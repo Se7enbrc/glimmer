@@ -43,6 +43,7 @@ extension InputForwarder {
         let priorPlayerIndex: GCControllerPlayerIndex
         let priorHandlerQueue: DispatchQueue
         let priorOptionsGesture: GCControllerElement.SystemGestureState?
+        let priorMenuGesture: GCControllerElement.SystemGestureState?
         let priorHomeGesture: GCControllerElement.SystemGestureState?
         /// True if this is a DualSense and we `retain()`ed the raw-HID reader
         /// for it (so detach can `release()` it).
@@ -54,6 +55,9 @@ extension InputForwarder {
             controller.handlerQueue = priorHandlerQueue
             if let priorOptionsGesture {
                 controller.extendedGamepad?.buttonOptions?.preferredSystemGestureState = priorOptionsGesture
+            }
+            if let priorMenuGesture {
+                controller.extendedGamepad?.buttonMenu.preferredSystemGestureState = priorMenuGesture
             }
             if let priorHomeGesture {
                 controller.physicalInputProfile.buttons[GCInputButtonHome]?
@@ -152,12 +156,8 @@ extension InputForwarder {
                                    bottomSymbol: gamepad.extendedGamepad?.buttonA.sfSymbolsName ?? "unavailable")
         let priorPlayerIndex = gamepad.playerIndex
         let priorOptionsGesture = gamepad.extendedGamepad?.buttonOptions?.preferredSystemGestureState
-        let priorHomeGesture: GCControllerElement.SystemGestureState?
-        if #available(macOS 27, *) {
-            priorHomeGesture = gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState
-        } else {
-            priorHomeGesture = nil
-        }
+        let priorMenuGesture = gamepad.extendedGamepad?.buttonMenu.preferredSystemGestureState
+        let priorHomeGesture = gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState
 
         // Light the controller's player-number LEDs to match its slot - the one
         // native touch the pad was missing. GameController owns this on macOS (it
@@ -200,26 +200,10 @@ extension InputForwarder {
             caps |= UInt16(StreamProtocol.LI_CCAP_TOUCHPAD)
         }
 
-        // Create/Share (`buttonOptions`) is bound to a macOS system gesture -
-        // measured on macOS 26 for the DualSense (isBoundToSystemGesture == true;
-        // the WWDC21 contract is double-press = screenshot, long-press = start or
-        // stop a ReplayKit recording). "Bound" means GameController runs the
-        // recognizer FIRST and withholds the press from the app, and the Moonlight
-        // quit chord is by definition a long-press of Create: the hold never
-        // reached us through GameController AND asked macOS to start a screen
-        // recording. A streaming client has exactly one consumer for that button,
-        // the host, so disable the gesture: the press is delivered immediately and
-        // macOS stays out of it.
+        // Gesture-bound Create/Share holds otherwise wait for macOS before reaching the quit chord.
         if let create = gamepad.extendedGamepad?.buttonOptions, create.isBoundToSystemGesture {
-            create.preferredSystemGestureState = .disabled
             Diag.info("controller \(slot): Create/Share was bound to a macOS system gesture - "
                 + "disabled so the press reaches the stream", "Controller")
-        }
-        // Home (PS): macOS 27 honors this only when the user picks Defer to app in
-        // System Settings › Game Controllers, so the default Game Overlay stays and
-        // Defer sends Guide to the PC.
-        if #available(macOS 27, *) {
-            gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = .disabled
         }
 
         // DualSense + the user opted in: start the raw-HID side-channel so the
@@ -259,7 +243,8 @@ extension InputForwarder {
         let state = AttachedController(
             slot: slot, arrival: ControllerArrival(type: kind, supportedButtons: buttons, caps: caps),
             controller: gamepad, priorPlayerIndex: priorPlayerIndex, priorHandlerQueue: gamepad.handlerQueue,
-            priorOptionsGesture: priorOptionsGesture, priorHomeGesture: priorHomeGesture, retainedHID: useHID
+            priorOptionsGesture: priorOptionsGesture, priorMenuGesture: priorMenuGesture,
+            priorHomeGesture: priorHomeGesture, retainedHID: useHID
         )
         attachedControllers[ObjectIdentifier(gamepad)] = state
         dualSenseRouting.register(slot: slot, controller: ObjectIdentifier(gamepad))
@@ -520,6 +505,11 @@ extension InputForwarder {
         }
         gamepad.extendedGamepad?.valueChangedHandler = nil
         gamepad.handlerQueue = controllerCaptureQueue
+        // Reassert on main whenever handlers heal, before capture can run.
+        // macOS 27 honors Home suppression only with “Defer to app”; system settings still win.
+        gamepad.extendedGamepad?.buttonOptions?.preferredSystemGestureState = .disabled
+        gamepad.extendedGamepad?.buttonMenu.preferredSystemGestureState = .disabled
+        gamepad.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = .disabled
         gamepad.extendedGamepad?.valueChangedHandler = { [weak self, inputCore] pad, _ in
             InputTimingContext.begin(source: .controller, timestamp: pad.lastEventTimestamp)
             defer { InputTimingContext.end() }

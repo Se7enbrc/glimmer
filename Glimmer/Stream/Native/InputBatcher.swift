@@ -39,6 +39,7 @@ final class InputBatcher: @unchecked Sendable {
     /// wakeups; deadlines stay 1 ms apart, as the old repeating tick's did.
     private var flushArmed = false
     private var flushDeadline = DispatchTime.now()
+    private var backpressureSince: DispatchTime?
 
     // MARK: Merge state (only ever touched on `queue`)
 
@@ -366,14 +367,17 @@ final class InputBatcher: @unchecked Sendable {
         if hasPendingState { armFlush() }
     }
 
-    /// While either backlog signal is up, merged state waits dirty and latest-only for a
-    /// clear tick. The reliableBacklogged gate is the mouse-spin fix, mirroring moonlight's
-    /// ack-wait (ControlStream.c:787-789).
+    /// Bound ACK-only waiting to ENet's 10 ms allowance; a full submission queue still waits for space.
     private func flush() {
-        guard hasPendingState, let enet else { return }
+        guard hasPendingState, let enet else { backpressureSince = nil; return }
         if backpressure(enet) {
-            countBackpressureSkip(enet)
-            return
+            let time = now()
+            let since = backpressureSince ?? time
+            backpressureSince = since
+            if enet.sendBacklogged || time < since + .milliseconds(10) {
+                countBackpressureSkip(enet)
+                return
+            }
         }
         flushLocked()
     }
@@ -381,6 +385,7 @@ final class InputBatcher: @unchecked Sendable {
     /// Drain dirty merged state without a gate so an edge cannot overtake earlier state,
     /// even under backpressure. MUST run on `queue`.
     private func flushLocked() {
+        backpressureSince = nil
         guard hasPendingState, let enet else { return }
         TelemetryCounters.shared.inputBatchFlushTotal.increment()
 

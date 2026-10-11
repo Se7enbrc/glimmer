@@ -167,3 +167,23 @@ struct PairAgainSheetTests {
         #expect(PairSheet.title(paired: true, chosen: true, rePairName: "Tower") == "Paired")
     }
 }
+
+@MainActor
+struct ReadinessDotTests {
+    @Test func heartbeatUsesOnlyTheCompositorAndStopsWhenOccluded() throws {
+        let view = ReadinessDot.DotView()
+        view.pulsing = true
+        view.updatePulse(visible: true)
+        let animation = try #require(view.layer?.animation(forKey: "heartbeat") as? CABasicAnimation)
+        #expect(animation.keyPath == "opacity")
+        #expect(animation.repeatCount == .infinity)
+        #expect(view.layer?.opacity == 1)
+        view.updatePulse(visible: false)
+        #expect(view.layer?.animationKeys()?.isEmpty != false)
+        view.updatePulse(visible: true)
+        #expect(view.layer?.animation(forKey: "heartbeat") != nil)
+        view.pulsing = false
+        view.updatePulse(visible: true)
+        #expect(view.layer?.animationKeys()?.isEmpty != false)
+    }
+}

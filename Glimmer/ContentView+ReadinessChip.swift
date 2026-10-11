@@ -170,11 +170,8 @@ struct ReadinessChip: View {
     /// the certMismatch Button so both render identically.
     private func pill(for chip: ChipPresentation) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: "circle.fill")
-                .font(.system(size: 7))
-                .foregroundStyle(chip.dotColor)
+            ReadinessDot(color: NSColor(chip.dotColor), pulsing: chip.pulsing && !reduceMotion)
                 .frame(width: 7, height: 7)
-                .symbolEffect(.pulse, options: .repeating, isActive: chip.pulsing && !reduceMotion)
             Text(chip.label)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.primary)
@@ -202,5 +199,72 @@ struct ReadinessChip: View {
             return chip.accessibility
         }
         return "\(chip.accessibility), \(route)"
+    }
+}
+
+/// A compositor animation keeps the heartbeat out of SwiftUI's per-frame layout cycle.
+struct ReadinessDot: NSViewRepresentable {
+    let color: NSColor
+    let pulsing: Bool
+
+    func makeNSView(context: Context) -> DotView { DotView() }
+
+    func updateNSView(_ view: DotView, context: Context) {
+        view.layer?.backgroundColor = color.cgColor
+        view.pulsing = pulsing
+        view.refreshPulse()
+    }
+
+    final class DotView: NSView {
+        var pulsing = false
+        private var visibilityObserver: NSObjectProtocol?
+
+        init() {
+            super.init(frame: .zero)
+            wantsLayer = true
+            layer?.cornerRadius = 3.5
+            layer?.actions = ["backgroundColor": NSNull(), "opacity": NSNull()]
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let visibilityObserver { NotificationCenter.default.removeObserver(visibilityObserver) }
+            visibilityObserver = nil
+            if let window {
+                visibilityObserver = NotificationCenter.default.addObserver(
+                    forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.refreshPulse() }
+                }
+            }
+            refreshPulse()
+        }
+
+        isolated deinit {
+            if let visibilityObserver { NotificationCenter.default.removeObserver(visibilityObserver) }
+        }
+
+        func refreshPulse() {
+            updatePulse(visible: window?.occlusionState.contains(.visible) == true)
+        }
+
+        func updatePulse(visible: Bool) {
+            guard let layer else { return }
+            guard pulsing && visible else {
+                layer.removeAnimation(forKey: "heartbeat")
+                return
+            }
+            guard layer.animation(forKey: "heartbeat") == nil else { return }
+            let pulse = CABasicAnimation(keyPath: "opacity")
+            pulse.fromValue = 1
+            pulse.toValue = 0.4
+            pulse.duration = 1
+            pulse.autoreverses = true
+            pulse.repeatCount = .infinity
+            pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            layer.add(pulse, forKey: "heartbeat")
+        }
     }
 }

@@ -752,8 +752,9 @@ windowed percentile. The scorecard is session-wide, including startup.
 send completions and ENet ACK callbacks. The eight-submission and
 `max(30 ms, 3 × RTT)` ACK-silence gates require local queue progress within 2
 ms; otherwise motion continues merging and submitting while the probe is
-delayed. Matched ACKs also clear the cached ACK-silence gate immediately. Edges
-always bypass both gates. Network.framework provides no kernel arrival or
+delayed. Matched ACKs also clear the cached ACK-silence gate immediately. An
+ACK-only hold ends after 10 ms; a full submission queue still waits for space.
+Edges always bypass both gates. Network.framework provides no kernel arrival or
 callback-ready timestamp here: the probe identifies local queue starvation, not
 the exact network/local division of an individual late ACK. A queue stall can
 briefly mask simultaneous network trouble; check real loss separately.

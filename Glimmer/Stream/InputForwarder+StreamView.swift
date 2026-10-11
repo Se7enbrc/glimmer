@@ -24,8 +24,20 @@ import os.log
 
 extension InputForwarder: StreamInputViewDelegate {
     func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) {
+        if consumeStopShortcut(event) { return }
         if deferKeyboardEvent({ $0.streamView(view, handleKeyDown: event) }) { return }
         forwardKeyDown(event, in: view)
+    }
+
+    /// Stop is local and must remain available while text or PC modifier releases are pending.
+    func consumeStopShortcut(_ event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard event.type == .keyDown, quitHotkeyProvider().matches(event: event, modifiers: mods) else { return false }
+        if !event.isARepeat {
+            log.info("Quit hotkey detected - leaving the stream")
+            quitOrCancelConnect()
+        }
+        return true
     }
 
     private func forwardKeyDown(_ event: NSEvent, in view: StreamInputView) {
@@ -37,14 +49,6 @@ extension InputForwarder: StreamInputViewDelegate {
         if view.hasMarkedText(), !mods.isDisjoint(with: [.command, .control]) { view.cancelComposition() }
         releaseStaleModifiers(for: event)
         noteEscapeModifiersChanged(event.modifierFlags)
-
-        // Quit hotkey, key-down only and never forwarded. Checked before the
-        // ⌘ gate so a custom chord with ⌘ still quits while ⌘ is the Mac's.
-        if !event.isARepeat, quitHotkeyProvider().matches(event: event, modifiers: mods) {
-            log.info("Quit hotkey detected - leaving the stream")
-            quitOrCancelConnect()
-            return
-        }
 
         // Client chords precede the Command gate so custom shortcuts work in either mode.
         if !event.isARepeat, statsHotkeyProvider().matches(event: event, modifiers: mods) {

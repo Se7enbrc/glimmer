@@ -117,6 +117,8 @@ extension InputForwarder {
         // moved. Inert in full screen and when the pointer is elsewhere.
         captureIfPointerIsOverTheStreamView(reason: "stream window opened under the pointer")
         reconcilePhysicalInputs()
+        // The window became key before these observers existed; publish capture ownership now.
+        resyncControllers()
     }
 
     public func detach() {

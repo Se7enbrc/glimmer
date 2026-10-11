@@ -5,6 +5,7 @@
 
 import CryptoKit
 import Foundation
+import os
 import Testing
 @testable import Glimmer
 
@@ -17,6 +18,27 @@ struct InputBatcherTests {
         EnetFixture.connect(channel)
         channel.reliableBackloggedFlag.store(backlogged, ordering: .relaxed)
         return channel
+    }
+
+    @Test func backpressureCannotHoldMotionIndefinitely() async throws {
+        let channel = try Self.makeChannel()
+        let clock = OSAllocatedUnfairLock(initialState: UInt64(1))
+        let probes = AtomicCounter()
+        let batcher = InputBatcher(enet: channel,
+            now: { DispatchTime(uptimeNanoseconds: clock.withLock { $0 }) },
+            backpressure: { _ in probes.increment(); return true })
+        defer { batcher.stop() }
+        #expect(batcher.accumulateMouseMove(dx: 5, dy: -2) == 0)
+        for _ in 0..<100 where probes.value < 2 { try await Task.sleep(for: .milliseconds(1)) }
+        try #require(probes.value >= 2)
+        #expect(channel.withState { channel.sentReliable.isEmpty })
+        for _ in 0..<EnetControlChannel.maxInFlightSends { channel.inFlightSends.increment() }
+        clock.withLock { $0 += 10_000_000 }
+        let before = probes.value
+        for _ in 0..<100 where probes.value < before + 2 { try await Task.sleep(for: .milliseconds(1)) }
+        #expect(channel.withState { channel.sentReliable.isEmpty })
+        for _ in 0..<EnetControlChannel.maxInFlightSends { channel.inFlightSends.decrement() }
+        #expect(try await Self.waitForMotion(channel, dx: 5, dy: -2))
     }
 
     /// The InputEncoder bytes inside each sealed SEND_RELIABLE command, in wire order.

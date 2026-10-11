@@ -375,7 +375,7 @@ struct StreamWindowFirstFrameTests {
         #expect(NSCursor.current === NSCursor.arrow)
     }
 
-    @Test func fullscreenAbsolutePointerStaysVisibleAcrossCursorReassertions() {
+    @Test func fullscreenAbsolutePointerHidesTheMacCursor() {
         let stream = StreamWindow()
         stream.fullscreenRelativePointer = false
         let view = StreamInputView()
@@ -383,14 +383,25 @@ struct StreamWindowFirstFrameTests {
         defer { stream.setCursorHidden(false) }
         stream.setCursorHidden(true)
         stream.reassertCursorHiddenIfNeeded()
+        #expect(stream.cursorHideCount == 1)
+        #expect(NSCursor.current !== NSCursor.arrow)
+        stream.setCursorHidden(false)
         #expect(stream.cursorHideCount == 0)
         #expect(NSCursor.current === NSCursor.arrow)
-        stream.fullscreenRelativePointer = true
-        stream.awaitingFirstFrameFadeIn = false
-        stream.setPointerCaptured(true)
-        #expect(stream.cursorHideCount == 1)
+    }
+
+    @Test func fullscreenCaptureReleaseKeepsTheAbsolutePointerHiddenOnlyWhileFocused() {
+        let stream = StreamWindow()
+        stream.awaitingFirstFrameFadeIn = true
+        stream.window.contentView = StreamInputView()
         stream.fullscreenRelativePointer = false
-        stream.setPointerCaptured(false)
+        defer { stream.setCursorHidden(false) }
+        stream.setPointerCaptured(false, isKeyWindow: true)
+        #expect(stream.cursorHideCount == 0)
+        stream.awaitingFirstFrameFadeIn = false
+        stream.setPointerCaptured(false, isKeyWindow: true)
+        #expect(stream.cursorHideCount == 1)
+        stream.setPointerCaptured(false, isKeyWindow: false)
         #expect(stream.cursorHideCount == 0)
         #expect(NSCursor.current === NSCursor.arrow)
     }

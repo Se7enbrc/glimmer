@@ -16,6 +16,55 @@ struct InputCoreTests {
         return (core, backend)
     }
 
+    @MainActor @Test func firstResponderPublishesControllerFocusWithoutAKeyNotification() async {
+        let forwarder = InputForwarder()
+        let backend = InputRecordingBackend()
+        let window = PointerFocusTestWindow(contentRect: .zero, styleMask: .borderless,
+                                            backing: .buffered, defer: true)
+        window.focused = false
+        forwarder.attach(to: window)
+        forwarder.backend = backend
+        forwarder.isReady = true
+        forwarder.gamepadMask = 1
+        forwarder.controllerQuitChordProvider = { .l1r1 }
+        forwarder.neutralizeControllers()
+        defer { forwarder.detach() }
+        window.focused = true
+        forwarder.fullscreenRelativePointer = false
+        forwarder.installFirstResponder()
+        #expect(forwarder.inputCore.withLock { forwarder.inputCore.snapshot.focused })
+        let core = forwarder.inputCore
+        await Task.detached {
+            core.receive(slot: 0, buttons: StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG,
+                         analog: InputCore.neutral)
+        }.value
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(forwarder.quitChordDwellSlot == 0)
+        var stopped = false
+        forwarder.onQuitHotkey = { stopped = true }
+        forwarder.cancelQuitChordDwell()
+        forwarder.quitChordDwellExpired(slot: 0, pad: nil) { core.state(slot: 0) }
+        #expect(stopped)
+    }
+
+    @MainActor @Test func controllerHandlerHealingReassertsSystemGestureOwnership() throws {
+        let forwarder = InputForwarder()
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        pad.buttonMenu.preferredSystemGestureState = .enabled
+        forwarder.attach(gamepad: controller)
+        defer { forwarder.detach() }
+        let state = try #require(forwarder.attachedControllers[ObjectIdentifier(controller)])
+        #expect(pad.buttonMenu.preferredSystemGestureState == .disabled)
+        pad.buttonMenu.preferredSystemGestureState = .enabled
+        forwarder.installInputHandlers(for: state)
+        #expect(pad.buttonMenu.preferredSystemGestureState == .disabled)
+        forwarder.detach(gamepad: controller)
+        #expect(pad.buttonMenu.preferredSystemGestureState == .enabled)
+    }
+
     @Test func rawCaptureKeepsNintendoMappingAndMouseClicksPositional() {
         let (core, backend) = rig()
         let token = UUID()

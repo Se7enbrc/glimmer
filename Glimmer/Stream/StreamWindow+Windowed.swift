@@ -136,16 +136,18 @@ extension StreamWindow {
     /// The delegate's close request (red button / Cmd-W). Handed to the
     /// session's stop() via `onCloseRequested`; nothing is closed here.
     func handleUserCloseRequest() {
-        guard displayMode == .window, !didClose else { return }
+        guard !didClose else { return }
         log.info("Stream window close requested by the user - stopping the session")
         onCloseRequested?()
     }
 
     /// Cursor ownership stays here for both presentations; startup waits for a picture.
-    func setPointerCaptured(_ captured: Bool) {
+    func setPointerCaptured(_ captured: Bool, isKeyWindow: Bool? = nil) {
         guard !didClose else { return }
         if displayMode == .fullScreen {
-            setCursorHidden(captured && !awaitingFirstFrameFadeIn)
+            let forwardingAbsolute = !fullscreenRelativePointer
+                && (isKeyWindow ?? window.isKeyWindow) && !userBackgrounded
+            setCursorHidden((captured || forwardingAbsolute) && !awaitingFirstFrameFadeIn)
             return
         }
         setCursorHidden(captured)

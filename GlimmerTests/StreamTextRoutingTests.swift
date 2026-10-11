@@ -34,6 +34,28 @@ struct StreamTextRoutingTests {
     }
 
     @Test(arguments: [false, true])
+    func stopShortcutBypassesPendingTextAndTheCommandGate(keyEquivalent: Bool) throws {
+        let (forwarder, backend, view) = ready()
+        defer { forwarder.detach() }
+        forwarder.quitHotkeyProvider = {
+            HotkeyChord(ctrl: false, alt: false, shift: true, cmd: true, keyChar: "q")
+        }
+        forwarder.captureSysKeys = false
+        forwarder.pendingTextTask = Task { try? await Task.sleep(for: .seconds(10)) }
+        var stops = 0
+        forwarder.onQuitHotkey = { stops += 1 }
+        let event = try key(kVK_ANSI_Q, mods: [.command, .shift], chars: "q")
+        if keyEquivalent {
+            #expect(view.performKeyEquivalent(with: event))
+        } else {
+            view.keyDown(with: event)
+        }
+        #expect(stops == 1)
+        #expect(forwarder.pendingKeyboardEvents.isEmpty)
+        #expect(backend.keyboard.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
     func failedReleaseKeepsLiveCommitAndFollowingKeysOrdered(paste: Bool) async throws {
         let (forwarder, backend, view) = ready()
         defer { forwarder.detach() }
