@@ -87,6 +87,7 @@ public final class StreamWindow {
     /// sole caller is the capture edge in StreamWindow+Windowed.swift, which
     /// full screen never reaches.
     public let captureHintBanner: StreamBannerLayer
+    var streamToastGeneration: UInt64 = 0
     let displayView: DisplayContainerView
     /// The NSView hosting the AVSampleBufferDisplayLayer. Exposed so the
     /// session can bind the FramePacer's CADisplayLink to this view's screen

@@ -119,6 +119,7 @@ extension InputForwarder {
         // Raise every held key/button/modifier so a mid-press teardown can't
         // leave the host with phantom-held input.
         raiseAllHeldInputs(reason: "stream teardown")
+        suspendControllerMouse()
 
         // Disengage relative-aim mode + remove gesture defaults.
         // `exitCapturedMode()` RE-ASSOCIATES the cursor
@@ -167,7 +168,10 @@ extension InputForwarder {
     /// queue is closed and would just return -2).
     public func setReady(_ ready: Bool) {
         let was = isReady
-        if !ready { releaseControllerTouches() }
+        if !ready {
+            releaseControllerTouches()
+            suspendControllerMouse()
+        }
         isReady = ready
         updateControllerBackgroundEvents()
         if ready != was {

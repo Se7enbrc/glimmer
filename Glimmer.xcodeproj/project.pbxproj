@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CA202610110000000000000D /* ControllerTouchpadMouseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA202610110000000000000E /* ControllerTouchpadMouseTests.swift */; };
+		CA202610110000000000000B /* ControllerForwarder+TouchpadMouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA202610110000000000000C /* ControllerForwarder+TouchpadMouse.swift */; };
+		CA2026101100000000000009 /* ControllerButtonLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA202610110000000000000A /* ControllerButtonLayoutTests.swift */; };
+		CA2026101100000000000007 /* ControllerMouseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2026101100000000000008 /* ControllerMouseTests.swift */; };
+		CA2026101100000000000005 /* SettingsInput+NintendoLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2026101100000000000006 /* SettingsInput+NintendoLayout.swift */; };
+		CA2026101100000000000003 /* ControllerButtonLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2026101100000000000004 /* ControllerButtonLayout.swift */; };
+		CA2026101100000000000001 /* ControllerForwarder+Mouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2026101100000000000002 /* ControllerForwarder+Mouse.swift */; };
 		DA2026100900000000000021 /* AWDLProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000022 /* AWDLProcess.swift */; };
 		DA2026100900000000000023 /* AWDLProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000022 /* AWDLProcess.swift */; };
 		DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */; };
@@ -511,6 +518,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CA202610110000000000000E /* ControllerTouchpadMouseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerTouchpadMouseTests.swift"; sourceTree = "<group>"; };
+		CA202610110000000000000C /* ControllerForwarder+TouchpadMouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+TouchpadMouse.swift"; sourceTree = "<group>"; };
+		CA202610110000000000000A /* ControllerButtonLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerButtonLayoutTests.swift"; sourceTree = "<group>"; };
+		CA2026101100000000000008 /* ControllerMouseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerMouseTests.swift"; sourceTree = "<group>"; };
+		CA2026101100000000000006 /* SettingsInput+NintendoLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsInput+NintendoLayout.swift"; sourceTree = "<group>"; };
+		CA2026101100000000000004 /* ControllerButtonLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerButtonLayout.swift"; sourceTree = "<group>"; };
+		CA2026101100000000000002 /* ControllerForwarder+Mouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+Mouse.swift"; sourceTree = "<group>"; };
 		DA2026100900000000000022 /* AWDLProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLProcess.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperManagerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000002 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
@@ -1092,6 +1106,7 @@
 				A100017B /* SettingsGeneralStreamingPanes.swift */,
 				DEC0DE05000000000000000B /* SettingsGeneralStreamingPanes+LoginItem.swift */,
 				A100018B /* SettingsPCsShortcutsPanes.swift */,
+				CA2026101100000000000006 /* SettingsInput+NintendoLayout.swift */,
 				DEC0DE202609222400000002 /* SettingsShortcutRecorders.swift */,
 				A100019B /* AboutPane.swift */,
 				DEC0DE2026092000000000D2 /* WakeOnLAN.swift */,
@@ -1308,6 +1323,9 @@
 				AC2026083000000000000009 /* AudioDecoder+Resampler.swift */,
 				AC202608300000000000000B /* InputForwarder+Lifecycle.swift */,
 				AC202608300000000000000D /* ControllerForwarder+StatePush.swift */,
+				CA2026101100000000000004 /* ControllerButtonLayout.swift */,
+				CA202610110000000000000C /* ControllerForwarder+TouchpadMouse.swift */,
+				CA2026101100000000000002 /* ControllerForwarder+Mouse.swift */,
 				AC202608300000000000000F /* ControllerForwarder+Touchpad.swift */,
 				AB00000017 /* InputForwarder.swift */,
 				AB00000019 /* StreamWindow.swift */,
@@ -1525,6 +1543,9 @@
 				DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */,
 				DEC0DE202610109900000002 /* PEMTests.swift */,
 				DEC0DE202610109900000004 /* ControllerStatePushTests.swift */,
+				CA202610110000000000000A /* ControllerButtonLayoutTests.swift */,
+				CA202610110000000000000E /* ControllerTouchpadMouseTests.swift */,
+				CA2026101100000000000008 /* ControllerMouseTests.swift */,
 				DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */,
 				DEC0DE202610101000000002 /* HostsPersistenceTests.swift */,
 				DEC0DE202610101000000004 /* StoragePersistenceTests.swift */,
@@ -1707,6 +1728,7 @@
 				A100017A /* SettingsGeneralStreamingPanes.swift in Sources */,
 				DEC0DE05000000000000000A /* SettingsGeneralStreamingPanes+LoginItem.swift in Sources */,
 				A100018A /* SettingsPCsShortcutsPanes.swift in Sources */,
+				CA2026101100000000000005 /* SettingsInput+NintendoLayout.swift in Sources */,
 				DEC0DE202609222400000001 /* SettingsShortcutRecorders.swift in Sources */,
 				A100019A /* AboutPane.swift in Sources */,
 				DEC0DE2026092000000000D1 /* WakeOnLAN.swift in Sources */,
@@ -1922,6 +1944,9 @@
 				AC202608300000000000000A /* AudioDecoder+Resampler.swift in Sources */,
 				AC202608300000000000000C /* InputForwarder+Lifecycle.swift in Sources */,
 				AC202608300000000000000E /* ControllerForwarder+StatePush.swift in Sources */,
+				CA2026101100000000000003 /* ControllerButtonLayout.swift in Sources */,
+				CA202610110000000000000B /* ControllerForwarder+TouchpadMouse.swift in Sources */,
+				CA2026101100000000000001 /* ControllerForwarder+Mouse.swift in Sources */,
 				AC2026083000000000000010 /* ControllerForwarder+Touchpad.swift in Sources */,
 				AB00000018 /* InputForwarder.swift in Sources */,
 				AB00000020 /* StreamWindow.swift in Sources */,
@@ -2130,6 +2155,9 @@
 				DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */,
 				DEC0DE202610109900000001 /* PEMTests.swift in Sources */,
 				DEC0DE202610109900000003 /* ControllerStatePushTests.swift in Sources */,
+				CA2026101100000000000009 /* ControllerButtonLayoutTests.swift in Sources */,
+				CA202610110000000000000D /* ControllerTouchpadMouseTests.swift in Sources */,
+				CA2026101100000000000007 /* ControllerMouseTests.swift in Sources */,
 				DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */,
 				DEC0DE202610101000000001 /* HostsPersistenceTests.swift in Sources */,
 				DEC0DE202610101000000003 /* StoragePersistenceTests.swift in Sources */,

@@ -82,4 +82,20 @@ extension StreamWindow {
         captureHintGeneration &+= 1
         captureHintBanner.setVisible(false)
     }
+
+    func showControllerMouseMode(_ message: String) {
+        showStreamToast(message, for: 2)
+    }
+
+    // Mode changes replace the teaching toast so transient messages occupy one place.
+    func showStreamToast(_ text: String, for duration: TimeInterval) {
+        leaveHintBanner.setText(text)
+        leaveHintBanner.setVisible(true)
+        streamToastGeneration &+= 1
+        let generation = streamToastGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self, self.streamToastGeneration == generation else { return }
+            self.leaveHintBanner.setVisible(false)
+        }
+    }
 }

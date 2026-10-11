@@ -100,6 +100,8 @@ extension InputForwarder {
                     } else {
                         // Controller already deallocated; just clear bookkeeping.
                         if let state = self.attachedControllers.removeValue(forKey: id) {
+                            self.nintendoControllerTypes[state.slot] = nil
+                            self.resetControllerMouse(slot: state.slot)
                             self.releaseControllerTouches(slot: state.slot)
                             self.dualSenseRouting.syncControllers()
                             self.dualSenseRouting.unregister(slot: state.slot)
@@ -142,6 +144,8 @@ extension InputForwarder {
             return
         }
         gamepadMask |= UInt16(1) << slot
+        registerNintendoController(slot: slot, type: NintendoControllerType.identify(gamepad),
+                                   bottomSymbol: gamepad.extendedGamepad?.buttonA.sfSymbolsName ?? "unavailable")
         let priorPlayerIndex = gamepad.playerIndex
         let priorOptionsGesture = gamepad.extendedGamepad?.buttonOptions?.preferredSystemGestureState
         let priorHomeGesture: GCControllerElement.SystemGestureState?
@@ -288,6 +292,8 @@ extension InputForwarder {
     func detach(gamepad: GCController) {
         guard let state = attachedControllers.removeValue(forKey: ObjectIdentifier(gamepad)) else { return }
         state.restoreSystemState()
+        nintendoControllerTypes[state.slot] = nil
+        resetControllerMouse(slot: state.slot)
         dualSenseRouting.disconnectController(ObjectIdentifier(gamepad))
         dualSenseRouting.unregister(slot: state.slot)
         gamepadMask &= ~(UInt16(1) << state.slot)
@@ -350,6 +356,7 @@ extension InputForwarder {
         // A pad connecting while stop waits on the PC must not retake the HID
         // retain and haptics, motion, or battery slots this walk releases.
         removeGamepadObservers()
+        resetControllerMouse()
         releaseHIDControllers()
         for state in attachedControllers.values {
             state.controller?.extendedGamepad?.valueChangedHandler = nil
@@ -364,6 +371,7 @@ extension InputForwarder {
             }
         }
         attachedControllers.removeAll()
+        nintendoControllerTypes.removeAll()
         touchpadStates.removeAll()
         gamepadMask = 0
         announcedControllers.removeAll()
@@ -373,6 +381,7 @@ extension InputForwarder {
         let center = NotificationCenter.default
         if let observer = connectObserver { center.removeObserver(observer); connectObserver = nil }
         if let observer = disconnectObserver { center.removeObserver(observer); disconnectObserver = nil }
+        if let observer = nintendoLayoutObserver { center.removeObserver(observer); nintendoLayoutObserver = nil }
     }
 
     func sendArrival(slot: UInt8, _ arrival: ControllerArrival) {
@@ -541,7 +550,8 @@ extension InputForwarder {
         for state in attachedControllers.values {
             // Reassert stream ownership before restoring held state after a focus change.
             installInputHandlers(for: state)
-            ControllerMotion.shared.setInputEnabled(true, slot: state.slot)
+            ControllerMotion.shared.setInputEnabled(
+                controllerMouseStates[state.slot]?.isMouse != true, slot: state.slot)
             guard let pad = state.controller?.extendedGamepad else { continue }
             sendGamepadUpdate(pad: pad, slot: state.slot)
         }

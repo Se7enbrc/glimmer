@@ -301,6 +301,14 @@ public final class InputForwarder {
     /// Sent to the host as `activeGamepadMask` on every controller event.
     var gamepadMask: UInt16 = 0
 
+    var controllerMouseStates: [UInt8: ControllerMouseState] = [:]
+    var controllerMouseTask: Task<Void, Never>?
+    var onControllerMouseChanged: (@MainActor (String) -> Void)?
+    var nintendoLayoutProvider: @MainActor () -> Bool = { ControllerButtonLayout.usesLabels() }
+    var useNintendoLabels = false
+    var nintendoLayoutObserver: NSObjectProtocol?
+    var nintendoControllerTypes: [UInt8: NintendoControllerType] = [:]
+
     /// What the PC may still hold in each slot. Only a stream start retires an entry,
     /// since a removal sent into a link that is already dead never arrives.
     var announcedControllers: [UInt8: ControllerArrival] = [:]
@@ -505,7 +513,7 @@ public final class InputForwarder {
                     modifiers: 0, flags: key.flags) ?? -2
                 record("LiSendKeyboardEvent2(raise-all)", rc)
             }
-            for button in heldMouseButtons {
+            for button in heldMouseButtons.subtracting(controllerMouseButtons) {
                 let rc = backend?.sendMouseButton(
                     action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button) ?? -2
                 record("LiSendMouseButtonEvent(raise-all)", rc)
