@@ -170,7 +170,7 @@ extension RtpAudioQueue {
             head.allowDiscontinuity = true
         }
 
-        guard blockSize > 0, blockSize <= RtpAudioReceiver.maxPacketSize,
+        guard blockSize > 0, blockSize <= Self.maxPacketSize,
               let block = freeBlocks.popLast() else { return nil }
         for index in block.marks.indices { block.marks[index] = 1 }
         block.dataShardsReceived = 0

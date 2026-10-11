@@ -31,6 +31,11 @@ enum Diag {
     static func error(_ message: String, _ category: String) {}
 }
 
+enum AudioDiagnostics {
+    static func notice(_ message: @autoclosure () -> String, _ category: String) {}
+    static func warn(_ message: @autoclosure () -> String, _ category: String) {}
+}
+
 /// Every `TelemetryCounters.shared.<name>Total` resolves to one no-op counter.
 @dynamicMemberLookup
 final class TelemetryCounters: Sendable {

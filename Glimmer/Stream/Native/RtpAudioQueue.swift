@@ -66,6 +66,7 @@ final class RtpAudioQueue {
     // same contract as the RtpVideoQueue splits.
 
     // Constants (RtpAudioQueue.h:18-20, plus the OOS wait).
+    static let maxPacketSize = 1400   // MAX_PACKET_SIZE
     static let dataShards = 4         // RTPA_DATA_SHARDS
     static let fecShards = 2          // RTPA_FEC_SHARDS
     static let totalShards = 6        // RTPA_TOTAL_SHARDS

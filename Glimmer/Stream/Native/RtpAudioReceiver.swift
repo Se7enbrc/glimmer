@@ -244,7 +244,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     /// failure + recovery, never per packet). Owned by the ping thread.
     var pingSendFailureStreak = UdpPinger.SendFailureStreak()
 
-    static let maxPacketSize = 1400  // MAX_PACKET_SIZE
+    static let maxPacketSize = RtpAudioQueue.maxPacketSize
 
     /// Startup-pacing decision window: enough audio-ms that a PACED flow through
     /// this link's clumpy radio (routine 40-110ms coalesced deliveries) still
