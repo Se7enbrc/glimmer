@@ -22,14 +22,14 @@ extension GlimmerCLI {
             return Exit.usage
         }
         if let known = matchHost(address, in: model.hosts), await isStillPaired(known, model: model) {
-            print("Already paired with \(known.displayName).")
+            printLine("Already paired with \(known.displayName).")
             return Exit.ok
         }
         let pin = command.pin ?? model.generatePairingPIN()
         printError("On \(address), open Sunshine's web page, choose PIN, and enter \(pin).")
         let attempt = model.beginPairing(address: address)
         if let host = await model.pair(attempt: attempt, pin: pin) {
-            print("Paired with \(host.displayName).")
+            printLine("Paired with \(host.displayName).")
             return Exit.ok
         }
         if case .failure(let failure) = model.pairingPhase {
@@ -57,7 +57,7 @@ extension GlimmerCLI {
     private static func isStillPaired(_ host: Host, model: AppModel) async -> Bool {
         let info = model.nativeServerInfo(for: host)
         guard info.serverCertPEM != nil else { return false }
-        let client = NetworkClient(server: info)
+        let client = model.makeNetwork(info)
         let fetched = try? await client.fetchServerInfo()
         await client.shutdown()
         return fetched?.pairStatus == .paired
@@ -79,10 +79,10 @@ extension GlimmerCLI {
             printError(AppModel.WakeFailureReason.couldNotSend.line)
             return Exit.failed
         case .sent:
-            print("Sent the wake signal to \(name).")
+            printLine("Sent the wake signal to \(name).")
             return Exit.ok
         case .answered:
-            print("\(name) is awake.")
+            printLine("\(name) is awake.")
             return Exit.ok
         case .cancelled:
             printError("Stopped waiting for \(name).")
@@ -106,7 +106,7 @@ extension GlimmerCLI {
             printError(notPairedMessage(host))
             return Exit.notPaired
         case .idle, .unknown:
-            print("\(host.displayName) isn't running an app.")
+            printLine("\(host.displayName) isn't running an app.")
             return Exit.ok
         case .streamingApp(let name):
             running = name
@@ -118,12 +118,12 @@ extension GlimmerCLI {
         let request = [CommandChannel.Key.verb: "quit", CommandChannel.Key.host: host.id]
         if runningGlimmer() != nil,
            await ask(request, within: .seconds(2))?[CommandChannel.Key.event] == CommandChannel.Event.stopped {
-            print("Quit \(running) on \(host.displayName).")
+            printLine("Quit \(running) on \(host.displayName).")
             return Exit.ok
         }
         do {
             try await model.quitRunningApp(on: host)
-            print("Quit \(running) on \(host.displayName).")
+            printLine("Quit \(running) on \(host.displayName).")
             return Exit.ok
         } catch {
             printError(message(for: error, host: host))
@@ -199,11 +199,13 @@ final class CommandReplies {
             forName: CommandChannel.reply, object: nil, queue: .main
         ) { [weak self] note in
             guard let info = note.userInfo as? [String: String] else { return }
-            MainActor.assumeIsolated {
-                guard let self, info[CommandChannel.Key.id] == self.requestID else { return }
-                self.pending.append(info)
-            }
+            MainActor.assumeIsolated { self?.receive(info) }
         }
+    }
+
+    func receive(_ info: [String: String]) {
+        guard info[CommandChannel.Key.id] == requestID else { return }
+        pending.append(info)
     }
 
     func take() -> [String: String]? {

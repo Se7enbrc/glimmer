@@ -77,7 +77,8 @@ public actor PairingClient {
         // subsequent TLS verification until pairing finishes (or fails).
         // ---------------------------------------------------------------
         let salt = try Self.randomBytes(16)
-        let clientCertPEM = try await IdentityManager.shared.clientCertPEM()
+        let identity = try await network.identity()
+        let clientCertPEM = identity.certPEM
         let clientCertBytes = Data(clientCertPEM.utf8)
 
         let serverCertPEM = try await fetchServerCert(
@@ -168,6 +169,7 @@ public actor PairingClient {
 
         try await completeClientPairing(
             clientSecret: clientSecret,
+            clientKeyPEM: identity.keyPEM,
             signpostID: pairingSignpostID
         )
 
@@ -301,9 +303,9 @@ public actor PairingClient {
     /// fully added on the host side. Both rounds throw on a non-`paired=1` reply.
     private func completeClientPairing(
         clientSecret: Data,
+        clientKeyPEM: String,
         signpostID: OSSignpostID
     ) async throws {
-        let clientKeyPEM = try await IdentityManager.shared.clientKeyPEM()
         let signedClientSecret = try Self.signMessage(
             Data(clientSecret),
             privateKeyPEM: clientKeyPEM

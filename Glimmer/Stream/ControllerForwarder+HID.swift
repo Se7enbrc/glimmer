@@ -38,18 +38,21 @@ extension InputForwarder {
     }
 
     func pushHID(_ pad: HIDGamepadDevice) {
-        guard forwardsControllerEvents, let attached = attachedHIDControllers[pad.id] else { return }
-        let state = pad.state
+        guard let attached = attachedHIDControllers[pad.id] else { return }
+        pushHID(slot: attached.slot, state: pad.state) { [weak pad] in pad?.state }
+    }
+
+    /// The pad's decoded state as values; `readState` re-reads it for the quit-chord dwell.
+    func pushHID(slot: UInt8, state: (buttons: Int32, analog: GamepadAnalog),
+                 readState: @escaping @MainActor () -> (buttons: Int32, analog: GamepadAnalog)?) {
+        guard forwardsControllerEvents else { return }
         if matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
                                       rightTrigger: state.analog.rightTrigger) {
-            armQuitChordDwell(slot: attached.slot) { [weak pad] in
-                guard let pad else { return nil }
-                return pad.state
-            }
+            armQuitChordDwell(slot: slot, readState: readState)
             return
         }
-        if quitChordDwellSlot == attached.slot { cancelQuitChordDwell(reason: "HID chord released") }
-        let result = backend?.sendMultiController(num: Int16(attached.slot), mask: Int16(bitPattern: gamepadMask),
+        if quitChordDwellSlot == slot { cancelQuitChordDwell(reason: "HID chord released") }
+        let result = backend?.sendMultiController(num: Int16(slot), mask: Int16(bitPattern: gamepadMask),
                                                   buttons: state.buttons, analog: state.analog) ?? -2
         record("LiSendMultiControllerEvent(HID)", result)
     }

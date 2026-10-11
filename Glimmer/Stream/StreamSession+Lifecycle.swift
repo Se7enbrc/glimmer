@@ -195,7 +195,7 @@ extension StreamSession {
     /// The client stop cancels with. A failed reconnect attempt clears `network`, but the session
     /// may still own a launch on `reconnectServer`, and that game must not be left running.
     var cleanupNetwork: NetworkClient? {
-        network ?? reconnectServer.map { NetworkClient(server: $0) }
+        network ?? reconnectServer.map(makeNetwork)
     }
 
     private static func cancelOwnedSession(_ network: NetworkClient) async {

@@ -266,8 +266,8 @@ final class AWDLHelperManager: ObservableObject {
 
     /// User opted out of the launch-time enable nudge ("Don't ask again").
     var promptSuppressed: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.promptSuppressedKey) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.promptSuppressedKey) }
+        get { defaults.bool(forKey: Self.promptSuppressedKey) }
+        set { defaults.set(newValue, forKey: Self.promptSuppressedKey) }
     }
 
     /// Whether to show the launch nudge: only while not yet enabled and the user

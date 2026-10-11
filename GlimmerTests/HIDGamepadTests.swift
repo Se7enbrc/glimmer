@@ -271,6 +271,84 @@ struct HIDGamepadTests {
         #expect(!InputForwarder.chordSatisfied(.none, custom: [], held: held))
     }
 
+    /// Twelve buttons (cookies 1-12), X/Y/Z/Rz sticks, Rx/Ry-style 0x33/0x34 triggers and a hat.
+    private static let padElements: [HIDGamepadElement] = (1...12).map {
+        HIDGamepadElement(cookie: UInt32($0), page: 9, usage: UInt32($0), kind: .button)
+    } + [(20, 0x30), (21, 0x31), (22, 0x32), (23, 0x35), (24, 0x33), (25, 0x34)].map {
+        HIDGamepadElement(cookie: $0.0, page: 1, usage: $0.1, kind: .axis)
+    } + [HIDGamepadElement(cookie: 40, page: 1, usage: 0x39, kind: .hat)]
+
+    private static func padReadings() -> HIDGamepadReadings {
+        var logical: [UInt32: HIDGamepadElement.AxisRange] = [40: .init(minimum: 0, maximum: 7)]
+        for cookie in UInt32(1)...12 { logical[cookie] = .init(minimum: 0, maximum: 1) }
+        for cookie in UInt32(20)...25 { logical[cookie] = .init(minimum: 0, maximum: 255) }
+        return HIDGamepadReadings(descriptors: padElements, logical: logical)
+    }
+
+    @Test func elementReadingsDecodeIntoTheStateSentToThePC() {
+        var readings = Self.padReadings()
+        let mapping = HIDGamepadMapping.heuristic(elements: Self.padElements)
+        for (cookie, raw) in [(1, 1), (10, 1), (20, 255), (21, 0), (22, 0), (23, 255), (24, 255), (25, 0), (40, 2),
+                              (99, 1)] {
+            readings.update(cookie: UInt32(cookie), raw: raw)
+        }
+        #expect(readings.snapshot.hats == [2])
+        let state = mapping.translate(readings.snapshot)
+        #expect(state.buttons == StreamProtocol.A_FLAG | StreamProtocol.PLAY_FLAG | StreamProtocol.RIGHT_FLAG)
+        #expect(state.analog.leftStickX == 32767)
+        #expect(state.analog.leftStickY == 32767)
+        #expect(state.analog.rightStickX == -32768)
+        #expect(state.analog.rightStickY == -32767)
+        #expect(state.analog.leftTrigger == 255)
+        #expect(state.analog.rightTrigger == 0)
+        readings.update(cookie: 1, raw: 0)
+        readings.update(cookie: 40, raw: 8)
+        #expect(mapping.translate(readings.snapshot).buttons == StreamProtocol.PLAY_FLAG)
+    }
+
+    /// An axis whose live value leaves its logical range widens it, so full travel stays reachable.
+    @Test func axisRangeWidensAcrossReadings() {
+        var readings = Self.padReadings()
+        readings.update(cookie: 20, raw: 511)
+        readings.update(cookie: 20, raw: 255)
+        #expect(readings.snapshot.axes[0] == -64)
+        #expect(HIDGamepadReadings.batteryPercentage(raw: 3, range: .init(minimum: 0, maximum: 4)) == 75)
+        #expect(HIDGamepadReadings.batteryPercentage(raw: 9, range: .init(minimum: 0, maximum: 4)) == 100)
+        #expect(HIDGamepadReadings.batteryPercentage(raw: 1, range: .init(minimum: 1, maximum: 1)) == nil)
+    }
+
+    @MainActor
+    @Test func pushedHIDStateReachesTheBackendUnlessTheQuitChordIsHeld() {
+        let forwarder = InputForwarder()
+        defer { forwarder.detach() }
+        let backend = InputRecordingBackend()
+        forwarder.setBackend(backend)
+        forwarder.isReady = true
+        forwarder.gamepadMask = 0b1001
+        let analog = GamepadAnalog(leftTrigger: 9, rightTrigger: 200, leftStickX: -5, leftStickY: 7,
+                                   rightStickX: 300, rightStickY: -300)
+        forwarder.pushHID(slot: 3, state: (StreamProtocol.B_FLAG, analog)) { nil }
+        #expect(backend.calls.count == 1)
+        #expect(backend.calls.last?.num == 3)
+        #expect(backend.calls.last?.mask == 0b1001)
+        #expect(backend.calls.last?.buttons == StreamProtocol.B_FLAG)
+        #expect(backend.calls.last?.analog.leftTrigger == 9)
+        #expect(backend.calls.last?.analog.rightTrigger == 200)
+        #expect(backend.calls.last?.analog.leftStickY == 7)
+        #expect(backend.calls.last?.analog.rightStickY == -300)
+
+        forwarder.controllerQuitChordProvider = { .l1r1 }
+        forwarder.pushHID(slot: 3, state: (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG, analog)) { nil }
+        #expect(backend.calls.count == 1)
+        #expect(forwarder.quitChordDwellSlot == 3)
+        forwarder.pushHID(slot: 3, state: (StreamProtocol.LB_FLAG, analog)) { nil }
+        #expect(forwarder.quitChordDwellSlot == nil)
+        #expect(backend.calls.count == 2)
+        forwarder.isReady = false
+        forwarder.pushHID(slot: 3, state: (StreamProtocol.B_FLAG, analog)) { nil }
+        #expect(backend.calls.count == 2)
+    }
+
     /// Not Now quiets one pad until relaunch; Don't Ask Again outlives it.
     @Test func permissionOfferAnswersAreKeptPerPad() throws {
         let suite = "io.ugfugl.Glimmer.tests.\(UUID().uuidString)"

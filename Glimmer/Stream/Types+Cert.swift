@@ -112,9 +112,10 @@ public enum PinnedCertStore {
     ///   1. The new file store
     ///   2. The legacy UserDefaults key (migrated forward + cleaned up)
     /// Returns nil if neither has it.
-    public static func load(forHostID hostID: String) -> String? {
+    public static func load(forHostID hostID: String, defaults: UserDefaults = .standard,
+                            base: URL? = nil) -> String? {
         // 1. File store.
-        if let url = try? fileURL(for: hostID),
+        if let url = try? fileURL(for: hostID, base: base),
            FileManager.default.fileExists(atPath: url.path),
            let data = try? Data(contentsOf: url),
            let pem = String(data: data, encoding: .utf8),
@@ -122,11 +123,10 @@ public enum PinnedCertStore {
             return pem
         }
         // 2. Legacy UserDefaults - read then migrate.
-        let defaults = UserDefaults.standard
         let legacyKey = legacyDefaultsKey(for: hostID)
         if let legacy = defaults.string(forKey: legacyKey), !legacy.isEmpty {
             do {
-                try writePEM(legacy, forHostID: hostID)
+                try writePEM(legacy, forHostID: hostID, base: base)
                 defaults.removeObject(forKey: legacyKey)
                 defaults.synchronize()
                 return legacy
@@ -143,33 +143,30 @@ public enum PinnedCertStore {
 
     /// Persist a pinned cert PEM for the given host. Atomic 0600 write.
     /// Throws on any IO / permission failure.
-    public static func store(pem: String, forHostID hostID: String) throws {
-        try writePEM(pem, forHostID: hostID)
+    public static func store(pem: String, forHostID hostID: String,
+                             defaults: UserDefaults = .standard, base: URL? = nil) throws {
+        try writePEM(pem, forHostID: hostID, base: base)
         // Belt-and-braces: nuke any legacy UserDefaults entry under the
         // same key. Idempotent.
-        UserDefaults.standard.removeObject(forKey: legacyDefaultsKey(for: hostID))
+        defaults.removeObject(forKey: legacyDefaultsKey(for: hostID))
     }
 
     /// Remove the pinned cert for a host. Wipes both stores so a stale
     /// UserDefaults entry can't resurrect a wiped pin.
-    public static func delete(forHostID hostID: String) {
-        if let url = try? fileURL(for: hostID) {
+    public static func delete(forHostID hostID: String, defaults: UserDefaults = .standard,
+                              base: URL? = nil) {
+        if let url = try? fileURL(for: hostID, base: base) {
             try? FileManager.default.removeItem(at: url)
         }
-        UserDefaults.standard.removeObject(forKey: legacyDefaultsKey(for: hostID))
+        defaults.removeObject(forKey: legacyDefaultsKey(for: hostID))
     }
 
     // MARK: File-store internals
 
     /// `~/Library/Application Support/Glimmer/PinnedHosts/`. Created at
     /// mode 0700 on first write.
-    private static func directoryURL() throws -> URL {
-        let fm = FileManager.default
-        let base = try fm.url(for: .applicationSupportDirectory,
-                              in: .userDomainMask,
-                              appropriateFor: nil,
-                              create: true)
-        return base.appendingPathComponent("Glimmer/PinnedHosts", isDirectory: true)
+    private static func directoryURL(base: URL?) throws -> URL {
+        try URL.supportRoot(base: base).appendingPathComponent("Glimmer/PinnedHosts", isDirectory: true)
     }
 
     /// Restrict host-id characters in the filename to a known-safe set
@@ -185,23 +182,23 @@ public enum PinnedCertStore {
         return sanitizedName.isEmpty ? "unnamed" : sanitizedName
     }
 
-    private static func fileURL(for hostID: String) throws -> URL {
-        try directoryURL().appendingPathComponent("\(sanitized(hostID)).pem",
+    private static func fileURL(for hostID: String, base: URL?) throws -> URL {
+        try directoryURL(base: base).appendingPathComponent("\(sanitized(hostID)).pem",
                                                    isDirectory: false)
     }
 
     /// Validate a temporary 0600 file before replacing a saved pin.
     /// A failed permission check must leave the old pin intact.
-    static func writePEM(_ pem: String, forHostID hostID: String,
+    static func writePEM(_ pem: String, forHostID hostID: String, base: URL? = nil,
                          verify: (URL) throws -> Void = verifyPermissions) throws {
         let fm = FileManager.default
-        let dir = try directoryURL()
+        let dir = try directoryURL(base: base)
         try fm.createDirectory(at: dir,
                                withIntermediateDirectories: true,
                                attributes: [.posixPermissions: 0o700])
         try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
 
-        let url = try fileURL(for: hostID)
+        let url = try fileURL(for: hostID, base: base)
         let prepared = dir.appendingPathComponent(".\(UUID().uuidString).pem")
         defer { try? fm.removeItem(at: prepared) }
         try Data(pem.utf8).write(to: prepared, options: [.atomic])

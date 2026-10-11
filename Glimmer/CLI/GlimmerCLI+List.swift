@@ -24,11 +24,11 @@ extension GlimmerCLI {
         // One PC at a time: a handful of 2-second probes at most. The status
         // is the launcher chip's own words, untruncated.
         let csv = command.flags.contains("--csv")
-        if csv { print(pcCSVHeader) }
+        if csv { printLine(pcCSVHeader) }
         for host in model.hosts {
             let live = await probe(host, model: model)
             let fields = [host.displayName, AppModel.routeAddress(host), ChipPresentation(live: live).fullLabel]
-            print(csv ? fields.map(csvField).joined(separator: ",") : fields.joined(separator: "\t"))
+            printLine(csv ? fields.map(csvField).joined(separator: ",") : fields.joined(separator: "\t"))
         }
         return Exit.ok
     }
@@ -41,7 +41,7 @@ extension GlimmerCLI {
             printError(notPairedMessage(host))
             return Exit.notPaired
         }
-        let client = NetworkClient(server: info)
+        let client = model.makeNetwork(info)
         let apps: [HostApp]
         do {
             _ = try await client.fetchServerInfo()
@@ -55,10 +55,10 @@ extension GlimmerCLI {
             return code
         }
         if csv {
-            print(csvHeader)
-            apps.forEach { print(csvRow($0)) }
+            printLine(csvHeader)
+            apps.forEach { printLine(csvRow($0)) }
         } else {
-            apps.filter { !$0.hidden }.forEach { print($0.name) }
+            apps.filter { !$0.hidden }.forEach { printLine($0.name) }
         }
         return Exit.ok
     }

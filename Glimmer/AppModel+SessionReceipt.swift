@@ -129,10 +129,10 @@ enum SessionReceiptStore {
     /// Stamp the wall clock the duration counts from. Latched ONCE per
     /// session - `.connectionEstablished` and the `.firstFrame` promote path
     /// both call this, and reconnect-quality events must not restart it.
-    static func markSessionLive() {
+    static func markSessionLive(at now: Date = Date()) {
         lock.lock()
         if pending != nil, pending?.liveAt == nil {
-            pending?.liveAt = Date()
+            pending?.liveAt = now
         }
         lock.unlock()
     }
@@ -143,7 +143,7 @@ enum SessionReceiptStore {
     /// collector resets on the next session. `receivedBytes` has no accessor
     /// of its own, so we take the same unfair lock the collector's own
     /// accessors take - a one-shot read at the teardown edge, never hot path.
-    static func captureStreamEnd(rttMs: Double?, collector: StatsCollector?) {
+    static func captureStreamEnd(rttMs: Double?, collector: StatsCollector?, at now: Date = Date()) {
         var videoBytes: UInt64?
         if let collector {
             collector.lock.lock()
@@ -153,7 +153,7 @@ enum SessionReceiptStore {
         lock.lock()
         endRttMs = rttMs
         endVideoBytes = videoBytes
-        endedAt = Date()
+        endedAt = now
         lock.unlock()
     }
 
@@ -161,7 +161,7 @@ enum SessionReceiptStore {
     /// (and stashes nothing) when the session never went live or ran under
     /// the 5-minute threshold. Consumes the latch either way, so a receipt
     /// can never be double-counted or leak into the next session.
-    static func finalizeSession() -> SessionReceipt? {
+    static func finalizeSession(defaults: UserDefaults = .standard) -> SessionReceipt? {
         lock.lock()
         let session = pending
         let rtt = endRttMs
@@ -188,7 +188,7 @@ enum SessionReceiptStore {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .secondsSince1970
         if let data = try? encoder.encode(receipt) {
-            UserDefaults.standard.set(data, forKey: key(
+            defaults.set(data, forKey: key(
                 hostId: session.hostId, width: session.width,
                 height: session.height, refreshHz: session.refreshHz))
         }
@@ -196,9 +196,10 @@ enum SessionReceiptStore {
     }
 
     /// Read half of the contract (the guidance copy in Settings rides this).
-    static func load(hostId: String, width: Int, height: Int, refreshHz: Int) -> SessionReceipt? {
+    static func load(hostId: String, width: Int, height: Int, refreshHz: Int,
+                     defaults: UserDefaults = .standard) -> SessionReceipt? {
         let storageKey = key(hostId: hostId, width: width, height: height, refreshHz: refreshHz)
-        guard let data = UserDefaults.standard.data(forKey: storageKey) else { return nil }
+        guard let data = defaults.data(forKey: storageKey) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .secondsSince1970
         return try? decoder.decode(SessionReceipt.self, from: data)

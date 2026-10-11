@@ -130,7 +130,7 @@ enum GlimmerCLI {
             return Exit.usage
         }
         if command.verb == .help {
-            print(usage)
+            printLine(usage)
             return Exit.ok
         }
         // The app's launch order minus the UI. AppModel reads the screen, which
@@ -155,8 +155,12 @@ enum GlimmerCLI {
 
     // MARK: - Shared helpers
 
+    static func printLine(_ line: String) {
+        CLITerminal.write(line + "\n", false)
+    }
+
     static func printError(_ line: String, newline: Bool = true) {
-        FileHandle.standardError.write(Data((line + (newline ? "\n" : "")).utf8))
+        CLITerminal.write(line + (newline ? "\n" : ""), true)
     }
 
     /// A paired PC by name, id or address, ignoring case (moonlight's rule).
@@ -218,5 +222,13 @@ enum GlimmerCLI {
 
     nonisolated static func notPairedMessage(_ host: Host) -> String {
         "\(host.displayName) needs pairing again. Run: glimmer pair \(AppModel.routeAddress(host))"
+    }
+}
+
+/// Where the verbs' text goes, stderr when `error`; tests read it back from here.
+/// Outside GlimmerCLI so the task-local stays nonisolated on every toolchain.
+enum CLITerminal {
+    @TaskLocal static var write: @Sendable (_ text: String, _ error: Bool) -> Void = { text, error in
+        if error { FileHandle.standardError.write(Data(text.utf8)) } else { print(text, terminator: "") }
     }
 }

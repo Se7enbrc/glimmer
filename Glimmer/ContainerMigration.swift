@@ -16,10 +16,10 @@ enum ContainerMigration {
 
     /// Run the migration if it hasn't run yet. Idempotent and a no-op when the
     /// old container is absent (fresh installs, already-migrated users).
-    static func runIfNeeded(defaults: UserDefaults = .standard) {
+    static func runIfNeeded(defaults: UserDefaults = .standard,
+                            home: URL = FileManager.default.homeDirectoryForCurrentUser) {
         guard !defaults.bool(forKey: didMigrateKey) else { return }
         let fm = FileManager.default
-        let home = fm.homeDirectoryForCurrentUser
         let containerLib = home
             .appendingPathComponent("Library/Containers/\(bundleID)/Data/Library", isDirectory: true)
         let hostLib = home.appendingPathComponent("Library", isDirectory: true)

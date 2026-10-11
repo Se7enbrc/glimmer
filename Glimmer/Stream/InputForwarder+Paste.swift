@@ -42,9 +42,11 @@ extension InputForwarder {
     /// Held input is released first so a held modifier cannot turn the text
     /// into shortcuts, and the text waits one beat for those releases, which
     /// ride another channel. Reading the clipboard here is a user paste.
-    func pasteClipboardAsText() {
-        guard isReady, let clipboard = NSPasteboard.general.string(forType: .string) else { return }
-        queuePasteText(clipboard)
+    @discardableResult
+    func pasteClipboardAsText(read: () -> String? = { NSPasteboard.general.string(forType: .string) })
+        -> Task<Void, Never>? {
+        guard isReady, let clipboard = read() else { return nil }
+        return queuePasteText(clipboard)
     }
 
     @discardableResult

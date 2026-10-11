@@ -120,12 +120,16 @@ final class TelemetryExporter: @unchecked Sendable {
 
     /// LAN-bind opt-in, resolved ONCE at construction (the TelemetryGate
     /// read-at-session-start discipline - no mid-session bind tearing).
-    private let lanBindEnabled = TelemetryGate.listensOnLAN()
+    private let lanBindEnabled: Bool
+    /// `port` in production; tests pass 0 for an ephemeral one.
+    private let listenPort: UInt16
 
     let source: TelemetrySource
     /// Allocated only when the opt-in exporter starts its capture timer.
     var rendererTelemetry: RendererTelemetry?
-    let counters = TelemetryCounters.shared
+    let counters: TelemetryCounters
+    /// Where the NDJSON rows and the session report land (`logsDirectory` in production).
+    let outputDirectory: URL
 
     /// Wi-Fi radio sampler (signal 3). Exists only on the gate-on path (this
     /// exporter is built only when enabled), and is read once per ~1Hz capture
@@ -164,7 +168,8 @@ final class TelemetryExporter: @unchecked Sendable {
     /// Everything mutable is confined here so no extra locks are needed.
     let workQueue = DispatchQueue(label: "io.ugfugl.Glimmer.telemetry", qos: .utility)
 
-    private var listener: NWListener?
+    // Module-internal so tests can wait for `.ready` and read the bound port.
+    var listener: NWListener?
     /// Accepted `/metrics` connections still alive, so the per-connection
     /// deadline and teardown can sweep silent/half-open peers - cancel() used
     /// to be reachable ONLY from inside the receive completion, so a never-
@@ -244,8 +249,15 @@ final class TelemetryExporter: @unchecked Sendable {
         return TelemetryExporter(source: source, serverName: serverName)
     }
 
-    private init(source: TelemetrySource, serverName: String) {
+    /// Tests pass a temp directory, their own counters and port 0; production takes the defaults.
+    init(source: TelemetrySource, serverName: String,
+         outputDirectory: URL = TelemetryExporter.logsDirectory, counters: TelemetryCounters = .shared,
+         port: UInt16 = TelemetryExporter.port, listenOnLAN: Bool = TelemetryGate.listensOnLAN()) {
         self.source = source
+        self.listenPort = port
+        self.lanBindEnabled = listenOnLAN
+        self.outputDirectory = outputDirectory
+        self.counters = counters
         self.serverLabel = TelemetryRenderer.pseudonym(serverName)
         // 64-bit random hex - opaque, not a host identifier.
         self.sessionId = String(format: "%016x", UInt64.random(in: .min ... .max))
@@ -282,7 +294,8 @@ final class TelemetryExporter: @unchecked Sendable {
             // those sites stay zero-cost. Started here so the latency rig shares
             // the exporter's lifecycle, session id, and ISO stamp.
             FrameTimingTracker.startIfEnabled(
-                sessionId: self.sessionId, isoStamp: self.isoFormatter.string(from: Date()))
+                sessionId: self.sessionId, isoStamp: self.isoFormatter.string(from: Date()),
+                directory: self.outputDirectory)
             // One-shot CONFIG/DIAL breadcrumb first, so every session file is
             // self-describing from line 1 (see writeConfigEvent).
             self.writeConfigEvent()
@@ -455,7 +468,7 @@ final class TelemetryExporter: @unchecked Sendable {
 
     private func startListener() {
         let params = Self.listenerParameters(listenOnLAN: lanBindEnabled)
-        guard let endpointPort = NWEndpoint.Port(rawValue: Self.port) else { return }
+        guard let endpointPort = NWEndpoint.Port(rawValue: listenPort) else { return }
         do {
             let newListener = try NWListener(using: params, on: endpointPort)
             newListener.stateUpdateHandler = { [weak self] state in

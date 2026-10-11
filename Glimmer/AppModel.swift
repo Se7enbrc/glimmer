@@ -53,6 +53,8 @@ final class AppModel {
     @ObservationIgnored var nativeSession: StreamSession?
     /// A command-line launch waiting for its route, before a session exists.
     @ObservationIgnored var pendingCommandStream: PendingCommandStream?
+    /// The panel's native mode; tests stand in a display of their own.
+    @ObservationIgnored var displayProbe: @MainActor () -> (width: Int, height: Int, fps: Int) = AppModel.mainDisplayMode
 
     // Quality
     // Default `.matchDisplay` (panel-native resolution + refresh) - the option
@@ -537,6 +539,14 @@ final class AppModel {
         customControllerChord = Self.persistedDecoded("customControllerChord", Set<ControllerButton>.self) ?? customControllerChord
         hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
     }
+
+    /// How the model reaches a PC and where it keeps paired PCs and their pins.
+    /// Production uses the real client, probe and store; tests answer as the PC.
+    @ObservationIgnored var makeNetwork: @Sendable (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) }
+    @ObservationIgnored var measureRTT: @Sendable (String, Int, Int) async -> HostReachability.Outcome =
+        HostReachability.measureRTT
+    @ObservationIgnored var hostsDefaults: UserDefaults = .standard
+    @ObservationIgnored var supportBase: URL?
 
     /// The launch the user last asked for, so Retry repeats exactly that.
     @ObservationIgnored var lastLaunchAttempt: (app: LibraryApp, host: Host)?

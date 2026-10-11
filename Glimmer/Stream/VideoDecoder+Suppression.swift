@@ -236,7 +236,7 @@ extension VideoDecoder {
     nonisolated func secondsSinceDecodeGateLifted() -> Double {
         presentSuppressedLock.lock(); defer { presentSuppressedLock.unlock() }
         guard let lifted = _decodeGateLiftedAtNanos else { return .infinity }
-        return Double(DispatchTime.now().uptimeNanoseconds &- lifted) / 1_000_000_000
+        return Double(now() &- lifted) / 1_000_000_000
     }
 
     /// Arm (or re-arm) the gate timer on the suppress edge. A rapid alt-tab
@@ -270,7 +270,7 @@ extension VideoDecoder {
     /// lock hold, so there is no window where the gate is on without the
     /// resync obligation recorded.
     @MainActor
-    private func engageDecodeGate() {
+    func engageDecodeGate() {
         // Defensive re-checks: teardown may have raced the timer (isStreaming
         // off), and the lock-guarded suppression re-read catches a resume
         // whose cancel lost the race with an already-completed sleep. The
@@ -314,7 +314,7 @@ extension VideoDecoder {
         let wasGated = _decodeGated
         if wasGated {
             _decodeGated = false
-            _decodeGateLiftedAtNanos = DispatchTime.now().uptimeNanoseconds
+            _decodeGateLiftedAtNanos = now()
         }
         presentSuppressedLock.unlock()
         guard wasGated else { return false }
@@ -348,7 +348,7 @@ extension VideoDecoder {
         let wasGated = _decodeGated
         if wasGated {
             _decodeGated = false
-            _decodeGateLiftedAtNanos = DispatchTime.now().uptimeNanoseconds
+            _decodeGateLiftedAtNanos = now()
         }
         _awaitingResyncIdr = false
         presentSuppressedLock.unlock()

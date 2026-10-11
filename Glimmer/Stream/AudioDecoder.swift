@@ -37,6 +37,11 @@ public final class AudioDecoder: @unchecked Sendable {
     var outputRoute = AudioOutputRoute()
     let engine = AVAudioEngine()
     let playerNode = AVAudioPlayerNode()
+    /// Where every decoded, backfill and top-up buffer is queued for playout.
+    /// Tests swap it to record what is scheduled, in order; the default is the player node.
+    lazy var schedulePlayout: (AVAudioPCMBuffer, @escaping @Sendable () -> Void) -> Void = { [playerNode] in
+        playerNode.scheduleBuffer($0, completionHandler: $1)
+    }
     /// Drift-tracking resampler, inserted between `playerNode` and the mixer. A
     /// slew-limited PI loop (`driveResampler`, driven ~1Hz from `publishAudioState`)
     /// steers `rate = 1+ε` to hold buffer fill at the cushion setpoint, cancelling

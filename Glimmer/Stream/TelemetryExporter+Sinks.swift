@@ -190,7 +190,7 @@ extension TelemetryExporter {
     /// Module-internal (not private) so `start()` in TelemetryExporter.swift
     /// still opens the file across the file split.
     func openNDJSONFile() {
-        let dir = Self.logsDirectory
+        let dir = outputDirectory
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {

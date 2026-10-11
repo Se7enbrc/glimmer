@@ -73,7 +73,7 @@ extension IdentityManager {
                 kSecAttrLabel as String: Self.dpLabel,
                 kSecMatchLimit as String: kSecMatchLimitAll
             ]
-            _ = SecItemDelete(query as CFDictionary)
+            _ = deleteKeychainItems(query)
         }
     }
 }

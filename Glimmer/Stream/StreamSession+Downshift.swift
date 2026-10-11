@@ -33,7 +33,7 @@ extension StreamSession {
             decodeIdle: decodeIdle,
             receiveIdle: receiveIdle,
             currentKbps: current,
-            nowUptime: ProcessInfo.processInfo.systemUptime)
+            nowUptime: uptimeSeconds)
 
         guard case .downshift(let toKbps) = decision else {
             // Log the honest reason ONCE per stall episode - a declined
@@ -49,7 +49,7 @@ extension StreamSession {
 
         // Spend the budget BEFORE any await so a second watchdog tick landing
         // mid-reconnect can't book a second downshift off the same evidence.
-        downshift.recordDownshift(atUptime: ProcessInfo.processInfo.systemUptime)
+        downshift.recordDownshift(atUptime: uptimeSeconds)
         reconnectConfig?.bitrateKbps = toKbps
         didLogDownshiftDecision = true
         // The route the stall was judged on, so a later route change can set the downshift aside.
@@ -75,7 +75,7 @@ extension StreamSession {
     func considerBitrateStepUp() async {
         guard isStreaming, !stopInProgress, !isReconnecting, downshift.isDownshifted,
               let current = reconnectConfig?.bitrateKbps else { return }
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = uptimeSeconds
         // The clean window is checked before the main-actor hop for the route, so the hop is rare.
         guard downshift.stepUp(currentKbps: current, routeKbps: .max, nowUptime: now) != nil else { return }
         let route = await currentRouteAsk()

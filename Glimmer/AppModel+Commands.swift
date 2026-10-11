@@ -303,7 +303,7 @@ extension AppModel {
     /// over the pinned connection, then a fresh readiness poll. Without a pin
     /// the request refuses before sending anything.
     func quitRunningApp(on host: Host) async throws {
-        let client = NetworkClient(server: nativeServerInfo(for: host))
+        let client = makeNetwork(nativeServerInfo(for: host))
         defer { restartHostStatusPolling() }
         do {
             try await client.cancel()

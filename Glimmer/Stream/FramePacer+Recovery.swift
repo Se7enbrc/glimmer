@@ -335,7 +335,12 @@ extension FramePacer {
     @MainActor
     @discardableResult
     func forceReleaseNextTick(reason: String) -> Int {
-        let target = displayLink?.targetTimestamp ?? .nan
+        forceReleaseNextTick(reason: reason, linkTarget: displayLink?.targetTimestamp ?? .nan)
+    }
+
+    /// The poke on the live link's `targetTimestamp` (NaN without a link).
+    @discardableResult
+    func forceReleaseNextTick(reason: String, linkTarget target: CFTimeInterval) -> Int {
         lock.lock()
         let depth = queue.count
         anchorCadenceBaseOnGridLocked(targetTimestamp: target)

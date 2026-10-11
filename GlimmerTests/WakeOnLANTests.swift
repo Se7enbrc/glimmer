@@ -62,6 +62,15 @@ struct WakeOnLANTests {
         #expect(targets[0].ports == [9, 47009])
     }
 
+    @Test func sendDeliversTheMagicPacketToEachTargetPort() async throws {
+        let peer = try #require(LoopbackUdpPeer())
+        #expect(WakeOnLAN.send(mac: "AA-BB-CC-DD-EE-FF", to: [("127.0.0.1", [peer.port])]) == 1)
+        let received = try #require(try await onTestThread { peer.receive(within: .seconds(5)) })
+        let mac: [UInt8] = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]
+        #expect(received.bytes == [UInt8](repeating: 0xFF, count: 6) + Array(repeating: mac, count: 16).flatMap { $0 })
+        #expect(WakeOnLAN.send(mac: "00:00:00:00:00:00", to: [("127.0.0.1", [peer.port])]) == 0)
+    }
+
     private func tower(mac: String) -> Glimmer.Host {
         Glimmer.Host(id: "tower", name: "tower", customName: nil, localAddress: "192.0.2.10", manualAddress: nil,
                      apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: mac)

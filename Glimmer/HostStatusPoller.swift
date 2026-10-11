@@ -134,7 +134,8 @@ extension AppModel {
     /// verdict: nothing is published, the streak is kept, and `noPath` asks for a quick retry.
     func pollHostStatusOnce(
         for expectedHostID: String, appListFor: Int?,
-        probe: @Sendable (String, Int, Int) async -> HostReachability.Outcome = HostReachability.measureRTT,
+        probe: (@Sendable (String, Int, Int) async -> HostReachability.Outcome)? = nil,
+        makeClient: ((ServerInfo) -> NetworkClient)? = nil,
         macHasRoute: Bool? = nil, publishMiss: ((String, String) async -> Void)? = nil
     ) async -> (appListFor: Int?, noPath: Bool) {
         // Snapshot the host on MainActor so we can hand its address etc.
@@ -150,7 +151,7 @@ extension AppModel {
 
         // TCP is the cheapest signal; an unanswered port does not warrant a TLS exchange.
         guard !Task.isCancelled, !hostPollingPausedForSleep else { return (appListFor, false) }
-        let probe = await probe(snap.address, snap.info.httpPort, 2_000)
+        let probe = await (probe ?? measureRTT)(snap.address, snap.info.httpPort, 2_000)
         guard !Task.isCancelled, !hostPollingPausedForSleep else { return (appListFor, false) }
 
         switch probe {
@@ -173,14 +174,14 @@ extension AppModel {
             return (appListFor, false)
 
         case .reachable(let rttMs):
-            let fetchedFor = await pollReachableHost(snap.info, hostID: snap.id, rttMs: rttMs,
-                                                     appListFor: appListFor)
+            let client = (makeClient ?? makeNetwork)(snap.info)
+            let fetchedFor = await pollReachableHost(client, hostID: snap.id, rttMs: rttMs, appListFor: appListFor)
             return (fetchedFor, false)
         }
     }
 
     /// The PC took the TCP probe: /serverinfo decides idle, busy or a changed certificate.
-    private func pollReachableHost(_ server: ServerInfo, hostID: String, rttMs: Int, appListFor: Int?) async -> Int? {
+    private func pollReachableHost(_ client: NetworkClient, hostID: String, rttMs: Int, appListFor: Int?) async -> Int? {
         // Host answered → clear the unreachable streak so a later transient
         // miss starts counting from zero again, and any stale wake failure.
         hostUnreachableStreak = 0
@@ -190,7 +191,6 @@ extension AppModel {
         }
         // Once TCP answers, ask /serverinfo who the PC is and whether it's busy.
         // A fresh NetworkClient per poll has no persistent connection to reuse.
-        let client = NetworkClient(server: server)
         do {
             let info = try await client.fetchServerInfo()
             await client.shutdown()
@@ -238,7 +238,7 @@ extension AppModel {
     /// running app by name.
     private func publishAnswer(_ info: ServerInfo, rttMs: Int, hostID: String, appListFor: Int?) async -> Int? {
         guard let host = selectedHost, host.id == hostID else { return appListFor }
-        updateHostMac(hostID: hostID, mac: info.macAddress)
+        updateHostMac(hostID: hostID, mac: info.macAddress, defaults: hostsDefaults)
         var fetchedFor = appListFor
         let running = info.currentGameID
         if Self.needsAppList(runningID: running, known: Set(host.apps.map(\.id)), fetchedFor: appListFor) {

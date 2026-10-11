@@ -94,7 +94,7 @@ extension StreamSession {
         }
 
         // --- 1) Pair or verify pairing ---------------------------------
-        let network = NetworkClient(server: server)
+        let network = makeNetwork(server)
         self.network = network
         // Sample latency from the click, on a host that is still idle. The gate
         // bands on the samples taken before /launch: once the game starts and
@@ -237,7 +237,7 @@ extension StreamSession {
     /// Step 1 of start(): fetch /serverinfo, stamp its launch sub-leg, log the handshake line, and
     /// refuse a GameStream or unpaired PC, named as the user knows it. A throw unwinds through
     /// start()'s power-assertion defer; the caller then awaits stop() for network cleanup.
-    private func fetchAndVerifyServerInfo(network: NetworkClient, pcName: String) async throws -> ServerInfo {
+    func fetchAndVerifyServerInfo(network: NetworkClient, pcName: String) async throws -> ServerInfo {
         // Telemetry: stamp the /serverinfo leg (launch sub-leg, part of launch_path_ms).
         let serverinfoStart = Date()
         let serverInfo = try await fetchInitialServerInfo { try await network.fetchServerInfo() }

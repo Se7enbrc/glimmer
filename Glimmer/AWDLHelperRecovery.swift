@@ -13,10 +13,11 @@ enum AWDLHelperRecovery {
         await daemonLayout() == .missing
     }
 
-    static func daemonLayout() async -> Layout {
+    static func daemonLayout(launchctl: @escaping @Sendable ([String]) -> AWDLProcess.Result? = {
+        AWDLProcess.run(arguments: $0, executable: "/bin/launchctl", captureErrors: true)
+    }) async -> Layout {
         let result = await Task.detached(priority: .utility) {
-            AWDLProcess.run(arguments: ["print", "system/" + glimmerHelperMachServiceName],
-                            executable: "/bin/launchctl", captureErrors: true)
+            launchctl(["print", "system/" + glimmerHelperMachServiceName])
         }.value
         guard let result, !result.timedOut, !result.truncated, result.status & 0x7f == 0 else { return .unknown }
         return layout(status: result.status >> 8, output: String(data: result.output, encoding: .utf8) ?? "")

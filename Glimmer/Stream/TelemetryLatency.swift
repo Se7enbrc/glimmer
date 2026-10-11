@@ -90,9 +90,10 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// Install a fresh tracker iff the gate is on, and start its trace writer.
     /// Called from the exporter's `start()`. No-op (and nothing installed) when
     /// off, so `shared` stays nil and the hot path stays zero-cost.
-    static func startIfEnabled(sessionId: String, isoStamp: String) {
+    static func startIfEnabled(sessionId: String, isoStamp: String,
+                               directory: URL = TelemetryExporter.logsDirectory) {
         guard TelemetryGate.isEnabled else { return }
-        let tracker = FrameTimingTracker(sessionId: sessionId)
+        let tracker = FrameTimingTracker(sessionId: sessionId, traceDirectory: directory)
         tracker.traceWriter.start(isoStamp: isoStamp)
         sharedBox.withLock { $0 = tracker }
     }
@@ -186,7 +187,7 @@ final class FrameTimingTracker: @unchecked Sendable {
 
     /// Both internal (not private): the trace renderer + drop-stub emitter in
     /// TelemetryLatency+Trace.swift are the only cross-file consumers.
-    let traceWriter = FrameTraceWriter()
+    let traceWriter: FrameTraceWriter
     let sessionId: String
 
     /// One in-flight frame's stage timestamps (nanoseconds, monotonic uptime).
@@ -316,9 +317,18 @@ final class FrameTimingTracker: @unchecked Sendable {
         return remaining.count
     }
 
+    /// Stage stamps (submit, output, present) read this uptime clock; tests script it and the counters.
+    let now: @Sendable () -> UInt64
+    let counters: TelemetryCounters
+
     /// Internal for tests; the engine only reaches a tracker through `shared`.
-    init(sessionId: String) {
+    init(sessionId: String, traceDirectory: URL = TelemetryExporter.logsDirectory,
+         now: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
+         counters: TelemetryCounters = .shared) {
         self.sessionId = sessionId
+        self.now = now
+        self.counters = counters
+        self.traceWriter = FrameTraceWriter(directory: traceDirectory)
         mapLock.initialize(to: os_unfair_lock_s())
         warmupLock.initialize(to: os_unfair_lock_s())
     }
@@ -338,7 +348,6 @@ final class FrameTimingTracker: @unchecked Sendable {
                          frameBytes: Int32 = 0, isIDR: Bool = false,
                          hostEncodeTenthsMs: UInt16 = 0) {
         guard rtpTimestamp != 0 else { return }
-        let counters = TelemetryCounters.shared
         let timing = Timing(frameIndex: frameIndex,
                             receiveNanos: receiveNanos,
                             assembleNanos: assembleNanos,
@@ -401,7 +410,7 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// (VideoDecoder.submitSampleToVT) with one cheap monotonic read.
     func recordSubmit(rtpTimestamp: UInt32) {
         guard rtpTimestamp != 0 else { return }
-        let now = DispatchTime.now().uptimeNanoseconds
+        let now = self.now()
         os_unfair_lock_lock(mapLock)
         if inFlight[rtpTimestamp] != nil {
             inFlight[rtpTimestamp]?.submitNanos = now
@@ -413,7 +422,7 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// decompressionOutputCallback) with the recovered rtpTimestamp.
     func recordOutput(rtpTimestamp: UInt32) {
         guard rtpTimestamp != 0 else { return }
-        let now = DispatchTime.now().uptimeNanoseconds
+        let now = self.now()
         os_unfair_lock_lock(mapLock)
         let prevOutput = lastOutputNanos
         lastOutputNanos = now
@@ -430,7 +439,7 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// entry (so a presented frame can never leak).
     func recordPresent(rtpTimestamp: UInt32) {
         guard rtpTimestamp != 0 else { return }
-        let presentNanos = DispatchTime.now().uptimeNanoseconds
+        let presentNanos = self.now()
 
         os_unfair_lock_lock(mapLock)
         guard let timing = inFlight.removeValue(forKey: rtpTimestamp) else {

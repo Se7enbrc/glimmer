@@ -379,16 +379,8 @@ extension VideoDecoder {
             rebuilt = false
         }
         guard rebuilt else { return false }
-        // Classify the create cause from the dimension delta (see the capture above).
-        let cause: SessionCreateCause
-        if !hadPriorSession {
-            cause = .firstCreate
-        } else if let priorDims, let newDims = formatDescription.map(CMVideoFormatDescriptionGetDimensions),
-                  priorDims.width != newDims.width || priorDims.height != newDims.height {
-            cause = .resolution
-        } else {
-            cause = .colorspace
-        }
+        let cause = Self.sessionCreateCause(hadPriorSession: hadPriorSession, priorDims: priorDims,
+                                            newDims: formatDescription.map(CMVideoFormatDescriptionGetDimensions))
         guard ensureDecompressionSession(cause: cause) else { return false }
 
         // STREAM DISCONTINUITY FLUSH. A parameter-set rebuild means the format
@@ -413,6 +405,18 @@ extension VideoDecoder {
         // geometry first. No-op if pacing isn't up.
         framePacer?.clearQueue(reason: "discontinuity")
         return true
+    }
+
+    /// No prior session is a first create, changed dimensions a resolution change, and the
+    /// same dimensions a colorspace, HDR or profile rebuild.
+    nonisolated static func sessionCreateCause(
+        hadPriorSession: Bool, priorDims: CMVideoDimensions?, newDims: CMVideoDimensions?
+    ) -> SessionCreateCause {
+        guard hadPriorSession else { return .firstCreate }
+        if let priorDims, let newDims, priorDims.width != newDims.width || priorDims.height != newDims.height {
+            return .resolution
+        }
+        return .colorspace
     }
 
     /// Submit one ready sample to VideoToolbox for ASYNCHRONOUS decode and book

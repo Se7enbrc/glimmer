@@ -56,6 +56,15 @@ enum IdentityKey {
 // Atomic writes, owner-only permissions, verified by stat(2) after setattr
 // because some filesystems (network mounts, FUSE) silently ignore the chmod.
 
+extension URL {
+    /// `~/Library/Application Support`, or `base` when a caller supplies its own root.
+    static func supportRoot(base: URL?) throws -> URL {
+        if let base { return base }
+        return try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                           appropriateFor: nil, create: true)
+    }
+}
+
 enum FileIdentityStore {
 
     /// Filename for the X.509 certificate (PEM, full --BEGIN CERTIFICATE-- block).
@@ -81,25 +90,20 @@ enum FileIdentityStore {
 
     /// `~/Library/Application Support/Glimmer/Identity/`. Created on first
     /// write with mode 0700.
-    static func directoryURL() throws -> URL {
-        let fm = FileManager.default
-        let base = try fm.url(for: .applicationSupportDirectory,
-                              in: .userDomainMask,
-                              appropriateFor: nil,
-                              create: true)
-        return base.appendingPathComponent("Glimmer/Identity", isDirectory: true)
+    static func directoryURL(base: URL? = nil) throws -> URL {
+        try URL.supportRoot(base: base).appendingPathComponent("Glimmer/Identity", isDirectory: true)
     }
 
-    static func fileURL(account: String) throws -> URL? {
+    static func fileURL(account: String, base: URL? = nil) throws -> URL? {
         guard let name = filename(forAccount: account) else { return nil }
-        return try directoryURL().appendingPathComponent(name, isDirectory: false)
+        return try directoryURL(base: base).appendingPathComponent(name, isDirectory: false)
     }
 
     /// Returns the bytes if the file exists, nil if it's absent. Anything
     /// else (permission denied, IO error mid-read) throws so we don't
     /// silently fall through to a destructive "regenerate".
-    static func read(account: String) throws -> Data? {
-        guard let url = try fileURL(account: account) else { return nil }
+    static func read(account: String, base: URL? = nil) throws -> Data? {
+        guard let url = try fileURL(account: account, base: base) else { return nil }
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else { return nil }
         return try Data(contentsOf: url)
@@ -112,13 +116,13 @@ enum FileIdentityStore {
     /// some FUSE backends). On a permissions verification failure we delete
     /// the partial file and throw - half-written secrets on a too-permissive
     /// filesystem are worse than no file at all.
-    static func write(_ data: Data, account: String) throws {
-        guard let url = try fileURL(account: account) else {
+    static func write(_ data: Data, account: String, base: URL? = nil) throws {
+        guard let url = try fileURL(account: account, base: base) else {
             throw StreamError.crypto("FileIdentityStore: unknown account \(account)")
         }
 
         let fm = FileManager.default
-        let dir = try directoryURL()
+        let dir = try directoryURL(base: base)
 
         // Ensure directory exists at 0700. `createDirectory` is a no-op if it
         // already exists (with `withIntermediateDirectories: true`), but it
@@ -155,8 +159,8 @@ enum FileIdentityStore {
     }
 
     /// Idempotent unlink. Used by cleanup / future migrations.
-    static func delete(account: String) {
-        guard let url = try? fileURL(account: account) else { return }
+    static func delete(account: String, base: URL? = nil) {
+        guard let url = try? fileURL(account: account, base: base) else { return }
         try? FileManager.default.removeItem(at: url)
     }
 }
@@ -166,6 +170,14 @@ enum FileIdentityStore {
 public actor IdentityManager {
 
     public static let shared = IdentityManager()
+
+    /// Where this manager keeps its state; the defaults are the real locations.
+    let defaults: UserDefaults
+    let supportBase: URL?
+    let keychainService: String
+    let moonlightQtSuite: String
+    /// SecItemDelete; tests record the queries instead of touching the keychain.
+    let deleteKeychainItems: @Sendable ([String: Any]) -> OSStatus
 
     /// Cached, fully-materialized identity. Built lazily on first access; once
     /// in memory we never touch disk again for the life of the actor.
@@ -180,7 +192,16 @@ public actor IdentityManager {
     let log = Logger(subsystem: "io.ugfugl.Glimmer",
                              category: "Stream.Identity")
 
-    private init() {}
+    init(defaultsSuite: String? = nil, supportBase: URL? = nil,
+         keychainService: String = IdentityManager.legacyKeychainService,
+         moonlightQtSuite: String = IdentityManager.moonlightQtSuiteName,
+         deleteKeychainItems: @escaping @Sendable ([String: Any]) -> OSStatus = { SecItemDelete($0 as CFDictionary) }) {
+        self.defaults = defaultsSuite.flatMap { UserDefaults(suiteName: $0) } ?? .standard
+        self.supportBase = supportBase
+        self.keychainService = keychainService
+        self.moonlightQtSuite = moonlightQtSuite
+        self.deleteKeychainItems = deleteKeychainItems
+    }
 
     // MARK: Public surface
 
@@ -215,7 +236,6 @@ public actor IdentityManager {
     private static let currentCleanupVersion = 3
 
     private func cleanupOrphanLoginKeychainEntries() {
-        let defaults = UserDefaults.standard
         guard defaults.integer(forKey: Self.cleanupVersionKey) < Self.currentCleanupVersion else {
             return
         }
@@ -237,11 +257,11 @@ public actor IdentityManager {
         for account in [Self.accountCert, Self.accountKey, Self.accountUID] {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: Self.legacyKeychainService,
+                kSecAttrService as String: keychainService,
                 kSecAttrAccount as String: account,
                 kSecMatchLimit as String: kSecMatchLimitAll
             ]
-            let status = SecItemDelete(query as CFDictionary)
+            let status = deleteKeychainItems(query)
             if status == errSecSuccess {
                 log.info("Cleaned up legacy keychain identity item (\(account)) from login keychain")
             }
@@ -254,9 +274,7 @@ public actor IdentityManager {
         // no longer need. Safe to delete on every install where the flag
         // hasn't been bumped past this version.
         let fm = FileManager.default
-        if let appSupport = try? fm.url(for: .applicationSupportDirectory,
-                                         in: .userDomainMask, appropriateFor: nil,
-                                         create: false) {
+        if let appSupport = try? URL.supportRoot(base: supportBase) {
             let oldKC = appSupport.appendingPathComponent("Glimmer/identity.keychain")
             if fm.fileExists(atPath: oldKC.path) {
                 try? fm.removeItem(at: oldKC)

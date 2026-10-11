@@ -301,7 +301,7 @@ extension AppModel {
     /// when no trustworthy pin exists - the pairStatus gate then forces a
     /// re-pair rather than pinning a writable value.
     private func authoritativePin(for host: Host) -> String? {
-        let filePin = PinnedCertStore.load(forHostID: host.id)
+        let filePin = PinnedCertStore.load(forHostID: host.id, defaults: hostsDefaults, base: supportBase)
         let hint = host.serverCertPEM.flatMap { $0.isEmpty ? nil : $0 }
 
         if let filePin {
@@ -325,8 +325,8 @@ extension AppModel {
         // same-UID-writable value.
         if let hint {
             do {
-                try PinnedCertStore.store(pem: hint, forHostID: host.id)
-                return PinnedCertStore.load(forHostID: host.id)
+                try PinnedCertStore.store(pem: hint, forHostID: host.id, defaults: hostsDefaults, base: supportBase)
+                return PinnedCertStore.load(forHostID: host.id, defaults: hostsDefaults, base: supportBase)
             } catch {
                 log.error(
                     """

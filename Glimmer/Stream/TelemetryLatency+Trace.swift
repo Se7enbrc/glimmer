@@ -82,10 +82,9 @@ extension FrameTimingTracker {
     /// `stage` is the last stage reached; assemble and eviction times locate the hitch.
     /// Called off the mapLock.
     func emitDropStubs(_ evicted: [(rtp: UInt32, timing: Timing)]) {
-        let counters = TelemetryCounters.shared
         let lines = dropStubLines(
             evicted, hiddenNow: counters.presentSuppressed || counters.decodeGated,
-            evictMs: Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0)
+            evictMs: Double(now()) / 1_000_000.0)
         for line in lines { traceWriter.append(line) }
     }
 

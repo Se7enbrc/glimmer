@@ -102,7 +102,7 @@ extension StreamSession {
             // Stamp the startup-grace origin: the present-stall branch is
             // suppressed for `presentWatchdogGrace` seconds from here, spanning
             // the pacer's cadence-lock after its first frame.
-            self.presentWatchdogStartedAt = CFAbsoluteTimeGetCurrent()
+            self.presentWatchdogStartedAt = clock.absolute()
             // 20 Hz (50ms) so we detect and recover a present-path stall in
             // well under the ~300ms a user would perceive as a freeze, while
             // staying a featherweight check (one lock-guarded snapshot read).
@@ -122,7 +122,7 @@ extension StreamSession {
     /// One present-watchdog evaluation. MainActor-isolated (the timer body
     /// runs there). Reads the pacer liveness snapshot and escalates recovery.
     @MainActor
-    private func tickPresentWatchdog(dec: VideoDecoder) {
+    func tickPresentWatchdog(dec: VideoDecoder) {
         // Intentional non-presentation is NOT a freeze. When the window is
         // hidden / occluded / backgrounded the present path is deliberately
         // suppressed: frames legitimately stop reaching the screen while decode
@@ -173,7 +173,13 @@ extension StreamSession {
         }
         // Paced mode is live again - clear any direct-stall episode state.
         self.directPresentStallSince = nil
+        self.tickPacedPresentWatchdog(dec: dec, live: live, decodeIdle: decodeIdle)
+    }
 
+    /// The paced half of one evaluation, over a liveness snapshot: grace, trip,
+    /// episode and cluster bookkeeping, then the staged recovery.
+    @MainActor
+    func tickPacedPresentWatchdog(dec: VideoDecoder, live: FramePacer.LivenessSnapshot, decodeIdle: Double) {
         // Startup grace: suppress the PRESENT-STALL branch while the pacer locks
         // cadence - keyed on TIME since the watchdog armed, not totalReleases==0.
         // The pacer force-releases frame 1 immediately, so a totalReleases-keyed
@@ -184,7 +190,7 @@ extension StreamSession {
         // suppressed.
         let inStartupGrace: Bool = {
             guard let started = self.presentWatchdogStartedAt else { return false }
-            return CFAbsoluteTimeGetCurrent() - started < StreamSession.presentWatchdogGrace
+            return clock.absolute() - started < StreamSession.presentWatchdogGrace
         }()
 
         let trip = self.evaluatePresentTrip(live: live, inStartupGrace: inStartupGrace)
@@ -197,14 +203,14 @@ extension StreamSession {
             // a ~4.5s three-trip outage). See the PresentTrip extension.
             if self.presentStallSince != nil {
                 self.log.notice("Present path recovered - resuming normal pacing")
-                StreamSession.presentTripLastClearedAt = CFAbsoluteTimeGetCurrent()
+                StreamSession.presentTripLastClearedAt = clock.absolute()
             }
             self.presentStallSince = nil
             self.lastPresentRecoveryStage = 0
             return
         }
 
-        let now = CFAbsoluteTimeGetCurrent()
+        let now = clock.absolute()
         if self.presentStallSince == nil {
             self.presentStallSince = now
             self.lastPresentRecoveryStage = 0
@@ -295,7 +301,7 @@ extension StreamSession {
             return
         }
 
-        let now = CFAbsoluteTimeGetCurrent()
+        let now = clock.absolute()
         if self.directPresentStallSince == nil {
             self.directPresentStallSince = now
             TelemetryCounters.shared.presentStallTotal.increment()

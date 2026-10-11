@@ -148,17 +148,23 @@ extension InputForwarder {
         quitChordDwellTask = Task { [weak self, weak pad] in
             try? await Task.sleep(nanoseconds: UInt64(Self.quitChordDwellSeconds * 1_000_000_000))
             guard !Task.isCancelled, let self else { return }
-            self.quitChordDwellTask = nil
-            self.quitChordDwellSlot = nil
-            guard self.forwardsControllerEvents, let state = readState() else { return }
-            guard self.matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
-                                                  rightTrigger: state.analog.rightTrigger) else {
-                self.quitChordBreadcrumb(.cycle, "not held at dwell expiry (slot \(slot)) - not quitting", pad: pad)
-                return
-            }
-            Diag.notice("controller quit chord held - ending stream", "Controller")
-            self.onQuitHotkey?()
+            self.quitChordDwellExpired(slot: slot, pad: pad, readState: readState)
         }
+    }
+
+    /// The dwell ran out: quit if the chord is still held. The timer's body; tests call it directly.
+    func quitChordDwellExpired(slot: UInt8, pad: GCExtendedGamepad?,
+                               readState: @MainActor () -> (buttons: Int32, analog: GamepadAnalog)?) {
+        quitChordDwellTask = nil
+        quitChordDwellSlot = nil
+        guard forwardsControllerEvents, let state = readState() else { return }
+        guard matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
+                                         rightTrigger: state.analog.rightTrigger) else {
+            quitChordBreadcrumb(.cycle, "not held at dwell expiry (slot \(slot)) - not quitting", pad: pad)
+            return
+        }
+        Diag.notice("controller quit chord held - ending stream", "Controller")
+        onQuitHotkey?()
     }
 
     /// Cancel an in-flight dwell (chord released early, arming pad detached,
@@ -209,8 +215,8 @@ extension InputForwarder {
     /// registered; hid[l1=true] with gc[l1=false] says GameController withheld
     /// a shoulder. Only ever called on transitions (arm, cancel, expiry, a
     /// centre-button edge), never per frame; the held-set build is the cost.
-    func quitChordBreadcrumb(_ kind: QuitChordBreadcrumbKind, _ what: String, pad: GCExtendedGamepad?) {
-        let now = ProcessInfo.processInfo.systemUptime
+    func quitChordBreadcrumb(_ kind: QuitChordBreadcrumbKind, _ what: String, pad: GCExtendedGamepad?,
+                             now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
         switch kind {
         case .armed:
             let allowed = now - quitChordCrumbs.lastArmAt >= Self.quitChordBreadcrumbIntervalSeconds

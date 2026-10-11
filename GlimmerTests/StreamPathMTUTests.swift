@@ -427,6 +427,13 @@ struct StreamPathMTUTests {
         #expect(probe.rtt?.count == 3)
     }
 
+    @Test func loopbackProbeResolvesLoAndItsMtu() {
+        let probe = StreamPathMTU.probe(host: "127.0.0.1")
+        #expect(probe.interfaceName == "lo0")
+        #expect((probe.mtu ?? 0) >= StreamPathMTU.standardEthernetMTU)
+        #expect(!probe.isTunnel && probe.rtt == nil)
+    }
+
     @Test func fullWindowReleasesLaunchWithoutWaitingOutTheCap() async throws {
         try await Task(priority: .high) {
             let port = try #require(LoopbackPort(listening: true))

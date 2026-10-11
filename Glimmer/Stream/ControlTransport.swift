@@ -71,6 +71,11 @@ enum ControlTransport {
     /// backstop only ends an unwrapped `/launch`, so it lands just after the same deadline.
     static let backstopGrace: TimeInterval = 0.25
 
+    /// One control GET in `get`'s shape: NetworkClient's seam, so tests can answer as a fake Sunshine.
+    typealias Get = @Sendable (_ host: String, _ port: Int, _ target: String, _ userAgent: String,
+                               _ tls: Bool, _ credential: TLSCredential,
+                               _ timeout: TimeInterval) async throws -> Response
+
     /// Perform one HTTP/1.1 GET. `tls == false` is plain HTTP (the unpaired probe
     /// path - no cert, no pin); `tls == true` presents the client cert and pins.
     static func get(host: String, port: Int, target: String,

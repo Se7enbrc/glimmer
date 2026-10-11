@@ -12,6 +12,8 @@
 		DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */; };
 		DEC0DE202609258300000001 /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000002 /* Protocol.swift */; };
 		DEC0DE202609253700000001 /* AWDLHelperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253700000002 /* AWDLHelperTests.swift */; };
+		5EA320261010000000001301 /* ProcessRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001302 /* ProcessRunnerTests.swift */; };
+		5EA320261010000000001101 /* AWDLSuppressorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001102 /* AWDLSuppressorTests.swift */; };
 		DEC0DE202609258000000001 /* TestConcurrency.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258000000002 /* TestConcurrency.swift */; };
 		DEC0DE202609253700000003 /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253700000004 /* Protocol.swift */; };
 		DEC0DE202609253700000005 /* AWDLSuppressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253700000006 /* AWDLSuppressor.swift */; };
@@ -57,6 +59,8 @@
 		DEC0DE202609222400000001 /* SettingsShortcutRecorders.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222400000002 /* SettingsShortcutRecorders.swift */; };
 		DEC0DE202609222400000003 /* ShortcutRecordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */; };
 		DEC0DE202609222400000005 /* LoginItemReconcileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */; };
+		5E5A5E202610100000000001 /* LoginItemApplyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5A5E202610100000000002 /* LoginItemApplyTests.swift */; };
+		5E5A5E202610100000000003 /* SystemServiceSeamTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5A5E202610100000000004 /* SystemServiceSeamTests.swift */; };
 		A100019A /* AboutPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019B /* AboutPane.swift */; };
 		DEC0DE2026092000000000D1 /* WakeOnLAN.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D2 /* WakeOnLAN.swift */; };
 		DEC0DE20260922030000000F /* AppShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220300000010 /* AppShellTests.swift */; };
@@ -309,12 +313,14 @@
 		DEC0DE202609253900000001 /* VideoDepacketizerRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253900000002 /* VideoDepacketizerRecoveryTests.swift */; };
 		D2B0000C /* PresentTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000B /* PresentTripTests.swift */; };
 		D2C7A002 /* StreamSessionDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C7A001 /* StreamSessionDecisionTests.swift */; };
+		5E551030261010000C1C0001 /* SessionTimerBodyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E551030261010000C1C0002 /* SessionTimerBodyTests.swift */; };
 		D2C7A004 /* EnvSignalStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C7A003 /* EnvSignalStateMachineTests.swift */; };
 		D2C7A006 /* BackendGlueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C7A005 /* BackendGlueTests.swift */; };
 		D1A1B003 /* HUDBackdropLuminanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A1B004 /* HUDBackdropLuminanceTests.swift */; };
 		DEC0DE202609221200000001 /* FramePacerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221200000002 /* FramePacerTests.swift */; };
 		DEC0DE202609252400000001 /* FramePacerTickDeficitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609252400000002 /* FramePacerTickDeficitTests.swift */; };
 		D2B0000E /* AudioPrimeEdgeSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000D /* AudioPrimeEdgeSafetyTests.swift */; };
+		A0D5EA400000000000000002 /* AudioPlayoutScheduleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D5EA400000000000000001 /* AudioPlayoutScheduleTests.swift */; };
 		DEC0DE202609221300000002 /* AudioCushionDeadAirTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221300000001 /* AudioCushionDeadAirTests.swift */; };
 		DEC0DE202609221300000004 /* AudioResamplerHoldTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221300000003 /* AudioResamplerHoldTests.swift */; };
 		A0D102202610091540000002 /* AudioPacketSpliceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D102202610091540000001 /* AudioPacketSpliceTests.swift */; };
@@ -365,6 +371,9 @@
 		DA2026100900000000000015 /* RendererTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000016 /* RendererTelemetryTests.swift */; };
 		C4A400000000000000000102 /* LatencyTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000101 /* LatencyTrackerTests.swift */; };
 		C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000103 /* TelemetryCounterStateTests.swift */; };
+		C4A4000000000000000003F2 /* TelemetryCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */; };
+		C4A40000000000000000E2A4 /* TelemetrySinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A40000000000000000E2A3 /* TelemetrySinkTests.swift */; };
+		C4A40000000000000000E2A2 /* TelemetryListenerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A40000000000000000E2A1 /* TelemetryListenerTests.swift */; };
 		C4A400000000000000000106 /* StatsCollectorWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000105 /* StatsCollectorWindowTests.swift */; };
 		C4A400000000000000000108 /* StatsSnapshotRowsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */; };
 		C4A400000000000000000110 /* StatsSupportTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000109 /* StatsSupportTypesTests.swift */; };
@@ -383,6 +392,19 @@
 		DEC0DE202610100800000011 /* StreamViewKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100800000012 /* StreamViewKeyboardTests.swift */; };
 		DEC0DE202610100800000021 /* StreamViewCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100800000022 /* StreamViewCaptureTests.swift */; };
 		DEC0DE202609221000000003 /* RtspClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221000000004 /* RtspClientTests.swift */; };
+		DEC0DE20261010E100000001 /* FakeSunshine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000002 /* FakeSunshine.swift */; };
+		DEC0DE20261010E100000003 /* NetworkClientRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000004 /* NetworkClientRequestTests.swift */; };
+		5E55102026101000000000A1 /* SessionLaunchFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */; };
+		5E55103026101000000000B1 /* GlimmerCLISunshineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */; };
+		5E55103026101000000000A1 /* AppModelSunshineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55103026101000000000A2 /* AppModelSunshineTests.swift */; };
+		5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */; };
+		5E551020261010000C1C0001 /* TimedDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E551020261010000C1C0002 /* TimedDecisionTests.swift */; };
+		DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000006 /* PairingFlowTests.swift */; };
+		DEC0DE20261010E100000007 /* HostStatusPollerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */; };
+		DEC0DE20261010E100000009 /* RtspHandshakeLoopbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000010 /* RtspHandshakeLoopbackTests.swift */; };
+		DEC0DE20261010A1000000B0 /* LoopbackUdpPeer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010A1000000F0 /* LoopbackUdpPeer.swift */; };
+		DEC0DE20261010A1000010B0 /* EnetHandshakeLoopbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010A1000010F0 /* EnetHandshakeLoopbackTests.swift */; };
+		DEC0DE20261010A1000020B0 /* RtpReceiverLoopbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010A1000020F0 /* RtpReceiverLoopbackTests.swift */; };
 		DEC0DE2026101010A0000001 /* RtspHandshakeParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101010A0000002 /* RtspHandshakeParsingTests.swift */; };
 		DEC0DE2026101010A0000003 /* SunshineHTTPParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101010A0000004 /* SunshineHTTPParsingTests.swift */; };
 		DEC0DE2026101010A0000005 /* PairingHandshakeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101010A0000006 /* PairingHandshakeTests.swift */; };
@@ -400,20 +422,27 @@
 		6E2026101000000000000003 /* VideoDecoderEnqueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000004 /* VideoDecoderEnqueueTests.swift */; };
 		6E2026101000000000000005 /* VideoDecoderSuppressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000006 /* VideoDecoderSuppressionTests.swift */; };
 		6E2026101000000000000007 /* VideoDecoderLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */; };
+		5EA320261010000000001401 /* VideoDecoderSessionFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001402 /* VideoDecoderSessionFactoryTests.swift */; };
 		DEC0DE202609230400000001 /* GlimmerIntentsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */; };
 		DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */; };
 		DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609232100000004 /* LauncherWindowTests.swift */; };
 		DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F2 /* MutedOutputTests.swift */; };
+		DEC0DE20261010D5E0000001 /* DualSenseOutputReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010D5E0000002 /* DualSenseOutputReportTests.swift */; };
 		DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */; };
 		DEC0DE2026091900000000F9 /* DualSenseBinderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */; };
 		DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */; };
 		DEC0DE202610109900000001 /* PEMTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000002 /* PEMTests.swift */; };
 		DEC0DE202610109900000003 /* ControllerStatePushTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000004 /* ControllerStatePushTests.swift */; };
 		DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */; };
+		DEC0DE202610101000000001 /* HostsPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610101000000002 /* HostsPersistenceTests.swift */; };
+		DEC0DE202610101000000003 /* StoragePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610101000000004 /* StoragePersistenceTests.swift */; };
+		5EA320261010000000001501 /* IdentityKeychainCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */; };
 		DEC0DE202610109900000007 /* ControllerBatteryMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */; };
 		DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609233300000002 /* ControllerArrivalTests.swift */; };
+		DEC0DE202610101100000001 /* ControllerHapticsActuationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610101100000002 /* ControllerHapticsActuationTests.swift */; };
 		DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */; };
 		DEC0DE20261009000000CA03 /* FramePacerHandoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261009000000CA04 /* FramePacerHandoffTests.swift */; };
+		DEC0DE20261010F1C0000001 /* FramePacerTickTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010F1C0000002 /* FramePacerTickTests.swift */; };
 		DEC0DE2026101000000005A1 /* FramePacerReleaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101000000005A2 /* FramePacerReleaseTests.swift */; };
 		DEC0DE2026101000000005A3 /* FramePacerDeficitEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101000000005A4 /* FramePacerDeficitEventTests.swift */; };
 		DEC0DE2026091900000000E1 /* HIDGamepadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */; };
@@ -481,6 +510,8 @@
 		DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperManagerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000002 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
 		DEC0DE202609253700000002 /* AWDLHelperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperTests.swift; sourceTree = "<group>"; };
+		5EA320261010000000001302 /* ProcessRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessRunnerTests.swift; sourceTree = "<group>"; };
+		5EA320261010000000001102 /* AWDLSuppressorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLSuppressorTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258000000002 /* TestConcurrency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestConcurrency.swift; sourceTree = "<group>"; };
 		DEC0DE202609253700000004 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
 		DEC0DE202609253700000006 /* AWDLSuppressor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/AWDLSuppressor.swift; sourceTree = "<group>"; };
@@ -535,6 +566,8 @@
 		DEC0DE202609222400000002 /* SettingsShortcutRecorders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsShortcutRecorders.swift; sourceTree = "<group>"; };
 		DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRecordingTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemReconcileTests.swift; sourceTree = "<group>"; };
+		5E5A5E202610100000000002 /* LoginItemApplyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemApplyTests.swift; sourceTree = "<group>"; };
+		5E5A5E202610100000000004 /* SystemServiceSeamTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemServiceSeamTests.swift; sourceTree = "<group>"; };
 		A100019B /* AboutPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPane.swift; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D2 /* WakeOnLAN.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLAN.swift"; sourceTree = "<group>"; };
 		DEC0DE202609220300000010 /* AppShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppShellTests.swift"; sourceTree = "<group>"; };
@@ -797,12 +830,14 @@
 		DEC0DE202609253900000002 /* VideoDepacketizerRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDepacketizerRecoveryTests.swift; sourceTree = "<group>"; };
 		D2B0000B /* PresentTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentTripTests.swift; sourceTree = "<group>"; };
 		D2C7A001 /* StreamSessionDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamSessionDecisionTests.swift; sourceTree = "<group>"; };
+		5E551030261010000C1C0002 /* SessionTimerBodyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTimerBodyTests.swift; sourceTree = "<group>"; };
 		D2C7A003 /* EnvSignalStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvSignalStateMachineTests.swift; sourceTree = "<group>"; };
 		D2C7A005 /* BackendGlueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendGlueTests.swift; sourceTree = "<group>"; };
 		D1A1B004 /* HUDBackdropLuminanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDBackdropLuminanceTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221200000002 /* FramePacerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609252400000002 /* FramePacerTickDeficitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerTickDeficitTests.swift; sourceTree = "<group>"; };
 		D2B0000D /* AudioPrimeEdgeSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPrimeEdgeSafetyTests.swift; sourceTree = "<group>"; };
+		A0D5EA400000000000000001 /* AudioPlayoutScheduleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayoutScheduleTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221300000001 /* AudioCushionDeadAirTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCushionDeadAirTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221300000003 /* AudioResamplerHoldTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioResamplerHoldTests.swift; sourceTree = "<group>"; };
 		A0D102202610091540000001 /* AudioPacketSpliceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPacketSpliceTests.swift; sourceTree = "<group>"; };
@@ -853,6 +888,9 @@
 		DA2026100900000000000016 /* RendererTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RendererTelemetryTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000101 /* LatencyTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LatencyTrackerTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000103 /* TelemetryCounterStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryCounterStateTests.swift"; sourceTree = "<group>"; };
+		C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryCaptureTests.swift"; sourceTree = "<group>"; };
+		C4A40000000000000000E2A3 /* TelemetrySinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetrySinkTests.swift"; sourceTree = "<group>"; };
+		C4A40000000000000000E2A1 /* TelemetryListenerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryListenerTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000105 /* StatsCollectorWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsCollectorWindowTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsSnapshotRowsTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000109 /* StatsSupportTypesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsSupportTypesTests.swift"; sourceTree = "<group>"; };
@@ -871,6 +909,19 @@
 		DEC0DE202610100800000012 /* StreamViewKeyboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamViewKeyboardTests.swift; sourceTree = "<group>"; };
 		DEC0DE202610100800000022 /* StreamViewCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamViewCaptureTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221000000004 /* RtspClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RtspClientTests.swift"; sourceTree = "<group>"; };
+		DEC0DE20261010E100000002 /* FakeSunshine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeSunshine.swift; sourceTree = "<group>"; };
+		DEC0DE20261010E100000004 /* NetworkClientRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkClientRequestTests.swift; sourceTree = "<group>"; };
+		5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLaunchFlowTests.swift; sourceTree = "<group>"; };
+		5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerCLISunshineTests.swift; sourceTree = "<group>"; };
+		5E55103026101000000000A2 /* AppModelSunshineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelSunshineTests.swift; sourceTree = "<group>"; };
+		5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReconnectFlowTests.swift; sourceTree = "<group>"; };
+		5E551020261010000C1C0002 /* TimedDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedDecisionTests.swift; sourceTree = "<group>"; };
+		DEC0DE20261010E100000006 /* PairingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingFlowTests.swift; sourceTree = "<group>"; };
+		DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostStatusPollerTests.swift; sourceTree = "<group>"; };
+		DEC0DE20261010E100000010 /* RtspHandshakeLoopbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RtspHandshakeLoopbackTests.swift; sourceTree = "<group>"; };
+		DEC0DE20261010A1000000F0 /* LoopbackUdpPeer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopbackUdpPeer.swift; sourceTree = "<group>"; };
+		DEC0DE20261010A1000010F0 /* EnetHandshakeLoopbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnetHandshakeLoopbackTests.swift; sourceTree = "<group>"; };
+		DEC0DE20261010A1000020F0 /* RtpReceiverLoopbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RtpReceiverLoopbackTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026101010A0000002 /* RtspHandshakeParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RtspHandshakeParsingTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026101010A0000004 /* SunshineHTTPParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SunshineHTTPParsingTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026101010A0000006 /* PairingHandshakeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairingHandshakeTests.swift"; sourceTree = "<group>"; };
@@ -888,20 +939,27 @@
 		6E2026101000000000000004 /* VideoDecoderEnqueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderEnqueueTests.swift"; sourceTree = "<group>"; };
 		6E2026101000000000000006 /* VideoDecoderSuppressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderSuppressionTests.swift"; sourceTree = "<group>"; };
 		6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderLifecycleTests.swift"; sourceTree = "<group>"; };
+		5EA320261010000000001402 /* VideoDecoderSessionFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDecoderSessionFactoryTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerIntentsTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609232100000004 /* LauncherWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherWindowTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000F2 /* MutedOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MutedOutputTests.swift"; sourceTree = "<group>"; };
+		DEC0DE20261010D5E0000002 /* DualSenseOutputReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseOutputReportTests.swift"; path = "DualSenseOutputReportTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseDeviceStateTests.swift"; path = "DualSenseDeviceStateTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseBinderTests.swift"; path = "DualSenseBinderTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlayerLEDsTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610109900000002 /* PEMTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PEMTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610109900000004 /* ControllerStatePushTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerStatePushTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioCushionMemoryTests.swift"; sourceTree = "<group>"; };
+		DEC0DE202610101000000002 /* HostsPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostsPersistenceTests.swift"; sourceTree = "<group>"; };
+		DEC0DE202610101000000004 /* StoragePersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StoragePersistenceTests.swift"; sourceTree = "<group>"; };
+		5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityKeychainCleanupTests.swift; sourceTree = "<group>"; };
 		DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerBatteryMappingTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609233300000002 /* ControllerArrivalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerArrivalTests.swift"; sourceTree = "<group>"; };
+		DEC0DE202610101100000002 /* ControllerHapticsActuationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerHapticsActuationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InputRecordingBackend.swift"; sourceTree = "<group>"; };
 		DEC0DE20261009000000CA04 /* FramePacerHandoffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FramePacerHandoffTests.swift"; sourceTree = "<group>"; };
+		DEC0DE20261010F1C0000002 /* FramePacerTickTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FramePacerTickTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026101000000005A2 /* FramePacerReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerReleaseTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026101000000005A4 /* FramePacerDeficitEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerDeficitEventTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HIDGamepadTests.swift"; sourceTree = "<group>"; };
@@ -1302,6 +1360,8 @@
 			isa = PBXGroup;
 			children = (
 				DEC0DE202609253700000002 /* AWDLHelperTests.swift */,
+				5EA320261010000000001302 /* ProcessRunnerTests.swift */,
+				5EA320261010000000001102 /* AWDLSuppressorTests.swift */,
 				DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */,
 				DEC0DE202609258000000002 /* TestConcurrency.swift */,
 				DEC0DE202609256700000004 /* AWDLStreamLease.swift */,
@@ -1325,12 +1385,14 @@
 				DEC0DE202609253900000002 /* VideoDepacketizerRecoveryTests.swift */,
 				D2B0000B /* PresentTripTests.swift */,
 				D2C7A001 /* StreamSessionDecisionTests.swift */,
+				5E551030261010000C1C0002 /* SessionTimerBodyTests.swift */,
 				D2C7A003 /* EnvSignalStateMachineTests.swift */,
 				D2C7A005 /* BackendGlueTests.swift */,
 				D1A1B004 /* HUDBackdropLuminanceTests.swift */,
 				DEC0DE202609221200000002 /* FramePacerTests.swift */,
 				DEC0DE202609252400000002 /* FramePacerTickDeficitTests.swift */,
 				D2B0000D /* AudioPrimeEdgeSafetyTests.swift */,
+				A0D5EA400000000000000001 /* AudioPlayoutScheduleTests.swift */,
 				DEC0DE202609221300000001 /* AudioCushionDeadAirTests.swift */,
 				DEC0DE202609221300000003 /* AudioResamplerHoldTests.swift */,
 				A0D102202610091540000001 /* AudioPacketSpliceTests.swift */,
@@ -1381,6 +1443,9 @@
 				DA2026100900000000000016 /* RendererTelemetryTests.swift */,
 				C4A400000000000000000101 /* LatencyTrackerTests.swift */,
 				C4A400000000000000000103 /* TelemetryCounterStateTests.swift */,
+				C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */,
+				C4A40000000000000000E2A3 /* TelemetrySinkTests.swift */,
+				C4A40000000000000000E2A1 /* TelemetryListenerTests.swift */,
 				C4A400000000000000000105 /* StatsCollectorWindowTests.swift */,
 				C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */,
 				C4A400000000000000000109 /* StatsSupportTypesTests.swift */,
@@ -1399,6 +1464,19 @@
 				DEC0DE202610100800000012 /* StreamViewKeyboardTests.swift */,
 				DEC0DE202610100800000022 /* StreamViewCaptureTests.swift */,
 				DEC0DE202609221000000004 /* RtspClientTests.swift */,
+				DEC0DE20261010E100000002 /* FakeSunshine.swift */,
+				DEC0DE20261010E100000004 /* NetworkClientRequestTests.swift */,
+				5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */,
+				5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */,
+				5E55103026101000000000A2 /* AppModelSunshineTests.swift */,
+				5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */,
+				5E551020261010000C1C0002 /* TimedDecisionTests.swift */,
+				DEC0DE20261010E100000006 /* PairingFlowTests.swift */,
+				DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */,
+				DEC0DE20261010E100000010 /* RtspHandshakeLoopbackTests.swift */,
+				DEC0DE20261010A1000000F0 /* LoopbackUdpPeer.swift */,
+				DEC0DE20261010A1000010F0 /* EnetHandshakeLoopbackTests.swift */,
+				DEC0DE20261010A1000020F0 /* RtpReceiverLoopbackTests.swift */,
 				DEC0DE2026101010A0000002 /* RtspHandshakeParsingTests.swift */,
 				DEC0DE2026101010A0000004 /* SunshineHTTPParsingTests.swift */,
 				DEC0DE2026101010A0000006 /* PairingHandshakeTests.swift */,
@@ -1417,22 +1495,31 @@
 				6E2026101000000000000004 /* VideoDecoderEnqueueTests.swift */,
 				6E2026101000000000000006 /* VideoDecoderSuppressionTests.swift */,
 				6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */,
+				5EA320261010000000001402 /* VideoDecoderSessionFactoryTests.swift */,
 				DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */,
 				DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */,
+				5E5A5E202610100000000002 /* LoginItemApplyTests.swift */,
+				5E5A5E202610100000000004 /* SystemServiceSeamTests.swift */,
 				DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */,
 				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE202609232100000004 /* LauncherWindowTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
+				DEC0DE20261010D5E0000002 /* DualSenseOutputReportTests.swift */,
 				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
 				DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */,
 				DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */,
 				DEC0DE202610109900000002 /* PEMTests.swift */,
 				DEC0DE202610109900000004 /* ControllerStatePushTests.swift */,
 				DEC0DE202610109900000006 /* AudioCushionMemoryTests.swift */,
+				DEC0DE202610101000000002 /* HostsPersistenceTests.swift */,
+				DEC0DE202610101000000004 /* StoragePersistenceTests.swift */,
+				5EA320261010000000001502 /* IdentityKeychainCleanupTests.swift */,
 				DEC0DE202610109900000008 /* ControllerBatteryMappingTests.swift */,
 				DEC0DE202609233300000002 /* ControllerArrivalTests.swift */,
+				DEC0DE202610101100000002 /* ControllerHapticsActuationTests.swift */,
 				DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */,
 				DEC0DE20261009000000CA04 /* FramePacerHandoffTests.swift */,
+				DEC0DE20261010F1C0000002 /* FramePacerTickTests.swift */,
 				DEC0DE2026101000000005A2 /* FramePacerReleaseTests.swift */,
 				DEC0DE2026101000000005A4 /* FramePacerDeficitEventTests.swift */,
 				DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */,
@@ -1872,6 +1959,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				DEC0DE202609253700000001 /* AWDLHelperTests.swift in Sources */,
+				5EA320261010000000001301 /* ProcessRunnerTests.swift in Sources */,
+				5EA320261010000000001101 /* AWDLSuppressorTests.swift in Sources */,
 				DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */,
 				DEC0DE202609258000000001 /* TestConcurrency.swift in Sources */,
 				DEC0DE202609256700000005 /* AWDLStreamLease.swift in Sources */,
@@ -1896,12 +1985,14 @@
 				DEC0DE202609253900000001 /* VideoDepacketizerRecoveryTests.swift in Sources */,
 				D2B0000C /* PresentTripTests.swift in Sources */,
 				D2C7A002 /* StreamSessionDecisionTests.swift in Sources */,
+				5E551030261010000C1C0001 /* SessionTimerBodyTests.swift in Sources */,
 				D2C7A004 /* EnvSignalStateMachineTests.swift in Sources */,
 				D2C7A006 /* BackendGlueTests.swift in Sources */,
 				D1A1B003 /* HUDBackdropLuminanceTests.swift in Sources */,
 				DEC0DE202609221200000001 /* FramePacerTests.swift in Sources */,
 				DEC0DE202609252400000001 /* FramePacerTickDeficitTests.swift in Sources */,
 				D2B0000E /* AudioPrimeEdgeSafetyTests.swift in Sources */,
+				A0D5EA400000000000000002 /* AudioPlayoutScheduleTests.swift in Sources */,
 				DEC0DE202609221300000002 /* AudioCushionDeadAirTests.swift in Sources */,
 				DEC0DE202609221300000004 /* AudioResamplerHoldTests.swift in Sources */,
 				A0D102202610091540000002 /* AudioPacketSpliceTests.swift in Sources */,
@@ -1952,6 +2043,9 @@
 				DA2026100900000000000015 /* RendererTelemetryTests.swift in Sources */,
 				C4A400000000000000000102 /* LatencyTrackerTests.swift in Sources */,
 				C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */,
+				C4A4000000000000000003F2 /* TelemetryCaptureTests.swift in Sources */,
+				C4A40000000000000000E2A4 /* TelemetrySinkTests.swift in Sources */,
+				C4A40000000000000000E2A2 /* TelemetryListenerTests.swift in Sources */,
 				C4A400000000000000000106 /* StatsCollectorWindowTests.swift in Sources */,
 				C4A400000000000000000108 /* StatsSnapshotRowsTests.swift in Sources */,
 				C4A400000000000000000110 /* StatsSupportTypesTests.swift in Sources */,
@@ -1970,6 +2064,19 @@
 				DEC0DE202610100800000011 /* StreamViewKeyboardTests.swift in Sources */,
 				DEC0DE202610100800000021 /* StreamViewCaptureTests.swift in Sources */,
 				DEC0DE202609221000000003 /* RtspClientTests.swift in Sources */,
+				DEC0DE20261010E100000001 /* FakeSunshine.swift in Sources */,
+				DEC0DE20261010E100000003 /* NetworkClientRequestTests.swift in Sources */,
+				5E55102026101000000000A1 /* SessionLaunchFlowTests.swift in Sources */,
+				5E55103026101000000000B1 /* GlimmerCLISunshineTests.swift in Sources */,
+				5E55103026101000000000A1 /* AppModelSunshineTests.swift in Sources */,
+				5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */,
+				5E551020261010000C1C0001 /* TimedDecisionTests.swift in Sources */,
+				DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */,
+				DEC0DE20261010E100000007 /* HostStatusPollerTests.swift in Sources */,
+				DEC0DE20261010E100000009 /* RtspHandshakeLoopbackTests.swift in Sources */,
+				DEC0DE20261010A1000000B0 /* LoopbackUdpPeer.swift in Sources */,
+				DEC0DE20261010A1000010B0 /* EnetHandshakeLoopbackTests.swift in Sources */,
+				DEC0DE20261010A1000020B0 /* RtpReceiverLoopbackTests.swift in Sources */,
 				DEC0DE2026101010A0000001 /* RtspHandshakeParsingTests.swift in Sources */,
 				DEC0DE2026101010A0000003 /* SunshineHTTPParsingTests.swift in Sources */,
 				DEC0DE2026101010A0000005 /* PairingHandshakeTests.swift in Sources */,
@@ -1988,22 +2095,31 @@
 				6E2026101000000000000003 /* VideoDecoderEnqueueTests.swift in Sources */,
 				6E2026101000000000000005 /* VideoDecoderSuppressionTests.swift in Sources */,
 				6E2026101000000000000007 /* VideoDecoderLifecycleTests.swift in Sources */,
+				5EA320261010000000001401 /* VideoDecoderSessionFactoryTests.swift in Sources */,
 				DEC0DE202609222400000003 /* ShortcutRecordingTests.swift in Sources */,
 				DEC0DE202609222400000005 /* LoginItemReconcileTests.swift in Sources */,
+				5E5A5E202610100000000001 /* LoginItemApplyTests.swift in Sources */,
+				5E5A5E202610100000000003 /* SystemServiceSeamTests.swift in Sources */,
 				DEC0DE202609230400000001 /* GlimmerIntentsTests.swift in Sources */,
 				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
+				DEC0DE20261010D5E0000001 /* DualSenseOutputReportTests.swift in Sources */,
 				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,
 				DEC0DE2026091900000000F9 /* DualSenseBinderTests.swift in Sources */,
 				DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */,
 				DEC0DE202610109900000001 /* PEMTests.swift in Sources */,
 				DEC0DE202610109900000003 /* ControllerStatePushTests.swift in Sources */,
 				DEC0DE202610109900000005 /* AudioCushionMemoryTests.swift in Sources */,
+				DEC0DE202610101000000001 /* HostsPersistenceTests.swift in Sources */,
+				DEC0DE202610101000000003 /* StoragePersistenceTests.swift in Sources */,
+				5EA320261010000000001501 /* IdentityKeychainCleanupTests.swift in Sources */,
 				DEC0DE202610109900000007 /* ControllerBatteryMappingTests.swift in Sources */,
 				DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */,
+				DEC0DE202610101100000001 /* ControllerHapticsActuationTests.swift in Sources */,
 				DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */,
 				DEC0DE20261009000000CA03 /* FramePacerHandoffTests.swift in Sources */,
+				DEC0DE20261010F1C0000001 /* FramePacerTickTests.swift in Sources */,
 				DEC0DE2026101000000005A1 /* FramePacerReleaseTests.swift in Sources */,
 				DEC0DE2026101000000005A3 /* FramePacerDeficitEventTests.swift in Sources */,
 				DEC0DE2026091900000000E1 /* HIDGamepadTests.swift in Sources */,

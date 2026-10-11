@@ -142,7 +142,7 @@ public actor StreamSession {
     /// Recovery starts at 2s; past 10s, recent ACKs defer teardown while recovery continues, and remote paths may downshift.
     /// Main thread only; the actor schedules mutations through `MainActor.run`.
     nonisolated(unsafe) var frameWatchdogTimer: Timer?
-    /// `CACurrentMediaTime` the first-frame envelope runs from, re-stamped by
+    /// `uptimeSeconds` the first-frame envelope runs from, re-stamped by
     /// each silent reconnect. Main thread only: written by startFrameWatchdog and
     /// the reconnect's MainActor hop, read by the watchdog's timer closure.
     nonisolated(unsafe) var frameWatchdogArmedAt: Double = 0
@@ -398,9 +398,30 @@ public actor StreamSession {
     var launchTask: Task<LaunchResponse, Error>?
     var pendingLaunch: Task<LaunchResponse, Error>?
 
-    /// - Parameter backend: the streaming engine. Defaults to the Swift-native
-    ///   engine, the only implementation.
-    public init(backend: StreamingBackend = NativeBackend()) {
+    /// Every Sunshine client and every reconnect's fresh engine come from these, so tests can
+    /// answer as the PC; production uses the real client and the native engine.
+    let makeNetwork: @Sendable (ServerInfo) -> NetworkClient
+    let makeBackend: @Sendable () -> StreamingBackend
+    /// Every watchdog, metric and backoff reads time here, so tests can script it.
+    let clock: SessionClock
+
+    init(backend: StreamingBackend = NativeBackend(),
+         makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) },
+         makeBackend: @escaping @Sendable () -> StreamingBackend = { NativeBackend() },
+         clock: SessionClock = SessionClock()) {
         self.backend = backend
+        self.makeNetwork = makeNetwork
+        self.makeBackend = makeBackend
+        self.clock = clock
     }
+
+    /// Uptime in seconds, the timebase `CACurrentMediaTime` and `systemUptime` share.
+    nonisolated var uptimeSeconds: Double { Double(clock.uptimeNanos()) / 1_000_000_000 }
+}
+
+/// The session's time sources. The present watchdog keeps its wall-clock stamps; the rest is uptime.
+struct SessionClock: Sendable {
+    var uptimeNanos: @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }
+    var absolute: @Sendable () -> CFAbsoluteTime = { CFAbsoluteTimeGetCurrent() }
+    var sleep: @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
 }

@@ -161,6 +161,23 @@ First recorded run, 2026-10-10, commit `5ace115`, Xcode 27.0 (Hosted Verify uses
 Across three local runs the app's xccov covered lines ranged from 25,080 to
 25,083.
 
+After two test waves (unit tests, then seams that let tests drive networking,
+telemetry, persistence, clocks, system services and device I/O), 2026-10-10,
+commit `1d10a89`, Xcode 27.0, local Apple silicon Mac:
+
+| Component                                  | Lines (xccov)          | Lines (llvm-cov)       | Regions                | Branches     |
+| ------------------------------------------ | ---------------------- | ---------------------- | ---------------------- | ------------ |
+| App, `Glimmer.debug.dylib`                 | 68.20% (37,747/55,350) | 68.01% (37,641/55,350) | 70.49% (13,511/19,167) | No counters  |
+| Helper sources linked into the test bundle | 57.79% (230/398)       | 57.79% (230/398)       | 61.71% (108/175)       | No counters  |
+| Login item                                 | 0.00% (0/36)           | Not executed           | Not executed           | Not executed |
+
+| Python release tooling (`scripts/*.py`) | Statements           | Branches         |
+| --------------------------------------- | -------------------- | ---------------- |
+| All files, tests omitted                | 96.96% (1,180/1,217) | 91.39% (446/488) |
+
+The app's remaining gap to 80% is mostly SwiftUI and AppKit views, which need UI
+tests rather than unit tests.
+
 What these numbers do not cover:
 
 - The login item is built with coverage but never runs under test.

@@ -117,14 +117,17 @@ final class ControllerHaptics: @unchecked Sendable {
     /// event from a dying session must not re-spin motors AFTER the teardown
     /// (0,0) - once the channel is dead nobody can deliver the next "off".
     /// startVideoStage lifts it via streamActivated() when it wires onRumble.
-    private var quiesced = true
+    var quiesced = true
+    /// Seams for tests: nil runs the real CoreHaptics motor / GCDeviceLight path.
+    var motorSink: ((UInt8, GCHapticsLocality, Float) -> Void)?
+    var lightSink: ((UInt8, LightColor) -> Void)?
 
     /// Block-based observer tokens, retained for the singleton's (infinite)
     /// lifetime so the registrations stay alive.
     private var resignObserver: NSObjectProtocol?
     private var becomeObserver: NSObjectProtocol?
 
-    private init() {
+    init() {
         // App-deactivation safety net. The notifications post on the main
         // thread; the closures only hop to the haptics queue, so no main-time
         // is spent beyond the dispatch itself.
