@@ -390,6 +390,7 @@
 		DEC0DE20261010E100000003 /* NetworkClientRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000004 /* NetworkClientRequestTests.swift */; };
 		5E55102026101000000000A1 /* SessionLaunchFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */; };
 		5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */; };
+		5E551020261010000C1C0001 /* TimedDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E551020261010000C1C0002 /* TimedDecisionTests.swift */; };
 		DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000006 /* PairingFlowTests.swift */; };
 		DEC0DE20261010E100000007 /* HostStatusPollerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */; };
 		DEC0DE20261010E100000009 /* RtspHandshakeLoopbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000010 /* RtspHandshakeLoopbackTests.swift */; };
@@ -893,6 +894,7 @@
 		DEC0DE20261010E100000004 /* NetworkClientRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkClientRequestTests.swift; sourceTree = "<group>"; };
 		5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLaunchFlowTests.swift; sourceTree = "<group>"; };
 		5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReconnectFlowTests.swift; sourceTree = "<group>"; };
+		5E551020261010000C1C0002 /* TimedDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedDecisionTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000006 /* PairingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingFlowTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostStatusPollerTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000010 /* RtspHandshakeLoopbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RtspHandshakeLoopbackTests.swift; sourceTree = "<group>"; };
@@ -1436,6 +1438,7 @@
 				DEC0DE20261010E100000004 /* NetworkClientRequestTests.swift */,
 				5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */,
 				5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */,
+				5E551020261010000C1C0002 /* TimedDecisionTests.swift */,
 				DEC0DE20261010E100000006 /* PairingFlowTests.swift */,
 				DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */,
 				DEC0DE20261010E100000010 /* RtspHandshakeLoopbackTests.swift */,
@@ -2022,6 +2025,7 @@
 				DEC0DE20261010E100000003 /* NetworkClientRequestTests.swift in Sources */,
 				5E55102026101000000000A1 /* SessionLaunchFlowTests.swift in Sources */,
 				5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */,
+				5E551020261010000C1C0001 /* TimedDecisionTests.swift in Sources */,
 				DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */,
 				DEC0DE20261010E100000007 /* HostStatusPollerTests.swift in Sources */,
 				DEC0DE20261010E100000009 /* RtspHandshakeLoopbackTests.swift in Sources */,

@@ -40,6 +40,7 @@ struct SessionReconnectFlowTests {
         let session: StreamSession
         let sunshine: FakeSunshine
         let supply: BackendSupply
+        let clock: ScriptedClock
         let events: AsyncStream<StreamEvent>
 
         /// Ends the session and returns every event it emitted, in order.
@@ -57,10 +58,11 @@ struct SessionReconnectFlowTests {
     ) async -> Live {
         let sunshine = FakeSunshine.scripted(script)
         let supply = BackendSupply(failing: failing)
+        let clock = ScriptedClock()
         let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
-                                    makeBackend: { supply.make() })
+                                    makeBackend: { supply.make() }, clock: clock.session)
         let events = await session.goLive(server: SessionFlow.pairedPC(), config: config, appID: Self.appID)
-        return Live(session: session, sunshine: sunshine, supply: supply, events: events)
+        return Live(session: session, sunshine: sunshine, supply: supply, clock: clock, events: events)
     }
 
     fileprivate static func label(_ event: StreamEvent) -> String {
@@ -143,6 +145,51 @@ struct SessionReconnectFlowTests {
         #expect(live.sunshine.paths == ["serverinfo"])
         // The attempt's fresh engine is built before the handshake, but never connects.
         #expect(live.supply.backends.map(\.startedServers.count) == [0])
+    }
+
+    /// The backoff ramps 0.8, 1.6, then 2.4 s; once every attempt has failed the stream ends.
+    @Test func everyAttemptFailingEndsTheStreamAfterTheCap() async {
+        let cap = StreamSession.reconnectAttemptCap
+        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+                               "cancel": [SessionFlow.cancelled]], failing: cap)
+        await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
+
+        #expect(live.clock.napMilliseconds == [800, 1_600, 2_400, 2_400, 2_400])
+        #expect(live.supply.backends.count == cap)
+        #expect(live.sunshine.paths.filter { $0 == "launch" }.count == cap)
+        #expect(await !live.session.isStreaming)
+        #expect(await live.finish() == ["reconnecting", "terminated(-1)"])
+    }
+
+    /// The new connection gets its own first-frame allowance, counted from the resume.
+    @Test func aResumeRearmsTheFrameWatchdogAtTheResume() async {
+        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+                               "cancel": [SessionFlow.cancelled]])
+        await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
+
+        #expect(live.clock.napMilliseconds == [800])
+        #expect(live.session.frameWatchdogArmedAt == live.clock.seconds)
+        #expect(await live.finish() == ["reconnecting", "reconnected"])
+    }
+
+    // MARK: - Frame watchdog
+
+    /// A connection that never decodes a frame ends ten seconds after the arm, not before, with a
+    /// bring-up error (no traffic or no frame, by the process-wide datagram clock) instead of -1.
+    @Test func aConnectionThatNeverDecodesEndsTenSecondsAfterTheArm() async throws {
+        let live = await live([:])
+        let decoder = try #require(await live.session.videoDecoder)
+        live.session.frameWatchdogArmedAt = live.session.uptimeSeconds
+        live.clock.advance(.milliseconds(9_500))
+        live.session.frameWatchdogTick(decoder: decoder)
+        #expect(await live.session.isStreaming)
+
+        live.clock.advance(.seconds(1))
+        live.session.frameWatchdogTick(decoder: decoder)
+        var seen: [String] = []
+        for await event in live.events { seen.append(Self.label(event)) }
+        #expect(seen == ["terminated(-100)"] || seen == ["terminated(-101)"])
+        #expect(await !live.session.isStreaming)
     }
 
     // MARK: - Downshift
