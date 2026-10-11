@@ -9,4 +9,4 @@ site:
       path: docs
       default: true
       content:
-        directory: ./docs
+        directory: /docs
