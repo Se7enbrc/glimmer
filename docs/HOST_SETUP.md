@@ -1,4 +1,9 @@
-# PC setup: display modes (Sunshine + VDD)
+---
+description: Set up Sunshine and a display that matches your Mac.
+icon: desktop
+---
+
+# Set up the PC
 
 Glimmer asks the PC for an **exact** `width × height @ refresh`, whatever you
 pick in **Settings ▸ Quality**. The presets there are _Sharpest_ (your panel's

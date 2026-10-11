@@ -1,3 +1,8 @@
+---
+description: Stop a stream, get the pointer back, and use copy and paste.
+icon: keyboard
+---
+
 # Keyboard and controller shortcuts
 
 These are the default bindings. Your current keyboard and controller shortcuts

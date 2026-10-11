@@ -1,6 +1,16 @@
-# Features
+---
+description:
+  Video, audio, controllers, and the things that make Glimmer a Mac app.
+icon: gamepad
+layout:
+  outline:
+    visible: false
+---
 
-Everything Glimmer does, in more detail than the [README](../README.md).
+# What Glimmer can do
+
+Everything Glimmer does, in more detail than the
+[README](https://github.com/Se7enbrc/glimmer/blob/main/README.md).
 
 - **Video.** Hardware-decoded H.264 and HEVC, with AV1 on supported Macs, 8- and
   10-bit, and a real HDR10 pipeline. Up to 4K 240 Hz.

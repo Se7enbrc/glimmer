@@ -1,10 +1,16 @@
-# Architecture
+---
+description: The app, streaming engine, and helpers in detail.
+icon: layer-group
+---
+
+# How Glimmer works
 
 Glimmer is a SwiftUI launcher plus a pure-Swift streaming engine, in one
 process. No external player, no linked C streaming library: Sunshine's streaming
 protocol is implemented in Swift under `Glimmer/Stream/Native/` (ported from
-`moonlight-common-c`, GPLv3; see [CREDITS.md](../CREDITS.md)). The only code
-that crosses the bridging header is an Objective-C exception guard in
+`moonlight-common-c`, GPLv3; see
+[CREDITS.md](https://github.com/Se7enbrc/glimmer/blob/main/CREDITS.md)). The
+only code that crosses the bridging header is an Objective-C exception guard in
 `CHelpers.h`, which Swift can't express; crypto, TLS and audio decode run on
 CryptoKit, CommonCrypto, Security, Network.framework and AudioToolbox.
 
@@ -141,7 +147,7 @@ Components:
   over UDP. It runs the CONNECT handshake, reliable sends with ACK tracking, and
   the inbound control dispatch (rumble, HDR mode, motion enable, lightbar,
   termination). `EnetWire.swift` owns the byte layout (ENet wire format; see
-  [CREDITS.md](../CREDITS.md)).
+  [CREDITS.md](https://github.com/Se7enbrc/glimmer/blob/main/CREDITS.md)).
 - **`StreamCrypto`**: AES-GCM for the control-V2 envelope and for video the PC
   requires encrypted.
 - **Video receive**: `VideoRtpReceiver` (socket and ping loop) → `RtpVideoQueue`
@@ -149,12 +155,12 @@ Components:
   reorders, FEC-recovers and assembles packets → `VideoDepacketizer`, which
   emits `DecodeUnit`s to the `VideoSink` (the `VideoDecoder`).
   `ReedSolomon.swift` is the GF(256) erasure decoder (see
-  [CREDITS.md](../CREDITS.md)). Once a link has shown reordering, the queue may
-  hold back one datagram of the next frame while the current frame is incomplete
-  and FEC can still recover it, and only within 24 ms of that frame's first
-  packet. It is replayed as soon as the frame completes, a datagram for another
-  frame arrives, or the 24 ms window runs out, so the hold is one datagram deep
-  and adds no buffer depth.
+  [CREDITS.md](https://github.com/Se7enbrc/glimmer/blob/main/CREDITS.md)). Once
+  a link has shown reordering, the queue may hold back one datagram of the next
+  frame while the current frame is incomplete and FEC can still recover it, and
+  only within 24 ms of that frame's first packet. It is replayed as soon as the
+  frame completes, a datagram for another frame arrives, or the 24 ms window
+  runs out, so the hold is one datagram deep and adds no buffer depth.
 - **Audio receive**: `RtpAudioReceiver` (+`+Socket`, `+Receive`, `+Decrypt`,
   `+Ping`, `+StartupGate`, `+Events`, `+Telemetry`) → `RtpAudioQueue` (+`+Fec`)
   / `AudioFecDecoder` → `OpusDecoder` (Opus on AudioToolbox) → `AudioDecoder`

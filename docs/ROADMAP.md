@@ -1,9 +1,15 @@
-# Roadmap
+---
+description: The direction for Glimmer and the decisions that guide it.
+icon: route
+---
+
+# What comes next
 
 Glimmer is a Mac-native client for Sunshine, for people with a Mac and a gaming
 PC who want to play their PC games on the Mac, at a desk on Ethernet or on the
 couch on Wi-Fi. Success is a player forgetting it is a stream, and the app
-feeling like part of macOS ([PRODUCT](../PRODUCT.md)).
+feeling like part of macOS
+([PRODUCT](https://github.com/Se7enbrc/glimmer/blob/main/PRODUCT.md)).
 
 This page covers at least the next year. It states direction, not promises: no
 item has a date, and any item may change with a release.
@@ -14,14 +20,19 @@ Each item names the evidence it comes from.
 
 - **Stream fidelity on Wi-Fi.** Keep tuning pacing, audio buffering and quality
   recovery against real-stream telemetry, with the couch on Wi-Fi as the harder
-  case. Source: [PRODUCT](../PRODUCT.md) users and principles; recurring Wi-Fi,
-  pacing and audio fixes in [CHANGELOG](../CHANGELOG.md) 2026.10.3 to 2026.10.6.
+  case. Source:
+  [PRODUCT](https://github.com/Se7enbrc/glimmer/blob/main/PRODUCT.md) users and
+  principles; recurring Wi-Fi, pacing and audio fixes in
+  [CHANGELOG](https://github.com/Se7enbrc/glimmer/blob/main/CHANGELOG.md)
+  2026.10.3 to 2026.10.6.
 - **Clear failures and recovery.** Every way a stream fails says what happened
   and the one thing to do next, and safeguards recover rather than give up.
   Source: CHANGELOG 2026.10.3 and 2026.10.4.
 - **Keep pace with Sunshine, macOS and dependencies.** Track current, unmodified
   Sunshine and new macOS releases, and keep dependencies updated through
-  Renovate. Source: [AGENTS](../AGENTS.md) product decisions; issue #42.
+  Renovate. Source:
+  [AGENTS](https://github.com/Se7enbrc/glimmer/blob/main/AGENTS.md) product
+  decisions; issue #42.
 - **Test coverage.** Measure per-component coverage before setting any gate,
   then add tests for missing paths. Source:
   [security roadmap](SECURITY_ROADMAP.md) item 1.

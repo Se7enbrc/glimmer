@@ -1,25 +1,28 @@
 # Table of contents
 
-- [Glimmer](README.md)
+- [Glimmer help](README.md)
 
-## Using Glimmer
+## Get started
 
-- [Install](INSTALL.md)
-- [Setting up the PC](HOST_SETUP.md)
-- [Features](FEATURES.md)
-- [Shortcuts](SHORTCUTS.md)
-- [Command line](COMMAND_LINE.md)
-- [Audio on macOS](AUDIO.md)
+- [Install Glimmer](INSTALL.md)
+- [Set up the PC](HOST_SETUP.md)
+- [What Glimmer can do](FEATURES.md)
 
-## Security
+## While playing
+
+- [Keyboard and controller shortcuts](SHORTCUTS.md)
+- [Audio and voice chat](AUDIO.md)
+- [Use the command line](COMMAND_LINE.md)
+
+## About Glimmer
 
 - [Security](SECURITY.md)
+- [What comes next](ROADMAP.md)
+
+## Develop Glimmer
+
+- [Contribute to Glimmer](CONTRIBUTING.md)
+- [How Glimmer works](ARCHITECTURE.md)
+- [Measure stream performance](PROFILING.md)
+- [Release Glimmer](RELEASE.md)
 - [Security roadmap](SECURITY_ROADMAP.md)
-
-## Developing Glimmer
-
-- [Contributing](CONTRIBUTING.md)
-- [Architecture](ARCHITECTURE.md)
-- [Profiling](PROFILING.md)
-- [Releasing](RELEASE.md)
-- [Roadmap](ROADMAP.md)
