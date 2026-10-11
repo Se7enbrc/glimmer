@@ -7,7 +7,7 @@
 <p align="center">Your gaming PC, on your Mac.</p>
 
 <p align="center">
-  <a href="https://glimmer.ugfugl.io">Website</a> ·
+  <a href="https://se7enbrc.github.io/glimmer/">Website</a> ·
   <a href="https://github.com/Se7enbrc/glimmer/releases/latest">Download for Mac</a> ·
   <a href="#install">Homebrew</a> ·
   <a href="docs/SHORTCUTS.md">Shortcuts</a> ·
