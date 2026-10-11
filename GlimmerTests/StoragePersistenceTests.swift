@@ -17,7 +17,6 @@ struct IdentityPersistenceTests {
     /// A manager whose keychain service matches nothing, so no real item is read or deleted.
     private func manager(_ store: IsolatedStore, qt: String? = nil) -> IdentityManager {
         IdentityManager(defaultsSuite: store.domain, supportBase: store.directory,
-                        keychainService: "io.ugfugl.Glimmer.tests.none-\(UUID().uuidString)",
                         moonlightQtSuite: qt ?? "io.ugfugl.Glimmer.tests.persistence-qt-none")
     }
 

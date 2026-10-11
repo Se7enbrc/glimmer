@@ -55,25 +55,4 @@ extension IdentityManager {
         // No passphrase: the key lives in a mode-0600 file, and a same-user attacker already won.
         return (PEM.encode(cert, label: "CERTIFICATE"), PEM.encode(pkcs8, label: "PRIVATE KEY"))
     }
-
-    // MARK: - Legacy login-keychain cleanup
-    //
-    // Older builds laundered the client cert/key through a SecIdentity in the login keychain.
-    // Nothing reads it now, so the versioned cleanup deletes it once.
-
-    private static let dpLabel = "Glimmer Client Identity"
-
-    /// Delete the orphaned "Glimmer Client Identity" item (+ its cert/key) that
-    /// older builds imported into the login keychain. Idempotent; SecItemDelete
-    /// on absent items is a harmless no-op.
-    func deleteLabelledIdentity() {
-        for cls in [kSecClassIdentity, kSecClassKey, kSecClassCertificate] {
-            let query: [String: Any] = [
-                kSecClass as String: cls,
-                kSecAttrLabel as String: Self.dpLabel,
-                kSecMatchLimit as String: kSecMatchLimitAll
-            ]
-            _ = deleteKeychainItems(query)
-        }
-    }
 }
