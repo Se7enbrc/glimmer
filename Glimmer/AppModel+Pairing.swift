@@ -135,7 +135,7 @@ extension AppModel {
         }
         pairingPhase = .connecting
         let info = ServerInfo(address: address, uniqueId: address, serverName: address)
-        let network = NetworkClient(server: info)
+        let network = makeNetwork(info)
         let fetched: ServerInfo
         do {
             fetched = try await network.fetchServerInfo()
@@ -170,7 +170,7 @@ extension AppModel {
                 hostname: verified.serverName.isEmpty ? address : verified.serverName,
                 address: address, serverCertPEM: paired.serverCertPEM,
                 appVersion: verified.appVersion,
-                apps: apps, macAddress: verified.macAddress)
+                apps: apps, macAddress: verified.macAddress, defaults: hostsDefaults, supportBase: supportBase)
             pairingPhase = .success
             Diag.notice("Pairing succeeded", "Pairing")
             return hosts.first { $0.id == verified.uniqueId }
@@ -192,7 +192,7 @@ extension AppModel {
     }
 
     private func pairingApps(server: ServerInfo) async -> [PairedApp] {
-        let client = NetworkClient(server: server)
+        let client = makeNetwork(server)
         if let apps = try? await client.appList(), !apps.isEmpty {
             return apps.map { PairedApp(id: $0.id, name: $0.name, hdr: $0.hdrCapable, hidden: $0.hidden) }
         }

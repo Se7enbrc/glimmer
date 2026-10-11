@@ -391,6 +391,8 @@
 		DEC0DE20261010E100000001 /* FakeSunshine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000002 /* FakeSunshine.swift */; };
 		DEC0DE20261010E100000003 /* NetworkClientRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000004 /* NetworkClientRequestTests.swift */; };
 		5E55102026101000000000A1 /* SessionLaunchFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */; };
+		5E55103026101000000000B1 /* GlimmerCLISunshineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */; };
+		5E55103026101000000000A1 /* AppModelSunshineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55103026101000000000A2 /* AppModelSunshineTests.swift */; };
 		5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */; };
 		DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000006 /* PairingFlowTests.swift */; };
 		DEC0DE20261010E100000007 /* HostStatusPollerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */; };
@@ -896,6 +898,8 @@
 		DEC0DE20261010E100000002 /* FakeSunshine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeSunshine.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000004 /* NetworkClientRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkClientRequestTests.swift; sourceTree = "<group>"; };
 		5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLaunchFlowTests.swift; sourceTree = "<group>"; };
+		5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerCLISunshineTests.swift; sourceTree = "<group>"; };
+		5E55103026101000000000A2 /* AppModelSunshineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelSunshineTests.swift; sourceTree = "<group>"; };
 		5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReconnectFlowTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000006 /* PairingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingFlowTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostStatusPollerTests.swift; sourceTree = "<group>"; };
@@ -1439,6 +1443,8 @@
 				DEC0DE20261010E100000002 /* FakeSunshine.swift */,
 				DEC0DE20261010E100000004 /* NetworkClientRequestTests.swift */,
 				5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */,
+				5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */,
+				5E55103026101000000000A2 /* AppModelSunshineTests.swift */,
 				5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */,
 				DEC0DE20261010E100000006 /* PairingFlowTests.swift */,
 				DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */,
@@ -2027,6 +2033,8 @@
 				DEC0DE20261010E100000001 /* FakeSunshine.swift in Sources */,
 				DEC0DE20261010E100000003 /* NetworkClientRequestTests.swift in Sources */,
 				5E55102026101000000000A1 /* SessionLaunchFlowTests.swift in Sources */,
+				5E55103026101000000000B1 /* GlimmerCLISunshineTests.swift in Sources */,
+				5E55103026101000000000A1 /* AppModelSunshineTests.swift in Sources */,
 				5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */,
 				DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */,
 				DEC0DE20261010E100000007 /* HostStatusPollerTests.swift in Sources */,

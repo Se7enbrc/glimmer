@@ -92,11 +92,11 @@ extension GlimmerCLI {
         let wait = command.flags.contains("--wait")
         let json = command.flags.contains("--json")
         guard wait || json || command.flags.contains("--exit-after-first-frame") else {
-            print("Glimmer is starting \(app.name) on \(host.displayName).")
+            printLine("Glimmer is starting \(app.name) on \(host.displayName).")
             return Exit.ok
         }
         while let reply = await replies.next(giveUp: { glimmer.isTerminated }) {
-            if json { print(jsonLine(reply)) }
+            if json { printLine(jsonLine(reply)) }
             if reply[Key.event] == Event.live, !wait { return Exit.ok }
             if reply[Key.event] == Event.ended {
                 guard let detail = reply[Key.detail] else { return Exit.ok }

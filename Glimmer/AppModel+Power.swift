@@ -208,7 +208,7 @@ extension AppModel {
         while !Task.isCancelled, !hostPolling.systemSleeping, Date() < deadline {
             let current = hosts.first { $0.id == host.id } ?? host
             let info = nativeServerInfo(for: current)
-            let client = NetworkClient(server: info)
+            let client = makeNetwork(info)
             let answered = (try? await client.fetchServerInfo(timeout: Self.wakeReadinessTimeout,
                                                                diagnosePinnedFailure: false)) != nil
             await client.shutdown()

@@ -148,7 +148,7 @@ extension AppModel {
         Task { [weak self] in
             guard let self else { return }
             // The Swift-native engine is the only path.
-            let session = StreamSession(backend: NativeBackend())
+            let session = StreamSession(backend: NativeBackend(), makeNetwork: makeNetwork)
             await MainActor.run { self.nativeSession = session }
             await session.authorizeTakeover(takeoverAuthorized)
             if let launch = cfg.bitrateDecision {
@@ -298,7 +298,7 @@ extension AppModel {
                 // "Last played" is the stream-END time, read back as `Host.lastConnected`
                 // for the "last played N ago" label and the PC order. A failed connect
                 // stamps its attempt too, by design.
-                self.recordLastPlayed(hostID: host.id)
+                self.recordLastPlayed(hostID: host.id, defaults: self.hostsDefaults)
             }
         }
         // Wait out /cancel before probing. An established session also holds the chip
