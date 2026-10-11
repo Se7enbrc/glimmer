@@ -44,7 +44,9 @@ struct MainWindow: View {
         // maybeOfferRawHID) - explains the feature before macOS's Input
         // Monitoring prompt; declining never re-asks.
         .alert("Turn on Extra DualSense buttons?", isPresented: $model.showRawHIDPrompt) {
-            Button("Turn On") { model.enableRawHIDFromPrompt() }
+            Button(InputMonitoring.state == .denied ? "Open System Settings" : "Turn On") {
+                model.enableRawHIDFromPrompt()
+            }
             // "Not Now" just dismisses - no permanent flag - so a future
             // DualSense connect offers again. Only "Don't Ask Again" answers
             // for good (matches AWDLEnablePrompt's Not Now / Don't ask again
@@ -52,16 +54,16 @@ struct MainWindow: View {
             Button("Not Now", role: .cancel) { model.showRawHIDPrompt = false }
             Button("Don't Ask Again") { model.declineRawHIDPrompt() }
         } message: {
-            Text(AppModel.rawHIDExplanation)
+            Text(AppModel.rawHIDExplanation(InputMonitoring.state))
         }
         // Same explanation and answers for a pad macOS doesn't recognise (generic HID).
         .alert("Use \(model.hidPermissionPadName ?? "this controller") with Glimmer?",
                isPresented: $model.showHIDPermissionPrompt) {
-            Button("Continue") { model.continueHIDPermission() }
+            Button(InputMonitoring.actionTitle(InputMonitoring.state)) { model.continueHIDPermission() }
             Button("Not Now", role: .cancel) { model.dismissHIDPermission() }
             Button("Don't Ask Again") { model.declineHIDPermission() }
         } message: {
-            Text(AppModel.hidPermissionExplanation)
+            Text(AppModel.hidPermissionExplanation(InputMonitoring.state))
         }
         // Wi-Fi stutter protection is offered at first open on every Mac, whatever the
         // route: awdl0 wrecks streams, and a MacBook first opened on Ethernet goes to the

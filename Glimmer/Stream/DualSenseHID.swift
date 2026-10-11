@@ -213,13 +213,6 @@ final class DualSenseHID: @unchecked Sendable {
         IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeDenied
     }
 
-    /// Present the Input Monitoring prompt if the state is still unknown.
-    /// Returns true if already/now granted.
-    @discardableResult
-    static func requestAccess() -> Bool {
-        IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-    }
-
     // MARK: Lifecycle (ref-counted)
 
     func retain() {

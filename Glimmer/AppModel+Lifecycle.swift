@@ -128,6 +128,7 @@ extension AppModel {
                 // the raw-HID feature, offer it now (e.g. they returned to the
                 // launcher after plugging it in mid-stream).
                 self.maybeOfferRawHID()
+                InputMonitoring.noticeReturn()
                 // Cmd-Tab back into Glimmer while a stream is parked in the
                 // background should bring the stream forward - but ONLY for a
                 // keyboard-style reactivation (Cmd-Tab). If the user clicked
@@ -152,20 +153,9 @@ extension AppModel {
         // polling also keeps the menu's Wake vs Stream action current; streams and
         // system or display sleep pause it instead.
 
-        // Proactively offer the raw-HID DualSense feature the moment a
-        // DualSense connects while Glimmer is running (once), rather than
-        // burying it in Settings. The same observers keep `controllerConnected`
-        // live so the controller-permission UI shows/hides as pads come and go.
-        //
-        // Mid-stream invariant: plugging a pad in during a live stream must be
-        // SILENT and NON-BLOCKING. This handler only updates
-        // `controllerConnected` and calls `maybeOfferRawHID()`, which is
-        // `!isStreaming`-gated - so the offer alert never fires mid-stream. Even
-        // the "Enable" path (`enableRawHIDFromPrompt`) is now side-effect-free
-        // (no IOHIDRequestAccess, no NSWorkspace.open), so nothing on this path
-        // can block the present thread or flash a System Settings window. If
-        // raw HID is already enabled + granted, the pad attaches silently via
-        // `ControllerForwarder.retain()` - never from here.
+        // Offer Extra DualSense buttons when a DualSense connects, and keep `controllerConnected`
+        // live. Mid-stream this stays silent: the offer is `!isStreaming`-gated, so nothing here
+        // can prompt, open System Settings or block the present path during a stream.
         notificationTokens.append(nc.addObserver(
             forName: .GCControllerDidConnect, object: nil, queue: .main
         ) { [weak self] _ in

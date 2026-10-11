@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.10.7 - Unreleased
+
+### Bug fixes
+
+- Turning on a controller that needs Input Monitoring shows macOS's own
+  permission prompt instead of opening System Settings on top of it. Once you
+  allow it, the controller starts working when you come back to Glimmer, with
+  no relaunch.
+
 ## 2026.10.6 - 2026-10-09
 
 ### Features

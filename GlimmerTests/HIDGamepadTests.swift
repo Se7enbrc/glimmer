@@ -364,4 +364,14 @@ struct HIDGamepadTests {
         #expect(relaunched.shouldOffer("2DC8:301B"))
         #expect(!relaunched.shouldOffer("0F0D:00C1"))
     }
+
+    /// Opening System Settings while macOS can still prompt hid the prompt under it.
+    @MainActor @Test func inputMonitoringPromptsBeforeItEverOpensSettings() {
+        #expect(InputMonitoring.step(for: .unknown) == .systemPrompt)
+        #expect(InputMonitoring.step(for: .denied) == .openSettings)
+        #expect(InputMonitoring.step(for: .granted) == .reopenReaders)
+        #expect(InputMonitoring.actionTitle(.denied) == "Open System Settings")
+        #expect(!AppModel.hidPermissionExplanation(.denied).contains("will then ask"))
+        #expect(AppModel.rawHIDExplanation(.unknown).contains("will then ask"))
+    }
 }

@@ -12,7 +12,6 @@
 
 import Foundation
 import GameController
-import IOKit.hid
 
 @MainActor
 private enum HIDDiscoveryState {
@@ -21,14 +20,22 @@ private enum HIDDiscoveryState {
 
 extension AppModel {
 
-    /// Shared up-front explanation shown before macOS's Input Monitoring prompt
-    /// (both the auto-offer on DualSense connect and the Settings toggle).
-    static let rawHIDExplanation =
+    /// What the DualSense offer says, before macOS's prompt or, once macOS has an answer,
+    /// before System Settings.
+    static func rawHIDExplanation(_ access: InputMonitoring.State) -> String {
         "Glimmer will read your DualSense's raw input to access the Options, "
-        + "Create and Mute buttons.\n\nmacOS will then ask for "
-        + "\u{201C}Input Monitoring\u{201D} permission. Its dialog says "
-        + "\u{201C}keystrokes\u{201D} because that's the same system permission, "
-        + "but Glimmer only reads the controller, never your keyboard."
+            + "Create and Mute buttons.\n\n" + permissionNote(access)
+    }
+
+    /// The prompt says “keystrokes” because Input Monitoring is one permission for both.
+    private static func permissionNote(_ access: InputMonitoring.State) -> String {
+        access == .denied
+            ? "Turn on Glimmer in System Settings › Privacy & Security › Input Monitoring. "
+                + "Glimmer only reads the controller, never your keyboard."
+            : "macOS will then ask for \u{201C}Input Monitoring\u{201D} permission. Its dialog says "
+                + "\u{201C}keystrokes\u{201D} because that's the same system permission, "
+                + "but Glimmer only reads the controller, never your keyboard."
+    }
 
     /// Offer the raw-HID feature if a DualSense is connected and the user
     /// hasn't enabled it or been asked. Never interrupts a live stream.
@@ -38,27 +45,13 @@ extension AppModel {
         if hasDualSense { showRawHIDPrompt = true }
     }
 
-    /// "Turn On" from the auto-offer: turn it on and mark answered. We do NOT
-    /// request the Input Monitoring permission or open System Settings here:
-    ///   * `IOHIDRequestAccess` is SYNCHRONOUS and blocks the main thread for
-    ///     ~2s while presenting/resolving the TCC prompt; on a live stream that
-    ///     stalls the present path and trips the present-stall watchdog (which
-    ///     disables the pacer). See DualSenseHID.start()'s note.
-    ///   * `NSWorkspace.open(Privacy_ListenEvent)` flashes a System Settings
-    ///     window - jarring mid-game.
-    /// Both belong only behind an explicit user action in Settings (the
-    /// Troubleshooting "Open Settings" button, `RawHIDControl.registerAndOpen`),
-    /// off the main thread. Flipping the flag is enough: if the permission is
-    /// already granted the raw-HID reader attaches silently via
-    /// `ControllerForwarder` (mid-stream) / the input test; if it isn't, the
-    /// Troubleshooting pane's permission card guides the user there on their own
-    /// schedule. The proactive offer itself is `!isStreaming`-gated
-    /// (`maybeOfferRawHID`), so this only runs from the launcher anyway - but we
-    /// keep it side-effect-free so it can never block or pop a window.
+    /// "Turn On" from the auto-offer. The offer only shows in the launcher, never mid-stream,
+    /// so asking here can't stall a stream; the request itself runs off main.
     func enableRawHIDFromPrompt() {
         rawHIDControllerEnabled = true
         rawHIDPromptAnswered = true
         showRawHIDPrompt = false
+        InputMonitoring.ask()
     }
 
     /// "Don't Ask Again" from the auto-offer: never offer proactively again.
@@ -82,12 +75,10 @@ extension AppModel {
         }
     }
 
-    static let hidPermissionExplanation =
+    static func hidPermissionExplanation(_ access: InputMonitoring.State) -> String {
         "macOS doesn't recognise this controller on its own, so Glimmer reads it "
-        + "directly.\n\nmacOS will ask for \u{201C}Input Monitoring\u{201D} "
-        + "permission. Its dialog says \u{201C}keystrokes\u{201D} because that's "
-        + "the same system permission, but Glimmer only reads the controller, "
-        + "never your keyboard."
+            + "directly.\n\n" + permissionNote(access)
+    }
 
     /// Answers to the generic-pad offer; process lifetime is "until relaunch".
     static var hidPermissionOffers = HIDPermissionOffers()
@@ -107,16 +98,9 @@ extension AppModel {
         showHIDPermissionPrompt = true
     }
 
-    /// "Continue": the system prompt blocks its thread for a moment, so it
-    /// runs off main. A grant re-opens the pads; a refusal opens the pane.
     func continueHIDPermission() {
         answerHIDPermission(dontAskAgain: false)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-            DispatchQueue.main.async {
-                if granted { HIDGamepadManager.shared.reopenAll() } else { RawHIDControl.openInputMonitoring() }
-            }
-        }
+        InputMonitoring.ask()
     }
 
     /// "Not Now": skip this pad until relaunch.
