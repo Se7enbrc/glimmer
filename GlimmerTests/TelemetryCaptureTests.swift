@@ -10,18 +10,21 @@ import Foundation
 import Testing
 @testable import Glimmer
 
-// Serialized: the capture's cross-tick baselines are one static slot.
+// Serialized: the capture's cross-tick baselines are one static slot. A class, so each
+// test's scratch directory is removed in deinit whether the test passed or not.
 @Suite(.serialized)
-struct TelemetryCaptureTests {
+final class TelemetryCaptureTests {
 
     private static let pcName = "Den PC"
+    private let dir: URL
 
-    private func scratchDir() throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
+    init() throws {
+        dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("TelemetryCaptureTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
     }
+
+    deinit { try? FileManager.default.removeItem(at: dir) }
 
     private func stats() -> StreamStatsSnapshot {
         var stats = StreamStatsSnapshot()
@@ -94,7 +97,7 @@ struct TelemetryCaptureTests {
     // MARK: - Source-driven sections
 
     @Test func captureCopiesTheScriptedSourceIntoTheSnapshot() throws {
-        let exporter = exporter(in: try scratchDir())
+        let exporter = exporter(in: dir)
         let (snap, _) = try capture(exporter)
         #expect(snap.sessionId == exporter.sessionId)
         #expect(snap.receivedFps == 120 && snap.decodedFps == 119 && snap.renderedFps == 100)
@@ -124,7 +127,7 @@ struct TelemetryCaptureTests {
         var scripted = source()
         scripted.pacingLiveness = { nil }
         let exporter = TelemetryExporter(
-            source: scripted, serverName: Self.pcName, outputDirectory: try scratchDir(), counters: TelemetryCounters())
+            source: scripted, serverName: Self.pcName, outputDirectory: dir, counters: TelemetryCounters())
         let (snap, extras) = try capture(exporter)
         #expect(snap.pacingQueueDepth == 0 && snap.pacingAdaptiveTargetDepth == 0)
         #expect(extras.pacerTicksPerSecond == nil)
@@ -139,7 +142,7 @@ struct TelemetryCaptureTests {
         counters.reconnectTotal.increment(by: 3)
         counters.corruptionHeuristicTotal.increment(by: 5)
         counters.audioPacketsTotal.increment(by: 50)
-        let (snap, _) = try capture(exporter(in: try scratchDir(), counters: counters))
+        let (snap, _) = try capture(exporter(in: dir, counters: counters))
         #expect(snap.rfiTotal == 2 && snap.reconnectTotal == 3 && snap.corruptionTotal == 5)
         #expect(snap.preFecLossRate == nil && snap.outOfOrderRate == nil && snap.fecRecoveryRate == nil)
         #expect(snap.corruptionPerSecond == nil)
@@ -151,7 +154,7 @@ struct TelemetryCaptureTests {
         let counters = TelemetryCounters()
         counters.videoPacketsTotal.increment(by: 1000)
         counters.audioPacketsTotal.increment(by: 50)
-        let exporter = exporter(in: try scratchDir(), counters: counters)
+        let exporter = exporter(in: dir, counters: counters)
         _ = try capture(exporter)
         try await Task.sleep(for: .milliseconds(80))
         counters.videoPacketsTotal.increment(by: 900)
@@ -177,7 +180,7 @@ struct TelemetryCaptureTests {
     }
 
     @Test func videoOnlyTickLeavesTheAudioBlockOut() throws {
-        let (snap, _) = try capture(exporter(in: try scratchDir()))
+        let (snap, _) = try capture(exporter(in: dir))
         #expect(snap.audio == nil)
         #expect(snap.handshake == nil)
         #expect(snap.idrRoundTrip == nil)
@@ -187,7 +190,7 @@ struct TelemetryCaptureTests {
         let counters = TelemetryCounters()
         counters.idrRoundTripRequestTotal.increment(by: 4)
         counters.idrRoundTripMatchedTotal.increment(by: 3)
-        let (snap, _) = try capture(exporter(in: try scratchDir(), counters: counters))
+        let (snap, _) = try capture(exporter(in: dir, counters: counters))
         let idr = try #require(snap.idrRoundTrip)
         #expect(idr.requestsTotal == 4 && idr.matchedTotal == 3)
     }
@@ -201,7 +204,6 @@ struct TelemetryCaptureTests {
         counters.p2.markEnetStart(base &+ 3_000_000)
         counters.p2.markEstablished()
         counters.p2.markFirstFrame(TelemetryCounters.monotonicNowNanos() &+ 5_000_000)
-        let dir = try scratchDir()
         let exporter = exporter(in: dir, counters: counters)
         exporter.workQueue.sync { exporter.openNDJSONFile() }
         let (snap, _) = try capture(exporter)
@@ -224,7 +226,6 @@ struct TelemetryCaptureTests {
     }
 
     @Test func sessionWritesItsFilesIntoTheGivenDirectoryOnly() throws {
-        let dir = try scratchDir()
         let exporter = exporter(in: dir)
         exporter.workQueue.sync {
             exporter.openNDJSONFile()
@@ -254,7 +255,6 @@ struct TelemetryCaptureTests {
     }
 
     @Test func everyFileNamesThePCAndMacByPseudonymOnly() throws {
-        let dir = try scratchDir()
         let exporter = exporter(in: dir)
         exporter.workQueue.sync {
             exporter.openNDJSONFile()
