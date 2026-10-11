@@ -130,7 +130,7 @@ enum GlimmerCLI {
             return Exit.usage
         }
         if command.verb == .help {
-            print(usage)
+            printLine(usage)
             return Exit.ok
         }
         // The app's launch order minus the UI. AppModel reads the screen, which
@@ -155,8 +155,17 @@ enum GlimmerCLI {
 
     // MARK: - Shared helpers
 
+    /// Where the verbs' text goes, stderr when `error`; tests read it back from here.
+    @TaskLocal nonisolated static var terminal: @Sendable (_ text: String, _ error: Bool) -> Void = { text, error in
+        if error { FileHandle.standardError.write(Data(text.utf8)) } else { print(text, terminator: "") }
+    }
+
+    static func printLine(_ line: String) {
+        terminal(line + "\n", false)
+    }
+
     static func printError(_ line: String, newline: Bool = true) {
-        FileHandle.standardError.write(Data((line + (newline ? "\n" : "")).utf8))
+        terminal(line + (newline ? "\n" : ""), true)
     }
 
     /// A paired PC by name, id or address, ignoring case (moonlight's rule).

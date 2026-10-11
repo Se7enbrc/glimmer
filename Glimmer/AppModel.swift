@@ -538,6 +538,14 @@ final class AppModel {
         hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
     }
 
+    /// How the model reaches a PC and where it keeps paired PCs and their pins.
+    /// Production uses the real client, probe and store; tests answer as the PC.
+    @ObservationIgnored var makeNetwork: @Sendable (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) }
+    @ObservationIgnored var measureRTT: @Sendable (String, Int, Int) async -> HostReachability.Outcome =
+        HostReachability.measureRTT
+    @ObservationIgnored var hostsDefaults: UserDefaults = .standard
+    @ObservationIgnored var supportBase: URL?
+
     /// The launch the user last asked for, so Retry repeats exactly that.
     @ObservationIgnored var lastLaunchAttempt: (app: LibraryApp, host: Host)?
 

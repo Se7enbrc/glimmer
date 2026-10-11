@@ -335,12 +335,12 @@ extension AppModel {
     /// can anything else that needs the current list. False when the PC didn't answer.
     @discardableResult
     func refreshAppList(for host: Host) async -> Bool {
-        let client = NetworkClient(server: nativeServerInfo(for: host))
+        let client = makeNetwork(nativeServerInfo(for: host))
         let fetched = try? await client.appList()
         await client.shutdown()
         guard let fetched, !fetched.isEmpty else { return false }
         let apps = fetched.map { PairedApp(id: $0.id, name: $0.name, hdr: $0.hdrCapable, hidden: $0.hidden) }
-        if Self.storeApps(apps, hostID: host.id, in: .standard) { loadHosts() }
+        if Self.storeApps(apps, hostID: host.id, in: hostsDefaults) { loadHosts(defaults: hostsDefaults) }
         return true
     }
 
@@ -385,7 +385,7 @@ extension AppModel {
             for address in Set(found.hosts.map(\.host)) where address != saved && IPv4Address(address) != nil {
                 guard !Task.isCancelled, !hostPolling.systemSleeping else { break search }
                 probe.address = address
-                let client = NetworkClient(server: probe)
+                let client = makeNetwork(probe)
                 let answer = try? await client.fetchServerInfo()
                 await client.shutdown()
                 guard !Task.isCancelled, !hostPolling.systemSleeping else { break search }
