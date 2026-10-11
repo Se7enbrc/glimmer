@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.10.7 - 2026-10-11
+
+### Bug fixes
+
+- Glimmer no longer removes certificates or keys from the keychain when it first
+  opens. A cleanup meant for leftovers from early test builds could delete
+  another app's signing certificate and its key
+  ([#138](https://github.com/Se7enbrc/glimmer/issues/138)). Glimmer now only
+  removes its own saved items.
+
 ## 2026.10.6 - 2026-10-09
 
 ### Features

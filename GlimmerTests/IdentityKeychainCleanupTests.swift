@@ -27,11 +27,6 @@ struct IdentityKeychainCleanupTests {
         })
     }
 
-    private func labelled(_ itemClass: CFString) -> Query {
-        [kSecClass as String: itemClass as String, kSecAttrLabel as String: "Glimmer Client Identity",
-         kSecMatchLimit as String: kSecMatchLimitAll as String]
-    }
-
     private func password(_ account: String) -> Query {
         [kSecClass as String: kSecClassGenericPassword as String,
          kSecAttrService as String: "io.ugfugl.Glimmer.tests.cleanup",
@@ -55,9 +50,10 @@ struct IdentityKeychainCleanupTests {
 
         await identity.preflight()
 
-        let expected = [labelled(kSecClassIdentity), labelled(kSecClassKey), labelled(kSecClassCertificate)]
-            + legacyPasswords
+        let expected = legacyPasswords
         #expect(deletes.all == expected)
+        // Only Glimmer's own service-and-account passwords: never a certificate, key or identity (#138).
+        #expect(deletes.all.allSatisfy { $0[kSecClass as String] == kSecClassGenericPassword as String })
         #expect(!FileManager.default.fileExists(atPath: oldKeychain.path))
         #expect(store.defaults.string(forKey: "glimmer.identityKeychainPassphrase") == nil)
         await identity.preflight()

@@ -240,12 +240,11 @@ public actor IdentityManager {
             return
         }
 
-        // Sweep 1: the "Glimmer Client Identity" item older builds
-        // imported into the login keychain. Only labels Glimmer itself wrote
-        // are swept, never a generic one another app's import could carry.
-        deleteLabelledIdentity()
+        // Never delete certificates, keys or identities: a label query for those
+        // can match other apps' items, and a first launch deleted a user's signing
+        // identity that way (#138). Old Glimmer certificates are left in place.
 
-        // Sweep 2: the three generic-password items the prior build
+        // Sweep 1: the three generic-password items the prior build
         // wrote into the login keychain at service
         // "io.ugfugl.Glimmer.identity". These are the items that
         // triggered the "allow Glimmer to read its own client identity"
@@ -267,7 +266,7 @@ public actor IdentityManager {
             }
         }
 
-        // Sweep 3: the abandoned file-based SecKeychain from an even earlier
+        // Sweep 2: the abandoned file-based SecKeychain from an even earlier
         // build. Different path from our new mode-0600 identity files -
         // this was an entire SecKeychain database at
         // ~/Library/Application Support/Glimmer/identity.keychain that we
