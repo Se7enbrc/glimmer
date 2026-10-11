@@ -528,13 +528,13 @@ composites the sRGB text against the HDR content correctly.
 **Dual-path fullscreen: the `coversNotch` toggle.** Two paths, picked per
 session config:
 
-- **`coversNotch == true`**: a borderless covering window at the
+- **`coversNotch == true`** (default): a borderless covering window at the
   `mainMenuWindow + 1` level,
   `collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]`.
   No Space-based fullscreen. The window owns the full physical panel, including
   the notch reserve on notched MacBooks. Bitstreams at the panel's true native
   resolution render 1:1.
-- **`coversNotch == false`** (default): `toggleFullScreen(nil)` for Space-based
+- **`coversNotch == false`**: `toggleFullScreen(nil)` for Space-based
   fullscreen. AppKit handles the Space creation and reserves the menu-bar and
   notch area as safe inset. Same path SDL's
   `SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES=1` uses.
@@ -656,7 +656,9 @@ installed to run.
 ### `Glimmer/StreamLib.xcconfig`
 
 Points Xcode at the bridging header and pulls in the version's single source of
-truth:
+truth. It also strips Release binaries' debug map for the reproducible payload
+(RELEASE.md section 4) and turns on Enhanced Security's compiler protections.
+The core lines:
 
 ```text
 #include "Version.xcconfig"
@@ -683,7 +685,8 @@ and never sign; they need no profiles.
 | ------------------------ | ---------------------------------------------------------------------------- |
 | `make app`               | Compile-only check, no signing or notarization                               |
 | `make test`              | Build + run the `GlimmerTests` bundle                                        |
-| `make verify`            | Strict SwiftLint, release-tool tests and Swift tests; the gate `dist` runs   |
+| `make check`             | Actionlint, SPDX notices, strict SwiftLint, release-tool tests               |
+| `make verify`            | `make check`, Swift tests and ASan fuzz tests; the gate `dist` runs          |
 | `make release`           | Notarized Release build, no install                                          |
 | `make` / `make install`  | `release` + copy to `/Applications/Glimmer.app`                              |
 | `make reinstall`         | `install` + quit and relaunch the running app                                |

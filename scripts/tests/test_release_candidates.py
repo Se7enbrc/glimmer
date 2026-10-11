@@ -124,11 +124,16 @@ class CandidatePublicationTests(unittest.TestCase):
         self.write_tool("bin/git", '''#!/bin/bash
 shift 2
 case "$1" in
-    fetch) exit 0 ;;
+    fetch) [ "$5" = +refs/heads/appcast:refs/remotes/origin/appcast ] ;;
     rev-parse)
-        if [ "$2" = origin/main ]; then printf '%040d\\n' 0 | tr 0 b; else printf '%040d\\n' 0 | tr 0 a; fi ;;
+        case "$2" in
+            origin/main) printf '%040d\\n' 0 | tr 0 b ;;
+            origin/appcast) printf '%040d\\n' 0 | tr 0 e ;;
+            *) printf '%040d\\n' 0 | tr 0 a ;;
+        esac ;;
     show)
-        if [[ "$2" = *:appcast.xml ]]; then cat "$FIXTURE_ROOT/live-appcast.xml";
+        if [ "$2" = eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee:appcast.xml ]; then cat "$FIXTURE_ROOT/live-appcast.xml";
+        elif [[ "$2" = *:appcast.xml ]]; then exit 1;
         else printf 'MARKETING_VERSION = 2026.10.6\\n'; fi ;;
     *) exit 1 ;;
 esac
@@ -140,14 +145,31 @@ root = pathlib.Path(os.environ["FIXTURE_ROOT"])
 args = sys.argv[1:]
 with (root / "gh-calls").open("a") as log:
     log.write(json.dumps(args) + "\\n")
-if args[:2] == ["release", "view"]:
-    sys.exit(1)
-if args[0] == "api":
-    print("a" * 40 if "/commits/" in args[1] else "true")
+state = root / "release-state"
+if args[:2] == ["release", "create"]:
+    state.write_text("draft" if "--draft" in args else "published")
+elif args[:2] == ["release", "edit"] and "--draft=false" in args:
+    state.write_text("published")
+elif args[:2] == ["release", "view"]:
+    if not state.exists():
+        sys.exit(1)
+    print(7)
+elif args[0] == "api":
+    # Like GitHub: the by-tag endpoint can't see a draft.
+    if "/releases/tags/" in args[1] and state.read_text() == "draft":
+        sys.exit(1)
+    if "/commits/" in args[1]:
+        print("a" * 40)
+    elif ".draft" in args:
+        print("true" if state.read_text() == "draft" else "false")
+    elif any(".assets" in arg for arg in args):
+        pass
+    else:
+        print("true")
 ''')
         (self.root / "scripts/github_signed_commit.py").write_text('''import json, os, pathlib, sys
 root = pathlib.Path(os.environ["FIXTURE_ROOT"])
-(root / "committed-feed.xml").write_bytes(pathlib.Path(sys.argv[4]).read_bytes())
+(root / "committed-feed.xml").write_bytes(pathlib.Path(sys.argv[5]).read_bytes())
 (root / "commit-args").write_text(json.dumps(sys.argv[1:]))
 print("c" * 40)
 ''')
@@ -163,14 +185,15 @@ print("c" * 40)
                                str(self.root / "dist"), "fixture/glimmer", tag],
                               env=self.env, capture_output=True, text=True, timeout=10)
 
-    def test_candidate_uses_live_feed_and_main_cas_without_changing_source_checkout(self):
+    def test_candidate_uses_appcast_branch_feed_and_cas_without_changing_source_checkout(self):
         self.configure_candidate()
+        (self.root / "dist/Glimmer-2026.10.6.intoto.jsonl").write_text("{}\n")
         original = self.source_feed.read_bytes()
         result = self.publish_candidate()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.source_feed.read_bytes(), original)
         args = json.loads((self.root / "commit-args").read_text())
-        self.assertEqual(args[1], "b" * 40)
+        self.assertEqual(args[:4], ["fixture/glimmer", "appcast", "e" * 40, "appcast.xml"])
         feed = ET.parse(self.root / "committed-feed.xml").getroot().find("channel")
         self.assertEqual(feed[0].findtext(f"{{{SPARKLE}}}channel"), "rc")
         self.assertEqual(feed[0].findtext(f"{{{SPARKLE}}}shortVersionString"), "2026.10.6")
@@ -183,6 +206,10 @@ print("c" * 40)
         self.assertNotIn("--target", create)
         edit = next(call for call in calls if call[:2] == ["release", "edit"])
         self.assertIn("--latest=false", edit)
+        self.assertIn("--draft=false", edit)
+        self.assertEqual((self.root / "release-state").read_text(), "published")
+        upload = next(call for call in calls if call[:2] == ["release", "upload"])
+        self.assertTrue(upload[3].endswith("/Glimmer-2026.10.6.intoto.jsonl"))
         self.assertFalse(Path(self.env["FIXTURE_DITTO_MARKER"]).exists())
 
     def test_candidate_requires_hosted_context_and_exact_version_tag_before_credentials(self):

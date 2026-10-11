@@ -3,60 +3,84 @@
 
 name: Release candidate
 
-# A same-repository pull request labelled `rc` gets a candidate for each head
-# once Verify and CodeQL pass. A new push restarts the wait for the new head.
+# A same-repository pull request labelled `rc` gets a candidate once Verify and
+# CodeQL pass on its head. Both triggers run main's copy of this workflow.
 on:
-  pull_request:
-    types: [labeled, synchronize]
+  pull_request_target:
+    types: [labeled]
+  workflow_run:
+    workflows: [Verify, CodeQL]
+    types: [completed]
 
 permissions:
   contents: read
 
 jobs:
-  checks:
-    # Waits on the required checks without secrets, so the cut runs last.
+  ready:
+    # Decides without secrets or waiting; the next check to finish asks again.
     if: >-
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.action == 'labeled' && github.event.label.name == 'rc' ||
-       github.event.action == 'synchronize' &&
-      contains(github.event.pull_request.labels.*.name, 'rc'))
+      github.event_name == 'pull_request_target' && github.event.label.name ==
+      'rc' && github.event.pull_request.head.repo.full_name == github.repository
+      || github.event_name == 'workflow_run' && github.event.workflow_run.event
+      == 'pull_request' && github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    # A push or a new `rc` label replaces the wait; other labels never cancel it.
-    concurrency:
-      group:
-        rc-checks-${{ github.event.pull_request.number }}-${{
-        github.event.label.name || 'rc' }}
-      cancel-in-progress: true
+    timeout-minutes: 10
     permissions:
       actions: read
       checks: read
       contents: read
+      pull-requests: read
       security-events: read
+    outputs:
+      ready: ${{ steps.decide.outputs.ready }}
+      sha: ${{ steps.decide.outputs.sha }}
+      pr: ${{ steps.decide.outputs.pr }}
     steps:
-      - name: Check out the pull request head
+      - name: Check out main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Wait for Verify and CodeQL
+      - name: Decide
+        id: decide
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run:
-          python3 scripts/release-candidate.py --ci-sha "$HEAD_SHA" --pr
-          "$PR_NUMBER" --wait-only
+          HEAD_SHA:
+            ${{ github.event.pull_request.head.sha ||
+            github.event.workflow_run.head_sha }}
+          PR_NUMBER:
+            ${{ github.event.pull_request.number ||
+            github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          ready=false
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No pull request for $HEAD_SHA."
+          else
+            read -r head state labelled < <(gh pr view "$PR_NUMBER" -R "$GITHUB_REPOSITORY" \
+              --json headRefOid,state,labels -q '"\(.headRefOid) \(.state) \(any(.labels[]; .name == "rc"))"')
+            if [ "$head" != "$HEAD_SHA" ]; then
+              echo "Pull request #$PR_NUMBER moved past ${HEAD_SHA:0:12}."
+            elif [ "$state" != OPEN ] || [ "$labelled" != true ]; then
+              echo "Pull request #$PR_NUMBER is not an open pull request labelled rc."
+            elif python3 scripts/release-checks.py "$HEAD_SHA"; then
+              ready=true
+            else
+              echo "Required checks aren't all green yet; the next one to finish asks again."
+            fi
+          fi
+          printf 'ready=%s\nsha=%s\npr=%s\n' "$ready" "$HEAD_SHA" "$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
   cut:
-    needs: checks
+    needs: ready
+    if: needs.ready.outputs.ready == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: rc-cut
       cancel-in-progress: false
     environment: rc-cut
-    timeout-minutes: 120
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -74,20 +98,22 @@ jobs:
           permission-checks: read
           permission-security-events: read
 
-      - name: Check out the labelled head
+      # Main's tooling runs; the candidate is only read from history, never executed.
+      - name: Check out main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 
       - name: Cut the candidate
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ needs.ready.outputs.sha }}
+          PR_NUMBER: ${{ needs.ready.outputs.pr }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
         run: |
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+          git fetch --quiet origin "$HEAD_SHA"
           python3 scripts/release-candidate.py --ci-sha "$HEAD_SHA" --pr "$PR_NUMBER"
