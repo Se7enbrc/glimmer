@@ -67,37 +67,37 @@ struct StatsOverlayRefreshTests {
     }
 
     @Test func thePillWaitsOutTheLaunchGraceThenFlagsRenderLoss() {
-        var now = 100.0
-        let box = PerceivedHitchBox(now: { now })
+        let clock = ScriptedClock(startingAt: 100_000_000_000)
+        let box = PerceivedHitchBox(now: { clock.seconds })
         var snap = StreamStatsSnapshot()
         snap.decodedFps = 120
         snap.renderedFps = 90
         #expect(!box.perceivedHitch(snap: snap))
-        now = 105.75
+        clock.advance(.milliseconds(5_750))
         #expect(!box.perceivedHitch(snap: snap))
-        now = 106
+        clock.advance(.milliseconds(250))
         #expect(box.perceivedHitch(snap: snap))
         snap.renderedFps = 110
-        now = 106.25
+        clock.advance(.milliseconds(250))
         #expect(!box.perceivedHitch(snap: snap))
     }
 
     /// Late drops that still present something fresh are absorbed jitter, not a felt stutter.
     @Test func aLateDropBurstCountsOnlyWithAPresentGap() {
-        var now = 100.0
-        let box = PerceivedHitchBox(now: { now })
+        let clock = ScriptedClock(startingAt: 100_000_000_000)
+        let box = PerceivedHitchBox(now: { clock.seconds })
         var snap = StreamStatsSnapshot()
         snap.presentationLateDrops = 0
         snap.presentationGaps = 0
         _ = box.perceivedHitch(snap: snap)
-        now += 6
+        clock.advance(.seconds(6))
         snap.presentationLateDrops = 100
         #expect(!box.perceivedHitch(snap: snap))
-        now += 0.25
+        clock.advance(.milliseconds(250))
         snap.presentationLateDrops = 110
         snap.presentationGaps = 1
         #expect(box.perceivedHitch(snap: snap))
-        now += 0.25
+        clock.advance(.milliseconds(250))
         snap.presentationLateDrops = 111
         snap.presentationGaps = 2
         #expect(!box.perceivedHitch(snap: snap))
