@@ -153,6 +153,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh prepare-promotion
 
+      - name: Mint a scoped release tag token
+        if: inputs.operation == 'promote'
+        id: tag-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.GLIMMER_RC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GLIMMER_RC_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+
+      - name: Create final version tag at the verified candidate
+        if: inputs.operation == 'promote'
+        env:
+          GH_TOKEN: ${{ steps.tag-app.outputs.token }}
+          APP_SLUG: ${{ steps.tag-app.outputs.app-slug }}
+        run: |
+          gh auth setup-git
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+          python3 scripts/promote-release.py tag "$RC_TAG" "$CANDIDATE_SHA"
+
       - name: Promote tested bytes to stable
         if: inputs.operation == 'promote'
         env:
