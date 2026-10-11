@@ -339,14 +339,14 @@ struct HIDGamepadTests {
 
         forwarder.controllerQuitChordProvider = { .l1r1 }
         forwarder.pushHID(slot: 3, state: (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG, analog)) { nil }
-        #expect(backend.calls.count == 1)
+        #expect(backend.calls.map(\.buttons) == [StreamProtocol.B_FLAG, 0])
         #expect(forwarder.quitChordDwellSlot == 3)
         forwarder.pushHID(slot: 3, state: (StreamProtocol.LB_FLAG, analog)) { nil }
         #expect(forwarder.quitChordDwellSlot == nil)
-        #expect(backend.calls.count == 2)
+        #expect(backend.calls.map(\.buttons) == [StreamProtocol.B_FLAG, 0, StreamProtocol.LB_FLAG])
         forwarder.isReady = false
         forwarder.pushHID(slot: 3, state: (StreamProtocol.B_FLAG, analog)) { nil }
-        #expect(backend.calls.count == 2)
+        #expect(backend.calls.map(\.buttons) == [StreamProtocol.B_FLAG, 0, StreamProtocol.LB_FLAG])
     }
 
     /// Not Now quiets one pad until relaunch; Don't Ask Again outlives it.

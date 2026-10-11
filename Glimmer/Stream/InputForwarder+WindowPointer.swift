@@ -139,14 +139,9 @@ extension InputForwarder {
     }
 
     private func raiseHeldMouseButtons(reason: String) {
-        guard isReady, !heldMouseButtons.isEmpty else { return }
-        for button in heldMouseButtons {
-            let rc = backend?.sendMouseButton(
-                action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button) ?? -2
-            record("LiSendMouseButtonEvent(release-pointer)", rc)
-        }
-        Diag.notice("input: released \(heldMouseButtons.count) held mouse button(s) on \(reason)", "Stream")
-        heldMouseButtons.removeAll()
+        let count = heldMouseButtons.count
+        for button in heldMouseButtons { releaseMouse(button) }
+        if count > 0 { Diag.notice("input: released \(count) held mouse button(s) on \(reason)", "Stream") }
     }
 
     /// Mirror this event's pointer position onto the host, in stream pixels.

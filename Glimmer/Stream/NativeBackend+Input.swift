@@ -44,7 +44,8 @@ extension NativeBackend {
     //
     // InputEncoder builds plaintext input bytes for the encrypted control stream.
     // Upstream channels: keyboard 0x02, mouse 0x03, text 0x06, gamepad 0x10 + num%16.
-    // LiSend* returns -2 before ready, 0 when queued, or LI_ERR_UNSUPPORTED.
+    // Edges return 0 only after reliable-channel acceptance; motion may merge until the next tick.
+    // LiSend* returns -2 before ready, -1 on send failure, or LI_ERR_UNSUPPORTED.
 
     static let inputNotReady: Int32 = -2
 

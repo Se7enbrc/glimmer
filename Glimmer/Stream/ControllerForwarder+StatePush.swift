@@ -83,11 +83,14 @@ extension InputForwarder {
         let buttons = pressedButtonFlags(pad: pad)
 
         // The chord ends the stream only after the hold dwell (ControllerForwarder+QuitChord.swift),
-        // so an in-game overlap can't. Frames holding it stay off the PC, or the game would act on
-        // those buttons for the whole hold.
+        // so an in-game overlap can't. New presses stay off the PC during the dwell;
+        // releases still pass so unrelated buttons and triggers cannot get stuck.
         if matchesControllerQuitChord(pad: pad, buttons: buttons) {
             armQuitChordDwell(pad: pad, slot: slot)
-            // No frame is enqueued, so its stamp must not age into the next push.
+            releaseSuppressedControllerButtons(slot: slot, buttons: buttons,
+                                               leftDown: pad.leftTrigger.value > 0,
+                                               rightDown: pad.rightTrigger.value > 0)
+            // A suppressed frame must not age into the next push.
             _ = InputDeliverStamp.shared.take(slot: Int(slot))
             return false
         }
@@ -105,15 +108,10 @@ extension InputForwarder {
         let rx = Int16((pad.rightThumbstick.xAxis.value * 32767).rounded().clamped(to: -32768...32767))
         let ry = Int16((pad.rightThumbstick.yAxis.value * 32767).rounded().clamped(to: -32768...32767))
 
-        let rc = backend?.sendMultiController(
-            num: Int16(slot),
-            mask: Int16(bitPattern: gamepadMask),
-            buttons: buttons,
-            analog: GamepadAnalog(leftTrigger: lt, rightTrigger: rt,
-                                  leftStickX: lx, leftStickY: ly,
-                                  rightStickX: rx, rightStickY: ry)
-        ) ?? -2
-        record("LiSendMultiControllerEvent", rc)
+        sendControllerState(slot: slot, buttons: buttons,
+                            analog: GamepadAnalog(leftTrigger: lt, rightTrigger: rt,
+                                                  leftStickX: lx, leftStickY: ly,
+                                                  rightStickX: rx, rightStickY: ry))
         return true
     }
 
@@ -174,21 +172,22 @@ extension InputForwarder {
 
     /// Release every pad when focus leaves ordinary playback; Mini Player keeps its controller ownership.
     func neutralizeControllers() {
-        guard isReady else { return }
         releaseControllerTouches()
         for state in attachedControllers.values {
             ControllerMotion.shared.setInputEnabled(false, slot: state.slot)
         }
-        let slots = attachedControllers.values.map(\.slot) + attachedHIDControllers.values.map(\.slot)
-        for slot in slots {
-            let rc = backend?.sendMultiController(
-                num: Int16(slot), mask: Int16(bitPattern: gamepadMask),
-                buttons: 0, analog: Self.neutralControllerAnalog
-            ) ?? -2
-            record("LiSendMultiControllerEvent(focus loss)", rc)
+        let slots = Set(attachedControllers.values.map(\.slot) + attachedHIDControllers.values.map(\.slot)
+            + Array(controllerButtons.keys))
+        for slot in slots.sorted()
+            where controllerButtons[slot] != 0 || releases.held.contains(.controller(slot)) {
+            releases.hold(.controller(slot))
+            releases.release(.controller(slot))
+            controllerButtons[slot] = 0
+            controllerAnalogs[slot] = Self.neutralControllerAnalog
         }
+        flushPendingReleases()
         if !slots.isEmpty {
-            Diag.info("input: released \(slots.count) controller(s) on focus loss", "Stream")
+            Diag.info("input: \(slots.count) controller release obligations on focus loss", "Stream")
         }
     }
 }

@@ -13,7 +13,7 @@ struct InputBatcherTests {
 
     private static func makeChannel(backlogged: Bool = true) throws -> EnetControlChannel {
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
-                                         crypto: try ControlCrypto(rikey: key))
+                                         crypto: try ControlCrypto(rikey: key), inputConnectionAvailable: { true })
         channel.reliableBackloggedFlag.store(backlogged, ordering: .relaxed)
         return channel
     }
@@ -242,5 +242,52 @@ struct InputBatcherTests {
         #expect(InputBatcher.motionTraceDue(lastNanos: 0, nowNanos: interval, isGyroNull: false))
         #expect(!InputBatcher.motionTraceDue(lastNanos: 1, nowNanos: interval, isGyroNull: false))
         #expect(InputBatcher.motionTraceDue(lastNanos: 1, nowNanos: interval, isGyroNull: true))
+    }
+    @Test func reliableEdgesReportFailureInsteadOfQueueSuccess() throws {
+        let channel = try Self.makeChannel()
+        let batcher = InputBatcher(enet: channel)
+        #expect(batcher.passThrough([UInt8](repeating: 0, count: Int(Enet.defaultMTU)), channel: 2) == -1)
+        channel.close()
+        #expect(batcher.passThrough(Self.click, channel: 3) == -1)
+        batcher.stop()
+        #expect(batcher.passThrough(Self.click, channel: 3) == -2)
+        #expect(channel.sentReliable.isEmpty)
+    }
+
+    @Test func controllerNeutralAndKeyboardUpSurviveImmediateStop() throws {
+        let channel = try Self.makeChannel()
+        let batcher = InputBatcher(enet: channel)
+        let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0, leftStickY: 0,
+                                  rightStickX: 0, rightStickY: 0)
+        let release = InputEncoder.keyboard(keyCode: VKScanCode(vk: 0x57).wireCode,
+                                            action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0)
+        #expect(batcher.updateController(num: 0, mask: 1, buttons: 0x1000, analog: analog) == 0)
+        #expect(batcher.updateController(num: 0, mask: 1, buttons: 0, analog: analog) == 0)
+        #expect(batcher.passThrough(release, channel: 2) == 0)
+        batcher.stop()
+        #expect(try Self.sentPayloads(channel) == [
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0x1000, analog: analog),
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: analog), release
+        ])
+    }
+
+    @Test func failedControllerDownCannotResurrectAtStop() throws {
+        let channel = try Self.makeChannel()
+        let batcher = InputBatcher(enet: channel)
+        channel.interrupt()
+        let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0, leftStickY: 0,
+                                  rightStickX: 0, rightStickY: 0)
+        #expect(batcher.updateController(num: 0, mask: 1, buttons: 0x1000, analog: analog) == -1)
+        batcher.stop()
+        #expect(try Self.sentPayloads(channel).isEmpty)
+    }
+
+    @Test func inputWithoutALiveConnectionCannotReportAcceptance() throws {
+        let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
+                                         crypto: try ControlCrypto(rikey: Self.key))
+        let batcher = InputBatcher(enet: channel)
+        #expect(batcher.passThrough(Self.click, channel: 3) == InputBatcherResult.sendFailed)
+        batcher.stop()
+        #expect(channel.sentReliable.isEmpty)
     }
 }

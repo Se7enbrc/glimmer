@@ -41,6 +41,15 @@ final class StreamInputView: NSView {
     weak var delegate: (any StreamInputViewDelegate)?
 
     private var trackingArea: NSTrackingArea?
+    var onResignFirstResponder: (() -> Void)?
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { onResignFirstResponder?() }
+        return resigned
+    }
+
+    var onBecomeFirstResponder: (() -> Void)?
 
     /// The invisible image prevents a system reveal from drawing an arrow over
     /// captured input. Release and teardown must explicitly restore the arrow.
@@ -99,7 +108,10 @@ final class StreamInputView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
     override var isOpaque: Bool { true }
-    override func becomeFirstResponder() -> Bool { true }
+    override func becomeFirstResponder() -> Bool {
+        onBecomeFirstResponder?()
+        return true
+    }
 
     /// Critical for the stream window: macOS only delivers mouseMoved to a
     /// view if its window has `acceptsMouseMovedEvents = true` AND the view

@@ -49,12 +49,13 @@ extension InputForwarder {
         if matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
                                       rightTrigger: state.analog.rightTrigger) {
             armQuitChordDwell(slot: slot, readState: readState)
+            releaseSuppressedControllerButtons(slot: slot, buttons: state.buttons,
+                                               leftDown: state.analog.leftTrigger > 0,
+                                               rightDown: state.analog.rightTrigger > 0)
             return
         }
         if quitChordDwellSlot == slot { cancelQuitChordDwell(reason: "HID chord released") }
-        let result = backend?.sendMultiController(num: Int16(slot), mask: Int16(bitPattern: gamepadMask),
-                                                  buttons: state.buttons, analog: state.analog) ?? -2
-        record("LiSendMultiControllerEvent(HID)", result)
+        sendControllerState(slot: slot, buttons: state.buttons, analog: state.analog)
     }
 
     func detachHID(_ pad: HIDGamepadDevice, sendFinal: Bool = true) {

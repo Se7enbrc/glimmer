@@ -92,17 +92,17 @@ with a dash. Verbs run headless through the app's own `AppModel`, pairing and
 launch over distributed notifications (`CommandChannel`,
 `AppModel+Commands.swift`), so no stream ever runs in the terminal's process;
 `glimmer stop` disconnects that stream. `glimmer quit` confirms, disconnects,
-then cancels the PC app; scripts can confirm with `--force`. Run through
-a symlink, the binary re-execs through its real path so `Bundle.main` and the
+then cancels the PC app; scripts can confirm with `--force`. Run through a
+symlink, the binary re-execs through its real path so `Bundle.main` and the
 defaults domain resolve.
 
 **Shortcuts, Siri and Spotlight.** `GlimmerIntents.swift` declares four App
-Intents: Stream from PC, Wake PC, Stop streaming and Quit App on PC, with the paired PCs as a
-`PCEntity` query. They run inside the app, once `AppModel.forIntent()` has
-loaded the PCs, and call the launcher's own entry points (`requestStream`,
-`sendWakeAndWait`, `quitRunningApp`), so they share its rules and its wording.
-`GlimmerShortcuts` refreshes the PC names Siri knows whenever one is paired,
-renamed or removed.
+Intents: Stream from PC, Wake PC, Stop streaming and Quit App on PC, with the
+paired PCs as a `PCEntity` query. They run inside the app, once
+`AppModel.forIntent()` has loaded the PCs, and call the launcher's own entry
+points (`requestStream`, `sendWakeAndWait`, `quitRunningApp`), so they share its
+rules and its wording. `GlimmerShortcuts` refreshes the PC names Siri knows
+whenever one is paired, renamed or removed.
 
 ## The `StreamingBackend` boundary
 
@@ -203,16 +203,18 @@ UI lights up live.
    throw: the launcher's pair sheet runs first, not us.
 2. **Launch, resume, or confirmed takeover**: idle PCs get `/launch`. A matching
    app previously launched by this Mac gets `/resume`, with ownership retained
-   across Glimmer sessions in `RunningAppOwnership` for eight hours after recording;
-   expired or missing ownership requires takeover confirmation. Sunshine's `nvhttp.cpp`
-   `resume()` calls `make_launch_session()` with the new mode, FPS and HDR
-   request, and configures the display when no streaming session is active.
-   Another app or unknown ownership needs takeover confirmation, then `/cancel`,
-   an idle poll (up to 5 s for Undo commands), and `/launch`. A failed resume
-   keeps the underlying recovery action, or offers a confirmed quit and relaunch
-   for other failures; a 503 “No running app” launches fresh without confirmation.
-   It never automatically cancels the game, and observing idle or another app clears ownership.
-   Sunshine exposes no owner, so same-app takeovers between observations remain undetectable within those eight hours.
+   across Glimmer sessions in `RunningAppOwnership` for eight hours after
+   recording; expired or missing ownership requires takeover confirmation.
+   Sunshine's `nvhttp.cpp` `resume()` calls `make_launch_session()` with the new
+   mode, FPS and HDR request, and configures the display when no streaming
+   session is active. Another app or unknown ownership needs takeover
+   confirmation, then `/cancel`, an idle poll (up to 5 s for Undo commands), and
+   `/launch`. A failed resume keeps the underlying recovery action, or offers a
+   confirmed quit and relaunch for other failures; a 503 “No running app”
+   launches fresh without confirmation. It never automatically cancels the game,
+   and observing idle or another app clears ownership. Sunshine exposes no
+   owner, so same-app takeovers between observations remain undetectable within
+   those eight hours.
 3. **Build `BackendStreamConfig`**: `width`, `height`, `fps`, `bitrate`, the
    `supportedVideoFormats` codec bitmask, `colorSpace`, `colorRange`,
    `encryptionFlags`. The remote-input AES key and IV are copied in from the
@@ -254,7 +256,8 @@ Native connection events carry their originating backend and preserve arrival
 order, so delayed callbacks cannot revive input or stop a replacement
 connection. Per-PC launch epochs serialize late cleanup against the next launch:
 a new launch waits for an explicitly requested quit, while a late response from
-an older epoch cannot overwrite a newer session's ownership. Different PCs remain independent.
+an older epoch cannot overwrite a newer session's ownership. Different PCs
+remain independent.
 
 Teardown order is load-bearing:
 
@@ -430,9 +433,15 @@ physical key-down and key-up emits one keyboard event: no per-event modifier
 reset, no “release before press” coalescing. NKRO works because AppKit delivers
 each transition as its own `NSEvent` and the responder chain hands each to
 `keyDown(with:)` / `keyUp(with:)` independently. Held keys, mouse buttons and
-modifiers are released on focus loss, a paste, a reconnect and `detach()`. Key
-events also release tracked modifiers absent from their current flags,
-recovering a lost modifier-up without pressing additional modifiers.
+modifiers are released on focus/responder loss, deactivation, sleep, a paste,
+readiness loss and `detach()`. Physical ownership is separate from the release
+ledger, which retains each key's down-time wire mapping. Failed releases remain
+pending until ENet accepts them, and form a barrier before new presses. A
+replacement connection repeats releases that the old one may not have ACKed; it
+never replays old presses. Key events after a 100 ms gap and a 250 ms timer
+while inputs are held reconcile missing ups against current macOS state.
+Recovery, refocus and wake run the same reconciliation. Controller button edges
+and neutral frames also return channel acceptance; only replaceable axes merge.
 
 The Cmd key reports as `VK_LWIN` / `VK_RWIN`. By default
 (`captureSysKeys == false`) the InputForwarder drops Cmd-bearing keyDown and

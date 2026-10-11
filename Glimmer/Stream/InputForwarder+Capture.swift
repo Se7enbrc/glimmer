@@ -46,6 +46,7 @@ extension InputForwarder {
                 // GCController's value-changed handler doesn't re-fire for an
                 // input held across the focus loss, so without this a stick
                 // held while Cmd-Tabbing back reads as centered until nudged.
+                self?.reconcilePhysicalInputs()
                 self?.resyncControllers()
             }
         }

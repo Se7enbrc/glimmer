@@ -50,10 +50,9 @@ import Synchronization
 
 // MARK: - ENet control channel
 
-/// Single-peer ENet client over UDP. Drives the CONNECT → VERIFY_CONNECT → ACK
-/// handshake, then sends START_A / START_B reliably. All socket I/O is on a
-/// serial dispatch queue; the public API is async and runs the handshake to
-/// completion (or throws at a specific stage).
+/// Peer state uses stateLock, socket ownership uses connLock, and sealing uses outboundLock.
+/// The receive queue owns inbound callbacks; retained reliable commands survive until ACK or teardown.
+/// These locks and queue ownership are the invariant behind `@unchecked Sendable`.
 final class EnetControlChannel: @unchecked Sendable {
     static let logCategory = "NativeConnection"
 
@@ -364,6 +363,8 @@ final class EnetControlChannel: @unchecked Sendable {
     var ackSilenceNearMissArmed = false
 
     let stateLock = NSLock()
+    let outboundLock = NSLock()
+    let inputConnectionAvailable: (@Sendable () -> Bool)?
     let interrupted = ManagedAtomicFlag()
 
     /// Fired once when the peer dies (declarePeerDead): host TERMINATION or
@@ -449,11 +450,12 @@ final class EnetControlChannel: @unchecked Sendable {
     let startInstant = DispatchTime.now()
 
     init(host: NWEndpoint.Host, port: UInt16, controlConnectData: UInt32,
-         crypto: ControlCrypto) {
+         crypto: ControlCrypto, inputConnectionAvailable: (@Sendable () -> Bool)? = nil) {
         self.host = host
         self.port = port
         self.controlConnectData = controlConnectData
         self.crypto = crypto
+        self.inputConnectionAvailable = inputConnectionAvailable
         self.connectID = UInt32.random(in: UInt32.min...UInt32.max)
     }
 

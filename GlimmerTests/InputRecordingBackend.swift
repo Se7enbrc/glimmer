@@ -50,6 +50,13 @@ enum PointerSend: Equatable, Sendable {
 }
 
 final class InputRecordingBackend: StreamingBackend {
+    private let result = OSAllocatedUnfairLock(initialState: Int32(0))
+    var inputResult: Int32 {
+        get { result.withLock { $0 } }
+        set { result.withLock { $0 = newValue } }
+    }
+    private let stoppedControllerSends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
+    var controllersAtStop: [ControllerSend] { stoppedControllerSends.withLock { $0 } }
     private let sends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
 
     private let textSends = OSAllocatedUnfairLock(initialState: [String]())
@@ -87,7 +94,7 @@ final class InputRecordingBackend: StreamingBackend {
         connectConfigs.withLock { $0.append(config) }
         if let connectFailure { throw connectFailure }
     }
-    func stopConnection() {}
+    func stopConnection() { stoppedControllerSends.withLock { $0 = calls } }
     func interruptConnection() {}
     func attachVideoSink(_ sink: VideoSink) {}
     func attachAudioSink(_ sink: NativeAudioSink) {}
@@ -97,7 +104,10 @@ final class InputRecordingBackend: StreamingBackend {
     func launchUrlQueryParameters() -> String { "" }
     func stageName(for stage: Int32) -> String { "" }
     func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 {
-        keyboardSends.withLock { $0.append(.init(keyCode: keyCode, action: action, modifiers: modifiers, flags: flags)) }
+        guard inputResult == 0 else { return inputResult }
+        keyboardSends.withLock {
+            $0.append(.init(keyCode: keyCode, action: action, modifiers: modifiers, flags: flags))
+        }
         return 0
     }
     func sendMouseMove(dx: Int16, dy: Int16) -> Int32 {
@@ -111,10 +121,12 @@ final class InputRecordingBackend: StreamingBackend {
     func sendScroll(_ amount: Int16) -> Int32 { recordPointer(.scroll(amount)) }
     func sendHScroll(_ amount: Int16) -> Int32 { recordPointer(.hScroll(amount)) }
     private func recordPointer(_ send: PointerSend) -> Int32 {
+        guard inputResult == 0 else { return inputResult }
         pointerSends.withLock { $0.append(send) }
         return 0
     }
     func sendMultiController(num: Int16, mask: Int16, buttons: Int32, analog: GamepadAnalog) -> Int32 {
+        guard inputResult == 0 else { return inputResult }
         sends.withLock { $0.append(ControllerSend(num: num, mask: mask, buttons: buttons, analog: analog)) }
         return 0
     }

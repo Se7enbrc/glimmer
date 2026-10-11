@@ -26,7 +26,7 @@ struct EnetControlChannelTests {
 
     private static func makeChannel() throws -> (EnetControlChannel, Codes) {
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
-                                         crypto: try ControlCrypto(rikey: key))
+                                         crypto: try ControlCrypto(rikey: key), inputConnectionAvailable: { true })
         let codes = Codes()
         channel.onTerminated = { codes.values.append($0) }
         return (channel, codes)

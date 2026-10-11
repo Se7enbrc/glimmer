@@ -42,7 +42,7 @@ import Foundation
 /// Analog state for one controller frame (triggers + both sticks), grouped so
 /// `sendMultiController` mirrors LiSendMultiControllerEvent without a 9-argument
 /// signature.
-public struct GamepadAnalog: Sendable {
+public struct GamepadAnalog: Sendable, Equatable {
     public var leftTrigger: UInt8
     public var rightTrigger: UInt8
     public var leftStickX: Int16

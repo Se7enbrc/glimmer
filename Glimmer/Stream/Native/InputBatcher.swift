@@ -15,7 +15,7 @@ import Foundation
 import Synchronization
 
 /// Return codes mirroring the NativeBackend.dispatchInput contract
-/// (Li* convention): 0 = queued OK, -1 = seal/send failed, -2 = input not ready.
+/// (Li* convention): 0 = accepted (edges) or merged (motion), -1 = seal/send failed, -2 = input not ready.
 enum InputBatcherResult {
     static let ok: Int32 = 0
     static let sendFailed: Int32 = -1
@@ -128,6 +128,9 @@ final class InputBatcher: @unchecked Sendable {
         queue.sync {
             timer?.cancel()
             timer = nil
+            for slot in controllers.indices where controllers[slot].dirty {
+                _ = flushController(slot, tracker: tracker())
+            }
             enet = nil
         }
         Diag.notice("input batcher stopped", Self.logCategory)
@@ -176,43 +179,45 @@ final class InputBatcher: @unchecked Sendable {
         return InputBatcherResult.ok
     }
 
-    /// sendControllerEventInternal (InputStream.c:998-1162): overwrite the slot's
-    /// latest state in place. On a buttonFlags CHANGE while a batch is pending,
-    /// flush that slot FIRST so the host receives the exact axis values present at
-    /// the time of the button press (InputStream.c:1048-1059), then start a fresh
-    /// batch with the new state.
+    /// Only axes merge. Button and trigger edges return the reliable channel's acceptance,
+    /// so a release cannot disappear behind a successful asynchronous enqueue.
     func updateController(num: Int16, mask: Int16, buttons: Int32,
                           analog: GamepadAnalog) -> Int32 {
-        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
-        queue.async { [weak self] in
-            guard let self else { return }
-            let slot = Int(num) % Enet.maxGamepads
-            // Sign-extend guard mirrors InputStream.c:1017 (and InputEncoder's
-            // own guard) so the buttonFlags comparison is on the canonical value.
+        return queue.sync {
+            guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
+            let slot = Int(UInt16(bitPattern: num)) % Enet.maxGamepads
             let safeButtons = buttons < 0 ? (buttons & 0xFFFF) : buttons
-            if self.controllers[slot].dirty,
-               self.controllers[slot].buttons != safeButtons {
-                // Button-flag change ends the batch: emit the pending slot first.
-                self.flushController(slot, tracker: self.tracker())
+            let previous = controllers[slot]
+            let edge = previous.buttons != safeButtons || (previous.mask != mask && mask & (1 << slot) == 0)
+                || previous.analog.leftTrigger != analog.leftTrigger
+                || previous.analog.rightTrigger != analog.rightTrigger
+                || (safeButtons == 0 && analog.leftStickX == 0 && analog.leftStickY == 0
+                    && analog.rightStickX == 0 && analog.rightStickY == 0)
+            if edge, previous.dirty, !flushController(slot, tracker: tracker()) {
+                return InputBatcherResult.sendFailed
             }
-            // Stamp the oldest unflushed state per slot (clean→dirty edge) with its
-            // deliver leg; a superseding update in the same batch keeps both.
-            let stampNow = self.now()
-            let deliverMs = self.observeInputDeliverAge(slot: slot, enqueued: stampNow)
-            if !self.controllers[slot].dirty {
-                self.controllers[slot].stamp = stampNow
-                self.controllers[slot].deliverMs = deliverMs
+            let stampNow = now()
+            let deliverMs = observeInputDeliverAge(slot: slot, enqueued: stampNow)
+            if !controllers[slot].dirty {
+                controllers[slot].stamp = stampNow
+                controllers[slot].deliverMs = deliverMs
             }
-            self.controllers[slot].num = num
-            self.controllers[slot].mask = mask
-            self.controllers[slot].buttons = safeButtons
-            self.controllers[slot].analog = analog
-            self.controllers[slot].dirty = true
-            self.armFlush()
+            controllers[slot].num = num
+            controllers[slot].mask = mask
+            controllers[slot].buttons = safeButtons
+            controllers[slot].analog = analog
+            controllers[slot].dirty = true
+            if edge {
+                let sent = flushController(slot, tracker: tracker())
+                // The caller retains failed edges. Never replay an obsolete down at stop.
+                if !sent { controllers[slot] = previous; controllers[slot].dirty = false }
+                return sent ? InputBatcherResult.ok : InputBatcherResult.sendFailed
+            }
+            armFlush()
+            return InputBatcherResult.ok
         }
-        return InputBatcherResult.ok
     }
 
     /// LiSendControllerMotionEvent (InputStream.c): overwrite the
@@ -264,24 +269,17 @@ final class InputBatcher: @unchecked Sendable {
 
     // MARK: - Low-rate pass-through producers
 
-    /// Edge events that must NOT be merged (keyboard, mouse button, scroll,
-    /// hscroll, controller arrival, controller touch). Sent straight through, but
-    /// only AFTER flushing any pending merged mouse/controller state so the host
-    /// sees them in the correct order relative to the merged stream (mirrors the
-    /// buttonFlags-change flush + the C's flushInputOnControlStream before
-    /// keyboard/UTF-8 events). Bytes are the InputEncoder plaintext; channel is
-    /// the input class's ENet channel.
+    /// Drain earlier motion, then hand the edge to ENet before reporting success.
+    /// This waits for local acceptance only, never for a network round trip or ACK.
     func passThrough(_ plaintext: [UInt8], channel: UInt8) -> Int32 {
-        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
-        queue.async { [weak self] in
-            guard let self else { return }
-            // Preserve ordering: drain merged state before the edge event.
-            self.flushLocked()
-            _ = self.enet?.sendInputPacket(plaintext, channel: channel)
+        return queue.sync {
+            guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
+            flushLocked()
+            return enet?.sendInputPacket(plaintext, channel: channel) == true
+                ? InputBatcherResult.ok : InputBatcherResult.sendFailed
         }
-        return InputBatcherResult.ok
     }
 
     /// Pass-through for host-facing device REPORTS that are not user input
@@ -525,19 +523,21 @@ final class InputBatcher: @unchecked Sendable {
     /// Send the latest pending multiController for `slot` and clear its dirty flag.
     /// MUST be called on `queue`: the drain point for both the timer flush and the
     /// button-change flush, so it resolves its own queue→wire age.
-    private func flushController(_ slot: Int, tracker: FrameTimingTracker?) {
-        guard let enet else { return }
+    @discardableResult
+    private func flushController(_ slot: Int, tracker: FrameTimingTracker?) -> Bool {
+        guard let enet else { return false }
         let pending = controllers[slot]
         let analog = pending.analog
-        _ = enet.sendInputPacket(
+        guard enet.sendInputPacket(
             InputEncoder.multiController(num: pending.num, mask: pending.mask,
                                         buttons: pending.buttons, analog: pending.analog),
-            channel: Enet.ctrlChannelGamepadBase &+ UInt8(slot))
+            channel: Enet.ctrlChannelGamepadBase &+ UInt8(slot)) else { return false }
         observeInputAge(from: pending.stamp, to: tracker != nil ? now() : nil,
                         tracker: tracker, deliverMs: pending.deliverMs)
         trace(tracker, "\"event\":\"input_pad\",\"slot\":\(slot),\"buttons\":\(pending.buttons),"
             + "\"lx\":\(analog.leftStickX),\"ly\":\(analog.leftStickY),\"rx\":\(analog.rightStickX),"
             + "\"ry\":\(analog.rightStickY),\"lt\":\(analog.leftTrigger),\"rt\":\(analog.rightTrigger)")
         controllers[slot].dirty = false
+        return true
     }
 }

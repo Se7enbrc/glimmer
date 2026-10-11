@@ -36,6 +36,7 @@ extension InputForwarder {
     /// at the correct moment.
     public func attach(to window: NSWindow) {
         self.window = window
+        installInputRecoveryObservers()
 
         // Wrap (or replace) the existing contentView with a StreamInputView so
         // we can intercept events at the responder level. We keep the old
@@ -46,6 +47,8 @@ extension InputForwarder {
         view.translatesAutoresizingMaskIntoConstraints = true
         view.autoresizingMask = [.width, .height]
         view.delegate = self
+        view.onResignFirstResponder = { [weak self] in self?.inputOwnershipLost(reason: "first responder lost") }
+        view.onBecomeFirstResponder = { [weak self] in self?.reconcilePhysicalInputs() }
 
         if let existing = window.contentView {
             // Re-parent the existing contentView (which hosts the Metal layer)
@@ -109,6 +112,7 @@ extension InputForwarder {
         // under a stationary pointer would otherwise stay ungrabbed until it
         // moved. Inert in full screen and when the pointer is elsewhere.
         captureIfPointerIsOverTheStreamView(reason: "stream window opened under the pointer")
+        reconcilePhysicalInputs()
     }
 
     public func detach() {
@@ -118,7 +122,7 @@ extension InputForwarder {
         isMiniPlayer = false
         // Raise every held key/button/modifier so a mid-press teardown can't
         // leave the host with phantom-held input.
-        raiseAllHeldInputs(reason: "stream teardown")
+        inputOwnershipLost(reason: "stream teardown")
 
         // Disengage relative-aim mode + remove gesture defaults.
         // `exitCapturedMode()` RE-ASSOCIATES the cursor
@@ -140,6 +144,9 @@ extension InputForwarder {
         removeCommandKeyUpMonitor()
         removeDiagnosticMonitors()
         removeFocusObservers()
+        removeInputRecoveryObservers()
+        reconciliationTimer?.invalidate()
+        reconciliationTimer = nil
 
         // The view survives in the closing window during its fade. Stop late
         // cursor updates from selecting its transparent image after teardown.
@@ -167,20 +174,26 @@ extension InputForwarder {
     /// queue is closed and would just return -2).
     public func setReady(_ ready: Bool) {
         let was = isReady
-        if !ready { releaseControllerTouches() }
+        if !ready {
+            releaseControllerTouches()
+            releases.releaseAll(connectionLost: true)
+        }
         isReady = ready
+        if !ready { inputOwnershipLost(reason: "connection lost") }
         updateControllerBackgroundEvents()
         if ready != was {
             log.info("Input forwarding ready=\(ready, privacy: .public)")
             if ready {
                 initialConnectPending = false
-                // A new session starts with nothing held on the PC, and a key
-                // released during the gap never sent its up: release it all.
+                controllersNeedAnnouncement = true
+                // The release barrier precedes controller arrivals and renewed physical input.
                 raiseAllHeldInputs(reason: "reconnect")
+                reconcilePhysicalInputs()
                 lastCapsLock = NSEvent.modifierFlags.contains(.capsLock)
-                announceControllers()
+                flushPendingReleases()
                 installDiagnosticMonitors()
             } else {
+                controllersNeedAnnouncement = false
                 cancelQuitChordDwell(reason: "connection lost")
                 removeDiagnosticMonitors()
             }

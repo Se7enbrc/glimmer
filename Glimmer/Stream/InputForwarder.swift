@@ -281,7 +281,13 @@ public final class InputForwarder {
 
     /// Supplied by the session; replacing it invalidates text queued for the old connection.
     var backend: StreamingBackend? {
-        didSet { inputGeneration &+= 1 }
+        didSet {
+            inputGeneration &+= 1
+            if oldValue != nil {
+                releases.releaseAll(connectionLost: true)
+                inputOwnershipLost(reason: "connection replaced")
+            }
+        }
     }
 
     /// Set the backend the forwarder uses. Called by StreamSession right after
@@ -455,6 +461,8 @@ public final class InputForwarder {
         // `isolated` so the MainActor observer tokens are readable here: the backstop for a
         // forwarder freed without detach().
         removeGamepadObservers()
+        removeInputRecoveryObservers()
+        reconciliationTimer?.invalidate()
     }
 
     // MARK: - LiSend wrappers with diagnostic logging
@@ -477,7 +485,7 @@ public final class InputForwarder {
 
     // MARK: - Modifier mapping
 
-    /// Win VK codes of the modifier sides the host has been told are held.
+    /// Physical modifier sides owned by this view; failed ups live in the release ledger.
     var heldModifierVKs: Set<Int16> = []
     /// Set when the PC may not match `heldModifierVKs` (attach, raise-all). Only
     /// then does a key-down resync: a tool-posted ⌃C carries ⌃ with no
@@ -486,46 +494,22 @@ public final class InputForwarder {
     /// The Mac's Caps Lock state last seen, so a toggle is sent exactly once.
     var lastCapsLock = false
 
-    /// Keys (exactly as sent, flags included) and mouse buttons the host holds
-    /// down, so focus loss, a reconnect or teardown can release them: the
-    /// physical release goes elsewhere, and a held W would walk forever.
+    /// Physical ownership ends on an up or focus loss. The separate release ledger
+    /// remembers what the PC may still hold until the reliable channel accepts the up.
     var heldKeys: Set<VKScanCode> = []
     var heldMouseButtons: Set<Int32> = []
-
-    /// Send key-up / button-release for everything we believe the host holds,
-    /// then clear the bookkeeping (modifiers included). A key still physically
-    /// held stays released until re-pressed, as in upstream clients.
-    func raiseAllHeldInputs(reason: String) {
-        let keyCount = heldKeys.count
-        let buttonCount = heldMouseButtons.count
-        if isReady {
-            for key in heldKeys {
-                let rc = backend?.sendKeyboard(
-                    keyCode: key.wireCode, action: Int8(StreamProtocol.KEY_ACTION_UP),
-                    modifiers: 0, flags: key.flags) ?? -2
-                record("LiSendKeyboardEvent2(raise-all)", rc)
-            }
-            for button in heldMouseButtons {
-                let rc = backend?.sendMouseButton(
-                    action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button) ?? -2
-                record("LiSendMouseButtonEvent(raise-all)", rc)
-            }
-            for vk in heldModifierVKs.sorted() {
-                let rc = backend?.sendKeyboard(
-                    keyCode: VKScanCode(vk: vk).wireCode,
-                    action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0) ?? -2
-                record("LiSendKeyboardEvent2(modifier release)", rc)
-            }
-            if keyCount + buttonCount > 0 {
-                Diag.notice("input: released \(keyCount) held key(s) + \(buttonCount) "
-                    + "mouse button(s) on \(reason)", "Stream")
-            }
-        }
-        heldKeys.removeAll()
-        heldMouseButtons.removeAll()
-        heldModifierVKs.removeAll()
-        modifiersNeedResync = true
-    }
+    var keyMapping: (Int) -> VKScanCode? = { vkScanCode(forCarbonKeyCode: $0) }
+    var physicalKeys: [UInt16: VKScanCode] = [:]
+    var releases = InputReleaseLedger()
+    var controllersNeedAnnouncement = false
+    var controllerButtons: [UInt8: Int32] = [:]
+    var controllerAnalogs: [UInt8: GamepadAnalog] = [:]
+    var reconciliationTimer: Timer?
+    var lastInputEventTime: TimeInterval?
+    var physicalKeyState: (UInt16) -> Bool = { CGEventSource.keyState(.combinedSessionState, key: $0) }
+    var currentModifierFlags: () -> NSEvent.ModifierFlags = { NSEvent.modifierFlags }
+    var currentMouseButtons: () -> Int = { NSEvent.pressedMouseButtons }
+    var inputRecoveryObservers: [(NotificationCenter, NSObjectProtocol)] = []
 
     /// True from attach until the first connection goes live: Esc cancels the
     /// connect then, and is game input from then on (reconnects included).

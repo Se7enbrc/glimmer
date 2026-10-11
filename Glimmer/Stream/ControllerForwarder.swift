@@ -376,6 +376,7 @@ extension InputForwarder {
     }
 
     func sendArrival(slot: UInt8, _ arrival: ControllerArrival) {
+        guard flushPendingReleases() else { return }
         let rc = backend?.sendControllerArrival(
             num: slot, mask: gamepadMask, type: arrival.type,
             supportedButtons: arrival.supportedButtons, caps: arrival.caps
@@ -393,11 +394,11 @@ extension InputForwarder {
 
     /// An empty event with the slot's bit cleared, which Sunshine takes as the pad leaving.
     func sendControllerRemoval(slot: UInt8) {
-        let rc = backend?.sendMultiController(
-            num: Int16(slot), mask: Int16(bitPattern: gamepadMask & ~(UInt16(1) << slot)), buttons: 0,
-            analog: Self.neutralControllerAnalog
-        ) ?? -2
-        record("LiSendMultiControllerEvent(removal)", rc)
+        releases.controllerRemovals.insert(slot)
+        releases.hold(.controller(slot))
+        releases.release(.controller(slot))
+        controllerButtons[slot] = 0
+        flushPendingReleases()
     }
 
     /// Every stream start: retire each slot the PC may still hold whose pad left or changed,
