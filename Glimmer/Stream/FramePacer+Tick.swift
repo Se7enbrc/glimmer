@@ -64,17 +64,18 @@ extension FramePacer {
     /// main-only access (`reapplyPreferredRangeIfNeeded`, which reads the NSView)
     /// is hopped to the main actor below. Nothing here runs on the main actor.
     func handleTick(_ link: CADisplayLink) {
-        // The link's realized cadence - refresh-agnostic. `duration` is the
-        // nominal vsync interval; `targetTimestamp` is when the frame we
-        // present THIS tick will actually scan out. We pace toward
-        // targetTimestamp so a frame lands on the right vsync, not the one
-        // we're already inside.
-        let target = link.targetTimestamp
+        handleTick(target: link.targetTimestamp, duration: link.duration, timestamp: link.timestamp)
+    }
+
+    /// The tick on the link's three timing values, so tests can script a tick sequence.
+    /// `target` is when this tick's frame scans out, `duration` the nominal vsync interval,
+    /// `timestamp` the just-passed vsync the callback fired for.
+    func handleTick(target: CFTimeInterval, duration: CFTimeInterval, timestamp: CFTimeInterval) {
         // `duration` is reliably > 0 on a running link; the 1/60 fallback only
         // guards a degenerate first tick. We deliberately use a constant here
         // (not the shared cadence estimate) so this pre-lock read touches no
         // lock-guarded state.
-        let vsyncInterval = link.duration > 0 ? link.duration : (1.0 / 60.0)
+        let vsyncInterval = duration > 0 ? duration : (1.0 / 60.0)
 
         // Present-side liveness: stamp that the LINK is alive (on the tick run
         // loop). This is the clock the watchdog's "link dead" trip gates on - a
@@ -176,7 +177,7 @@ extension FramePacer {
             // late = thread starved (PREEMPTED, RT not working); ran promptly but
             // the interval still stretched = the link skipped a vsync (LINKSKIP, RT
             // working, residual is the display server). One clock read, off-lock.
-            let lag = CACurrentMediaTime() - link.timestamp
+            let lag = CACurrentMediaTime() - timestamp
             if lag.isFinite, lag > vsyncInterval {
                 TelemetryCounters.shared.tickMissPreemptedTotal.increment()
             } else {
@@ -204,7 +205,7 @@ extension FramePacer {
 
         // A frame released now scans out on the next PANEL vsync, which can sit
         // before `target` when the link runs below the panel's rate.
-        let scanout = link.timestamp + vsyncInterval
+        let scanout = timestamp + vsyncInterval
         pacingQueue.async { [weak self] in
             self?.releaseDueFrame(
                 targetTimestamp: target, vsyncInterval: vsyncInterval, tickScanout: scanout)

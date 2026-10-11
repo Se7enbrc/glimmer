@@ -433,6 +433,7 @@
 		DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609233300000002 /* ControllerArrivalTests.swift */; };
 		DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */; };
 		DEC0DE20261009000000CA03 /* FramePacerHandoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261009000000CA04 /* FramePacerHandoffTests.swift */; };
+		DEC0DE20261010F1C0000001 /* FramePacerTickTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010F1C0000002 /* FramePacerTickTests.swift */; };
 		DEC0DE2026101000000005A1 /* FramePacerReleaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101000000005A2 /* FramePacerReleaseTests.swift */; };
 		DEC0DE2026101000000005A3 /* FramePacerDeficitEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101000000005A4 /* FramePacerDeficitEventTests.swift */; };
 		DEC0DE2026091900000000E1 /* HIDGamepadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */; };
@@ -940,6 +941,7 @@
 		DEC0DE202609233300000002 /* ControllerArrivalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerArrivalTests.swift"; sourceTree = "<group>"; };
 		DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InputRecordingBackend.swift"; sourceTree = "<group>"; };
 		DEC0DE20261009000000CA04 /* FramePacerHandoffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FramePacerHandoffTests.swift"; sourceTree = "<group>"; };
+		DEC0DE20261010F1C0000002 /* FramePacerTickTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FramePacerTickTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026101000000005A2 /* FramePacerReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerReleaseTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026101000000005A4 /* FramePacerDeficitEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerDeficitEventTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HIDGamepadTests.swift"; sourceTree = "<group>"; };
@@ -1490,6 +1492,7 @@
 				DEC0DE202609233300000002 /* ControllerArrivalTests.swift */,
 				DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */,
 				DEC0DE20261009000000CA04 /* FramePacerHandoffTests.swift */,
+				DEC0DE20261010F1C0000002 /* FramePacerTickTests.swift */,
 				DEC0DE2026101000000005A2 /* FramePacerReleaseTests.swift */,
 				DEC0DE2026101000000005A4 /* FramePacerDeficitEventTests.swift */,
 				DEC0DE2026091900000000E2 /* HIDGamepadTests.swift */,
@@ -2080,6 +2083,7 @@
 				DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */,
 				DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */,
 				DEC0DE20261009000000CA03 /* FramePacerHandoffTests.swift in Sources */,
+				DEC0DE20261010F1C0000001 /* FramePacerTickTests.swift in Sources */,
 				DEC0DE2026101000000005A1 /* FramePacerReleaseTests.swift in Sources */,
 				DEC0DE2026101000000005A3 /* FramePacerDeficitEventTests.swift in Sources */,
 				DEC0DE2026091900000000E1 /* HIDGamepadTests.swift in Sources */,
