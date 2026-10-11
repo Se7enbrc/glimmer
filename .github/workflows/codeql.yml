@@ -27,6 +27,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+      pull-requests: read
       security-events: write
     strategy:
       fail-fast: false
@@ -50,8 +51,29 @@ jobs:
         with:
           persist-credentials: false
 
+      # Main, scheduled and dispatched runs scan everything; a pull request skips
+      # only the Swift build when it changes nothing that build reads.
+      - name: Decide what to scan
+        id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LANGUAGE: ${{ matrix.language }}
+        run: |
+          scan=true
+          if [ "$LANGUAGE" = swift ] && [ -n "$PR_NUMBER" ]; then
+            if paths="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+                --jq '.[] | .filename, (.previous_filename // empty)')" &&
+                [ "$(printf '%s\n' "$paths" | wc -l)" -lt 3000 ] &&
+                ! printf '%s\n' "$paths" | python3 scripts/codeql-swift-changed.py; then
+              scan=false
+              echo "No Swift-relevant change; main scans this code when the pull request merges."
+            fi
+          fi
+          printf 'scan=%s\n' "$scan" >> "$GITHUB_OUTPUT"
+
       - name: Prepare Swift analysis
-        if: matrix.language == 'swift'
+        if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
         env:
           DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
         run: |
@@ -84,6 +106,7 @@ jobs:
 
       - name: Initialize CodeQL
         id: init
+        if: steps.changes.outputs.scan == 'true'
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: ${{ matrix.language }}
@@ -97,7 +120,7 @@ jobs:
       # the extractor skips any trap file that already exists, so seed them.
       - name: Key cached framework extraction
         id: frameworks
-        if: matrix.language == 'swift'
+        if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
         env:
           CODEQL_VERSION: ${{ steps.init.outputs.codeql-version }}
         run: |
@@ -111,7 +134,7 @@ jobs:
 
       - name: Restore cached framework extraction
         id: restore
-        if: matrix.language == 'swift'
+        if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/swift-framework-traps
@@ -119,8 +142,8 @@ jobs:
 
       - name: Seed framework extraction
         if:
-          matrix.language == 'swift' && steps.restore.outputs.cache-hit ==
-          'true'
+          steps.changes.outputs.scan == 'true' && matrix.language == 'swift' &&
+          steps.restore.outputs.cache-hit == 'true'
         run: |
           trap="$RUNNER_TEMP/codeql-databases/swift/trap/swift"
           mkdir -p "$trap"
@@ -128,7 +151,7 @@ jobs:
           du -sh "$trap"
 
       - name: Build app, login item and privileged helper
-        if: matrix.language == 'swift'
+        if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
         env:
           # Keep package resolution outside the compiler tracer.
           # The compiler wrapper restores tracing for every production target.
@@ -141,8 +164,8 @@ jobs:
       # anything built from this checkout is extracted fresh every run.
       - name: Collect framework extraction
         if:
-          matrix.language == 'swift' && steps.restore.outputs.cache-hit !=
-          'true'
+          steps.changes.outputs.scan == 'true' && matrix.language == 'swift' &&
+          steps.restore.outputs.cache-hit != 'true'
         run: |
           trap="$RUNNER_TEMP/codeql-databases/swift/trap/swift"
           out="$RUNNER_TEMP/swift-framework-traps"
@@ -153,14 +176,15 @@ jobs:
 
       - name: Save framework extraction
         if:
-          matrix.language == 'swift' && steps.restore.outputs.cache-hit !=
-          'true'
+          steps.changes.outputs.scan == 'true' && matrix.language == 'swift' &&
+          steps.restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/swift-framework-traps
           key: ${{ steps.frameworks.outputs.key }}
 
       - name: Analyze
+        if: steps.changes.outputs.scan == 'true'
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           category: /language:${{ matrix.language }}
@@ -168,7 +192,7 @@ jobs:
           upload-database: false
 
       - name: Require complete Swift extraction
-        if: matrix.language == 'swift'
+        if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
         run: |
           python3 scripts/codeql-coverage.py \
             --database "$RUNNER_TEMP/codeql-databases/swift"

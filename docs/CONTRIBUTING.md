@@ -463,14 +463,18 @@ made with Xcode 26 preserve that behavior on newer systems. Release signing uses
 a separate protected workflow; see [RELEASE.md](RELEASE.md).
 
 CodeQL scans Swift, Python and GitHub Actions with the `security-extended` query
-suite on pull requests, including approved fork PRs, and on `main`. The Swift
-scan compiles the unsigned app, login item and privileged helper with Xcode
-26.6; it receives no release credentials. Compiler-only tracing leaves SwiftPM's
-package sandbox intact. A post-analysis query requires successful extraction of
-every tracked production Swift file, so partial extraction cannot pass. An
-unsupported compiler or failed coverage query blocks the scan. Scheduled scans
-also check for newly added queries. GitHub's AI Scan is advisory and does not
-scan fork or bot PRs. Neither scanner replaces tests or security review.
+suite on pull requests, including approved fork PRs, and on every `main` commit.
+A pull request that changes nothing the traced Swift build reads (see
+`scripts/codeql-swift-changed.py`) skips only the Swift build and analysis; its
+merge to `main` is scanned in full, and a release candidate needs a Swift
+analysis of its exact commit. The Swift scan compiles the unsigned app, login
+item and privileged helper with Xcode 26.6; it receives no release credentials.
+Compiler-only tracing leaves SwiftPM's package sandbox intact. A post-analysis
+query requires successful extraction of every tracked production Swift file, so
+partial extraction cannot pass. An unsupported compiler or failed coverage query
+blocks the scan. Scheduled scans also check for newly added queries. GitHub's AI
+Scan is advisory and does not scan fork or bot PRs. Neither scanner replaces
+tests or security review.
 
 Hosted verification and releases download TruffleHog 3.97.8 and verify its
 pinned SHA-256 before installation. Scanner output stays suppressed, including
