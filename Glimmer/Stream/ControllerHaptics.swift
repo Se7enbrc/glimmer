@@ -120,7 +120,7 @@ final class ControllerHaptics: @unchecked Sendable {
     var quiesced = true
     /// Seams for tests: nil runs the real CoreHaptics motor / GCDeviceLight path.
     var motorSink: ((UInt8, GCHapticsLocality, Float) -> Void)?
-    var lightSink: ((UInt8, LightColor) -> Bool)?
+    var lightSink: ((UInt8, LightColor) -> Void)?
 
     /// Block-based observer tokens, retained for the singleton's (infinite)
     /// lifetime so the registrations stay alive.

@@ -136,21 +136,22 @@ extension ControllerHaptics {
     /// when gamepad.light != nil) just drops the event.
     func applyLight(slot: UInt8, red: UInt8, green: UInt8, blue: UInt8) {
         guard let pad = pads[slot] else { return }
-        let applied = lightSink?(slot, (red, green, blue)) ?? writeLight(pad, red: red, green: green, blue: blue)
-        guard applied else { return }
+        let light = pad.controller?.light
+        guard light != nil || lightSink != nil else { return }
         // Mirror to DualSenseHID's merge (see apply()) so a trigger report keeps this color.
         mirrorLightToHID(pad: pad, red: red, green: green, blue: blue)
+        if let lightSink {
+            lightSink(slot, (red, green, blue))
+        } else {
+            light?.color = GCColor(red: Float(red) / 255.0,
+                                   green: Float(green) / 255.0,
+                                   blue: Float(blue) / 255.0)
+        }
         if !pad.announcedLightActive {
             pad.announcedLightActive = true
             Diag.info("light bar set: controller \(slot) rgb(\(red),\(green),\(blue))",
                       Self.logCategory)
         }
-    }
-
-    private func writeLight(_ pad: PadHaptics, red: UInt8, green: UInt8, blue: UInt8) -> Bool {
-        guard let light = pad.controller?.light else { return false }
-        light.color = GCColor(red: Float(red) / 255.0, green: Float(green) / 255.0, blue: Float(blue) / 255.0)
-        return true
     }
 
     /// Player LEDs (SET_PLAYER_LEDS) → GCController.playerIndex, which drives the

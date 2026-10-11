@@ -27,7 +27,7 @@ struct ControllerHapticsActuationTests {
             pad.triggersSupported = true
             haptics.pads[0] = pad
             haptics.motorSink = { [self] slot, locality, intensity in motors.append((slot, locality, intensity)) }
-            haptics.lightSink = { [self] _, color in lights.append(color); return true }
+            haptics.lightSink = { [self] _, color in lights.append(color) }
         }
     }
 
@@ -75,7 +75,7 @@ struct ControllerHapticsActuationTests {
 
     @Test func aPadWithoutALightDropsTheEvent() {
         let rig = Rig()
-        rig.haptics.lightSink = { _, _ in false }
+        rig.haptics.lightSink = nil
         rig.haptics.applyLight(slot: 0, red: 9, green: 9, blue: 9)
         #expect(rig.haptics.pads[0]?.announcedLightActive == false)
     }
