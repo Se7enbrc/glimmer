@@ -44,12 +44,13 @@ extension StreamSession {
     }
 
     /// One snapshot for the menu bar's Connection Details, plus the overlay state.
-    func menuBarDetails() async -> (snapshot: StreamStatsSnapshot, overlayShown: Bool)? {
+    func menuBarDetails() async
+        -> (snapshot: StreamStatsSnapshot, overlayShown: Bool, resolution: (width: Int, height: Int))? {
         guard let dec = videoDecoder else { return nil }
         return await MainActor.run {
             var snap = dec.statsSnapshot(minWindowSeconds: 1.0)
             if let rtt = dec.telemetryEstimatedRtt() { snap.rttMs = rtt.rttMs }
-            return (snap, dec.statsOverlayEnabled)
+            return (snap, dec.statsOverlayEnabled, (Int(dec.streamWidth), Int(dec.streamHeight)))
         }
     }
 

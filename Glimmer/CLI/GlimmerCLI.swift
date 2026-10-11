@@ -16,7 +16,7 @@ import Foundation
 enum GlimmerCLI {
 
     enum Verb: String, Sendable {
-        case pair, list, stream, stop, quit, wake, help
+        case pair, list, status, stream, stop, quit, wake, help
     }
 
     /// Exit codes shared by every verb.
@@ -40,14 +40,16 @@ enum GlimmerCLI {
     }
 
     nonisolated private static let allowedFlags: [Verb: Set<String>] = [
-        .list: ["--csv"],
+        .list: ["--csv", "--json"],
+        .status: ["--json"],
         .stream: ["--force", "--wait", "--exit-after-first-frame", "--json"],
         .wake: ["--wait"],
         .quit: ["--force"]
     ]
 
     nonisolated private static let arity: [Verb: ClosedRange<Int>] = [
-        .pair: 1...1, .list: 0...1, .stream: 1...2, .quit: 1...1, .stop: 1...1, .wake: 1...1, .help: 0...1
+        .status: 0...0, .pair: 1...1, .list: 0...1, .stream: 1...2,
+        .quit: 1...1, .stop: 1...1, .wake: 1...1, .help: 0...1
     ]
 
     nonisolated static let usage = """
@@ -55,7 +57,8 @@ enum GlimmerCLI {
 
         Commands:
           pair <address> [--pin NNNN]    Pair with a PC running Sunshine
-          list [<pc>] [--csv]            List paired PCs, or the apps on one PC
+          list [<pc>] [--csv|--json]     List paired PCs, or the apps on one PC
+          status [--json]                Show this Mac's current stream
           stream <pc> [<app>]            Stream an app in Glimmer (default: the running app,
                                          else Settings › General › Start with)
             --force                      Quit an app already running on the PC without asking
@@ -107,6 +110,9 @@ enum GlimmerCLI {
         guard arity[verb]?.contains(command.arguments.count) == true else {
             throw UsageError(message: "Wrong arguments for “glimmer \(verb.rawValue)”. Run “glimmer help”.")
         }
+        if command.flags.isSuperset(of: ["--csv", "--json"]) {
+            throw UsageError(message: "Choose either --csv or --json.")
+        }
         return command
     }
 
@@ -135,6 +141,7 @@ enum GlimmerCLI {
             printLine(usage)
             return Exit.ok
         }
+        if command.verb == .status { return await status(command) }
         // The app's launch order minus the UI. AppModel reads the screen, which
         // registers this process with the window server as Glimmer, so first
         // keep it out of the Dock and Cmd-Tab.
@@ -152,7 +159,7 @@ enum GlimmerCLI {
         case .quit: return await quit(command, model: model)
         case .stop: return await stop(command, model: model)
         case .wake: return await wake(command, model: model)
-        case .help: return Exit.ok
+        case .status, .help: return Exit.ok
         }
     }
 

@@ -290,6 +290,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     #endif
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let model = model ?? Self.boundManager else { return }
+        Task {
+            await model.startBootstrap().value
+            for url in urls { model.handleCommandURL(url) }
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Keep the menu bar item alive when all windows close.
         false

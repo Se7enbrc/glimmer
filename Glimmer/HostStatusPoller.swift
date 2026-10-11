@@ -254,7 +254,8 @@ extension AppModel {
             state: state,
             rttMs: rttMs,
             sunshineVersion: info.appVersion,
-            capturedAt: Date()
+            capturedAt: Date(),
+            runningAppID: running == 0 ? nil : running
         ), expectedHostID: hostID)
         return fetchedFor
     }
