@@ -176,6 +176,8 @@ public actor IdentityManager {
     let supportBase: URL?
     let keychainService: String
     let moonlightQtSuite: String
+    /// SecItemDelete; tests record the queries instead of touching the keychain.
+    let deleteKeychainItems: @Sendable ([String: Any]) -> OSStatus
 
     /// Cached, fully-materialized identity. Built lazily on first access; once
     /// in memory we never touch disk again for the life of the actor.
@@ -192,11 +194,13 @@ public actor IdentityManager {
 
     init(defaultsSuite: String? = nil, supportBase: URL? = nil,
          keychainService: String = IdentityManager.legacyKeychainService,
-         moonlightQtSuite: String = IdentityManager.moonlightQtSuiteName) {
+         moonlightQtSuite: String = IdentityManager.moonlightQtSuiteName,
+         deleteKeychainItems: @escaping @Sendable ([String: Any]) -> OSStatus = { SecItemDelete($0 as CFDictionary) }) {
         self.defaults = defaultsSuite.flatMap { UserDefaults(suiteName: $0) } ?? .standard
         self.supportBase = supportBase
         self.keychainService = keychainService
         self.moonlightQtSuite = moonlightQtSuite
+        self.deleteKeychainItems = deleteKeychainItems
     }
 
     // MARK: Public surface
@@ -257,7 +261,7 @@ public actor IdentityManager {
                 kSecAttrAccount as String: account,
                 kSecMatchLimit as String: kSecMatchLimitAll
             ]
-            let status = SecItemDelete(query as CFDictionary)
+            let status = deleteKeychainItems(query)
             if status == errSecSuccess {
                 log.info("Cleaned up legacy keychain identity item (\(account)) from login keychain")
             }

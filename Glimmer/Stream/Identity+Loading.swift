@@ -316,7 +316,7 @@ extension IdentityManager {
                 kSecAttrAccount as String: account,
                 kSecMatchLimit as String: kSecMatchLimitAll
             ]
-            _ = SecItemDelete(query as CFDictionary)
+            _ = deleteKeychainItems(query)
         }
     }
 
