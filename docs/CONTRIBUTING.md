@@ -285,8 +285,8 @@ Rules:
   `StreamSession`, `NetworkClient`, `PairingClient`, `IdentityManager`.
 - **`@unchecked Sendable` with a documented lock** when a system framework
   forces callbacks onto its own threads:
-  - `AudioDecoder` (AVAudioEngine callbacks on Core Audio threads, internal
-    state lock-guarded).
+  - `AudioDecoder` (HAL callback storage is SPSC and atomic; decode admission
+    and graph lifecycle have separate locks).
   - `StatsCollector` (touched from the engine's receive thread, the VT decode
     queue, AND the main actor; guarded by an internal `OSAllocatedUnfairLock`).
   - `StreamBridgeContext` (the receive-thread callback target).

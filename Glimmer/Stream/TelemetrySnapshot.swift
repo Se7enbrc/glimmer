@@ -351,6 +351,7 @@ struct TelemetrySnapshot: Sendable {
     // counters/gauges the audio receive + output path batches into OFF the hot
     // path; nil until audio is flowing. See the AudioSnapshot type below.
     var audio: AudioSnapshot?
+    var audioPipeline: AudioPipelineTelemetry.Snapshot?
 
     // P2 SESSION-LIFECYCLE signals (all read off the always-live counters /
     // `TelemetryCounters.p2` on the exporter's 1Hz queue - never a hot path).
@@ -419,7 +420,7 @@ struct AudioSnapshot: Sendable {
     /// clock offset (tens of ppm) when converged - the direct view of the loop
     /// holding the fill, vs the av_skew that bounces with video-side timing.
     var resamplerPpm: Double?
-    /// AVAudioEngine running (1 = up). 0 with packets still flowing is the
+    /// HAL audio output running (1 = up). 0 with packets still flowing is the
     /// post-reconnect "playout dead" signature the isShutdown-latch fix targets.
     /// nil before the engine first starts.
     var engineRunning: Bool?

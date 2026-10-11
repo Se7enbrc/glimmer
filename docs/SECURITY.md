@@ -360,7 +360,7 @@ is low-likelihood to begin with.
 
 The app also carries `com.apple.developer.coremotion.head-pose` and
 `com.apple.developer.spatial-audio.profile-access`, both true. These allow
-AVAudioEngine to apply AirPods head tracking and the person's spatial audio
+AUSpatialMixer to apply AirPods head tracking and the person's spatial audio
 profile. Glimmer does not request raw motion updates or read, store or export
 profile data. The login helper and root helper receive neither entitlement. See
 Apple's

@@ -126,6 +126,7 @@ extension AudioDecoder {
                 if !nearMissLatched {
                     nearMissLatched = true
                     TelemetryCounters.shared.audioNearMissTotal.increment()
+                    AudioPipelineTelemetry.shared.noteNearMiss()
                 }
             } else if aheadMs > Self.nearMissRearmFillMs {
                 nearMissLatched = false
@@ -219,6 +220,7 @@ extension AudioDecoder {
             }
             buffersSinceArm = 0
         }
+        underrunArrivalGapNanos = 0
         framesScheduled &+= frames
         buffersSinceArm &+= 1
         // A new buffer is queued behind the playhead → no longer drained; re-arm
@@ -227,21 +229,19 @@ extension AudioDecoder {
         audioMeterLock.unlock()
         if let gapMs = settled.deadAirGapMs {
             TelemetryCounters.shared.audioUnderrunDeadairTotal.increment()
-            Diag.notice("audio under-run was dead air: \(Int(gapMs.rounded()))ms arrival gap, cushion unchanged", "Stream")
+            AudioDiagnostics.notice("audio under-run was dead air: \(Int(gapMs.rounded()))ms arrival gap, "
+                + "cushion unchanged", "Stream")
         }
         if let write = settled.memoryWrite { commitCushionMemory(write) }
         return false
     }
 
-    /// One scheduled buffer finished playing (the player's completion handler, on
-    /// an arbitrary thread). Advance the playhead and detect an UNDER-RUN - the
-    /// player drained to empty with the stream still active (an audible gap). Tiny
-    /// meter lock only; no decode/shutdown contention - and deliberately ZERO
-    /// AV-node calls: this thread is never serialized against `shutdown()`, so a
-    /// pause()/play() here would race teardown. The post-drain cushion rebuild
-    /// belongs to the DECODE path - the catch-up clump under the gate grace, or
-    /// the grace-expiry silence backfill - never this handler's.
-    func meterCompleteOnePlayout(frames: UInt64, isSilence: Bool = false) {
+    /// Consume ring observations off the render thread. Only a callback-confirmed shortage is
+    /// underrun evidence; teardown and graph replacement cannot teach the cushion. The optional
+    /// verdict keeps legacy policy tests independent of hardware and ring storage.
+    func meterCompleteOnePlayout(frames: UInt64, isSilence: Bool = false,
+                                 confirmedUnderrun: Bool? = nil, minimumFillFrames: Int? = nil,
+                                 counters: TelemetryCounters = .shared) {
         audioMeterLock.lock()
         framesPlayed &+= frames
         // Stall-watchdog heartbeat: a completion IS consumption. One clock read
@@ -252,38 +252,18 @@ extension AudioDecoder {
         if isSilence {
             pendingSilenceFrames = pendingSilenceFrames >= frames ? pendingSilenceFrames &- frames : 0
         }
-        // The scheduled-ahead trough right at this completion - the truest low of the
-        // backlog (a completion is exactly where the queue is shallowest). Fed to the
-        // reset-on-read MIN-fill window below so the exporter can prove the cushion
-        // holds above 0; the 1Hz last-writer-wins gauge can miss this instantaneous low.
+        // A delayed observer can run after refills; only the callback knows the actual trough.
         let aheadFrames = framesScheduled &- framesPlayed
         let rate = meterSampleRate
-        let fillMs = rate > 0 ? Double(aheadFrames) / rate * 1000.0 : 0
+        let trough = minimumFillFrames.map(Double.init) ?? Double(aheadFrames)
+        let fillMs = rate > 0 ? trough / rate * 1000.0 : 0
         // The same trough is the decay window's NEAR-MISS evidence (the
         // limit-cycle fix): a dip inside one step of empty must hold depth.
         let stopping = meterShutdown || meterRecovering
         if !stopping, rate > 0, fillMs < quietWindowMinFillMs { quietWindowMinFillMs = fillMs }
-        // Under-run EDGE: this completion drained the backlog to empty while
-        // playout is active AND we weren't already drained - a true gap, not a
-        // steady 1-deep queue. Latch so we count it once until the next schedule.
-        // TEARDOWN BURST GUARD: `shutdown()` raises `meterShutdown` (this lock's
-        // domain) BEFORE `playerNode.stop()`, because stop() fires the completion
-        // of EVERY still-queued buffer (.dataConsumed semantics: consumed OR
-        // stopped) - with a standing cushion that's a 6-30 handler burst whose
-        // last completion drains the playhead exactly like a starvation drain.
-        // Un-gated, that minted a synthetic under-run on EVERY session end:
-        // target ratcheted +10ms, floor EWMA-pulled, both PERSISTED per-host -
-        // sub-10-min sessions walked toward the 150ms cap across sessions (the
-        // disguised-permanent-pin class; the same completion-handler-vs-shutdown
-        // race the no-AV-calls rule guards, hitting the STATE MACHINE instead of
-        // the node). The burst still drains its bookkeeping above - playhead,
-        // trough, drained latch - so mid-session logic is untouched; ONLY the
-        // evidence edges (ratchet/floor/persist/counter/NOTICE, and the decay
-        // clock below) are gated.
-        // `meterRecovering` rides the same gate: the stall recovery's stop() fires
-        // an identical completion burst, and un-gated it would mint the same
-        // synthetic under-run (ratchet + persisted floor) the shutdown gate blocks.
-        let drainedNow = framesPlayed >= framesScheduled
+        // Teardown and recovery discard PCM without a real shortage. Gate their evidence so short
+        // sessions cannot ratchet and persist a deeper cushion just by stopping. Consumption still reconciles.
+        let drainedNow = confirmedUnderrun ?? (framesPlayed >= framesScheduled)
         let isUnderrunEdge = drainedNow && !playoutDrained && !stopping
         if drainedNow { playoutDrained = true }
         var emitNotice = false
@@ -296,7 +276,6 @@ extension AudioDecoder {
             // The gap that caused this drain is still open: grow or dead air is settled at the next
             // schedule, once the packet that ends it has said how long it was.
             pendingUnderrunTargetMs = playoutTargetMs
-            underrunArrivalGapNanos = 0
             // Every under-run (capped or not) restarts the decay quiet window: depth
             // is held by recurring evidence, decayed only by its sustained absence.
             quietSinceNanos = now
@@ -327,7 +306,7 @@ extension AudioDecoder {
         }
         audioMeterLock.unlock()
         if rate > 0 {
-            TelemetryCounters.shared.noteAudioBufferFill(ms: fillMs)
+            counters.noteAudioBufferFill(ms: fillMs)
         }
         if isUnderrunEdge {
             TelemetryCounters.shared.audioUnderrunTotal.increment()
@@ -347,7 +326,7 @@ extension AudioDecoder {
     private func emitUnderrunNotice(route: String, targetMs: Double, suppressed: UInt64) {
         let ordinal = TelemetryCounters.shared.audioUnderrunTotal.value
         let backlog = suppressed > 0 ? " (+\(suppressed) since last line)" : ""
-        Diag.notice(
+        AudioDiagnostics.notice(
             "audio under-run #\(ordinal)\(backlog) - playout drained to empty; route \(route, privacy: .private), "
             + "cushion target \(Int(targetMs))ms",
             "Stream")
@@ -390,7 +369,7 @@ extension AudioDecoder {
         // link resolve (the route probe feeds ~1-2s after audio bring-up).
         let needsLinkResolve = !cushionLinkResolved
         audioMeterLock.unlock()
-        if needsLinkResolve { resolveCushionLink() }
+        if needsLinkResolve { linkResolveSource.add(data: 1) }
         guard rate > 0 else { return }
         // Surface resident corrector-silence to the A/V-skew meter so it subtracts
         // it from buffer fill: the silence is buffered media the audio RTP clock
@@ -441,7 +420,7 @@ extension AudioDecoder {
                 rePrimeTotal: rePrimes,
                 // The resampler's applied rate offset - makes the loop visible vs av_skew noise.
                 resamplerPpm: appliedPpm,
-                // Engine-running mirror: 1 = AVAudioEngine up. Catches the post-
+                // Engine-running mirror: 1 = HAL output up. Catches the post-
                 // reconnect "packets flow but playout dead" latch in one query.
                 engineRunning: engineUp,
                 cushionMaxMs: cushionMaxMs))
@@ -497,17 +476,17 @@ extension AudioDecoder {
         if acted { playoutDrained = true }
         audioMeterLock.unlock()
         if acted {
-            Diag.notice("audio flow resumed after \(Int(afterGapMs.rounded()))ms gap "
+            AudioDiagnostics.notice("audio flow resumed after \(Int(afterGapMs.rounded()))ms gap "
                 + "with the drain edge missing - forcing the re-arm (drift "
                 + "re-anchor + cushion rebuild)", "Stream.Audio")
         }
     }
 
-    /// The receiver's inter-arrival gap that ended with its newest datagram. While an under-run waits,
-    /// the longest one is its outage: packets held for repair can arrive before the next schedule.
+    /// Keep the longest gap until scheduling settles it, even when arrival precedes drain observation.
+    /// Repair-held packets can arrive before the worker or monitor notices the shortage.
     public func noteArrivalGap(nanos: UInt64) {
         audioMeterLock.lock()
-        if pendingUnderrunTargetMs != nil { underrunArrivalGapNanos = max(underrunArrivalGapNanos, nanos) }
+        underrunArrivalGapNanos = max(underrunArrivalGapNanos, nanos)
         audioMeterLock.unlock()
     }
 

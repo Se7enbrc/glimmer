@@ -82,6 +82,26 @@ extension AudioPlayoutStallTests {
         #expect(TelemetryCounters.shared.audioUnderrunDeadairTotal.value == before + 1)
     }
 
+    @Test func arrivalBeforeDrainObservationStillClassifiesDeadAir() {
+        let decoder = drainingDecoder(targetMs: 170)
+        decoder.noteArrivalGap(nanos: 625_000_000)
+        decoder.noteArrivalGap(nanos: 5_000_000)
+        decoder.meterCompleteOnePlayout(frames: 240, confirmedUnderrun: true)
+        #expect(!decoder.meterRegisterScheduleOrOverrun(frames: 240))
+        #expect(decoder.playoutTargetMs == 170)
+        #expect(decoder.learnedFloorMs == 0)
+    }
+
+    @Test func settledArrivalEvidenceCannotMaskTheNextDrain() {
+        let decoder = drainingDecoder(targetMs: 100)
+        decoder.noteArrivalGap(nanos: 625_000_000)
+        #expect(!decoder.meterRegisterScheduleOrOverrun(frames: 240))
+        decoder.meterCompleteOnePlayout(frames: 480, confirmedUnderrun: true)
+        decoder.noteArrivalGap(nanos: 5_000_000)
+        #expect(!decoder.meterRegisterScheduleOrOverrun(frames: 240))
+        #expect(decoder.playoutTargetMs == 110)
+    }
+
     /// Control: the same drain ended by a gap a cushion can bridge is real depth evidence.
     @Test func drainAfterBridgeableGapGrowsAndLearnsTheFloor() {
         let decoder = drainingDecoder(targetMs: 170)

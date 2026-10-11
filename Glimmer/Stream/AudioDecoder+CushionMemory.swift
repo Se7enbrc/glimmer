@@ -394,8 +394,10 @@ extension AudioDecoder {
         // record later short-circuits the seed (the 40ms-vs-97ms 2026-07-05
         // cascade). Learning continues in-memory; once the resolve re-keys,
         // writes land in the real link's bucket.
-        if !write.key.hasSuffix("|unknown") {
-            Self.persistCushionMemory(key: write.key, targetMs: write.targetMs, floorMs: write.floorMs)
+        AudioDiagnostics.queue.async {
+            if !write.key.hasSuffix("|unknown") {
+                Self.persistCushionMemory(key: write.key, targetMs: write.targetMs, floorMs: write.floorMs)
+            }
         }
         AudioCushionTelemetry.shared.setFloorMs(write.floorMs)
     }

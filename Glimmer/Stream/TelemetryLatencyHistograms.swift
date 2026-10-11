@@ -125,7 +125,8 @@ final class LatencyHistograms: @unchecked Sendable {
         /// the exporter's serial queue (1Hz), not the hot path.
         func snapshot() -> (buckets: [UInt64], sumMs: Double, count: UInt64) {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
-            return (bucketCounts, sumMs, totalCount)
+            // Copy on the exporter thread so the next real-time observation cannot trigger Array COW.
+            return (bucketCounts.map { $0 }, sumMs, totalCount)
         }
 
         /// Snapshot as the renderer's value type. Used by standalone stages (e.g.

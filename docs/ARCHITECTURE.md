@@ -3,10 +3,10 @@
 Glimmer is a SwiftUI launcher plus a pure-Swift streaming engine, in one
 process. No external player, no linked C streaming library: Sunshine's streaming
 protocol is implemented in Swift under `Glimmer/Stream/Native/` (ported from
-`moonlight-common-c`, GPLv3; see [CREDITS.md](../CREDITS.md)). The only code
-that crosses the bridging header is an Objective-C exception guard in
-`CHelpers.h`, which Swift can't express; crypto, TLS and audio decode run on
-CryptoKit, CommonCrypto, Security, Network.framework and AudioToolbox.
+`moonlight-common-c`, GPLv3; see [CREDITS.md](../CREDITS.md)). Crypto, TLS,
+audio decode and audio output use CryptoKit, CommonCrypto, Security,
+Network.framework and AudioToolbox directly from Swift. No bridging header or
+Objective-C exception boundary is needed.
 
 Two helpers sit outside the stream path. The opt-in root LaunchDaemon under
 `helper/` parks the AirDrop radio (`awdl0`) for the duration of a stream. It is
@@ -162,25 +162,36 @@ Components:
 - **Audio receive**: `RtpAudioReceiver` (+`+Socket`, `+Receive`, `+Decrypt`,
   `+Ping`, `+StartupGate`, `+Events`, `+Telemetry`) → `RtpAudioQueue` (+`+Fec`)
   / `AudioFecDecoder` → `OpusDecoder` (Opus on AudioToolbox) → `AudioDecoder`
-  (AVAudioEngine playout with an adaptive cushion). When that cushion trims a
-  decoded packet, `AudioPacketSplice` retains the first skipped block and blends
-  its first millisecond into the next scheduled block. The blend preserves the
-  original join without adding frames; uninterrupted audio is unchanged. A
-  drained player or a new session discards the pending join.
-- **Spatial audio**: the default stream requests 7.1 from Sunshine so a stereo
-  speaker-to-headphone switch retains a surround source without reconnecting.
-  `AudioOutputRoute` uses CoreAudio stream terminal types, not device names or
-  Bluetooth alone, to identify suitable outputs. `AudioDecoder+Spatial` inserts
-  an `AVAudioEnvironmentNode` after varispeed and renders an ambience bed to
-  stereo, without reverb. macOS handles head tracking on compatible headphones.
-  External stereo speakers use Apple's external-speaker renderer, which keeps
-  the LFE channel that the ordinary stereo mixer omits. Physical surround
-  outputs keep native multichannel playback; stereo sources need no spatial
-  node. A change in spatial renderer rebuilds the graph even when the sample
-  rate and channel count are unchanged. There is no app preference to manage.
-  The app carries Apple's Head Pose and Spatial Audio Profile entitlements;
-  AVAudioEngine applies orientation and any personalized profile within its
-  renderer. Glimmer does not read, store or log raw head-pose or profile data.
+  (AudioToolbox HAL output with an adaptive cushion). The receive loop
+  timestamps datagrams and copies them into `AudioPacketWorker`'s bounded
+  64-slot ring. Its dedicated user-interactive thread owns reorder, FEC, decrypt
+  and decode, with a best-effort 5 ms Mach time constraint. PCM, ciphertext
+  scratch and FEC shards are preallocated. The worker demultiplexes into pooled
+  PCM, then copies into `AudioPCMQueue`, a single-producer/single-consumer
+  planar float ring. HAL pulls through AUVarispeed; its input callback reads raw
+  storage and lock-free atomics only. The existing PI gains, slew, bounds and
+  adaptive cushion policy remain unchanged. Consumption and actual missing-frame
+  edges come from ring atomics; the worker and a maintenance timer drain
+  observations outside the callback. Graph changes close decode admission under
+  `stateLock`, then release it before HAL work; packets during reconfiguration
+  are counted and discarded. Teardown joins the packet worker before sink
+  cleanup, stops HAL and disposes downstream units before freeing callback
+  storage. `AudioPacketSplice` still blends the first millisecond of trimmed
+  audio into its successor without adding frames.
+- **Spatial audio**: the stream requests 7.1 so switching outputs retains the
+  surround source. `AudioOutputRoute` uses Core Audio terminal types rather than
+  device names or Bluetooth alone. `AudioHALOutput` inserts AUSpatialMixer after
+  varispeed for multichannel sources on stereo outputs, with an ambience bed,
+  output-type rendering and no reverb. Compatible headphones enable head
+  tracking and automatic personalized HRTF selection. Built-in and external
+  speakers use their corresponding renderers; the external renderer retains LFE.
+  Native 5.1/7.1 outputs bypass spatial processing and retain channel labels
+  through the output mixer. There is no app setting. HAL listeners cover the
+  default output, device-alive, sample rate and stream configuration/format;
+  OSStatus failures retry off the render thread without restarting the stream.
+  The app carries Apple's Head Pose and Spatial Audio Profile entitlements and
+  never reads, stores or logs raw head-pose or profile data. See
+  [AUDIO.md](AUDIO.md).
 - **`StreamPathMTU`**: a connect-time egress path-MTU probe. It resolves
   `StreamConfig.remoteness == .auto` from the real route, so the SDP packet-size
   clamp (1392 down to 1024 on a tunnelled path) fires on the paths that need it.
@@ -272,7 +283,7 @@ Teardown order is load-bearing:
    control threads. After this returns, no further backend callbacks can fire.
 3. Main-actor teardowns: `input.detach()`, `videoDecoder.teardown()`,
    `window.close()`, so a dead link cannot hold a frozen full-screen frame.
-4. `audioDecoder.shutdown()` (AVAudioEngine drain).
+4. `audioDecoder.shutdown()` (HAL output teardown).
 5. Close the control client without `/cancel`. The PC app keeps running,
    including if a pending launch succeeds after disconnect.
 6. Clear `StreamBridgeContext.current`, release the bridge's
@@ -285,8 +296,8 @@ Ordinary stop, errors, and app termination never send `/cancel`.
 
 The bridge holds weak refs to every subsystem, so a callback firing against a
 torn-down subsystem just no-ops. But “no use-after-free” isn't “well-behaved”,
-and the order above keeps the engine's receive threads from racing the
-AVAudioEngine and AVSampleBufferDisplayLayer teardowns.
+and the order above keeps the engine's receive threads from racing the HAL audio
+and AVSampleBufferDisplayLayer teardowns.
 
 ## Video pipeline
 
@@ -730,17 +741,13 @@ installed to run.
 
 ### `Glimmer/StreamLib.xcconfig`
 
-Points Xcode at the bridging header and pulls in the version's single source of
-truth. It also strips Release binaries' debug map for the reproducible payload
-(RELEASE.md section 4) and turns on Enhanced Security's compiler protections.
-The core lines:
+Pulls in the version's single source of truth. It also strips Release binaries'
+debug map for the reproducible payload (RELEASE.md section 4) and turns on
+Enhanced Security's compiler protections. The core lines:
 
 ```text
 #include "Version.xcconfig"
-GLIMMER_REPO_ROOT          = $(SRCROOT)
-HEADER_SEARCH_PATHS        = $(inherited) $(GLIMMER_REPO_ROOT)
 ARCHS                      = arm64
-SWIFT_OBJC_BRIDGING_HEADER = $(SRCROOT)/Glimmer-Bridging-Header.h
 ```
 
 `ARCHS = arm64` is pinned so the Release build stays Apple Silicon only, the

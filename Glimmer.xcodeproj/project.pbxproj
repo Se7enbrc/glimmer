@@ -18,6 +18,10 @@
 		2CFEE7336CB443DD9C058E88 /* VideoDecoder+Color.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */; };
 		06C9C49668CE4796823B104C /* VideoDecoder+ColorProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */; };
 		DEC0DE202610110A00000001 /* StreamInputView+Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610110A00000002 /* StreamInputView+Text.swift */; };
+		A11020261011000200000001 /* AudioPCMQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11020261011000200000000 /* AudioPCMQueueTests.swift */; };
+		A11020261011000100000002 /* AudioHALDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11020261011000000000002 /* AudioHALDevice.swift */; };
+		A11020261011000100000001 /* AudioHALOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11020261011000000000001 /* AudioHALOutput.swift */; };
+		A11020261011000100000000 /* AudioPCMQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11020261011000000000000 /* AudioPCMQueue.swift */; };
 		DA2026100900000000000021 /* AWDLProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000022 /* AWDLProcess.swift */; };
 		DA2026100900000000000023 /* AWDLProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000022 /* AWDLProcess.swift */; };
 		DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */; };
@@ -515,6 +519,11 @@
 		089034CA08D544209EC065CE /* InputCallbackProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0F483AD1784C568B813A61 /* InputCallbackProbe.swift */; };
 		FC0BF6D54C37471FB74A1E5E /* InputCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21C273D96FC84878A5D36D98 /* InputCoreTests.swift */; };
 		1105D470ADB149908E9A056B /* InputLatencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 532168BB71F64A82A6D9820D /* InputLatencyTests.swift */; };
+		A0D10A110000000000000002 /* AudioPipelineTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D10A110000000000000001 /* AudioPipelineTelemetry.swift */; };
+		A0D10A110000000000000004 /* TelemetryExporter+AudioPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D10A110000000000000003 /* TelemetryExporter+AudioPipeline.swift */; };
+		A0D10A110000000000000006 /* AudioPacketWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D10A110000000000000005 /* AudioPacketWorker.swift */; };
+		A0D10A110000000000000008 /* AudioDecoder+Worker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D10A110000000000000007 /* AudioDecoder+Worker.swift */; };
+		A0D10A11000000000000000A /* AudioWorkerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D10A110000000000000009 /* AudioWorkerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -560,6 +569,10 @@
 		2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Color.swift"; sourceTree = "<group>"; };
 		D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+ColorProbe.swift"; sourceTree = "<group>"; };
 		DEC0DE202610110A00000002 /* StreamInputView+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "StreamInputView+Text.swift"; path = "Stream/StreamInputView+Text.swift"; sourceTree = "<group>"; };
+		A11020261011000200000000 /* AudioPCMQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPCMQueueTests.swift; sourceTree = "<group>"; };
+		A11020261011000000000002 /* AudioHALDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioHALDevice.swift"; sourceTree = "<group>"; };
+		A11020261011000000000001 /* AudioHALOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioHALOutput.swift"; sourceTree = "<group>"; };
+		A11020261011000000000000 /* AudioPCMQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioPCMQueue.swift"; sourceTree = "<group>"; };
 		DA2026100900000000000022 /* AWDLProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLProcess.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperManagerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000002 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
@@ -1061,6 +1074,11 @@
 		CA0F483AD1784C568B813A61 /* InputCallbackProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/InputCallbackProbe.swift"; sourceTree = "<group>"; };
 		21C273D96FC84878A5D36D98 /* InputCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputCoreTests.swift; sourceTree = "<group>"; };
 		532168BB71F64A82A6D9820D /* InputLatencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputLatencyTests.swift; sourceTree = "<group>"; };
+		A0D10A110000000000000001 /* AudioPipelineTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioPipelineTelemetry.swift"; sourceTree = "<group>"; };
+		A0D10A110000000000000003 /* TelemetryExporter+AudioPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+AudioPipeline.swift"; sourceTree = "<group>"; };
+		A0D10A110000000000000005 /* AudioPacketWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/AudioPacketWorker.swift"; sourceTree = "<group>"; };
+		A0D10A110000000000000007 /* AudioDecoder+Worker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Worker.swift"; sourceTree = "<group>"; };
+		A0D10A110000000000000009 /* AudioWorkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioWorkerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1392,8 +1410,15 @@
 				ABCD20260609000000000701 /* AudioDecoder+Meter.swift */,
 				ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */,
 				AC2026083000000000000001 /* AudioDecoder+Engine.swift */,
+				A0D10A110000000000000001 /* AudioPipelineTelemetry.swift */,
+				A0D10A110000000000000003 /* TelemetryExporter+AudioPipeline.swift */,
+				A0D10A110000000000000005 /* AudioPacketWorker.swift */,
+				A0D10A110000000000000007 /* AudioDecoder+Worker.swift */,
 				AC2026083000000000000003 /* AudioDecoder+Decode.swift */,
 				A0D102202610091545000003 /* AudioDecoder+Spatial.swift */,
+				A11020261011000000000002 /* AudioHALDevice.swift */,
+				A11020261011000000000001 /* AudioHALOutput.swift */,
+				A11020261011000000000000 /* AudioPCMQueue.swift */,
 				A0D102202610091545000001 /* SpatialAudio.swift */,
 				D2C00007 /* OpusDecoder.swift */,
 				EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */,
@@ -1509,6 +1534,8 @@
 				DEC0DE202609221200000002 /* FramePacerTests.swift */,
 				DEC0DE202609252400000002 /* FramePacerTickDeficitTests.swift */,
 				D2B0000D /* AudioPrimeEdgeSafetyTests.swift */,
+				A0D10A110000000000000009 /* AudioWorkerTests.swift */,
+				A11020261011000200000000 /* AudioPCMQueueTests.swift */,
 				A0D5EA400000000000000001 /* AudioPlayoutScheduleTests.swift */,
 				DEC0DE202609221300000001 /* AudioCushionDeadAirTests.swift */,
 				DEC0DE202609221300000003 /* AudioResamplerHoldTests.swift */,
@@ -2044,8 +2071,15 @@
 				ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */,
 				ABCD20260610000000000802 /* AudioDecoder+CushionMemory.swift in Sources */,
 				AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */,
+				A0D10A110000000000000002 /* AudioPipelineTelemetry.swift in Sources */,
+				A0D10A110000000000000004 /* TelemetryExporter+AudioPipeline.swift in Sources */,
+				A0D10A110000000000000006 /* AudioPacketWorker.swift in Sources */,
+				A0D10A110000000000000008 /* AudioDecoder+Worker.swift in Sources */,
 				AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */,
 				A0D102202610091545000004 /* AudioDecoder+Spatial.swift in Sources */,
+				A11020261011000100000002 /* AudioHALDevice.swift in Sources */,
+				A11020261011000100000001 /* AudioHALOutput.swift in Sources */,
+				A11020261011000100000000 /* AudioPCMQueue.swift in Sources */,
 				A0D102202610091545000002 /* SpatialAudio.swift in Sources */,
 				D2C00008 /* OpusDecoder.swift in Sources */,
 				EE6572F168D7406289351042 /* OpusDecoder+Packet.swift in Sources */,
@@ -2152,6 +2186,8 @@
 				DEC0DE202609221200000001 /* FramePacerTests.swift in Sources */,
 				DEC0DE202609252400000001 /* FramePacerTickDeficitTests.swift in Sources */,
 				D2B0000E /* AudioPrimeEdgeSafetyTests.swift in Sources */,
+				A0D10A11000000000000000A /* AudioWorkerTests.swift in Sources */,
+				A11020261011000200000001 /* AudioPCMQueueTests.swift in Sources */,
 				A0D5EA400000000000000002 /* AudioPlayoutScheduleTests.swift in Sources */,
 				DEC0DE202609221300000002 /* AudioCushionDeadAirTests.swift in Sources */,
 				DEC0DE202609221300000004 /* AudioResamplerHoldTests.swift in Sources */,

@@ -53,6 +53,12 @@
   Held keys work without Input Monitoring, and pasted text waits for held keys
   to release. Controllers keep their type after the PC reconnects.
 
+- Audio recovers from output changes and sleep while keeping spatial playback
+  and native surround sound. Stereo follows the speaker pair selected in macOS.
+
+- Audio has more protection from other work when the Mac is busy. Switching
+  between speakers and headphones no longer holds up incoming sound.
+
 - Stream diagnostics no longer count packets that arrive late from an earlier
   frame as lost.
 - SDR colour from the PC is no longer oversaturated.

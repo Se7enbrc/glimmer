@@ -83,10 +83,7 @@ struct AudioPacketSpliceTests {
         let skipped = try buffer { _, _ in -0.5 }
         let next = try buffer { _, _ in 0.5 }
         decoder.inputFormat = skipped.format
-        decoder.engine.attach(decoder.playerNode)
-        decoder.engine.connect(decoder.playerNode, to: decoder.engine.mainMixerNode, format: skipped.format)
-        try decoder.engine.enableManualRenderingMode(.offline, format: skipped.format, maximumFrameCount: 240)
-        try decoder.engine.start()
+        decoder.startOutput = { _ in noErr }
         decoder.stateLock.withLock {
             decoder.packetSplice.skip(skipped)
             decoder.audioMeterLock.withLock { decoder.playoutStallPending = true }

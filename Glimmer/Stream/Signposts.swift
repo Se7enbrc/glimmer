@@ -1,48 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  Signposts.swift
-//
-//  Shared OSSignposter instances used by the Stream subsystem so Instruments
-//  (Logging template) produces a meaningful end-to-end timeline without us
-//  having to litter the hot paths with ad-hoc logging.
-//
-//  Why OSSignposter (not os_signpost macros, not os_log).
-//  -----------------------------------------------------
-//  OSSignposter is the Swift-native wrapper Apple introduced in macOS 12 /
-//  iOS 15. It exposes typed `beginInterval` / `endInterval` / `emitEvent`
-//  APIs and an `OSSignpostID` that we can thread across thread boundaries -
-//  which we need, because every interesting hot path in Glimmer crosses a
-//  thread boundary at least once (the VT decode callback hops dispatch
-//  queues; the native backend's connection events fire on its receive
-//  threads).
-//
-//  Cost model. Per Apple's WWDC22 talk ("Profile your app with Instruments"):
-//   * ~5 ns per call when the signpost subsystem isn't being recorded
-//     (the common production case - the OS gates this through the signpost
-//     mux and short-circuits before any string formatting happens).
-//   * ~50 ns per call when Instruments is actively recording.
-//  Both numbers are dwarfed by anything else in our hot paths (a single
-//  decoded frame takes 1-8 ms wall-clock at 4K60), so we leave the signposts
-//  in production builds unconditionally.
-//
-//  Subsystem / category convention.
-//  --------------------------------
-//  The subsystem string matches what the Stream's Logger instances already
-//  use (`io.ugfugl.Glimmer`) so Instruments shows all of our
-//  os_log + os_signpost traffic under the same root node. Categories pick
-//  out specific hot paths so a profile run can focus on one area:
-//
-//    Decode   - VTDecompressionSessionDecodeFrame submit → output callback
-//    Render   - VT output callback → AVSampleBufferDisplayLayer enqueue
-//    Network  - startConnection flow + per-stage connection events
-//    Pairing  - five-round PIN handshake
-//    Audio    - opus decode + AVAudioPlayerNode schedule
-//
-//  Open the .trace in Instruments → drag the "os_signpost" track in → filter
-//  by subsystem `io.ugfugl.Glimmer` to see all of it at once,
-//  or by category for one path. See docs/PROFILING.md for the full playbook.
+// Shared signpost IDs span receive, decode and display threads without hot-path log formatting.
+// The system gates inactive recording, so production keeps these intervals enabled.
+// Categories and profiling instructions live in docs/PROFILING.md.
 
 import os
 

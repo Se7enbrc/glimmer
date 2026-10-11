@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import AVFoundation
+import AudioToolbox
 import CoreAudio
 
 struct AudioOutputRoute: Equatable, Sendable {
@@ -12,13 +12,13 @@ struct AudioOutputRoute: Equatable, Sendable {
     var channels = 2
     var kind: Kind = .other
 
-    func spatialOutput(sourceChannels: Int) -> AVAudioEnvironmentOutputType? {
+    func spatialOutput(sourceChannels: Int) -> AUSpatialMixerOutputType? {
         guard sourceChannels > 2, channels == 2 else { return nil }
         switch kind {
-        case .headphones: return .headphones
-        case .builtInSpeakers: return .builtInSpeakers
+        case .headphones: return AUSpatialMixerOutputType.spatialMixerOutputType_Headphones
+        case .builtInSpeakers: return AUSpatialMixerOutputType.spatialMixerOutputType_BuiltInSpeakers
         // The main mixer's stereo downmix omits LFE; Apple's speaker renderer retains it.
-        case .other: return .externalSpeakers
+        case .other: return AUSpatialMixerOutputType.spatialMixerOutputType_ExternalSpeakers
         }
     }
 
@@ -35,6 +35,14 @@ struct AudioOutputRoute: Equatable, Sendable {
                                         selector: kAudioHardwarePropertyDefaultOutputDevice), device != 0 else {
             return nil
         }
+        guard let streams = outputStreams(device: device) else { return nil }
+        let channels = streams.reduce(0) { $0 + channelCount($1) }
+        let terminals = streams.compactMap { uintProperty($0, selector: kAudioStreamPropertyTerminalType) }
+        let transport = uintProperty(device, selector: kAudioDevicePropertyTransportType)
+        return Self(channels: channels > 0 ? channels : 2, kind: classify(transport: transport, terminals: terminals))
+    }
+
+    static func outputStreams(device: AudioDeviceID) -> [AudioStreamID]? {
         var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams,
                                                   mScope: kAudioDevicePropertyScopeOutput,
                                                   mElement: kAudioObjectPropertyElementMain)
@@ -46,11 +54,7 @@ struct AudioOutputRoute: Equatable, Sendable {
             guard let base = buffer.baseAddress else { return kAudioHardwareUnspecifiedError }
             return AudioObjectGetPropertyData(device, &address, 0, nil, &bytes, base)
         }
-        guard status == noErr else { return nil }
-        let channels = streams.reduce(0) { $0 + channelCount($1) }
-        let terminals = streams.compactMap { uintProperty($0, selector: kAudioStreamPropertyTerminalType) }
-        let transport = uintProperty(device, selector: kAudioDevicePropertyTransportType)
-        return Self(channels: channels > 0 ? channels : 2, kind: classify(transport: transport, terminals: terminals))
+        return status == noErr ? streams : nil
     }
 
     private static func channelCount(_ stream: AudioStreamID) -> Int {

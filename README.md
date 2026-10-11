@@ -98,10 +98,10 @@ make app
 ## Why not Moonlight
 
 Moonlight is excellent and Glimmer would not exist without it. Glimmer focuses
-on macOS: its streaming engine is written in Swift and uses VideoToolbox,
-AVAudioEngine and GameController, with SwiftUI and AppKit for the interface. The
-menu bar, Mini Player, Shortcuts and display-matched presets are built around
-how you use a Mac.
+on macOS: its streaming engine is written in Swift and uses VideoToolbox, Core
+Audio and GameController, with SwiftUI and AppKit for the interface. The menu
+bar, Mini Player, Shortcuts and display-matched presets are built around how you
+use a Mac.
 
 ## Support
 

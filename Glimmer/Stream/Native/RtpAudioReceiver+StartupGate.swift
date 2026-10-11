@@ -38,7 +38,7 @@ extension RtpAudioReceiver {
     /// EARLY - deliberately the safe direction: under-dropping leaves extra
     /// cushion for the decoder's rate-limited trim to bleed down, while
     /// over-dropping would eat live audio (the exact cost this gate removes).
-    func updateStartupPacing(isData: Bool) -> Bool {
+    func updateStartupPacing(isData: Bool, now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Bool {
         switch startupPacing {
         case .decided:
             return false
@@ -48,12 +48,12 @@ extension RtpAudioReceiver {
             // of the measuring window.
             guard isData else { return false }
             if startupFirstDataNanos == 0 {
-                startupFirstDataNanos = DispatchTime.now().uptimeNanoseconds
+                startupFirstDataNanos = now
                 return false
             }
             startupDataPackets += 1
             guard startupDataPackets >= startupDecisionPackets else { return false }
-            let elapsedMs = elapsedSinceFirstDataMs()
+            let elapsedMs = elapsedSinceFirstDataMs(now: now)
             let arrivedMs = arrivedAudioMs()
             guard arrivedMs >= elapsedMs * Self.startupBurstRateFloor else {
                 latchStartupVerdict(burst: false, arrivedMs: arrivedMs, elapsedMs: elapsedMs)
@@ -71,7 +71,7 @@ extension RtpAudioReceiver {
             // they share the stale verdict.
             guard isData else { return true }
             startupDataPackets += 1
-            let elapsedMs = elapsedSinceFirstDataMs()
+            let elapsedMs = elapsedSinceFirstDataMs(now: now)
             let aheadMs = arrivedAudioMs() - elapsedMs
             if aheadMs >= startupPrevAheadMs + Double(audioPacketDuration) / 2 {
                 startupPrevAheadMs = aheadMs
@@ -92,11 +92,11 @@ extension RtpAudioReceiver {
     /// stands. Before the first data packet this is a no-op - there is nothing
     /// to measure yet, and the poll fires every 100ms while the host's audio
     /// pipeline spins up.
-    func resolveStartupPacingOnIdle() {
+    func resolveStartupPacingOnIdle(now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
         guard startupPacing != .decided, startupFirstDataNanos != 0 else { return }
         latchStartupVerdict(burst: startupPacing == .draining,
                             arrivedMs: arrivedAudioMs(),
-                            elapsedMs: elapsedSinceFirstDataMs(),
+                            elapsedMs: elapsedSinceFirstDataMs(now: now),
                             idleResolved: true)
     }
 
@@ -113,7 +113,7 @@ extension RtpAudioReceiver {
         startupVerdictBurst = burst
         let droppedMs = startupDroppedPackets * audioPacketDuration
         let rate = arrivedMs / max(elapsedMs, 0.001)
-        Diag.notice("NativeAudio METRIC startup-pacing=\(burst ? "burst" : "paced") "
+        AudioDiagnostics.notice("NativeAudio METRIC startup-pacing=\(burst ? "burst" : "paced") "
             + "rate=\(String(format: "%.1f", rate))x"
             + " (\(String(format: "%.0f", arrivedMs))ms audio in "
             + "\(String(format: "%.0f", elapsedMs))ms)"
@@ -132,7 +132,7 @@ extension RtpAudioReceiver {
     }
 
     /// One monotonic clock read, in ms since the first data packet.
-    private func elapsedSinceFirstDataMs() -> Double {
-        Double(DispatchTime.now().uptimeNanoseconds &- startupFirstDataNanos) / 1_000_000
+    private func elapsedSinceFirstDataMs(now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Double {
+        Double(now &- startupFirstDataNanos) / 1_000_000
     }
 }

@@ -45,12 +45,8 @@ import Foundation
 import Network
 import Darwin
 
-/// The decode/playback sink the native audio receiver feeds. The concrete
-/// implementation (AudioDecoder, adapted by the integrate step) already owns the
-/// OpusMSDecoder + AVAudioEngine; this is just the call surface the receiver
-/// needs. Distinct from `StreamingBackend.AudioSink` because the receiver hands
-/// raw opus BYTES (post-FEC, post-decrypt) and needs an explicit packet-loss
-/// concealment entry point that the existing `AudioSink` lacks.
+/// Receives post-FEC, decrypted Opus bytes and explicit loss concealment requests.
+/// AudioDecoder owns decode and HAL playout; the backend sink lacks an explicit concealment entry point.
 public protocol NativeAudioSink: AnyObject, Sendable {
     /// Configure the opus decoder + audio engine. Returns 0 on success.
     /// `opus` is the negotiated multistream config; `audioConfig` is the
@@ -66,10 +62,10 @@ public protocol NativeAudioSink: AnyObject, Sendable {
     /// Packet flow RESUMED after a multi-second arrival gap (host-idle silence,
     /// nap). Hygiene hook - the sink may re-arm its playout state so stale
     /// segment anchors don't survive the gap; the default does nothing. Called
-    /// on the receive thread, so implementations must make NO AV calls.
+    /// on the decode worker, so implementations must make NO AV calls.
     func notePacketFlowResumed(afterGapMs: Double)
     /// The inter-arrival gap that ended with the newest datagram. Called per
-    /// datagram on the receive thread, so implementations must make NO AV calls.
+    /// datagram on the decode worker, so implementations must make NO AV calls.
     func noteArrivalGap(nanos: UInt64)
 }
 
@@ -78,8 +74,8 @@ public extension NativeAudioSink {
     func noteArrivalGap(nanos: UInt64) {}
 }
 
-// Lifecycle calls serialize startup and shutdown; receive state stays on recvQueue,
-// and ping state stays on its dedicated thread.
+// Lifecycle calls serialize startup/shutdown and join the decode worker before sink cleanup.
+// Packet, reorder and decrypt state belong to that worker; arrival stamps and ping state have separate owners.
 final class RtpAudioReceiver: @unchecked Sendable {
     static let cat = "NativeAudio"
 
@@ -98,9 +94,9 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
     // Audio encryption (AES-128-CBC), on whenever the host offered SS_ENC_AUDIO.
     let audioEncryption: Bool
-    /// First-failure latch so a key mismatch logs once, not at packet rate.
-    /// recvQueue-confined.
+    /// First-failure latch so a key mismatch logs once, not at packet rate. Decode-worker confined.
     var loggedDecryptFailure = false
+    var decryptScratch = [UInt8](repeating: 0, count: 1416)
     let aesKey: [UInt8]      // remoteInputAesKey (16 bytes)
     let avRiKeyId: UInt32    // BE32 of the first 4 bytes of remoteInputAesIv
 
@@ -122,19 +118,28 @@ final class RtpAudioReceiver: @unchecked Sendable {
     var destAddr = sockaddr_storage()
     var destAddrLen: socklen_t = 0
     var pingThread: Thread?
+    // Created before receive begins; stop joins it before sink cleanup. Queue/startup state belongs to this worker.
+    lazy var decodeWorker = AudioPacketWorker { [weak self] packet, arrival in
+        guard let self else { return }
+        if packet.isEmpty {
+            self.resolveStartupPacingOnIdle(now: arrival)
+        } else {
+            self.handleDatagram(packet, count: packet.count, arrival: arrival)
+        }
+    }
     let interrupted = ManagedAtomicFlag()
     private let lifecycleLock = NSRecursiveLock()
 
     // `internal` so the RtpAudioReceiver+Telemetry extension can read `queue.stats`
-    // for the per-window receive-quality fold; touched only on `recvQueue`.
+    // for the per-window receive-quality fold; touched only on the decode worker.
     var queue: RtpAudioQueue!
+    var recoveredPacket: [UInt8] = []
 
-    // Receive-thread state (all touched only on recvQueue). `internal` so the
-    // +Receive extension that owns the datagram path can reach them.
+    // Datagram-processing state belongs to the decode worker; +Receive contains its packet handler.
     var receivedDataFromPeer = false
     var loggedFirstPacket = false
 
-    // --- Backlog-aware startup gate (recvQueue-confined, one-shot). ---
+    // --- Backlog-aware startup gate (decode-worker confined, one-shot). ---
     // moonlight-common-c discards a fixed 500ms of audio at start because GFE
     // pre-buffers samples before the client is ready. Sunshine never front-loads:
     // audio arrives at real-time pace from seq ~0 (proven on this host's session
@@ -183,7 +188,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     // straight decode. We read RtpAudioQueue's cumulative `Stats` (which it
     // already maintains) and publish the per-window DELTAS, exactly mirroring how
     // the video receive path batches its receive-quality totals. All touched only
-    // on recvQueue (single receive thread), so no lock is needed here. The flush
+    // on the decode worker, so no lock is needed here. The flush
     // logic lives in RtpAudioReceiver+Telemetry.swift (extensions can't hold stored
     // state, so the fields stay here `internal` while the method moves out - which
     // keeps this file under the SwiftLint length limit, like the video split). ---
@@ -205,8 +210,9 @@ final class RtpAudioReceiver: @unchecked Sendable {
     var audioLostInWindow: Int = 0
     /// Last datagram-arrival instant (uptime ns) for the per-socket GAP-EVENT
     /// counters (the audio leg of the 20/50/100ms family); 0 until the first
-    /// datagram. recvQueue-confined like the rest of the receive-thread state.
+    /// datagram. Only recvQueue touches this stamp.
     var lastDatagramArrivalNanos: UInt64 = 0
+    var lastProcessedArrivalNanos: UInt64 = 0
 
     // Ping/receive bring-up latches. `pingStarted`/`receiveStarted` make
     // startPing()/startReceive() idempotent so the early-start (mid-handshake)
@@ -227,12 +233,11 @@ final class RtpAudioReceiver: @unchecked Sendable {
 
     /// Cross-thread first-RTP latch for the silent-audio probe: SET on the first
     /// audio RTP datagram (any type). `receivedDataFromPeer` carries the same
-    /// fact but is confined to `recvQueue` - which the blocking receive loop
-    /// occupies for the whole session, so the probe can't hop there to read it.
+    /// fact but is confined to the packet worker, so the probe reads this independent latch.
     let firstRtpReceived = ManagedAtomicFlag()
     /// `audio_ttf` event fields stashed at the first-DATAGRAM latch and emitted
     /// at the startup-pacing verdict (≲200ms later), so one event row carries
-    /// both honest TTF spans plus the gate's verdict. recvQueue-confined.
+    /// both honest TTF spans plus the gate's verdict. Decode-worker confined.
     var firstRtpPingToRtpMs: Double?
     var firstRtpPings: UInt64 = 0
     /// Consecutive ping sendto() failures - for STREAK-EDGE logging only (first
@@ -321,6 +326,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
         self.startupDecisionPackets =
             max(2, Self.startupDecisionWindowMs / self.audioPacketDuration)
         self.queue = RtpAudioQueue(audioPacketDuration: self.audioPacketDuration)
+        recoveredPacket.reserveCapacity(Self.maxPacketSize + RtpAudioQueue.fixedRtpHeaderSize)
     }
 
     // MARK: - Lifecycle
@@ -370,6 +376,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
             initialized = true
         }
         receiveStarted = true
+        decodeWorker.start()
         startReceiveLoop()
         armAudioPendingProbe()
         Diag.notice("NativeAudio receive started → \(host, privacy: .private):\(audioPort) "
@@ -391,6 +398,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
         // Preserve the stream-end instant as the next session's idle anchor.
         TelemetryCounters.shared.audioTtf.markStreamEnd()
         pingThread = nil // the dedicated ping thread exits on the interrupted flag
+        decodeWorker.stop()
         if initialized {
             sink?.cleanup()
             initialized = false
@@ -400,19 +408,9 @@ final class RtpAudioReceiver: @unchecked Sendable {
     /// The only close: a close in stop() raced the loops, and a reconnect's new socket could
     /// reuse the number. Both loops hold `self` while they use the fd, so this runs after both.
     deinit {
+        if receiveStarted { decodeWorker.requestStop() }
         if fd >= 0 { close(fd) }
     }
 
-    // The receive loop and the per-datagram path (`startReceiveLoop`,
-    // `handleDatagram`, and the per-socket arrival-gap accumulation) live in
-    // RtpAudioReceiver+Receive.swift, split out to keep this type's body under
-    // the SwiftLint length limit. Everything there still runs on the single
-    // receive thread (`recvQueue`).
-
-    // The P1 AUDIO per-window receive-quality fold (`flushAudioMetricsIfDue`) lives
-    // in RtpAudioReceiver+Telemetry.swift, split out to keep this type's body under
-    // the SwiftLint length limit (the same pattern the video receive path uses for
-    // its receive-quality accumulation). The window-state fields above are
-    // `internal` so that extension can reach them; everything still runs on the
-    // single receive thread (`recvQueue`).
+    // +Receive owns the socket producer and worker-side packet handler; +Telemetry folds worker-owned stats.
 }

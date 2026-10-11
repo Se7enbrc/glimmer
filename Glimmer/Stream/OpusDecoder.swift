@@ -66,7 +66,10 @@ final class OpusDecoder {
     func decode(_ packet: UnsafeRawBufferPointer?, into pcm: UnsafeMutablePointer<Float>) -> Int {
         if let packet {
             guard !packet.isEmpty, packet.count <= Self.maxPacketBytes, parse(packet) else { return 0 }
-            if !hasReceivedPacket { Diag.info("Opus on AudioToolbox, \(Self.mode(packet[0])) frames", "Stream.Audio") }
+            if !hasReceivedPacket {
+                let toc = packet[0]
+                AudioDiagnostics.info("Opus on AudioToolbox, \(Self.mode(toc)) frames", "Stream.Audio")
+            }
             hasReceivedPacket = true
         } else if !hasReceivedPacket {
             return 0
@@ -99,9 +102,12 @@ final class OpusDecoder {
         if !loggedFailure {
             loggedFailure = true
             let status = decoders.lazy.map(\.lastStatus).first { $0 != 0 }
-            let reason = status.map { "AudioConverter OSStatus \($0)" } ?? "malformed packet"
-            Diag.notice("Opus packet of \(packet.count) bytes didn't decode (\(reason)); concealing it. "
-                + "Later failures count in audio_decode_failed_total", "Stream.Audio")
+            let size = packet.count
+            AudioDiagnostics.queue.async {
+                let reason = status.map { "AudioConverter OSStatus \($0)" } ?? "malformed packet"
+                Diag.notice("Opus packet of \(size) bytes didn't decode (\(reason)); concealing it. "
+                    + "Later failures count in audio_decode_failed_total", "Stream.Audio")
+            }
         }
         return decode(nil, into: pcm)
     }

@@ -56,7 +56,7 @@ extension RtpAudioReceiver {
             guard let opus = decryptCbc(payload, sequenceNumber: seq) else {
                 if !loggedDecryptFailure {
                     loggedDecryptFailure = true
-                    Diag.warn("NativeAudio AES-CBC decrypt failed (seq=\(seq)); "
+                    AudioDiagnostics.warn("NativeAudio AES-CBC decrypt failed (seq=\(seq)); "
                         + "dropping undecryptable packets, first sighting this session", Self.cat)
                 }
                 return
@@ -70,42 +70,19 @@ extension RtpAudioReceiver {
     /// AES-128-CBC decrypt one audio payload (AudioStream.c:178-219) with remoteInputAesKey
     /// and IV = BE32(avRiKeyId &+ seq) plus 12 zero bytes. Strips the host's PKCS7 padding
     /// (Sunshine's cbc_t) so opus never sees it. Returns nil on failure.
-    func decryptCbc(_ ciphertext: ArraySlice<UInt8>, sequenceNumber seq: UInt16) -> [UInt8]? {
-        guard aesKey.count == 16, !ciphertext.isEmpty else { return nil }
-
-        // IV first 4 bytes = BE32(avRiKeyId &+ seq); remaining 12 bytes zero.
-        let ivSeq = avRiKeyId &+ UInt32(seq)
-        var iv = [UInt8](repeating: 0, count: 16)
-        iv[0] = UInt8((ivSeq >> 24) & 0xFF)
-        iv[1] = UInt8((ivSeq >> 16) & 0xFF)
-        iv[2] = UInt8((ivSeq >> 8) & 0xFF)
-        iv[3] = UInt8(ivSeq & 0xFF)
-
-        return AesCbc.decryptPkcs7(ciphertext, key: aesKey, iv: iv)
-    }
-}
-
-/// AES-128-CBC via CommonCrypto with PKCS7 padding removal, the host's audio
-/// cipher (moonlight's OpenSSL/mbedTLS decrypt strips the same padding).
-private enum AesCbc {
-    static func decryptPkcs7(_ ciphertext: ArraySlice<UInt8>, key: [UInt8], iv: [UInt8]) -> [UInt8]? {
-        guard key.count == kCCKeySizeAES128, iv.count == kCCBlockSizeAES128 else { return nil }
-        // One spare block, like the C's ROUND_TO_PKCS7_PADDED_LEN buffer.
-        let outCapacity = ciphertext.count + kCCBlockSizeAES128
-        var out = [UInt8](repeating: 0, count: outCapacity)
+    func decryptCbc(_ ciphertext: ArraySlice<UInt8>, sequenceNumber seq: UInt16) -> ArraySlice<UInt8>? {
+        guard aesKey.count == kCCKeySizeAES128, !ciphertext.isEmpty,
+              ciphertext.count <= Self.maxPacketSize else { return nil }
+        var iv = ((avRiKeyId &+ UInt32(seq)).bigEndian, UInt32(0), UInt32(0), UInt32(0))
         var outMoved = 0
-        let status = ciphertext.withUnsafeBytes { ctPtr in
-            key.withUnsafeBytes { keyPtr in
-                iv.withUnsafeBytes { ivPtr in
-                    out.withUnsafeMutableBytes { outPtr in
-                        CCCrypt(CCOperation(kCCDecrypt),
-                                CCAlgorithm(kCCAlgorithmAES),
-                                CCOptions(kCCOptionPKCS7Padding),
-                                keyPtr.baseAddress, key.count,
-                                ivPtr.baseAddress,
-                                ctPtr.baseAddress, ciphertext.count,
-                                outPtr.baseAddress, outPtr.count,
-                                &outMoved)
+        let status = ciphertext.withUnsafeBytes { input in
+            aesKey.withUnsafeBytes { key in
+                withUnsafeBytes(of: &iv) { ivBytes in
+                    decryptScratch.withUnsafeMutableBytes { output in
+                        CCCrypt(CCOperation(kCCDecrypt), CCAlgorithm(kCCAlgorithmAES),
+                                CCOptions(kCCOptionPKCS7Padding), key.baseAddress, key.count,
+                                ivBytes.baseAddress, input.baseAddress, input.count,
+                                output.baseAddress, output.count, &outMoved)
                     }
                 }
             }
@@ -114,7 +91,6 @@ private enum AesCbc {
         // PKCS7 payload must lose between one byte and one complete block.
         guard status == kCCSuccess, outMoved > 0, outMoved < ciphertext.count,
               ciphertext.count - outMoved <= kCCBlockSizeAES128 else { return nil }
-        out.removeLast(outCapacity - outMoved)   // in place: no second buffer
-        return out
+        return decryptScratch[..<outMoved]
     }
 }

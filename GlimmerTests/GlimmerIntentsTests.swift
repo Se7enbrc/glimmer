@@ -9,6 +9,7 @@
 //  Wake PC failed.
 //
 
+import Foundation
 import Testing
 @testable import Glimmer
 

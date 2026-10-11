@@ -120,6 +120,7 @@ extension TelemetryRenderer {
         _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
     ) {
         guard let audio = snap.audio else { return }
+        ndjsonAudioPipeline(&builder, snap.audioPipeline)
         builder.addCount("audio_packets_total", audio.packetsTotal)
         builder.addCount("audio_packets_lost_total", audio.packetsLostTotal)
         builder.addCount("audio_fec_recovered_total", audio.fecRecoveredTotal)

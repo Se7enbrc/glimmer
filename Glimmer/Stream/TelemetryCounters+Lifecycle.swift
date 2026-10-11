@@ -65,6 +65,7 @@ extension TelemetryCounters {
     /// exporter start, so a warm host's one-shot latches can't serve a prior session's
     /// values. A Prometheus scrape across the boundary just sees a counter reset.
     func resetForNewSession() {
+        AudioPipelineTelemetry.shared.reset()
         for counter in [rfiTotal, idrRequestedTotal, backlogOverflowTotal,
                         presentStallTotal, frameLossTotal, unrecoverableFrameTotal,
                         pacerDisabledTotal, videoPacketsTotal, videoFramesTotal,

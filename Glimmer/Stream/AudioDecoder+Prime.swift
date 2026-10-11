@@ -22,28 +22,10 @@ import Foundation
 
 extension AudioDecoder {
 
-    /// PRE-ROLL / RE-PRIME arbiter, on the decode path after each schedule
-    /// (`stateLock` held by the caller, so the AV calls here are serialized
-    /// against `shutdown()`). No-op once primed - the steady-state cost is one
-    /// lock + a compare. Three un-primed paths:
-    ///   * TARGET REACHED (cold pre-roll filled, or a re-prime's catch-up clump
-    ///     stacked back up - the jittery-link rebuild): mark primed and `play()`.
-    ///     Only the COLD-START `play()` actually starts the node; on a re-prime it
-    ///     never paused (the completion path makes no AV calls), so `play()` is a
-    ///     harmless no-op marking the state-machine edge.
-    ///   * COLD-START FALLBACK: after `primeFallbackBufferCount` buffers, start
-    ///     anyway so a near-silent / very-low-bitrate stream can't wedge the
-    ///     session un-started.
-    ///   * RE-PRIME PAST THE GRACE with fill still a step short of target: the
-    ///     clump never formed (steady link - host pacing 1:1, or a playback-side
-    ///     drain), so waiting longer cannot add fill; hand the measured deficit to
-    ///     `backfillCushion`. The fallback deliberately does NOT apply here: it
-    ///     used to declare the rebuild done at ~15ms standing fill while the
-    ///     target ramped to 150ms - the under-run cascade.
-    /// Decides under the meter lock; AV calls happen OUTSIDE the lock
-    /// (AVAudioPlayerNode is thread-safe and we must not hold the meter lock
-    /// across an AV call).
-    func maybePrime(format: AVAudioFormat) {
+    /// Cold pre-roll opens ring consumption only at the target or scaled fallback. A live drain
+    /// keeps pulling: its catch-up clump has 250 ms before bounded silence fills the deficit.
+    /// Decide under the meter lock; perform lifecycle work only after releasing it.
+    func maybePrime(format: AVAudioFormat, onWorker: Bool = false) {
         audioMeterLock.lock()
         if primed {
             // RESOLVE TOP-UP (one-shot, armed by resolveCushionLink): the link
@@ -60,7 +42,7 @@ extension AudioDecoder {
             let deficitMs = playoutTargetMs - aheadMs
             audioMeterLock.unlock()
             if deficitMs >= Self.playoutCushionStepMs {
-                backfillCushion(deficitMs: deficitMs, format: format)
+                backfillCushion(deficitMs: deficitMs, format: format, onWorker: onWorker)
             }
             return
         }
@@ -73,7 +55,7 @@ extension AudioDecoder {
             // `primed` latches ONLY on a successful start (see
             // startPlayoutAtPrimeEdge - the post-wake stopped-engine crash):
             // on failure the next packet re-enters this edge and retries.
-            guard startPlayoutAtPrimeEdge() else { return }
+            guard startPlayoutAtPrimeEdge(allowRecovery: !onWorker) else { return }
             audioMeterLock.lock()
             primed = true
             audioMeterLock.unlock()
@@ -93,7 +75,7 @@ extension AudioDecoder {
                 return
             }
             audioMeterLock.unlock()
-            guard startPlayoutAtPrimeEdge() else { return }
+            guard startPlayoutAtPrimeEdge(allowRecovery: !onWorker) else { return }
             audioMeterLock.lock()
             primed = true
             audioMeterLock.unlock()
@@ -109,43 +91,35 @@ extension AudioDecoder {
         }
         let deficitMs = playoutTargetMs - aheadMs
         audioMeterLock.unlock()
-        backfillCushion(deficitMs: deficitMs, format: format)
+        backfillCushion(deficitMs: deficitMs, format: format, onWorker: onWorker)
     }
 
-    /// RE-PRIME silence backfill - the steady-link cushion rebuild. Schedules ONE
-    /// zeroed buffer of (target − fill) ms so the standing cushion reaches the
-    /// adaptive target immediately, then marks the re-prime complete. WHY silence:
-    /// after a drain the gap is already audible, and on a link delivering at
-    /// exactly real-time rate NOTHING else can add fill - the target ratchet was
-    /// pure cosmetics (fill pinned a couple steps above empty vs a much deeper
-    /// target through an under-run cascade). One deliberate, bounded (≤ cushion cap) quiet stretch right
-    /// behind the gap buys the headroom that ends the cascade - equivalent in gap
-    /// length to holding the node for the same span, without touching node state,
-    /// so the no-AV-calls-on-unserialized-paths discipline stands. JITTERY links
-    /// never reach here: their post-gap clump stacks fill to target inside the
-    /// grace and `maybePrime` exits on the target-reached path; a clump arriving
-    /// LATE (after a backfill) overshoots by at most its own size, which the
-    /// rate-limited trim - and, past 190ms, the ceiling backstop - walks back
-    /// down. Caller is the decode path with `stateLock` held (AV calls serialized
-    /// against `shutdown()`).
-    private func backfillCushion(deficitMs: Double, format: AVAudioFormat) {
+    /// Steady 1:1 arrivals cannot rebuild headroom after a drain. One bounded silence buffer
+    /// closes the measured deficit after catch-up grace; jittery links normally refill before this.
+    /// Trim/ceiling gates remove any later overshoot. Caller holds decode admission.
+    private func backfillCushion(deficitMs: Double, format: AVAudioFormat, onWorker: Bool) {
+        if silencePool == nil && !onWorker {
+            silencePool = makeSilencePool(format: format)
+        }
         let frames = AVAudioFrameCount((deficitMs / 1000.0) * format.sampleRate)
         // Sub-step deficits aren't worth a splice - fill is already within one
         // ratchet quantum of target. That case (and a failed allocation) primes
         // as-is rather than wedging the state machine un-primed.
         guard deficitMs >= Self.playoutCushionStepMs, frames > 0,
-              let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else {
+              let lease = silencePool?.acquire() else {
             // Sub-step deficit / failed alloc: prime as-is - but only if
             // playback actually starts; a play failure (post-wake stopped
             // engine) leaves the machine un-primed and this cheap path
             // retries per packet. Bounded: with fill ≈ target the deficit
             // stays sub-step, so the retries never re-enter the backfill.
-            guard startPlayoutAtPrimeEdge() else { return }
+            guard startPlayoutAtPrimeEdge(allowRecovery: !onWorker) else { return }
             audioMeterLock.lock()
             primed = true
             audioMeterLock.unlock()
             return
         }
+        let silence = lease.buffer
+        guard frames <= silence.frameCapacity else { lease.pool.release(lease.index); return }
         silence.frameLength = frames
         // Zero explicitly - AVAudioPCMBuffer does not guarantee zeroed memory, and
         // "silence" must never be heap garbage.
@@ -173,19 +147,17 @@ extension AudioDecoder {
         // Accounted above, scheduled here (outside the meter lock, AV-call
         // discipline): a completion in the sliver between sees fill briefly
         // overstated - harmless, and it can't mistake the moment for a drain.
-        schedulePlayout(silence) { [weak self] in
-            self?.meterCompleteOnePlayout(frames: silenceFrames, isSilence: true)
-        }
+        schedulePlayout(silence, true, lease.completion)
         // Uniform prime edge, made exception-safe: the silence stays scheduled
         // either way (it plays when the engine returns); `primed` latches only
         // on a successful start, and the sub-step guard above makes the
         // per-packet retries cheap (fill ≈ target ⇒ no repeat backfill).
-        if startPlayoutAtPrimeEdge() {
+        if startPlayoutAtPrimeEdge(allowRecovery: !onWorker) {
             audioMeterLock.lock()
             primed = true
             audioMeterLock.unlock()
         }
-        Diag.notice(
+        AudioDiagnostics.notice(
             "audio cushion backfill +\(Int(deficitMs.rounded()))ms silence → \(Int(targetMs))ms standing fill "
             + "- no catch-up clump within the re-prime grace (steady link); route \(route, privacy: .private)",
             "Stream")

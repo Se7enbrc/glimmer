@@ -50,6 +50,7 @@ extension TelemetryExporter {
         into snap: inout TelemetrySnapshot, now: DispatchTime,
         state: TelemetryCounters.AudioState?
     ) {
+        snap.audioPipeline = AudioPipelineTelemetry.shared.takeSnapshot()
         var audio = AudioSnapshot()
         let packetsTotal = counters.audioPacketsTotal.value
         let lostTotal = counters.audioPacketsLostTotal.value

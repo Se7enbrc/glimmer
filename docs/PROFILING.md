@@ -73,7 +73,7 @@ OSSignpost categories are a separate axis on the same subsystem (see
 | `Stream.Render`   | VT output → frame pacer submit, plus pacer and present events |
 | `Stream.Network`  | connection bring-up (`startConnection`)                       |
 | `Stream.Pairing`  | five-round PIN handshake                                      |
-| `Stream.Audio`    | Opus decode + `AVAudioPlayerNode` schedule                    |
+| `Stream.Audio`    | Opus decode + PCM ring write                                  |
 
 ### Stream-session lifecycle
 
@@ -260,9 +260,80 @@ so the last one that fired names the round where the PC hung.
 `make profile-signposts`. Filter category **Stream.Audio**. Each `AudioFrame`
 interval is one Opus packet (typically 5 ms of audio at 200 Hz). If the interval
 duration is consistently >5 ms the Opus decoder is the bottleneck (very unusual
-on Apple Silicon). If the intervals are sparse (visible gaps) the audio receive
-thread is starving; check the `Stream` log category for the audio underrun and
-cushion lines.
+on Apple Silicon). If intervals are sparse, compare `audio_receive_gap` with
+`audio_queue_wait`: socket delivery and decode-worker scheduling can each cause
+gaps. Check the `Stream` log category for underrun and cushion lines.
+
+### Audio under full CPU load
+
+Use the installed Release app on AC power, a fixed game scene and settings, and
+preferably Ethernet. Capture 120 seconds idle, 120 seconds under load, and 120
+seconds of recovery on both builds. Match output device, channel layout,
+`audio_cushion_seed_ms`, target and link class; the cushion policy is unchanged.
+Repeat with telemetry off/on and Game Mode off/on. Listen throughout; bookmark
+an audible gap. Switch speakers/headphones, unplug and reconnect the output,
+then stop and reconnect the stream while load continues.
+
+The following waits 10 seconds so you can refocus Glimmer, then runs one
+explicitly default-QoS busy process per logical CPU for 120 seconds. It does not
+raise the competing work to user-interactive or real-time priority.
+
+```sh
+python3 - <<'PYLOAD'
+import ctypes, os, subprocess, sys, time
+worker = "import ctypes,time; assert ctypes.CDLL(None).pthread_set_qos_class_self_np(0x15,0)==0; end=time.monotonic()+120\nwhile time.monotonic()<end: pass"
+time.sleep(10)
+workers = [subprocess.Popen([sys.executable, "-c", worker]) for _ in range(os.cpu_count() or 1)]
+try:
+    for p in workers: p.wait()
+finally:
+    for p in workers:
+        if p.poll() is None: p.terminate()
+    for p in workers: p.wait()
+PYLOAD
+```
+
+Read these fields in the per-second NDJSON, or their `glimmer_` Prometheus
+families. Histograms are cumulative per session, so subtract bucket/count/sum
+values at each 120-second boundary before computing window quantiles. NDJSON
+carries `audio_timing_bounds_ms` and each family's `_buckets`, `_count`,
+`_sum_ms`, plus cumulative `_p50_ms`, `_p95_ms`, `_p99_ms`; Prometheus uses
+`<family>_ms_bucket`, `_sum`, `_count` and `histogram_quantile` over `rate`.
+
+| Field/family                                                    | Boundary and expected direction under load                                                                                            |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `audio_receive_gap`                                             | Every socket datagram, including parity; p95/p99 should fall or stay stable. Compare the existing `audio_gap_max_ms` for open gaps.   |
+| `audio_queue_wait`                                              | Receive timestamp to worker dequeue; tail should stay well below the standing cushion.                                                |
+| `audio_decode_schedule`                                         | Each Opus/PLC call, including admission-lock wait through schedule/prime; p99 should stay below the 5 ms frame period.                |
+| `audio_state_lock_wait`                                         | Decode admission lock acquisition; graph stop/reconnect/start must not appear as long waits.                                          |
+| `audio_buffer_fill_min_ms`                                      | Ring consumption accounting minimum, reset each capture; should remain safely above zero.                                             |
+| `audio_near_misses_window`                                      | Existing accounting near-miss edges in this capture window; should decrease. Thresholds remain 15/30 ms.                              |
+| `audio_render_cushion_min_ms`                                   | Minimum ring fill after a render pull this window; measured by the callback.                                                          |
+| `audio_render_underrun_total`                                   | Callback requests more PCM than the ring contains; require zero additional edges under load.                                          |
+| `audio_decode_realtime`                                         | Successful Mach policy request (5 ms period/deadline, 1 ms computation, preemptible); true while the worker runs.                     |
+| `audio_worker_overflow_total`, `audio_pcm_pool_exhausted_total` | Require zero growth in steady playback. The full packet queue drops newest, preserving retained order; RTP/FEC handles sequence gaps. |
+| `audio_reconfiguration_drop_total`                              | Packets rejected while graph access is closed; expected only around output changes/maintenance.                                       |
+
+The HAL render callback counts missing PCM directly and publishes the minimum
+ring fill through atomics. The decode worker and a 10 ms monitor read those
+observations; neither telemetry locks nor logging run on the render thread.
+Startup and stopped graphs do not count underruns. The prior player-clock poll
+could miss gaps shorter than a render quantum, so compare that baseline with
+this measurement change in mind. Check Audio System Trace and audible playback
+alongside `audio_underrun_total`, trims, re-primes and engine/stall recovery.
+`audio_output_latency_ms` is HAL latency + safety offset + buffer duration;
+`audio_device_recovery_ms` measures notification to first replacement-graph PCM,
+observed within the monitor interval. Acoustic latency still needs loopback. A
+successful Mach request does not prove the kernel never later demotes the
+thread; verify `Glimmer.audioDecode` in System Trace. Compare video
+output-to-present p99 for collateral regressions.
+
+The asynchronous packet producer uses Mach scheduling rather than joining the
+device render workgroup, whose deadline it does not share. See
+[Apple's asynchronous audio-thread guidance](https://developer.apple.com/documentation/audiotoolbox/adding-asynchronous-real-time-threads-to-audio-workgroups).
+For a like-for-like baseline, the owner must run the telemetry-only changes on
+the original synchronous audio path before comparing this worker build. No
+before/after stream measurements are supplied by hostless tests.
 
 ## Opt-in telemetry
 
