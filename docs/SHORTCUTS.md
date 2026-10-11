@@ -10,7 +10,7 @@ stream before using its shortcuts.
 
 | Action                               | Default shortcut | Notes                                                                                  |
 | ------------------------------------ | ---------------- | -------------------------------------------------------------------------------------- |
-| Stop streaming                       | Control-Q · ⌃Q   | Returns to Glimmer. Command-Q quits the app.                                           |
+| Stop streaming                       | Control-Q · ⌃Q   | Disconnects and leaves the game running. Command-Q quits Glimmer.                                           |
 | Enter or leave Mini Player           | Control-M · ⌃M   | Returns to the previous presentation when leaving Mini Player.                         |
 | Show or hide stream stats            | Control-I · ⌃I   | Applies to this stream; the next follows Settings → Quality.                           |
 | Capture or release the pointer       | Control-P · ⌃P   | Window and Mini Player only. In fullscreen, this goes to the PC.                       |
@@ -20,6 +20,12 @@ stream before using its shortcuts.
 To leave fullscreen temporarily, use Command-Tab to switch apps or Control-M to
 open Mini Player. The stream keeps running. Select Back to Stream in the
 launcher to return.
+
+Stopping with a shortcut or controller, closing the stream window, and quitting
+Glimmer all leave the game running on the PC. Choose its app tile to resume.
+Use Quit from the app tile's context menu, the menu bar, or the stream-ended
+notice to close it. Confirmation names the app and PC and warns about unsaved
+progress.
 
 ## Escape and mouse capture
 

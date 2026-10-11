@@ -146,7 +146,7 @@ final class AppModel {
     var nativeStreamErrorHostID: String?
 
     enum StreamErrorKind {
-        case unreachable, pairing, other
+        case unreachable, pairing, other, resumeFailed
     }
 
     /// Effective HDR-active state from the native engine. True only when the
@@ -184,6 +184,7 @@ final class AppModel {
     /// dialog to this; confirming calls `stream(app:on:)`, cancelling clears it.
     /// nil = no takeover pending (the common case streams straight through).
     var pendingTakeover: PendingTakeover?
+    var quittingHostID: String?
     struct PendingTakeover: Equatable {
         let app: LibraryApp
         let host: Host

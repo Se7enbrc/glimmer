@@ -7,6 +7,10 @@ struct TakeoverRequired: Error {
     let appID: Int
 }
 
+struct ResumeFailed: Error {
+    let underlying: Error
+}
+
 enum StreamAttempt {
     static func shouldContinue(cancelled: Bool, streaming: Bool, stopping: Bool) -> Bool {
         !cancelled && streaming && !stopping
@@ -86,11 +90,12 @@ actor SharedTeardown {
 /// Only /cancel is serialized with the next launch; a hung /launch never holds this gate.
 actor HostLaunchMutations {
     private var epochs: [String: Int] = [:]
-    private var cancellations: [String: Task<Void, Never>] = [:]
+    private var cancellations: [String: Task<Void, Error>] = [:]
+    private var launches: [String: [Int: Task<LaunchResponse, Error>]] = [:]
 
     func beginLaunch(for pc: String) async throws -> Int {
         while let pending = cancellations[pc] {
-            await pending.value
+            _ = try? await pending.value
             if cancellations[pc] == pending { cancellations[pc] = nil }
         }
         try Task.checkCancellation()
@@ -98,17 +103,44 @@ actor HostLaunchMutations {
         return epochs[pc, default: 0]
     }
 
-    func cancelIfCurrent(pc: String, epoch: Int, operation: @escaping @Sendable () async -> Void) async {
+    func launch(pc: String, client: String?, appID: Int,
+                operation: @escaping @Sendable () async throws -> LaunchResponse) async throws
+        -> Task<LaunchResponse, Error> {
+        let epoch = try await beginLaunch(for: pc)
+        let task = Task {
+            defer {
+                launches[pc]?[epoch] = nil
+                if launches[pc]?.isEmpty == true { launches[pc] = nil }
+            }
+            let response = try await operation()
+            if epochs[pc] == epoch, let client {
+                RunningAppOwnership.save(pc: pc, appID: appID, clientID: client)
+            }
+            return response
+        }
+        launches[pc, default: [:]][epoch] = task
+        return task
+    }
+
+    func cancel(pc: String, operation: @escaping @Sendable () async throws -> Void) async throws {
         while let pending = cancellations[pc] {
-            await pending.value
+            _ = try? await pending.value
             if cancellations[pc] == pending { cancellations[pc] = nil }
         }
-        guard epochs[pc, default: 0] == epoch else { return }
-        // Publish before suspending so a newer launch waits through the whole network request.
-        let task = Task { await operation() }
+        try Task.checkCancellation()
+        epochs[pc, default: 0] += 1
+        // A disconnected session can still have a launch preparing on the PC.
+        // Wait under the gate so quit follows every pending launch and precedes the next one.
+        let pending = launches[pc].map { Array($0.values) } ?? []
+        let task = Task {
+            try await StreamAttempt.run(until: Date().addingTimeInterval(StreamSession.launchOverallDeadlineSeconds)) {
+                for launch in pending { _ = await launch.result }
+            }
+            try await operation()
+        }
         cancellations[pc] = task
-        await task.value
-        if cancellations[pc] == task { cancellations[pc] = nil }
+        defer { if cancellations[pc] == task { cancellations[pc] = nil } }
+        try await task.value
     }
 }
 

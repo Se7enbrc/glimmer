@@ -41,127 +41,6 @@ struct SessionLaunchTests {
         #expect(await !session.stopInProgress)
     }
 
-    @Test(arguments: [false, true])
-    func settledLaunchDeterminesWhetherToCancel(refused: Bool) async {
-        let session = StreamSession()
-        let entered = SafetyTestGate()
-        let response = SafetyTestGate()
-        let cancelled = SafetyTestCounter()
-        let launch = Task {
-            try await session.launchAndRecordOwnership(client: "client", appID: 1) {
-                await entered.open()
-                await response.wait()
-                if refused { throw StreamError.hostRefused(message: "Busy", code: 503) }
-                return Self.response
-            }
-        }
-        await entered.wait()
-        let cleanup = Task {
-            await session.settlePendingLaunch { await cancelled.increment() }
-        }
-        await response.open()
-        await cleanup.value
-        _ = await launch.result
-        #expect(await cancelled.value == (refused ? 0 : 1))
-        #expect(await session.ownsHostSession == !refused)
-        #expect(await session.hostSessionClientID == (refused ? nil : "client"))
-    }
-
-    @Test func cancelledConnectReturnsBeforeReplyAndLateSuccessIsCancelledAgain() async {
-        let session = StreamSession()
-        let entered = SafetyTestGate()
-        let response = SafetyTestGate()
-        let cancelled = SafetyTestCounter()
-        let twice = SafetyTestGate()
-        let attempt = Task {
-            try await StreamAttempt.run(until: Date().addingTimeInterval(30)) {
-                try await session.launchAndRecordOwnership(client: "client", appID: 1) {
-                    await entered.open()
-                    await response.wait()
-                    try Task.checkCancellation()
-                    return Self.response
-                }
-            }
-        }
-        await entered.wait()
-        attempt.cancel()
-        let cancelledPromptly = await TerminationGate.runBounded(seconds: 5) {
-            do {
-                _ = try await attempt.value
-                Issue.record("Cancelled connect returned a launch response")
-            } catch {
-                #expect(error is CancellationError)
-            }
-            await session.settlePendingLaunch {
-                await cancelled.increment()
-                if await cancelled.value == 2 { await twice.open() }
-            }
-        }
-        #expect(cancelledPromptly)
-        #expect(await cancelled.value == 1)
-        #expect(await session.ownsHostSession)
-        await response.open()
-        let cleaned = await TerminationGate.runBounded(seconds: 5) { await twice.wait() }
-        #expect(cleaned)
-        #expect(await cancelled.value == 2)
-    }
-
-    @Test func lateSuccessLeavesAReconnectAlone() async {
-        let session = StreamSession()
-        let entered = SafetyTestGate()
-        let response = SafetyTestGate()
-        let cancelled = SafetyTestCounter()
-        let launch = Task {
-            try await session.launchAndRecordOwnership(client: "client", appID: 1) {
-                await entered.open()
-                await response.wait()
-                return Self.response
-            }
-        }
-        await entered.wait()
-        await session.settlePendingLaunch { await cancelled.increment() }
-        #expect(await cancelled.value == 1)
-        // The user reconnects to the same PC before the abandoned /launch replies.
-        let reconnect = StreamSession()
-        _ = try? await reconnect.launchAndRecordOwnership(client: "client", appID: 1) { Self.response }
-        await response.open()
-        _ = await launch.result
-        // Without the newer-launch check, the late cancel lands within milliseconds.
-        let cancelledAgain = await TerminationGate.runBounded(seconds: 0.5) {
-            while await cancelled.value < 2, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(5)) }
-        }
-        #expect(!cancelledAgain)
-        #expect(await cancelled.value == 1)
-    }
-
-    /// A launch on another PC doesn't stand in for this one: the abandoned launch's late success
-    /// still gets its second /cancel, so the first PC isn't left running the game.
-    @Test func lateSuccessIsCancelledWhenAnotherPcLaunches() async {
-        let session = StreamSession()
-        await session.useServer(ServerInfo(address: "192.0.2.1", uniqueId: "pc-a", serverName: "Den PC"))
-        let entered = SafetyTestGate()
-        let response = SafetyTestGate()
-        let cancelled = SafetyTestCounter()
-        let launch = Task {
-            try await session.launchAndRecordOwnership(client: "client", appID: 1) {
-                await entered.open()
-                await response.wait()
-                return Self.response
-            }
-        }
-        await entered.wait()
-        await session.settlePendingLaunch { await cancelled.increment() }
-        let other = StreamSession()
-        await other.useServer(ServerInfo(address: "192.0.2.2", uniqueId: "pc-b", serverName: "Tower"))
-        _ = try? await other.launchAndRecordOwnership(client: "client", appID: 1) { Self.response }
-        await response.open()
-        _ = await launch.result
-        let cancelledAgain = await TerminationGate.runBounded(seconds: 2) {
-            while await cancelled.value < 2, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(5)) }
-        }
-        #expect(cancelledAgain)
-    }
-
     /// A pipeline's events go to the session it started for, whichever is current when they fire,
     /// so a late callback from a timed-out pipeline can't land in the next session.
     @Test func eventsGoToTheSessionTheirPipelineStartedFor() async {
@@ -177,9 +56,8 @@ struct SessionLaunchTests {
         #expect(received == 1)
     }
 
-    /// Quitting during "Reconnecting…" after an attempt failed: stop still has a client for the PC
-    /// it launched on, so the owned session gets its /cancel instead of leaving the game running.
-    @Test func stopCanCancelAfterAFailedReconnectAttempt() async {
+    /// The disconnected control client still closes after a failed reconnect.
+    @Test func stopCanCloseClientAfterAFailedReconnectAttempt() async {
         let session = StreamSession()
         await session.loseNetworkAfterReconnect(to: ServerInfo(address: "192.0.2.1", uniqueId: "pc", serverName: "Den PC"))
         let cleanup = await session.cleanupNetwork
@@ -202,7 +80,7 @@ struct SessionLaunchTests {
         await entered.wait()
         #expect(await session.bridge != nil)
         #expect(await session.pendingLaunch != nil)
-        #expect(session.terminationStopBoundSeconds == 4)
+        #expect(session.terminationStopBoundSeconds == 2)
         let finished = await TerminationGate.runBounded(seconds: 5) { await session.stop() }
         #expect(finished)
         #expect(await session.pendingLaunch != nil)
@@ -247,9 +125,6 @@ struct SessionLaunchTests {
         } catch let takeover as TakeoverRequired {
             #expect(takeover.appID == 2)
         }
-        let cancelled = SafetyTestCounter()
-        await session.settlePendingLaunch { await cancelled.increment() }
-        #expect(await cancelled.value == 0)
         #expect(await !session.ownsHostSession)
     }
 
@@ -290,7 +165,7 @@ struct SessionLaunchTests {
         #expect(await session.pendingLaunch == nil)
     }
 
-    @Test func newLaunchWaitsForAnAlreadySendingLateCancel() async throws {
+    @Test func newLaunchWaitsForAnAlreadySendingExplicitQuit() async throws {
         let mutations = HostLaunchMutations()
         let epoch = try await mutations.beginLaunch(for: "pc")
         let cancelEntered = SafetyTestGate()
@@ -298,7 +173,7 @@ struct SessionLaunchTests {
         let launchEntered = SafetyTestGate()
         let launchStarted = SafetyTestGate()
         let cleanup = Task {
-            await mutations.cancelIfCurrent(pc: "pc", epoch: epoch) {
+            try? await mutations.cancel(pc: "pc") {
                 await cancelEntered.open()
                 await cancelResponse.wait()
             }
@@ -317,10 +192,7 @@ struct SessionLaunchTests {
         #expect(try await mutations.beginLaunch(for: "other-pc") == 1)
         await cancelResponse.open()
         await cleanup.value
-        #expect(try await launch.value == epoch + 1)
-        let staleCancelled = SafetyTestCounter()
-        await mutations.cancelIfCurrent(pc: "pc", epoch: epoch) { await staleCancelled.increment() }
-        #expect(await staleCancelled.value == 0)
+        #expect(try await launch.value == epoch + 2)
     }
 
     @Test func cancellingAQueuedLaunchDoesNotClaimThePc() async throws {
@@ -329,7 +201,7 @@ struct SessionLaunchTests {
         let entered = SafetyTestGate()
         let response = SafetyTestGate()
         let cleanup = Task {
-            await mutations.cancelIfCurrent(pc: "pc", epoch: epoch) {
+            try? await mutations.cancel(pc: "pc") {
                 await entered.open()
                 await response.wait()
             }
@@ -340,7 +212,7 @@ struct SessionLaunchTests {
         await response.open()
         await cleanup.value
         await #expect(throws: CancellationError.self) { try await launch.value }
-        #expect(try await mutations.beginLaunch(for: "pc") == epoch + 1)
+        #expect(try await mutations.beginLaunch(for: "pc") == epoch + 2)
     }
 
     private static var response: LaunchResponse {

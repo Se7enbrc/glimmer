@@ -91,12 +91,13 @@ with a dash. Verbs run headless through the app's own `AppModel`, pairing and
 `NetworkClient` code. `glimmer stream` opens the app if needed and hands it the
 launch over distributed notifications (`CommandChannel`,
 `AppModel+Commands.swift`), so no stream ever runs in the terminal's process;
-`glimmer quit` ends the app's own stream from that PC the same way. Run through
+`glimmer stop` disconnects that stream. `glimmer quit` confirms, disconnects,
+then cancels the PC app; scripts can confirm with `--force`. Run through
 a symlink, the binary re-execs through its real path so `Bundle.main` and the
 defaults domain resolve.
 
-**Shortcuts, Siri and Spotlight.** `GlimmerIntents.swift` declares three App
-Intents: Stream from PC, Wake PC and Quit App on PC, with the paired PCs as a
+**Shortcuts, Siri and Spotlight.** `GlimmerIntents.swift` declares four App
+Intents: Stream from PC, Wake PC, Stop streaming and Quit App on PC, with the paired PCs as a
 `PCEntity` query. They run inside the app, once `AppModel.forIntent()` has
 loaded the PCs, and call the launcher's own entry points (`requestStream`,
 `sendWakeAndWait`, `quitRunningApp`), so they share its rules and its wording.
@@ -200,15 +201,17 @@ UI lights up live.
 1. **Verify pairing**: `NetworkClient.fetchServerInfo()` (over HTTPS if the PC's
    cert is already pinned, plain HTTP otherwise). If `pairStatus != .paired`,
    throw: the launcher's pair sheet runs first, not us.
-2. **Launch, or cancel and launch**: `launchWithBusyRecovery()` always
-   renegotiates. If the PC is idle we send `/launch`; otherwise `/cancel`, then
-   poll `/serverinfo` until idle (`waitForHostIdle`, up to 5 s), then `/launch`.
-   The old “auto-resume if it's our app” path was removed because it preserved
-   the PC's previous stream configuration (resolution, FPS, HDR mode) across
-   machines: a resume from a laptop after starting on a desktop would carry over
-   the desktop's 4K@240 settings. The poll matters because the PC's per-stream
-   Undo command has to finish before our `/launch` runs, or display resolution
-   lands on whichever of Do and Undo wrote last.
+2. **Launch, resume, or confirmed takeover**: idle PCs get `/launch`. A matching
+   app previously launched by this Mac gets `/resume`, with ownership retained
+   across Glimmer sessions in `RunningAppOwnership`. Sunshine's `nvhttp.cpp`
+   `resume()` calls `make_launch_session()` with the new mode, FPS and HDR
+   request, and configures the display when no streaming session is active.
+   Another app or unknown ownership needs takeover confirmation, then `/cancel`,
+   an idle poll (up to 5 s for Undo commands), and `/launch`. A failed resume
+   reports the shared failure copy and offers a confirmed quit and relaunch;
+   it never automatically cancels the game. `/serverinfo` has no client-owner
+   field: local ownership is invalidated when a poll observes idle or another app,
+   but cannot detect another client taking over the same app between observations.
 3. **Build `BackendStreamConfig`**: `width`, `height`, `fps`, `bitrate`, the
    `supportedVideoFormats` codec bitmask, `colorSpace`, `colorRange`,
    `encryptionFlags`. The remote-input AES key and IV are copied in from the
@@ -249,8 +252,8 @@ Stopping cancels the initial server-info task as well as a pending launch.
 Native connection events carry their originating backend and preserve arrival
 order, so delayed callbacks cannot revive input or stop a replacement
 connection. Per-PC launch epochs serialize late cleanup against the next launch:
-a new launch waits for an already-sending cancel, while cleanup from an older
-epoch cannot cancel a newer session. Different PCs remain independent.
+a new launch waits for an explicitly requested quit, while a late response from
+an older epoch cannot overwrite a newer session's ownership. Different PCs remain independent.
 
 Teardown order is load-bearing:
 
@@ -259,14 +262,17 @@ Teardown order is load-bearing:
 2. `backend.stopConnection()`: synchronous; drains the engine's receive and
    control threads. After this returns, no further backend callbacks can fire.
 3. Main-actor teardowns: `input.detach()`, `videoDecoder.teardown()`,
-   `window.close()`, so a dead link can't hold a frozen full-screen frame while
-   `/cancel` waits.
+   `window.close()`, so a dead link cannot hold a frozen full-screen frame.
 4. `audioDecoder.shutdown()` (AVAudioEngine drain).
-5. `network.cancel()`: tell the PC the session is over so its `currentgame`
-   clears.
+5. Close the control client without `/cancel`. The PC app keeps running,
+   including if a pending launch succeeds after disconnect.
 6. Clear `StreamBridgeContext.current`, release the bridge's
    `Unmanaged.passRetained` +1, then `finish()` the event stream.
 7. Release the `beginActivity` power assertion.
+
+An explicit quit first awaits disconnect and any pending launch, then sends
+`/cancel`. A pending launch that exceeds the quit deadline reports failure.
+Ordinary stop, errors, and app termination never send `/cancel`.
 
 The bridge holds weak refs to every subsystem, so a callback firing against a
 torn-down subsystem just no-ops. But “no use-after-free” isn't “well-behaved”,

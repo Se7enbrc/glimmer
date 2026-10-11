@@ -172,22 +172,22 @@ struct AppShellTests {
         #expect(!AppModel.routeSettled(.unknown, phyMbps: nil))
     }
 
-    @Test func quitStopsOnlyAStreamFromThatPC() {
+    @Test func quitRoutesKnownPCsThroughTheSharedCancelPath() {
         var handled: Set<String> = []
-        #expect(decide(["id": "a", "verb": "quit", "host": "UUID-1"], handled: &handled) == .notMine)
+        #expect(decide(["id": "a", "verb": "quit", "host": "UUID-1"], handled: &handled) == .quit(tower))
         #expect(decide(["id": "b", "verb": "quit", "host": "UUID-1"], streamingFrom: "UUID-2", handled: &handled)
-            == .notMine)
+            == .quit(tower))
         #expect(decide(["id": "c", "verb": "quit", "host": "UUID-1"], streamingFrom: "UUID-1", handled: &handled)
-            == .stop)
+            == .quit(tower))
     }
 
-    @Test @MainActor func quitCancelsALaunchBeforeItsRouteSettles() async throws {
+    @Test @MainActor func stopCancelsALaunchBeforeItsRouteSettles() async throws {
         let model = AppModel()
         let route = CommandRouteWait()
         let (request, task) = try await pendingStream(model, route: route)
         let replies = CommandReplies()
         replies.requestID = request.id
-        model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
+        model.handleCommand(["id": UUID().uuidString, "verb": "stop", "host": tower.id])
         #expect(model.pendingCommandStream == nil)
         #expect(task.isCancelled)
         route.settle()
@@ -201,11 +201,11 @@ struct AppShellTests {
         #expect(reply?[CommandChannel.Key.detail] == "Stream request cancelled.")
     }
 
-    @Test @MainActor func quittingAnotherPCLeavesThePendingLaunchAlone() async throws {
+    @Test @MainActor func stoppingAnotherPCLeavesThePendingLaunchAlone() async throws {
         let model = AppModel()
         let route = CommandRouteWait()
         let (request, task) = try await pendingStream(model, route: route)
-        model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": "another-pc"])
+        model.handleCommand(["id": UUID().uuidString, "verb": "stop", "host": "another-pc"])
         #expect(model.pendingCommandStream === request)
         #expect(!task.isCancelled)
         model.cancelPendingCommandStream()
@@ -217,7 +217,7 @@ struct AppShellTests {
         let model = AppModel()
         let firstRoute = CommandRouteWait()
         let (_, firstTask) = try await pendingStream(model, route: firstRoute)
-        model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
+        model.handleCommand(["id": UUID().uuidString, "verb": "stop", "host": tower.id])
         let nextRoute = CommandRouteWait()
         let (nextRequest, nextTask) = try await pendingStream(model, route: nextRoute)
         firstRoute.settle()
@@ -234,7 +234,7 @@ struct AppShellTests {
         let model = AppModel()
         let route = CommandRouteWait()
         let (_, task) = try await pendingStream(model, route: route)
-        model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
+        model.handleCommand(["id": UUID().uuidString, "verb": "stop", "host": tower.id])
         let session = StreamSession()
         model.nativeSession = session
         model.isStreaming = true

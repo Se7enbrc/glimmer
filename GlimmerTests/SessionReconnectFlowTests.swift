@@ -74,6 +74,28 @@ struct SessionReconnectFlowTests {
         }
     }
 
+    @Test func aDroppedLinkResumesOurRunningGameWithoutCancel() async throws {
+        let live = await live(["serverinfo": [SessionFlow.running(Self.appID)], "resume": [SessionFlow.launched]])
+        await live.session.claimPC(client: FakeSunshine.clientUniqueID, appID: Self.appID)
+        await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
+        #expect(await live.finish() == ["reconnecting", "reconnected"])
+        #expect(live.sunshine.paths == ["serverinfo", "resume"])
+    }
+
+    @Test func failedReconnectResumesKeepTheGameAndTheRecoveryChoice() async throws {
+        let live = await live(["serverinfo": [SessionFlow.running(Self.appID)],
+                               "resume": [.failure(.hostRefused(message: "No display", code: 503))]])
+        await live.session.claimPC(client: FakeSunshine.clientUniqueID, appID: Self.appID)
+        let server = try #require(await live.session.reconnectServer)
+        defer { RunningAppOwnership.clear(pc: server.uniqueId) }
+        RunningAppOwnership.save(pc: server.uniqueId, appID: Self.appID, clientID: FakeSunshine.clientUniqueID)
+        await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
+        #expect(await live.session.resumeFailure != nil)
+        #expect(!live.sunshine.paths.contains("cancel"))
+        #expect(!live.sunshine.paths.contains("launch"))
+        _ = await live.finish()
+    }
+
     @Test func aDroppedLinkRelaunchesOnAFreshEngineAndResumesInPlace() async throws {
         let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
                                "cancel": [SessionFlow.cancelled]])
@@ -87,17 +109,17 @@ struct SessionReconnectFlowTests {
         #expect(await live.session.backend === fresh)
         #expect(await !live.session.isReconnecting)
         #expect(await live.session.reconnectAttempts == 0)
-        // Quitting afterwards cancels the game this reconnect launched.
+        // Stopping afterwards leaves the game this reconnect launched available to resume.
         #expect(await live.finish() == ["reconnecting", "reconnected"])
-        #expect(live.sunshine.paths.last == "cancel")
+        #expect(!live.sunshine.paths.contains("cancel"))
     }
 
-    @Test func aFailedAttemptCancelsItsLaunchAndRetriesOnAnotherEngine() async {
+    @Test func aFailedAttemptDisconnectsAndRetriesOnAnotherEngine() async {
         let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
                                "cancel": [SessionFlow.cancelled]], failing: 1)
         await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
 
-        #expect(live.sunshine.paths == ["serverinfo", "launch", "cancel", "serverinfo", "launch"])
+        #expect(live.sunshine.paths == ["serverinfo", "launch", "serverinfo", "launch"])
         #expect(live.supply.backends.count == 2)
         #expect(live.supply.backends.map(\.startedServers.count) == [1, 1])
         #expect(await live.finish() == ["reconnecting", "reconnected"])

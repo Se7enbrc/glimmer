@@ -128,7 +128,7 @@ struct WakePCIntent: AppIntent {
 
 struct QuitAppOnPCIntent: AppIntent {
     static let title: LocalizedStringResource = "Quit App on PC"
-    static let description = IntentDescription("Quits the app a paired PC is streaming and ends its session.")
+    static let description = IntentDescription("Quits the app running on a paired PC after asking for confirmation.")
 
     @Parameter(title: "PC")
     var pc: PCEntity
@@ -138,19 +138,59 @@ struct QuitAppOnPCIntent: AppIntent {
     }
 
     @MainActor func perform() async throws -> some IntentResult {
-        let model = try await AppModel.forIntent()
-        let host = try model.pairedHost(pc)
-        Diag.notice("Quit App on PC from Shortcuts: \(host.displayName, privacy: .private)", "Stream")
-        if model.streamingHostID == host.id, await model.stopOwnStream(source: "Shortcuts") {
-            return .result()
-        }
-        do {
-            try await model.quitRunningApp(on: host)
-        } catch {
-            // The launcher's words: a changed certificate says Pair Again…, not "couldn't reach".
-            throw PCIntentError.failed(AppModel.quitFailureMessage(for: error, hostName: host.displayName))
+        try await Self.quit(pc, model: AppModel.forIntent()) { app, host in
+            try await requestConfirmation(dialog:
+                "\(AppModel.quitTitle(app: app.name, pc: host.displayName)) \(AppModel.quitMessage)")
         }
         return .result()
+    }
+
+    @MainActor static func quit(
+        _ pc: PCEntity, model: AppModel,
+        confirm: @MainActor (LibraryApp, Host) async throws -> Void
+    ) async throws {
+        let host = try model.pairedHost(pc)
+        if model.runningApp(on: host) == nil {
+            if model.selectedHost?.id != host.id { model.selectHost(host) }
+            _ = await model.pollHostStatusOnce(for: host.id, appListFor: nil)
+        }
+        guard let app = model.runningApp(on: host) else {
+            if model.polledChip(for: host) == .certMismatch {
+                throw PCIntentError.failed(NetworkClient.notPaired(host.displayName).description)
+            }
+            if model.polledChip(for: host) == .asleep || model.polledChip(for: host) == .unknown {
+                throw PCIntentError.failed(AppModel.unreachableMessage(host.displayName))
+            }
+            throw PCIntentError.failed("\(host.displayName) isn't running an app.")
+        }
+        try await confirm(app, host)
+        try Task.checkCancellation()
+        Diag.notice("Quit App on PC from Shortcuts: \(host.displayName, privacy: .private)", "Stream")
+        do { try await model.quitRunningApp(on: host) } catch {
+            throw PCIntentError.failed(AppModel.quitFailureMessage(for: error, hostName: host.displayName))
+        }
+    }
+}
+
+struct StopStreamingIntent: AppIntent {
+    static let title: LocalizedStringResource = "Stop streaming"
+    static let description = IntentDescription("Disconnects from a PC and leaves its app running.")
+
+    @Parameter(title: "PC")
+    var pc: PCEntity
+
+    static var parameterSummary: some ParameterSummary { Summary("Stop streaming from \(\.$pc)") }
+
+    @MainActor func perform() async throws -> some IntentResult {
+        try await Self.stop(pc, model: AppModel.forIntent())
+        return .result()
+    }
+
+    @MainActor static func stop(_ pc: PCEntity, model: AppModel) async throws {
+        let host = try model.pairedHost(pc)
+        if model.streamingHostID == host.id || model.pendingCommandStream?.hostID == host.id {
+            _ = await model.stopOwnStream(source: "Shortcuts")
+        }
     }
 }
 

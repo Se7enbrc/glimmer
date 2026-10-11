@@ -108,8 +108,8 @@ extension StreamSession {
     /// The PC ended the session on purpose: end it like a clean close, with no
     /// error banner and no /launch.
     private func endStreamClosedByPC() async {
-        // Nothing of ours left to /cancel, and a /cancel would quit whatever
-        // another device is streaming now.
+        // A PC-side quit or takeover invalidates this Mac's remembered app.
+        if let server = reconnectServer { RunningAppOwnership.clear(pc: server.uniqueId) }
         ownsHostSession = false
         hostSessionClientID = nil
         bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: 0))
@@ -215,7 +215,8 @@ extension StreamSession {
     /// What a failed attempt tells the user if the episode gives up. A deadline the PC never answered
     /// inside means the PC is gone (asleep, off the network), not an app slow to start.
     static func reconnectAttemptError(_ error: Error, pcAnswered: Bool) -> StreamError? {
-        guard let streamError = error as? StreamError else { return nil }
+        let cause = (error as? ResumeFailed)?.underlying ?? error
+        guard let streamError = cause as? StreamError else { return nil }
         if case .hostTimedOut = streamError, !pcAnswered {
             return .hostUnreachable("the PC didn't answer during the reconnect")
         }
@@ -288,7 +289,7 @@ extension StreamSession {
                 config: config, launch: launch, server: serverInfo)
             // duringReconnect: connectBackend's failure path must NOT run the
             // full stop() (that would blank the frozen frame + bounce to the
-            // launcher) - it cancels the failed launch and throws so we retry.
+            // launcher). It disconnects the failed transport and throws so we retry.
             try await connectBackend(
                 serverInfo: serverInfo, launch: launch, backendConfig: backendConfig,
                 setup: (win, inp, dec), network: net, duringReconnect: true, deadline: deadline)
@@ -369,13 +370,8 @@ extension StreamSession {
         if self.network === net { self.network = nil }
     }
 
-    /// Connection-only teardown for a reconnect: bring the backend connection
-    /// down and drop the NetworkClient WITHOUT the things `stop()` does that
-    /// would end the session - no event-stream finish, no bridge release, no
-    /// `StreamBridgeContext.current` clear, no window close, no decoder teardown,
-    /// no power-assertion end, and crucially NO `/cancel` (the host session is
-    /// already gone; a /cancel could race the host's freshly-restarted one -
-    /// launchWithBusyRecovery does the proper /cancel+/launch on the new client).
+    /// Keep the window, decoders, bridge, event stream and power assertion while replacing
+    /// the transport. The PC app stays running so the new connection can resume it.
     private func teardownConnectionForReconnect() async {
         backend.stopConnection()
         if let net = network { await net.shutdown() }

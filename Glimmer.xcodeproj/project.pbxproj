@@ -128,6 +128,7 @@
 		CC00000004 /* VideoDecoder+HDR.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000003 /* VideoDecoder+HDR.swift */; };
 		DEC0DE2026091900000000E8 /* PairingAttempt.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E7 /* PairingAttempt.swift */; };
 		DEC0DE2026091900000000E6 /* StreamSession+Attempt.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E5 /* StreamSession+Attempt.swift */; };
+		D15C0A202610110000000002 /* RunningAppOwnership.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15C0A202610110000000001 /* RunningAppOwnership.swift */; };
 		DEC0DE2026091900000000E4 /* VideoDecoder+HDRMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000E3 /* VideoDecoder+HDRMetadata.swift */; };
 		CC00000006 /* VideoDecoder+Bitstream.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC00000005 /* VideoDecoder+Bitstream.swift */; };
 		CC0000000B /* StatsCollector+Record.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0000000A /* StatsCollector+Record.swift */; };
@@ -424,6 +425,7 @@
 		6E2026101000000000000007 /* VideoDecoderLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */; };
 		5EA320261010000000001401 /* VideoDecoderSessionFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA320261010000000001402 /* VideoDecoderSessionFactoryTests.swift */; };
 		DEC0DE202609230400000001 /* GlimmerIntentsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */; };
+		D15C0A202610110000000008 /* DisconnectTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15C0A202610110000000007 /* DisconnectTests.swift */; };
 		DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */; };
 		DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609232100000004 /* LauncherWindowTests.swift */; };
 		DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F2 /* MutedOutputTests.swift */; };
@@ -466,6 +468,8 @@
 		DEC0DE202609220100000012 /* AppModel+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000011 /* AppModel+Commands.swift */; };
 		DEC0DE202609220100000014 /* AppModel+Derived.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000013 /* AppModel+Derived.swift */; };
 		DEC0DE202609220100000016 /* GlimmerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000015 /* GlimmerIntents.swift */; };
+		D15C0A202610110000000006 /* MenuBarPanel+Charts.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15C0A202610110000000005 /* MenuBarPanel+Charts.swift */; };
+		D15C0A202610110000000004 /* AppModel+RunningApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15C0A202610110000000003 /* AppModel+RunningApp.swift */; };
 		DEC0DE202609220100000020 /* MenuBarChartAccessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000019 /* MenuBarChartAccessibility.swift */; };
 		DEC0DE202609220100000026 /* GlimmerCLITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000025 /* GlimmerCLITests.swift */; };
 		DEC0DE202609220100000028 /* StreamOverridesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000027 /* StreamOverridesTests.swift */; };
@@ -631,6 +635,7 @@
 		CC00000003 /* VideoDecoder+HDR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+HDR.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000E7 /* PairingAttempt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairingAttempt.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000E5 /* StreamSession+Attempt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Attempt.swift"; sourceTree = "<group>"; };
+		D15C0A202610110000000001 /* RunningAppOwnership.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/RunningAppOwnership.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000E3 /* VideoDecoder+HDRMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+HDRMetadata.swift"; sourceTree = "<group>"; };
 		CC00000005 /* VideoDecoder+Bitstream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Bitstream.swift"; sourceTree = "<group>"; };
 		CC0000000A /* StatsCollector+Record.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsCollector+Record.swift"; sourceTree = "<group>"; };
@@ -696,6 +701,8 @@
 		DEC0DE202609220100000011 /* AppModel+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Commands.swift"; sourceTree = "<group>"; };
 		DEC0DE202609220100000013 /* AppModel+Derived.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Derived.swift"; sourceTree = "<group>"; };
 		DEC0DE202609220100000015 /* GlimmerIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerIntents.swift; sourceTree = "<group>"; };
+		D15C0A202610110000000005 /* MenuBarPanel+Charts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPanel+Charts.swift"; sourceTree = "<group>"; };
+		D15C0A202610110000000003 /* AppModel+RunningApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+RunningApp.swift"; sourceTree = "<group>"; };
 		DEC0DE202609220100000019 /* MenuBarChartAccessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarChartAccessibility.swift; sourceTree = "<group>"; };
 		DEC0DE202609220100000025 /* GlimmerCLITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerCLITests.swift; sourceTree = "<group>"; };
 		DEC0DE202609220100000027 /* StreamOverridesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamOverridesTests.swift; sourceTree = "<group>"; };
@@ -941,6 +948,7 @@
 		6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VideoDecoderLifecycleTests.swift"; sourceTree = "<group>"; };
 		5EA320261010000000001402 /* VideoDecoderSessionFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDecoderSessionFactoryTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerIntentsTests.swift"; sourceTree = "<group>"; };
+		D15C0A202610110000000007 /* DisconnectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DisconnectTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609232100000004 /* LauncherWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherWindowTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000F2 /* MutedOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MutedOutputTests.swift"; sourceTree = "<group>"; };
@@ -1307,6 +1315,7 @@
 				CC00000003 /* VideoDecoder+HDR.swift */,
 				DEC0DE2026091900000000E7 /* PairingAttempt.swift */,
 				DEC0DE2026091900000000E5 /* StreamSession+Attempt.swift */,
+				D15C0A202610110000000001 /* RunningAppOwnership.swift */,
 				DEC0DE2026091900000000E3 /* VideoDecoder+HDRMetadata.swift */,
 				CC00000005 /* VideoDecoder+Bitstream.swift */,
 				8DDA470B0B4FA74B04B8C203 /* Models */,
@@ -1341,6 +1350,8 @@
 				DEC0DE202609220100000011 /* AppModel+Commands.swift */,
 				DEC0DE202609220100000013 /* AppModel+Derived.swift */,
 				DEC0DE202609220100000015 /* GlimmerIntents.swift */,
+				D15C0A202610110000000005 /* MenuBarPanel+Charts.swift */,
+				D15C0A202610110000000003 /* AppModel+RunningApp.swift */,
 				DEC0DE202609220100000019 /* MenuBarChartAccessibility.swift */,
 			);
 			path = Glimmer;
@@ -1501,6 +1512,7 @@
 				5E5A5E202610100000000002 /* LoginItemApplyTests.swift */,
 				5E5A5E202610100000000004 /* SystemServiceSeamTests.swift */,
 				DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */,
+				D15C0A202610110000000007 /* DisconnectTests.swift */,
 				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE202609232100000004 /* LauncherWindowTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
@@ -1916,6 +1928,7 @@
 				CC00000004 /* VideoDecoder+HDR.swift in Sources */,
 				DEC0DE2026091900000000E8 /* PairingAttempt.swift in Sources */,
 				DEC0DE2026091900000000E6 /* StreamSession+Attempt.swift in Sources */,
+				D15C0A202610110000000002 /* RunningAppOwnership.swift in Sources */,
 				DEC0DE2026091900000000E4 /* VideoDecoder+HDRMetadata.swift in Sources */,
 				CC00000006 /* VideoDecoder+Bitstream.swift in Sources */,
 				BBF95775D96E9853A40ADED0 /* Host.swift in Sources */,
@@ -1950,6 +1963,8 @@
 				DEC0DE202609220100000012 /* AppModel+Commands.swift in Sources */,
 				DEC0DE202609220100000014 /* AppModel+Derived.swift in Sources */,
 				DEC0DE202609220100000016 /* GlimmerIntents.swift in Sources */,
+				D15C0A202610110000000006 /* MenuBarPanel+Charts.swift in Sources */,
+				D15C0A202610110000000004 /* AppModel+RunningApp.swift in Sources */,
 				DEC0DE202609220100000020 /* MenuBarChartAccessibility.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -2101,6 +2116,7 @@
 				5E5A5E202610100000000001 /* LoginItemApplyTests.swift in Sources */,
 				5E5A5E202610100000000003 /* SystemServiceSeamTests.swift in Sources */,
 				DEC0DE202609230400000001 /* GlimmerIntentsTests.swift in Sources */,
+				D15C0A202610110000000008 /* DisconnectTests.swift in Sources */,
 				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,

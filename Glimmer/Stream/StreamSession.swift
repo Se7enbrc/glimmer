@@ -390,10 +390,11 @@ public actor StreamSession {
     var stopCause: DisconnectReason?
     var teardown = SharedTeardown()
     var takeoverAuthorized = false
+    var resumingHostApp = false
+    var resumeFailure: ResumeFailed?
     var ownsHostSession = false
     var hostSessionClientID: String?
     var hostSessionAppID: Int?
-    var hostLaunchEpoch = 0
     var initialServerInfoTask: Task<ServerInfo, Error>?
     var launchTask: Task<LaunchResponse, Error>?
     var pendingLaunch: Task<LaunchResponse, Error>?

@@ -16,7 +16,7 @@ import Foundation
 enum GlimmerCLI {
 
     enum Verb: String, Sendable {
-        case pair, list, stream, quit, wake, help
+        case pair, list, stream, stop, quit, wake, help
     }
 
     /// Exit codes shared by every verb.
@@ -42,11 +42,12 @@ enum GlimmerCLI {
     nonisolated private static let allowedFlags: [Verb: Set<String>] = [
         .list: ["--csv"],
         .stream: ["--force", "--wait", "--exit-after-first-frame", "--json"],
-        .wake: ["--wait"]
+        .wake: ["--wait"],
+        .quit: ["--force"]
     ]
 
     nonisolated private static let arity: [Verb: ClosedRange<Int>] = [
-        .pair: 1...1, .list: 0...1, .stream: 1...2, .quit: 1...1, .wake: 1...1, .help: 0...1
+        .pair: 1...1, .list: 0...1, .stream: 1...2, .quit: 1...1, .stop: 1...1, .wake: 1...1, .help: 0...1
     ]
 
     nonisolated static let usage = """
@@ -61,7 +62,8 @@ enum GlimmerCLI {
             --wait                       Return when the stream ends
             --exit-after-first-frame     Return when the first frame arrives
             --json                       Print connect timings as one JSON line
-          quit <pc>                      Quit the app running on a PC
+          stop <pc>                      Disconnect, leaving the app running on the PC
+          quit <pc> [--force]             Confirm quitting the PC app (--force skips asking)
           wake <pc> [--wait]             Send Wake on LAN, and wait for the PC to answer
           help                           Show this help
 
@@ -148,6 +150,7 @@ enum GlimmerCLI {
         case .list: return await list(command, model: model)
         case .stream: return await stream(command, model: model)
         case .quit: return await quit(command, model: model)
+        case .stop: return await stop(command, model: model)
         case .wake: return await wake(command, model: model)
         case .help: return Exit.ok
         }

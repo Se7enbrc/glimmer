@@ -137,8 +137,15 @@ Coming from moonlight-qt:
 | `moonlight pair <host> [--pin NNNN]` | `glimmer pair <address> [--pin NNNN]` | None.                                          |
 | `moonlight list <host> [--csv]`      | `glimmer list <pc> [--csv]`           | `glimmer list [--csv]` lists the paired PCs.   |
 | `moonlight stream <host> <app> ...`  | `glimmer stream <pc> [<app>]`         | The app is optional; see below.                |
-| `moonlight quit <host>`              | `glimmer quit <pc>`                   | None.                                          |
+| `moonlight quit <host>`              | `glimmer quit <pc> [--force]`         | Asks before quitting; `--force` confirms for scripts. |
+|                                      | `glimmer stop <pc>`                  | Disconnects and leaves the PC app running. |
 |                                      | `glimmer wake <pc> [--wait]`          | Wake on LAN, optionally waiting for an answer. |
+
+Stopping a stream, closing its window, or quitting Glimmer leaves the game running
+on the PC. Choose the same app again to resume with this Mac's current stream
+settings. Quit the app separately from its launcher context menu, the menu bar,
+or the stream-ended notice. Glimmer asks first because unsaved progress may be
+lost. Shortcuts has separate Stop streaming and Quit App on PC actions.
 
 Without an app, `glimmer stream` streams the PC's running app, else follows
 Settings › General › Start with. The `--resolution`, `--bitrate` and other
