@@ -119,6 +119,7 @@ extension InputForwarder {
         // Raise every held key/button/modifier so a mid-press teardown can't
         // leave the host with phantom-held input.
         raiseAllHeldInputs(reason: "stream teardown")
+        suspendControllerMouse()
 
         // Disengage relative-aim mode + remove gesture defaults.
         // `exitCapturedMode()` RE-ASSOCIATES the cursor

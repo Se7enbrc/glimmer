@@ -1,19 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ControllerForwarder+Touchpad.swift
-//
-//  The DualSense / DualShock touchpad SURFACE: the per-finger contact state and
-//  the down/move/up transitions forwarded to the host as controller touch
-//  events. Split from ControllerForwarder.swift - same idiom as the
-//  ControllerForwarder+QuitChord split, to keep that file under the length
-//  limit. The touchpad *click* is not here: it rides the normal button bitmask
-//  as TOUCHPAD_FLAG (ControllerForwarder+StatePush.swift). Per-slot finger state
-//  lives on `InputForwarder` proper (`touchpadStates`, `nextTouchPointerId`) -
-//  stored properties can't live in an extension - so the methods here rely on
-//  default `internal` access to it.
-//
+// Game mode preserves per-finger PC touch events; mouse mode uses the same snapshots as a trackpad.
 
 import Foundation
 import GameController
@@ -36,26 +24,21 @@ extension InputForwarder {
         var secondary = TouchpadFinger()
     }
 
-    /// Translate the DualSense/DualShock touchpad surface into host touch
-    /// events. GameController reports each finger as a `GCControllerDirectionPad`
-    /// that reads (0,0) when no finger is present and the contact position
-    /// otherwise; we derive down/move/up transitions from that. Both fingers
-    /// ride touchpad index 0 (one physical pad, two contacts), each with its
-    /// own pointerId so the host can track them independently.
-    ///
-    /// EXPERIMENTAL: GameController exposes no explicit "finger down" flag, so
-    /// "touching" is inferred from a non-zero position. A finger resting at the
-    /// exact geometric centre is therefore indistinguishable from "lifted" -
-    /// acceptable for taps/swipes (which move), a known edge for a dead-centre
-    /// hold. Validate on-device.
+    /// GameController has no contact flag: (0,0) means lifted or an exact-centre hold.
+    /// Both contacts use pad 0 with independent pointer IDs so the PC can track them.
     func forwardTouchpad(pad: GCExtendedGamepad, slot: UInt8) {
         guard let tp = touchpadElements(of: pad) else { return }
         forwardTouchpad(slot: slot, primary: (tp.primary.xAxis.value, tp.primary.yAxis.value),
-                        secondary: (tp.secondary.xAxis.value, tp.secondary.yAxis.value))
+                        secondary: (tp.secondary.xAxis.value, tp.secondary.yAxis.value), clicked: tp.button.isPressed)
     }
 
-    func forwardTouchpad(slot: UInt8, primary: (x: Float, y: Float), secondary: (x: Float, y: Float)) {
+    func forwardTouchpad(slot: UInt8, primary: (x: Float, y: Float), secondary: (x: Float, y: Float),
+                         clicked: Bool = false, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
         guard forwardsControllerEvents else { return }
+        if controllerMouseStates[slot]?.isMouse == true {
+            forwardTouchpadMouse(slot: slot, primary: primary, secondary: secondary, clicked: clicked, now: now)
+            return
+        }
         var state = touchpadStates[slot] ?? TouchpadState()
         updateFinger(&state.primary, position: primary, slot: slot)
         updateFinger(&state.secondary, position: secondary, slot: slot)

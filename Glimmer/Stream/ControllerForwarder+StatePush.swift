@@ -1,18 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ControllerForwarder+StatePush.swift
-//
-//  The PER-FRAME state push: the two entry points that carry a gamepad frame to
-//  the host (the GameController `valueChangedHandler` full-state forward and the
-//  raw-HID centre-button side-channel), the shared builder they both run, and
-//  the table-driven button bitmask. Split from ControllerForwarder.swift - same
-//  idiom as the ControllerForwarder+QuitChord split, to keep that file under the
-//  length limit; the attach/detach/arrival lifecycle stays there. Stored state
-//  (`gamepadMask`, the quit-chord dwell fields) lives on `InputForwarder`
-//  proper, so the methods here rely on default `internal` access to it.
-//
+// GameController owns full snapshots; raw HID contributes centre-button edges without repeating touch.
 
 import AppKit
 import Foundation
@@ -36,38 +25,19 @@ extension InputForwarder {
 
     // MARK: - Per-frame state push
 
-    /// FULL-state push from the GameController valueChangedHandler - the SINGLE
-    /// source of truth for sticks/triggers/face buttons/touchpad. Pushes the
-    /// merged multiController state AND forwards the touchpad surface.
-    func sendGamepadUpdate(pad: GCExtendedGamepad, slot: UInt8) {
+    /// Only GameController snapshots own the surface, so centre-button edges cannot double-feed touch.
+    func sendGamepadUpdate(pad: GCExtendedGamepad, slot: UInt8,
+                           touchpadUpdate: (@MainActor () -> Void)? = nil) {
         guard pushControllerState(pad: pad, slot: slot) else { return }
-        // Forward the touchpad surface (finger contacts) as host touch events.
-        // ONLY from this GameController path - touchpad data comes through
-        // GameController, so the raw-HID center-button path must NOT re-run this
-        // (it would emit redundant touch pass-through events, an amplifier).
-        forwardTouchpad(pad: pad, slot: slot)
+        if let touchpadUpdate { touchpadUpdate() } else { forwardTouchpad(pad: pad, slot: slot) }
     }
 
-    /// Raw-HID side-channel update: fired ONLY when a decoded DualSense bit
-    /// changed - a center button (Options/Create/PS/Mute) or, for the quit chord,
-    /// a shoulder (DualSenseHID gates onChange on a real bit change). GameController
-    /// never delivers the center buttons and does NOT fire its valueChangedHandler
-    /// for them, so this push is necessary to carry a center-button edge to the
-    /// host - but it does NOT re-forward the touchpad (that stays on the
-    /// GameController path) and the InputBatcher coalesces it with the latest
-    /// GC-sourced axes for the slot, so it is not a double-feed of stick/axis
-    /// state. A shoulder edge here re-pushes the same GC-sourced state (the host
-    /// L1/R1 still come from GameController); its purpose is to re-run the chord
-    /// check so a chord completed by a shoulder arms even if GameController's
-    /// frame for it is late or withheld.
+    /// Raw-HID centre and shoulder edges re-run the chord check when GameController is late or silent.
+    /// Axes still come from GameController; the batcher merges them without repeating surface events.
     func sendCenterButtonUpdate(pad: GCExtendedGamepad, slot: UInt8) {
         let pushed = pushControllerState(pad: pad, slot: slot)
-        // Partial-hold breadcrumb: a centre button is down, the chord needs
-        // centre buttons, and the chord did NOT match on this edge (a match
-        // returns false from the push, having armed the dwell). This is the
-        // line that makes "I held all four and nothing happened" diagnosable:
-        // it names which of the four never registered. Edge-only + rate-limited.
-        guard pushed, quitChordUsesCentreButtons() else { return }
+        // Keep the rate-limited partial-hold breadcrumb: it identifies which centre button never registered.
+        guard pushed, controllerMouseStates[slot]?.isMouse != true, quitChordUsesCentreButtons() else { return }
         let hid = dualSenseButtons(pad: pad)
         if hid.options || hid.create {
             quitChordBreadcrumb(.partial, "partial hold on slot \(slot)", pad: pad)
@@ -75,7 +45,7 @@ extension InputForwarder {
     }
 
     /// Only the GameController frame owns touchpad forwarding, so centre-button edges cannot double-feed it.
-    /// Returns false when input is gated, the quit chord is held, or the pad is a mouse.
+    /// Returns false when input is gated or the quit chord is held; mouse mode still needs the surface.
     @discardableResult
     private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8) -> Bool {
         guard forwardsControllerEvents else { return false }
@@ -102,7 +72,7 @@ extension InputForwarder {
 
         guard !isMouse else {
             _ = InputDeliverStamp.shared.take(slot: Int(slot))
-            return false
+            return true
         }
         let mapped = ControllerButtonLayout.apply(
             buttons, useNintendoLabels: useNintendoLabels && nintendoControllerTypes[slot] != nil)

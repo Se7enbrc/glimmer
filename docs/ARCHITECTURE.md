@@ -468,7 +468,13 @@ The timing, click map, D-pad and cubic pointer curve follow
 [Moonlight's SdlInputHandler](https://github.com/moonlight-stream/moonlight-qt/blob/a57e947d7185fd01384f6973df4df59ae2968d01/app/streaming/input/gamepad.cpp).
 Moonlight uses either stick for movement; Glimmer reserves the right for scrolling
 and makes the cubic deadzone symmetric. Stop chords cancel a mouse-toggle hold,
-including a chord released before its stop dwell expires. Focus loss and reconnect
+including a chord released before its stop dwell expires. DualSense and DualShock 4
+GameController snapshots also drive a relative trackpad in mouse mode: one contact
+moves with a small noise band and light acceleration; two contacts scroll naturally
+through `ScrollQuantizer`. Contact changes rebase motion. The touchpad click latches
+left or right at press time based on the contact count, sharing button ownership
+with the stick mouse and physical mouse. The existing raw-HID readers carry no touch
+coordinates, so GameController remains the surface's only source. Focus loss and reconnect
 release mouse buttons and cancel holds without changing the selected mode.
 
 **Nintendo buttons.** GameController's extended profile names face buttons by

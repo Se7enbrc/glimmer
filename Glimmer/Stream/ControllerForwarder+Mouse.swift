@@ -10,6 +10,7 @@ struct ControllerMouseState {
     var buttons: Int32 = 0
     var analog = InputForwarder.neutralControllerAnalog
     var clicks: Set<Int32> = []
+    var touchpad = ControllerTouchpadMouseState()
     private var startDownAt: TimeInterval?
     private var blocked = false
 
@@ -41,6 +42,7 @@ extension InputForwarder {
         (StreamProtocol.LB_FLAG, StreamProtocol.BUTTON_X1),
         (StreamProtocol.RB_FLAG, StreamProtocol.BUTTON_X2)
     ]
+    static let controllerMouseClickFlags = controllerMouseClicks.reduce(Int32(0)) { $0 | $1.0 }
 
     @discardableResult
     func routeControllerMouse(slot: UInt8, buttons: Int32, analog: GamepadAnalog, chordHeld: Bool,
@@ -50,7 +52,10 @@ extension InputForwarder {
         let previous = state.buttons
         let toggled = state.update(buttons: buttons, analog: analog, chordHeld: chordHeld, now: now)
         controllerMouseStates[slot] = state
-        if state.isMouse || !state.clicks.isEmpty {
+        if toggled || chordHeld { updateControllerTouchpadMouse(slot: slot, state: ControllerTouchpadMouseState()) }
+        let clicksChanged = (buttons ^ previous) & Self.controllerMouseClickFlags != 0
+        // Surface-only frames must not allocate a button set on every touch sample.
+        if (state.isMouse || !state.clicks.isEmpty) && (toggled || chordHeld || clicksChanged) {
             let clicks = state.isMouse && !chordHeld ? Set(Self.controllerMouseClicks.compactMap {
                 buttons & $0.0 != 0 ? $0.1 : nil
             }) : []
@@ -101,7 +106,10 @@ extension InputForwarder {
     }
 
     var controllerMouseButtons: Set<Int32> {
-        controllerMouseStates.values.reduce(into: Set<Int32>()) { $0.formUnion($1.clicks) }
+        controllerMouseStates.values.reduce(into: Set<Int32>()) {
+            $0.formUnion($1.clicks)
+            if let button = $1.touchpad.clickedButton { $0.insert(button) }
+        }
     }
 
     func sendMouseButtonEdges(before: Set<Int32>, after: Set<Int32>) {
@@ -159,6 +167,7 @@ extension InputForwarder {
 
     func suspendControllerMouse() {
         for (slot, state) in controllerMouseStates {
+            updateControllerTouchpadMouse(slot: slot, state: ControllerTouchpadMouseState())
             updateControllerMouseClicks(slot: slot, clicks: [])
             controllerMouseStates[slot] = ControllerMouseState(isMouse: state.isMouse)
         }
@@ -169,6 +178,7 @@ extension InputForwarder {
     func resetControllerMouse(slot: UInt8? = nil) {
         let slots = slot.map { [$0] } ?? Array(controllerMouseStates.keys)
         for slot in slots {
+            updateControllerTouchpadMouse(slot: slot, state: ControllerTouchpadMouseState())
             updateControllerMouseClicks(slot: slot, clicks: [])
             controllerMouseStates[slot] = nil
         }

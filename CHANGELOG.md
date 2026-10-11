@@ -5,7 +5,9 @@
 ### Features
 
 - Hold Menu, Options or Start for a moment, then release it to use the controller
-  as a mouse. Hold and release again to return to the game.
+  as a mouse. On DualSense and DualShock 4, move one finger on the touchpad to
+  point, move two to scroll, and click with one or two fingers for a left or right
+  click. Hold and release again to return to the game.
 - Nintendo controllers send each button in the position of an Xbox controller's
   by default. “Use Nintendo button layout” in Input settings matches A, B, X and Y
   by their labels for all Nintendo-layout controllers. Single Joy-Con sides keep
