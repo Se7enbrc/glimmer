@@ -11,8 +11,10 @@ struct DisconnectTests {
     func everyStopLeavesTheGameRunning(cause: DisconnectReason) async throws {
         let sunshine = FakeSunshine.scripted(["launch": [SessionFlow.launched], "cancel": [SessionFlow.cancelled]])
         let server = SessionFlow.pairedPC()
-        defer { RunningAppOwnership.clear(pc: server.uniqueId) }
-        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) })
+        let store = try IsolatedStore(UUID().uuidString)
+        defer { store.remove() }
+        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
+                                    ownershipStore: RunningAppOwnershipStore(store.defaults))
         await session.prepareLaunchFlow(server: server)
         _ = try await session.launchAndRecordOwnership(client: FakeSunshine.clientUniqueID, appID: 7) {
             try await sunshine.client(server).launch(appID: 7, config: SessionFlow.config)
@@ -22,14 +24,16 @@ struct DisconnectTests {
         #expect(sunshine.paths == ["launch"])
         #expect(await !session.isStreaming)
         #expect(await !session.stopInProgress)
-        #expect(RunningAppOwnership.load(pc: server.uniqueId)?.appID == 7)
+        #expect(RunningAppOwnership.load(pc: server.uniqueId, defaults: store.defaults)?.appID == 7)
     }
 
     @Test func lateLaunchSuccessAfterStopIsRetainedWithoutCancel() async throws {
         let sunshine = FakeSunshine.scripted(["cancel": [SessionFlow.cancelled]])
         let server = SessionFlow.pairedPC()
-        defer { RunningAppOwnership.clear(pc: server.uniqueId) }
-        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) })
+        let store = try IsolatedStore(UUID().uuidString)
+        defer { store.remove() }
+        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
+                                    ownershipStore: RunningAppOwnershipStore(store.defaults))
         await session.prepareLaunchFlow(server: server)
         let entered = SafetyTestGate()
         let reply = SafetyTestGate()
@@ -46,18 +50,21 @@ struct DisconnectTests {
         await reply.open()
         _ = try await launch.value
         #expect(sunshine.requests.isEmpty)
-        #expect(RunningAppOwnership.load(pc: server.uniqueId)?.appID == 7)
+        #expect(RunningAppOwnership.load(pc: server.uniqueId, defaults: store.defaults)?.appID == 7)
     }
 
     @Test(arguments: [false, true])
     func savedOwnershipSurvivesANewSessionButNeverAuthorizesAnotherClient(foreign: Bool) async throws {
         let server = SessionFlow.pairedPC()
-        defer { RunningAppOwnership.clear(pc: server.uniqueId) }
+        let store = try IsolatedStore(UUID().uuidString)
+        defer { store.remove() }
         RunningAppOwnership.save(pc: server.uniqueId, appID: 7,
-                                 clientID: foreign ? "another-client" : FakeSunshine.clientUniqueID)
+                                 clientID: foreign ? "another-client" : FakeSunshine.clientUniqueID,
+                                 defaults: store.defaults)
         let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.running(7)], "resume": [SessionFlow.launched]])
         let client = sunshine.client(server)
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(backend: InputRecordingBackend(),
+                                    ownershipStore: RunningAppOwnershipStore(store.defaults))
         await session.prepareLaunchFlow(server: server)
         let info = try await session.fetchAndVerifyServerInfo(network: client, pcName: "Tower")
         var config = SessionFlow.config
@@ -79,10 +86,13 @@ struct DisconnectTests {
 
     @Test func ourDifferentRunningAppStillNeedsConfirmation() async throws {
         let server = SessionFlow.pairedPC()
-        defer { RunningAppOwnership.clear(pc: server.uniqueId) }
-        RunningAppOwnership.save(pc: server.uniqueId, appID: 9, clientID: FakeSunshine.clientUniqueID)
+        let store = try IsolatedStore(UUID().uuidString)
+        defer { store.remove() }
+        RunningAppOwnership.save(pc: server.uniqueId, appID: 9, clientID: FakeSunshine.clientUniqueID,
+                                 defaults: store.defaults)
         let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.running(9)]])
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(backend: InputRecordingBackend(),
+                                    ownershipStore: RunningAppOwnershipStore(store.defaults))
         await session.prepareLaunchFlow(server: server)
         let client = sunshine.client(server)
         let info = try await session.fetchAndVerifyServerInfo(network: client, pcName: "Tower")
@@ -110,16 +120,18 @@ struct DisconnectTests {
         let fixture = try FakePCModel("disconnect-quit", sunshine: sunshine)
         defer { fixture.remove() }
         let host = try fixture.pairTower()
-        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) })
+        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
+                                    ownershipStore: RunningAppOwnershipStore(fixture.store.defaults))
         await session.prepareLaunchFlow(server: fixture.model.nativeServerInfo(for: host))
         fixture.model.nativeSession = session
         fixture.model.isStreaming = true
         fixture.model.lastLaunchAttempt = (try #require(host.apps.first), host)
-        RunningAppOwnership.save(pc: host.id, appID: 1, clientID: FakeSunshine.clientUniqueID)
+        RunningAppOwnership.save(pc: host.id, appID: 1, clientID: FakeSunshine.clientUniqueID,
+                                 defaults: fixture.store.defaults)
         try await fixture.model.quitRunningApp(on: host)
         #expect(await !session.isStreaming)
         #expect(sunshine.paths == ["cancel"])
-        #expect(RunningAppOwnership.load(pc: host.id) == nil)
+        #expect(RunningAppOwnership.load(pc: host.id, defaults: fixture.store.defaults) == nil)
     }
 
     @MainActor @Test(arguments: [false, true])
@@ -146,7 +158,8 @@ struct DisconnectTests {
         let fixture = try FakePCModel("disconnect-stop-intent", sunshine: sunshine)
         defer { fixture.remove() }
         let host = try fixture.pairTower()
-        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) })
+        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
+                                    ownershipStore: RunningAppOwnershipStore(fixture.store.defaults))
         await session.prepareLaunchFlow(server: fixture.model.nativeServerInfo(for: host))
         await session.claimPC(client: FakeSunshine.clientUniqueID, appID: 1)
         fixture.model.nativeSession = session
@@ -218,7 +231,8 @@ struct DisconnectTests {
         let fixture = try FakePCModel("disconnect-quit-pending", sunshine: sunshine)
         defer { fixture.remove() }
         let host = try fixture.pairTower()
-        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) })
+        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
+                                    ownershipStore: RunningAppOwnershipStore(fixture.store.defaults))
         await session.prepareLaunchFlow(server: fixture.model.nativeServerInfo(for: host))
         fixture.model.nativeSession = session
         fixture.model.isStreaming = true
@@ -241,19 +255,19 @@ struct DisconnectTests {
         try await quit.value
         #expect(await !session.isStreaming)
         #expect(sunshine.paths == ["cancel"])
-        #expect(RunningAppOwnership.load(pc: host.id) == nil)
+        #expect(RunningAppOwnership.load(pc: host.id, defaults: fixture.store.defaults) == nil)
     }
 
     @MainActor @Test func resumeLabelsRequireAFreshMatchingRunningApp() async throws {
         let fixture = try FakePCModel("resume-label", sunshine: FakeSunshine.scripted([:]))
         defer { fixture.remove() }
         let host = try fixture.pairTower()
-        defer { RunningAppOwnership.clear(pc: host.id) }
         let app = try #require(host.apps.first)
         fixture.model.hostLiveStatus = HostLiveStatus(hostID: host.id, state: .streamingApp(name: app.name),
                                                       rttMs: 3, sunshineVersion: nil, capturedAt: Date())
         #expect(fixture.model.streamActionTitle(app, on: host) == "Stream Desktop")
-        RunningAppOwnership.save(pc: host.id, appID: app.id, clientID: FakeSunshine.clientUniqueID)
+        RunningAppOwnership.save(pc: host.id, appID: app.id, clientID: FakeSunshine.clientUniqueID,
+                                 defaults: fixture.store.defaults)
         #expect(fixture.model.streamActionTitle(app, on: host) == "Resume Desktop")
         fixture.model.hostLiveStatus?.capturedAt = .distantPast
         #expect(!fixture.model.canResume(app, on: host))
@@ -264,11 +278,14 @@ struct DisconnectTests {
 
     @Test func confirmedRelaunchOfOurAppCancelsThenLaunches() async throws {
         let server = SessionFlow.pairedPC()
-        defer { RunningAppOwnership.clear(pc: server.uniqueId) }
-        RunningAppOwnership.save(pc: server.uniqueId, appID: 7, clientID: FakeSunshine.clientUniqueID)
+        let store = try IsolatedStore(UUID().uuidString)
+        defer { store.remove() }
+        RunningAppOwnership.save(pc: server.uniqueId, appID: 7, clientID: FakeSunshine.clientUniqueID,
+                                 defaults: store.defaults)
         let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.running(7), SessionFlow.idle],
                                                "cancel": [SessionFlow.cancelled], "launch": [SessionFlow.launched]])
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(backend: InputRecordingBackend(),
+                                    ownershipStore: RunningAppOwnershipStore(store.defaults))
         await session.prepareLaunchFlow(server: server)
         await session.authorizeTakeover(true)
         let client = sunshine.client(server)
@@ -281,9 +298,10 @@ struct DisconnectTests {
         let fixture = try FakePCModel("disconnect-unpair", sunshine: FakeSunshine.scripted([:]))
         defer { fixture.remove() }
         let host = try fixture.pairTower()
-        RunningAppOwnership.save(pc: host.id, appID: 1, clientID: FakeSunshine.clientUniqueID)
+        RunningAppOwnership.save(pc: host.id, appID: 1, clientID: FakeSunshine.clientUniqueID,
+                                 defaults: fixture.store.defaults)
         fixture.model.unpair(host, defaults: fixture.store.defaults, supportBase: fixture.store.directory)
-        #expect(RunningAppOwnership.load(pc: host.id) == nil)
+        #expect(RunningAppOwnership.load(pc: host.id, defaults: fixture.store.defaults) == nil)
     }
 
     @MainActor @Test func stopDuringSessionSetupLatchesBeforeTheActorExists() async {
@@ -295,12 +313,15 @@ struct DisconnectTests {
     }
 
     @Test func explicitQuitWaitsForALaunchAfterItsSessionWasDiscarded() async throws {
+        let store = try IsolatedStore("discarded-launch")
+        defer { store.remove() }
         let mutations = HostLaunchMutations()
         let entered = SafetyTestGate()
         let reply = SafetyTestGate()
         let cancelled = SafetyTestCounter()
         let quitEntered = SafetyTestGate()
-        let launch = try await mutations.launch(pc: "discarded", client: "mac", appID: 7) {
+        let launch = try await mutations.launch(pc: "discarded", client: "mac", appID: 7,
+                                                store: RunningAppOwnershipStore(store.defaults)) {
             await entered.open()
             await reply.wait()
             return LaunchResponse(sessionURL: "", gcmKey: Data(), gcmKeyId: Data())
@@ -316,7 +337,7 @@ struct DisconnectTests {
         _ = try await launch.value
         try await quit.value
         #expect(await cancelled.value == 1)
-        RunningAppOwnership.clear(pc: "discarded")
+        RunningAppOwnership.clear(pc: "discarded", defaults: store.defaults)
     }
 
     @MainActor @Test(arguments: [false, true])

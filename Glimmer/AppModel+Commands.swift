@@ -178,6 +178,10 @@ extension AppModel {
     /// Retain the route wait so quit can invalidate it before any session exists.
     func beginCommandStream(_ id: String, app: LibraryApp, on host: Host, takeover: Bool,
                             waitForRoute: (@MainActor () async -> Void)? = nil) {
+        if let message = quitInProgressMessage {
+            replyToCommand(id, CommandChannel.Event.rejected, message)
+            return
+        }
         cancelPendingCommandStream()
         let request = PendingCommandStream(id: id, hostID: host.id)
         pendingCommandStream = request
@@ -189,6 +193,10 @@ extension AppModel {
             pendingCommandStream = nil
             guard !isStreaming else {
                 replyToCommand(id, CommandChannel.Event.rejected, CommandChannel.alreadyStreaming)
+                return
+            }
+            if let message = quitInProgressMessage {
+                replyToCommand(id, CommandChannel.Event.rejected, message)
                 return
             }
             stream(app: app, on: host, takeoverAuthorized: takeover)
@@ -268,7 +276,7 @@ extension AppModel {
         info[CommandChannel.Key.id] = id
         info[CommandChannel.Key.event] = event
         if let detail { info[CommandChannel.Key.detail] = detail }
-        CommandChannel.post(CommandChannel.reply, info)
+        postCommandReply(info)
     }
 
     /// "live" at the first decoded frame (with the connect timings), then
@@ -294,7 +302,7 @@ extension AppModel {
             "\($0.host.displayName) is busy. Choose Quit and Stream in Glimmer, or run again with --force."
         }
         if nativeStreamErrorKind == .resumeFailed, let failure = nativeStreamError {
-            return failure + " Choose Quit and relaunch… in Glimmer, or run again with --force."
+            return failure + " Choose Quit and Relaunch… in Glimmer, or run again with --force."
         }
         return nativeStreamError ?? busy
     }

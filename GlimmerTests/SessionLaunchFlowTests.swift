@@ -55,7 +55,10 @@ struct SessionLaunchFlowTests {
         on sunshine: FakeSunshine, server: ServerInfo, appID: Int = 7,
         prepare: (StreamSession) async -> Void = { _ in }
     ) async throws -> (StreamSession, LaunchResponse) {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let store = try IsolatedStore(UUID().uuidString)
+        defer { store.remove() }
+        let session = StreamSession(backend: InputRecordingBackend(),
+                                    ownershipStore: RunningAppOwnershipStore(store.defaults))
         let network = sunshine.client(server)
         await session.prepareLaunchFlow(server: server)
         await prepare(session)
@@ -137,7 +140,10 @@ struct SessionLaunchFlowTests {
 
     @Test func anExpiredLaunchBudgetSendsNothing() async throws {
         let sunshine = FakeSunshine.scripted([:])
-        let session = StreamSession(backend: InputRecordingBackend())
+        let store = try IsolatedStore(UUID().uuidString)
+        defer { store.remove() }
+        let session = StreamSession(backend: InputRecordingBackend(),
+                                    ownershipStore: RunningAppOwnershipStore(store.defaults))
         await session.prepareLaunchFlow(server: SessionFlow.pairedPC())
         await #expect(throws: StreamError.self) {
             _ = try await session.launchWithDeadline(

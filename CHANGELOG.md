@@ -4,8 +4,9 @@
 
 ### Features
 
-- Ending a stream leaves the game running on the PC. Choose it again to resume,
-  or use Quit to close it after confirming that unsaved progress may be lost.
+- Ending a stream, including cancelling while it connects, leaves the game
+  running on the PC. Choose it again to resume, or use Quit to close it after
+  confirming that unsaved progress may be lost.
 
 - Steam shows its own logo in the launcher, the menu and the PC list, instead
   of a generic controller.

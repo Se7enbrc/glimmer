@@ -109,7 +109,9 @@ extension StreamSession {
     /// error banner and no /launch.
     private func endStreamClosedByPC() async {
         // A PC-side quit or takeover invalidates this Mac's remembered app.
-        if let server = reconnectServer { RunningAppOwnership.clear(pc: server.uniqueId) }
+        if let server = reconnectServer {
+            RunningAppOwnership.clear(pc: server.uniqueId, defaults: ownershipStore.defaults)
+        }
         ownsHostSession = false
         hostSessionClientID = nil
         bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: 0))

@@ -63,7 +63,7 @@ enum GlimmerCLI {
             --exit-after-first-frame     Return when the first frame arrives
             --json                       Print connect timings as one JSON line
           stop <pc>                      Disconnect, leaving the app running on the PC
-          quit <pc> [--force]             Confirm quitting the PC app (--force skips asking)
+          quit <pc> [--force]            Confirm quitting the PC app (--force skips asking)
           wake <pc> [--wait]             Send Wake on LAN, and wait for the PC to answer
           help                           Show this help
 

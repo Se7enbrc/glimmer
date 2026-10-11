@@ -132,14 +132,14 @@ glimmer stream "Living Room" Steam --wait
 
 Coming from moonlight-qt:
 
-| moonlight-qt                         | Glimmer                               | Difference                                     |
-| ------------------------------------ | ------------------------------------- | ---------------------------------------------- |
-| `moonlight pair <host> [--pin NNNN]` | `glimmer pair <address> [--pin NNNN]` | None.                                          |
-| `moonlight list <host> [--csv]`      | `glimmer list <pc> [--csv]`           | `glimmer list [--csv]` lists the paired PCs.   |
-| `moonlight stream <host> <app> ...`  | `glimmer stream <pc> [<app>]`         | The app is optional; see below.                |
+| moonlight-qt                         | Glimmer                               | Difference                                            |
+| ------------------------------------ | ------------------------------------- | ----------------------------------------------------- |
+| `moonlight pair <host> [--pin NNNN]` | `glimmer pair <address> [--pin NNNN]` | None.                                                 |
+| `moonlight list <host> [--csv]`      | `glimmer list <pc> [--csv]`           | `glimmer list [--csv]` lists the paired PCs.          |
+| `moonlight stream <host> <app> ...`  | `glimmer stream <pc> [<app>]`         | The app is optional; see below.                       |
 | `moonlight quit <host>`              | `glimmer quit <pc> [--force]`         | Asks before quitting; `--force` confirms for scripts. |
-|                                      | `glimmer stop <pc>`                  | Disconnects and leaves the PC app running. |
-|                                      | `glimmer wake <pc> [--wait]`          | Wake on LAN, optionally waiting for an answer. |
+|                                      | `glimmer stop <pc>`                   | Disconnects and leaves the PC app running.            |
+|                                      | `glimmer wake <pc> [--wait]`          | Wake on LAN, optionally waiting for an answer.        |
 
 Stopping a stream, closing its window, or quitting Glimmer leaves the game running
 on the PC. Choose the same app again to resume with this Mac's current stream

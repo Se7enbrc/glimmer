@@ -184,6 +184,9 @@ final class AppModel {
     /// dialog to this; confirming calls `stream(app:on:)`, cancelling clears it.
     /// nil = no takeover pending (the common case streams straight through).
     var pendingTakeover: PendingTakeover?
+    @ObservationIgnored var postCommandReply: ([String: String]) -> Void = {
+        CommandChannel.post(CommandChannel.reply, $0)
+    }
     var quittingHostID: String?
     struct PendingTakeover: Equatable {
         let app: LibraryApp

@@ -32,7 +32,7 @@ enum ConnectBannerAction: Equatable {
         case .wakeAndConnect: "Wake and Connect"
         case .pairAgain: "Pair Again…"
         case .tryAgain: "Try Again"
-        case .quitAndRelaunch: "Quit and relaunch…"
+        case .quitAndRelaunch: "Quit and Relaunch…"
         }
     }
 

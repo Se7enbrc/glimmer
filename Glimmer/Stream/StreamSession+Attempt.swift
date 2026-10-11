@@ -87,7 +87,8 @@ actor SharedTeardown {
     }
 }
 
-/// Only /cancel is serialized with the next launch; a hung /launch never holds this gate.
+/// Quit waits up to 22 seconds for pending launches so a late launch cannot restart the app afterward.
+/// New launches wait behind the quit.
 actor HostLaunchMutations {
     private var epochs: [String: Int] = [:]
     private var cancellations: [String: Task<Void, Error>] = [:]
@@ -103,7 +104,7 @@ actor HostLaunchMutations {
         return epochs[pc, default: 0]
     }
 
-    func launch(pc: String, client: String?, appID: Int,
+    func launch(pc: String, client: String?, appID: Int, store: RunningAppOwnershipStore = RunningAppOwnershipStore(),
                 operation: @escaping @Sendable () async throws -> LaunchResponse) async throws
         -> Task<LaunchResponse, Error> {
         let epoch = try await beginLaunch(for: pc)
@@ -114,7 +115,7 @@ actor HostLaunchMutations {
             }
             let response = try await operation()
             if epochs[pc] == epoch, let client {
-                RunningAppOwnership.save(pc: pc, appID: appID, clientID: client)
+                RunningAppOwnership.save(pc: pc, appID: appID, clientID: client, defaults: store.defaults)
             }
             return response
         }

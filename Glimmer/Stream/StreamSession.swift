@@ -405,15 +405,18 @@ public actor StreamSession {
     let makeBackend: @Sendable () -> StreamingBackend
     /// Every watchdog, metric and backoff reads time here, so tests can script it.
     let clock: SessionClock
+    let ownershipStore: RunningAppOwnershipStore
 
     init(backend: StreamingBackend = NativeBackend(),
          makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) },
          makeBackend: @escaping @Sendable () -> StreamingBackend = { NativeBackend() },
-         clock: SessionClock = SessionClock()) {
+         clock: SessionClock = SessionClock(),
+         ownershipStore: RunningAppOwnershipStore = RunningAppOwnershipStore()) {
         self.backend = backend
         self.makeNetwork = makeNetwork
         self.makeBackend = makeBackend
         self.clock = clock
+        self.ownershipStore = ownershipStore
     }
 
     /// Uptime in seconds, the timebase `CACurrentMediaTime` and `systemUptime` share.

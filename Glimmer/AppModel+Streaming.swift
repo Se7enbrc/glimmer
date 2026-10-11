@@ -24,7 +24,10 @@ extension AppModel {
     /// Prompt at once when the launcher already knows the host is taken; the
     /// launch flow re-checks fresh server-info and prompts if that disagrees.
     func requestStream(app: LibraryApp, on host: Host) {
-        guard quittingHostID == nil else { return }
+        if let message = quitInProgressMessage {
+            showStreamFailure((message, .other), on: host)
+            return
+        }
         if !isStreaming, !canResume(app, on: host), let live = hostLiveStatus, live.hostID == host.id,
            Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
            let occupant = Self.occupant(of: live.state) {
@@ -153,7 +156,8 @@ extension AppModel {
                 return
             }
             // The Swift-native engine is the only path.
-            let session = StreamSession(backend: NativeBackend(), makeNetwork: makeNetwork)
+            let session = StreamSession(backend: NativeBackend(), makeNetwork: makeNetwork,
+                                        ownershipStore: RunningAppOwnershipStore(hostsDefaults))
             self.nativeSession = session
             await session.authorizeTakeover(takeoverAuthorized)
             if let launch = cfg.bitrateDecision {
@@ -313,8 +317,7 @@ extension AppModel {
                 self.recordLastPlayed(hostID: host.id, defaults: self.hostsDefaults)
             }
         }
-        // An established session holds the chip
-        // through transient misses, even when its pre-stream sample is stale.
+        // An established session holds the chip through transient misses, even when its pre-stream sample is stale.
         self.restartHostStatusPolling(afterStream: true)
         NSApp.activate()
         if let main = NSApp.windows.first(where: {

@@ -203,15 +203,16 @@ UI lights up live.
    throw: the launcher's pair sheet runs first, not us.
 2. **Launch, resume, or confirmed takeover**: idle PCs get `/launch`. A matching
    app previously launched by this Mac gets `/resume`, with ownership retained
-   across Glimmer sessions in `RunningAppOwnership`. Sunshine's `nvhttp.cpp`
+   across Glimmer sessions in `RunningAppOwnership` for eight hours after recording;
+   expired or missing ownership requires takeover confirmation. Sunshine's `nvhttp.cpp`
    `resume()` calls `make_launch_session()` with the new mode, FPS and HDR
    request, and configures the display when no streaming session is active.
    Another app or unknown ownership needs takeover confirmation, then `/cancel`,
    an idle poll (up to 5 s for Undo commands), and `/launch`. A failed resume
-   reports the shared failure copy and offers a confirmed quit and relaunch;
-   it never automatically cancels the game. `/serverinfo` has no client-owner
-   field: local ownership is invalidated when a poll observes idle or another app,
-   but cannot detect another client taking over the same app between observations.
+   keeps the underlying recovery action, or offers a confirmed quit and relaunch
+   for other failures; a 503 “No running app” launches fresh without confirmation.
+   It never automatically cancels the game, and observing idle or another app clears ownership.
+   Sunshine exposes no owner, so same-app takeovers between observations remain undetectable within those eight hours.
 3. **Build `BackendStreamConfig`**: `width`, `height`, `fps`, `bitrate`, the
    `supportedVideoFormats` codec bitmask, `colorSpace`, `colorRange`,
    `encryptionFlags`. The remote-input AES key and IV are copied in from the

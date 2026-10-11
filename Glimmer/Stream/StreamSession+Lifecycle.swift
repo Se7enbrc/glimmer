@@ -216,6 +216,11 @@ extension StreamSession {
             } catch {
                 if error is CancellationError { throw error }
                 Diag.notice("Resume /resume failed: \(error, privacy: .private)", "Stream")
+                if case StreamError.hostRefused(let message, 503) = error,
+                   message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "no running app" {
+                    resumingHostApp = false
+                    return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
+                }
                 let failure = ResumeFailed(underlying: error)
                 resumeFailure = failure
                 throw failure
@@ -231,9 +236,9 @@ extension StreamSession {
 
     private func restoreOwnership(from info: ServerInfo) {
         guard let server = reconnectServer else { return }
-        RunningAppOwnership.reconcile(pc: server.uniqueId, appID: info.currentGameID)
+        RunningAppOwnership.reconcile(pc: server.uniqueId, appID: info.currentGameID, defaults: ownershipStore.defaults)
         guard !ownsHostSession,
-              let owner = RunningAppOwnership.load(pc: server.uniqueId),
+              let owner = RunningAppOwnership.load(pc: server.uniqueId, defaults: ownershipStore.defaults),
               owner.appID == info.currentGameID else { return }
         ownsHostSession = true
         hostSessionClientID = owner.clientID
@@ -273,7 +278,8 @@ extension StreamSession {
     ) async throws -> LaunchResponse {
         // A late success still belongs to this Mac, unless another launch superseded it.
         let key = launchPCKey
-        let task = try await Self.launchMutations.launch(pc: key, client: client, appID: appID, operation: operation)
+        let task = try await Self.launchMutations.launch(pc: key, client: client, appID: appID,
+                                                        store: ownershipStore, operation: operation)
         ownsHostSession = true
         hostSessionClientID = client
         hostSessionAppID = appID

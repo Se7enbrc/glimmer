@@ -37,6 +37,7 @@ struct SessionReconnectFlowTests {
     private static let pcRestarted = StreamSession.recoverableTerminationCode
 
     private struct Live {
+        let store: IsolatedStore
         let session: StreamSession
         let sunshine: FakeSunshine
         let supply: BackendSupply
@@ -45,6 +46,7 @@ struct SessionReconnectFlowTests {
 
         /// Ends the session and returns every event it emitted, in order.
         func finish() async -> [String] {
+            defer { store.remove() }
             await session.stop()
             var seen: [String] = []
             for await event in events { seen.append(SessionReconnectFlowTests.label(event)) }
@@ -55,14 +57,16 @@ struct SessionReconnectFlowTests {
     private func live(
         _ script: [String: [Result<ControlTransport.Response, StreamError>]],
         failing: Int = 0, config: StreamConfig = SessionFlow.config
-    ) async -> Live {
+    ) async throws -> Live {
+        let store = try IsolatedStore(UUID().uuidString)
         let sunshine = FakeSunshine.scripted(script)
         let supply = BackendSupply(failing: failing)
         let clock = ScriptedClock()
         let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
-                                    makeBackend: { supply.make() }, clock: clock.session)
+                                    makeBackend: { supply.make() }, clock: clock.session,
+                                    ownershipStore: RunningAppOwnershipStore(store.defaults))
         let events = await session.goLive(server: SessionFlow.pairedPC(), config: config, appID: Self.appID)
-        return Live(session: session, sunshine: sunshine, supply: supply, clock: clock, events: events)
+        return Live(store: store, session: session, sunshine: sunshine, supply: supply, clock: clock, events: events)
     }
 
     fileprivate static func label(_ event: StreamEvent) -> String {
@@ -75,7 +79,7 @@ struct SessionReconnectFlowTests {
     }
 
     @Test func aDroppedLinkResumesOurRunningGameWithoutCancel() async throws {
-        let live = await live(["serverinfo": [SessionFlow.running(Self.appID)], "resume": [SessionFlow.launched]])
+        let live = try await live(["serverinfo": [SessionFlow.running(Self.appID)], "resume": [SessionFlow.launched]])
         await live.session.claimPC(client: FakeSunshine.clientUniqueID, appID: Self.appID)
         await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
         #expect(await live.finish() == ["reconnecting", "reconnected"])
@@ -83,12 +87,13 @@ struct SessionReconnectFlowTests {
     }
 
     @Test func failedReconnectResumesKeepTheGameAndTheRecoveryChoice() async throws {
-        let live = await live(["serverinfo": [SessionFlow.running(Self.appID)],
+        let live = try await live(["serverinfo": [SessionFlow.running(Self.appID)],
                                "resume": [.failure(.hostRefused(message: "No display", code: 503))]])
         await live.session.claimPC(client: FakeSunshine.clientUniqueID, appID: Self.appID)
         let server = try #require(await live.session.reconnectServer)
-        defer { RunningAppOwnership.clear(pc: server.uniqueId) }
-        RunningAppOwnership.save(pc: server.uniqueId, appID: Self.appID, clientID: FakeSunshine.clientUniqueID)
+        defer { RunningAppOwnership.clear(pc: server.uniqueId, defaults: live.store.defaults) }
+        RunningAppOwnership.save(pc: server.uniqueId, appID: Self.appID, clientID: FakeSunshine.clientUniqueID,
+                                 defaults: live.store.defaults)
         await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
         #expect(await live.session.resumeFailure != nil)
         #expect(!live.sunshine.paths.contains("cancel"))
@@ -97,7 +102,7 @@ struct SessionReconnectFlowTests {
     }
 
     @Test func aDroppedLinkRelaunchesOnAFreshEngineAndResumesInPlace() async throws {
-        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+        let live = try await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
                                "cancel": [SessionFlow.cancelled]])
         await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
 
@@ -114,8 +119,8 @@ struct SessionReconnectFlowTests {
         #expect(!live.sunshine.paths.contains("cancel"))
     }
 
-    @Test func aFailedAttemptDisconnectsAndRetriesOnAnotherEngine() async {
-        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+    @Test func aFailedAttemptDisconnectsAndRetriesOnAnotherEngine() async throws {
+        let live = try await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
                                "cancel": [SessionFlow.cancelled]], failing: 1)
         await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
 
@@ -127,8 +132,8 @@ struct SessionReconnectFlowTests {
 
     /// The PC sent the terminate and no longer runs the game: it ended the session on purpose, so
     /// the stream ends cleanly with no relaunch and no /cancel of whatever runs there now.
-    @Test func aPcThatQuitTheGameEndsTheStreamWithoutRelaunching() async {
-        let live = await live(["serverinfo": [SessionFlow.idle]])
+    @Test func aPcThatQuitTheGameEndsTheStreamWithoutRelaunching() async throws {
+        let live = try await live(["serverinfo": [SessionFlow.idle]])
         await live.session.handleHostTerminate(code: Self.pcRestarted)
 
         #expect(await !live.session.isStreaming)
@@ -138,8 +143,8 @@ struct SessionReconnectFlowTests {
     }
 
     /// No answer to the probe means Sunshine is restarting, which a reconnect rides out.
-    @Test func aSilentPcIsRiddenOutByAReconnect() async {
-        let live = await live(["serverinfo": [.failure(.hostTimedOut), SessionFlow.idle],
+    @Test func aSilentPcIsRiddenOutByAReconnect() async throws {
+        let live = try await live(["serverinfo": [.failure(.hostTimedOut), SessionFlow.idle],
                                "launch": [SessionFlow.launched], "cancel": [SessionFlow.cancelled]])
         await live.session.handleHostTerminate(code: Self.pcRestarted)
 
@@ -147,8 +152,8 @@ struct SessionReconnectFlowTests {
         #expect(await live.finish() == ["reconnecting", "reconnected"])
     }
 
-    @Test func aTerminateBeforeTheStreamWentLiveIsAFailedConnect() async {
-        let live = await live([:])
+    @Test func aTerminateBeforeTheStreamWentLiveIsAFailedConnect() async throws {
+        let live = try await live([:])
         await live.session.forgetLiveState()
         await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
 
@@ -159,8 +164,8 @@ struct SessionReconnectFlowTests {
 
     /// Mid-reconnect the PC is streaming another app: someone else has it now, so end without a
     /// takeover, a /cancel or a /launch.
-    @Test func aPcRunningAnotherAppMidReconnectEndsTheStreamCleanly() async {
-        let live = await live(["serverinfo": [SessionFlow.running(9)]])
+    @Test func aPcRunningAnotherAppMidReconnectEndsTheStreamCleanly() async throws {
+        let live = try await live(["serverinfo": [SessionFlow.running(9)]])
         await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
 
         #expect(await live.finish() == ["reconnecting", "terminated(0)"])
@@ -170,9 +175,9 @@ struct SessionReconnectFlowTests {
     }
 
     /// The backoff ramps 0.8, 1.6, then 2.4 s; once every attempt has failed the stream ends.
-    @Test func everyAttemptFailingEndsTheStreamAfterTheCap() async {
+    @Test func everyAttemptFailingEndsTheStreamAfterTheCap() async throws {
         let cap = StreamSession.reconnectAttemptCap
-        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+        let live = try await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
                                "cancel": [SessionFlow.cancelled]], failing: cap)
         await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
 
@@ -184,8 +189,8 @@ struct SessionReconnectFlowTests {
     }
 
     /// The new connection gets its own first-frame allowance, counted from the resume.
-    @Test func aResumeRearmsTheFrameWatchdogAtTheResume() async {
-        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+    @Test func aResumeRearmsTheFrameWatchdogAtTheResume() async throws {
+        let live = try await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
                                "cancel": [SessionFlow.cancelled]])
         await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
 
@@ -199,7 +204,7 @@ struct SessionReconnectFlowTests {
     /// A connection that never decodes a frame ends ten seconds after the arm, not before, with a
     /// bring-up error (no traffic or no frame, by the process-wide datagram clock) instead of -1.
     @Test func aConnectionThatNeverDecodesEndsTenSecondsAfterTheArm() async throws {
-        let live = await live([:])
+        let live = try await live([:])
         let decoder = try #require(await live.session.videoDecoder)
         live.session.frameWatchdogArmedAt = live.session.uptimeSeconds
         live.clock.advance(.milliseconds(9_500))
@@ -220,7 +225,7 @@ struct SessionReconnectFlowTests {
         var config = SessionFlow.config
         config.bitrateKbps = 84_000
         config.remoteness = .remote
-        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+        let live = try await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
                                "cancel": [SessionFlow.cancelled]], config: config)
         await live.session.markRemotePath()
         await live.session.considerBitrateDownshift(decodeIdle: 25, receiveIdle: 0.2)
@@ -235,10 +240,10 @@ struct SessionReconnectFlowTests {
     }
 
     /// A LAN that can't carry its rate is a different fault: no lower ask, no reconnect.
-    @Test func aLanStallNeverDownshifts() async {
+    @Test func aLanStallNeverDownshifts() async throws {
         var config = SessionFlow.config
         config.bitrateKbps = 84_000
-        let live = await live([:], config: config)
+        let live = try await live([:], config: config)
         await live.session.considerBitrateDownshift(decodeIdle: 25, receiveIdle: 0.2)
 
         #expect(await live.session.reconnectConfig?.bitrateKbps == 84_000)

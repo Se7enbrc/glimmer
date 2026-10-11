@@ -61,7 +61,7 @@ struct AppIconsRow: View {
 
     /// What the app that is launching or streaming shows on its own button, so the status
     /// stays on the chip and no second button appears: progress, the way out, the way back.
-    private enum TileState {
+    enum TileState {
         case ready, connecting, reconnecting, hiddenStream
 
         var shortcut: KeyboardShortcut? {
@@ -92,10 +92,11 @@ struct AppIconsRow: View {
     }
 
     /// A hidden stream wins, as the Stream button's roles do; a (re)connect shows once past the hold.
-    private func tileState(_ app: LibraryApp) -> TileState {
+    static func tileState(_ app: LibraryApp, on host: Host, model: AppModel,
+                          connectingShown: Bool) -> TileState {
         guard let attempt = model.lastLaunchAttempt, attempt.app.id == app.id,
               attempt.host.id == host.id else { return .ready }
-        if model.isStreaming, model.streamPhase == .streaming { return .hiddenStream }
+        if model.isStreaming, model.nativeStreamBackgrounded { return .hiddenStream }
         guard connectingShown, case .connecting = model.streamPhase else { return .ready }
         return model.isReconnecting ? .reconnecting : .connecting
     }
@@ -132,7 +133,7 @@ struct AppIconsRow: View {
     }
 
     private func appTile(_ app: LibraryApp) -> some View {
-        let state = tileState(app)
+        let state = Self.tileState(app, on: host, model: model, connectingShown: connectingShown)
         return Button {
             switch state {
             case .ready: model.requestStream(app: app, on: host)

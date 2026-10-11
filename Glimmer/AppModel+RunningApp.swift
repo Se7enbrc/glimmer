@@ -5,6 +5,14 @@ import AppKit
 import SwiftUI
 
 extension AppModel {
+    var quitInProgressMessage: String? {
+        guard let quittingHostID else { return nil }
+        let pc = hosts.first { $0.id == quittingHostID }?.displayName ?? "the PC"
+        return "An app is quitting on \(pc). Try again when it finishes."
+    }
+
+    static func notStreamingMessage(_ pc: String) -> String { "Glimmer isn't streaming from \(pc)." }
+
     func runningApp(on host: Host) -> LibraryApp? {
         if isStreaming, let attempt = lastLaunchAttempt, attempt.host.id == host.id { return attempt.app }
         guard HostLiveStatus.isFresh(hostLiveStatus, for: host.id), let live = hostLiveStatus else { return nil }
@@ -16,13 +24,15 @@ extension AppModel {
     }
 
     func publishDisconnectedApp(_ app: LibraryApp, on host: Host) {
-        guard RunningAppOwnership.load(pc: host.id)?.appID == app.id, selectedHost?.id == host.id else { return }
+        guard RunningAppOwnership.load(pc: host.id, defaults: hostsDefaults)?.appID == app.id,
+              selectedHost?.id == host.id else { return }
         hostLiveStatus = HostLiveStatus(hostID: host.id, state: .streamingApp(name: app.name),
                                        rttMs: nil, sunshineVersion: nil, capturedAt: Date())
     }
 
     func canResume(_ app: LibraryApp, on host: Host) -> Bool {
-        runningApp(on: host)?.id == app.id && RunningAppOwnership.load(pc: host.id)?.appID == app.id
+        runningApp(on: host)?.id == app.id
+            && RunningAppOwnership.load(pc: host.id, defaults: hostsDefaults)?.appID == app.id
     }
 
     func streamActionTitle(_ app: LibraryApp, on host: Host) -> String {
@@ -62,10 +72,11 @@ extension AppModel {
             if let session = nativeSession { await session.stop() }
         }
         let client = makeNetwork(nativeServerInfo(for: host))
+        let store = RunningAppOwnershipStore(hostsDefaults)
         do {
             try await StreamSession.launchMutations.cancel(pc: host.id) {
                 try await client.cancel()
-                RunningAppOwnership.clear(pc: host.id)
+                RunningAppOwnership.clear(pc: host.id, defaults: store.defaults)
             }
             Diag.notice("Explicit quit /cancel succeeded", "Stream")
             if hostLiveStatus?.hostID == host.id { hostLiveStatus?.state = .idle }

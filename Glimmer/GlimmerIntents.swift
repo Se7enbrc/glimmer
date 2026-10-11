@@ -173,7 +173,7 @@ struct QuitAppOnPCIntent: AppIntent {
 }
 
 struct StopStreamingIntent: AppIntent {
-    static let title: LocalizedStringResource = "Stop streaming"
+    static let title: LocalizedStringResource = "Stop Streaming"
     static let description = IntentDescription("Disconnects from a PC and leaves its app running.")
 
     @Parameter(title: "PC")
@@ -188,8 +188,11 @@ struct StopStreamingIntent: AppIntent {
 
     @MainActor static func stop(_ pc: PCEntity, model: AppModel) async throws {
         let host = try model.pairedHost(pc)
-        if model.streamingHostID == host.id || model.pendingCommandStream?.hostID == host.id {
-            _ = await model.stopOwnStream(source: "Shortcuts")
+        guard model.streamingHostID == host.id || model.pendingCommandStream?.hostID == host.id else {
+            throw PCIntentError.failed(AppModel.notStreamingMessage(host.displayName))
+        }
+        guard await model.stopOwnStream(source: "Shortcuts") else {
+            throw PCIntentError.failed(AppModel.notStreamingMessage(host.displayName))
         }
     }
 }

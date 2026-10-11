@@ -241,7 +241,7 @@ extension AppModel {
         updateHostMac(hostID: hostID, mac: info.macAddress, defaults: hostsDefaults)
         var fetchedFor = appListFor
         let running = info.currentGameID
-        RunningAppOwnership.reconcile(pc: hostID, appID: running)
+        RunningAppOwnership.reconcile(pc: hostID, appID: running, defaults: hostsDefaults)
         if Self.needsAppList(runningID: running, known: Set(host.apps.map(\.id)), fetchedFor: appListFor) {
             if await refreshAppList(for: host) { fetchedFor = running }
             if Task.isCancelled { return fetchedFor }

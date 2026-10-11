@@ -162,15 +162,22 @@ extension GlimmerCLI {
         return ["y", "yes"].contains(answer()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "")
     }
 
-    static func stop(_ command: Command, model: AppModel) async -> Int32 {
+    static func stop(
+        _ command: Command, model: AppModel,
+        appIsRunning: () -> Bool = { runningGlimmer() != nil },
+        send: ([String: String]) async -> [String: String]? = { await ask($0, within: .seconds(10)) }
+    ) async -> Int32 {
         guard let host = resolveHost(command.arguments[0], model: model) else { return Exit.notPaired }
-        guard runningGlimmer() != nil else {
-            printLine("Glimmer isn't streaming from \(host.displayName).")
-            return Exit.ok
+        guard appIsRunning() else {
+            printError(AppModel.notStreamingMessage(host.displayName))
+            return Exit.failed
         }
-        let reply = await ask([CommandChannel.Key.verb: "stop", CommandChannel.Key.host: host.id], within: .seconds(10))
-        guard let event = reply?[CommandChannel.Key.event],
-              [CommandChannel.Event.stopped, CommandChannel.Event.notMine].contains(event) else {
+        let reply = await send([CommandChannel.Key.verb: "stop", CommandChannel.Key.host: host.id])
+        if reply?[CommandChannel.Key.event] == CommandChannel.Event.notMine {
+            printError(AppModel.notStreamingMessage(host.displayName))
+            return Exit.failed
+        }
+        guard reply?[CommandChannel.Key.event] == CommandChannel.Event.stopped else {
             printError("Couldn't disconnect from \(host.displayName). Choose Stop Streaming in Glimmer.")
             return Exit.failed
         }

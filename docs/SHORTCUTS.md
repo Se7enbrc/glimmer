@@ -10,7 +10,7 @@ stream before using its shortcuts.
 
 | Action                               | Default shortcut | Notes                                                                                  |
 | ------------------------------------ | ---------------- | -------------------------------------------------------------------------------------- |
-| Stop streaming                       | Control-Q · ⌃Q   | Disconnects and leaves the game running. Command-Q quits Glimmer.                                           |
+| Stop streaming                       | Control-Q · ⌃Q   | Disconnects and leaves the game running. Command-Q quits Glimmer.                      |
 | Enter or leave Mini Player           | Control-M · ⌃M   | Returns to the previous presentation when leaving Mini Player.                         |
 | Show or hide stream stats            | Control-I · ⌃I   | Applies to this stream; the next follows Settings → Quality.                           |
 | Capture or release the pointer       | Control-P · ⌃P   | Window and Mini Player only. In fullscreen, this goes to the PC.                       |
