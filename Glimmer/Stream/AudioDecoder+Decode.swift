@@ -21,7 +21,7 @@ extension AudioDecoder {
         defer { stateLock.unlock() }
         guard !isShutdown, let decoder, let fmt = inputFormat else { return }
 
-        // `AudioFrame` interval - decode + scheduleBuffer, one per 5 ms packet; cheap enough not to gate.
+        // `AudioFrame` interval - decode + schedule, one per 5 ms packet; cheap enough not to gate.
         let audioSignpostID = OSSignposter.audio.makeSignpostID()
         let audioIntervalState = OSSignposter.audio.beginInterval(
             "AudioFrame",
@@ -76,9 +76,9 @@ extension AudioDecoder {
             return false
         }
         packetSplice.apply(to: pcm)
-        playerNode.scheduleBuffer(pcm, completionHandler: { [weak self] in
+        schedulePlayout(pcm) { [weak self] in
             self?.meterCompleteOnePlayout(frames: decodedFrames)
-        })
+        }
         // Rebuild the cushion after a drain; steady playback takes the cheap primed path.
         maybePrime(format: fmt)
         // Drives the drift resampler's PI loop (self-rate-limited to ~4Hz) + the
