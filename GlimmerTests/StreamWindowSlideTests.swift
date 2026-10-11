@@ -16,7 +16,7 @@ import Testing
 @MainActor
 struct StreamWindowSlideTests {
 
-    @Test(arguments: [CoverSlideEvent.firstFrame, .away, .back])
+    @Test(arguments: [CoverSlideEvent.firstFrame, .away, .back, .close])
     func onlyTheBorderlessCoverSlides(event: CoverSlideEvent) {
         let still: CoverTransition = event == .firstFrame ? .fade : .snap
         #expect(StreamWindow.coverTransition(event, borderlessCover: true, reduceMotion: false) == .slide)
