@@ -1,4 +1,12 @@
-# Command line
+---
+description: Pair, stream, and wake the PC with the glimmer command.
+icon: terminal
+layout:
+  outline:
+    visible: false
+---
+
+# Use the command line
 
 `glimmer` is the app itself, run from a terminal: it pairs, lists, wakes and
 quits headless, and hands a stream to the app so it gets its window. Stream

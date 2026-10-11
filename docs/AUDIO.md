@@ -1,4 +1,12 @@
-# Audio on macOS
+---
+description: Use AirPods, choose a microphone, and recover quiet playback.
+icon: headphones
+layout:
+  outline:
+    visible: false
+---
+
+# Audio and voice chat
 
 Glimmer follows the Mac's selected audio output during a stream. Compatible
 AirPods use spatial playback and head tracking automatically. Change outputs

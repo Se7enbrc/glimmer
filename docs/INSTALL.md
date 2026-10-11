@@ -1,4 +1,12 @@
-# Install
+---
+description: Get Glimmer on your Mac with Homebrew or a download.
+icon: download
+layout:
+  outline:
+    visible: false
+---
+
+# Install Glimmer
 
 macOS 26+, Apple Silicon.
 

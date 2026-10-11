@@ -1,3 +1,9 @@
+---
+description:
+  How Glimmer protects connections, verifies downloads, and handles reports.
+icon: shield-halved
+---
+
 # Security
 
 ## Reporting
