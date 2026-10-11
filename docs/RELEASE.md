@@ -102,8 +102,10 @@ release, use the following acceptance checks:
   switches; check screen-anchored spatial audio with AirPods. Compare with
   Discord's microphone inactive and with a separate microphone selected.
 - Save a custom resolution, reopen its editor and confirm the saved dimensions.
-- Choose Stream → Stop Streaming from fullscreen and from Mini Player. The Mac
-  pointer must be visible, and clicks must work in Glimmer and other apps. Start
+- Choose Stream → Stop Streaming from fullscreen and from Mini Player. Confirm
+  the PC game keeps running, resume it with different resolution/FPS/HDR settings,
+  then use Quit and confirm the named app closes. Check cancellation leaves it
+  running. The Mac pointer must be visible, and clicks must work in Glimmer and other apps. Start
   another stream and confirm input capture works again.
 
 Stop the final session so telemetry writes its scorecard, then review it with

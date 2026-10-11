@@ -61,7 +61,7 @@ struct AppIconsRow: View {
 
     /// What the app that is launching or streaming shows on its own button, so the status
     /// stays on the chip and no second button appears: progress, the way out, the way back.
-    private enum TileState {
+    enum TileState {
         case ready, connecting, reconnecting, hiddenStream
 
         var shortcut: KeyboardShortcut? {
@@ -92,7 +92,8 @@ struct AppIconsRow: View {
     }
 
     /// A hidden stream wins, as the Stream button's roles do; a (re)connect shows once past the hold.
-    private func tileState(_ app: LibraryApp) -> TileState {
+    static func tileState(_ app: LibraryApp, on host: Host, model: AppModel,
+                          connectingShown: Bool) -> TileState {
         guard let attempt = model.lastLaunchAttempt, attempt.app.id == app.id,
               attempt.host.id == host.id else { return .ready }
         if model.isStreaming, model.nativeStreamBackgrounded { return .hiddenStream }
@@ -132,7 +133,7 @@ struct AppIconsRow: View {
     }
 
     private func appTile(_ app: LibraryApp) -> some View {
-        let state = tileState(app)
+        let state = Self.tileState(app, on: host, model: model, connectingShown: connectingShown)
         return Button {
             switch state {
             case .ready: model.requestStream(app: app, on: host)
@@ -143,29 +144,38 @@ struct AppIconsRow: View {
             }
         } label: {
             tileLabel(icon: app.icon, title: app.name, trailing: "play.fill",
-                      trailingText: state == .hiddenStream ? "Back to Stream" : nil,
+                      trailingText: state == .hiddenStream ? "Back to Stream"
+                        : (model.canResume(app, on: host) ? "Resume" : nil),
                       launching: state == .connecting || state == .reconnecting)
         }
         .buttonStyle(AppTileStyle())
         .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
         // Only the streaming app stays live while a stream exists; the others can't start one.
         .disabled(model.isStreaming && state == .ready)
-        .help(state.help ?? (model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)"))
+        .help(state.help ?? (model.isStreaming
+            ? "Finish the current stream first" : model.streamActionTitle(app, on: host)))
         // One name, not glyph + name + play glyph read in turn.
         .accessibilityLabel(app.name)
-        .accessibilityValue(state.spoken.value)
-        .accessibilityHint(state.spoken.hint)
+        .accessibilityValue(model.canResume(app, on: host) ? "Running on \(host.displayName)" : state.spoken.value)
+        .accessibilityHint(model.canResume(app, on: host) ? "Resumes the app" : state.spoken.hint)
+        .contextMenu {
+            if model.runningApp(on: host)?.id == app.id { QuitRunningAppButton(app: app, host: host) }
+        }
     }
 
     private var overflowMenu: some View {
         Menu {
+            if let running = model.runningApp(on: host) {
+                QuitRunningAppButton(app: running, host: host)
+                Divider()
+            }
             ForEach(overflowApps) { app in
                 Button {
                     model.requestStream(app: app, on: host)
                 } label: {
                     // macOS 27 hides a plain menu-item symbol image by default;
                     // these items name an app, so force the icon back on.
-                    Label { Text(app.name) } icon: { app.icon }
+                    Label { Text(model.streamActionTitle(app, on: host)) } icon: { app.icon }
                         .labelStyle(.titleAndIcon)
                 }
                 .disabled(model.isStreaming)
@@ -281,6 +291,12 @@ struct StreamEndedToast: View {
                     Text("Stream ended")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.primary)
+                    if let attempt = model.lastLaunchAttempt,
+                       let running = model.runningApp(on: attempt.host) {
+                        QuitRunningAppButton(app: running, host: attempt.host)
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                    }
                     // Session receipt - one quiet line ("2h 12m · 12 ms
                     // median"), only when the stash kept one (≥5 min sessions).
                     if let line = model.lastSessionReceiptToastLine {
@@ -295,8 +311,8 @@ struct StreamEndedToast: View {
                 .overlay(Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
                 .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
                 .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
-                // One element, one sentence for assistive tech.
-                .accessibilityElement(children: .combine)
+                // Keep the secondary quit button separately reachable by VoiceOver.
+                .accessibilityElement(children: .contain)
                 // Keyed on the receipt so a back-to-back end re-arms the hold
                 // for the new content; the flag reset in stream() is the other
                 // half - the flag actually FALLS between cycles now, so a

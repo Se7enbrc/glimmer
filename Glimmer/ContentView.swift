@@ -13,7 +13,7 @@ enum TakeoverDialogCopy {
         "\(occupantApp ?? "Another app") is running on \(hostName)."
     }
 
-    static let message = "It will quit and your stream will start."
+    static let message = "It will quit and your stream will start. Unsaved progress may be lost."
 }
 
 struct MainWindow: View {

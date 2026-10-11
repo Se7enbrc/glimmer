@@ -35,7 +35,8 @@ extension GlimmerCLI {
             return Exit.usage
         }
         var takeover = command.flags.contains("--force")
-        if !takeover, let occupant = live.flatMap({ AppModel.occupant(of: $0.state) }) {
+        if !takeover, !model.canResume(app, on: host),
+           let occupant = live.flatMap({ AppModel.occupant(of: $0.state) }) {
             // Glimmer's own stream may be what keeps the PC busy; it refuses a second one.
             if runningGlimmer() != nil, let reply = await ask([Key.verb: "check", Key.host: host.id], within: .seconds(2)),
                reply[Key.event] == Event.rejected {
@@ -70,7 +71,8 @@ extension GlimmerCLI {
             printError("\(pc) is running \(occupant). Run again with --force to quit it and start \(app).")
             return false
         }
-        printError("\(pc) is running \(occupant). Quit it and start \(app)? [y/N] ", newline: false)
+        printError("\(pc) is running \(occupant). Unsaved progress may be lost. "
+            + "Quit it and start \(app)? [y/N] ", newline: false)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
         return answer == "y" || answer == "yes"
     }

@@ -38,7 +38,7 @@ extension AppModel {
         // Don't poll while a stream is up - the engine has its own RTT
         // metric, and concurrent /serverinfo calls would tag along with the
         // pairing TLS session and confuse Sunshine's logs.
-        guard !isStreaming else { return }
+        guard !isStreaming, quittingHostID == nil else { return }
         // Both sleep sources must clear before control traffic can resume.
         guard !hostPollingPausedForSleep else { return }
         guard let host = selectedHost else { return }
@@ -241,6 +241,7 @@ extension AppModel {
         updateHostMac(hostID: hostID, mac: info.macAddress, defaults: hostsDefaults)
         var fetchedFor = appListFor
         let running = info.currentGameID
+        RunningAppOwnership.reconcile(pc: hostID, appID: running, defaults: hostsDefaults)
         if Self.needsAppList(runningID: running, known: Set(host.apps.map(\.id)), fetchedFor: appListFor) {
             if await refreshAppList(for: host) { fetchedFor = running }
             if Task.isCancelled { return fetchedFor }

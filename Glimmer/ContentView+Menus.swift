@@ -27,11 +27,6 @@ private struct HostContextMenu: ViewModifier {
     @State private var showPairAgain = false
     @State private var draftName = ""
     @State private var codecPref: HostCodecPreference
-    /// The app the Quit item named when it was chosen; nil when the PC didn't say.
-    @State private var quitApp: String?
-    @State private var showQuitConfirm = false
-    @State private var quitFailure: String?
-    private var quitName: String { quitApp ?? "the running app" }
 
     init(host: Host, asButton: Bool) {
         self.host = host
@@ -77,22 +72,6 @@ private struct HostContextMenu: ViewModifier {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Shown in the launcher and PC list. Leave it empty to show the PC's own name.")
-        }
-        .confirmationDialog(
-            "Quit \(quitName) on \(host.displayName)?",
-            isPresented: $showQuitConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Quit \(quitApp ?? "App")", role: .destructive) { quitRunningApp() }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Anything unsaved in \(quitName) will be lost.")
-        }
-        .alert("Couldn't quit \(quitName)", isPresented: Binding(
-            get: { quitFailure != nil }, set: { if !$0 { quitFailure = nil } })) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(quitFailure ?? "")
         }
         .confirmationDialog(
             "Unpair \(host.displayName)?",
@@ -149,14 +128,8 @@ private struct HostContextMenu: ViewModifier {
             Label("Pair Again…", systemImage: "key")
         }
         .disabled(isStreamingThisPC)
-        // Only while the chip says an app is running; `app` is nil when the PC didn't name it.
-        if !isStreamingThisPC, case .streamingElsewhere(let app) = model.polledChip(for: host) {
-            Button {
-                quitApp = app
-                showQuitConfirm = true
-            } label: {
-                Label("Quit \(app ?? "the Running App") on \(host.displayName)…", systemImage: "xmark.circle")
-            }
+        if let running = model.runningApp(on: host) {
+            QuitRunningAppButton(app: running, host: host)
         }
         Button(role: .destructive) {
             showUnpairConfirm = true
@@ -164,16 +137,6 @@ private struct HostContextMenu: ViewModifier {
             Label("Unpair…", systemImage: "minus.circle")
         }
         .disabled(isStreamingThisPC)
-    }
-
-    private func quitRunningApp() {
-        Task {
-            do {
-                try await model.quitRunningApp(on: host)
-            } catch {
-                quitFailure = AppModel.quitFailureMessage(for: error, hostName: host.displayName)
-            }
-        }
     }
 }
 

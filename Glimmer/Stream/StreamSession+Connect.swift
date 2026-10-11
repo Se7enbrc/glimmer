@@ -188,27 +188,16 @@ extension StreamSession {
             }
             try checkAttempt(deadline: deadline)
         } catch {
-            // startConnection failed (RTSP handshake, control connect, etc., or
-            // the native backend's LI_ERR_UNSUPPORTED stub). We've already told
-            // the host to /launch, so it now thinks a session is active - clean
-            // up so the next attempt isn't blocked.
+            // A failed transport leaves the PC app available for a later resume.
             let code: Int32
             if case let StreamError.sessionFailed(failureCode) = error {
                 code = failureCode
             } else {
                 code = -1
             }
-            log.error("startConnection failed with \(code) - cancelling host session")
-            // On a RECONNECT attempt, DON'T run the full stop() - that would
-            // close the window, drop the decoder (blanking the frozen frame),
-            // and finish the event stream (bouncing to the launcher), defeating
-            // the whole stall→resume. Just cancel the failed launch on the host
-            // and throw so the reconnect driver counts the miss and retries (or
-            // gives up to a real teardown after the cap). The initial-connect
-            // path keeps its original behavior: latch connect-failed + stop().
+            log.error("startConnection failed with \(code) - disconnecting")
+            // Keep the frozen frame and event stream while the reconnect driver retries.
             if duringReconnect {
-                try checkAttempt(deadline: deadline)
-                try? await network.cancel()
                 try checkAttempt(deadline: deadline)
                 throw StreamError.sessionFailed(code)
             }
