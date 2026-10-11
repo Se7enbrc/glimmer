@@ -204,9 +204,10 @@ final class InputBatcher: @unchecked Sendable {
             let safeButtons = buttons < 0 ? (buttons & 0xFFFF) : buttons
             let previous = controllers[slot]
             let edge = previous.buttons != safeButtons || (previous.mask != mask && mask & (1 << slot) == 0)
-                || previous.analog.leftTrigger != analog.leftTrigger
-                || previous.analog.rightTrigger != analog.rightTrigger
-                || (safeButtons == 0 && analog.leftStickX == 0 && analog.leftStickY == 0
+                || (previous.analog.leftTrigger == 0) != (analog.leftTrigger == 0)
+                || (previous.analog.rightTrigger == 0) != (analog.rightTrigger == 0)
+                || (safeButtons == 0 && analog.leftTrigger == 0 && analog.rightTrigger == 0
+                    && analog.leftStickX == 0 && analog.leftStickY == 0
                     && analog.rightStickX == 0 && analog.rightStickY == 0)
             if edge, previous.dirty {
                 // Obsolete axes cannot prevent a button edge from reaching the reliable channel.

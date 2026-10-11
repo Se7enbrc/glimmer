@@ -359,6 +359,7 @@
 		DEC0DE202609222000000006 /* HostReachabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222000000005 /* HostReachabilityTests.swift */; };
 		DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */; };
 		4B4559555000000000000006 /* InputReleaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B4559555000000000000007 /* InputReleaseTests.swift */; };
+		5245434F5645525900000001 /* InputRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5245434F5645525900000002 /* InputRecoveryTests.swift */; };
 		DEC0DE202609221400000007 /* StreamWindowFirstFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221400000008 /* StreamWindowFirstFrameTests.swift */; };
 		DEC0DE202610100000000001 /* StreamWindowSlideTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100000000002 /* StreamWindowSlideTests.swift */; };
 		B1AC20261010000000000003 /* StreamWindowCloseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AC20261010000000000004 /* StreamWindowCloseTests.swift */; };
@@ -897,6 +898,7 @@
 		DEC0DE202609222000000005 /* HostReachabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostReachabilityTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandKeyUpTests.swift"; sourceTree = "<group>"; };
 		4B4559555000000000000007 /* InputReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InputReleaseTests.swift"; sourceTree = "<group>"; };
+		5245434F5645525900000002 /* InputRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InputRecoveryTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609221400000008 /* StreamWindowFirstFrameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamWindowFirstFrameTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202610100000000002 /* StreamWindowSlideTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamWindowSlideTests.swift"; sourceTree = "<group>"; };
 		B1AC20261010000000000004 /* StreamWindowCloseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamWindowCloseTests.swift"; sourceTree = "<group>"; };
@@ -1480,6 +1482,7 @@
 				DEC0DE202609222000000005 /* HostReachabilityTests.swift */,
 				DEC0DE2026091300000000B6 /* CommandKeyUpTests.swift */,
 				4B4559555000000000000007 /* InputReleaseTests.swift */,
+				5245434F5645525900000002 /* InputRecoveryTests.swift */,
 				DEC0DE202609221400000008 /* StreamWindowFirstFrameTests.swift */,
 				DEC0DE202610100000000002 /* StreamWindowSlideTests.swift */,
 				B1AC20261010000000000004 /* StreamWindowCloseTests.swift */,
@@ -2099,6 +2102,7 @@
 				DEC0DE202609222000000006 /* HostReachabilityTests.swift in Sources */,
 				DEC0DE2026091300000000B5 /* CommandKeyUpTests.swift in Sources */,
 				4B4559555000000000000006 /* InputReleaseTests.swift in Sources */,
+				5245434F5645525900000001 /* InputRecoveryTests.swift in Sources */,
 				DEC0DE202609221400000007 /* StreamWindowFirstFrameTests.swift in Sources */,
 				DEC0DE202610100000000001 /* StreamWindowSlideTests.swift in Sources */,
 				B1AC20261010000000000003 /* StreamWindowCloseTests.swift in Sources */,

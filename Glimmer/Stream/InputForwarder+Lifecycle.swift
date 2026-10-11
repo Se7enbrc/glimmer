@@ -178,12 +178,13 @@ extension InputForwarder {
         defer { publishInputSnapshot() }
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         let was = isReady
-        if !ready {
-            releaseControllerTouches()
-            releases.releaseAll(connectionLost: true)
-        }
+        if !ready { releaseControllerTouches() }
         isReady = ready
-        if !ready { inputOwnershipLost(reason: "connection lost") }
+        if !ready {
+            inputOwnershipLost(reason: "connection lost")
+            releases.releaseAll(connectionLost: true)
+            updateReconciliationTimer()
+        }
         updateControllerBackgroundEvents()
         if ready != was {
             log.info("Input forwarding ready=\(ready, privacy: .public)")

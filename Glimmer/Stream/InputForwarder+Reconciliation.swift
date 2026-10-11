@@ -5,8 +5,12 @@ import AppKit
 import CoreGraphics
 
 extension InputForwarder {
-    func noteInputEvent(now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
-        defer { lastInputEventTime = now }
+    func noteInputEvent(keyCode: UInt16? = nil, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        if let keyCode { missingPhysicalKeys.remove(keyCode) }
+        defer {
+            lastInputEventTime = now
+            if let keyCode { missingPhysicalKeys.remove(keyCode) }
+        }
         if let lastInputEventTime, now - lastInputEventTime > 0.1 { reconcilePhysicalInputs() }
     }
 
@@ -15,22 +19,35 @@ extension InputForwarder {
         guard !physicalKeys.isEmpty || !heldModifierVKs.isEmpty || !heldMouseButtons.isEmpty
             || !releases.pending.isEmpty else { return }
         let before = physicalKeys.count + heldModifierVKs.count + heldMouseButtons.count
-        for physical in Array(physicalKeys.keys) where !physicalKeyState(physical) { releaseKey(physical) }
-        let flags = currentModifierFlags()
-        let missing = ModifierSides.released(from: heldModifierVKs, in: flags, includeCommand: forwardsCommand)
-        for vk in missing.sorted() { sendModifier(vk, down: false, modByte: 0) }
-        heldModifierVKs.subtract(missing)
+        reconcileKeyboard()
         let mouse = currentMouseButtons()
-        for button in heldMouseButtons where mouse & Self.mouseMask(button) == 0 { releaseMouse(button) }
+        for (physical, button) in physicalMouseButtons where (0...4).contains(physical)
+            && mouse & (1 << physical) == 0 {
+            physicalMouseButtons[physical] = nil
+            if !physicalMouseButtons.values.contains(button) { releaseMouse(button) }
+        }
         let count = before - physicalKeys.count - heldModifierVKs.count - heldMouseButtons.count
         if count > 0 { releases.reconciledCount += count; reportReleaseRecovery() }
         flushPendingReleases()
     }
 
-    private static func mouseMask(_ button: Int32) -> Int {
-        // Sunshine numbers left/middle/right as 1/2/3; AppKit uses left/right/middle bits.
-        let index = [1: 0, 2: 2, 3: 1, 4: 3, 5: 4][button] ?? 0
-        return 1 << index
+    private func reconcileKeyboard() {
+        guard let window, let inputView, window.isKeyWindow, window.firstResponder === inputView,
+              keyboardMonitoringGranted() else {
+            missingPhysicalKeys.removeAll()
+            missingModifierVKs.removeAll()
+            return
+        }
+        // Permission and focus make samples meaningful; a second miss rules out transient state lag.
+        let missing = Set(physicalKeys.keys.filter { !physicalKeyState($0) })
+        for physical in missing.intersection(missingPhysicalKeys) { releaseKey(physical) }
+        missingPhysicalKeys = missing.intersection(physicalKeys.keys)
+        let modifiers = ModifierSides.released(from: heldModifierVKs, in: currentModifierFlags(),
+                                               includeCommand: forwardsCommand)
+        let released = modifiers.intersection(missingModifierVKs)
+        for vk in released.sorted() { sendModifier(vk, down: false, modByte: 0) }
+        heldModifierVKs.subtract(released)
+        missingModifierVKs = modifiers.intersection(heldModifierVKs)
     }
 
     func updateReconciliationTimer() {

@@ -61,9 +61,13 @@ extension InputForwarder {
         log.info("Pasting \(text.utf8.count, privacy: .public) bytes as text")
         let generation = inputGeneration
         return Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(50))
-            guard !Task.isCancelled, let self, self.isReady, self.inputGeneration == generation else { return }
-            self.record("LiSendUtf8TextEvent", backend.sendUtf8Text(text))
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+                guard let self, self.isReady, self.inputGeneration == generation else { return }
+                guard self.flushPendingReleases() else { continue }
+                self.record("LiSendUtf8TextEvent", backend.sendUtf8Text(text))
+                return
+            }
         }
     }
 }

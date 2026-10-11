@@ -14,6 +14,7 @@ struct InputReleaseTests {
         let backend = InputRecordingBackend()
         input.backend = backend
         input.isReady = true
+        input.keyboardMonitoringGranted = { true }
         input.physicalKeyState = { _ in true }
         input.currentModifierFlags = { [] }
         input.currentMouseButtons = { 0 }
@@ -26,6 +27,14 @@ struct InputReleaseTests {
                                      timestamp: 1, windowNumber: 0, context: nil,
                                      characters: "w", charactersIgnoringModifiers: "w",
                                      isARepeat: false, keyCode: UInt16(code)))
+    }
+
+    private func focus(_ input: InputForwarder, _ view: StreamInputView) -> InputReleaseWindow {
+        let window = InputReleaseWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
+        window.responder = view
+        input.window = window
+        input.inputView = view
+        return window
     }
 
     private var down: Int8 { Int8(StreamProtocol.KEY_ACTION_DOWN) }
@@ -119,8 +128,12 @@ struct InputReleaseTests {
     @Test(arguments: [false, true])
     func missingUpIsRepairedByPeriodicCheckOrMainThreadGap(gap: Bool) throws {
         let (input, backend, view) = setup()
+        let window = focus(input, view)
+        defer { withExtendedLifetime(window) {} }
         input.streamView(view, handleKeyDown: try key(.keyDown))
         input.physicalKeyState = { _ in false }
+        input.reconcilePhysicalInputs()
+        #expect(backend.keyboard.map(\.action) == [down])
         if gap {
             input.lastInputEventTime = 1
             input.noteInputEvent(now: 1.101)
@@ -135,7 +148,10 @@ struct InputReleaseTests {
 
     @Test func physicalModifierFlagsRepairMissingUp() throws {
         let (input, backend, view) = setup()
+        let window = focus(input, view)
+        defer { withExtendedLifetime(window) {} }
         input.streamView(view, handleFlagsChanged: try key(.flagsChanged, code: kVK_Shift, flags: .shift))
+        input.reconcilePhysicalInputs()
         input.reconcilePhysicalInputs()
         #expect(backend.keyboard.map(\.action) == [down, up])
         #expect(backend.keyboard.first?.keyCode == backend.keyboard.last?.keyCode)
@@ -169,7 +185,7 @@ struct InputReleaseTests {
         #expect(backend.pointer.count == 2)
     }
 
-    @Test func controllerFailureAndReconnectSendNeutralBeforeFreshButtons() {
+    @Test func controllerFailureAndReconnectDiscardOldNeutralFrames() {
         let (input, backend, _) = setup()
         input.gamepadMask = 1
         input.sendControllerState(slot: 0, buttons: StreamProtocol.A_FLAG,
@@ -184,7 +200,7 @@ struct InputReleaseTests {
         input.sendControllerState(slot: 0, buttons: StreamProtocol.B_FLAG,
                                   analog: InputForwarder.neutralControllerAnalog)
         #expect(backend.calls.map(\.buttons) == [StreamProtocol.A_FLAG])
-        #expect(replacement.calls.map(\.buttons) == [0, StreamProtocol.B_FLAG])
+        #expect(replacement.calls.map(\.buttons) == [StreamProtocol.B_FLAG])
     }
 
     @Test func quitChordDoesNotWithholdUnrelatedRelease() {
@@ -232,6 +248,8 @@ struct InputReleaseTests {
                       NSApplication.didBecomeActiveNotification])
     func wakeAndReactivationReconcileBeforeAnotherEvent(name: Notification.Name) throws {
         let (input, backend, view) = setup()
+        let window = focus(input, view)
+        defer { withExtendedLifetime(window) {} }
         input.installInputRecoveryObservers()
         defer { input.removeInputRecoveryObservers() }
         input.streamView(view, handleKeyDown: try key(.keyDown))
@@ -239,19 +257,24 @@ struct InputReleaseTests {
         let center = name == NSApplication.didBecomeActiveNotification
             ? NotificationCenter.default : NSWorkspace.shared.notificationCenter
         center.post(name: name, object: nil)
+        input.reconcilePhysicalInputs()
         #expect(backend.keyboard.map(\.action) == [down, up])
     }
 
     @Test func refocusRepairsMissingReleaseAndUnfocusedDownsStayLocal() throws {
         let (input, backend, view) = setup()
         let window = InputReleaseWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
+        input.window = window
+        input.inputView = view
+        window.responder = view
         input.installFocusObservers(for: window)
         defer { input.removeFocusObservers() }
         input.streamView(view, handleKeyDown: try key(.keyDown))
         input.physicalKeyState = { _ in false }
         NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+        input.reconcilePhysicalInputs()
         #expect(backend.keyboard.map(\.action) == [down, up])
-        input.window = window
+        window.responder = nil
         input.streamView(view, handleKeyDown: try key(.keyDown, code: kVK_ANSI_A))
         #expect(backend.keyboard.count == 2)
     }
@@ -374,6 +397,8 @@ struct InputReleaseTests {
 
 @MainActor
 private final class InputReleaseWindow: NSWindow {
+    weak var responder: NSResponder?
+    override var firstResponder: NSResponder? { responder }
     override var isKeyWindow: Bool { true }
 }
 

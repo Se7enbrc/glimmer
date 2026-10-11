@@ -57,6 +57,8 @@ final class InputRecordingBackend: StreamingBackend {
     }
     private let stoppedControllerSends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
     var controllersAtStop: [ControllerSend] { stoppedControllerSends.withLock { $0 } }
+    private let controllerOrder = OSAllocatedUnfairLock(initialState: [String]())
+    var controllerEvents: [String] { controllerOrder.withLock { $0 } }
     private let sends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
 
     private let textSends = OSAllocatedUnfairLock(initialState: [String]())
@@ -135,13 +137,18 @@ final class InputRecordingBackend: StreamingBackend {
     }
     func sendMultiController(num: Int16, mask: Int16, buttons: Int32, analog: GamepadAnalog) -> Int32 {
         guard inputResult == 0 else { return inputResult }
+        controllerOrder.withLock { $0.append("state") }
         sends.withLock { $0.append(ControllerSend(num: num, mask: mask, buttons: buttons, analog: analog)) }
         return 0
     }
     func sendControllerArrival(
         num: UInt8, mask: UInt16, type: UInt8,
         supportedButtons: UInt32, caps: UInt16
-    ) -> Int32 { 0 }
+    ) -> Int32 {
+        guard inputResult == 0 else { return inputResult }
+        controllerOrder.withLock { $0.append("arrival") }
+        return 0
+    }
     func sendControllerTouch(
         num: UInt8, eventType: UInt8, touchpadIndex: UInt8,
         pointerId: UInt32, x: Float, y: Float, pressure: Float

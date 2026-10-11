@@ -51,7 +51,7 @@ extension EnetControlChannel {
                 channel: channel, label: "INPUT", requireConnection: true, timing: timing)
             return true
         } catch {
-            Diag.error("ENet input send failed (ch \(channel)): \(error, privacy: .private)", Self.logCategory)
+            reportInputFailure(error, channel: channel)
             return false
         }
     }
@@ -73,10 +73,19 @@ extension EnetControlChannel {
                 channel: channel, label: "INPUT_UNREL")
             return true
         } catch {
-            Diag.error("ENet unreliable input send failed (ch \(channel)): \(error, privacy: .private)",
-                       Self.logCategory)
+            reportInputFailure(error, channel: channel)
             return false
         }
+    }
+
+    private func reportInputFailure(_ error: Error, channel: UInt8) {
+        let first = withState {
+            let first = !inputFailureReported
+            inputFailureReported = true
+            return first
+        }
+        guard first else { return }
+        Diag.error("ENet input send failed (ch \(channel)): \(error, privacy: .private)", Self.logCategory)
     }
 
     // MARK: - Public client→host control (IDR / RFI / LTR)
@@ -206,13 +215,13 @@ extension EnetControlChannel {
     /// Nonces are consumed even on failure, and the outbound lock preserves commit/send order.
     @discardableResult
     func sendEncryptedControl(type: UInt16, payload: [UInt8], channel requested: UInt8,
-                              label: String, requireConnection: Bool = false, timing: InputTimingBatch? = nil,
-                              seal: ((UInt16, [UInt8], UInt32) throws -> [UInt8])? = nil) throws -> UInt16 {
+                              label: String, requireConnection: Bool = false,
+                              timing: InputTimingBatch? = nil) throws -> UInt16 {
         outboundLock.lock()
         defer { outboundLock.unlock() }
         if requireConnection {
             guard !interrupted.isSet, !withState({ disconnected }),
-                  inputConnectionAvailable?() ?? (currentConnection() != nil) else {
+                  currentConnection() != nil else {
                 throw EnetError.disconnected
             }
         }
@@ -225,7 +234,7 @@ extension EnetControlChannel {
         }
         let encrypted: [UInt8]
         do {
-            encrypted = try seal?(type, payload, seq) ?? crypto.seal(type: type, payload: payload, seq: seq)
+            encrypted = try sealControl(crypto, type, payload, seq)
         } catch {
             throw EnetError.startFailed("\(label) encrypt: \(error)")
         }

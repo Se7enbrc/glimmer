@@ -7,21 +7,18 @@ import Foundation
 struct RunningAppOwnership: Codable, Equatable {
     let appID: Int
     let clientID: String
-    let recordedAt: Date
 
-    static func load(pc: String, defaults: UserDefaults = .standard, now: Date = Date()) -> Self? {
+    static func load(pc: String, defaults: UserDefaults = .standard) -> Self? {
         guard let data = defaults.data(forKey: key(pc)),
-              let owner = try? JSONDecoder().decode(Self.self, from: data),
-              now.timeIntervalSince(owner.recordedAt) >= 0,
-              now.timeIntervalSince(owner.recordedAt) < 8 * 60 * 60 else { return nil }
+              let owner = try? JSONDecoder().decode(Self.self, from: data) else { return nil }
         return owner
     }
 
     static func save(pc: String, appID: Int, clientID: String,
-                     defaults: UserDefaults = .standard, now: Date = Date()) {
+                     defaults: UserDefaults = .standard) {
         guard !pc.isEmpty, !clientID.isEmpty,
               let data = try? JSONEncoder().encode(
-                Self(appID: appID, clientID: clientID, recordedAt: now)) else { return }
+                Self(appID: appID, clientID: clientID)) else { return }
         defaults.set(data, forKey: key(pc))
     }
 

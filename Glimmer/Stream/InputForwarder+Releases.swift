@@ -41,6 +41,13 @@ struct InputReleaseLedger {
             keyReleaseModifiers.removeAll()
         }
         for input in connectionInputs { release(input) }
+        if connectionLost {
+            // A replacement announces pads before its live-state resync, never an old neutral frame.
+            held = held.filter { if case .controller = $0 { return false }; return true }
+            pending.removeAll { if case .controller = $0 { return true }; return false }
+            controllerRemovals.removeAll()
+            connectionInputs.removeAll()
+        }
     }
 
     mutating func releaseKeyboardAndMouse() {
@@ -55,7 +62,6 @@ struct InputReleaseLedger {
         if case .key(let key) = input { keyReleaseModifiers[key] = nil }
         if case .controller(let slot) = input { controllerRemovals.remove(slot) }
         pending.removeAll { $0 == input }
-        remember(input)
     }
 }
 
@@ -95,6 +101,7 @@ extension InputForwarder {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         guard let key = physicalKeys.removeValue(forKey: physical) else { return }
         heldKeys.remove(key)
+        missingPhysicalKeys.remove(physical)
         releases.release(.key(key), modifiers: modifiers)
         flushPendingReleases()
     }
@@ -102,6 +109,7 @@ extension InputForwarder {
     func releaseMouse(_ button: Int32) {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         heldMouseButtons.remove(button)
+        physicalMouseButtons = physicalMouseButtons.filter { $0.value != button }
         releases.release(.mouse(button))
         flushPendingReleases()
     }
@@ -112,6 +120,9 @@ extension InputForwarder {
         releases.releaseKeyboardAndMouse()
         heldKeys.removeAll()
         physicalKeys.removeAll()
+        missingPhysicalKeys.removeAll()
+        missingModifierVKs.removeAll()
+        physicalMouseButtons.removeAll()
         heldMouseButtons.removeAll()
         heldModifierVKs.removeAll()
         modifiersNeedResync = true

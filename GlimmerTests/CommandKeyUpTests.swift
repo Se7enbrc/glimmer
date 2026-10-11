@@ -293,6 +293,7 @@ struct ModifiedEscapeHoldTests {
         let forwarder = capturedForwarder()
         let backend = InputRecordingBackend()
         forwarder.backend = backend
+        forwarder.isReady = true
         let view = StreamInputView()
         defer { forwarder.cancelEscapeHold() }
         forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Escape))

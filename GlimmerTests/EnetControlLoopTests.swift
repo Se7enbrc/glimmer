@@ -256,11 +256,15 @@ struct EnetControlLoopTests {
         #expect(Self.commands(dead).isEmpty)
     }
     @Test func sealAndMtuFailuresCannotLeaveReliableSequenceHoles() throws {
-        let channel = try EnetFixture.channel()
-        #expect(throws: EnetError.self) {
-            try channel.sendEncryptedControl(type: CtrlV2.inputData, payload: [1], channel: 2, label: "test",
-                                             seal: { _, _, _ in throw EnetError.mtuExceeded })
-        }
+        let attempts = AtomicCounter()
+        let channel = EnetControlChannel(host: .ipv4(.loopback), port: 9, controlConnectData: 0,
+            crypto: try ControlCrypto(rikey: EnetFixture.key), sealControl: { crypto, type, payload, seq in
+                attempts.increment()
+                if attempts.value == 1 { throw EnetError.mtuExceeded }
+                return try crypto.seal(type: type, payload: payload, seq: seq)
+            })
+        EnetFixture.connect(channel)
+        #expect(!channel.sendInputPacket([1], channel: 2))
         #expect(!channel.sendInputPacket([UInt8](repeating: 0, count: Int(Enet.defaultMTU)), channel: 2))
         #expect(channel.sendInputPacket([3], channel: 2))
         let sent = try #require(channel.sentReliable.first)

@@ -361,7 +361,8 @@ final class EnetControlChannel: @unchecked Sendable {
 
     let stateLock = NSLock()
     let outboundLock = NSLock()
-    let inputConnectionAvailable: (@Sendable () -> Bool)?
+    let sealControl: @Sendable (ControlCrypto, UInt16, [UInt8], UInt32) throws -> [UInt8]
+    var inputFailureReported = false
     let interrupted = ManagedAtomicFlag()
 
     /// Fired once when the peer dies (declarePeerDead): host TERMINATION or
@@ -447,12 +448,15 @@ final class EnetControlChannel: @unchecked Sendable {
     let startInstant = DispatchTime.now()
 
     init(host: NWEndpoint.Host, port: UInt16, controlConnectData: UInt32,
-         crypto: ControlCrypto, inputConnectionAvailable: (@Sendable () -> Bool)? = nil) {
+         crypto: ControlCrypto,
+         sealControl: @escaping @Sendable (ControlCrypto, UInt16, [UInt8], UInt32) throws -> [UInt8] = {
+             try $0.seal(type: $1, payload: $2, seq: $3)
+         }) {
         self.host = host
         self.port = port
         self.controlConnectData = controlConnectData
         self.crypto = crypto
-        self.inputConnectionAvailable = inputConnectionAvailable
+        self.sealControl = sealControl
         self.connectID = UInt32.random(in: UInt32.min...UInt32.max)
     }
 

@@ -205,18 +205,18 @@ UI lights up live.
    throw: the launcher's pair sheet runs first, not us.
 2. **Launch, resume, or confirmed takeover**: idle PCs get `/launch`. A matching
    app previously launched by this Mac gets `/resume`, with ownership retained
-   across Glimmer sessions in `RunningAppOwnership` for eight hours after
-   recording; expired or missing ownership requires takeover confirmation.
-   Sunshine's `nvhttp.cpp` `resume()` calls `make_launch_session()` with the new
-   mode, FPS and HDR request, and configures the display when no streaming
-   session is active. Another app or unknown ownership needs takeover
-   confirmation, then `/cancel`, an idle poll (up to 5 s for Undo commands), and
-   `/launch`. A failed resume keeps the underlying recovery action, or offers a
-   confirmed quit and relaunch for other failures; a 503 “No running app”
-   launches fresh without confirmation. It never automatically cancels the game,
-   and observing idle or another app clears ownership. Sunshine exposes no
-   owner, so same-app takeovers between observations remain undetectable within
-   those eight hours.
+   across Glimmer sessions in `RunningAppOwnership` with no time limit; missing
+   ownership requires takeover confirmation. Sunshine's `nvhttp.cpp` `resume()`
+   calls `make_launch_session()` with the new mode, FPS and HDR request, and
+   configures the display when no streaming session is active. Another app or
+   unknown ownership needs takeover confirmation, then `/cancel`, an idle poll
+   (up to 5 s for Undo commands), and `/launch`. A failed resume keeps the
+   underlying recovery action, or offers a confirmed quit and relaunch for other
+   failures; a 503 “No running app” launches fresh without confirmation. It
+   never automatically cancels the game, and observing idle or another app in
+   the status poller, or unpairing the PC, clears ownership. Sunshine exposes no
+   owner, so another device relaunching the same game while Glimmer was closed
+   remains undetectable.
 3. **Build `BackendStreamConfig`**: `width`, `height`, `fps`, `bitrate`, the
    `supportedVideoFormats` codec bitmask, `colorSpace`, `colorRange`,
    `encryptionFlags`. The remote-input AES key and IV are copied in from the
@@ -440,10 +440,14 @@ readiness loss and `detach()`. Physical ownership is separate from the release
 ledger, which retains each key's down-time wire mapping. Failed releases remain
 pending until ENet accepts them, and form a barrier before new presses. A
 replacement connection repeats releases that the old one may not have ACKed; it
-never replays old presses. Key events after a 100 ms gap and a 250 ms timer
-while inputs are held reconcile missing ups against current macOS state.
-Recovery, refocus and wake run the same reconciliation. Controller button edges
-and neutral frames also return channel acceptance; only replaceable axes merge.
+never replays old presses, and retires that history at the connection boundary.
+Key events after a 100 ms gap and a 250 ms timer reconcile missing ups only with
+Input Monitoring granted and the stream view first responder in the key window.
+Two consecutive missing samples without a key event are required. Mouse checks
+use original button numbers 0–4; extra buttons wait for their real up events.
+Recovery, refocus and wake run the same reconciliation. Controller button edges,
+trigger zero crossings and neutral frames return channel acceptance; replaceable
+axes and trigger travel merge. Paste waits for pending releases to be accepted.
 
 The Cmd key reports as `VK_LWIN` / `VK_RWIN`. By default
 (`captureSysKeys == false`) the InputForwarder drops Cmd-bearing keyDown and
@@ -461,18 +465,19 @@ builds silently drop multi-controller events without it). Sunshine keeps a
 paired client's virtual pads across a reconnect and ignores an arrival for a
 slot it holds, so the forwarder remembers each slot's last arrival
 (`announcedControllers`) and, when input is ready again, removes every slot
-whose pad left or changed before it replays the arrivals. An entry is cleared
-only there, since a removal sent into a link that has already died is lost. Each
-controller has a serial `.userInteractive` handler queue. `InputCore` owns
-forwarding snapshots and the shared release ledger under a recursive lock, so
-capture, focus changes and pending releases remain ordered. AppKit responders
-stay on main; keyboard/button encoding runs on the sender. Controller motion
-sampling is also lock-protected. UI and lifecycle publications stay on main.
-State updates go through `sendMultiController`. Feedback from the PC comes back
-through `ConnectionEvents`: rumble (`0x010b`), trigger rumble (`0x5500`),
-motion-sensor enable (`0x5501`, answered with `sendControllerMotion` samples),
-and RGB lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion` and
-`ControllerBattery` own the actuator and sampler sides.
+whose pad left or changed before it replays the arrivals. Old controller release
+frames are discarded on connection loss so arrivals precede live-state resync.
+An entry is cleared only there, since a removal sent into a link that has
+already died is lost. Each controller has a serial `.userInteractive` handler
+queue. `InputCore` owns forwarding snapshots and the shared release ledger under
+a recursive lock, so capture, focus changes and pending releases remain ordered.
+AppKit responders stay on main; keyboard/button encoding runs on the sender.
+Controller motion sampling is also lock-protected. UI and lifecycle publications
+stay on main. State updates go through `sendMultiController`. Feedback from the
+PC comes back through `ConnectionEvents`: rumble (`0x010b`), trigger rumble
+(`0x5500`), motion-sensor enable (`0x5501`, answered with `sendControllerMotion`
+samples), and RGB lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion`
+and `ControllerBattery` own the actuator and sampler sides.
 
 Mini Player keeps controller input active when another Mac app has focus.
 Keyboard and mouse still release on focus loss. A shared ownership set manages

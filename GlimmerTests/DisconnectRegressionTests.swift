@@ -83,7 +83,7 @@ struct DisconnectRegressionTests {
         #expect(store.defaults.data(forKey: "runningAppOwner.pc") == nil)
     }
 
-    @Test func ownershipOlderThanEightHoursIsNotTrusted() throws {
+    @Test func ownershipOlderThanEightHoursIsRetained() throws {
         let store = try IsolatedStore("owner-expiry-regression")
         defer { store.remove() }
         let data = try JSONSerialization.data(withJSONObject: [
@@ -92,7 +92,7 @@ struct DisconnectRegressionTests {
         ])
         store.defaults.set(data, forKey: "runningAppOwner.pc")
         store.defaults.set(data, forKey: "glimmer.runningAppOwner.pc")
-        #expect(RunningAppOwnership.load(pc: "pc", defaults: store.defaults) == nil)
+        #expect(RunningAppOwnership.load(pc: "pc", defaults: store.defaults)?.appID == 7)
     }
 
     @MainActor @Test(arguments: [false, true])
@@ -136,35 +136,44 @@ struct DisconnectRegressionTests {
                 == (backgrounded ? .hiddenStream : .ready))
     }
 
-    @Test(arguments: [-1.0, 0, 28_799, 28_800, 28_801] as [TimeInterval])
-    func ownershipExpiresAtExactlyEightHours(age: TimeInterval) throws {
+    @Test(arguments: [-1.0, 0, 28_799, 28_800, 28_801, 31_536_000] as [TimeInterval])
+    func ownershipHasNoClockBasedExpiry(age: TimeInterval) throws {
         let store = try IsolatedStore("owner-boundary-regression")
         defer { store.remove() }
-        let recorded = Date(timeIntervalSinceReferenceDate: 800_000_000)
-        RunningAppOwnership.save(pc: "pc", appID: 7, clientID: "mac", defaults: store.defaults, now: recorded)
-        let owner = RunningAppOwnership.load(pc: "pc", defaults: store.defaults, now: recorded.addingTimeInterval(age))
-        #expect((owner != nil) == (age >= 0 && age < 8 * 3600))
+        let data = try JSONSerialization.data(withJSONObject: [
+            "appID": 7, "clientID": "mac",
+            "recordedAt": Date().addingTimeInterval(-age).timeIntervalSinceReferenceDate
+        ])
+        store.defaults.set(data, forKey: "glimmer.runningAppOwner.pc")
+        let owner = RunningAppOwnership.load(pc: "pc", defaults: store.defaults)
+        #expect(owner?.appID == 7)
     }
 
     @Test(arguments: [false, true])
-    func expiredOrMissingOwnershipRequiresTakeover(expired: Bool) async throws {
+    func onlyMissingOwnershipRequiresTakeover(remembered: Bool) async throws {
         let store = try IsolatedStore("owner-takeover-regression")
         defer { store.remove() }
         let server = SessionFlow.pairedPC()
-        if expired {
+        if remembered {
             RunningAppOwnership.save(pc: server.uniqueId, appID: 7, clientID: FakeSunshine.clientUniqueID,
-                                     defaults: store.defaults, now: Date().addingTimeInterval(-8 * 3600))
+                                     defaults: store.defaults)
         }
-        let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.running(7)]])
+        let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.running(7)], "resume": [SessionFlow.launched]])
         let session = StreamSession(backend: InputRecordingBackend(),
                                     ownershipStore: RunningAppOwnershipStore(store.defaults))
         await session.prepareLaunchFlow(server: server)
         let client = sunshine.client(server)
         let info = try await session.fetchAndVerifyServerInfo(network: client, pcName: "Tower")
-        await #expect(throws: TakeoverRequired.self) {
+        if remembered {
             _ = try await session.launchWithDeadline(network: client, appID: 7, config: SessionFlow.config, info: info)
+            #expect(sunshine.paths == ["serverinfo", "resume"])
+        } else {
+            await #expect(throws: TakeoverRequired.self) {
+                _ = try await session.launchWithDeadline(network: client, appID: 7,
+                                                         config: SessionFlow.config, info: info)
+            }
+            #expect(sunshine.paths == ["serverinfo"])
         }
-        #expect(sunshine.paths == ["serverinfo"])
     }
 
     @MainActor @Test func quitStartingDuringTheRouteWaitRejectsTheCommand() async throws {

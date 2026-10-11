@@ -27,7 +27,7 @@ extension InputForwarder: StreamInputViewDelegate {
         InputTimingContext.begin(source: .keyboard, timestamp: event.timestamp)
         defer { InputTimingContext.end() }
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
-        noteInputEvent()
+        noteInputEvent(keyCode: event.keyCode)
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         releaseStaleModifiers(for: event)
         noteEscapeModifiersChanged(event.modifierFlags)
@@ -124,7 +124,7 @@ extension InputForwarder: StreamInputViewDelegate {
             noteUnmappedKey(event.keyCode)
             return
         }
-        if modifiersNeedResync { syncModifiers(to: event.modifierFlags) }
+        if modifiersNeedResync, !syncModifiers(to: event.modifierFlags) { return }
         guard physicalKeys[event.keyCode] == nil else { return }
         physicalKeys[event.keyCode] = key
         releases.hold(.key(key))
@@ -144,7 +144,7 @@ extension InputForwarder: StreamInputViewDelegate {
         defer { InputTimingContext.end() }
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         if let key = physicalKeys[event.keyCode] { InputTimingContext.allowRelease(.key(key)) }
-        noteInputEvent()
+        noteInputEvent(keyCode: event.keyCode)
         guard !isDuplicateKeyUp(event) else { return }
         // Cancel a pending Esc hold FIRST, ahead of every gate below: a tap
         // must behave exactly as it did before the gesture existed, including
@@ -155,6 +155,8 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent) {
+        missingModifierVKs.removeAll()
+        defer { missingModifierVKs.removeAll() }
         InputTimingContext.begin(source: .keyboard, timestamp: event.timestamp)
         defer { InputTimingContext.end() }
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
@@ -178,16 +180,21 @@ extension InputForwarder: StreamInputViewDelegate {
     /// Send the modifier sides that changed since the host was last told, so
     /// a Shift held through a reconnect, sleep or screen lock reaches the PC.
     /// Each SIDE is its own entry; ⌘ only counts while `forwardsCommand`.
-    private func syncModifiers(to flags: NSEvent.ModifierFlags) {
+    @discardableResult
+    private func syncModifiers(to flags: NSEvent.ModifierFlags) -> Bool {
         let downNow = ModifierSides.held(in: flags, includeCommand: forwardsCommand)
         let modByte = Int8(bitPattern: modifierByte(from: flags))
         for vk in heldModifierVKs.subtracting(downNow).sorted() { sendModifier(vk, down: false, modByte: modByte) }
-        if flushPendingReleases() {
-            for vk in downNow.subtracting(heldModifierVKs).sorted() { sendModifier(vk, down: true, modByte: modByte) }
+        heldModifierVKs.formIntersection(downNow)
+        modifiersNeedResync = true
+        guard flushPendingReleases() else { return false }
+        for vk in downNow.subtracting(heldModifierVKs).sorted() {
+            guard sendModifier(vk, down: true, modByte: modByte) else { return false }
+            heldModifierVKs.insert(vk)
         }
-        heldModifierVKs = downNow
         modifiersNeedResync = false
         updateReconciliationTimer()
+        return true
     }
 
     /// An interrupted client chord can lose its modifier-up. Recover before
@@ -206,19 +213,20 @@ extension InputForwarder: StreamInputViewDelegate {
         if initialConnectPending, let onCancelConnect { onCancelConnect() } else { onQuitHotkey?() }
     }
 
-    func sendModifier(_ vk: Int16, down: Bool, modByte: Int8) {
+    @discardableResult
+    func sendModifier(_ vk: Int16, down: Bool, modByte: Int8) -> Bool {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         let key = VKScanCode(vk: vk)
         if !down {
             releases.release(.key(key), modifiers: modByte)
-            flushPendingReleases()
-            return
+            return flushPendingReleases()
         }
-        guard isReady, ownsKeyboard, flushPendingReleases() else { return }
+        guard isReady, ownsKeyboard, flushPendingReleases() else { return false }
         releases.hold(.key(key))
         let rc = backend?.sendKeyboard(keyCode: key.wireCode, action: Int8(StreamProtocol.KEY_ACTION_DOWN),
                                        modifiers: modByte, flags: 0) ?? -2
         record("LiSendKeyboardEvent2(modifier)", rc)
+        return rc == 0
     }
 
     /// One notice per unmapped key per session, so a key that does nothing on
@@ -386,6 +394,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // No-op in full screen and while captured.
         sendAbsolutePointer(for: event, in: view)
         let hostButton = button(for: event)
+        physicalMouseButtons[event.buttonNumber] = hostButton
         releases.hold(.mouse(hostButton))
         let rc = backend?.sendMouseButton(
             action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: hostButton) ?? -2
@@ -404,7 +413,8 @@ extension InputForwarder: StreamInputViewDelegate {
         guard releases.held.contains(.mouse(hostButton)) else { return }
         // A drag releases at its final position even when the last motion was coalesced.
         if isReady, forwardsMouseEvents { sendAbsolutePointer(for: event, in: view) }
-        releaseMouse(hostButton)
+        physicalMouseButtons[event.buttonNumber] = nil
+        if !physicalMouseButtons.values.contains(hostButton) { releaseMouse(hostButton) }
     }
 
     /// Window mode's grab: the pointer crossing onto the picture takes it, no

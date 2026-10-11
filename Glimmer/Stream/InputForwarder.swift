@@ -294,8 +294,10 @@ public final class InputForwarder {
             inputGeneration &+= 1
             publishInputSnapshot(focused: false)
             if oldValue != nil {
-                releases.releaseAll(connectionLost: true)
+                isReady = false
                 inputOwnershipLost(reason: "connection replaced")
+                releases.releaseAll(connectionLost: true)
+                updateReconciliationTimer()
             }
         }
     }
@@ -500,12 +502,16 @@ public final class InputForwarder {
     var heldMouseButtons: Set<Int32> = []
     var keyMapping: (Int) -> VKScanCode? = { vkScanCode(forCarbonKeyCode: $0) }
     var physicalKeys: [UInt16: VKScanCode] = [:]
+    var missingPhysicalKeys: Set<UInt16> = []
+    var missingModifierVKs: Set<Int16> = []
+    var physicalMouseButtons: [Int: Int32] = [:]
     nonisolated let inputCore = InputCore()
     nonisolated let controllerCaptureQueue = DispatchQueue(
         label: "io.ugfugl.Glimmer.controllerCapture", qos: .userInteractive)
     var controllersNeedAnnouncement = false { didSet { publishInputSnapshot() } }
     var reconciliationTimer: Timer?
     var lastInputEventTime: TimeInterval?
+    var keyboardMonitoringGranted: () -> Bool = { HIDGamepadManager.accessGranted }
     var physicalKeyState: (UInt16) -> Bool = { CGEventSource.keyState(.combinedSessionState, key: $0) }
     var currentModifierFlags: () -> NSEvent.ModifierFlags = { NSEvent.modifierFlags }
     var currentMouseButtons: () -> Int = { NSEvent.pressedMouseButtons }

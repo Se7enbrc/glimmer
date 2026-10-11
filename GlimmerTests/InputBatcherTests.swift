@@ -13,7 +13,8 @@ struct InputBatcherTests {
 
     private static func makeChannel(backlogged: Bool = true) throws -> EnetControlChannel {
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
-                                         crypto: try ControlCrypto(rikey: key), inputConnectionAvailable: { true })
+                                         crypto: try ControlCrypto(rikey: key))
+        EnetFixture.connect(channel)
         channel.reliableBackloggedFlag.store(backlogged, ordering: .relaxed)
         return channel
     }
@@ -136,10 +137,12 @@ struct InputBatcherTests {
     @Test func failedMergedAxesDoNotBlockTheFollowingButtonEdge() throws {
         let attempts = AtomicCounter()
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
-            crypto: try ControlCrypto(rikey: Self.key), inputConnectionAvailable: {
+            crypto: try ControlCrypto(rikey: Self.key), sealControl: { crypto, type, payload, seq in
                 attempts.increment()
-                return attempts.value > 1
+                if attempts.value == 1 { throw EnetError.mtuExceeded }
+                return try crypto.seal(type: type, payload: payload, seq: seq)
             })
+        EnetFixture.connect(channel)
         let batcher = InputBatcher(enet: channel, backpressure: { _ in true })
         defer { batcher.stop() }
         let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 100,
@@ -280,6 +283,27 @@ struct InputBatcherTests {
         batcher.stop()
         #expect(batcher.passThrough(Self.click, channel: 3) == -2)
         #expect(channel.sentReliable.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
+    func triggerTravelMergesBetweenZeroCrossings(right: Bool) throws {
+        func analog(_ value: UInt8) -> GamepadAnalog {
+            GamepadAnalog(leftTrigger: right ? 0 : value, rightTrigger: right ? value : 0,
+                          leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0)
+        }
+        let channel = try Self.makeChannel()
+        let batcher = InputBatcher(enet: channel, backpressure: { _ in true })
+        defer { batcher.stop() }
+        for value: UInt8 in [1, 30, 80] {
+            #expect(batcher.updateController(num: 0, mask: 1, buttons: 0, analog: analog(value)) == 0)
+        }
+        #expect(try Self.sentPayloads(channel) == [
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: analog(1))
+        ])
+        #expect(batcher.updateController(num: 0, mask: 1, buttons: 0, analog: analog(0)) == 0)
+        #expect(try Self.sentPayloads(channel) == [1, 80, 0].map {
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: analog($0))
+        })
     }
 
     @Test func controllerNeutralAndKeyboardUpSurviveImmediateStop() throws {
