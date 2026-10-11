@@ -15,13 +15,9 @@ final class HIDGamepadDevice: Identifiable {
     let name: String
     let mapping: HIDGamepadMapping
     let rumble: HIDGamepadRumble
-    private(set) var snapshot = HIDGamepadSnapshot()
+    private(set) var readings: HIDGamepadReadings
     private(set) var reportCount: UInt64 = 0
     private var elements: [UInt32: IOHIDElement] = [:]
-    private var axes: [HIDGamepadElement] = []
-    private var buttons: [HIDGamepadElement] = []
-    private var hats: [HIDGamepadElement] = []
-    private var ranges: [UInt32: HIDGamepadElement.AxisRange] = [:]
     private var batteryElement: IOHIDElement?
     private var pendingReport: UInt64?
     private var pendingReportID: UInt32?
@@ -30,7 +26,7 @@ final class HIDGamepadDevice: Identifiable {
     private var reading = false
     var onReport: ((HIDGamepadDevice) -> Void)?
 
-    var state: (buttons: Int32, analog: GamepadAnalog) { mapping.translate(snapshot) }
+    var state: (buttons: Int32, analog: GamepadAnalog) { mapping.translate(readings.snapshot) }
     var hasBattery: Bool { batteryElement != nil }
     var hardwareID: String { String(format: "%04X:%04X", vendor, product) }
     var mappingSource: String { mapping.isHeuristic ? "heuristic" : mapping.name }
@@ -48,22 +44,13 @@ final class HIDGamepadDevice: Identifiable {
         transport = IOHIDDeviceGetProperty(device, kIOHIDTransportKey as CFString) as? String ?? "Unknown"
         let discovered = Self.discover(device)
         elements = discovered.references
-        axes = HIDGamepadElement.ordered(discovered.descriptors, kind: .axis)
-        buttons = HIDGamepadElement.ordered(discovered.descriptors, kind: .button)
-        hats = HIDGamepadElement.ordered(discovered.descriptors, kind: .hat)
+        readings = HIDGamepadReadings(descriptors: discovered.descriptors,
+                                      logical: discovered.references.mapValues(Self.logicalRange))
         batteryElement = discovered.descriptors.first { $0.kind == .battery }.flatMap { discovered.references[$0.cookie] }
         mapping = GameControllerDB.lookup(vendor: vendor, product: product, version: version,
                                           bus: GameControllerDB.bus(forTransport: transport))
             ?? .heuristic(elements: discovered.descriptors)
         rumble = HIDGamepadRumble(service: IOHIDDeviceGetService(device))
-        snapshot.axes = Array(repeating: 0, count: axes.count)
-        snapshot.buttons = Array(repeating: false, count: buttons.count)
-        snapshot.hats = Array(repeating: 0, count: hats.count)
-        for descriptor in axes {
-            guard let element = elements[descriptor.cookie] else { continue }
-            ranges[descriptor.cookie] = .init(minimum: IOHIDElementGetLogicalMin(element),
-                                              maximum: IOHIDElementGetLogicalMax(element))
-        }
         if mapping.isHeuristic {
             Diag.notice("Unmapped HID pad \(name) \(hardwareID): assuming X/Y left stick, Z/Rz right stick, "
                 + "Rx/Ry or brake/accelerator triggers, first hat dpad, standard b0–b11 layout", "Controller")
@@ -122,10 +109,12 @@ final class HIDGamepadDevice: Identifiable {
     var batteryPercentage: UInt8? {
         guard let element = batteryElement else { return nil }
         guard let value = read(element) else { return nil }
-        let minimum = IOHIDElementGetLogicalMin(element), maximum = IOHIDElementGetLogicalMax(element)
-        guard maximum > minimum else { return nil }
-        let fraction = Double(IOHIDValueGetIntegerValue(value) - minimum) / Double(maximum - minimum)
-        return UInt8((min(1, max(0, fraction)) * 100).rounded())
+        return HIDGamepadReadings.batteryPercentage(raw: IOHIDValueGetIntegerValue(value),
+                                                    range: Self.logicalRange(element))
+    }
+
+    private static func logicalRange(_ element: IOHIDElement) -> HIDGamepadElement.AxisRange {
+        .init(minimum: IOHIDElementGetLogicalMin(element), maximum: IOHIDElementGetLogicalMax(element))
     }
 
     private func read(_ element: IOHIDElement) -> IOHIDValue? {
@@ -151,7 +140,7 @@ final class HIDGamepadDevice: Identifiable {
         if pendingReport != nil && (pendingReport != timestamp || pendingReportID != reportID) { flush() }
         pendingReport = timestamp
         pendingReportID = reportID
-        update(cookie: cookie, raw: raw)
+        readings.update(cookie: cookie, raw: raw)
         guard !flushScheduled else { return }
         flushScheduled = true
         // Element callbacks from one report share a timestamp; flush its final snapshot after the callback batch.
@@ -173,20 +162,7 @@ final class HIDGamepadDevice: Identifiable {
     private func update(_ value: IOHIDValue) {
         let element = IOHIDValueGetElement(value)
         let cookie = IOHIDElementGetCookie(element)
-        update(cookie: cookie, raw: IOHIDValueGetIntegerValue(value))
-    }
-
-    private func update(cookie: UInt32, raw: Int) {
-        guard let element = elements[cookie] else { return }
-        if let index = axes.firstIndex(where: { $0.cookie == cookie }), var range = ranges[cookie] {
-            snapshot.axes[index] = range.scale(raw)
-            ranges[cookie] = range
-        } else if let index = buttons.firstIndex(where: { $0.cookie == cookie }) {
-            snapshot.buttons[index] = raw > 0
-        } else if let index = hats.firstIndex(where: { $0.cookie == cookie }) {
-            snapshot.hats[index] = HIDGamepadElement.hat(value: raw, minimum: IOHIDElementGetLogicalMin(element),
-                                                        maximum: IOHIDElementGetLogicalMax(element))
-        }
+        readings.update(cookie: cookie, raw: IOHIDValueGetIntegerValue(value))
     }
 
     private static func discover(_ device: IOHIDDevice)

@@ -423,6 +423,7 @@
 		DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */; };
 		DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609232100000004 /* LauncherWindowTests.swift */; };
 		DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000F2 /* MutedOutputTests.swift */; };
+		DEC0DE20261010D5E0000001 /* DualSenseOutputReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010D5E0000002 /* DualSenseOutputReportTests.swift */; };
 		DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */; };
 		DEC0DE2026091900000000F9 /* DualSenseBinderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */; };
 		DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */; };
@@ -933,6 +934,7 @@
 		DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609232100000004 /* LauncherWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherWindowTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000F2 /* MutedOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MutedOutputTests.swift"; sourceTree = "<group>"; };
+		DEC0DE20261010D5E0000002 /* DualSenseOutputReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseOutputReportTests.swift"; path = "DualSenseOutputReportTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseDeviceStateTests.swift"; path = "DualSenseDeviceStateTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DualSenseBinderTests.swift"; path = "DualSenseBinderTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlayerLEDsTests.swift"; sourceTree = "<group>"; };
@@ -1486,6 +1488,7 @@
 				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE202609232100000004 /* LauncherWindowTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
+				DEC0DE20261010D5E0000002 /* DualSenseOutputReportTests.swift */,
 				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
 				DEC0DE2026091900000000FA /* DualSenseBinderTests.swift */,
 				DEC0DE2026091800000000C2 /* PlayerLEDsTests.swift */,
@@ -2079,6 +2082,7 @@
 				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
+				DEC0DE20261010D5E0000001 /* DualSenseOutputReportTests.swift in Sources */,
 				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,
 				DEC0DE2026091900000000F9 /* DualSenseBinderTests.swift in Sources */,
 				DEC0DE2026091800000000C1 /* PlayerLEDsTests.swift in Sources */,
