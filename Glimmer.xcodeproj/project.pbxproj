@@ -365,6 +365,7 @@
 		DA2026100900000000000015 /* RendererTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000016 /* RendererTelemetryTests.swift */; };
 		C4A400000000000000000102 /* LatencyTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000101 /* LatencyTrackerTests.swift */; };
 		C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000103 /* TelemetryCounterStateTests.swift */; };
+		C4A4000000000000000003F2 /* TelemetryCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */; };
 		C4A400000000000000000106 /* StatsCollectorWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000105 /* StatsCollectorWindowTests.swift */; };
 		C4A400000000000000000108 /* StatsSnapshotRowsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */; };
 		C4A400000000000000000110 /* StatsSupportTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000109 /* StatsSupportTypesTests.swift */; };
@@ -853,6 +854,7 @@
 		DA2026100900000000000016 /* RendererTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RendererTelemetryTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000101 /* LatencyTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LatencyTrackerTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000103 /* TelemetryCounterStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryCounterStateTests.swift"; sourceTree = "<group>"; };
+		C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryCaptureTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000105 /* StatsCollectorWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsCollectorWindowTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsSnapshotRowsTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000109 /* StatsSupportTypesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsSupportTypesTests.swift"; sourceTree = "<group>"; };
@@ -1381,6 +1383,7 @@
 				DA2026100900000000000016 /* RendererTelemetryTests.swift */,
 				C4A400000000000000000101 /* LatencyTrackerTests.swift */,
 				C4A400000000000000000103 /* TelemetryCounterStateTests.swift */,
+				C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */,
 				C4A400000000000000000105 /* StatsCollectorWindowTests.swift */,
 				C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */,
 				C4A400000000000000000109 /* StatsSupportTypesTests.swift */,
@@ -1952,6 +1955,7 @@
 				DA2026100900000000000015 /* RendererTelemetryTests.swift in Sources */,
 				C4A400000000000000000102 /* LatencyTrackerTests.swift in Sources */,
 				C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */,
+				C4A4000000000000000003F2 /* TelemetryCaptureTests.swift in Sources */,
 				C4A400000000000000000106 /* StatsCollectorWindowTests.swift in Sources */,
 				C4A400000000000000000108 /* StatsSnapshotRowsTests.swift in Sources */,
 				C4A400000000000000000110 /* StatsSupportTypesTests.swift in Sources */,
