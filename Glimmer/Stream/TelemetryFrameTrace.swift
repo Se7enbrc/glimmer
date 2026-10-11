@@ -47,7 +47,9 @@ final class FrameTraceWriter: @unchecked Sendable {
     /// SIZE-CAPPED ROLLOVER (C2): past `maxFileBytes` a fresh `-<n>` segment opens; a session keeps
     /// its first (connect, first IDR, pacer lock-in) plus the newest `maxTraceFiles - 1` (≈384MB).
     /// The next connect's byte sweep trims this session last, oldest `-<n>` first.
-    private static let maxFileBytes: UInt64 = 96 * 1024 * 1024
+    static let defaultMaxFileBytes: UInt64 = 96 * 1024 * 1024
+    private let maxFileBytes: UInt64
+    private let directory: URL
     static let maxTraceFiles = 4
 
     private let flushQueue = DispatchQueue(label: "io.ugfugl.Glimmer.telemetry.frames", qos: .utility)
@@ -69,7 +71,11 @@ final class FrameTraceWriter: @unchecked Sendable {
     private var pending: [String] = []
     private var droppedOverflow = false
 
-    init() { bufferLock.initialize(to: os_unfair_lock_s()) }
+    init(directory: URL = TelemetryExporter.logsDirectory, maxFileBytes: UInt64 = defaultMaxFileBytes) {
+        self.directory = directory
+        self.maxFileBytes = maxFileBytes
+        bufferLock.initialize(to: os_unfair_lock_s())
+    }
     deinit { bufferLock.deallocate() }
 
     /// Open the trace file + arm the flush timer. Mirrors the exporter's NDJSON
@@ -84,7 +90,7 @@ final class FrameTraceWriter: @unchecked Sendable {
             self.flushTimer = timer
             timer.resume()
 
-            let dir = TelemetryExporter.logsDirectory
+            let dir = self.directory
             do {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             } catch {
@@ -185,7 +191,7 @@ final class FrameTraceWriter: @unchecked Sendable {
             // Past the size cap: open a fresh segment (see `trimSegments`). One
             // rollover per drain, and a batch is one flush interval's frames, so
             // a segment never overshoots the cap by more than a single batch.
-            if bytesWritten >= Self.maxFileBytes { rollover() }
+            if bytesWritten >= maxFileBytes { rollover() }
         } catch {
             log.error("Telemetry per-frame trace write failed: \(error.localizedDescription, privacy: .private)")
         }

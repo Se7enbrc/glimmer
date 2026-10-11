@@ -55,22 +55,22 @@ enum HostCodecPreference: String, CaseIterable, Identifiable {
         "glimmer.codecPreference.\(hostID)"
     }
 
-    static func load(for hostID: String) -> HostCodecPreference {
-        guard let raw = UserDefaults.standard.string(forKey: key(for: hostID)),
+    static func load(for hostID: String, defaults: UserDefaults = .standard) -> HostCodecPreference {
+        guard let raw = defaults.string(forKey: key(for: hostID)),
               let pref = HostCodecPreference(rawValue: raw)
         else { return .auto }
         return pref
     }
 
-    static func save(_ pref: HostCodecPreference, for hostID: String) {
+    static func save(_ pref: HostCodecPreference, for hostID: String, defaults: UserDefaults = .standard) {
         if pref == .auto {
-            UserDefaults.standard.removeObject(forKey: key(for: hostID))
+            defaults.removeObject(forKey: key(for: hostID))
         } else {
-            UserDefaults.standard.set(pref.rawValue, forKey: key(for: hostID))
+            defaults.set(pref.rawValue, forKey: key(for: hostID))
         }
     }
 
-    static func forget(hostID: String) {
-        UserDefaults.standard.removeObject(forKey: key(for: hostID))
+    static func forget(hostID: String, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key(for: hostID))
     }
 }

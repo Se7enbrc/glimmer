@@ -195,8 +195,10 @@ extension AudioDecoder {
 
     /// Read one persisted record, AGE-LERPed toward base and clamped to its own
     /// link-class cap (the link rides the key). Defensive against hand-edits.
-    static func readCushionMemory(key: String) -> (targetMs: Double, floorMs: Double)? {
-        guard let dict = UserDefaults.standard.dictionary(forKey: key),
+    static func readCushionMemory(
+        key: String, defaults: UserDefaults = .standard
+    ) -> (targetMs: Double, floorMs: Double)? {
+        guard let dict = defaults.dictionary(forKey: key),
               let target = dict["target_ms"] as? Double, target.isFinite else { return nil }
         var floor = (dict["floor_ms"] as? Double).flatMap { $0.isFinite ? $0 : nil } ?? 0
         // AGE LERP: pull a stale target/floor toward base by its wall age (the
@@ -232,11 +234,13 @@ extension AudioDecoder {
     /// per-under-run grow), so a crash or force-quit never loses the session's
     /// learning. A mid-spike write self-corrects: each later decay step
     /// persists the lower value, and a seeded spike decays normally next run.
-    static func persistCushionMemory(key: String, targetMs: Double, floorMs: Double) {
+    static func persistCushionMemory(
+        key: String, targetMs: Double, floorMs: Double, defaults: UserDefaults = .standard
+    ) {
         guard !key.isEmpty else { return }
         // `saved_at` (wall reference seconds) drives the read-side age lerp - a
         // record refreshed this session reads near full depth, a stale one decays.
-        UserDefaults.standard.set(
+        defaults.set(
             ["target_ms": targetMs, "floor_ms": floorMs,
              "saved_at": Date().timeIntervalSinceReferenceDate],
             forKey: key)
@@ -247,7 +251,7 @@ extension AudioDecoder {
     /// (deep-by-default fails toward a few ms of extra audio latency that the
     /// trim walks off in ~1s once the link resolves shallow - the alternative,
     /// shallow-by-default, fails toward audible blips).
-    static func loadCushionSeed() -> CushionSeed {
+    static func loadCushionSeed(defaults: UserDefaults = .standard) -> CushionSeed {
         let host = StreamRouteProbe.currentLatchedHost ?? "unknown"
         let link = EnvSignalController.shared.streamLink
         let key = cushionMemoryKey(host: host, link: link)
@@ -256,14 +260,14 @@ extension AudioDecoder {
         // while the real wifi record held 97ms - the shallow prime that set
         // off the 2026-07-05 startup drain cascade. Real links direct-hit;
         // unknown goes straight to the deepest-of-wifi/wired borrow.
-        if link != "unknown", let record = readCushionMemory(key: key) {
+        if link != "unknown", let record = readCushionMemory(key: key, defaults: defaults) {
             return CushionSeed(key: key, host: host, link: link,
                                targetMs: record.targetMs, floorMs: record.floorMs,
                                fromMemory: true)
         }
         if link == "unknown" {
             let borrowed = ["wifi", "wired"]
-                .compactMap { readCushionMemory(key: cushionMemoryKey(host: host, link: $0)) }
+                .compactMap { readCushionMemory(key: cushionMemoryKey(host: host, link: $0), defaults: defaults) }
                 .max { $0.targetMs < $1.targetMs }
             if let borrowed {
                 // COLD-SEED SANITY: an UNKNOWN link (probe dark on an AP switch) must
