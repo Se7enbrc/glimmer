@@ -174,10 +174,7 @@ public actor IdentityManager {
     /// Where this manager keeps its state; the defaults are the real locations.
     let defaults: UserDefaults
     let supportBase: URL?
-    let keychainService: String
     let moonlightQtSuite: String
-    /// SecItemDelete; tests record the queries instead of touching the keychain.
-    let deleteKeychainItems: @Sendable ([String: Any]) -> OSStatus
 
     /// Cached, fully-materialized identity. Built lazily on first access; once
     /// in memory we never touch disk again for the life of the actor.
@@ -193,14 +190,10 @@ public actor IdentityManager {
                              category: "Stream.Identity")
 
     init(defaultsSuite: String? = nil, supportBase: URL? = nil,
-         keychainService: String = IdentityManager.legacyKeychainService,
-         moonlightQtSuite: String = IdentityManager.moonlightQtSuiteName,
-         deleteKeychainItems: @escaping @Sendable ([String: Any]) -> OSStatus = { SecItemDelete($0 as CFDictionary) }) {
+         moonlightQtSuite: String = IdentityManager.moonlightQtSuiteName) {
         self.defaults = defaultsSuite.flatMap { UserDefaults(suiteName: $0) } ?? .standard
         self.supportBase = supportBase
-        self.keychainService = keychainService
         self.moonlightQtSuite = moonlightQtSuite
-        self.deleteKeychainItems = deleteKeychainItems
     }
 
     // MARK: Public surface
@@ -215,74 +208,6 @@ public actor IdentityManager {
 
     public func uniqueID() throws -> String {
         try load().uniqueID
-    }
-
-    /// Bootstrap step - call this early (from AppModel.bootstrap()) so
-    /// the identity setup happens during launch, not on the user's first
-    /// stream click. Idempotent.
-    public func preflight() async {
-        cleanupOrphanLoginKeychainEntries()
-        // Nothing here touches moonlight-qt: preflight only cleans up stores
-        // Glimmer itself wrote. The qt plist is a copy-from source, never a
-        // thing we edit - see the moonlight-qt section in Identity+Loading.
-    }
-
-    /// Versioned one-shot cleanup of legacy keychain state from earlier builds.
-    /// Repeated SecItemDelete on absent items is harmless but generates
-    /// keychain log noise on every preflight; gate behind a UserDefaults flag
-    /// so it runs at most once per install. Bump `currentCleanupVersion` when
-    /// new orphans need sweeping.
-    private static let cleanupVersionKey = "glimmer.identityCleanupVersion"
-    private static let currentCleanupVersion = 3
-
-    private func cleanupOrphanLoginKeychainEntries() {
-        guard defaults.integer(forKey: Self.cleanupVersionKey) < Self.currentCleanupVersion else {
-            return
-        }
-
-        // Never delete certificates, keys or identities: a label query for those
-        // can match other apps' items, and a first launch deleted a user's signing
-        // identity that way (#138). Old Glimmer certificates are left in place.
-
-        // Sweep 1: the three generic-password items the prior build
-        // wrote into the login keychain at service
-        // "io.ugfugl.Glimmer.identity". These are the items that
-        // triggered the "allow Glimmer to read its own client identity"
-        // prompt on every adhoc rebuild. The migration path in `load()`
-        // pulls their values out for re-use; this sweep is the belt-and-
-        // suspenders cleanup for entries that didn't get migrated (e.g.
-        // because the user denied the prompt last time and the read
-        // returned nil).
-        for account in [Self.accountCert, Self.accountKey, Self.accountUID] {
-            let query: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: keychainService,
-                kSecAttrAccount as String: account,
-                kSecMatchLimit as String: kSecMatchLimitAll
-            ]
-            let status = deleteKeychainItems(query)
-            if status == errSecSuccess {
-                log.info("Cleaned up legacy keychain identity item (\(account)) from login keychain")
-            }
-        }
-
-        // Sweep 2: the abandoned file-based SecKeychain from an even earlier
-        // build. Different path from our new mode-0600 identity files -
-        // this was an entire SecKeychain database at
-        // ~/Library/Application Support/Glimmer/identity.keychain that we
-        // no longer need. Safe to delete on every install where the flag
-        // hasn't been bumped past this version.
-        let fm = FileManager.default
-        if let appSupport = try? URL.supportRoot(base: supportBase) {
-            let oldKC = appSupport.appendingPathComponent("Glimmer/identity.keychain")
-            if fm.fileExists(atPath: oldKC.path) {
-                try? fm.removeItem(at: oldKC)
-                log.info("Removed legacy file-based identity keychain")
-            }
-        }
-        defaults.removeObject(forKey: "glimmer.identityKeychainPassphrase")
-
-        defaults.set(Self.currentCleanupVersion, forKey: Self.cleanupVersionKey)
     }
 
     /// AES key derived from the pairing PIN. The host computes the same value
@@ -308,11 +233,8 @@ public actor IdentityManager {
     //      mode-0600 PEM files, read with no keychain involvement and no
     //      Security.framework prompts.
     //
-    //   2. Legacy keychain items (io.ugfugl.Glimmer.identity service,
-    //      generic-password) from the keychain-era build. If present we read them out
-    //      ONCE (accepting any prompt the user gets at this moment), copy
-    //      them into the file store, and SecItemDelete the keychain
-    //      originals. After this one-shot, the prompt never returns.
+    //   2. (Removed) Glimmer never reads or deletes keychain items (#138); a
+    //      pre-public build's leftovers stay where they are, unused.
     //
     //   3. UserDefaults plaintext PEMs from the original plaintext build.
     //      If we still have this old shape, copy it into the file store and
@@ -344,9 +266,6 @@ public actor IdentityManager {
     /// `fileStorageFlag` supersedes it.
     static let legacyKeychainOnlyFlag = "glimmer.identityKeychainOnly"
 
-    /// Service string the prior build used for the three generic-password
-    /// keychain items. We only ever read from this now - never write back.
-    static let legacyKeychainService = "io.ugfugl.Glimmer.identity"
     static let accountCert = "client-cert-pem"
     static let accountKey  = "client-key-pem"
     static let accountUID  = "client-unique-id"
