@@ -11,6 +11,7 @@ import SwiftUI
 // MARK: - General
 
 struct GeneralPane: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
     @AppStorage("launchMinimized") private var launchMinimized: Bool = false
@@ -129,6 +130,7 @@ struct GeneralPane: View {
             }
         }
         .formStyle(.grouped)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: launchAtLogin)
         .onAppear { refreshLoginItemState() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshLoginItemState()
@@ -385,7 +387,9 @@ struct QualityPane: View {
             }
         }
         .formStyle(.grouped)
-        .animation(reduceMotion ? nil : .snappy, value: model.qualityPreset)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.qualityPreset == .custom)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.effectiveDisplayMode)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.statsOverlayPreset == .custom)
         .onAppear { awdl.refresh() }
     }
 

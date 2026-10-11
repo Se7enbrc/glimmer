@@ -80,14 +80,6 @@ public final class StatsOverlayLayer {
         usesDarkInk = dark
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let fade = CATransition()
-            fade.type = .fade
-            fade.duration = 0.3
-            layer.add(fade, forKey: "ink")
-        } else {
-            layer.removeAnimation(forKey: "ink")
-        }
         refreshInk()
         CATransaction.commit()
     }
@@ -276,7 +268,12 @@ public final class StatsOverlayLayer {
             if let host = layer.superlayer { layoutInHost(host) }
         }
         CATransaction.begin()
-        CATransaction.setAnimationDuration(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.12)
+        CATransaction.setDisableActions(true)
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = layer.presentation()?.opacity ?? layer.opacity
+        fade.toValue = visible ? 1 : 0
+        fade.duration = Motion.short
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
         if visible {
             layer.isHidden = false
             layer.opacity = 1
@@ -286,6 +283,7 @@ public final class StatsOverlayLayer {
             }
             layer.opacity = 0
         }
+        layer.add(fade, forKey: "visibility")
         CATransaction.commit()
     }
 

@@ -17,6 +17,7 @@ enum TakeoverDialogCopy {
 }
 
 struct MainWindow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
     @FocusState private var launcherFocus: LauncherFocus?
@@ -32,11 +33,12 @@ struct MainWindow: View {
         @Bindable var model = model
         return Group {
             if model.hosts.isEmpty {
-                EmptyPairingState(showPair: $showPair)
+                EmptyPairingState(showPair: $showPair).transition(.opacity.animation(Motion.fade))
             } else {
-                ConnectSurface(focus: $launcherFocus)
+                ConnectSurface(focus: $launcherFocus).transition(.opacity.animation(Motion.fade))
             }
         }
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.hosts.isEmpty)
         .background {
             LauncherControllerWindow(controller: model.launcherController, handle: navigateLauncher)
                 .frame(width: 0, height: 0)
@@ -224,6 +226,7 @@ struct StreamMenu: View {
 // MARK: - Connect surface
 
 private struct ConnectSurface: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let focus: FocusState<LauncherFocus?>.Binding
     @Environment(AppModel.self) private var model
 
@@ -240,15 +243,7 @@ private struct ConnectSurface: View {
     /// doesn't briefly flash a spinner or change the button.
     @State private var showsConnectingUI = false
 
-    /// True once the stream is established and the fullscreen window is
-    /// taking over - Glimmer's window fades down so the handoff doesn't
-    /// strobe two competing surfaces. NOT true while backgrounded (the
-    /// launcher is the foreground surface then) and NOT during CONNECTING:
-    /// `isStreaming` flips at stream() ENTRY, so without that exemption the
-    /// `!isHandedOff` guard below unmounted the StreamButton for the whole
-    /// handshake - the .connecting capsule was unreachable dead code and a
-    /// stuck connect stranded the user on a dimmed, button-less launcher.
-    /// Handoff (and the dim) now begin at the live edge, as documented.
+    /// The live app owns the controls until it is hidden or reconnecting.
     private var isHandedOff: Bool {
         guard model.isStreaming, !model.nativeStreamBackgrounded else { return false }
         if case .connecting = model.streamPhase { return false }
@@ -287,6 +282,8 @@ private struct ConnectSurface: View {
             PCHeader(host: model.selectedHost, focus: focus)
             if let host = model.selectedHost, !host.apps.isEmpty {
                 AppIconsRow(apps: host.apps, host: host, focus: focus, connectingShown: showsConnectingUI)
+                    .id(host.id)
+                    .transition(.opacity.animation(Motion.fade))
             }
             if showsStateButton {
                 StreamButton(isConnecting: showsConnectingUI, launcherFocus: focus)
@@ -296,7 +293,10 @@ private struct ConnectSurface: View {
             ContextFooter()
                 .frame(maxWidth: .infinity)
         }
-        .animation(.snappy(duration: 0.3), value: showsStateButton)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: showsStateButton)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.nativeStreamError != nil)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.selectedHost?.id)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.selectedHost?.apps.count)
         // No trailing Spacer: the window sizes to this column (.windowResizability
         // in GlimmerApp). 532pt of content in 24pt margins is the 580pt window, and
         // must stay in step with GlimmerApp's minWidth, or the window can be dragged.
@@ -313,10 +313,6 @@ private struct ConnectSurface: View {
         // proposes nil height to the column, so every such floor resolves to its
         // own ideal instead of springboarding off the window.
         .fixedSize(horizontal: false, vertical: true)
-        // Hand off to the stream window: dim Glimmer's content so the
-        // fullscreen surface visibly takes over and reverses on disconnect.
-        .opacity(isHandedOff ? 0.4 : 1.0)
-        .animation(.snappy(duration: 0.4), value: isHandedOff)
         // The 400 ms connect threshold. task(id:) restarts on every raw-edge
         // flip: a connect that establishes inside the hold cancels the sleep
         // (no flash); a disconnect mid-hold resets the same way.
@@ -403,6 +399,8 @@ private struct PCHeader: View {
 
     private var name: some View {
         Text(host?.displayName ?? "No PC selected")
+            .contentTransition(.opacity)
+            .animation(Motion.fade, value: host?.id)
             .font(.title.weight(.semibold))
             .lineLimit(1)
     }

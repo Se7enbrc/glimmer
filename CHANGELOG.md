@@ -4,6 +4,8 @@
 
 ### Features
 
+- Quieter, more consistent transitions across the launcher, stream and settings,
+  including Reduce Motion.
 - The full-screen stream slides away when it ends, the way it slid in, instead
   of fading. Reduce Motion keeps the fade.
 - Ending a stream, including cancelling while it connects, leaves the game

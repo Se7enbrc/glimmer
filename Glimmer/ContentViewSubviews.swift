@@ -19,6 +19,7 @@ struct AppIconsRow: View {
     /// The connect is on screen (past the 400 ms hold), so the app being launched shows it.
     var connectingShown = false
     @Environment(AppModel.self) var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Two columns of large app buttons fill the window's width with two apps or
     /// four; past four the last cell is the overflow menu.
@@ -63,9 +64,6 @@ struct AppIconsRow: View {
                 overflowMenu
             }
         }
-        // Each app button is disabled (and dimmed by its style) while a session exists;
-        // the overflow menu stays openable mid-session, since looking launches nothing.
-        .animation(.snappy(duration: 0.3), value: model.isStreaming)
     }
 
     /// Return streams the Start with app while the PC is ready; otherwise the
@@ -165,10 +163,12 @@ struct AppIconsRow: View {
                           launching: state == .connecting || state == .reconnecting)
             }
         }
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: state)
         .buttonStyle(LauncherTileStyle(covers: model.launcherStyle == .covers))
         .modifier(LauncherControlFocus(focus: focus, target: .app(app.id), activate: { activate(app) }))
         .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
-        // Only the streaming app stays live while a stream exists; the others can't start one.
+        // Only the streaming app stays live; the overflow menu remains openable,
+        // since looking at other apps launches nothing.
         .disabled(model.isStreaming && state == .ready)
         .help(state.help ?? (model.isStreaming
             ? "Finish the current stream first" : model.streamActionTitle(app, on: host)))
@@ -231,6 +231,8 @@ struct SpecChipsRow: View {
     var body: some View {
         // Facts, not controls: one secondary line, so nothing here looks pressable.
         Text(model.streamSpecChips.joined(separator: " · "))
+            .contentTransition(.opacity)
+            .animation(Motion.fade, value: model.selectedHost?.id)
             .font(.body)
             .foregroundStyle(.secondary)
     }
@@ -239,7 +241,6 @@ struct SpecChipsRow: View {
 // MARK: - Empty pairing state
 
 struct EmptyPairingState: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Owned by MainWindow so its `.sheet` survives the swap to ConnectSurface
     /// the moment pairing fills `model.hosts` - see MainWindow.showPair.
     @Binding var showPair: Bool
@@ -249,34 +250,11 @@ struct EmptyPairingState: View {
         // taller than itself, and the window now sizes to its content, so there
         // is no extra height to centre within - only height they would invent.
         VStack(spacing: 26) {
-            ZStack {
-                // Floating glass medallion behind the hero symbol -
-                // accent-tinted so it picks up the system tint.
-                Circle()
-                    .frame(width: 144, height: 144)
-                    .glassEffect(
-                        .regular.tint(Color.accentColor.opacity(0.18)),
-                        in: .circle
-                    )
-                    .overlay {
-                        Circle()
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.22),
-                                        Color.white.opacity(0.04)
-                                    ],
-                                    startPoint: .top, endPoint: .bottom
-                                ),
-                                lineWidth: 1
-                            )
-                    }
-                Image(systemName: "display.and.arrow.down")
-                    .font(.system(size: 60, weight: .light))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.tint)
-                    .symbolEffect(.pulse.byLayer, options: .repeating, isActive: !reduceMotion)
-            }
+            Image(systemName: "display")
+                .font(.system(size: 60, weight: .light))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.tint)
+                .frame(width: 144, height: 144)
 
             VStack(spacing: 10) {
                 Text("Let's find your gaming PC")
@@ -340,7 +318,7 @@ struct StreamEndedToast: View {
                 .background(.thinMaterial, in: Capsule())
                 .overlay(Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
                 .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
-                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                .transition(Motion.overlayTransition(reduceMotion: reduceMotion))
                 // Keep the secondary quit button separately reachable by VoiceOver.
                 .accessibilityElement(children: .contain)
                 // Keyed on the receipt so a back-to-back end re-arms the hold
@@ -363,7 +341,7 @@ struct StreamEndedToast: View {
                 }
             }
         }
-        .animation(.snappy(duration: 0.30, extraBounce: reduceMotion ? 0 : 0.1),
+        .animation(Motion.overlay(reduceMotion: reduceMotion),
                    value: model.streamEndedToastVisible)
     }
 }

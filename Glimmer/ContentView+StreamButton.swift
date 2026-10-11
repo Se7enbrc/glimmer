@@ -32,6 +32,7 @@ extension InsettableShape {
 /// Internal so SettingsView's Pair/Stream-now buttons share the treatment.
 struct StreamButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -43,22 +44,23 @@ struct StreamButtonStyle: ButtonStyle {
             .frame(minHeight: 46)
             .background { Capsule().accentSurface() }
             .opacity(isEnabled ? 1.0 : 0.55)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
-            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(Motion.pressedScale(configuration.isPressed, reduceMotion: reduceMotion))
+            .animation(Motion.press(reduceMotion: reduceMotion), value: configuration.isPressed)
     }
 }
 
 /// The launcher's app buttons: each one streams, so each wears the Stream button's violet.
 struct AppTileStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(.white)
             .background { RoundedRectangle(cornerRadius: 14, style: .continuous).accentSurface() }
             .opacity(isEnabled ? 1.0 : 0.55)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
-            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(Motion.pressedScale(configuration.isPressed, reduceMotion: reduceMotion))
+            .animation(Motion.press(reduceMotion: reduceMotion), value: configuration.isPressed)
     }
 }
 
@@ -206,15 +208,14 @@ struct StreamButton: View {
                     // label swap here would flash inside the 400 ms hold).
                     Image(systemName: "play.fill")
                         .font(.system(size: 16, weight: .semibold))
-                        // Bounce on the live edge (curtain rises). Suppressed
-                        // under Reduce Motion; the success haptic still fires.
-                        .symbolEffect(.bounce, value: reduceMotion ? false : isLive)
                     Text(model.heroActionLabel)
                         .font(.title2.weight(.semibold))
                         .lineLimit(1)
                         .contentTransition(.opacity)
                 }
             }
+            .id(role)
+            .transition(.opacity.animation(Motion.fade))
             .frame(maxWidth: .infinity)
         }
         // Custom style = the hero's accent gradient + glass + soft rim.
@@ -252,8 +253,7 @@ struct StreamButton: View {
         // VoiceOver hint mirrors the sighted-only `.help` so assistive-tech
         // users learn WHY the button is disabled (noPC) or what a click does.
         .accessibilityHint(guidance.hint)
-        .animation(.snappy(duration: 0.35, extraBounce: reduceMotion ? 0 : 0.1), value: isConnecting)
-        .animation(.snappy(duration: 0.35, extraBounce: reduceMotion ? 0 : 0.1), value: model.isStreaming)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: role)
     }
 
     /// Tooltip and VoiceOver hint for the current role, kept in one place.

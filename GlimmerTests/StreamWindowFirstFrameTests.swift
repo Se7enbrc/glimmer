@@ -16,6 +16,45 @@ import Testing
 @MainActor
 struct StreamWindowFirstFrameTests {
 
+    @Test func firstPictureWaitsForNativeSpaceSettlement() {
+        let stream = StreamWindow()
+        stream.coversNotch = false
+        stream.awaitingFirstFrameFadeIn = true
+        stream.streamDelegate.closeState.transition = .entering
+        stream.fadeInOnFirstFrame()
+        #expect(stream.pendingFirstFrameReveal)
+        #expect(stream.awaitingFirstFrameFadeIn)
+        #expect(stream.cursorHideCount == 0)
+        stream.streamDelegate.closeState.transition = .idle
+        stream.streamDelegate.onFullScreenSettled?()
+        #expect(!stream.pendingFirstFrameReveal)
+        #expect(!stream.awaitingFirstFrameFadeIn)
+    }
+
+    @Test func aDroppedSpaceSettlementCannotStrandTheFirstPicture() async throws {
+        let stream = StreamWindow()
+        stream.coversNotch = false
+        stream.awaitingFirstFrameFadeIn = true
+        stream.streamDelegate.closeState.transition = .entering
+        stream.fadeInOnFirstFrame()
+        try await Task.sleep(for: .milliseconds(1_600))
+        #expect(!stream.pendingFirstFrameReveal)
+        #expect(!stream.awaitingFirstFrameFadeIn)
+    }
+
+    @Test func closeDuringNativeEntryNeverRevealsAPendingPicture() {
+        let stream = StreamWindow()
+        stream.coversNotch = false
+        stream.awaitingFirstFrameFadeIn = true
+        stream.streamDelegate.closeState.transition = .entering
+        stream.fadeInOnFirstFrame()
+        stream.didClose = true
+        stream.streamDelegate.closeState.transition = .idle
+        stream.streamDelegate.onFullScreenSettled?()
+        #expect(stream.awaitingFirstFrameFadeIn)
+        #expect(stream.cursorHideCount == 0)
+    }
+
     @Test(arguments: [false, true])
     func eachDisplayTypeRetainsItsFullScreenChoice(usesSpace: Bool) {
         #expect(AppModel.streamCoversNotch(displayHasNotch: false, coversNotch: false,

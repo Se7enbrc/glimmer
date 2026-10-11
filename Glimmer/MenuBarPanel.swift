@@ -9,6 +9,7 @@ import AppKit
 import SwiftUI
 
 struct MenuBarPanel: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
@@ -20,13 +21,16 @@ struct MenuBarPanel: View {
         VStack(spacing: 8) {
             if let error = model.nativeStreamError { attentionCard(error) }
             switch model.menuBarPrimaryAction {
-            case .backToStream: streamCard
+            case .backToStream: streamCard.transaction { $0.animation = nil }
             case .cancelConnection, .stopStreaming: connectingCard
             case .stream, .wake, .waking, .pairAgain, .none: pcCard
             }
             controllerCard
             footer
         }
+        .animation(isShown ? Motion.layout(reduceMotion: reduceMotion) : nil, value: model.menuBarPrimaryAction)
+        .animation(isShown ? Motion.layout(reduceMotion: reduceMotion) : nil, value: model.nativeStreamError != nil)
+        .animation(isShown ? Motion.layout(reduceMotion: reduceMotion) : nil, value: model.menuBarControllers.map(\.id))
         .padding(10)
         .frame(width: 300)
         .onAppear { isShown = true; model.startMenuBarRefresh() }
@@ -334,7 +338,7 @@ struct MenuBarPanel: View {
         let pads = model.menuBarControllers
         if let first = pads.first {
             card(pads.count > 1 ? "Controllers" : "Controller", trailing: pads.count == 1 ? first.status : nil) {
-                ForEach(Array(pads.enumerated()), id: \.offset) { _, pad in
+                ForEach(pads) { pad in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Image(systemName: "gamecontroller.fill")
@@ -351,6 +355,7 @@ struct MenuBarPanel: View {
                         if let percent = pad.percent {
                             ProgressView(value: Double(percent), total: 100)
                                 .progressViewStyle(.linear)
+                                .animation(reduceMotion ? nil : Motion.fade, value: percent)
                                 .tint(percent <= 20 && !pad.charging ? .red : .accentColor)
                         }
                     }

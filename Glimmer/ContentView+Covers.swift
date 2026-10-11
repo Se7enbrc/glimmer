@@ -130,8 +130,8 @@ struct LauncherTileStyle: ButtonStyle {
         if covers {
             configuration.label
                 .opacity(isEnabled ? 1 : 0.55)
-                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
-                .animation(reduceMotion ? nil : .snappy(duration: 0.15), value: configuration.isPressed)
+                .scaleEffect(Motion.pressedScale(configuration.isPressed, reduceMotion: reduceMotion))
+                .animation(Motion.press(reduceMotion: reduceMotion), value: configuration.isPressed)
         } else {
             AppTileStyle().makeBody(configuration: configuration)
         }

@@ -127,6 +127,8 @@ public final class StreamWindow {
     /// aborted Path-B session.
     var enterFullScreenObserver: NSObjectProtocol?
     var didClose = false
+    var visualCloseFinished = false
+    var visualCloseWaiters: [CheckedContinuation<Void, Never>] = []
 
     /// `NSApplication.presentationOptions` we observed at `show()` time, so we
     /// can restore exactly that on `close()` rather than guessing at a sane
@@ -210,6 +212,8 @@ public final class StreamWindow {
     /// Called when displays wake, even if the screen signature is unchanged.
     public var onDisplaysWoke: (@MainActor () -> Void)?
 
+    var presentationRevealInProgress = false
+    var pendingFirstFrameReveal = false
     /// Set by show(), cleared by the first-frame fade-in. Until then the window
     /// is invisible and passes clicks through to the launcher's Cancel, and it
     /// takes neither the pointer nor the menu bar.
@@ -394,6 +398,10 @@ public final class StreamWindow {
         // full initialization because it captures self.
         delegate.onCloseRequested = { [weak self] in self?.handleUserCloseRequest() }
         delegate.onMiniPlayerExitRequested = { [weak self] in self?.leaveMiniPlayer() }
+        delegate.onFullScreenSettled = { [weak self] in
+            guard let self, self.pendingFirstFrameReveal else { return }
+            self.fadeInOnFirstFrame()
+        }
     }
 
     /// Strong ref so the window delegate isn't deallocated mid-stream

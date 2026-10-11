@@ -99,7 +99,7 @@ public final class StreamBannerLayer {
     /// The text the pill shows right now, linger hint included.
     var displayedText: String { (textLayer.string as? String) ?? "" }
 
-    /// Fade the pill in (true) or out (false) over 200ms.
+    /// Short fades keep reconnect and pointer hints quiet, including under Reduce Motion.
     public func setVisible(_ show: Bool) {
         if show == visible { return }
         visible = show
@@ -112,7 +112,13 @@ public final class StreamBannerLayer {
             scheduleLinger()
         }
         CATransaction.begin()
-        CATransaction.setAnimationDuration(0.2)
+        CATransaction.setDisableActions(true)
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = layer.presentation()?.opacity ?? layer.opacity
+        fade.toValue = show ? 1 : 0
+        fade.duration = Motion.short
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        let generation = showGeneration
         if show {
             layer.isHidden = false
             layer.opacity = 1
@@ -121,10 +127,12 @@ public final class StreamBannerLayer {
             // raced in during the fade sets visible=true, so a stale completion can't
             // un-hide a shown pill - and a real hide always lands.
             CATransaction.setCompletionBlock { [weak self] in
-                if self?.visible == false { self?.layer.isHidden = true }
+                guard let self, !self.visible, self.showGeneration == generation else { return }
+                self.layer.isHidden = true
             }
             layer.opacity = 0
         }
+        layer.add(fade, forKey: "visibility")
         CATransaction.commit()
     }
 
@@ -133,9 +141,35 @@ public final class StreamBannerLayer {
     private func render() {
         var shown = baseText
         if lingered, let hint = lingerHint?() { shown += " · \(hint)" }
+        let oldFrame = layer.presentation()?.frame ?? layer.frame
+        let changesVisibleText = visible && displayedText != shown && !displayedText.isEmpty
         textLayer.string = shown
         if let host = layer.superlayer { layoutInHost(host) }
+        if changesVisibleText {
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = Motion.short
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            textLayer.add(fade, forKey: "wording")
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                animateBounds(from: oldFrame)
+            }
+        }
         if visible { announce(shown) }
+    }
+
+    private func animateBounds(from frame: CGRect) {
+        for (key, start, end) in [
+            ("bounds", NSValue(rect: CGRect(origin: .zero, size: frame.size)), NSValue(rect: layer.bounds)),
+            ("position", NSValue(point: CGPoint(x: frame.midX, y: frame.midY)), NSValue(point: layer.position))
+        ] {
+            let animation = CABasicAnimation(keyPath: key)
+            animation.fromValue = start
+            animation.toValue = end
+            animation.duration = Motion.short
+            animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.add(animation, forKey: key)
+        }
     }
 
     private func scheduleLinger() {

@@ -166,6 +166,7 @@ extension StreamSession {
             Unmanaged<StreamBridgeContext>.fromOpaque(ptr).release()
         }
         bridgePtr = nil
+        await win?.waitForVisualClose()
         // finish() ends AppModel's `for await`, which is how it learns the stream is over, and turns
         // any late yield from a callback thread into a no-op. Clearing the field instead would race them.
         bridge?.eventContinuation?.finish()
