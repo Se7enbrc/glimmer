@@ -47,6 +47,8 @@ public final class VideoDecoder {
     nonisolated let requestedColorSpace: ColorSpace
     nonisolated let requestedColorRange: ColorRange
     nonisolated let resolvedColor = OSAllocatedUnfairLock<VideoColorDescription?>(initialState: nil)
+    nonisolated let pixelFormatRanges = OSAllocatedUnfairLock(initialState: [OSType: String]())
+    var colorDisplayProbeTask: Task<Void, Never>?
     nonisolated let colorProbeState = OSAllocatedUnfairLock<ColorProbeKey?>(initialState: nil)
 
     /// Safety-net teardown for the VTDecompressionSession. Normally

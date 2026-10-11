@@ -86,6 +86,16 @@ struct VideoDecoderHDRTests {
                   expectedPrimaries: bt709, expectedTransfer: sdr),
         ColorCase(format: main10, controlHDR: true, primaries: nil, transfer: sdr,
                   expectedPrimaries: bt709, expectedTransfer: sdr),
+        ColorCase(format: main10, controlHDR: false, primaries: nil, transfer: pq,
+                  expectedPrimaries: bt2020, expectedTransfer: pq),
+        ColorCase(format: main10, controlHDR: true, primaries: nil, transfer: hlg,
+                  expectedPrimaries: bt2020, expectedTransfer: hlg),
+        ColorCase(format: main10, controlHDR: true, primaries: bt2020, transfer: nil,
+                  expectedPrimaries: bt2020, expectedTransfer: pq),
+        ColorCase(format: main10, controlHDR: false, primaries: bt2020, transfer: nil,
+                  expectedPrimaries: bt2020, expectedTransfer: sdr),
+        ColorCase(format: main8, controlHDR: true, primaries: bt2020, transfer: nil,
+                  expectedPrimaries: bt2020, expectedTransfer: sdr),
         ColorCase(format: main10, controlHDR: false, primaries: p3, transfer: sdr,
                   expectedPrimaries: p3, expectedTransfer: sdr)
     ]
@@ -96,16 +106,20 @@ struct VideoDecoderHDRTests {
         decoder.streamVideoFormat = testCase.format
         let buffer = try makeTaggedPixelBuffer(
             primaries: testCase.primaries.map { $0 as CFString }, transfer: testCase.transfer.map { $0 as CFString })
-        if testCase.primaries == Self.bt2020 {
-            CVBufferSetAttachment(buffer, kCVImageBufferYCbCrMatrixKey,
-                                  kCVImageBufferYCbCrMatrix_ITU_R_2020, .shouldPropagate)
-        }
         let color = decoder.resolveColorDescription(for: buffer, controlHDR: testCase.controlHDR)
         #expect(color.primaries == testCase.expectedPrimaries)
         #expect(color.transfer == testCase.expectedTransfer)
         #expect(color.isHDR == [Self.pq, Self.hlg].contains(testCase.expectedTransfer))
         #expect(color.range == kCVPixelFormatComponentRange_VideoRange as String)
         #expect(color.makeColorSpace() != nil)
+        if testCase.expectedPrimaries == Self.bt2020 {
+            #expect(color.matrix == kCVImageBufferYCbCrMatrix_ITU_R_2020 as String)
+        }
+        if color.isHDR {
+            let name = color.makeColorSpace()?.name as String?
+            #expect(name == (color.transfer == Self.pq
+                ? CGColorSpace.itur_2100_PQ as String : CGColorSpace.itur_2100_HLG as String))
+        }
     }
 
     // MARK: HDR10 metadata blobs
@@ -262,17 +276,17 @@ struct VideoDecoderColorTransitionTests {
     private let hlg = kCVImageBufferTransferFunction_ITU_R_2100_HLG
     private let sdr = kCVImageBufferTransferFunction_ITU_R_709_2
 
-    @Test func aMatrixAlonePreventsTheUntaggedPQFallback() throws {
+    @Test func aMatrixAlonePreservesTheUntaggedPQFallback() throws {
         let decoder = VideoDecoder()
         decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_H265_MAIN10
         let buffer = try makeTaggedPixelBuffer()
         CVBufferSetAttachment(buffer, kCVImageBufferYCbCrMatrixKey,
                               kCVImageBufferYCbCrMatrix_ITU_R_601_4, .shouldPropagate)
         let color = decoder.resolveColorDescription(for: buffer, controlHDR: true)
-        #expect(color.primaries == kCVImageBufferColorPrimaries_ITU_R_709_2 as String)
-        #expect(color.transfer == sdr as String)
+        #expect(color.primaries == bt2020 as String)
+        #expect(color.transfer == pq as String)
         #expect(color.matrix == kCVImageBufferYCbCrMatrix_ITU_R_601_4 as String)
-        #expect(!color.isHDR)
+        #expect(color.isHDR)
     }
 
     @Test func independentTagsAndGammaSurviveAttachment() throws {
@@ -395,6 +409,86 @@ struct VideoDecoderColorTransitionTests {
         let changed = decoder.resolveColorDescription(for: tagged, controlHDR: true)
         #expect(decoder.beginColorProbe(tagged, color: changed, controlHDR: true) != nil)
         #expect(decoder.beginColorProbe(tagged, color: changed, controlHDR: true) == nil)
+    }
+
+    @Test func stableColorReusesItsAttachmentDictionary() throws {
+        let decoder = VideoDecoder()
+        let firstBuffer = try makeTaggedPixelBuffer()
+        let first = decoder.resolveColorDescription(for: firstBuffer, controlHDR: false)
+        decoder.attachColorAndHDRMetadata(to: firstBuffer, color: first)
+        let second = decoder.resolveColorDescription(for: try makeTaggedPixelBuffer(), controlHDR: false)
+        let firstAttachments = first.attachments as CFDictionary
+        let secondAttachments = second.attachments as CFDictionary
+        #expect(firstAttachments === secondAttachments)
+    }
+
+    @Test func rangeCacheKeepsEachPixelFormatSeparate() throws {
+        let decoder = VideoDecoder()
+        let full = kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+        let video = kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+        for format in [full, video, full, video] {
+            let color = decoder.resolveColorDescription(
+                for: try makeTaggedPixelBuffer(format: format), controlHDR: false)
+            #expect(color.range == (format == full ? kCVPixelFormatComponentRange_FullRange as String
+                : kCVPixelFormatComponentRange_VideoRange as String))
+        }
+        #expect(decoder.pixelFormatRanges.withLock { $0.count } == 2)
+    }
+
+    @Test(arguments: [false, true])
+    func displayReprobesStopAtSDROrTeardown(teardown: Bool) async throws {
+        let decoder = VideoDecoder()
+        decoder.attach(to: AVSampleBufferDisplayLayer())
+        defer { decoder.teardown() }
+        let buffer = try makeTaggedPixelBuffer(primaries: bt2020, transfer: pq)
+        let color = decoder.resolveColorDescription(for: buffer, controlHDR: false)
+        decoder.resolvedColor.withLock { $0 = color }
+        var probes = 0
+        decoder.configureLayerColorspace(headroom: { probes += 1; return (1, 4) })
+        if teardown {
+            decoder.teardown()
+        } else {
+            decoder.resolvedColor.withLock { $0 = nil }
+            decoder.configureLayerColorspace()
+        }
+        try await Task.sleep(for: .milliseconds(1_100))
+        #expect(probes == 1)
+    }
+
+    @Test func probeAppliesDynamicRangeBeforeLogging() async throws {
+        let decoder = VideoDecoder()
+        let layer = AVSampleBufferDisplayLayer()
+        decoder.attach(to: layer)
+        layer.preferredDynamicRange = .standard
+        defer { decoder.teardown() }
+        let buffer = try makeTaggedPixelBuffer(primaries: bt2020, transfer: pq)
+        let color = decoder.resolveColorDescription(for: buffer, controlHDR: false)
+        decoder.resolvedColor.withLock { $0 = color }
+        let probe = try #require(decoder.beginColorProbe(buffer, color: color, controlHDR: false))
+        decoder.finishColorProbe(probe, pixelBuffer: buffer)
+        try await Task.sleep(for: .milliseconds(100))
+        let row = try #require(LogStore.shared.snapshot().last { $0.message.hasPrefix("Colour probe display:") })
+        #expect(row.message.contains("preferredDynamicRange=high"))
+        #expect(layer.preferredDynamicRange == .high)
+    }
+
+    @Test func hdrTransitionReprobesDisplayHeadroom() async throws {
+        let decoder = VideoDecoder()
+        decoder.attach(to: AVSampleBufferDisplayLayer())
+        defer { decoder.teardown() }
+        let buffer = try makeTaggedPixelBuffer(primaries: bt2020, transfer: pq)
+        let color = decoder.resolveColorDescription(for: buffer, controlHDR: false)
+        decoder.resolvedColor.withLock { $0 = color }
+        decoder.configureLayerColorspace(headroom: { (1, 4) })
+        try await Task.sleep(for: .milliseconds(5_200))
+        let rows = LogStore.shared.snapshot().filter { $0.message.hasPrefix("Colour display transition:") }
+        #expect(LogStore.shared.snapshot().contains {
+            $0.message.contains("HDR input has no EDR headroom") && $0.message.contains("potentialEDR=4.0")
+        })
+        for seconds in [0, 1, 3, 5] {
+            #expect(rows.contains { $0.message.contains("after=\(seconds)s")
+                && $0.message.contains("potentialEDR=") && $0.message.contains("hdrInput=true") })
+        }
     }
 
     @Test func inputHDRSurvivesMovementWhileOutputTracksCurrentEDR() {

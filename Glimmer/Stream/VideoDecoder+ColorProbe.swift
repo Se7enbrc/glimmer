@@ -53,15 +53,45 @@ extension VideoDecoder {
         guard let probe else { return }
         let final = colorAttachmentSummary(pixelBuffer)
         Task { @MainActor [weak self] in
+            self?.configureLayerColorspace()
             self?.logColorProbe(probe, final: final)
         }
     }
 
-    private func logColorProbe(_ probe: ColorProbe, final: String) {
+    func probeDisplayTransition(headroom: (@MainActor () -> (current: Double, potential: Double))? = nil) {
+        colorDisplayProbeTask?.cancel()
+        logDisplayTransition(after: 0, headroom: headroom?())
+        guard isHDRActive else { return }
+        colorDisplayProbeTask = Task { @MainActor [weak self] in
+            for seconds in [1, 3, 5] {
+                do { try await Task.sleep(for: .seconds(seconds == 1 ? 1 : 2)) } catch { return }
+                guard let self, self.isHDRActive else { return }
+                self.logDisplayTransition(after: seconds, headroom: headroom?())
+            }
+        }
+    }
+
+    private func displayHeadroom() -> (current: Double, potential: Double) {
         let view = displayLayer?.delegate as? NSView
         let screen = view?.window?.screen ?? NSScreen.main
-        let current = screen?.maximumExtendedDynamicRangeColorComponentValue ?? 1
-        let potential = screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1
+        return (Double(screen?.maximumExtendedDynamicRangeColorComponentValue ?? 1),
+                Double(screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1))
+    }
+
+    private func logDisplayTransition(after seconds: Int, headroom: (current: Double, potential: Double)?) {
+        let values = headroom ?? displayHeadroom()
+        let outputHDR = VideoColorDescription.hdrDisplayOutput(inputHDR: isHDRActive, currentEDR: values.current)
+        Diag.notice("Colour display transition: after=\(seconds)s currentEDR=\(values.current) "
+            + "potentialEDR=\(values.potential) hdrInput=\(isHDRActive) hdrOutput=\(outputHDR) "
+            + "preferredDynamicRange=\(displayLayer?.preferredDynamicRange.rawValue ?? "absent")", "Stream")
+        if seconds == 5 && isHDRActive && !outputHDR {
+            Diag.warn("HDR input has no EDR headroom: currentEDR=\(values.current) "
+                + "potentialEDR=\(values.potential)", "Stream")
+        }
+    }
+
+    private func logColorProbe(_ probe: ColorProbe, final: String) {
+        let (current, potential) = displayHeadroom()
         let csc = (requestedColorSpace.cValue << 1) | requestedColorRange.cValue
         let depth = probe.videoFormat & StreamProtocol.VIDEO_FORMAT_MASK_10BIT != 0 ? 10 : 8
         let format = String(probe.videoFormat, radix: 16)

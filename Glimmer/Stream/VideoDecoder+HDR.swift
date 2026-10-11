@@ -16,13 +16,14 @@ extension VideoDecoder {
     // MARK: - Display-layer configuration
 
     // Source tags determine dynamic range; macOS maps HDR input to the destination display.
-    func configureLayerColorspace() {
+    func configureLayerColorspace(headroom: (@MainActor () -> (current: Double, potential: Double))? = nil) {
         guard let layer = displayLayer else { return }
         let active = resolvedColor.withLock { $0?.isHDR ?? false }
         layer.preferredDynamicRange = active ? .high : .standard
         if active != isHDRActive {
             isHDRActive = active
             onHDRActiveChanged?(active)
+            probeDisplayTransition(headroom: headroom)
         }
     }
 

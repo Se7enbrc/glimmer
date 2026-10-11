@@ -247,6 +247,8 @@ extension VideoDecoder {
         // serial queue no-ops. Drop our reference after.
         framePacer?.stop()
         framePacer = nil
+        colorDisplayProbeTask?.cancel()
+        colorDisplayProbeTask = nil
 
         // Drain any in-flight decode operations before invalidating the
         // session - VTDecompressionSessionWaitForAsynchronousFrames blocks

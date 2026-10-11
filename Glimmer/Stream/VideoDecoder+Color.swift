@@ -5,7 +5,8 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 
-struct VideoColorDescription: Equatable, Sendable {
+// The CF dictionary is created once from immutable values and never mutated after publication.
+struct VideoColorDescription: Equatable, @unchecked Sendable {
     let primaries: String
     let transfer: String
     let matrix: String
@@ -22,18 +23,30 @@ struct VideoColorDescription: Equatable, Sendable {
         return "primaries=\(primaries) transfer=\(transfer) matrix=\(matrix) range=\(range) gamma=\(gammaLabel)"
     }
 
-    var attachments: [String: Any] {
-        var result: [String: Any] = [
+    let attachments: CFDictionary
+
+    init(primaries: String, transfer: String, matrix: String, range: String, gamma: Double?) {
+        self.primaries = primaries
+        self.transfer = transfer
+        self.matrix = matrix
+        self.range = range
+        self.gamma = gamma
+        var values: [String: Any] = [
             kCVImageBufferColorPrimariesKey as String: primaries,
             kCVImageBufferTransferFunctionKey as String: transfer,
             kCVImageBufferYCbCrMatrixKey as String: matrix
         ]
-        if let gamma { result[kCVImageBufferGammaLevelKey as String] = gamma }
-        return result
+        if let gamma { values[kCVImageBufferGammaLevelKey as String] = gamma }
+        attachments = values as CFDictionary
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.primaries == rhs.primaries && lhs.transfer == rhs.transfer && lhs.matrix == rhs.matrix
+            && lhs.range == rhs.range && lhs.gamma == rhs.gamma
     }
 
     func makeColorSpace() -> CGColorSpace? {
-        CVImageBufferCreateColorSpaceFromAttachments(attachments as CFDictionary)?.takeRetainedValue()
+        CVImageBufferCreateColorSpaceFromAttachments(attachments)?.takeRetainedValue()
     }
 
     static func hdrDisplayOutput(inputHDR: Bool, currentEDR: Double) -> Bool {
@@ -53,27 +66,46 @@ extension VideoDecoder {
         let primaries = tag(kCVImageBufferColorPrimariesKey)
         let transfer = tag(kCVImageBufferTransferFunctionKey)
         let matrix = tag(kCVImageBufferYCbCrMatrixKey)
-        let untagged = primaries == nil && transfer == nil && matrix == nil
         let tenBit = streamVideoFormat & StreamProtocol.VIDEO_FORMAT_MASK_10BIT != 0
-        let fallbackHDR = untagged && controlHDR && tenBit
-        let fallback = fallbackColorTags(hdr: fallbackHDR)
-        let pixelFormat = CVPixelBufferGetPixelFormatType(buffer)
-        let pixelDescription = CVPixelFormatDescriptionCreateWithPixelFormatType(nil, pixelFormat) as? [String: Any]
-        // VT can convert full-range input to video-range output. The output format owns its range.
-        let range = pixelDescription?[kCVPixelFormatComponentRange as String] as? String
-            ?? (requestedColorRange == .full ? kCVPixelFormatComponentRange_FullRange as String
-                : kCVPixelFormatComponentRange_VideoRange as String)
+        let declaredHDR = transfer == kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ as String
+            || transfer == kCVImageBufferTransferFunction_ITU_R_2100_HLG as String
+        let inferPQ = transfer == nil && controlHDR && tenBit
+            && (primaries == nil || primaries == kCVImageBufferColorPrimaries_ITU_R_2020 as String)
+        let space: ColorSpace = declaredHDR || inferPQ || primaries == kCVImageBufferColorPrimaries_ITU_R_2020 as String
+            ? .rec2020 : requestedColorSpace
+        let fallback = fallbackColorTags(space: space, hdr: inferPQ)
+        let range = outputColorRange(for: CVPixelBufferGetPixelFormatType(buffer))
         let gamma = CVBufferCopyAttachment(buffer, kCVImageBufferGammaLevelKey, nil) as? Double
             ?? input.flatMap {
                 CMFormatDescriptionGetExtension($0, extensionKey: kCVImageBufferGammaLevelKey) as? Double
             }
+        if let cached = resolvedColor.withLock({ $0 }),
+           cached.primaries == primaries ?? fallback.primaries,
+           cached.transfer == transfer ?? fallback.transfer,
+           cached.matrix == matrix ?? fallback.matrix, cached.range == range, cached.gamma == gamma {
+            return cached
+        }
         return VideoColorDescription(primaries: primaries ?? fallback.primaries,
                                      transfer: transfer ?? fallback.transfer, matrix: matrix ?? fallback.matrix,
                                      range: range, gamma: gamma)
     }
 
-    private nonisolated func fallbackColorTags(hdr: Bool) -> (primaries: String, transfer: String, matrix: String) {
-        let space = hdr ? ColorSpace.rec2020 : requestedColorSpace
+    // VT can convert full-range input to video-range output. The output format owns its range.
+    nonisolated func outputColorRange(for pixelFormat: OSType) -> String {
+        pixelFormatRanges.withLock { ranges in
+            if let cached = ranges[pixelFormat] { return cached }
+            let description = CVPixelFormatDescriptionCreateWithPixelFormatType(nil, pixelFormat) as? [String: Any]
+            let range = description?[kCVPixelFormatComponentRange as String] as? String
+                ?? (requestedColorRange == .full ? kCVPixelFormatComponentRange_FullRange as String
+                    : kCVPixelFormatComponentRange_VideoRange as String)
+            ranges[pixelFormat] = range
+            return range
+        }
+    }
+
+    private nonisolated func fallbackColorTags(
+        space: ColorSpace, hdr: Bool
+    ) -> (primaries: String, transfer: String, matrix: String) {
         let primaries: CFString
         let matrix: CFString
         switch space {
@@ -104,7 +136,7 @@ extension VideoDecoder {
             noteColorSpaceChangeTelemetry(color.summary)
             Task { @MainActor [weak self] in self?.configureLayerColorspace() }
         }
-        CVBufferSetAttachments(buffer, color.attachments as CFDictionary, .shouldPropagate)
+        CVBufferSetAttachments(buffer, color.attachments, .shouldPropagate)
         if let space = lastColorSpace {
             CVBufferSetAttachment(buffer, kCVImageBufferCGColorSpaceKey, space, .shouldPropagate)
         } else {
