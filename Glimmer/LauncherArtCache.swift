@@ -6,32 +6,51 @@ import Foundation
 import ImageIO
 
 actor LauncherArtCache {
-    static let shared = LauncherArtCache()
     private let base: URL?
     private let byteLimit: Int
+    private var memory: [String: Data] = [:]
+    private var recent: [String] = []
+    private var missing: Set<String> = []
+    private var generations: [String: Int] = [:]
 
     init(base: URL? = nil, byteLimit: Int = 64 * 1024 * 1024) {
         self.base = base
         self.byteLimit = byteLimit
     }
 
-    static func key(pcID: String, appID: Int, apps: [LibraryApp]) -> String {
-        let revision = apps.sorted { $0.id < $1.id }.map {
+    static func revision(apps: [LibraryApp]) -> String {
+        let entries = apps.sorted { $0.id < $1.id }.map {
             "\($0.id):\($0.name.utf8.count):\($0.name):\($0.hdr):\($0.hidden)"
         }
-        let identity = "\(pcID.utf8.count):\(pcID):\(appID):" + revision.joined(separator: ":")
-        return SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
+        return digest(entries.joined(separator: ":"))
     }
 
-    func image(key: String, fetch: @Sendable () async throws -> Data) async -> CGImage? {
+    static func key(pcID: String, appID: Int, revision: String) -> String {
+        digest(pcID) + "-" + digest("\(appID):\(revision)")
+    }
+
+    private static func digest(_ value: String) -> String {
+        SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    func image(pcID: String, appID: Int, revision: String,
+               fetch: @Sendable () async throws -> Data) async -> Data? {
         guard !Task.isCancelled else { return nil }
+        let key = Self.key(pcID: pcID, appID: appID, revision: revision)
+        if let data = memory[key] { remember(data, key: key); return data }
+        guard !missing.contains(key) else { return nil }
         let directory = try? URL.supportRoot(base: base).appendingPathComponent("Glimmer/Covers", isDirectory: true)
         let file = directory?.appendingPathComponent(key).appendingPathExtension("png")
-        if let file, let data = try? Data(contentsOf: file), let image = Self.decode(data) {
+        if let file, let data = try? Data(contentsOf: file), Self.decode(data) != nil {
             try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
-            return image
+            remember(data, key: key)
+            return data
         }
-        guard let data = try? await fetch(), !Task.isCancelled, let image = Self.decode(data) else { return nil }
+        let generation = generations[pcID, default: 0]
+        let fetched = try? await fetch()
+        guard !Task.isCancelled, generations[pcID, default: 0] == generation else { return nil }
+        guard let data = fetched, Self.decode(data) != nil else { missing.insert(key); return nil }
+        remember(data, key: key)
         if let directory, let file, data.count <= byteLimit {
             do {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -41,7 +60,33 @@ actor LauncherArtCache {
                 // A full or read-only disk must not keep usable art off the launcher.
             }
         }
-        return image
+        return data
+    }
+
+    func remove(pcID: String) {
+        generations[pcID, default: 0] += 1
+        let prefix = Self.digest(pcID) + "-"
+        memory = memory.filter { !$0.key.hasPrefix(prefix) }
+        recent.removeAll { $0.hasPrefix(prefix) }
+        missing = missing.filter { !$0.hasPrefix(prefix) }
+        guard let directory = try? URL.supportRoot(base: base).appendingPathComponent("Glimmer/Covers"),
+              let files = try? FileManager.default.contentsOfDirectory(at: directory,
+                                                                      includingPropertiesForKeys: nil) else { return }
+        for file in files where file.lastPathComponent.hasPrefix(prefix) {
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+
+    private func remember(_ data: Data, key: String) {
+        guard data.count <= byteLimit else { return }
+        memory[key] = data
+        recent.removeAll { $0 == key }
+        recent.append(key)
+        var size = memory.values.reduce(0) { $0 + $1.count }
+        while size > byteLimit, let oldest = recent.first {
+            size -= memory.removeValue(forKey: oldest)?.count ?? 0
+            recent.removeFirst()
+        }
     }
 
     static func decode(_ data: Data) -> CGImage? {

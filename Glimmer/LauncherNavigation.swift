@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import Foundation
+import SwiftUI
 
 enum LauncherFocus: Hashable {
-    case app(Int), pc, overflow
+    case app(Int), pc, overflow, state
 }
 
 enum LauncherCommand: Equatable {
@@ -32,6 +32,8 @@ struct LauncherControllerInput {
     var direction: LauncherCommand?
     var activate = false
     var dismiss = false
+
+    var isNeutral: Bool { direction == nil && !activate && !dismiss }
 }
 
 struct LauncherControllerRepeat {
@@ -42,7 +44,7 @@ struct LauncherControllerRepeat {
     mutating func commands(_ input: LauncherControllerInput, at time: TimeInterval) -> [LauncherCommand] {
         // Require release after a window/stream handoff so a held game button cannot launch another app.
         guard armed else {
-            armed = input.direction == nil && !input.activate && !input.dismiss
+            armed = input.isNeutral
             prior = input
             return []
         }
@@ -76,18 +78,32 @@ enum LauncherNavigation {
         guard !cells.isEmpty else { return hasSwitcher ? .pc : nil }
         if focus == .pc { return command == .down ? cells.first : .pc }
         guard let focus, let index = cells.firstIndex(of: focus) else { return cells.first }
+        if focus == .state {
+            return command == .up ? cells.last(where: { $0 != .state }) ?? (hasSwitcher ? .pc : .state) : .state
+        }
+        let grid = cells.filter { $0 != .state }
         let columns = max(1, columns)
         switch command {
         case .up:
-            return index < columns ? (hasSwitcher ? .pc : focus) : cells[index - columns]
+            return index < columns ? (hasSwitcher ? .pc : focus) : grid[index - columns]
         case .down:
-            guard index / columns < (cells.count - 1) / columns else { return focus }
-            return cells[min(index + columns, cells.count - 1)]
+            guard index / columns < (grid.count - 1) / columns else {
+                return cells.contains(.state) ? .state : focus
+            }
+            return grid[min(index + columns, grid.count - 1)]
         case .left:
-            return index % columns == 0 ? focus : cells[index - 1]
+            return index % columns == 0 ? focus : grid[index - 1]
         case .right:
-            return (index + 1) % columns == 0 ? focus : cells[min(index + 1, cells.count - 1)]
+            return (index + 1) % columns == 0 ? focus : grid[min(index + 1, grid.count - 1)]
         case .activate, .dismiss: return focus
         }
+    }
+}
+
+struct LauncherFocusCells: PreferenceKey {
+    static let defaultValue: [LauncherFocus] = []
+
+    static func reduce(value: inout [LauncherFocus], nextValue: () -> [LauncherFocus]) {
+        value.append(contentsOf: nextValue())
     }
 }

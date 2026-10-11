@@ -8,26 +8,48 @@ import UniformTypeIdentifiers
 @testable import Glimmer
 
 struct LauncherExperienceTests {
-    @Test @MainActor func buttonsAreDefaultAndExplicitChoicePersists() throws {
-        let suite = "LauncherExperienceTests.\(UUID())"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let model = AppModel(launcherDefaults: defaults)
+    @Test @MainActor func buttonsAreDefaultAndExplicitChoicePersistsPerPC() throws {
+        let store = try IsolatedStore("launcher-style")
+        defer { store.remove() }
+        let model = AppModel()
+        model.hostsDefaults = store.defaults
+        model.supportBase = store.directory
+        defer { model.hostStatusTask?.cancel() }
+        store.defaults.set("covers", forKey: "launcherStyle")
+        for id in ["one", "two"] {
+            try model.saveHost(uuid: id, hostname: id, address: "192.0.2.1", serverCertPEM: nil,
+                               appVersion: nil, apps: [.init(id: 1, name: "Desktop", hdr: false, hidden: false)],
+                               defaults: store.defaults)
+        }
+        let first = try #require(model.hosts.first { $0.id == "one" })
+        let second = try #require(model.hosts.first { $0.id == "two" })
+        #expect(model.hosts.allSatisfy { $0.launcherStyle == .buttons })
+        model.setLauncherStyle(.covers, for: first)
+        model.loadHosts(defaults: store.defaults)
+        model.selectHost(try #require(model.hosts.first { $0.id == first.id }), defaults: store.defaults)
+        #expect(model.launcherStyle == .covers)
+        model.isStreaming = true
+        model.selectHost(second, defaults: store.defaults)
+        #expect(model.selectedHost?.id == second.id)
         #expect(model.launcherStyle == .buttons)
-        #expect(defaults.string(forKey: LauncherStyle.defaultsKey) == nil)
-        model.launcherStyle = .covers
-        #expect(AppModel(launcherDefaults: defaults).launcherStyle == .covers)
-        model.launcherStyle = .buttons
-        #expect(AppModel(launcherDefaults: defaults).launcherStyle == .buttons)
-        defaults.set("unknown", forKey: LauncherStyle.defaultsKey)
-        #expect(AppModel(launcherDefaults: defaults).launcherStyle == .buttons)
+        #expect(LauncherStyle.load(for: first.id, defaults: store.defaults) == .covers)
+        model.isStreaming = false
+        model.setLauncherStyle(.buttons, for: first)
+        #expect(LauncherStyle.load(for: first.id, defaults: store.defaults) == .buttons)
+        store.defaults.set("unknown", forKey: "glimmer.launcherStyle.one")
+        #expect(LauncherStyle.load(for: first.id, defaults: store.defaults) == .buttons)
     }
 
-    @Test func onlyCoversFetchArtWhileIdle() {
-        #expect(!LauncherStyle.buttons.loadsArt(streaming: false))
-        #expect(!LauncherStyle.buttons.loadsArt(streaming: true))
-        #expect(LauncherStyle.covers.loadsArt(streaming: false))
-        #expect(!LauncherStyle.covers.loadsArt(streaming: true))
+    @Test func pairingOffersAChoiceOnlyForVisibleNonStockApps() {
+        func apps(_ names: [String]) -> [LibraryApp] {
+            names.enumerated().map { .init(id: $0.offset, name: $0.element, hdr: false, hidden: false) }
+        }
+        for names in [[], ["Desktop"], ["Steam Big Picture"], ["Desktop", "Steam Big Picture"]] {
+            #expect(!LauncherStyle.offersChoice(apps: apps(names)))
+        }
+        #expect(LauncherStyle.offersChoice(apps: apps(["Desktop", "Steam Big Picture", "Game"])))
+        #expect(LauncherStyle.offersChoice(apps: apps(["Game"])))
+        #expect(!LauncherStyle.offersChoice(apps: [.init(id: 1, name: "Game", hdr: false, hidden: true)]))
     }
 
     @Test func columnCountFillsRowsAndBoundsLargeLibraries() {
@@ -38,6 +60,10 @@ struct LauncherExperienceTests {
         for count in 1...200 {
             #expect((1...4).contains(LauncherLayout.columns(appCount: count)))
             #expect(LauncherLayout.coverHeight(appCount: count) <= 240)
+            let columns = CGFloat(LauncherLayout.columns(appCount: count))
+            let width = LauncherLayout.coverWidth(appCount: count) * columns
+                + (columns - 1) * 10 + LauncherLayout.coverPadding * 2
+            #expect(abs(width - LauncherLayout.contentWidth) < 0.001)
         }
     }
 
@@ -71,12 +97,13 @@ struct LauncherExperienceTests {
 
     @Test func cacheKeysSeparatePCsAppsAndListRevisions() {
         let apps = [LibraryApp(id: 1, name: "Game", hdr: false, hidden: false)]
-        let key = LauncherArtCache.key(pcID: "../pc", appID: 1, apps: apps)
-        #expect(key.count == 64 && key.allSatisfy(\.isHexDigit))
-        #expect(key == LauncherArtCache.key(pcID: "../pc", appID: 1, apps: apps))
-        #expect(key != LauncherArtCache.key(pcID: "another PC", appID: 1, apps: apps))
-        #expect(key != LauncherArtCache.key(pcID: "../pc", appID: 2, apps: apps))
-        #expect(key != LauncherArtCache.key(pcID: "../pc", appID: 1, apps: []))
+        let revision = LauncherArtCache.revision(apps: apps)
+        let key = LauncherArtCache.key(pcID: "../pc", appID: 1, revision: revision)
+        #expect(key.count == 129 && key.filter { $0 != "-" }.allSatisfy(\.isHexDigit))
+        #expect(key == LauncherArtCache.key(pcID: "../pc", appID: 1, revision: revision))
+        #expect(key != LauncherArtCache.key(pcID: "another PC", appID: 1, revision: revision))
+        #expect(key != LauncherArtCache.key(pcID: "../pc", appID: 2, revision: revision))
+        #expect(key != LauncherArtCache.key(pcID: "../pc", appID: 1, revision: LauncherArtCache.revision(apps: [])))
     }
 
     @Test func cacheSurvivesReopeningAndEvictsLeastRecentlyUsedArt() async throws {
@@ -84,15 +111,17 @@ struct LauncherExperienceTests {
         defer { try? FileManager.default.removeItem(at: base) }
         let data = try Self.png(width: 3, height: 4)
         let cache = LauncherArtCache(base: base, byteLimit: data.count * 2)
-        #expect(await cache.image(key: "first", fetch: { data }) != nil)
-        #expect(await cache.image(key: "second", fetch: { data }) != nil)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "first", fetch: { data }) != nil)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "second", fetch: { data }) != nil)
         let directory = base.appendingPathComponent("Glimmer/Covers")
-        try FileManager.default.setAttributes([.modificationDate: Date.distantPast],
-                                             ofItemAtPath: directory.appendingPathComponent("second.png").path)
-        #expect(await cache.image(key: "third", fetch: { data }) != nil)
-        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("second.png").path))
+        let secondFile = directory.appendingPathComponent(
+            LauncherArtCache.key(pcID: "pc", appID: 1, revision: "second") + ".png")
+        try FileManager.default.setAttributes([.modificationDate: Date.distantPast], ofItemAtPath: secondFile.path)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "third", fetch: { data }) != nil)
+        #expect(!FileManager.default.fileExists(atPath: secondFile.path))
         let reopened = LauncherArtCache(base: base, byteLimit: data.count * 2)
-        #expect(await reopened.image(key: "first", fetch: { throw CancellationError() }) != nil)
+        let cached = await reopened.image(pcID: "pc", appID: 1, revision: "first") { throw CancellationError() }
+        #expect(cached != nil)
         let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         #expect(files.count == 2)
     }
@@ -101,10 +130,11 @@ struct LauncherExperienceTests {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: base) }
         let cache = LauncherArtCache(base: base)
-        #expect(await cache.image(key: "missing", fetch: { throw CancellationError() }) == nil)
-        #expect(await cache.image(key: "corrupt", fetch: { Data("<root/>".utf8) }) == nil)
+        let missing = await cache.image(pcID: "pc", appID: 1, revision: "missing") { throw CancellationError() }
+        #expect(missing == nil)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "corrupt", fetch: { Data("<root/>".utf8) }) == nil)
         let placeholder = try Self.png(width: 130, height: 180)
-        #expect(await cache.image(key: "placeholder", fetch: { placeholder }) == nil)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "placeholder", fetch: { placeholder }) == nil)
         #expect(!FileManager.default.fileExists(atPath: base.appendingPathComponent("Glimmer/Covers").path))
     }
 
@@ -113,11 +143,12 @@ struct LauncherExperienceTests {
         defer { try? FileManager.default.removeItem(at: base) }
         let directory = base.appendingPathComponent("Glimmer/Covers")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let file = directory.appendingPathComponent("corrupt.png")
+        let file = directory.appendingPathComponent(
+            LauncherArtCache.key(pcID: "pc", appID: 1, revision: "corrupt") + ".png")
         try Data("bad image".utf8).write(to: file)
         let data = try Self.png(width: 3, height: 4)
         let cache = LauncherArtCache(base: base)
-        #expect(await cache.image(key: "corrupt", fetch: { data }) != nil)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "corrupt", fetch: { data }) != nil)
         #expect(try Data(contentsOf: file) == data)
         #expect(LauncherArtCache.decode(Data(count: 4 * 1024 * 1024 + 1)) == nil)
     }
@@ -127,12 +158,79 @@ struct LauncherExperienceTests {
         let cache = LauncherArtCache()
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
-            return await cache.image(key: "cancelled") {
+            return await cache.image(pcID: "pc", appID: 1, revision: "cancelled") {
                 try await sunshine.client(FakeSunshine.server(pin: "pin")).appAsset(appID: 1)
             }
         }
         #expect(await task.value == nil)
         #expect(sunshine.requests.isEmpty)
+    }
+
+    @Test func memoryAndNegativeResultsAvoidRepeatedDiskAndNetworkWork() async throws {
+        let store = try IsolatedStore("launcher-memory")
+        defer { store.remove() }
+        let data = try Self.png(width: 3, height: 4)
+        let cache = LauncherArtCache(base: store.directory)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "a", fetch: { data }) == data)
+        try FileManager.default.removeItem(at: store.directory.appendingPathComponent("Glimmer/Covers"))
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "a", fetch: { throw CancellationError() }) == data)
+        let missing = FakeSunshine { _ in ControlTransport.Response(status: 404, body: Data()) }
+        for _ in 0..<3 {
+            #expect(await cache.image(pcID: "pc", appID: 2, revision: "a", fetch: {
+                try await missing.client(FakeSunshine.server(pin: "pin")).appAsset(appID: 2)
+            }) == nil)
+        }
+        #expect(missing.requests.count == 1)
+        #expect(await cache.image(pcID: "pc", appID: 2, revision: "b", fetch: { data }) == data)
+    }
+
+    @Test @MainActor func removingAPCClearsOnlyItsArtAndStyle() async throws {
+        let store = try IsolatedStore("launcher-removal")
+        defer { store.remove() }
+        let model = AppModel()
+        model.supportBase = store.directory
+        model.hostsDefaults = store.defaults
+        let data = try Self.png(width: 3, height: 4)
+        let host = Host(id: "pc", name: "PC", customName: nil, localAddress: nil, manualAddress: nil,
+                        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+        model.setLauncherStyle(.covers, for: host)
+        let cache = model.launcherArtCache
+        for id in ["pc", "other"] {
+            #expect(await cache.image(pcID: id, appID: 1, revision: "a", fetch: { data }) == data)
+        }
+        await model.unpair(host, defaults: store.defaults, supportBase: store.directory).value
+        #expect(LauncherStyle.load(for: host.id, defaults: store.defaults) == .buttons)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "a", fetch: { throw CancellationError() }) == nil)
+        #expect(await cache.image(pcID: "other", appID: 1, revision: "a", fetch: { throw CancellationError() }) == data)
+        let reopened = LauncherArtCache(base: store.directory)
+        #expect(await reopened.image(pcID: "pc", appID: 1, revision: "a", fetch: { throw CancellationError() }) == nil)
+        #expect(await reopened.image(pcID: "other", appID: 1, revision: "a", fetch: { data }) == data)
+        await cache.remove(pcID: "pc")
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "a", fetch: { data }) == data)
+    }
+
+    @Test func removingAPCDiscardsAnArtworkFetchStillInFlight() async throws {
+        let store = try IsolatedStore("launcher-inflight-removal")
+        defer { store.remove() }
+        let cache = LauncherArtCache(base: store.directory)
+        let data = try Self.png(width: 3, height: 4)
+        let started = DispatchSemaphore(value: 0)
+        let release = AsyncStream<Void>.makeStream()
+        let pending = Task {
+            await cache.image(pcID: "pc", appID: 1, revision: "a") {
+                started.signal()
+                for await _ in release.stream { break }
+                return data
+            }
+        }
+        #expect(await started.waitAsync(for: .seconds(2)) == .success)
+        await cache.remove(pcID: "pc")
+        release.continuation.yield(())
+        release.continuation.finish()
+        #expect(await pending.value == nil)
+        let reopened = LauncherArtCache(base: store.directory)
+        #expect(await reopened.image(pcID: "pc", appID: 1, revision: "a", fetch: { Data() }) == nil)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "a", fetch: { Data() }) == nil)
     }
 
     private static func png(width: Int, height: Int) throws -> Data {
@@ -191,6 +289,52 @@ struct LauncherNavigationTests {
         #expect(move(.app(3), .down) == .app(3))
         #expect(move(.app(3), .activate) == .app(3))
         #expect(move(.app(3), .dismiss) == .app(3))
+    }
+
+    @Test func partialRowsOverflowAndStateAreReachableWithoutWrapping() {
+        let cells: [LauncherFocus] = [.app(1), .app(2), .app(3), .overflow, .state]
+        func move(_ focus: LauncherFocus?, _ command: LauncherCommand) -> LauncherFocus? {
+            LauncherNavigation.destination(from: focus, command: command, cells: cells, columns: 3, hasSwitcher: true)
+        }
+        #expect(move(.app(2), .down) == .overflow)
+        #expect(move(.app(3), .down) == .overflow)
+        #expect(move(.overflow, .right) == .overflow)
+        #expect(move(.overflow, .down) == .state)
+        #expect(move(.state, .up) == .overflow)
+        #expect(move(.state, .left) == .state)
+        #expect(move(.state, .down) == .state)
+        #expect(LauncherNavigation.destination(from: nil, command: .down, cells: [.state],
+                                               columns: 2, hasSwitcher: false) == .state)
+        #expect(LauncherNavigation.destination(from: .state, command: .up, cells: [.state],
+                                               columns: 2, hasSwitcher: true) == .pc)
+        #expect(LauncherNavigation.destination(from: .app(8), command: .right, cells: [.overflow, .state],
+                                               columns: 2, hasSwitcher: false) == .overflow)
+    }
+
+    @Test @MainActor func pollingSleepsAtNeutralAndStopsDuringAHandoff() {
+        var enabled = true
+        let controller = LauncherController(navigationEnabled: { enabled })
+        defer { controller.detach() }
+        let id = ObjectIdentifier(controller)
+        var commands: [LauncherCommand] = []
+        controller.handle = { commands.append($0) }
+        controller.poll(inputs: [id: .init()])
+        #expect(!controller.isPolling)
+        controller.inputChanged(inputs: [id: .init(direction: .right)])
+        #expect(controller.isPolling)
+        #expect(commands == [.right])
+        controller.inputChanged(inputs: [id: .init(dismiss: true)])
+        #expect(commands == [.right])
+        controller.poll(inputs: [id: .init()])
+        #expect(!controller.isPolling)
+        controller.poll(inputs: [id: .init(activate: true)])
+        #expect(commands == [.right, .activate])
+        controller.poll(inputs: [id: .init(activate: true)])
+        #expect(commands == [.right, .activate])
+        controller.poll(inputs: [id: .init()])
+        controller.handle = { _ in enabled = false }
+        controller.poll(inputs: [id: .init(activate: true)])
+        #expect(!controller.isPolling)
     }
 
     @Test func repeatDelaysAndButtonsOnlyFireOnPress() {

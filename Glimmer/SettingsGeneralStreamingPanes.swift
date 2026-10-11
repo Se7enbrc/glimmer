@@ -62,13 +62,6 @@ struct GeneralPane: View {
         @Bindable var model = model
         Form {
             Section {
-                Picker("Launcher", selection: $model.launcherStyle) {
-                    ForEach(LauncherStyle.allCases, id: \.self) { style in
-                        Text(style.title).tag(style)
-                    }
-                }
-            }
-            Section {
                 Toggle("Open at login", isOn: $launchAtLogin)
                     .help("Adds Glimmer to System Settings › General › Login Items.")
                     .onChange(of: launchAtLogin) { _, on in

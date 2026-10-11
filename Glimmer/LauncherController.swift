@@ -16,7 +16,12 @@ final class LauncherController {
     private var timer: Timer?
     private var controllers: [GCController] = []
     private var repeats: [ObjectIdentifier: LauncherControllerRepeat] = [:]
-    private let backgroundEventsID = UUID()
+    private let navigationEnabled: (() -> Bool)?
+    var isPolling: Bool { timer != nil }
+
+    init(navigationEnabled: (() -> Bool)? = nil) {
+        self.navigationEnabled = navigationEnabled
+    }
 
     func attach(window: NSWindow?) {
         guard self.window !== window else { return }
@@ -62,6 +67,7 @@ final class LauncherController {
     }
 
     private var canNavigate: Bool {
+        if let navigationEnabled { return navigationEnabled() }
         guard let window, window.isVisible else { return false }
         return LauncherNavigation.isEnabled(streaming: streaming, testing: testing, active: NSApp.isActive,
                                             launcherKey: window.isKeyWindow,
@@ -80,13 +86,24 @@ final class LauncherController {
         controllers.removeAll { !liveIDs.contains(ObjectIdentifier($0)) }
         for controller in live where !controllers.contains(where: { $0 === controller }) {
             guard let pad = controller.extendedGamepad, pad.valueChangedHandler == nil else { continue }
-            // GameController refreshes polled values only with a handler; never replace another consumer's slot.
-            pad.valueChangedHandler = { _, _ in }
+            // GameController refreshes values only with a handler; never replace another consumer's slot.
+            // The callback wakes repeats; a neutral controller needs no timer.
+            pad.valueChangedHandler = { [weak self] _, _ in
+                Task { @MainActor [weak self] in self?.inputChanged() }
+            }
             controllers.append(controller)
         }
         guard !controllers.isEmpty else { stop(); return }
+        poll()
+    }
+
+    func inputChanged(inputs: [ObjectIdentifier: LauncherControllerInput]? = nil) {
         guard timer == nil else { return }
-        ControllerBackgroundEvents.setEnabled(true, for: backgroundEventsID)
+        poll(inputs: inputs)
+    }
+
+    private func startTimer() {
+        guard timer == nil else { return }
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
@@ -101,18 +118,24 @@ final class LauncherController {
         for controller in controllers { controller.extendedGamepad?.valueChangedHandler = nil }
         controllers.removeAll()
         repeats.removeAll()
-        ControllerBackgroundEvents.setEnabled(false, for: backgroundEventsID)
     }
 
-    private func poll() {
-        guard canNavigate else { stop(); return }
+    private func currentInputs() -> [ObjectIdentifier: LauncherControllerInput] {
+        var inputs: [ObjectIdentifier: LauncherControllerInput] = [:]
         for controller in controllers {
             guard let pad = controller.extendedGamepad else { continue }
             let direction = LauncherCommand.direction(x: pad.dpad.xAxis.value, y: pad.dpad.yAxis.value)
                 ?? LauncherCommand.direction(x: pad.leftThumbstick.xAxis.value, y: pad.leftThumbstick.yAxis.value)
-            let input = LauncherControllerInput(direction: direction,
-                                                activate: pad.buttonA.isPressed, dismiss: pad.buttonB.isPressed)
-            let id = ObjectIdentifier(controller)
+            inputs[ObjectIdentifier(controller)] = LauncherControllerInput(
+                direction: direction, activate: pad.buttonA.isPressed, dismiss: pad.buttonB.isPressed)
+        }
+        return inputs
+    }
+
+    func poll(inputs: [ObjectIdentifier: LauncherControllerInput]? = nil) {
+        guard canNavigate else { stop(); return }
+        let inputs = inputs ?? currentInputs()
+        for (id, input) in inputs {
             var repeatState = repeats[id] ?? LauncherControllerRepeat()
             let commands = repeatState.commands(input, at: ProcessInfo.processInfo.systemUptime)
             repeats[id] = repeatState
@@ -124,6 +147,13 @@ final class LauncherController {
                     handle?(command)
                 }
             }
+        }
+        guard canNavigate else { stop(); return }
+        if inputs.values.contains(where: { !$0.isNeutral }) {
+            startTimer()
+        } else {
+            timer?.invalidate()
+            timer = nil
         }
     }
 

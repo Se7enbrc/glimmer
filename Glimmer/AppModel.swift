@@ -52,10 +52,7 @@ final class AppModel {
         didSet { launcherController.streamingChanged(isStreaming) }
     }
     @ObservationIgnored let launcherController = LauncherController()
-    @ObservationIgnored private let launcherDefaults: UserDefaults
-    var launcherStyle = LauncherStyle.buttons {
-        didSet { launcherDefaults.set(launcherStyle.rawValue, forKey: LauncherStyle.defaultsKey) }
-    }
+    @ObservationIgnored lazy var launcherArtCache = LauncherArtCache(base: supportBase)
     /// Active native session, retained while streaming.
     @ObservationIgnored var nativeSession: StreamSession?
     /// A command-line launch waiting for its route, before a session exists.
@@ -498,9 +495,7 @@ final class AppModel {
         hostStatusTask?.cancel()
     }
 
-    init(launcherDefaults: UserDefaults = .standard) {
-        self.launcherDefaults = launcherDefaults
-        _launcherStyle = LauncherStyle.persisted(rawValue: launcherDefaults.string(forKey: LauncherStyle.defaultsKey))
+    init() {
         // Observation setters can run during initialization. Restore quality's
         // backing storage so entering Custom cannot overwrite saved dimensions
         // before they are read, or persist defaults the user never chose.

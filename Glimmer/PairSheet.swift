@@ -67,7 +67,9 @@ struct PairSheet: View {
                 .font(.title2.bold())
                 .contentTransition(.opacity)
 
-            if paired {
+            if let pairedHost, LauncherStyle.offersChoice(apps: pairedHost.apps) {
+                PairLauncherChoice(host: pairedHost)
+            } else if paired {
                 successBody
             } else if !chosen {
                 HostChooser(selected: { addr, name in
@@ -219,6 +221,7 @@ struct PairSheet: View {
             let host = await model.pair(attempt: attempt, pin: pin)
             guard attempt.accepts(pairingAttempt, address: trimmedHost, cancelled: Task.isCancelled) else { return }
             pairedHost = host
+            selectPairedHost()
             pairingTask = nil
         }
     }
@@ -231,7 +234,9 @@ struct PairSheet: View {
     }
 
     private func selectPairedHost() {
-        if let pairedHost { model.selectHost(pairedHost) }
+        if let pairedHost, let current = model.hosts.first(where: { $0.id == pairedHost.id }) {
+            model.selectHost(current, defaults: model.hostsDefaults)
+        }
     }
 }
 

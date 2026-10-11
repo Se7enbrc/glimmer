@@ -43,7 +43,9 @@ struct HostContextMenuTests {
         #expect(model.streamingHostID == host.id)
     }
 
-    @Test func switchingPCsDuringAStreamPreservesSelectionAndStatus() {
+    @Test func switchingPCsDuringAStreamKeepsTheSessionOnItsOwnPC() throws {
+        let store = try IsolatedStore("switch-during-stream")
+        defer { store.remove() }
         let model = model(polled: .streamingApp(name: "Desktop"))
         model.selectedHost = host
         let live = HostLiveStatus(hostID: host.id, state: .streamingApp(name: "Desktop"), capturedAt: Date())
@@ -53,11 +55,14 @@ struct HostContextMenuTests {
         let other = Host(id: "other-pc", name: "other", customName: nil, localAddress: nil, manualAddress: nil,
                          apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
 
-        model.selectHost(other)
+        model.lastLaunchAttempt = (LibraryApp(id: 1, name: "Desktop", hdr: false, hidden: false), host)
+        model.selectHost(other, defaults: store.defaults)
 
-        #expect(model.selectedHost?.id == host.id)
-        #expect(model.hostLiveStatus?.hostID == live.hostID)
-        #expect(model.nativeStreamError == "Existing stream message")
+        #expect(model.selectedHost?.id == other.id)
+        #expect(model.hostLiveStatus == nil)
+        #expect(model.nativeStreamError == nil)
+        #expect(model.streamingHostID == host.id)
+        model.hostStatusTask?.cancel()
     }
 
     /// Without a pin nothing is sent, and the launcher points at the fix.

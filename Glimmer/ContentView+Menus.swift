@@ -132,6 +132,12 @@ private struct HostContextMenu: ViewModifier {
         // Several surfaces mount this menu; reload at present-time so a
         // change on one is reflected in the other's checkmark.
         .onAppear { codecPref = HostCodecPreference.load(for: host.id) }
+        Picker("Launcher", selection: Binding(
+            get: { model.hosts.first(where: { $0.id == host.id })?.launcherStyle ?? host.launcherStyle },
+            set: { model.setLauncherStyle($0, for: host) })) {
+            ForEach(LauncherStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.menu)
         // Wake on LAN needs the MAC Sunshine reports; without one the switch
         // is off and disabled, and its title and tooltip say why.
         let hasMac = WakeOnLAN.normalizeMac(host.macAddress) != nil

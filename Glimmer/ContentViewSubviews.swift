@@ -37,11 +37,18 @@ struct AppIconsRow: View {
     }
 
     var body: some View {
-        if model.launcherStyle == .covers {
-            coverGrid
-        } else {
-            buttonGrid
+        Group {
+            if model.launcherStyle == .covers { coverGrid } else { buttonGrid }
         }
+        .preference(key: LauncherFocusCells.self, value: navigationCells)
+    }
+
+    private var navigationCells: [LauncherFocus] {
+        let visible = model.launcherStyle == .covers ? apps : inlineApps
+        var cells = visible.filter { !model.isStreaming || tileState($0) != .ready }
+            .map { LauncherFocus.app($0.id) }
+        if model.launcherStyle == .buttons, !overflowApps.isEmpty { cells.append(.overflow) }
+        return cells
     }
 
     private var buttonGrid: some View {
@@ -140,7 +147,7 @@ struct AppIconsRow: View {
         .contentShape(Rectangle())
     }
 
-    func appTile(_ app: LibraryApp) -> some View {
+    func appTile(_ app: LibraryApp, revision: String = "") -> some View {
         let state = tileState(app)
         return Button {
             switch state {
@@ -152,7 +159,7 @@ struct AppIconsRow: View {
             }
         } label: {
             if model.launcherStyle == .covers {
-                coverLabel(app, connecting: state == .connecting || state == .reconnecting,
+                coverLabel(app, revision: revision, connecting: state == .connecting || state == .reconnecting,
                            hiddenStream: state == .hiddenStream)
             } else {
                 tileLabel(icon: app.icon, title: app.name, trailing: "play.fill",
@@ -161,7 +168,6 @@ struct AppIconsRow: View {
             }
         }
         .buttonStyle(LauncherTileStyle(covers: model.launcherStyle == .covers))
-        .focusable()
         .focused(focus, equals: .app(app.id))
         .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
         // Only the streaming app stays live while a stream exists; the others can't start one.
@@ -189,7 +195,6 @@ struct AppIconsRow: View {
         } label: {
             tileLabel(icon: Image(systemName: "ellipsis"), title: "\(overflowApps.count) more", trailing: "chevron.down")
         }
-        .focusable()
         .focused(focus, equals: .overflow)
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

@@ -66,6 +66,7 @@ struct StreamButton: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var isConnecting: Bool = false
+    var launcherFocus: FocusState<LauncherFocus?>.Binding?
 
     /// The success haptic belongs on the actual "we're live" beat - this flag
     /// gives sensoryFeedback a precise connectionEstablished edge, not a tap.
@@ -217,6 +218,7 @@ struct StreamButton: View {
         // Custom style = the hero's accent gradient + glass + soft rim.
         // `.glassProminent` was too saturated; `.glass` near-neutral.
         .buttonStyle(StreamButtonStyle())
+        .modifier(LauncherStateFocus(focus: launcherFocus))
         // ENTER-TO-PLAY: Return fires the hero verb from anywhere in the
         // window (.disabled keeps it a no-op; sheets/alerts own Return while
         // up). The cancel roles bind ⎋ instead - Escape-to-cancel is
@@ -304,5 +306,13 @@ struct StreamButton: View {
         }
         if let selectedName { return "Connecting to \(selectedName)…" }
         return "Connecting…"
+    }
+}
+
+private struct LauncherStateFocus: ViewModifier {
+    let focus: FocusState<LauncherFocus?>.Binding?
+
+    func body(content: Content) -> some View {
+        if let focus { content.focused(focus, equals: .state) } else { content }
     }
 }

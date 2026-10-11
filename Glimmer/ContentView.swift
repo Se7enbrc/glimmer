@@ -20,6 +20,7 @@ struct MainWindow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
     @FocusState private var launcherFocus: LauncherFocus?
+    @State private var focusCells: [LauncherFocus] = []
     @State private var showAWDLPrompt = false
     @State private var awdlPromptChecked = false
     /// Lifted out of EmptyPairingState so the sheet survives the swap to
@@ -39,6 +40,12 @@ struct MainWindow: View {
         .background {
             LauncherControllerWindow(controller: model.launcherController, handle: navigateLauncher)
                 .frame(width: 0, height: 0)
+        }
+        .onPreferenceChange(LauncherFocusCells.self) { cells in
+            focusCells = cells
+            if let launcherFocus, launcherFocus != .pc, !cells.contains(launcherFocus) {
+                self.launcherFocus = cells.first
+            }
         }
         .onChange(of: model.selectedHost?.id) { _, _ in launcherFocus = nil }
         .onChange(of: model.launcherStyle) { _, _ in launcherFocus = nil }
@@ -155,14 +162,9 @@ struct MainWindow: View {
         }
         guard !modal else { return }
         let apps = model.selectedHost?.apps ?? []
-        let inline = model.launcherStyle == .covers ? apps : AppIconsRow.inlineApps(apps)
-        var cells = inline.map { LauncherFocus.app($0.id) }
-        if inline.count < apps.count { cells.append(.overflow) }
+        let cells = focusCells
         if command == .activate {
-            if case .app(let id) = launcherFocus, let host = model.selectedHost,
-               let app = host.apps.first(where: { $0.id == id }) {
-                model.requestStream(app: app, on: host)
-            } else if launcherFocus != nil {
+            if launcherFocus != nil {
                 model.launcherController.postKey(.activate)
             } else {
                 launcherFocus = cells.first ?? (model.hosts.count > 1 ? .pc : nil)
@@ -288,7 +290,8 @@ private struct ConnectSurface: View {
                 AppIconsRow(apps: host.apps, host: host, focus: focus, connectingShown: showsConnectingUI)
             }
             if showsStateButton {
-                StreamButton(isConnecting: showsConnectingUI)
+                StreamButton(isConnecting: showsConnectingUI, launcherFocus: focus)
+                    .preference(key: LauncherFocusCells.self, value: [.state])
                     .transition(.opacity)
             }
             ContextFooter()
@@ -298,7 +301,7 @@ private struct ConnectSurface: View {
         // No trailing Spacer: the window sizes to this column (.windowResizability
         // in GlimmerApp). 532pt of content in 24pt margins is the 580pt window, and
         // must stay in step with GlimmerApp's minWidth, or the window can be dragged.
-        .frame(width: 532)
+        .frame(width: LauncherLayout.contentWidth)
         .padding(.horizontal, 24)
         .padding(.top, 4)
         .padding(.bottom, 18)
@@ -432,9 +435,7 @@ private struct PCHeader: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .focusable()
         .focused(focus, equals: .pc)
-        .disabled(model.isStreaming)
         .help("Choose a PC")
         .accessibilityLabel("PC")
         .accessibilityValue(host?.displayName ?? "None")

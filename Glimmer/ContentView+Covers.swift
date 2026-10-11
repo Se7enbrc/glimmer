@@ -5,6 +5,7 @@ import SwiftUI
 
 extension AppIconsRow {
     var coverGrid: some View {
+        let revision = LauncherArtCache.revision(apps: host.apps)
         let columns = LauncherLayout.columns(appCount: apps.count)
         let rows = (apps.count + columns - 1) / columns
         let rowHeight = LauncherLayout.coverHeight(appCount: apps.count) + 48
@@ -13,11 +14,11 @@ extension AppIconsRow {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: columns),
                           spacing: 10) {
                     ForEach(apps) { app in
-                        appTile(app).id(LauncherFocus.app(app.id))
+                        appTile(app, revision: revision).id(LauncherFocus.app(app.id))
                     }
                 }
                 .padding(.vertical, 16)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, LauncherLayout.coverPadding)
             }
             .scrollDisabled(rows <= 2)
             .frame(height: CGFloat(min(rows, 2)) * rowHeight + CGFloat(min(rows, 2) - 1) * 10 + 32)
@@ -27,9 +28,10 @@ extension AppIconsRow {
         }
     }
 
-    func coverLabel(_ app: LibraryApp, connecting: Bool, hiddenStream: Bool) -> some View {
+    func coverLabel(_ app: LibraryApp, revision: String, connecting: Bool, hiddenStream: Bool) -> some View {
         VStack(spacing: 6) {
-            LauncherCoverArt(app: app, host: host, height: LauncherLayout.coverHeight(appCount: apps.count))
+            LauncherCoverArt(app: app, host: host, revision: revision,
+                             height: LauncherLayout.coverHeight(appCount: apps.count))
             VStack(spacing: 2) {
                 Text(app.name).font(.headline).lineLimit(1)
                 if connecting {
@@ -42,8 +44,6 @@ extension AppIconsRow {
             }
             .frame(height: 42, alignment: .top)
         }
-        .frame(maxWidth: .infinity)
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     func isRunning(_ app: LibraryApp) -> Bool {
@@ -59,14 +59,16 @@ extension AppIconsRow {
     }
 }
 
-private struct LauncherCoverArt: View {
+struct LauncherCoverArt: View {
     let app: LibraryApp
     let host: Host
+    let revision: String
     let height: CGFloat
     @Environment(AppModel.self) private var model
     @State private var image: CGImage?
 
-    private var key: String { LauncherArtCache.key(pcID: host.id, appID: app.id, apps: host.apps) }
+    @State private var shownKey: String?
+    private var key: String { "\(host.id):\(app.id):\(revision)" }
 
     var body: some View {
         ZStack {
@@ -79,14 +81,18 @@ private struct LauncherCoverArt: View {
         }
         .frame(width: height * 3 / 4, height: height)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(.focusEffect, RoundedRectangle(cornerRadius: 14, style: .continuous))
         .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 4)
         .task(id: "\(key)-\(model.isStreaming)") {
-            guard model.launcherStyle.loadsArt(streaming: model.isStreaming) else { return }
-            image = nil
+            if shownKey != key { image = nil; shownKey = key }
+            guard !model.isStreaming, image == nil else { return }
             let client = model.makeNetwork(model.nativeServerInfo(for: host))
-            let result = await LauncherArtCache.shared.image(key: key) { try await client.appAsset(appID: app.id) }
-            guard !Task.isCancelled, model.launcherStyle == .covers else { return }
-            image = result
+            let data = await model.launcherArtCache.image(pcID: host.id, appID: app.id, revision: revision) {
+                try await client.appAsset(appID: app.id)
+            }
+            await client.shutdown()
+            guard !Task.isCancelled, let data else { return }
+            image = LauncherArtCache.decode(data)
         }
     }
 }

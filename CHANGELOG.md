@@ -4,10 +4,11 @@
 
 ### Features
 
-- Choose Covers in Settings › General to browse the PC's apps by their cover art.
-  The familiar Buttons look remains the default.
+- Choose Buttons or Covers for each PC when pairing, or in Settings › PCs next
+  to Codec. Existing PCs keep Buttons.
 - Use a controller to choose apps and switch PCs in the launcher. The d-pad or
   left stick moves focus, A or Cross opens the selection, and B or Circle dismisses a dialog.
+  Raw-HID-only controllers don't navigate the launcher yet.
 
 - Steam shows its own logo in the launcher, the menu and the PC list, instead
   of a generic controller.

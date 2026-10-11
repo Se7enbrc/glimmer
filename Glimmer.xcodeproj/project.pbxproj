@@ -478,6 +478,7 @@
 		AC2026101100000000000003A /* LauncherController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026101100000000000003B /* LauncherController.swift */; };
 		AC2026101100000000000004A /* ContentView+Covers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026101100000000000004B /* ContentView+Covers.swift */; };
 		AC2026101100000000000005A /* LauncherExperienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026101100000000000005B /* LauncherExperienceTests.swift */; };
+		AC202610120000000000000A /* PairSheet+Launcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC202610120000000000000B /* PairSheet+Launcher.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -987,6 +988,7 @@
 		AC2026101100000000000003B /* LauncherController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherController.swift"; sourceTree = "<group>"; };
 		AC2026101100000000000004B /* ContentView+Covers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Covers.swift"; sourceTree = "<group>"; };
 		AC2026101100000000000005B /* LauncherExperienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherExperienceTests.swift"; sourceTree = "<group>"; };
+		AC202610120000000000000B /* PairSheet+Launcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairSheet+Launcher.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1089,6 +1091,7 @@
 				AC2026101100000000000003B /* LauncherController.swift */,
 				AC2026101100000000000002B /* LauncherNavigation.swift */,
 				AC2026101100000000000001B /* LauncherArtCache.swift */,
+				AC202610120000000000000B /* PairSheet+Launcher.swift */,
 				AC2026101100000000000000B /* LauncherStyle.swift */,
 				DEC0DE01000000000000000B /* ContentView+Menus.swift */,
 				DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */,
@@ -1705,6 +1708,7 @@
 				AC2026101100000000000003A /* LauncherController.swift in Sources */,
 				AC2026101100000000000002A /* LauncherNavigation.swift in Sources */,
 				AC2026101100000000000001A /* LauncherArtCache.swift in Sources */,
+				AC202610120000000000000A /* PairSheet+Launcher.swift in Sources */,
 				AC2026101100000000000000A /* LauncherStyle.swift in Sources */,
 				DEC0DE01000000000000000A /* ContentView+Menus.swift in Sources */,
 				DEC0DE02000000000000000A /* ContentView+ReadinessChip.swift in Sources */,
