@@ -50,6 +50,9 @@ struct MainWindow: View {
             }
         }
         .onChange(of: model.selectedHost?.id) { _, _ in launcherFocus = nil }
+        .onChange(of: launcherFocus) { _, focus in
+            if focus == nil { model.launcherControllerNavigating = false }
+        }
         .onChange(of: model.launcherStyle) { _, _ in launcherFocus = nil }
         .onAppear { model.setHIDDiscovery(true, for: .launcher) }
         .onDisappear { model.setHIDDiscovery(false, for: .launcher) }
@@ -156,6 +159,12 @@ struct MainWindow: View {
 
     private func navigateLauncher(_ command: LauncherCommand) {
         guard !model.isStreaming else { return }
+        // The controls become focusable a render later, so the first command waits a turn.
+        guard model.launcherControllerNavigating else {
+            model.launcherControllerNavigating = true
+            DispatchQueue.main.async { navigateLauncher(command) }
+            return
+        }
         let modal = showPair || showAWDLPrompt || model.pairSheetShown || model.showRawHIDPrompt
             || model.showHIDPermissionPrompt || model.pendingTakeover != nil
         if command == .dismiss {

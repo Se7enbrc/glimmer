@@ -323,17 +323,24 @@ struct LauncherExperienceTests {
 
 struct LauncherNavigationTests {
     @Test func controllerFocusUsesOneTargetAndOneActivationWithEitherKeyboardSetting() {
-        #expect(LauncherNavigation.needsControllerFocus(keyboardNavigation: false))
-        #expect(!LauncherNavigation.needsControllerFocus(keyboardNavigation: true))
+        #expect(LauncherNavigation.needsControllerFocus(keyboardNavigation: false, controllerNavigating: true))
+        #expect(!LauncherNavigation.needsControllerFocus(keyboardNavigation: true, controllerNavigating: true))
         for keyboard in [false, true] {
             for focused in [false, true] {
                 for enabled in [false, true] {
-                    #expect(LauncherNavigation.handlesSpace(keyboardNavigation: keyboard,
+                    #expect(LauncherNavigation.handlesSpace(keyboardNavigation: keyboard, controllerNavigating: true,
                                                            focused: focused, enabled: enabled)
                             == (!keyboard && focused && enabled))
                 }
             }
         }
+    }
+
+    /// Opening the launcher must not focus (and ring) the PC name before a controller moves.
+    @Test func nothingTakesControllerFocusUntilAControllerNavigates() {
+        #expect(!LauncherNavigation.needsControllerFocus(keyboardNavigation: false, controllerNavigating: false))
+        #expect(!LauncherNavigation.handlesSpace(keyboardNavigation: false, controllerNavigating: false,
+                                                 focused: true, enabled: true))
     }
 
     @Test func navigationRequiresTheLauncherAndYieldsToStreamingAndDiagnostics() {

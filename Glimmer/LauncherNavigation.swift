@@ -69,10 +69,16 @@ struct LauncherControllerRepeat {
 }
 
 enum LauncherNavigation {
-    static func needsControllerFocus(keyboardNavigation: Bool) -> Bool { !keyboardNavigation }
+    /// Only while a controller is driving: an always-focusable header gets the window's
+    /// initial focus and its ring when the launcher opens.
+    static func needsControllerFocus(keyboardNavigation: Bool, controllerNavigating: Bool) -> Bool {
+        !keyboardNavigation && controllerNavigating
+    }
 
-    static func handlesSpace(keyboardNavigation: Bool, focused: Bool, enabled: Bool) -> Bool {
-        needsControllerFocus(keyboardNavigation: keyboardNavigation) && focused && enabled
+    static func handlesSpace(keyboardNavigation: Bool, controllerNavigating: Bool, focused: Bool,
+                             enabled: Bool) -> Bool {
+        needsControllerFocus(keyboardNavigation: keyboardNavigation, controllerNavigating: controllerNavigating)
+            && focused && enabled
     }
 
     static func isEnabled(streaming: Bool, testing: Bool, active: Bool, launcherKey: Bool, sheetKey: Bool) -> Bool {
@@ -112,11 +118,13 @@ struct LauncherControlFocus: ViewModifier {
     let target: LauncherFocus
     var activate: (() -> Void)?
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(AppModel.self) private var model
     @State private var keyboardNavigation = NSApp.isFullKeyboardAccessEnabled
 
     func body(content: Content) -> some View {
         Group {
-            if LauncherNavigation.needsControllerFocus(keyboardNavigation: keyboardNavigation) {
+            if LauncherNavigation.needsControllerFocus(keyboardNavigation: keyboardNavigation,
+                                                       controllerNavigating: model.launcherControllerNavigating) {
                 // Replace the control's focus target, so accessibility never sees two stops.
                 // Edit focus also works with Keyboard navigation off; activation stays on the control.
                 content.focusable(false)
@@ -124,7 +132,9 @@ struct LauncherControlFocus: ViewModifier {
                     .focused(focus, equals: target)
                     .onKeyPress(.space) {
                         guard let activate, LauncherNavigation.handlesSpace(
-                            keyboardNavigation: keyboardNavigation, focused: focus.wrappedValue == target,
+                            keyboardNavigation: keyboardNavigation,
+                            controllerNavigating: model.launcherControllerNavigating,
+                            focused: focus.wrappedValue == target,
                             enabled: isEnabled) else { return .ignored }
                         activate()
                         return .handled

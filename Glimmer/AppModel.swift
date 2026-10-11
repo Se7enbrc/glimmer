@@ -207,6 +207,8 @@ final class AppModel {
     var menuDetails: StreamStatsSnapshot?
     var menuBarControllers: [MenuBarController] = []
     var pairSheetShown = false
+    /// True from a controller's first launcher command until focus clears.
+    var launcherControllerNavigating = false
     var pairSheetHost: Host?
     @ObservationIgnored var menuRefreshTimer: Timer?
 
