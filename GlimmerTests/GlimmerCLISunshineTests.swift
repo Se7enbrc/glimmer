@@ -36,7 +36,7 @@ struct GlimmerCLISunshineTests {
     private func run(_ verb: Verb, _ args: [String], on fixture: FakePCModel) async throws -> (Int32, CapturedTerminal) {
         let command = try CLI.parse(args)
         let terminal = CapturedTerminal()
-        let status = await CLI.$terminal.withValue(terminal.write) { await verb(command, fixture.model) }
+        let status = await CLITerminal.$write.withValue(terminal.write) { await verb(command, fixture.model) }
         fixture.settle()
         return (status, terminal)
     }

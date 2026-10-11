@@ -66,7 +66,7 @@ struct GlimmerCLIHandOffTests {
         let terminal = CapturedTerminal()
         var requests: [[String: String]] = []
         let command = GlimmerCLI.Command(verb: .stream, arguments: ["Tower"], flags: flags)
-        let status = await GlimmerCLI.$terminal.withValue(terminal.write) {
+        let status = await CLITerminal.$write.withValue(terminal.write) {
             await GlimmerCLI.handOff(app: desktop, host: tower, takeover: true, command: command,
                                      open: { opens ? NSRunningApplication.current : nil },
                                      post: { request, replies in
