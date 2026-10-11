@@ -125,7 +125,9 @@ final class TelemetryExporter: @unchecked Sendable {
     let source: TelemetrySource
     /// Allocated only when the opt-in exporter starts its capture timer.
     var rendererTelemetry: RendererTelemetry?
-    let counters = TelemetryCounters.shared
+    let counters: TelemetryCounters
+    /// Where the NDJSON rows and the session report land (`logsDirectory` in production).
+    let outputDirectory: URL
 
     /// Wi-Fi radio sampler (signal 3). Exists only on the gate-on path (this
     /// exporter is built only when enabled), and is read once per ~1Hz capture
@@ -244,8 +246,12 @@ final class TelemetryExporter: @unchecked Sendable {
         return TelemetryExporter(source: source, serverName: serverName)
     }
 
-    private init(source: TelemetrySource, serverName: String) {
+    /// Tests pass a temp directory and their own counters; production takes the defaults.
+    init(source: TelemetrySource, serverName: String,
+         outputDirectory: URL = TelemetryExporter.logsDirectory, counters: TelemetryCounters = .shared) {
         self.source = source
+        self.outputDirectory = outputDirectory
+        self.counters = counters
         self.serverLabel = TelemetryRenderer.pseudonym(serverName)
         // 64-bit random hex - opaque, not a host identifier.
         self.sessionId = String(format: "%016x", UInt64.random(in: .min ... .max))
