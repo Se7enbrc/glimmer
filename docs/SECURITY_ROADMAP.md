@@ -103,9 +103,9 @@ own evidence and any applicable qualification.
    `scripts/fuzz.sh`, 30 seconds per target in Verify's `libFuzzer` job
    ([#123](https://github.com/Se7enbrc/glimmer/pull/123)). This addresses
    `dynamic_analysis` and strengthens `dynamic_analysis_unsafe` evidence around
-   unsafe buffers and `Glimmer/Stream/CHelpers.h`. Still to do: ThreadSanitizer,
-   once validated against the platform frameworks, and real streaming checks of
-   playback, controller and concurrency lifecycles.
+   unsafe Swift buffers. Still to do: ThreadSanitizer, once validated against
+   the platform frameworks, and real streaming checks of playback, controller
+   and concurrency lifecycles.
 3. **Build repeatability: proved for the unsigned payload.** Two clean clones of
    the same commit build byte-identical `Glimmer.app` bundles
    (`scripts/compare-builds.sh`; first run 2026-10-10 with Xcode 27.0 on macOS

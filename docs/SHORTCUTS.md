@@ -13,7 +13,7 @@ stream before using its shortcuts.
 | Stop streaming                       | Control-Q · ⌃Q   | Disconnects and leaves the game running. Command-Q quits Glimmer.                      |
 | Enter or leave Mini Player           | Control-M · ⌃M   | Returns to the previous presentation when leaving Mini Player.                         |
 | Show or hide stream stats            | Control-I · ⌃I   | Applies to this stream; the next follows Settings → Quality.                           |
-| Capture or release the pointer       | Control-P · ⌃P   | Window and Mini Player only. In fullscreen, this goes to the PC.                       |
+| Capture or release the pointer       | Control-P · ⌃P   | Also switches fullscreen between a free pointer and captured game controls.            |
 | Paste Mac clipboard text into the PC | Control-V · ⌃V   | Command-V also works when Command shortcuts stay with the Mac.                         |
 | Bookmark a rough moment              | Control-B · ⌃B   | Requires Performance telemetry in Settings → Diagnostics. Otherwise it goes to the PC. |
 
@@ -38,6 +38,14 @@ capture when the pointer enters its picture while the window has focus.
 Controllers keep working while Mini Player is visible, even when another Mac app
 is active; keyboard and mouse input follow focus.
 
+An app named “Desktop” starts fullscreen with a free pointer that follows the
+picture. Other apps start with captured game controls. Control-P toggles either
+way and keeps that fullscreen choice across focus changes for this stream.
+
+While the pointer is free, macOS input methods and the character viewer can
+compose text for the PC. Capturing it sends physical keys instead. Committed
+text stays ahead of later keys; pasted text first releases held input.
+
 ## Copy and paste
 
 Control-C copies inside the PC. It does not copy that text to the Mac. Sunshine
@@ -52,8 +60,8 @@ UTF-8 bytes per paste.
 
 Command stays with the Mac by default, so Command-Tab switches apps and
 Command-Space opens Spotlight. Settings → Input can send Command to the PC as
-the Windows key while the game captures the pointer. The Stop Streaming shortcut
-works either way.
+the Windows key in fullscreen, or while the pointer is captured in a window or
+Mini Player. The Stop Streaming shortcut works either way.
 
 In native fullscreen, Command-Escape opens macOS Game Overlay. Its Settings
 contains the Game Mode switch. See
@@ -69,6 +77,25 @@ For Start + Select + L1 + R1, the names differ by controller:
 - DualSense: Options + Create + L1 + R1. Extra DualSense buttons must be
   enabled.
 - Xbox: Menu + View + LB + RB.
+
+## Controller mouse and launcher
+
+Hold Menu, Options or Start alone for more than 0.75 seconds, then release it to
+switch that controller between game input and mouse input. Left stick moves the
+pointer; right stick scrolls. The bottom, right and left face buttons click
+left, right and middle; L1/R1 click back/forward, and the d-pad scrolls. On
+DualSense, Start needs Extra DualSense buttons enabled.
+
+In mouse mode, a DualSense or DualShock 4 touchpad moves with one finger and
+scrolls with two. Clicking with fewer than two contacts is a left click; with
+two, a right click. Nintendo button layout changes only the buttons sent to the
+game, so these mouse controls stay positional. The setting is off by default and
+appears in Settings → Input when a Nintendo-layout controller is connected.
+
+In the launcher, the d-pad or left stick moves focus, the bottom face button (A
+or Cross) selects, and the right face button (B or Circle) dismisses. Move to
+the PC name to switch PCs. This uses macOS GameController pads; controllers
+available only through raw HID do not navigate the launcher.
 
 ## When you forget
 

@@ -37,9 +37,9 @@ moonlight-qt stream options are refused, since Settings holds them; Glimmer adds
 `--force`, `--wait`, `--exit-after-first-frame` and `--json`. The CSV from
 `glimmer list <pc> --csv` has Name, ID, HDR Support and Hidden.
 
-`<pc>` is a paired PC's name or address, ignoring case. Exit status: 0 success,
-1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired or no paired PC by
-that name.
+`<pc>` is a paired PC's name, ID or address, ignoring case. Exit status: 0
+success, 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired or no
+paired PC by that name.
 
 ## URL commands
 

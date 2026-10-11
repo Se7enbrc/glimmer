@@ -38,18 +38,23 @@ interface. macOS 26 or later, Apple Silicon. Free, open source, and always free.
 
 ## What you get
 
-- **Video:** H.264, HEVC and AV1, 8- and 10-bit, real HDR10, up to 4K 240 Hz.
-- **Pacing:** the display locks to the stream, tuned against per-frame
-  telemetry.
+- **Video:** H.264 and HEVC, plus AV1 on supported Macs; 8-bit SDR and 10-bit
+  HDR10, with custom modes up to 7680 × 4320 and 240 fps. Actual playback
+  depends on the PC, Mac and display.
+- **Pacing:** frames follow the display clock, with buffering tuned against
+  per-frame telemetry.
 - **Audio:** stereo, 5.1 and 7.1, with spatial audio and AirPods head tracking.
 - **Controllers:** Xbox, DualSense and other pads, with rumble, gyro, touchpad
   and adaptive triggers.
-- **Mouse and keyboard:** raw 1:1 aim with the acceleration curve removed.
+- **Mouse and keyboard:** raw aim, a pointer that follows the picture, and
+  composed text through macOS input methods.
+- **Launcher:** Buttons or Covers for each PC, with controller navigation.
 - **Wi-Fi:** a helper that stops AirDrop's radio from interrupting the stream.
 - **The Mac side:** menu bar, mini player, Wake on LAN, Shortcuts, Siri,
   Spotlight and a `glimmer` command.
 
-No accounts, no analytics: Glimmer talks only to your PC and its update feed.
+No accounts, no analytics: Glimmer talks to your PC, the local network for
+discovery and Wake on LAN, and its update feed and downloads.
 [Every feature in detail](docs/FEATURES.md).
 
 ## Install

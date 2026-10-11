@@ -22,20 +22,21 @@ Each item names the evidence it comes from.
 - **Keep pace with Sunshine, macOS and dependencies.** Track current, unmodified
   Sunshine and new macOS releases, and keep dependencies updated through
   Renovate. Source: [AGENTS](../AGENTS.md) product decisions; issue #42.
-- **Test coverage.** Measure per-component coverage before setting any gate,
-  then add tests for missing paths. Source:
+- **Test coverage.** Extend the measured per-component coverage with tests for
+  missing paths before setting a gate. Source:
   [security roadmap](SECURITY_ROADMAP.md) item 1.
 - **Sanitizers and fuzzing.** Keep the protocol fuzz tests running under
   AddressSanitizer in `make verify` and retain hosted results for each release.
   Source: security roadmap item 2.
-- **Reproducible builds.** Make release metadata deterministic and compare two
-  independent clean builds. Source: security roadmap item 3.
-- **Source and release evidence.** Per-file copyright and licence notices, and
-  documented verification steps for every distributed artifact. Source: security
-  roadmap item 4.
-- **Network protocol assessment.** Document what stock Sunshine encrypts and
-  what it does not, without requiring a patched PC. Source: security roadmap,
-  `crypto_used_network`.
+- **Reproducible builds.** Extend the local unsigned-payload comparison to
+  hosted independent builds and normalize shipped bundles for comparison.
+  Source: security roadmap item 3.
+- **Source and release evidence.** Keep per-file copyright and licence notices
+  and retain verification evidence for every distributed artifact. Source:
+  security roadmap item 4.
+- **Network protocol assessment.** Keep the encryption and integrity assessment
+  current with stock Sunshine, without requiring a patched PC. Source: security
+  roadmap, `crypto_used_network`.
 - **Homebrew's main cask repository.** Move from the `se7enbrc/glimmer` tap to
   plain `brew install --cask glimmer` once Glimmer meets Homebrew's notability
   bar (75 stars for a submission by someone else, 225 for one by the

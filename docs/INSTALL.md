@@ -25,9 +25,9 @@ Glimmer has earned the
 The public assessment records the evidence and protocol limitations; the
 [security roadmap](SECURITY_ROADMAP.md) tracks work toward higher levels.
 
-Your PC needs Sunshine and a display that can present the exact mode you ask
-for: a virtual display driver on Windows, a current Sunshine on Linux.
-[the PC setup guide](HOST_SETUP.md) walks through it.
+Your PC needs Sunshine and a physical or virtual display to capture. Matching
+its mode to the stream requires configuration that differs between Windows and
+Linux; [the PC setup guide](HOST_SETUP.md) walks through it.
 
 The Wi-Fi helper lives in Settings › Quality › Wi-Fi; macOS asks for one
 approval under Login Items & Extensions. If registration fails, follow the

@@ -348,8 +348,8 @@ the attestation step from other trusted build steps. The separate scoped token
 still owns content publication.
 
 If publication succeeds but the tap step fails, the release is already public.
-The promotion's own appcast commit moves main, so rerunning that run fails its
-main check. Bump the cask from a current main checkout with
+The appcast commit updates the `appcast` branch. A rerun still requires `main`
+to match the dispatched SHA. Bump the cask from a current main checkout with
 `make brew-bump VERSION=<version>`, which finds the stable release's tag (a
 promoted candidate keeps its `-rc.N` tag) and checksums the published DMG. Do
 not rebuild the published version. If the appcast push fails after assets
@@ -449,21 +449,20 @@ updates, privacy permissions and the helpers carry over to the new certificate.
 
 ## 4. Reproducible payload
 
-The unsigned Release bundle is a pure function of the commit and the toolchain.
-`make CONFIG=Release app embed-helper`, the build the hosted Release workflow
-goes on to sign, produces a `Glimmer.app` whose every byte, mode and symlink
-matches another clean build of the same commit in another directory. Three
-things used to differ between builds, and the build itself fixes them.
-`BuildInfo.date` stamps the commit time instead of the wall clock
-(`SOURCE_DATE_EPOCH` overrides it; a dirty tree still stamps the clock so local
-builds stay distinguishable). Release binaries are stripped of their debug map
-(`STRIP_STYLE=debugging`): the SO, OSO and AST stabs that named the building
-machine's checkout and DerivedData paths. The symbol table stays, so crash logs
-still name functions without a dSYM. The App Intents metadata processor wrote
-its JSON in Swift's per-process hash order, so `make app` runs xcodebuild with
-`SWIFT_DETERMINISTIC_HASHING=1`. The linker already zeroes stab timestamps,
-derives `LC_UUID` from the content and ad-hoc signs by hashing it, so nothing
-else varies.
+The unsigned Release bundle is compared across clean builds of the same commit
+and toolchain. `make CONFIG=Release app embed-helper` produces the payload the
+hosted Release workflow goes on to sign. The comparison checks bytes, modes and
+symlinks, with the `Assets.car` exception described below. Three things used to
+differ between builds, and the build itself fixes them. `BuildInfo.date` stamps
+the commit time instead of the wall clock (`SOURCE_DATE_EPOCH` overrides it; a
+dirty tree still stamps the clock so local builds stay distinguishable). Release
+binaries are stripped of their debug map (`STRIP_STYLE=debugging`): the SO, OSO
+and AST stabs that named the building machine's checkout and DerivedData paths.
+The symbol table stays, so crash logs still name functions without a dSYM. The
+App Intents metadata processor wrote its JSON in Swift's per-process hash order,
+so `make app` runs xcodebuild with `SWIFT_DETERMINISTIC_HASHING=1`. The linker
+already zeroes stab timestamps, derives `LC_UUID` from the content and ad-hoc
+signs by hashing it, so nothing else varies.
 
 Prove it with `scripts/compare-builds.sh [WORKDIR]`: it clones HEAD twice,
 builds each clone from clean and compares the two bundles, every entry's mode

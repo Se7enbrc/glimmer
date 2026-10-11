@@ -28,8 +28,9 @@
   Y by their labels for all Nintendo-layout controllers. Single Joy-Con sides
   keep their positional layout.
 
-- Choose Buttons or Covers for each PC when pairing, or in Settings › PCs next
-  to Codec. Existing PCs keep Buttons.
+- Choose Buttons or Covers for each PC in its Launcher menu in Settings › PCs.
+  Pairing offers the choice when the PC has apps beyond Desktop and Steam Big
+  Picture. Existing PCs keep Buttons.
 - Use a controller to choose apps and switch PCs in the launcher. The d-pad or
   left stick moves focus, A or Cross opens the selection, and B or Circle
   dismisses a dialog. Raw-HID-only controllers don't navigate the launcher yet.
@@ -50,8 +51,8 @@
 
 - Keys and mouse or controller buttons no longer stay held after a slowdown,
   lost input event or reconnect. Releases recover when the connection returns.
-  Held keys work without Input Monitoring, and pasted text waits for held keys
-  to release. Controllers keep their type after the PC reconnects.
+  Held keys work without Input Monitoring, and pasted text releases held input
+  before it is sent. Controllers keep their type after the PC reconnects.
 
 - Audio recovers from output changes and sleep while keeping spatial playback
   and native surround sound. Stereo follows the speaker pair selected in macOS.
