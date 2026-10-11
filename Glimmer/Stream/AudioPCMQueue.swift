@@ -51,43 +51,67 @@ struct AudioPCMQueue: ~Copyable {
     }
 
     func render(frames: Int, buffers: UnsafeMutablePointer<AudioBufferList>) -> OSStatus {
-        guard frames >= 0 else { return kAudio_ParamError }
+        // AudioBuffer byte counts are UInt32; reject oversized requests before any pointer arithmetic.
+        guard frames >= 0, frames <= 1_073_741_823 else { return kAudio_ParamError }
         guard Int(buffers.pointee.mNumberBuffers) == channels else { return kAudioUnitErr_FormatNotSupported }
         let offset = MemoryLayout<AudioBufferList>.size - MemoryLayout<AudioBuffer>.size
         let output = UnsafeMutableRawPointer(buffers).advanced(by: offset).assumingMemoryBound(to: AudioBuffer.self)
-        for channel in 0..<channels {
+        var channel = 0
+        while channel < channels {
             guard output[channel].mData != nil,
-                  output[channel].mDataByteSize >= frames * MemoryLayout<Float>.size else {
+                  Int(output[channel].mDataByteSize) >= frames &* MemoryLayout<Float>.size else {
                 return kAudioUnitErr_TooManyFramesToProcess
             }
+            channel &+= 1
         }
+        // Capacity is positive at construction; nontrapping arithmetic keeps Debug free of runtime slow paths.
+        let ringCapacity = UInt64(truncatingIfNeeded: capacity)
         let start = consumed.load(ordering: .relaxed)
         let end = written.load(ordering: .acquiring)
         let active = enabled.load(ordering: .acquiring)
-        let count = active ? min(frames, Int(end &- start)) : 0
+        let available = Int(truncatingIfNeeded: end &- start)
+        let count = active ? (frames < available ? frames : available) : 0
         let gain: Float = muted.load(ordering: .relaxed) ? 0 : 1
-        for channel in 0..<channels {
-            guard let data = output[channel].mData?.assumingMemoryBound(to: Float.self) else { continue }
-            for frame in 0..<count {
-                let slot = Int((start &+ UInt64(frame)) % UInt64(capacity))
-                data[frame] = samples[channel * capacity + slot] * gain
+        channel = 0
+        while channel < channels {
+            if let pointer = output[channel].mData {
+                let data = pointer.assumingMemoryBound(to: Float.self)
+                var frame = 0
+                while frame < count {
+                    let position = start &+ UInt64(truncatingIfNeeded: frame)
+                    let slot = Int(truncatingIfNeeded: position.remainderReportingOverflow(dividingBy: ringCapacity)
+                        .partialValue)
+                    data[frame] = samples[channel &* capacity &+ slot] * gain
+                    frame &+= 1
+                }
+                while frame < frames {
+                    data[frame] = 0
+                    frame &+= 1
+                }
             }
-            if frames > count { data.advanced(by: count).update(repeating: 0, count: frames - count) }
+            channel &+= 1
         }
-        guard active else { return noErr }
+        guard active else { return 0 }
         var silent: UInt64 = 0
-        for frame in 0..<count { silent += UInt64(silence[Int((start &+ UInt64(frame)) % UInt64(capacity))]) }
+        var frame = 0
+        while frame < count {
+            let position = start &+ UInt64(truncatingIfNeeded: frame)
+            let remainder = position.remainderReportingOverflow(dividingBy: ringCapacity).partialValue
+            let slot = Int(truncatingIfNeeded: remainder)
+            silent &+= UInt64(silence[slot])
+            frame &+= 1
+        }
         observationVersion.wrappingAdd(1, ordering: .acquiringAndReleasing)
         silenceConsumed.wrappingAdd(silent, ordering: .relaxed)
-        consumed.store(start &+ UInt64(count), ordering: .releasing)
-        minimumFill.min(Int(end &- start) - count, ordering: .relaxed)
+        consumed.store(start &+ UInt64(truncatingIfNeeded: count), ordering: .releasing)
+        minimumFill.min(Int(truncatingIfNeeded: end &- start) &- count, ordering: .relaxed)
         if count < frames {
             if !drained.exchange(true, ordering: .relaxed) { underruns.wrappingAdd(1, ordering: .releasing) }
         } else {
             drained.store(false, ordering: .relaxed)
         }
         observationVersion.wrappingAdd(1, ordering: .releasing)
-        return noErr
+        return 0
     }
 
     // The observer may skip an in-flight update; silence and consumption must describe the same pull.

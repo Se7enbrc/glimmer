@@ -21,14 +21,43 @@ struct AudioHALDevice {
         guard alive != 0, rate.isFinite, rate > 0 else {
             throw AudioHALOutput.Failure(status: kAudioHardwareBadDeviceError)
         }
-        let latency: UInt32 = try read(device, selector: kAudioDevicePropertyLatency,
-                                       scope: kAudioDevicePropertyScopeOutput, initial: UInt32(0))
-        let safety: UInt32 = try read(device, selector: kAudioDevicePropertySafetyOffset,
-                                      scope: kAudioDevicePropertyScopeOutput, initial: UInt32(0))
-        let buffer: UInt32 = try read(device, selector: kAudioDevicePropertyBufferFrameSize, initial: UInt32(0))
-        return Self(id: device, rate: rate,
-                    latencyMs: (Double(latency) + Double(safety) + Double(buffer)) / rate * 1000,
+        return Self(id: device, rate: rate, latencyMs: try outputLatencyMs(device: device, rate: rate),
                     channelLayout: preferredLayout(device))
+    }
+
+    static func stereoChannelMap(channels: Int, preferred: (UInt32, UInt32)) throws -> [Int32] {
+        guard preferred.0 > 0, preferred.1 > 0, preferred.0 != preferred.1,
+              preferred.0 <= channels, preferred.1 <= channels else {
+            throw AudioHALOutput.Failure(status: kAudioUnitErr_FormatNotSupported)
+        }
+        var map = [Int32](repeating: -1, count: channels)
+        map[Int(preferred.0) - 1] = 0
+        map[Int(preferred.1) - 1] = 1
+        return map
+    }
+
+    static func outputLatencyMs(device: AudioDeviceID, rate: Double,
+                                streams: (AudioDeviceID) -> [AudioStreamID]? = AudioOutputRoute.outputStreams,
+                                readUInt: (AudioObjectID, AudioObjectPropertySelector,
+                                           AudioObjectPropertyScope) throws -> UInt32 = {
+                                    try read($0, selector: $1, scope: $2, initial: UInt32(0))
+                                }) throws -> Double {
+        let latency = try readUInt(device, kAudioDevicePropertyLatency, kAudioDevicePropertyScopeOutput)
+        let safety = try readUInt(device, kAudioDevicePropertySafetyOffset, kAudioDevicePropertyScopeOutput)
+        let buffer = try readUInt(device, kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeGlobal)
+        guard let streams = streams(device) else {
+            throw AudioHALOutput.Failure(status: kAudioHardwareBadStreamError)
+        }
+        // Streams run in parallel; the slowest active path bounds the reported device output latency.
+        var streamLatency: UInt32 = 0
+        for stream in streams {
+            guard try readUInt(stream, kAudioStreamPropertyIsActive, kAudioObjectPropertyScopeGlobal) != 0 else {
+                continue
+            }
+            streamLatency = max(streamLatency,
+                try readUInt(stream, kAudioStreamPropertyLatency, kAudioObjectPropertyScopeGlobal))
+        }
+        return (Double(latency) + Double(safety) + Double(buffer) + Double(streamLatency)) / rate * 1000
     }
 
     private static func preferredLayout(_ device: AudioDeviceID) -> AVAudioChannelLayout? {
@@ -91,13 +120,17 @@ extension AudioDecoder {
             (kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeGlobal),
             (kAudioDevicePropertyStreamConfiguration, kAudioDevicePropertyScopeOutput),
             (kAudioDevicePropertyPreferredChannelLayout, kAudioDevicePropertyScopeOutput),
+            (kAudioDevicePropertyPreferredChannelsForStereo, kAudioDevicePropertyScopeOutput),
+            (kAudioDevicePropertyLatency, kAudioDevicePropertyScopeOutput),
+            (kAudioDevicePropertySafetyOffset, kAudioDevicePropertyScopeOutput),
             (kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeGlobal)
         ]
         for (selector, scope) in properties {
             observeAudioProperty(device, address: AudioHALDevice.address(selector, scope: scope))
         }
         for stream in AudioOutputRoute.outputStreams(device: device) ?? [] {
-            for selector in [kAudioStreamPropertyVirtualFormat, kAudioStreamPropertyPhysicalFormat] {
+            for selector in [kAudioStreamPropertyVirtualFormat, kAudioStreamPropertyPhysicalFormat,
+                             kAudioStreamPropertyLatency, kAudioStreamPropertyIsActive] {
                 observeAudioProperty(stream, address: AudioHALDevice.address(selector))
             }
         }

@@ -97,10 +97,11 @@ p99 alongside them. The HAL path verifies missing PCM inside the render
 callback; the old path polled a player clock, so short-gap counts are more
 sensitive now. `audio_output_latency_ms` reports device latency + safety offset
 
-- buffer duration; it excludes acoustic/Bluetooth delay and processing-unit
-  latency. `audio_device_recovery_ms` reports a device-change notification to
-  the first consumed PCM in the replacement graph, observed within the 10 ms
-  monitor cadence. Logs carry `audio HAL ready`,
+- buffer duration + the largest active output-stream latency. Parallel stream
+  latencies are not summed. It excludes acoustic/Bluetooth delay and
+  processing-unit latency. `audio_device_recovery_ms` reports a device-change
+  notification to the first consumed PCM in the replacement graph, observed
+  within the 10 ms monitor cadence. Logs carry `audio HAL ready`,
   `audio engine config change handled` and `audio device recovery`. Use physical
   loopback/listening for end-to-end latency and A/V skew; neither unit tests nor
   these gauges prove audible equivalence.

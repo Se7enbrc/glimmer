@@ -13,6 +13,9 @@
 
 ### Bug fixes
 
+- Audio recovers from output changes and sleep while keeping spatial playback
+  and native surround sound. Stereo follows the speaker pair selected in macOS.
+
 - Audio has more protection from other work when the Mac is busy. Switching
   between speakers and headphones no longer holds up incoming sound.
 
@@ -22,13 +25,6 @@
   permission prompt instead of opening System Settings on top of it. Once you
   allow it, the controller starts working when you come back to Glimmer, with no
   relaunch.
-
-## 2026.10.7
-
-### Bug fixes
-
-- Audio uses Core Audio directly to recover from output changes without an
-  exception guard, while keeping spatial playback and native surround sound.
 
 ## 2026.10.6 - 2026-10-09
 

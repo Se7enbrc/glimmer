@@ -249,8 +249,8 @@ public final class AudioDecoder: @unchecked Sendable {
     /// above it for the floor's slow decay window. Guarded by `audioMeterLock`.
     var lastFailedTargetMs: Double = 0
     var lastUnderrunNanos: UInt64 = 0
-    /// An under-run waiting for the gap that ends it: the target that failed, and the longest arrival
-    /// gap since. The next schedule settles it. Guarded by `audioMeterLock`.
+    /// The failed target and longest arrival gap since scheduling last settled evidence.
+    /// Arrival may precede drain observation. Guarded by `audioMeterLock`.
     var pendingUnderrunTargetMs: Double?
     var underrunArrivalGapNanos: UInt64 = 0
 

@@ -45,6 +45,14 @@ struct AudioPCMQueueTests {
         #expect(queue.pointee.underruns.load(ordering: .acquiring) == 1)
     }
 
+    @Test func oversizedRenderRequestCannotOverflowByteCount() throws {
+        let graph = AudioHALOutput(channels: 2)
+        let output = try buffer(frames: 1)
+        #expect(Bool(graph.queue.pointee.render(frames: Int.max,
+            buffers: output.mutableAudioBufferList) == kAudio_ParamError))
+        #expect(graph.queue.pointee.consumed.load(ordering: .acquiring) == 0)
+    }
+
     @Test func prerollAndMuteDoNotInventUnderruns() throws {
         let graph = AudioHALOutput(channels: 2, capacity: 8)
         let input = try buffer(frames: 4)
@@ -129,6 +137,34 @@ struct AudioPCMQueueTests {
         decoder.halOutput?.queue.pointee.underruns.store(1, ordering: .releasing)
         decoder.observeRenderClock(telemetry: telemetry)
         #expect(telemetry.takeSnapshot().window.renderUnderruns == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func renderTroughSurvivesWritesBeforeObservation(windowExpired: Bool) throws {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        decoder.halOutput = AudioHALOutput(channels: 2)
+        let graph = try #require(decoder.halOutput)
+        let input = try buffer(frames: 2_400)
+        let data = try #require(input.floatChannelData)
+        decoder.meterSampleRate = 48_000
+        decoder.playoutStarted = true
+        decoder.playoutTargetMs = 60
+        decoder.framesScheduled = 2_400
+        #expect(Bool(graph.queue.pointee.write(data, frames: 2_400, isSilence: false)))
+        graph.queue.pointee.enabled.store(true, ordering: .releasing)
+        let output = try buffer(frames: 2_160)
+        #expect(Bool(graph.queue.pointee.render(frames: 2_160, buffers: output.mutableAudioBufferList) == noErr))
+        decoder.framesScheduled += 2_400
+        #expect(Bool(graph.queue.pointee.write(data, frames: 2_400, isSilence: false)))
+        let now = DispatchTime.now().uptimeNanoseconds
+        decoder.quietSinceNanos = windowExpired ? now &- AudioDecoder.playoutDecayQuietNanos : now
+        decoder.floorQuietSinceNanos = now
+        let counters = TelemetryCounters()
+        decoder.observeRenderClock(telemetry: AudioPipelineTelemetry(), counters: counters)
+        #expect(counters.takeAudioBufferFillMinMs() == 5)
+        #expect(decoder.quietWindowMinFillMs == (windowExpired ? .infinity : 5))
+        #expect(decoder.playoutTargetMs == 60)
     }
 
     @Test func observationNeverCombinesDifferentRenderPulls() {

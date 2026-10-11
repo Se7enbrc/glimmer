@@ -9,6 +9,39 @@ import Testing
 @testable import Glimmer
 
 struct AudioEngineLifecycleTests {
+    @Test func stereoUsesThePreferredHardwarePair() throws {
+        #expect(try AudioHALDevice.stereoChannelMap(channels: 4, preferred: (3, 4)) == [-1, -1, 0, 1])
+        #expect(try AudioHALDevice.stereoChannelMap(channels: 4, preferred: (4, 2)) == [-1, 1, -1, 0])
+        #expect(try AudioHALDevice.stereoChannelMap(channels: 2, preferred: (1, 2)) == [0, 1])
+    }
+
+    @Test(arguments: [(UInt32(0), UInt32(2)), (1, 5), (2, 2)])
+    func invalidStereoPairFailsWithoutMisrouting(pair: (UInt32, UInt32)) {
+        #expect(throws: AudioHALOutput.Failure.self) {
+            try AudioHALDevice.stereoChannelMap(channels: 4, preferred: pair)
+        }
+    }
+
+    @Test func latencyIncludesTheSlowestActiveOutputStream() throws {
+        let latency = try AudioHALDevice.outputLatencyMs(device: 1, rate: 48_000,
+            streams: { _ in [2, 3, 4] }, readUInt: { object, selector, scope in
+            if object == 1 {
+                switch selector {
+                case kAudioDevicePropertyLatency: return 48
+                case kAudioDevicePropertySafetyOffset: return 24
+                case kAudioDevicePropertyBufferFrameSize: return 240
+                default: Issue.record("Unexpected device property"); return 0
+                }
+            }
+            #expect(scope == kAudioObjectPropertyScopeGlobal)
+            if selector == kAudioStreamPropertyIsActive { return object == 4 ? 0 : 1 }
+            #expect(selector == kAudioStreamPropertyLatency)
+            #expect(object != 4)
+            return object == 2 ? 96 : 144
+        })
+        #expect(latency == 9.5)
+    }
+
     @Test func muteTogglesOnlyStreamSamples() {
         let decoder = AudioDecoder()
         decoder.setOutputMuted(true)
@@ -18,6 +51,40 @@ struct AudioEngineLifecycleTests {
         decoder.setOutputMuted(false)
         #expect(decoder.halOutput?.queue.pointee.muted.load(ordering: .relaxed) == false)
         decoder.shutdown()
+    }
+
+    @Test func primeEdgeRejectsStaleRunningState() {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        decoder.engineRunning = true
+        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.startOutput = { _ in kAudioUnitErr_Uninitialized }
+        #expect(!decoder.ensureEngineAtPrimeEdge(now: DispatchTime.now().uptimeNanoseconds))
+        #expect(!decoder.engineRunning)
+        #expect(decoder.primeEdgeFailureStreak)
+    }
+
+    @Test func monitorRecoversAnUnsolicitedStopWithoutWaitingForStall() async {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        let restarted = DispatchSemaphore(value: 0)
+        decoder.engineRunning = true
+        decoder.primed = true
+        decoder.framesScheduled = 480
+        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.startOutput = { audio in
+            #expect(!audio.primed)
+            #expect(audio.framesPlayed == audio.framesScheduled)
+            #expect(!audio.playoutStallPending)
+            restarted.signal()
+            return noErr
+        }
+        decoder.installRenderMonitor()
+        #expect(await restarted.waitAsync(for: .seconds(1)) == .success)
+        decoder.routeListenerQueue.sync {
+            #expect(decoder.engineRunning)
+            #expect(!decoder.outputGraphNeedsReconnect)
+        }
     }
 
     @Test func missingGraphReportsFailureWithoutCrashing() {

@@ -220,6 +220,7 @@ extension AudioDecoder {
             }
             buffersSinceArm = 0
         }
+        underrunArrivalGapNanos = 0
         framesScheduled &+= frames
         buffersSinceArm &+= 1
         // A new buffer is queued behind the playhead → no longer drained; re-arm
@@ -239,7 +240,8 @@ extension AudioDecoder {
     /// underrun evidence; teardown and graph replacement cannot teach the cushion. The optional
     /// verdict keeps legacy policy tests independent of hardware and ring storage.
     func meterCompleteOnePlayout(frames: UInt64, isSilence: Bool = false,
-                                 confirmedUnderrun: Bool? = nil) {
+                                 confirmedUnderrun: Bool? = nil, minimumFillFrames: Int? = nil,
+                                 counters: TelemetryCounters = .shared) {
         audioMeterLock.lock()
         framesPlayed &+= frames
         // Stall-watchdog heartbeat: a completion IS consumption. One clock read
@@ -250,13 +252,11 @@ extension AudioDecoder {
         if isSilence {
             pendingSilenceFrames = pendingSilenceFrames >= frames ? pendingSilenceFrames &- frames : 0
         }
-        // The scheduled-ahead trough right at this completion - the truest low of the
-        // backlog (a completion is exactly where the queue is shallowest). Fed to the
-        // reset-on-read MIN-fill window below so the exporter can prove the cushion
-        // holds above 0; the 1Hz last-writer-wins gauge can miss this instantaneous low.
+        // A delayed observer can run after refills; only the callback knows the actual trough.
         let aheadFrames = framesScheduled &- framesPlayed
         let rate = meterSampleRate
-        let fillMs = rate > 0 ? Double(aheadFrames) / rate * 1000.0 : 0
+        let trough = minimumFillFrames.map(Double.init) ?? Double(aheadFrames)
+        let fillMs = rate > 0 ? trough / rate * 1000.0 : 0
         // The same trough is the decay window's NEAR-MISS evidence (the
         // limit-cycle fix): a dip inside one step of empty must hold depth.
         let stopping = meterShutdown || meterRecovering
@@ -276,7 +276,6 @@ extension AudioDecoder {
             // The gap that caused this drain is still open: grow or dead air is settled at the next
             // schedule, once the packet that ends it has said how long it was.
             pendingUnderrunTargetMs = playoutTargetMs
-            underrunArrivalGapNanos = 0
             // Every under-run (capped or not) restarts the decay quiet window: depth
             // is held by recurring evidence, decayed only by its sustained absence.
             quietSinceNanos = now
@@ -307,7 +306,7 @@ extension AudioDecoder {
         }
         audioMeterLock.unlock()
         if rate > 0 {
-            TelemetryCounters.shared.noteAudioBufferFill(ms: fillMs)
+            counters.noteAudioBufferFill(ms: fillMs)
         }
         if isUnderrunEdge {
             TelemetryCounters.shared.audioUnderrunTotal.increment()
@@ -483,11 +482,11 @@ extension AudioDecoder {
         }
     }
 
-    /// The receiver's inter-arrival gap that ended with its newest datagram. While an under-run waits,
-    /// the longest one is its outage: packets held for repair can arrive before the next schedule.
+    /// Keep the longest gap until scheduling settles it, even when arrival precedes drain observation.
+    /// Repair-held packets can arrive before the worker or monitor notices the shortage.
     public func noteArrivalGap(nanos: UInt64) {
         audioMeterLock.lock()
-        if pendingUnderrunTargetMs != nil { underrunArrivalGapNanos = max(underrunArrivalGapNanos, nanos) }
+        underrunArrivalGapNanos = max(underrunArrivalGapNanos, nanos)
         audioMeterLock.unlock()
     }
 

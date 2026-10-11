@@ -59,9 +59,7 @@ extension AudioDecoder {
             defer { self.endGraphChange() }
             guard !self.isShutdown else { return }
             self.recoverIfPlayoutStalled()
-            if !self.engineRunning {
-                _ = self.ensureEngineAtPrimeEdge(now: DispatchTime.now().uptimeNanoseconds)
-            }
+            _ = self.ensureEngineAtPrimeEdge(now: DispatchTime.now().uptimeNanoseconds)
         }
         source.activate()
         return source
@@ -75,6 +73,8 @@ extension AudioDecoder {
             guard let self, self.stateLock.try() else { return }
             defer { self.stateLock.unlock() }
             guard !self.graphChanging, !self.isShutdown else { return }
+            self.refreshOutputRunningState()
+            if !self.engineRunning { self.maintenanceSource.add(data: 1) }
             _ = self.observeRenderClock()
         }
         renderMonitor = timer
@@ -82,7 +82,8 @@ extension AudioDecoder {
     }
 
     @discardableResult
-    func observeRenderClock(telemetry: AudioPipelineTelemetry = .shared) -> Int64? {
+    func observeRenderClock(telemetry: AudioPipelineTelemetry = .shared,
+                            counters: TelemetryCounters = .shared) -> Int64? {
         guard let output = halOutput else { return nil }
         let queue = output.queue
         guard let observation = queue.pointee.observation() else { return nil }
@@ -96,10 +97,11 @@ extension AudioDecoder {
         observedRingSilence = silent
         observedRingUnderruns = underruns
         audioMeterLock.withLock { pendingSilenceFrames -= min(pendingSilenceFrames, silenceFrames) }
-        if frames > 0 || edges > 0 {
-            meterCompleteOnePlayout(frames: frames, confirmedUnderrun: edges > 0)
-        }
         let minimum = queue.pointee.minimumFill.exchange(Int.max, ordering: .relaxed)
+        if frames > 0 || edges > 0 || minimum != Int.max {
+            meterCompleteOnePlayout(frames: frames, confirmedUnderrun: edges > 0,
+                                    minimumFillFrames: minimum == Int.max ? nil : minimum, counters: counters)
+        }
         if minimum != Int.max {
             let fill = Double(minimum) / meterSampleRate * 1000
             telemetry.noteRender(cushionMs: fill, underrun: false)

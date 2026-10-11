@@ -258,7 +258,16 @@ extension AudioDecoder {
         return true
     }
 
+    // Maintenance and prime recovery query HAL off the render thread; the cached gauge cannot detect sleep.
+    func refreshOutputRunningState() {
+        guard engineRunning, let output = halOutput, !output.isRunning else { return }
+        audioMeterLock.withLock { engineRunning = false; meterRecovering = true }
+        output.queue.pointee.enabled.store(false, ordering: .releasing)
+        outputGraphNeedsReconnect = true
+    }
+
     func ensureEngineAtPrimeEdge(now: UInt64) -> Bool {
+        refreshOutputRunningState()
         guard now >= primeEdgeRetryAtNanos else { return false }
         if !engineRunning {
             let failure = startEngineSafely()

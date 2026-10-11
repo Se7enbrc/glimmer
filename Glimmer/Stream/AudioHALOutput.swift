@@ -11,7 +11,16 @@ final class AudioHALOutput {
     private(set) var units: [AudioUnit] = []
     private(set) var output: AudioUnit?
     private(set) var speed: AudioUnit?
-    private(set) var isRunning = false
+    var isRunning: Bool {
+        guard let output else { return false }
+        var running: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioUnitGetProperty(output, kAudioOutputUnitProperty_IsRunning, kAudioUnitScope_Global,
+                                   0, &running, &size) == noErr, running != 0 else { return false }
+        let deviceRunning = try? AudioHALDevice.read(device,
+            selector: kAudioDevicePropertyDeviceIsRunningSomewhere, initial: UInt32(0))
+        return deviceRunning != nil && deviceRunning != 0
+    }
     private(set) var device: AudioDeviceID = 0
     private(set) var sampleRate: Double = 0
     private(set) var channels: UInt32 = 0
@@ -78,6 +87,7 @@ final class AudioHALOutput {
             try check(AudioUnitSetParameter(mixer, kMultiChannelMixerParam_Volume, kAudioUnitScope_Output, 0, 1, 0))
             if let hal {
                 try setFormat(hal, scope: kAudioUnitScope_Input, rate: sampleRate, channels: channels, layout: nil)
+                if channels == 2 { try configureStereoMap(hal) }
                 try connect(mixer, to: hal)
             }
             for unit in units where unit != hal { try check(AudioUnitInitialize(unit)) }
@@ -88,11 +98,23 @@ final class AudioHALOutput {
         }
     }
 
+    private func configureStereoMap(_ hal: AudioUnit) throws {
+        var format = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        try check(AudioUnitGetProperty(hal, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output,
+                                       0, &format, &size))
+        let preferred = try AudioHALDevice.read(device, selector: kAudioDevicePropertyPreferredChannelsForStereo,
+            scope: kAudioDevicePropertyScopeOutput, initial: (UInt32(1), UInt32(2)))
+        let map = try AudioHALDevice.stereoChannelMap(channels: Int(format.mChannelsPerFrame), preferred: preferred)
+        try map.withUnsafeBufferPointer {
+            try check(AudioUnitSetProperty(hal, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output,
+                                           0, $0.baseAddress, UInt32($0.count * MemoryLayout<Int32>.size)))
+        }
+    }
+
     func start() -> OSStatus {
         guard let output else { return kAudioUnitErr_Uninitialized }
-        let status = AudioOutputUnitStart(output)
-        isRunning = status == noErr
-        return status
+        return AudioOutputUnitStart(output)
     }
 
     @discardableResult
@@ -101,7 +123,6 @@ final class AudioHALOutput {
               dispose: (AudioUnit) -> OSStatus = AudioComponentInstanceDispose) -> Bool {
         queue.pointee.enabled.store(false, ordering: .releasing)
         if let output { reportTeardownStatus(stopOutput(output)) }
-        isRunning = false
         // HAL must stop before downstream readers are disposed. A failed dispose keeps its callback storage alive.
         let order = [output].compactMap({ $0 }) + units.reversed().filter({ $0 != output })
         for unit in order {
