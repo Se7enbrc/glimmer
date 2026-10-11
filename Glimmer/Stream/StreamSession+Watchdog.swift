@@ -173,7 +173,13 @@ extension StreamSession {
         }
         // Paced mode is live again - clear any direct-stall episode state.
         self.directPresentStallSince = nil
+        self.tickPacedPresentWatchdog(dec: dec, live: live, decodeIdle: decodeIdle)
+    }
 
+    /// The paced half of one evaluation, over a liveness snapshot: grace, trip,
+    /// episode and cluster bookkeeping, then the staged recovery.
+    @MainActor
+    func tickPacedPresentWatchdog(dec: VideoDecoder, live: FramePacer.LivenessSnapshot, decodeIdle: Double) {
         // Startup grace: suppress the PRESENT-STALL branch while the pacer locks
         // cadence - keyed on TIME since the watchdog armed, not totalReleases==0.
         // The pacer force-releases frame 1 immediately, so a totalReleases-keyed
