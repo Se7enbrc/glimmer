@@ -14,7 +14,6 @@ extension InputForwarder {
         let manager = HIDGamepadManager.shared
         manager.onAttach = { [weak self] pad in self?.attachHID(pad) }
         manager.onDetach = { [weak self] pad in self?.detachHID(pad) }
-        manager.onReport = { [weak self] pad in self?.pushHID(pad) }
         manager.retain()
         for pad in manager.devices.values { attachHID(pad) }
     }
@@ -33,10 +32,15 @@ extension InputForwarder {
         // Generic HID has no standard player LEDs, motion or touchpad surface; those remain GameController-only.
         let arrival = ControllerArrival(type: pad.mapping.controllerType,
                                         supportedButtons: pad.mapping.supportedButtons, caps: caps)
-        attachedHIDControllers[pad.id] = AttachedHIDController(
-            slot: slot, device: pad, arrival: arrival)
+        attachedHIDControllers[pad.id] = AttachedHIDController(slot: slot, device: pad, arrival: arrival)
+        if isReady { sendArrival(slot: slot, arrival) }
+        let token = UUID()
+        inputCore.withLock { inputCore.hidRegistrations[slot] = token }
+        pad.capture.setHandler { [inputCore] buttons, analog, timestamp in
+            inputCore.receiveHID(slot: slot, token: token, buttons: buttons, analog: analog, capturedAt: timestamp)
+        }
         HIDGamepadManager.shared.register(slot: slot, pad: pad)
-        if isReady { sendArrival(slot: slot, arrival); pushHID(pad) }
+        if isReady { pushHID(pad) }
     }
 
     func pushHID(_ pad: HIDGamepadDevice) {
@@ -49,6 +53,7 @@ extension InputForwarder {
     /// The pad's decoded state as values; `readState` re-reads it for the quit-chord dwell.
     func pushHID(slot: UInt8, state: (buttons: Int32, analog: GamepadAnalog),
                  readState: @escaping @MainActor () -> (buttons: Int32, analog: GamepadAnalog)?) {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         guard forwardsControllerEvents else { return }
         let chordHeld = matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
                                                    rightTrigger: state.analog.rightTrigger)
@@ -56,19 +61,26 @@ extension InputForwarder {
                                            analog: state.analog, chordHeld: chordHeld)
         if chordHeld {
             armQuitChordDwell(slot: slot, readState: readState)
+            releaseSuppressedControllerButtons(slot: slot, buttons: state.buttons,
+                                               leftDown: state.analog.leftTrigger > 0,
+                                               rightDown: state.analog.rightTrigger > 0)
             return
         }
         if quitChordDwellSlot == slot { cancelQuitChordDwell(reason: "HID chord released") }
         guard !isMouse else { return }
         let buttons = ControllerButtonLayout.apply(
             state.buttons, useNintendoLabels: useNintendoLabels && nintendoControllerTypes[slot] != nil)
-        let result = backend?.sendMultiController(num: Int16(slot), mask: Int16(bitPattern: gamepadMask),
-                                                  buttons: buttons, analog: state.analog) ?? -2
-        record("LiSendMultiControllerEvent(HID)", result)
+        sendControllerState(slot: slot, buttons: buttons, analog: state.analog)
     }
 
     func detachHID(_ pad: HIDGamepadDevice, sendFinal: Bool = true) {
         guard let attached = attachedHIDControllers.removeValue(forKey: pad.id) else { return }
+        inputCore.withLock {
+            inputCore.hidRegistrations[attached.slot] = nil
+            inputCore.current[attached.slot] = nil
+            inputCore.chordSlots.remove(attached.slot)
+        }
+        pad.capture.setHandler(nil)
         nintendoControllerTypes[attached.slot] = nil
         resetControllerMouse(slot: attached.slot)
         gamepadMask &= ~(UInt16(1) << attached.slot)
@@ -84,7 +96,6 @@ extension InputForwarder {
         let manager = HIDGamepadManager.shared
         manager.onAttach = nil
         manager.onDetach = nil
-        manager.onReport = nil
         manager.release()
     }
 }

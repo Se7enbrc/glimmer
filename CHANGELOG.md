@@ -15,7 +15,8 @@
   of fading. Reduce Motion keeps the fade.
 - Ending a stream, including cancelling while it connects, leaves the game
   running on the PC. Choose it again to resume, or use Quit to close it after
-  confirming that unsaved progress may be lost.
+  confirming that unsaved progress may be lost. Glimmer remembers the game until
+  it sees it stop, sees a different game running, or you unpair the PC.
 - Steam shows its own logo in the launcher, the menu and the PC list, instead of
   a generic controller.
 - Hold Menu, Options or Start for a moment, then release it to use the
@@ -42,6 +43,15 @@
   between that pointer and captured game controls.
 
 ### Bug fixes
+
+- Controller capture and input sending have dedicated threads to keep controls
+  responsive when other apps are busy. Optional diagnostics now measure input
+  delays from the device event through network submission.
+
+- Keys and mouse or controller buttons no longer stay held after a slowdown,
+  lost input event or reconnect. Releases recover when the connection returns.
+  Held keys work without Input Monitoring, and pasted text waits for held keys
+  to release. Controllers keep their type after the PC reconnects.
 
 - Stream diagnostics no longer count packets that arrive late from an earlier
   frame as lost.

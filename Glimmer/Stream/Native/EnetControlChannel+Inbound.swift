@@ -344,9 +344,12 @@ extension EnetControlChannel {
               let receivedSentTime = reader.u16BE() else { return }
         var ackDelayMs: UInt32 = 0
         withState {
-            // Any inbound ACK is proof the host is alive and draining our reliable
-            // backlog - refresh the silence clock the control loop watches.
+            // Stray or duplicate ACKs cannot keep a stalled channel alive.
+            guard sentReliable.contains(where: {
+                $0.reliableSequenceNumber == receivedRelSeq && $0.channelID == ackChannelID
+            }) else { return }
             lastAckRecvMs = serviceTimeMs
+            reliableBackloggedFlag.store(false, ordering: .relaxed)
             // SUB-MS RTT: the host echoes back the 16-bit `sentTime` token we
             // stamped on the datagram. We use that token ONLY to look up the
             // HIGH-RES local instant we recorded when sending (localSentByToken),

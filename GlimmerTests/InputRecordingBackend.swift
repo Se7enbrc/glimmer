@@ -55,6 +55,15 @@ enum OrderedKeyboardSend: Equatable, Sendable {
 }
 
 final class InputRecordingBackend: StreamingBackend {
+    private let result = OSAllocatedUnfairLock(initialState: Int32(0))
+    var inputResult: Int32 {
+        get { result.withLock { $0 } }
+        set { result.withLock { $0 = newValue } }
+    }
+    private let stoppedControllerSends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
+    var controllersAtStop: [ControllerSend] { stoppedControllerSends.withLock { $0 } }
+    private let controllerOrder = OSAllocatedUnfairLock(initialState: [String]())
+    var controllerEvents: [String] { controllerOrder.withLock { $0 } }
     private let sends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
 
     private let orderedKeyboardSends = OSAllocatedUnfairLock(initialState: [OrderedKeyboardSend]())
@@ -70,7 +79,11 @@ final class InputRecordingBackend: StreamingBackend {
     /// Thrown from every connect when set, as a PC that refuses the RTSP handshake would.
     private let connectFailure: StreamError?
 
-    init(connectFailure: StreamError? = nil) { self.connectFailure = connectFailure }
+    private let onInput: @Sendable () -> Void
+    init(connectFailure: StreamError? = nil, onInput: @escaping @Sendable () -> Void = {}) {
+        self.connectFailure = connectFailure
+        self.onInput = onInput
+    }
     private let idrCount = OSAllocatedUnfairLock(initialState: 0)
     private let hostHDR = OSAllocatedUnfairLock<HdrMetadata?>(initialState: nil)
     private let pointerSends = OSAllocatedUnfairLock(initialState: [PointerSend]())
@@ -95,7 +108,7 @@ final class InputRecordingBackend: StreamingBackend {
         connectConfigs.withLock { $0.append(config) }
         if let connectFailure { throw connectFailure }
     }
-    func stopConnection() {}
+    func stopConnection() { stoppedControllerSends.withLock { $0 = calls } }
     func interruptConnection() {}
     func attachVideoSink(_ sink: VideoSink) {}
     func attachAudioSink(_ sink: NativeAudioSink) {}
@@ -105,32 +118,47 @@ final class InputRecordingBackend: StreamingBackend {
     func launchUrlQueryParameters() -> String { "" }
     func stageName(for stage: Int32) -> String { "" }
     func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 {
+        onInput()
+        guard inputResult == 0 else { return inputResult }
         orderedKeyboardSends.withLock { $0.append(.key(keyCode, action == StreamProtocol.KEY_ACTION_DOWN)) }
-        keyboardSends.withLock { $0.append(.init(keyCode: keyCode, action: action, modifiers: modifiers, flags: flags)) }
+        keyboardSends.withLock {
+            $0.append(.init(keyCode: keyCode, action: action, modifiers: modifiers, flags: flags))
+        }
         return 0
     }
     func sendMouseMove(dx: Int16, dy: Int16) -> Int32 {
+        onInput()
         mouseMoveSends.withLock { $0.append(.init(dx: dx, dy: dy)) }
         return 0
     }
     func sendMousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 {
         recordPointer(.position(x: x, y: y, refW: refW, refH: refH))
     }
-    func sendMouseButton(action: Int8, button: Int32) -> Int32 { recordPointer(.button(action: action, button: button)) }
+    func sendMouseButton(action: Int8, button: Int32) -> Int32 {
+        onInput()
+        return recordPointer(.button(action: action, button: button))
+    }
     func sendScroll(_ amount: Int16) -> Int32 { recordPointer(.scroll(amount)) }
     func sendHScroll(_ amount: Int16) -> Int32 { recordPointer(.hScroll(amount)) }
     private func recordPointer(_ send: PointerSend) -> Int32 {
+        guard inputResult == 0 else { return inputResult }
         pointerSends.withLock { $0.append(send) }
         return 0
     }
     func sendMultiController(num: Int16, mask: Int16, buttons: Int32, analog: GamepadAnalog) -> Int32 {
+        guard inputResult == 0 else { return inputResult }
+        controllerOrder.withLock { $0.append("state") }
         sends.withLock { $0.append(ControllerSend(num: num, mask: mask, buttons: buttons, analog: analog)) }
         return 0
     }
     func sendControllerArrival(
         num: UInt8, mask: UInt16, type: UInt8,
         supportedButtons: UInt32, caps: UInt16
-    ) -> Int32 { 0 }
+    ) -> Int32 {
+        guard inputResult == 0 else { return inputResult }
+        controllerOrder.withLock { $0.append("arrival") }
+        return 0
+    }
     func sendControllerTouch(
         num: UInt8, eventType: UInt8, touchpadIndex: UInt8,
         pointerId: UInt32, x: Float, y: Float, pressure: Float

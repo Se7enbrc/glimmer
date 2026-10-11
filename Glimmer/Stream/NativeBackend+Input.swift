@@ -44,7 +44,8 @@ extension NativeBackend {
     //
     // InputEncoder builds plaintext input bytes for the encrypted control stream.
     // Upstream channels: keyboard 0x02, mouse 0x03, text 0x06, gamepad 0x10 + num%16.
-    // LiSend* returns -2 before ready, 0 when queued, or LI_ERR_UNSUPPORTED.
+    // Edges return 0 only after reliable-channel acceptance; motion may merge until the next tick.
+    // LiSend* returns -2 before ready, -1 on send failure, or LI_ERR_UNSUPPORTED.
 
     static let inputNotReady: Int32 = -2
 
@@ -59,9 +60,9 @@ extension NativeBackend {
     /// Routes through the batcher's pass-through (flush-pending-then-send) so
     /// low-rate edge events stay ordered relative to the merged mouse/controller
     /// stream. Falls back to -2 when input isn't ready.
-    func dispatchInput(_ plaintext: [UInt8], channel: UInt8) -> Int32 {
+    func dispatchInput(_ plaintext: @autoclosure () -> [UInt8], channel: UInt8) -> Int32 {
         guard let batcher = readyBatcher() else { return Self.inputNotReady }
-        return batcher.passThrough(plaintext, channel: channel)
+        return batcher.passThrough(plaintext(), channel: channel)
     }
 
     public func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 {
@@ -150,10 +151,7 @@ extension NativeBackend {
     /// text lands after everything already sent.
     public func sendUtf8Text(_ text: String) -> Int32 {
         guard let batcher = readyBatcher() else { return Self.inputNotReady }
-        for packet in InputEncoder.utf8TextPackets(text) {
-            _ = batcher.passThrough(packet, channel: Enet.ctrlChannelUtf8)
-        }
-        return 0
+        return batcher.passThroughText(text)
     }
 
     /// CTRL_CHANNEL_GAMEPAD_BASE + (controllerNumber % MAX_GAMEPADS).

@@ -52,7 +52,10 @@ extension TelemetryExporter {
             aggregate: sessionAggregate,
             histograms: tracker?.histograms.snapshot(),
             counters: counters,
+            inputLatency: tracker?.inputLatency.snapshot() ?? [],
+            inputTimingDropped: UInt64(tracker?.inputTimingDropped.value ?? 0),
             sessionWideStages: tracker.map { [
+                ("input_callback_queue", $0.inputCallbackLatency.snapshotValue()),
                 ("input_deliver", $0.inputDeliverLatency.snapshotValue()),
                 ("input_queue_to_wire", $0.inputLocalLatency.snapshotValue()),
                 ("rfi_recovery", $0.rfiRecoveryMs.snapshotValue())

@@ -34,6 +34,31 @@ struct StreamTextRoutingTests {
     }
 
     @Test(arguments: [false, true])
+    func failedReleaseKeepsLiveCommitAndFollowingKeysOrdered(paste: Bool) async throws {
+        let (forwarder, backend, view) = ready()
+        defer { forwarder.detach() }
+        view.keyDown(with: try key(kVK_ANSI_W, chars: "w"))
+        backend.inputResult = -2
+        let up = try #require(NSEvent.keyEvent(
+            with: .keyUp, location: .zero, modifierFlags: [], timestamp: 2,
+            windowNumber: 0, context: nil, characters: "w", charactersIgnoringModifiers: "w",
+            isARepeat: false, keyCode: UInt16(kVK_ANSI_W)))
+        view.keyUp(with: up)
+        let task = try #require(paste ? forwarder.queuePasteText("你") : forwarder.queueText("你", modifiers: []))
+        view.keyDown(with: try key(kVK_ANSI_S, chars: "s"))
+        forwarder.queueText("好", modifiers: [])
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(backend.texts.isEmpty)
+        #expect(backend.keyboard.count == 1)
+        backend.inputResult = 0
+        await task.value
+        #expect(backend.orderedKeyboard == [
+            .key(VKScanCode(vk: 0x57).wireCode, true), .key(VKScanCode(vk: 0x57).wireCode, false),
+            .text("你"), .key(VKScanCode(vk: 0x53).wireCode, true), .text("好")
+        ])
+    }
+
+    @Test(arguments: [false, true])
     func unmarkedRepeatsNeverEnterTheTextSystem(captured: Bool) throws {
         let (forwarder, backend, view) = ready()
         forwarder.isMouseCaptured = captured
@@ -69,6 +94,7 @@ struct StreamTextRoutingTests {
         forwarder.heldKeys = [0x57]
         forwarder.heldMouseButtons = [StreamProtocol.BUTTON_LEFT]
         forwarder.heldModifierVKs = [0xA4]
+        forwarder.releases.hold(.key(VKScanCode(vk: 0xA4)))
         forwarder.streamView(view, commitText: "é")
         #expect(forwarder.heldKeys == [0x57])
         #expect(forwarder.heldMouseButtons == [StreamProtocol.BUTTON_LEFT])
@@ -83,6 +109,9 @@ struct StreamTextRoutingTests {
     @Test func desktopForwardsCommandWhileKeyWithoutPointerCapture() throws {
         let (forwarder, backend, view) = ready()
         let window = PointerFocusTestWindow()
+        window.contentView = view
+        window.makeFirstResponder(view)
+        forwarder.inputView = view
         forwarder.window = window
         forwarder.captureSysKeys = true
         #expect(forwarder.forwardsCommand)
@@ -128,6 +157,7 @@ struct StreamTextRoutingTests {
     @Test func textReleaseDoesNotRepressAPhysicallyHeldModifier() async throws {
         let (forwarder, backend, view) = ready()
         forwarder.heldModifierVKs = [0xA4]
+        forwarder.releases.hold(.key(VKScanCode(vk: 0xA4)))
         let task = try #require(forwarder.queueText("é", modifiers: [.option]))
         #expect(forwarder.heldModifierVKs == [0xA4])
         #expect(!forwarder.modifiersNeedResync)
@@ -143,6 +173,7 @@ struct StreamTextRoutingTests {
     @Test func focusLossDiscardsALiveTextCommit() async throws {
         let (forwarder, backend, view) = ready()
         forwarder.heldModifierVKs = [0xA4]
+        forwarder.releases.hold(.key(VKScanCode(vk: 0xA4)))
         forwarder.streamView(view, commitText: "你")
         forwarder.windowResignedKey()
         let pending = try #require(forwarder.pendingTextTask)
@@ -153,6 +184,7 @@ struct StreamTextRoutingTests {
     @Test func rapidCommitsStayOrderedAcrossTheReleaseDelay() async throws {
         let (forwarder, backend, _) = ready()
         forwarder.heldModifierVKs = [0xA4]
+        forwarder.releases.hold(.key(VKScanCode(vk: 0xA4)))
         let texts = (0..<20).map { "字\($0)" }
         for text in texts { forwarder.queueText(text, modifiers: []) }
         let last = try #require(forwarder.pendingTextTask)
@@ -169,8 +201,11 @@ struct StreamTextRoutingTests {
 
     @Test(arguments: [false, true])
     func systemShortcutCaptureFollowsFocusAndPointerMode(windowed: Bool) {
-        let (forwarder, _, _) = ready()
+        let (forwarder, _, view) = ready()
         let window = PointerFocusTestWindow()
+        window.contentView = view
+        window.makeFirstResponder(view)
+        forwarder.inputView = view
         forwarder.window = window
         forwarder.captureSysKeys = true
         forwarder.isWindowMode = windowed
@@ -198,6 +233,7 @@ struct StreamTextRoutingTests {
     @Test func modifierWaitHoldsFollowingDownUpAndTextInOrder() async throws {
         let (forwarder, backend, view) = ready()
         forwarder.heldModifierVKs = [0xA4]
+        forwarder.releases.hold(.key(VKScanCode(vk: 0xA4)))
         let pending = try #require(forwarder.queueText("你", modifiers: []))
         view.keyDown(with: try key(kVK_Space, chars: " "))
         let up = try #require(NSEvent.keyEvent(
@@ -222,6 +258,7 @@ struct StreamTextRoutingTests {
     @Test func queuedModifierAndCommitStartAnotherOrderedWait() async throws {
         let (forwarder, backend, view) = ready()
         forwarder.heldModifierVKs = [0xA4]
+        forwarder.releases.hold(.key(VKScanCode(vk: 0xA4)))
         let pending = try #require(forwarder.queueText("é", modifiers: []))
         let shift = try #require(NSEvent.keyEvent(
             with: .flagsChanged, location: .zero, modifierFlags: [.shift], timestamp: 2,
@@ -243,6 +280,7 @@ struct StreamTextRoutingTests {
     @Test func focusLossDiscardsKeysWaitingBehindText() async throws {
         let (forwarder, backend, view) = ready()
         forwarder.heldModifierVKs = [0xA4]
+        forwarder.releases.hold(.key(VKScanCode(vk: 0xA4)))
         let pending = try #require(forwarder.queueText("é", modifiers: []))
         view.keyDown(with: try key(kVK_ANSI_W, chars: "w"))
         forwarder.windowResignedKey()
@@ -283,6 +321,9 @@ struct StreamTextRoutingTests {
                 let (forwarder, backend, view) = ready()
                 let window = PointerFocusTestWindow()
                 window.focused = focused
+                window.contentView = view
+                window.makeFirstResponder(view)
+                forwarder.inputView = view
                 forwarder.window = window
                 forwarder.isWindowMode = windowed
                 forwarder.isMouseCaptured = captured

@@ -69,6 +69,10 @@ extension TelemetryRenderer {
         ndjsonNetwork(&builder, snap, extras)
         ndjsonPacingDrops(&builder, snap, extras)
         ndjsonInputRefresh(&builder, snap, extras)
+        ndjsonInputLatency(&builder, snap.inputLatency)
+        builder.addCount("input_timing_dropped_total", snap.inputTimingDropped)
+        builder.addCount("input_flush_backpressure_skips_total", snap.inputFlushSendBackloggedSkipTotal)
+        builder.addCount("input_flush_backpressure_reliable_skips_total", snap.inputFlushReliableBackloggedSkipTotal)
         ndjsonFrameSizeThermalProcess(&builder, snap)
         ndjsonResource(&builder, snap)
         ndjsonEventCounters(&builder, snap)
@@ -439,6 +443,7 @@ extension TelemetryRenderer {
         addStage("input_to_photon_est", histograms.inputToPhoton)
         // The client input legs input_to_photon_est is built from.
         if let stage = snap.inputDeliverLatency { addStage("lat_input_deliver", stage) }
+        if let stage = snap.inputCallbackLatency { addStage("lat_input_callback_queue", stage) }
         if let stage = snap.inputLocalLatency { addStage("lat_input_queue_to_wire", stage) }
         // DECODE time split by frame type (signal: DECODE).
         addStage("decode_idr", histograms.decodeIDR)

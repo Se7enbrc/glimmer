@@ -63,6 +63,7 @@ extension InputForwarder {
     @discardableResult
     func queueText(_ text: String, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags,
                    waitForRelease: Bool = false) -> Task<Void, Never>? {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         guard isReady, let backend, !text.isEmpty else { return nil }
         if deferKeyboardEvent({ $0.queueText(text, modifiers: modifiers, waitForRelease: waitForRelease) }) {
             return pendingTextTask
@@ -73,7 +74,7 @@ extension InputForwarder {
         // as held, so letting go sends a harmless release instead of a press.
         heldModifierVKs = ModifierSides.held(in: modifiers, includeCommand: forwardsCommand)
         modifiersNeedResync = false
-        guard needsDelay else {
+        if !needsDelay, flushPendingReleases() {
             record("LiSendUtf8TextEvent", backend.sendUtf8Text(text))
             return nil
         }
@@ -82,12 +83,18 @@ extension InputForwarder {
         let task = Task { [weak self] in
             try? await Task.sleep(until: deadline, clock: .continuous)
             guard let self else { return }
+            while !Task.isCancelled, self.isReady, self.inputGeneration == generation {
+                let sent = self.inputCore.withLock {
+                    guard self.flushPendingReleases() else { return false }
+                    self.record("LiSendUtf8TextEvent", backend.sendUtf8Text(text))
+                    return true
+                }
+                if sent { break }
+                do { try await Task.sleep(for: .milliseconds(50)) } catch { break }
+            }
             self.pendingTextTask = nil
             let queued = self.pendingKeyboardEvents
             self.pendingKeyboardEvents.removeAll()
-            if !Task.isCancelled, self.isReady, self.inputGeneration == generation {
-                self.record("LiSendUtf8TextEvent", backend.sendUtf8Text(text))
-            }
             for event in queued { event(self) }
             await self.pendingTextTask?.value
         }

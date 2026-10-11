@@ -166,6 +166,7 @@ public final class InputForwarder {
     /// Mini player: no hover grab, a click takes the pointer. Set live by
     /// `setMiniPlayer` (InputForwarder+WindowPointer.swift).
     var isMiniPlayer = false
+    var controllerOwnershipSuspended = false
     let controllerBackgroundEventsID = UUID()
     /// The pointer entered or left the mini player; the window shows its
     /// close button off this edge.
@@ -207,11 +208,15 @@ public final class InputForwarder {
     /// consults this on every gamepad update and fires `onQuitHotkey`
     /// when all chord buttons are held simultaneously. Closure so live
     /// edits in Settings take effect on the next gamepad event.
-    public var controllerQuitChordProvider: (@MainActor () -> ControllerQuitChord) = { .none }
+    public var controllerQuitChordProvider: (@MainActor () -> ControllerQuitChord) = { .none } {
+        didSet { observeControllerConfiguration() }
+    }
 
     /// The user-recorded button set for the `.custom` quit chord.
     /// Consulted only when `controllerQuitChordProvider()` returns `.custom`.
-    public var customControllerChordProvider: (@MainActor () -> Set<ControllerButton>) = { [] }
+    public var customControllerChordProvider: (@MainActor () -> Set<ControllerButton>) = { [] } {
+        didSet { observeControllerConfiguration() }
+    }
 
     /// In-flight hold-to-quit dwell for the controller quit chord. Armed by
     /// the ControllerForwarder extension when the chord first reads fully
@@ -246,12 +251,25 @@ public final class InputForwarder {
 
     /// Opens when the backend can accept input; reconnects invalidate delayed work.
     public internal(set) var isReady: Bool = false {
-        didSet { if isReady != oldValue { inputGeneration &+= 1 } }
+        didSet {
+            if isReady != oldValue { inputGeneration &+= 1 }
+            publishInputSnapshot()
+        }
     }
 
     /// Supplied by the session; replacing it invalidates text queued for the old connection.
     var backend: StreamingBackend? {
-        didSet { inputGeneration &+= 1 }
+        didSet {
+            inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+            inputGeneration &+= 1
+            publishInputSnapshot(focused: false)
+            if oldValue != nil {
+                isReady = false
+                inputOwnershipLost(reason: "connection replaced")
+                releases.releaseAll(connectionLost: true)
+                updateReconciliationTimer()
+            }
+        }
     }
 
     /// Set the backend the forwarder uses. Called by StreamSession right after
@@ -269,30 +287,17 @@ public final class InputForwarder {
 
     /// Bitmask of slots currently in use; bit N == 1 means slot N is occupied.
     /// Sent to the host as `activeGamepadMask` on every controller event.
-    var gamepadMask: UInt16 = 0
+    var gamepadMask: UInt16 = 0 { didSet { publishInputSnapshot() } }
 
-    var controllerMouseStates: [UInt8: ControllerMouseState] = [:]
-    var controllerMouseTask: Task<Void, Never>?
     var onControllerMouseChanged: (@MainActor (String) -> Void)?
     var nintendoLayoutProvider: @MainActor () -> Bool = { ControllerButtonLayout.usesLabels() }
-    var useNintendoLabels = false
+    var useNintendoLabels = false { didSet { publishInputSnapshot() } }
     var nintendoLayoutObserver: NSObjectProtocol?
-    var nintendoControllerTypes: [UInt8: NintendoControllerType] = [:]
+    var nintendoControllerTypes: [UInt8: NintendoControllerType] = [:] { didSet { publishInputSnapshot() } }
 
     /// What the PC may still hold in each slot. Only a stream start retires an entry,
     /// since a removal sent into a link that is already dead never arrives.
     var announcedControllers: [UInt8: ControllerArrival] = [:]
-
-    /// Per-slot DualSense/DualShock touchpad finger tracking, so the touchpad
-    /// surface can be forwarded as host touch events (down/move/up). Keyed by
-    /// controller slot. The physical touchpad *click* rides the normal button
-    /// bitmask (TOUCHPAD_FLAG); only the finger surface needs this state.
-    var touchpadStates: [UInt8: TouchpadState] = [:]
-
-    /// Monotonic pointer-id source for controller touch events. The host
-    /// correlates a finger's down→move→up by pointerId, so each new contact
-    /// gets a fresh id. Never 0 (some hosts treat 0 as "no pointer").
-    var nextTouchPointerId: UInt32 = 1
 
     /// Cached connection observers so we can deregister on `detach()`.
     var connectObserver: NSObjectProtocol?
@@ -426,6 +431,7 @@ public final class InputForwarder {
 
     init(cruiseTuning: CruiseTraversal.Tuning) {
         self.cruiseTuning = cruiseTuning
+        connectInputCore()
         setupGamepadObservers()
     }
 
@@ -433,6 +439,8 @@ public final class InputForwarder {
         // `isolated` so the MainActor observer tokens are readable here: the backstop for a
         // forwarder freed without detach().
         removeGamepadObservers()
+        removeInputRecoveryObservers()
+        reconciliationTimer?.invalidate()
     }
 
     // MARK: - LiSend wrappers with diagnostic logging
@@ -441,21 +449,13 @@ public final class InputForwarder {
     // LI_ERR_UNSUPPORTED when the host lacks the entry point.
     // Log the first non-zero return per code so transient failures stay quiet.
 
-    private var loggedFailureCodes: Set<Int32> = []
-
-    // Internal so the ControllerForwarder extension can call `record` from
-    // ControllerForwarder.swift to log non-zero LiSend* return codes.
     func record(_ name: StaticString, _ rc: Int32) {
-        guard rc != 0 else { return }
-        if !loggedFailureCodes.contains(rc) {
-            loggedFailureCodes.insert(rc)
-            log.error("\(name, privacy: .public) returned \(rc) (first occurrence)")
-        }
+        inputCore.withLock { inputCore.record(name, rc) }
     }
 
     // MARK: - Modifier mapping
 
-    /// Win VK codes of the modifier sides the host has been told are held.
+    /// Physical modifier sides owned by this view; failed ups live in the release ledger.
     var heldModifierVKs: Set<Int16> = []
     /// Set when the PC may not match `heldModifierVKs` (attach, raise-all). Only
     /// then does a key-down resync: a tool-posted ⌃C carries ⌃ with no
@@ -464,46 +464,25 @@ public final class InputForwarder {
     /// The Mac's Caps Lock state last seen, so a toggle is sent exactly once.
     var lastCapsLock = false
 
-    /// Keys (exactly as sent, flags included) and mouse buttons the host holds
-    /// down, so focus loss, a reconnect or teardown can release them: the
-    /// physical release goes elsewhere, and a held W would walk forever.
+    /// Physical ownership ends on an up or focus loss. The separate release ledger
+    /// remembers what the PC may still hold until the reliable channel accepts the up.
     var heldKeys: Set<VKScanCode> = []
-    var heldMouseButtons: Set<Int32> = []
-
-    /// Send key-up / button-release for everything we believe the host holds,
-    /// then clear the bookkeeping (modifiers included). A key still physically
-    /// held stays released until re-pressed, as in upstream clients.
-    func raiseAllHeldInputs(reason: String) {
-        let keyCount = heldKeys.count
-        let buttonCount = heldMouseButtons.count
-        if isReady {
-            for key in heldKeys {
-                let rc = backend?.sendKeyboard(
-                    keyCode: key.wireCode, action: Int8(StreamProtocol.KEY_ACTION_UP),
-                    modifiers: 0, flags: key.flags) ?? -2
-                record("LiSendKeyboardEvent2(raise-all)", rc)
-            }
-            for button in heldMouseButtons.subtracting(controllerMouseButtons) {
-                let rc = backend?.sendMouseButton(
-                    action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button) ?? -2
-                record("LiSendMouseButtonEvent(raise-all)", rc)
-            }
-            for vk in heldModifierVKs.sorted() {
-                let rc = backend?.sendKeyboard(
-                    keyCode: VKScanCode(vk: vk).wireCode,
-                    action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0) ?? -2
-                record("LiSendKeyboardEvent2(modifier release)", rc)
-            }
-            if keyCount + buttonCount > 0 {
-                Diag.notice("input: released \(keyCount) held key(s) + \(buttonCount) "
-                    + "mouse button(s) on \(reason)", "Stream")
-            }
-        }
-        heldKeys.removeAll()
-        heldMouseButtons.removeAll()
-        heldModifierVKs.removeAll()
-        modifiersNeedResync = true
-    }
+    var keyMapping: (Int) -> VKScanCode? = { vkScanCode(forCarbonKeyCode: $0) }
+    var physicalKeys: [UInt16: VKScanCode] = [:]
+    var missingPhysicalKeys: Set<UInt16> = []
+    var missingModifierVKs: Set<Int16> = []
+    var physicalMouseButtons: [Int: Int32] = [:]
+    nonisolated let inputCore = InputCore()
+    nonisolated let controllerCaptureQueue = DispatchQueue(
+        label: "io.ugfugl.Glimmer.controllerCapture", qos: .userInteractive)
+    var controllersNeedAnnouncement = false { didSet { publishInputSnapshot() } }
+    var reconciliationTimer: Timer?
+    var lastInputEventTime: TimeInterval?
+    var keyboardMonitoringGranted: () -> Bool = { HIDGamepadManager.accessGranted }
+    var physicalKeyState: (UInt16) -> Bool = { CGEventSource.keyState(.combinedSessionState, key: $0) }
+    var currentModifierFlags: () -> NSEvent.ModifierFlags = { NSEvent.modifierFlags }
+    var currentMouseButtons: () -> Int = { NSEvent.pressedMouseButtons }
+    var inputRecoveryObservers: [(NotificationCenter, NSObjectProtocol)] = []
 
     /// True from attach until the first connection goes live: Esc cancels the
     /// connect then, and is game input from then on (reconnects included).

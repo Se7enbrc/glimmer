@@ -15,7 +15,7 @@ import Foundation
 import Synchronization
 
 /// Return codes mirroring the NativeBackend.dispatchInput contract
-/// (Li* convention): 0 = queued OK, -1 = seal/send failed, -2 = input not ready.
+/// (Li* convention): 0 = accepted (edges) or merged (motion), -1 = seal/send failed, -2 = input not ready.
 enum InputBatcherResult {
     static let ok: Int32 = 0
     static let sendFailed: Int32 = -1
@@ -33,11 +33,8 @@ final class InputBatcher: @unchecked Sendable {
     private weak var enet: EnetControlChannel?
     private let stopped = Atomic<Bool>(false)
 
-    // QoS .userInteractive so the merge/flush context isn't a default-QoS queue
-    // starved behind high-QoS main-thread UI/input - it carries latency-sensitive
-    // input toward the wire.
-    private let queue = DispatchQueue(label: "io.ugfugl.Glimmer.inputBatcher", qos: .userInteractive)
-    private var timer: DispatchSourceTimer?
+    // The owned sender requests a bounded realtime budget and falls back to userInteractive.
+    private let queue = InputSendThread()
     /// The one-shot flush is armed only while state is dirty, so an idle stream costs no
     /// wakeups; deadlines stay 1 ms apart, as the old repeating tick's did.
     private var flushArmed = false
@@ -50,6 +47,7 @@ final class InputBatcher: @unchecked Sendable {
     private var relMouseDX: Int = 0
     private var relMouseDY: Int = 0
     private var relMouseDirty = false
+    private var relTimings: [InputEventTiming] = []
     /// Queue→wire latency stamp: the OLDEST unflushed entry per slot (set on the
     /// clean→dirty edge, kept across accumulation/supersession, reset at flush) so
     /// the flush observes the worst-case age, not the freshest survivor.
@@ -61,6 +59,7 @@ final class InputBatcher: @unchecked Sendable {
     private var absMouseRefW: Int16 = 0
     private var absMouseRefH: Int16 = 0
     private var absMouseDirty = false
+    private var absTimings: [InputEventTiming] = []
     private var absMouseStamp = DispatchTime.now()
 
     /// currentQueuedControllerPacket[MAX_GAMEPADS] (InputStream.c:80). Per-slot
@@ -78,6 +77,7 @@ final class InputBatcher: @unchecked Sendable {
         var stamp = DispatchTime.now()
         /// Deliver→enqueue leg (ms) of that oldest state; 0 when not measured.
         var deliverMs = 0.0
+        var timings: [InputEventTiming] = []
     }
     private var controllers = [ControllerSlot](repeating: ControllerSlot(),
                                                count: Enet.maxGamepads)
@@ -109,28 +109,39 @@ final class InputBatcher: @unchecked Sendable {
     /// Queue-to-wire stamps and the latency tracker, injectable so tests can script both.
     private let now: @Sendable () -> DispatchTime
     private let tracker: @Sendable () -> FrameTimingTracker?
+    private let backpressure: @Sendable (EnetControlChannel) -> Bool
 
     init(enet: EnetControlChannel, now: @escaping @Sendable () -> DispatchTime = { .now() },
-         tracker: @escaping @Sendable () -> FrameTimingTracker? = { FrameTimingTracker.shared }) {
+         tracker: @escaping @Sendable () -> FrameTimingTracker? = { FrameTimingTracker.shared },
+         backpressure: @escaping @Sendable (EnetControlChannel) -> Bool = { $0.inputBacklogged }) {
         self.enet = enet
         self.now = now
         self.tracker = tracker
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.setEventHandler { [weak self] in self?.flushTimerFired() }
-        self.timer = timer
-        timer.resume()  // Never fires until armFlush() schedules it.
+        self.backpressure = backpressure
         Diag.notice("input batcher started (1ms merge/flush)", Self.logCategory)
     }
 
     /// Stop the flush timer and release the channel reference. Idempotent.
     func stop() {
-        stopped.store(true, ordering: .relaxed)
+        guard !stopped.exchange(true, ordering: .relaxed) else { return }
         queue.sync {
-            timer?.cancel()
-            timer = nil
+            queue.cancelTimer()
+            for slot in controllers.indices where controllers[slot].dirty {
+                _ = flushController(slot, tracker: tracker())
+            }
             enet = nil
+            return InputBatcherResult.ok
         }
         Diag.notice("input batcher stopped", Self.logCategory)
+    }
+
+    deinit { queue.stop() }
+
+    private func appendTimings(_ capture: InputTimingContext.Capture?, to samples: inout [InputEventTiming]) {
+        guard let capture else { return }
+        for sample in capture.samples() {
+            if samples.count < 4096 { samples.append(sample) } else { tracker()?.inputTimingDropped.increment() }
+        }
     }
 
     // MARK: - High-rate merged producers
@@ -139,80 +150,92 @@ final class InputBatcher: @unchecked Sendable {
     /// and mark dirty; a timer flush or ordering barrier sends the total.
     func accumulateMouseMove(dx: Int16, dy: Int16) -> Int32 {
         guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
+        let timing = InputTimingContext.take()
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
-        queue.async { [weak self] in
-            guard let self else { return }
+        return queue.sync {
+            guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
             // Send the earlier absolute position before relative motion can move from it.
             if self.absMouseDirty { self.flushAbsoluteMouse(tracker: self.tracker()) }
             if !self.relMouseDirty { self.relMouseStamp = self.now() }
+            self.appendTimings(timing, to: &self.relTimings)
             self.relMouseDX += Int(dx)
             self.relMouseDY += Int(dy)
             self.relMouseDirty = true
             self.armFlush()
+            return InputBatcherResult.ok
         }
-        return InputBatcherResult.ok
     }
 
     /// LiSendMousePositionEvent (InputStream.c:437-467) - latest-only.
     func setAbsMouse(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 {
         guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
+        let timing = InputTimingContext.take()
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
-        queue.async { [weak self] in
-            guard let self else { return }
+        return queue.sync {
+            guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
             // Send the earlier relative motion before an absolute grab overwrites it.
             if self.relMouseDirty { self.flushRelativeMouse(tracker: self.tracker()) }
             // Latest-only: keep the oldest stamp (set on the clean→dirty edge);
             // a superseding sample discards its own newer stamp.
             if !self.absMouseDirty { self.absMouseStamp = self.now() }
+            self.appendTimings(timing, to: &self.absTimings)
             self.absMouseX = x
             self.absMouseY = y
             self.absMouseRefW = refW
             self.absMouseRefH = refH
             self.absMouseDirty = true
             self.armFlush()
+            return InputBatcherResult.ok
         }
-        return InputBatcherResult.ok
     }
 
-    /// sendControllerEventInternal (InputStream.c:998-1162): overwrite the slot's
-    /// latest state in place. On a buttonFlags CHANGE while a batch is pending,
-    /// flush that slot FIRST so the host receives the exact axis values present at
-    /// the time of the button press (InputStream.c:1048-1059), then start a fresh
-    /// batch with the new state.
+    /// Only axes merge. Button and trigger edges return the reliable channel's acceptance,
+    /// so a release cannot disappear behind a successful asynchronous enqueue.
     func updateController(num: Int16, mask: Int16, buttons: Int32,
                           analog: GamepadAnalog) -> Int32 {
-        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
+        let timing = InputTimingContext.take()
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
-        queue.async { [weak self] in
-            guard let self else { return }
-            let slot = Int(num) % Enet.maxGamepads
-            // Sign-extend guard mirrors InputStream.c:1017 (and InputEncoder's
-            // own guard) so the buttonFlags comparison is on the canonical value.
+        return queue.sync {
+            guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
+            let slot = Int(UInt16(bitPattern: num)) % Enet.maxGamepads
             let safeButtons = buttons < 0 ? (buttons & 0xFFFF) : buttons
-            if self.controllers[slot].dirty,
-               self.controllers[slot].buttons != safeButtons {
-                // Button-flag change ends the batch: emit the pending slot first.
-                self.flushController(slot, tracker: self.tracker())
+            let previous = controllers[slot]
+            let edge = previous.buttons != safeButtons || (previous.mask != mask && mask & (1 << slot) == 0)
+                || (previous.analog.leftTrigger == 0) != (analog.leftTrigger == 0)
+                || (previous.analog.rightTrigger == 0) != (analog.rightTrigger == 0)
+                || (safeButtons == 0 && analog.leftTrigger == 0 && analog.rightTrigger == 0
+                    && analog.leftStickX == 0 && analog.leftStickY == 0
+                    && analog.rightStickX == 0 && analog.rightStickY == 0)
+            if edge, previous.dirty {
+                // Obsolete axes cannot prevent a button edge from reaching the reliable channel.
+                _ = flushController(slot, tracker: tracker())
+                controllers[slot].dirty = false
+                controllers[slot].timings.removeAll(keepingCapacity: true)
             }
-            // Stamp the oldest unflushed state per slot (clean→dirty edge) with its
-            // deliver leg; a superseding update in the same batch keeps both.
-            let stampNow = self.now()
-            let deliverMs = self.observeInputDeliverAge(slot: slot, enqueued: stampNow)
-            if !self.controllers[slot].dirty {
-                self.controllers[slot].stamp = stampNow
-                self.controllers[slot].deliverMs = deliverMs
+            let stampNow = now()
+            let deliverMs = observeInputDeliverAge(slot: slot, enqueued: stampNow)
+            if !controllers[slot].dirty {
+                controllers[slot].stamp = stampNow
+                controllers[slot].deliverMs = deliverMs
             }
-            self.controllers[slot].num = num
-            self.controllers[slot].mask = mask
-            self.controllers[slot].buttons = safeButtons
-            self.controllers[slot].analog = analog
-            self.controllers[slot].dirty = true
-            self.armFlush()
+            appendTimings(timing, to: &controllers[slot].timings)
+            controllers[slot].num = num
+            controllers[slot].mask = mask
+            controllers[slot].buttons = safeButtons
+            controllers[slot].analog = analog
+            controllers[slot].dirty = true
+            if edge {
+                let sent = flushController(slot, tracker: tracker())
+                // The caller retains failed edges. Never replay an obsolete down at stop.
+                if !sent { controllers[slot] = previous; controllers[slot].dirty = false }
+                return sent ? InputBatcherResult.ok : InputBatcherResult.sendFailed
+            }
+            armFlush()
+            return InputBatcherResult.ok
         }
-        return InputBatcherResult.ok
     }
 
     /// LiSendControllerMotionEvent (InputStream.c): overwrite the
@@ -246,8 +269,8 @@ final class InputBatcher: @unchecked Sendable {
             return InputBatcherResult.sendFailed
         }
         TelemetryCounters.shared.inputMotionTotal.increment()
-        queue.async { [weak self] in
-            guard let self else { return }
+        return queue.sync {
+            guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
             let idx = (Int(num) % Enet.maxGamepads) * Self.motionTypeCount + typeIndex
             if !self.motionStates[idx].dirty {
                 self.motionStates[idx].dirty = true
@@ -258,30 +281,25 @@ final class InputBatcher: @unchecked Sendable {
             self.motionStates[idx].y = y
             self.motionStates[idx].z = z
             self.armFlush()
+            return InputBatcherResult.ok
         }
-        return InputBatcherResult.ok
     }
 
     // MARK: - Low-rate pass-through producers
 
-    /// Edge events that must NOT be merged (keyboard, mouse button, scroll,
-    /// hscroll, controller arrival, controller touch). Sent straight through, but
-    /// only AFTER flushing any pending merged mouse/controller state so the host
-    /// sees them in the correct order relative to the merged stream (mirrors the
-    /// buttonFlags-change flush + the C's flushInputOnControlStream before
-    /// keyboard/UTF-8 events). Bytes are the InputEncoder plaintext; channel is
-    /// the input class's ENet channel.
-    func passThrough(_ plaintext: [UInt8], channel: UInt8) -> Int32 {
-        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
+    /// Drain earlier motion, then hand the edge to ENet before reporting success.
+    /// This waits for local acceptance only, never for a network round trip or ACK.
+    func passThrough(_ plaintext: @autoclosure () -> [UInt8], channel: UInt8) -> Int32 {
+        let timing = InputTimingContext.take()
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
-        queue.async { [weak self] in
-            guard let self else { return }
-            // Preserve ordering: drain merged state before the edge event.
-            self.flushLocked()
-            _ = self.enet?.sendInputPacket(plaintext, channel: channel)
+        return queue.sync {
+            guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
+            flushLocked()
+            let batch = InputTimingBatch(timing?.samples() ?? [], tracker: tracker())
+            return enet?.sendInputPacket(plaintext(), channel: channel, timing: batch) == true
+                ? InputBatcherResult.ok : InputBatcherResult.sendFailed
         }
-        return InputBatcherResult.ok
     }
 
     /// Pass-through for host-facing device REPORTS that are not user input
@@ -292,12 +310,12 @@ final class InputBatcher: @unchecked Sendable {
     /// idle/active counters' honesty (the updateMotion rule).
     func passThroughReport(_ plaintext: [UInt8], channel: UInt8) -> Int32 {
         guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
-        queue.async { [weak self] in
-            guard let self else { return }
+        return queue.sync {
+            guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
             self.flushLocked()
             _ = self.enet?.sendInputPacket(plaintext, channel: channel)
+            return InputBatcherResult.ok
         }
-        return InputBatcherResult.ok
     }
 
     /// Pass-through that sends TWO packets atomically in order (controller arrival
@@ -307,13 +325,24 @@ final class InputBatcher: @unchecked Sendable {
         guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         TelemetryCounters.shared.inputEventsTotal.increment()
         TelemetryCounters.shared.noteInputEvent()
-        queue.async { [weak self] in
-            guard let self else { return }
+        return queue.sync {
+            guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
             self.flushLocked()
             _ = self.enet?.sendInputPacket(first, channel: channel)
             _ = self.enet?.sendInputPacket(second, channel: channel)
+            return InputBatcherResult.ok
         }
-        return InputBatcherResult.ok
+    }
+
+    func passThroughText(_ text: String) -> Int32 {
+        guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
+        return queue.sync {
+            guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
+            for packet in InputEncoder.utf8TextPackets(text) {
+                _ = passThrough(packet, channel: Enet.ctrlChannelUtf8)
+            }
+            return InputBatcherResult.ok
+        }
     }
 
     // MARK: - Flush (timer tick) - runs on `queue`
@@ -322,13 +351,12 @@ final class InputBatcher: @unchecked Sendable {
         relMouseDirty || absMouseDirty || motionDirtyCount > 0 || controllers.contains { $0.dirty }
     }
 
-    /// Arm the one-shot flush no sooner than 1 ms after the last one. Leeway is 250 us, not
-    /// the interval: more slack let macOS defer a flush and added input latency. On `queue`.
+    /// An owned-thread deadline keeps merged sends at least 1 ms apart without a GCD timer hop.
     private func armFlush() {
-        guard !flushArmed, let timer else { return }
+        guard !flushArmed else { return }
         flushArmed = true
         flushDeadline = max(flushDeadline + Self.batchInterval, .now())
-        timer.schedule(deadline: flushDeadline, leeway: .microseconds(250))
+        queue.schedule(deadline: flushDeadline) { [weak self] in self?.flushTimerFired() }
     }
 
     /// Re-arms while state is still dirty, as when backpressure held it back.
@@ -343,7 +371,7 @@ final class InputBatcher: @unchecked Sendable {
     /// ack-wait (ControlStream.c:787-789).
     private func flush() {
         guard hasPendingState, let enet else { return }
-        if enet.sendBacklogged || enet.reliableBacklogged {
+        if backpressure(enet) {
             countBackpressureSkip(enet)
             return
         }
@@ -477,6 +505,8 @@ final class InputBatcher: @unchecked Sendable {
     /// MUST run on `queue`: the timer drain and the mode-change drain both land here.
     private func flushRelativeMouse(tracker: FrameTimingTracker?) {
         guard let enet else { return }
+        var timing = InputTimingBatch(relTimings, tracker: tracker)
+        relTimings.removeAll(keepingCapacity: true)
         let dx = relMouseDX
         let dy = relMouseDY
         while relMouseDX != 0 || relMouseDY != 0 {
@@ -500,7 +530,8 @@ final class InputBatcher: @unchecked Sendable {
 
             _ = enet.sendInputPacket(
                 InputEncoder.mouseMove(dx: chunkX, dy: chunkY),
-                channel: Enet.ctrlChannelMouse)
+                channel: Enet.ctrlChannelMouse, timing: timing)
+            timing = nil
         }
         relMouseDirty = false
         observeInputAge(from: relMouseStamp, to: tracker != nil ? now() : nil,
@@ -512,10 +543,12 @@ final class InputBatcher: @unchecked Sendable {
     /// timer drain and the mode-change drain both land here.
     private func flushAbsoluteMouse(tracker: FrameTimingTracker?) {
         guard let enet else { return }
+        let timing = InputTimingBatch(absTimings, tracker: tracker)
         _ = enet.sendInputPacket(
             InputEncoder.mousePosition(x: absMouseX, y: absMouseY,
                                        refW: absMouseRefW, refH: absMouseRefH),
-            channel: Enet.ctrlChannelMouse)
+            channel: Enet.ctrlChannelMouse, timing: timing)
+        absTimings.removeAll(keepingCapacity: true)
         absMouseDirty = false
         observeInputAge(from: absMouseStamp, to: tracker != nil ? now() : nil,
                         tracker: tracker, deliverMs: 0)
@@ -525,19 +558,24 @@ final class InputBatcher: @unchecked Sendable {
     /// Send the latest pending multiController for `slot` and clear its dirty flag.
     /// MUST be called on `queue`: the drain point for both the timer flush and the
     /// button-change flush, so it resolves its own queue→wire age.
-    private func flushController(_ slot: Int, tracker: FrameTimingTracker?) {
-        guard let enet else { return }
+    @discardableResult
+    private func flushController(_ slot: Int, tracker: FrameTimingTracker?) -> Bool {
+        guard let enet else { return false }
         let pending = controllers[slot]
         let analog = pending.analog
-        _ = enet.sendInputPacket(
+        let timing = InputTimingBatch(pending.timings, tracker: tracker)
+        guard enet.sendInputPacket(
             InputEncoder.multiController(num: pending.num, mask: pending.mask,
                                         buttons: pending.buttons, analog: pending.analog),
-            channel: Enet.ctrlChannelGamepadBase &+ UInt8(slot))
+            channel: Enet.ctrlChannelGamepadBase &+ UInt8(slot),
+            timing: timing) else { return false }
         observeInputAge(from: pending.stamp, to: tracker != nil ? now() : nil,
                         tracker: tracker, deliverMs: pending.deliverMs)
         trace(tracker, "\"event\":\"input_pad\",\"slot\":\(slot),\"buttons\":\(pending.buttons),"
             + "\"lx\":\(analog.leftStickX),\"ly\":\(analog.leftStickY),\"rx\":\(analog.rightStickX),"
             + "\"ry\":\(analog.rightStickY),\"lt\":\(analog.leftTrigger),\"rt\":\(analog.rightTrigger)")
         controllers[slot].dirty = false
+        controllers[slot].timings.removeAll(keepingCapacity: true)
+        return true
     }
 }

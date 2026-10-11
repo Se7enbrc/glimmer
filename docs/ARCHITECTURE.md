@@ -67,7 +67,7 @@ Top-level pieces:
 | `FramePacer`          | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/FramePacer.swift` (+ extensions)        |
 | `AudioDecoder`        | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/AudioDecoder.swift`                     |
 | `InputForwarder`      | `@MainActor final class`                                 | `Glimmer/Stream/InputForwarder.swift`                   |
-| `ControllerForwarder` | `@MainActor` extension on InputForwarder                 | `Glimmer/Stream/ControllerForwarder.swift`              |
+| `ControllerForwarder` | `@MainActor` lifecycle; capture uses locked `InputCore`  | `Glimmer/Stream/ControllerForwarder.swift`              |
 | `HIDGamepadManager`   | `@MainActor final class` (singleton)                     | `Glimmer/Stream/HIDGamepad/`                            |
 | `DualSenseHID`        | `final class`, `@unchecked Sendable` (singleton)         | `Glimmer/Stream/DualSenseHID.swift` (+ extensions)      |
 | `StreamWindow`        | `@MainActor final class`                                 | `Glimmer/Stream/StreamWindow.swift`                     |
@@ -185,9 +185,11 @@ Components:
   `StreamConfig.remoteness == .auto` from the real route, so the SDP packet-size
   clamp (1392 down to 1024 on a tunnelled path) fires on the paths that need it.
 - **Input uplink**: `InputBatcher` + `InputEncoder`. High-rate mouse and
-  controller state merges between sends at least 1 ms apart, on a one-shot flush
-  timer armed only while input is pending, so an idle stream costs no wakeups;
-  edge events pass through in order.
+  controller state merges between sends at least 1 ms apart on the owned
+  `InputSendThread`, with best-effort Mach time-constraint scheduling. A pending
+  deadline wakes it; an idle sender sleeps. Encoding, sealing and network
+  submission stay on that thread. Edges return local channel acceptance in
+  order.
 - **`UdpPinger`**: the keepalive ping plumbing and cadences the video and audio
   receivers share; each pings from its own socket.
 
@@ -206,18 +208,18 @@ UI lights up live.
    throw: the launcher's pair sheet runs first, not us.
 2. **Launch, resume, or confirmed takeover**: idle PCs get `/launch`. A matching
    app previously launched by this Mac gets `/resume`, with ownership retained
-   across Glimmer sessions in `RunningAppOwnership` for eight hours after
-   recording; expired or missing ownership requires takeover confirmation.
-   Sunshine's `nvhttp.cpp` `resume()` calls `make_launch_session()` with the new
-   mode, FPS and HDR request, and configures the display when no streaming
-   session is active. Another app or unknown ownership needs takeover
-   confirmation, then `/cancel`, an idle poll (up to 5 s for Undo commands), and
-   `/launch`. A failed resume keeps the underlying recovery action, or offers a
-   confirmed quit and relaunch for other failures; a 503 “No running app”
-   launches fresh without confirmation. It never automatically cancels the game,
-   and observing idle or another app clears ownership. Sunshine exposes no
-   owner, so same-app takeovers between observations remain undetectable within
-   those eight hours.
+   across Glimmer sessions in `RunningAppOwnership` with no time limit; missing
+   ownership requires takeover confirmation. Sunshine's `nvhttp.cpp` `resume()`
+   calls `make_launch_session()` with the new mode, FPS and HDR request, and
+   configures the display when no streaming session is active. Another app or
+   unknown ownership needs takeover confirmation, then `/cancel`, an idle poll
+   (up to 5 s for Undo commands), and `/launch`. A failed resume keeps the
+   underlying recovery action, or offers a confirmed quit and relaunch for other
+   failures; a 503 “No running app” launches fresh without confirmation. It
+   never automatically cancels the game, and observing idle or another app in
+   the status poller, or unpairing the PC, clears ownership. Sunshine exposes no
+   owner, so another device relaunching the same game while Glimmer was closed
+   remains undetectable.
 3. **Build `BackendStreamConfig`**: `width`, `height`, `fps`, `bitrate`, the
    `supportedVideoFormats` codec bitmask, `colorSpace`, `colorRange`,
    `encryptionFlags`. The remote-input AES key and IV are copied in from the
@@ -436,9 +438,22 @@ physical key-down and key-up emits one keyboard event: no per-event modifier
 reset, no “release before press” coalescing. NKRO works because AppKit delivers
 each transition as its own `NSEvent` and the responder chain hands each to
 `keyDown(with:)` / `keyUp(with:)` independently. Held keys, mouse buttons and
-modifiers are released on focus loss, a paste, a reconnect and `detach()`. Key
-events also release tracked modifiers absent from their current flags,
-recovering a lost modifier-up without pressing additional modifiers.
+modifiers are released on focus/responder loss, deactivation, sleep, a paste,
+readiness loss and `detach()`. Physical ownership is separate from the release
+ledger, which retains each key's down-time wire mapping. Failed releases remain
+pending until ENet accepts them, and form a barrier before new presses. A
+replacement connection repeats releases that the old one may not have ACKed; it
+never replays old presses, and retires that history at the connection boundary.
+Key events after a 100 ms gap and a 250 ms timer reconcile missing ups only with
+Input Monitoring granted and the stream view first responder in the key window.
+Two consecutive missing samples without a key event are required. Mouse checks
+use original button numbers 0–4; extra buttons wait for their real up events.
+Recovery, refocus and wake run the same reconciliation. Controller button edges,
+trigger zero crossings and neutral frames return channel acceptance; replaceable
+axes and trigger travel merge. Paste and live text commits wait for pending
+releases to be accepted; later keys and commits stay queued in order. AppKit
+retains IME composition while the pointer is free, and captured input stays
+physical. Committing text preserves held game keys while releasing modifiers.
 
 The Cmd key reports as `VK_LWIN` / `VK_RWIN`. By default
 (`captureSysKeys == false`) the InputForwarder drops Cmd-bearing keyDown and
@@ -456,13 +471,19 @@ builds silently drop multi-controller events without it). Sunshine keeps a
 paired client's virtual pads across a reconnect and ignores an arrival for a
 slot it holds, so the forwarder remembers each slot's last arrival
 (`announcedControllers`) and, when input is ready again, removes every slot
-whose pad left or changed before it replays the arrivals. An entry is cleared
-only there, since a removal sent into a link that has already died is lost.
-State updates go through `sendMultiController`. Feedback from the PC comes back
-through `ConnectionEvents`: rumble (`0x010b`), trigger rumble (`0x5500`),
-motion-sensor enable (`0x5501`, answered with `sendControllerMotion` samples),
-and RGB lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion` and
-`ControllerBattery` own the actuator and sampler sides.
+whose pad left or changed before it replays the arrivals. Old controller release
+frames are discarded on connection loss so arrivals precede live-state resync.
+An entry is cleared only there, since a removal sent into a link that has
+already died is lost. Each controller has a serial `.userInteractive` handler
+queue. `InputCore` owns forwarding snapshots and the shared release ledger under
+a recursive lock, so capture, focus changes and pending releases remain ordered.
+AppKit responders stay on main; keyboard/button encoding runs on the sender.
+Controller motion sampling is also lock-protected. UI and lifecycle publications
+stay on main. State updates go through `sendMultiController`. Feedback from the
+PC comes back through `ConnectionEvents`: rumble (`0x010b`), trigger rumble
+(`0x5500`), motion-sensor enable (`0x5501`, answered with `sendControllerMotion`
+samples), and RGB lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion`
+and `ControllerBattery` own the actuator and sampler sides.
 
 Mini Player keeps controller input active when another Mac app has focus.
 Keyboard and mouse still release on focus loss. A shared ownership set manages
@@ -472,13 +493,16 @@ Leaving Mini Player in the background releases held controller input; returning
 to the stream resynchronizes the pad's current state.
 
 **Controller mouse.** Start alone, held longer than 750 ms and released, toggles
-per-slot mouse mode. The shared GameController/HID route keeps short Start
-presses and stop chords, and ignores Home for toggling. Mouse mode neutralizes
-the virtual pad and suppresses controller touch and motion input. It uses the
-existing backend mouse sends at 50 ms intervals: left stick moves, right stick
-scrolls, A/B/X click left/right/middle, L1/R1 click back/forward, and the D-pad
-scrolls one notch on press. The timing, click map, D-pad and cubic pointer curve
-follow
+per-slot mouse mode. Mouse and trackpad state live under the `InputCore` lock;
+stick polling runs on a separate user-interactive queue. Mouse edges share the
+release ledger with physical input, and capture timing follows both immediate
+mouse packets and the next stick poll without counting held repeats as captures.
+The shared GameController/HID route keeps short Start presses and stop chords,
+and ignores Home for toggling. Mouse mode neutralizes the virtual pad and
+suppresses controller touch and motion input. It uses the existing backend mouse
+sends at 50 ms intervals: left stick moves, right stick scrolls, A/B/X click
+left/right/middle, L1/R1 click back/forward, and the D-pad scrolls one notch on
+press. The timing, click map, D-pad and cubic pointer curve follow
 [Moonlight's SdlInputHandler](https://github.com/moonlight-stream/moonlight-qt/blob/a57e947d7185fd01384f6973df4df59ae2968d01/app/streaming/input/gamepad.cpp).
 Moonlight uses either stick for movement; Glimmer reserves the right for
 scrolling and makes the cubic deadzone symmetric. Stop chords cancel a
@@ -512,8 +536,11 @@ gamepads and multi-axis controllers with `IOHIDManager` and skips any device
 GameController owns: `GCController.supportsHIDDevice` on macOS 27, a
 platform-vendor and product-name check before that, and a recheck whenever a
 GameController pad connects. The hidden `hidGamepadClaimAll` default takes those
-pads too, for testing (see [PROFILING.md](PROFILING.md#hidden-defaults)). Each
-pad is mapped from the macOS section of SDL's GameControllerDB
+pads too, for testing (see [PROFILING.md](PROFILING.md#hidden-defaults)). Both
+raw-HID managers are scheduled on the owned `.userInteractive` `HIDInputThread`
+run loop. `HIDGamepadCapture` assembles report values there and forwards
+immutable states directly to the input core; enumeration and battery UI remain
+on main. Each pad is mapped from the macOS section of SDL's GameControllerDB
 (`GameControllerDB+Data.swift`, generated by `scripts/gen-gamecontrollerdb.py`),
 with a heuristic layout as the fallback; a keyboard's gamepad interface with no
 known mapping is ignored. The forwarder gives each pad a free bit in the same

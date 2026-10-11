@@ -254,6 +254,9 @@ extension TelemetryExporter {
         snap.latencyHistograms = FrameTimingTracker.shared?.histograms.snapshot()
         // Client-side input latency (queue→wire age) - a standalone input-family
         // stage, read off the same tracker on this queue.
+        snap.inputCallbackLatency = FrameTimingTracker.shared?.inputCallbackLatency.snapshotValue()
+        snap.inputTimingDropped = UInt64(FrameTimingTracker.shared?.inputTimingDropped.value ?? 0)
+        snap.inputLatency = FrameTimingTracker.shared?.inputLatency.snapshot() ?? []
         snap.inputLocalLatency = FrameTimingTracker.shared?.inputLocalLatency.snapshotValue()
         snap.inputDeliverLatency = FrameTimingTracker.shared?.inputDeliverLatency.snapshotValue()
         // Pipeline cadence (clump forensics) + cruise forensics - standalone

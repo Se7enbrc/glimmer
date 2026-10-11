@@ -14,6 +14,7 @@ struct InputBatcherTests {
     private static func makeChannel(backlogged: Bool = true) throws -> EnetControlChannel {
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
                                          crypto: try ControlCrypto(rikey: key))
+        EnetFixture.connect(channel)
         channel.reliableBackloggedFlag.store(backlogged, ordering: .relaxed)
         return channel
     }
@@ -49,7 +50,7 @@ struct InputBatcherTests {
 
     @Test func clickFollowsPendingPositionDuringBackpressure() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
         _ = batcher.setAbsMouse(x: 100, y: 100, refW: 1920, refH: 1080)
         _ = batcher.passThrough(
             InputEncoder.mouseButton(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: 1),
@@ -64,7 +65,7 @@ struct InputBatcherTests {
 
     @Test func relativeMotionFollowsPendingPositionDuringBackpressure() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
         _ = batcher.setAbsMouse(x: 100, y: 100, refW: 1920, refH: 1080)
         _ = batcher.accumulateMouseMove(dx: 5, dy: 0)
         batcher.stop()
@@ -74,7 +75,7 @@ struct InputBatcherTests {
 
     @Test func absolutePositionFollowsPendingMotionDuringBackpressure() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
         _ = batcher.accumulateMouseMove(dx: 5, dy: 0)
         _ = batcher.setAbsMouse(x: 100, y: 100, refW: 1920, refH: 1080)
         batcher.stop()
@@ -84,7 +85,7 @@ struct InputBatcherTests {
 
     @Test func timerSendsEveryMoveAndRearmsAfterIdle() async throws {
         let channel = try Self.makeChannel(backlogged: false)
-        let batcher = InputBatcher(enet: channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
         defer { batcher.stop() }
         for _ in 0..<50 { _ = batcher.accumulateMouseMove(dx: 3, dy: -1) }
         #expect(try await Self.waitForMotion(channel, dx: 150, dy: -50))
@@ -105,7 +106,7 @@ struct InputBatcherTests {
     /// A pad's held stick reaches the wire on the timer, and a press after it carries the same axes.
     @Test func controllerStateReachesTheWire() async throws {
         let channel = try Self.makeChannel(backlogged: false)
-        let batcher = InputBatcher(enet: channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
         defer { batcher.stop() }
         let held = GamepadAnalog(leftTrigger: 0, rightTrigger: 40, leftStickX: 12_000, leftStickY: -3_000,
                                  rightStickX: 0, rightStickY: 0)
@@ -120,7 +121,7 @@ struct InputBatcherTests {
 
     @Test func clickFollowsEveryEarlierMove() throws {
         let channel = try Self.makeChannel(backlogged: false)
-        let batcher = InputBatcher(enet: channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
         for _ in 0..<40 { _ = batcher.accumulateMouseMove(dx: 2, dy: 1) }
         _ = batcher.passThrough(
             InputEncoder.mouseButton(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: 1),
@@ -133,6 +134,36 @@ struct InputBatcherTests {
         #expect(moved.dx == 80 && moved.dy == 40)
     }
 
+    @Test func failedMergedAxesDoNotBlockTheFollowingButtonEdge() throws {
+        let attempts = AtomicCounter()
+        let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
+            crypto: try ControlCrypto(rikey: Self.key), sealControl: { crypto, type, payload, seq in
+                attempts.increment()
+                if attempts.value == 1 { throw EnetError.mtuExceeded }
+                return try crypto.seal(type: type, payload: payload, seq: seq)
+            })
+        EnetFixture.connect(channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { _ in true })
+        defer { batcher.stop() }
+        let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 100,
+                                   leftStickY: 0, rightStickX: 0, rightStickY: 0)
+        #expect(batcher.updateController(num: 0, mask: 1, buttons: 0, analog: analog) == 0)
+        #expect(batcher.updateController(num: 0, mask: 1, buttons: 1, analog: analog) == 0)
+        #expect(try Self.sentPayloads(channel) == [InputEncoder.multiController(
+            num: 0, mask: 1, buttons: 1, analog: analog)])
+        #expect(channel.withState { channel.sentReliable.first?.reliableSequenceNumber } == 1)
+    }
+
+    @Test func textEncodingOnTheSenderPreservesPacketAndEdgeOrder() throws {
+        let channel = try Self.makeChannel()
+        let batcher = InputBatcher(enet: channel, backpressure: { _ in true })
+        defer { batcher.stop() }
+        let text = String(repeating: "é", count: 40)
+        #expect(batcher.passThroughText(text) == 0)
+        #expect(batcher.passThrough(Self.click, channel: Enet.ctrlChannelMouse) == 0)
+        #expect(try Self.sentPayloads(channel) == InputEncoder.utf8TextPackets(text) + [Self.click])
+    }
+
     // MARK: Merge decisions, drained by an edge under backpressure
 
     private static let click = InputEncoder.mouseButton(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: 1)
@@ -140,7 +171,7 @@ struct InputBatcherTests {
     /// Merged state left behind by `fill`, then the edge that drained it.
     private static func drained(_ fill: (InputBatcher) -> Void) throws -> [[UInt8]] {
         let channel = try makeChannel()
-        let batcher = InputBatcher(enet: channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
         fill(batcher)
         _ = batcher.passThrough(click, channel: Enet.ctrlChannelMouse)
         batcher.stop()
@@ -189,7 +220,7 @@ struct InputBatcherTests {
     /// Sensor samples ride unreliable, except the gyro null that stops sensors.
     @Test func onlyTheGyroNullRidesReliable() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
         let gyro = UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO)
         let accel = UInt8(StreamProtocol.LI_MOTION_TYPE_ACCEL)
         #expect(batcher.updateMotion(num: 0, motionType: 3, x: 1, y: 1, z: 1) == InputBatcherResult.sendFailed)
@@ -208,7 +239,7 @@ struct InputBatcherTests {
 
     @Test func pairsAndReportsKeepTheirOrderBehindMergedMotion() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
         let report = InputEncoder.scroll(120)
         _ = batcher.accumulateMouseMove(dx: 5, dy: 0)
         _ = batcher.passThroughReport(report, channel: Enet.ctrlChannelMouse)
@@ -220,7 +251,7 @@ struct InputBatcherTests {
 
     @Test func aStoppedBatcherRefusesEverything() throws {
         let channel = try Self.makeChannel(backlogged: false)
-        let batcher = InputBatcher(enet: channel)
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
         batcher.stop()
         let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0, leftStickY: 0,
                                    rightStickX: 0, rightStickY: 0)
@@ -242,5 +273,73 @@ struct InputBatcherTests {
         #expect(InputBatcher.motionTraceDue(lastNanos: 0, nowNanos: interval, isGyroNull: false))
         #expect(!InputBatcher.motionTraceDue(lastNanos: 1, nowNanos: interval, isGyroNull: false))
         #expect(InputBatcher.motionTraceDue(lastNanos: 1, nowNanos: interval, isGyroNull: true))
+    }
+    @Test func reliableEdgesReportFailureInsteadOfQueueSuccess() throws {
+        let channel = try Self.makeChannel()
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        #expect(batcher.passThrough([UInt8](repeating: 0, count: Int(Enet.defaultMTU)), channel: 2) == -1)
+        channel.close()
+        #expect(batcher.passThrough(Self.click, channel: 3) == -1)
+        batcher.stop()
+        #expect(batcher.passThrough(Self.click, channel: 3) == -2)
+        #expect(channel.sentReliable.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
+    func triggerTravelMergesBetweenZeroCrossings(right: Bool) throws {
+        func analog(_ value: UInt8) -> GamepadAnalog {
+            GamepadAnalog(leftTrigger: right ? 0 : value, rightTrigger: right ? value : 0,
+                          leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0)
+        }
+        let channel = try Self.makeChannel()
+        let batcher = InputBatcher(enet: channel, backpressure: { _ in true })
+        defer { batcher.stop() }
+        for value: UInt8 in [1, 30, 80] {
+            #expect(batcher.updateController(num: 0, mask: 1, buttons: 0, analog: analog(value)) == 0)
+        }
+        #expect(try Self.sentPayloads(channel) == [
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: analog(1))
+        ])
+        #expect(batcher.updateController(num: 0, mask: 1, buttons: 0, analog: analog(0)) == 0)
+        #expect(try Self.sentPayloads(channel) == [1, 80, 0].map {
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: analog($0))
+        })
+    }
+
+    @Test func controllerNeutralAndKeyboardUpSurviveImmediateStop() throws {
+        let channel = try Self.makeChannel()
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0, leftStickY: 0,
+                                  rightStickX: 0, rightStickY: 0)
+        let release = InputEncoder.keyboard(keyCode: VKScanCode(vk: 0x57).wireCode,
+                                            action: Int8(StreamProtocol.KEY_ACTION_UP), modifiers: 0, flags: 0)
+        #expect(batcher.updateController(num: 0, mask: 1, buttons: 0x1000, analog: analog) == 0)
+        #expect(batcher.updateController(num: 0, mask: 1, buttons: 0, analog: analog) == 0)
+        #expect(batcher.passThrough(release, channel: 2) == 0)
+        batcher.stop()
+        #expect(try Self.sentPayloads(channel) == [
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0x1000, analog: analog),
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: analog), release
+        ])
+    }
+
+    @Test func failedControllerDownCannotResurrectAtStop() throws {
+        let channel = try Self.makeChannel()
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        channel.interrupt()
+        let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0, leftStickY: 0,
+                                  rightStickX: 0, rightStickY: 0)
+        #expect(batcher.updateController(num: 0, mask: 1, buttons: 0x1000, analog: analog) == -1)
+        batcher.stop()
+        #expect(try Self.sentPayloads(channel).isEmpty)
+    }
+
+    @Test func inputWithoutALiveConnectionCannotReportAcceptance() throws {
+        let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
+                                         crypto: try ControlCrypto(rikey: Self.key))
+        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        #expect(batcher.passThrough(Self.click, channel: 3) == InputBatcherResult.sendFailed)
+        batcher.stop()
+        #expect(channel.sentReliable.isEmpty)
     }
 }

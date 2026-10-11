@@ -50,6 +50,8 @@ struct SessionReport {
     let aggregate: SessionAggregate
     let histograms: LatencyHistogramSnapshot?
     let counters: TelemetryCounters
+    var inputLatency: [InputLatency.Row] = []
+    var inputTimingDropped: UInt64 = 0
     /// Stages kept outside the per-tick snapshot (input legs, RFI recovery), so
     /// they have no active-seconds form and ride `latency_raw` only.
     var sessionWideStages: [(String, LatencyHistogramSnapshot.Stage)] = []
@@ -77,6 +79,10 @@ struct SessionReport {
         top.append("\"latency_basis\":\"\(aggregate.activeLatency != nil ? "active_seconds" : "all_session")\"")
         top.append("\"latency\":\(latencyObject(aggregate.activeLatency ?? histograms))")
         top.append("\"latency_raw\":\(latencyObject(histograms, extra: sessionWideStages))")
+        var input = TelemetryRenderer.NDJSONBuilder()
+        TelemetryRenderer.ndjsonInputLatency(&input, inputLatency)
+        input.addCount("input_timing_dropped_total", inputTimingDropped)
+        top.append("\"input_latency\":\(input.line())")
         top.append("\"events\":\(eventsObject())")
         // REORDER-DISPLACEMENT invariant: how late reorders arrived vs the hold
         // that must outlast them. hold_exceeded > 0 is the only alertable value;

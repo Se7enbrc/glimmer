@@ -34,6 +34,11 @@ extension TelemetryRenderer {
         // Client-side input latency: queue→wire age of merged input on the batcher
         // (oldest unflushed entry → flush). The local half of the input path,
         // independent of host/present clock.
+        builder.emitCounter("glimmer_input_timing_dropped_total", "Input timing capacity drops.",
+                            snap.inputTimingDropped)
+        if let stage = snap.inputCallbackLatency {
+            builder.emitHistogram("glimmer_input_callback_queue_ms", "Local callback queue probe delay.", stage: stage)
+        }
         if let inputLocal = snap.inputLocalLatency {
             builder.emitHistogram(
                 "glimmer_latency_input_local_ms",

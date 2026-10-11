@@ -111,9 +111,9 @@ extension StreamSession {
             self.presentWatchdogTimer = nil
             self.stopPresentMetricTimer()
             winForOverlay?.statsOverlay.setVisible(false)
-            // Key-ups go out while the uplink is still live; once not ready, a
-            // quit chord's late modifier releases send nothing into a closed link.
-            inputForQuiesce?.raiseAllHeldInputs(reason: "stream teardown")
+            // Keys, mouse buttons and controller neutral frames must reach the reliable
+            // channel before the backend closes; offline obligations remain pending.
+            inputForQuiesce?.inputOwnershipLost(reason: "stream teardown")
             inputForQuiesce?.setReady(false)
         }
 

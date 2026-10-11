@@ -88,6 +88,7 @@ enum TelemetryRenderer {
         // (TelemetryExporter+RenderP2.swift) to keep this file under the length
         // budget; it appends to the SAME builder so the body stays one document.
         promSessionLifecycle(&builder, snap)
+        promInputLatency(&builder, snap.inputLatency)
         return builder.out
     }
 

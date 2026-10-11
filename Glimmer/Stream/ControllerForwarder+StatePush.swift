@@ -14,6 +14,7 @@ extension InputForwarder {
     }
 
     func updateControllerBackgroundEvents() {
+        publishInputSnapshot()
         ControllerBackgroundEvents.setEnabled(isMiniPlayer && isReady, for: controllerBackgroundEventsID)
         ControllerHaptics.shared.setBackgroundPlayEnabled(isMiniPlayer && isReady,
                                                           for: controllerBackgroundEventsID)
@@ -48,18 +49,22 @@ extension InputForwarder {
     /// Returns false when input is gated or the quit chord is held; mouse mode still needs the surface.
     @discardableResult
     private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8) -> Bool {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         guard forwardsControllerEvents else { return false }
         let buttons = pressedButtonFlags(pad: pad)
 
         // The chord ends the stream only after the hold dwell (ControllerForwarder+QuitChord.swift),
-        // so an in-game overlap can't. Frames holding it stay off the PC, or the game would act on
-        // those buttons for the whole hold.
-        let analog = controllerAnalog(pad)
+        // so an in-game overlap can't. New presses stay off the PC during the dwell;
+        // releases still pass so unrelated buttons and triggers cannot get stuck.
+        let analog = Self.controllerAnalog(pad)
         let chordHeld = matchesControllerQuitChord(pad: pad, buttons: buttons)
         let isMouse = routeControllerMouse(slot: slot, buttons: buttons, analog: analog, chordHeld: chordHeld)
         if chordHeld {
             armQuitChordDwell(pad: pad, slot: slot)
-            // No frame is enqueued, so its stamp must not age into the next push.
+            releaseSuppressedControllerButtons(slot: slot, buttons: buttons,
+                                               leftDown: pad.leftTrigger.value > 0,
+                                               rightDown: pad.rightTrigger.value > 0)
+            // A suppressed frame must not age into the next push.
             _ = InputDeliverStamp.shared.take(slot: Int(slot))
             return false
         }
@@ -76,22 +81,8 @@ extension InputForwarder {
         }
         let mapped = ControllerButtonLayout.apply(
             buttons, useNintendoLabels: useNintendoLabels && nintendoControllerTypes[slot] != nil)
-        let rc = backend?.sendMultiController(
-            num: Int16(slot), mask: Int16(bitPattern: gamepadMask), buttons: mapped, analog: analog
-        ) ?? -2
-        record("LiSendMultiControllerEvent", rc)
+        sendControllerState(slot: slot, buttons: mapped, analog: analog)
         return true
-    }
-
-    private func controllerAnalog(_ pad: GCExtendedGamepad) -> GamepadAnalog {
-        let lt = UInt8((pad.leftTrigger.value * 255).rounded().clamped(to: 0...255))
-        let rt = UInt8((pad.rightTrigger.value * 255).rounded().clamped(to: 0...255))
-        let lx = Int16((pad.leftThumbstick.xAxis.value * 32767).rounded().clamped(to: -32768...32767))
-        let ly = Int16((pad.leftThumbstick.yAxis.value * 32767).rounded().clamped(to: -32768...32767))
-        let rx = Int16((pad.rightThumbstick.xAxis.value * 32767).rounded().clamped(to: -32768...32767))
-        let ry = Int16((pad.rightThumbstick.yAxis.value * 32767).rounded().clamped(to: -32768...32767))
-        return GamepadAnalog(leftTrigger: lt, rightTrigger: rt, leftStickX: lx, leftStickY: ly,
-                             rightStickX: rx, rightStickY: ry)
     }
 
     /// The host button bitmask for a gamepad's current state. Table-driven so
@@ -100,7 +91,7 @@ extension InputForwarder {
     /// trips). The DualSense/DualShock touchpad *click* rides here as
     /// TOUCHPAD_FLAG (Sunshine's touchpad button); the touchpad *surface* is
     /// forwarded separately as touch events.
-    func pressedButtonFlags(pad: GCExtendedGamepad) -> Int32 {
+    nonisolated func pressedButtonFlags(pad: GCExtendedGamepad) -> Int32 {
         let mapping: [(Bool, Int32)] = [
             (pad.buttonA.isPressed, StreamProtocol.A_FLAG),
             (pad.buttonB.isPressed, StreamProtocol.B_FLAG),
@@ -145,39 +136,31 @@ extension InputForwarder {
     // MARK: - Focus loss
 
     /// The all-zero analog state a removal and a focus-loss release both send.
-    static let neutralControllerAnalog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
-                                                       leftStickX: 0, leftStickY: 0,
-                                                       rightStickX: 0, rightStickY: 0)
+    static let neutralControllerAnalog = InputCore.neutral
 
     /// Release every pad when focus leaves ordinary playback; Mini Player keeps its controller ownership.
     func neutralizeControllers() {
-        guard isReady else { return }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        controllerOwnershipSuspended = true
+        publishInputSnapshot(focused: false)
+        inputCore.chordSlots.removeAll()
         releaseControllerTouches()
         suspendControllerMouse()
         for state in attachedControllers.values {
             ControllerMotion.shared.setInputEnabled(false, slot: state.slot)
         }
-        let slots = attachedControllers.values.map(\.slot) + attachedHIDControllers.values.map(\.slot)
-        for slot in slots {
-            let rc = backend?.sendMultiController(
-                num: Int16(slot), mask: Int16(bitPattern: gamepadMask),
-                buttons: 0, analog: Self.neutralControllerAnalog
-            ) ?? -2
-            record("LiSendMultiControllerEvent(focus loss)", rc)
+        let slots = Set(attachedControllers.values.map(\.slot) + attachedHIDControllers.values.map(\.slot)
+            + Array(controllerButtons.keys))
+        for slot in slots.sorted()
+            where controllerButtons[slot] != 0 || releases.held.contains(.controller(slot)) {
+            releases.hold(.controller(slot))
+            releases.release(.controller(slot))
+            controllerButtons[slot] = 0
+            controllerAnalogs[slot] = Self.neutralControllerAnalog
         }
+        flushPendingReleases()
         if !slots.isEmpty {
-            Diag.info("input: released \(slots.count) controller(s) on focus loss", "Stream")
+            Diag.info("input: \(slots.count) controller release obligations on focus loss", "Stream")
         }
-    }
-}
-
-// MARK: - Local numeric helper
-
-// File-local clamp helper. A fileprivate extension can't be shared across files,
-// and promoting it to internal would leak the helper across the whole target, so
-// each file that needs it keeps a tight local copy.
-fileprivate extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self {
-        min(max(self, range.lowerBound), range.upperBound)
     }
 }

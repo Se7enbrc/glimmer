@@ -10,6 +10,7 @@
 
 import CryptoKit
 import Foundation
+import Network
 import Testing
 @testable import Glimmer
 
@@ -18,8 +19,15 @@ enum EnetFixture {
     static let key: [UInt8] = Array(0..<16).map { UInt8($0) }
 
     static func channel() throws -> EnetControlChannel {
-        EnetControlChannel(host: .ipv4(.loopback), port: 0, controlConnectData: 0,
-                           crypto: try ControlCrypto(rikey: key))
+        let channel = EnetControlChannel(host: .ipv4(.loopback), port: 0, controlConnectData: 0,
+                                         crypto: try ControlCrypto(rikey: key))
+        connect(channel)
+        return channel
+    }
+
+    static func connect(_ channel: EnetControlChannel) {
+        // An unstarted socket exercises connection presence without sending any network traffic.
+        channel.setConnection(NWConnection(host: .ipv4(.loopback), port: 9, using: .udp))
     }
 
     /// One datagram: the peer header, an optional sent time, then the commands back to back.
@@ -135,6 +143,7 @@ struct EnetControlInboundTests {
     @Test(arguments: [(10.0, 4.0, 50.0, 15.0, 13.0), (100.0, 8.0, 20.0, 90.0, 26.0)])
     func rttFollowsEnetGains(start: Double, variance: Double, sample: Double, mean: Double, spread: Double) throws {
         let channel = try EnetFixture.channel()
+        channel.sendPeriodicPing()
         channel.withState {
             channel.hasRttSample = true
             channel.roundTripTime = start

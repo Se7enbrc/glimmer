@@ -135,7 +135,8 @@ extension EnetControlChannel {
             ackSilenceNearMissArmed = false
         }
 
-        if health.unackedCount > 0 && health.sinceLastAck >= Self.ackSilenceDeadMs {
+        let stalled = health.sinceLastAck >= Self.ackSilenceDeadMs || health.oldestUnackedMs >= Self.ackSilenceDeadMs
+        if health.unackedCount > 0 && stalled {
             declarePeerDead(code: -1, reason: "ENet peer silent: no ACK in \(health.sinceLastAck)ms with "
                 + "\(health.unackedCount) reliable command(s) outstanding "
                 + "(oldest \(health.oldestUnackedMs)ms) - host silently reset peer; terminating")
@@ -245,17 +246,8 @@ extension EnetControlChannel {
         Diag.debug("ENet ping sent (relSeq=\(relSeq))", Self.logCategory)
     }
 
-    /// Resend any reliable command whose roundTripTimeout has elapsed (adaptive
-    /// base = clamp(srtt + 4*rttvar, 60...1000ms), 500ms until the first RTT sample,
-    /// then exponential backoff), COALESCING the due resends into as few
-    /// datagrams as possible (chunked under the MTU) instead of one datagram per
-    /// entry - the old one-datagram-per-entry behavior turned a transient backlog
-    /// into a retransmit storm that compounded the flood. Also adds max-attempt /
-    /// age give-up eviction: an entry that has been resent ~10 times OR has been
-    /// outstanding >= ~5000ms (host timeoutMinimum, protocol.c:1371-1379) means
-    /// the host has stopped ACKing us - declare the peer dead and fire
-    /// onTerminated(-1) ONCE rather than resending forever (converts the silent
-    /// host-driven kill into an observable, in-app-logged termination).
+    /// Retain every reliable command until ACK or connection teardown, with adaptive backoff.
+    /// Coalesce due retransmits under the MTU; attempts never evict individual commands.
     func checkRetransmit() {
         stateLock.lock()
         if disconnected { stateLock.unlock(); return }
@@ -280,11 +272,8 @@ extension EnetControlChannel {
             rtoBaseMs = Enet.defaultRoundTripTimeMs
         }
         var resends: [[UInt8]] = []
-        // No early give-up. Like enet_protocol_check_timeouts (protocol.c:1371-1388)
-        // we keep retransmitting with backoff and NEVER self-evict here - the attempt
-        // count only caps the backoff, it does not tear down. The sole dead-peer
-        // backstop is runControlLoop's ackSilenceDeadMs (= ENet's 10s peer timeout),
-        // which is what lets a brief blip self-heal once UDP flows again.
+        // Attempts only cap backoff. The control loop reconnects after ten seconds
+        // without progress, including a stuck channel while other channels still ACK.
         for i in sentReliable.indices {
             let timeout = rtoBaseMs * UInt32(1 << min(sentReliable[i].attempts, 4))
             if now &- sentReliable[i].sentAtMs >= timeout {

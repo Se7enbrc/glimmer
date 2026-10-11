@@ -16,26 +16,22 @@
 import Foundation
 
 extension EnetControlChannel {
-    /// Submit one datagram to the wire. The actual connection.send is hopped onto
-    /// the dedicated sendQueue so it can NEVER serialize ahead of (and starve) the
-    /// inbound receive/ACK callback running on `queue`. stateLock is NEVER held
-    /// across this call - callers always invoke it OUTSIDE their withState blocks,
-    /// matching moonlight's "release the mutex before any blocking op" invariant.
-    /// In-flight backpressure: count up before the send, down in its completion,
-    /// so the input flush path can back off via `sendBacklogged`.
-    func sendDatagram(_ bytes: [UInt8]) {
+    /// Input submits on its owned thread; outboundLock preserves reliable commit/submission order.
+    /// Never hold stateLock across submission: receive/ACK processing must remain independent.
+    /// currentConnection retains the socket under connLock so concurrent teardown cannot free it.
+    func sendDatagram(_ bytes: [UInt8], timing: InputTimingBatch? = nil) {
         withState { lastSendMs = serviceTimeMs }
-        // Locked read (see connLock): retains the connection under the lock so
-        // close()'s concurrent take-and-nil can never free it mid-load. nil
-        // here means teardown already took it - drop the datagram.
-        let conn = currentConnection()
+        guard let conn = currentConnection() else { return }
         inFlightSends.increment()
         let counter = inFlightSends
-        sendQueue.async {
-            guard let conn else { counter.decrement(); return }
-            conn.send(content: Data(bytes),
-                      completion: .contentProcessed { _ in counter.decrement() })
-        }
+        let content = Data(bytes)
+        let sent = DispatchTime.now().uptimeNanoseconds
+        conn.send(content: content, completion: .contentProcessed { _ in
+            let completed = DispatchTime.now().uptimeNanoseconds
+            counter.decrement()
+            timing?.completed(sent: sent, at: completed)
+        })
+        timing?.submitted(at: sent)
     }
 
     // MARK: - Public client→host input uplink
@@ -48,14 +44,14 @@ extension EnetControlChannel {
     /// control loop). Returns false if the seal/send failed (e.g. MTU) so the
     /// caller can surface -2/-1 to InputForwarder.
     @discardableResult
-    func sendInputPacket(_ plaintext: [UInt8], channel: UInt8) -> Bool {
+    func sendInputPacket(_ plaintext: [UInt8], channel: UInt8, timing: InputTimingBatch? = nil) -> Bool {
         do {
             _ = try sendEncryptedControl(
                 type: CtrlV2.inputData, payload: plaintext,
-                channel: channel, label: "INPUT")
+                channel: channel, label: "INPUT", requireConnection: true, timing: timing)
             return true
         } catch {
-            Diag.error("ENet input send failed (ch \(channel)): \(error, privacy: .private)", Self.logCategory)
+            reportInputFailure(error, channel: channel)
             return false
         }
     }
@@ -77,10 +73,19 @@ extension EnetControlChannel {
                 channel: channel, label: "INPUT_UNREL")
             return true
         } catch {
-            Diag.error("ENet unreliable input send failed (ch \(channel)): \(error, privacy: .private)",
-                       Self.logCategory)
+            reportInputFailure(error, channel: channel)
             return false
         }
+    }
+
+    private func reportInputFailure(_ error: Error, channel: UInt8) {
+        let first = withState {
+            let first = !inputFailureReported
+            inputFailureReported = true
+            return first
+        }
+        guard first else { return }
+        Diag.error("ENet input send failed (ch \(channel)): \(error, privacy: .private)", Self.logCategory)
     }
 
     // MARK: - Public client→host control (IDR / RFI / LTR)
@@ -206,72 +211,54 @@ extension EnetControlChannel {
         TelemetryCounters.shared.idrRoundTripRequestTotal.increment()
     }
 
-    /// Seal `type`+`payload` as a control-V2 message and send it as a reliable
-    /// SEND_RELIABLE ENet command on `channel`, tracking it in sentReliable for
-    /// ACK/retransmit. Does NOT block on the ACK (fire-and-track, like
-    /// sendMessageAndForget). Returns the per-channel reliable seq used.
-    ///
-    /// enetSeq + the per-channel reliable counter are both incremented under the
-    /// SAME lock that orders the send (StreamCrypto's seq-uniqueness contract:
-    /// reusing an enetSeq = GCM nonce reuse = catastrophic).
+    /// Seal before reserving a reliable sequence; failed encryption must never leave a hole.
+    /// Nonces are consumed even on failure, and the outbound lock preserves commit/send order.
     @discardableResult
     func sendEncryptedControl(type: UInt16, payload: [UInt8], channel requested: UInt8,
-                              label: String) throws -> UInt16 {
-        let channel = withState { Enet.effectiveChannel(requested, negotiatedCount: negotiatedChannelCount) }
-        let (seq, relSeq): (UInt32, UInt16) = withState {
-            let currentSeq = enetSeq
-            enetSeq += 1
-            // ENet reliable sequence numbers are 16-bit and WRAP (the vendored C
-            // does `++` on a u16, which wraps silently); the receiver compares
-            // with wraparound arithmetic. Must use &+ - plain + traps on overflow
-            // after 65535 reliable sends on a channel (the mouse channel hits this
-            // in ~20min of play → arithmetic-overflow crash on the input path).
-            let next = (channelOutgoingReliableSeq[channel] ?? 0) &+ 1
-            channelOutgoingReliableSeq[channel] = next
-            // ENet zeroes the channel's outgoing UNRELIABLE counter whenever a
-            // reliable command goes out on it (enet_peer_setup_outgoing_command,
-            // peer.c:658), so a subsequent unreliable's reliableSequenceNumber
-            // (this `next`) pairs with a fresh unreliable counter starting at 1.
-            channelOutgoingUnreliableSeq[channel] = 0
-            return (currentSeq, next)
+                              label: String, requireConnection: Bool = false,
+                              timing: InputTimingBatch? = nil) throws -> UInt16 {
+        outboundLock.lock()
+        defer { outboundLock.unlock() }
+        if requireConnection {
+            guard !interrupted.isSet, !withState({ disconnected }),
+                  currentConnection() != nil else {
+                throw EnetError.disconnected
+            }
         }
-
+        guard payload.count <= Int(Enet.defaultMTU) else { throw EnetError.mtuExceeded }
+        let channel = withState { Enet.effectiveChannel(requested, negotiatedCount: negotiatedChannelCount) }
+        let seq = withState {
+            let current = enetSeq
+            enetSeq += 1
+            return current
+        }
         let encrypted: [UInt8]
         do {
-            encrypted = try crypto.seal(type: type, payload: payload, seq: seq)
+            encrypted = try sealControl(crypto, type, payload, seq)
         } catch {
             throw EnetError.startFailed("\(label) encrypt: \(error)")
         }
-
-        // SEND_RELIABLE command: header (0x86, channel, relSeq) + u16 dataLength
-        // + inline ciphertext.
-        var cmd = ByteWriter()
-        cmd.u8(Enet.cmdSendReliable | Enet.flagAcknowledge) // 0x86
-        cmd.u8(channel)
-        cmd.u16BE(relSeq)
-        cmd.u16BE(UInt16(encrypted.count))
-        cmd.append(encrypted)
-
-        if cmd.bytes.count + 4 > Int(Enet.defaultMTU) {
-            throw EnetError.mtuExceeded
-        }
-
-        let commandBytes = cmd.bytes
-        withState {
+        guard encrypted.count + 10 <= Int(Enet.defaultMTU) else { throw EnetError.mtuExceeded }
+        let (relSeq, commandBytes) = withState {
+            // ENet's UInt16 sequence wraps; a reliable send resets the unreliable counter.
+            let next = (channelOutgoingReliableSeq[channel] ?? 0) &+ 1
+            var cmd = ByteWriter()
+            cmd.u8(Enet.cmdSendReliable | Enet.flagAcknowledge)
+            cmd.u8(channel)
+            cmd.u16BE(next)
+            cmd.u16BE(UInt16(encrypted.count))
+            cmd.append(encrypted)
+            channelOutgoingReliableSeq[channel] = next
+            channelOutgoingUnreliableSeq[channel] = 0
             let nowMs = serviceTimeMs
             sentReliable.append(SentReliable(
-                channelID: channel, reliableSequenceNumber: relSeq,
-                commandBytes: commandBytes, sentAtMs: nowMs, firstSentAtMs: nowMs,
-                attempts: 1))
-            unackedReliables.increment() // mirror sentReliable.count
+                channelID: channel, reliableSequenceNumber: next,
+                commandBytes: cmd.bytes, sentAtMs: nowMs, firstSentAtMs: nowMs, attempts: 1))
+            unackedReliables.increment()
+            return (next, cmd.bytes)
         }
-
-        sendDatagram(wrapDatagram(commands: [commandBytes], sentTime: true))
-        // NO per-packet logging here: this is the hot send path (input fires many
-        // times/sec) and Diag → LogStore.log takes a process-global NSLock from
-        // every thread, adding cross-thread contention exactly when input is hot.
-        // Handshake milestones (CONNECT/VERIFY_CONNECT/START_A/B ACKed + stage
-        // transitions) are logged separately at their own call sites.
+        sendDatagram(wrapDatagram(commands: [commandBytes], sentTime: true), timing: timing)
+        // Hot input sends stay out of Diag's process-global logging lock.
         return relSeq
     }
 
@@ -293,6 +280,9 @@ extension EnetControlChannel {
     /// nonce reuse = catastrophic).
     func sendEncryptedControlUnreliable(type: UInt16, payload: [UInt8],
                                         channel requested: UInt8, label: String) throws {
+        outboundLock.lock()
+        defer { outboundLock.unlock() }
+        guard payload.count <= Int(Enet.defaultMTU) else { throw EnetError.mtuExceeded }
         let channel = withState { Enet.effectiveChannel(requested, negotiatedCount: negotiatedChannelCount) }
         let (seq, relSeq, unrelSeq): (UInt32, UInt16, UInt16) = withState {
             let currentSeq = enetSeq

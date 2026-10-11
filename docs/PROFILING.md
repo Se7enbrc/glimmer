@@ -602,3 +602,142 @@ categories make Instruments simpler to filter. If the work crosses a thread
 boundary, thread the `OSSignpostIntervalState` through whatever data structure
 already crosses that boundary (see `StatsCollector` for the reference
 implementation: a FIFO of states paired with submit timestamps).
+
+## Input under CPU load
+
+Input timing is opt-in with the existing telemetry switch. The per-second
+NDJSON, Prometheus endpoint and session scorecard (`input_latency`) carry four
+sources: `keyboard`, `mouse`, `controller` and `raw_hid`. These new fields
+contain timing and counts only, with no key, button, device or text identities.
+Existing optional input trace rows are unchanged.
+
+Each forwarded event uses the original `NSEvent.timestamp`, GameController
+`lastEventTimestamp`, or IOHID report/value timestamp, normalized to Mac uptime.
+Generic HID records handler entry at its first element callback, before report
+assembly. AppKit stays on main for shortcuts and IME. GameController callbacks
+use `io.ugfugl.Glimmer.controllerCapture`; both HID readers use the owned
+`Glimmer.hidCapture` run loop. Focus, readiness, slot ownership and quit-chord
+configuration enter the locked input core as value snapshots. Old callbacks
+cannot press into a retired controller slot or a later focus interval.
+
+The sender owns merging, encoding, sealing and `NWConnection.send` invocation on
+`Glimmer.inputSend`. Its startup Diag line is exactly one of:
+
+```text
+input send thread: realtime scheduling applied
+input send thread: thread_policy_set failed (kr=<code>); staying userInteractive
+```
+
+Mach scheduling is best effort: even a successful policy request is not a
+latency guarantee. The thread sleeps when idle; it wakes on enqueue and on a
+pending 1 ms merge deadline. Edge acceptance remains synchronous and local, so a
+failed release stays in the obligation ledger. No input waits for an ACK or adds
+a network round trip to launch.
+
+For each source, NDJSON fields have the form
+`input_<source>_<stage>_{p50_ms,p95_ms,p99_ms,max_ms,count,over_10ms,over_20ms,over_50ms}`.
+The stages are:
+
+| Stage                | Boundaries                                                      |
+| -------------------- | --------------------------------------------------------------- |
+| `capture_handler`    | OS/device event to handler entry                                |
+| `handler_batcher`    | Handler entry to submission to the batcher                      |
+| `batcher_flush`      | Batcher entry to flush, including sender scheduling and merging |
+| `flush_send`         | Flush to the actual `NWConnection.send` invocation              |
+| `capture_send`       | OS/device event to that invocation                              |
+| `send_completion`    | Invocation to `.contentProcessed` callback entry                |
+| `capture_completion` | OS/device event to completion callback entry                    |
+
+`capture_send` is the local capture-to-submit measurement. Neither submission
+nor `.contentProcessed` establishes physical transmission or acceptance by the
+PC. Completion latency includes Network.framework work and local callback
+scheduling. Invalid, absent and future device timestamps do not become zero-ms
+samples. Locally consumed shortcuts and events producing no packet have no
+capture-to-send observation. Physical releases retain their event timestamp;
+reconciliation releases cannot consume another event's timing. GameController
+sensor callbacks expose no sample timestamp and retain the existing
+`input_motion` metrics instead of inventing capture times. Coalesced mouse
+events retain their individual capture times; split wire packets count the event
+once. Merged states retain each event's timestamp, including the oldest one.
+Each slot retains up to 4096 timing samples; `input_timing_dropped_total` must
+stay zero for a valid comparison.
+
+All distributions are cumulative within the session. Percentiles interpolate
+fixed histogram buckets; maxima and the strictly-greater-than 10/20/50 ms counts
+are exact. NDJSON also includes `input_latency_bounds_ms` and
+`input_<source>_<stage>_buckets`, so subtracting two rows' bucket/count values
+isolates a load window. Do not subtract percentiles. Prometheus exposes
+`glimmer_input_<source>_<stage>_ms_{bucket,sum,count}`, `_max_ms`, and
+`_over_{10,20,50}ms_total`. Use `histogram_quantile` over bucket rates for a
+windowed percentile. The scorecard is session-wide, including startup.
+
+`lat_input_callback_queue_{p50,p95,p99}_ms` and the Prometheus histogram
+`glimmer_input_callback_queue_ms` measure a probe on the same queue that runs
+send completions and ENet ACK callbacks. The eight-submission and
+`max(30 ms, 3 × RTT)` ACK-silence gates require local queue progress within 2
+ms; otherwise motion continues merging and submitting while the probe is
+delayed. Matched ACKs also clear the cached ACK-silence gate immediately. Edges
+always bypass both gates. Network.framework provides no kernel arrival or
+callback-ready timestamp here: the probe identifies local queue starvation, not
+the exact network/local division of an individual late ACK. A queue stall can
+briefly mask simultaneous network trouble; check real loss separately.
+
+### Reproduce and compare
+
+Use owner-installed Release builds, AC power, the same scene, stream settings,
+window mode, peripherals and preferably wired networking. Collect a telemetry
+baseline with these timing boundaries before comparing scheduling changes; older
+`lat_input_queue_to_wire` excludes OS capture and queued submission and is not a
+valid baseline for `capture_send`. No before/after latency numbers have been
+measured merely by building or running the unit tests.
+
+Record 120 seconds idle, 120 seconds under load, then 120 seconds recovery. This
+script gives you 10 seconds to refocus Glimmer, then runs one explicitly
+default-QoS busy process per logical CPU for 120 seconds. It stops its children
+on interruption. Run it only when ready to perform the load trial:
+
+```sh
+python3 - <<'PY'
+import ctypes, os, subprocess, sys, time
+worker = "import ctypes,time; assert ctypes.CDLL(None).pthread_set_qos_class_self_np(0x15,0)==0; end=time.monotonic()+120\nwhile time.monotonic()<end: pass"
+time.sleep(10)
+workers = [subprocess.Popen([sys.executable, "-c", worker]) for _ in range(os.cpu_count() or 1)]
+try:
+    for p in workers: p.wait()
+finally:
+    for p in workers:
+        if p.poll() is None: p.terminate()
+    for p in workers: p.wait()
+PY
+```
+
+Compare these exact fields/lines in each source's idle, load and recovery
+window:
+
+- `input_<source>_capture_send_p50_ms`, `_p95_ms`, `_p99_ms`, `_max_ms`,
+  `_count` and `_over_10ms`, `_over_20ms`, `_over_50ms`: lower tails and gap
+  rates under load, comparable event counts. For windowed percentiles use bucket
+  differences or Prometheus rates, not the cumulative convenience percentiles.
+  Compare exact maxima in separate fixed-duration sessions.
+- `input_controller_capture_handler_*` and `input_raw_hid_capture_handler_*`:
+  lower scheduling tails after leaving main. Keyboard/mouse remain subject to
+  main-thread stalls; this change cannot guarantee their capture deadlines.
+- `input_<source>_batcher_flush_*` and `input_<source>_flush_send_*`: lower load
+  tails after consolidating the sender. `send_completion_*` can still rise if
+  Network.framework's callback queue stalls.
+- `lat_input_callback_queue_p99_ms`, `input_flush_backpressure_skips_total` and
+  `input_flush_backpressure_reliable_skips_total`: local callback delay may
+  rise, but it must not cause sustained input holds. Real induced packet loss
+  must still gate merged motion while releases and button edges continue.
+- The sender startup Diag line above, `input_timing_dropped_total` (zero),
+  `lat_output_to_present_p99_ms` (no material regression), and independently
+  verified audible/render underruns (no increase). Keep audio settings fixed.
+
+Targets, not measured claims: capture-to-submit p99 at or below 4 ms and maximum
+at or below 10 ms under this load, with zero lost/reordered edges. Repeat with
+telemetry and HUD off/on, USB/Bluetooth input and macOS Game Mode off/on.
+Exercise held keys/buttons across focus loss, Mini Player transitions, sleep,
+reconnect, controller detach/reattach and two DualSenses. Check controller
+touchpad, motion, quit-chord dwell, battery display, shortcuts and IME by eye/on
+the PC. A passing unit test or successful Mach policy request does not replace
+these trials.

@@ -41,14 +41,7 @@ extension InputForwarder {
     }
 
     func quitChordState(buttons: Int32, pad: GCExtendedGamepad) -> (buttons: Int32, analog: GamepadAnalog) {
-        // Xbox Share was never a GC quit-chord Mute button; preserve that distinction.
-        var buttons = buttons & ~StreamProtocol.MISC_FLAG
-        let hid = dualSenseButtons(pad: pad)
-        // Preserve the raw shoulder/centre fallbacks used by the existing GC chord recorder.
-        let extras: [(Bool, Int32)] = [(hid.l1, StreamProtocol.LB_FLAG), (hid.r1, StreamProtocol.RB_FLAG),
-                                      (hid.options, StreamProtocol.PLAY_FLAG), (hid.create, StreamProtocol.BACK_FLAG),
-                                      (hid.ps, StreamProtocol.SPECIAL_FLAG), (hid.mute, StreamProtocol.MISC_FLAG)]
-        for (held, flag) in extras where held { buttons |= flag }
+        let buttons = Self.controllerChordButtons(pad, buttons: buttons)
         return (buttons, GamepadAnalog(leftTrigger: pad.leftTrigger.value >= 0.5 ? 255 : 0,
                                       rightTrigger: pad.rightTrigger.value >= 0.5 ? 255 : 0,
                                       leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0))

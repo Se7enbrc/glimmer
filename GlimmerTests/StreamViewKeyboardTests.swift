@@ -265,6 +265,9 @@ struct StreamViewKeyboardTests {
         let commandW = try key(.keyDown, kVK_ANSI_W, mods: [.command], chars: "w")
         #expect(!view.performKeyEquivalent(with: commandW))
         let window = PointerFocusTestWindow()
+        window.contentView = view
+        window.makeFirstResponder(view)
+        forwarder.inputView = view
         forwarder.window = window
         forwarder.captureSysKeys = true
         #expect(view.performKeyEquivalent(with: commandW))

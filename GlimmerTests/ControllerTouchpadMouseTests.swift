@@ -239,6 +239,7 @@ struct ControllerTouchpadMouseTests {
         #expect(reads == 0)
         #expect(backend.touches.isEmpty && backend.mouseMoves.isEmpty && backend.pointer.isEmpty)
         forwarder.quitChordDwellSlot = nil
+        _ = forwarder.inputCore.withLock { forwarder.inputCore.chordSlots.remove(0) }
         forwarder.forwardTouchpad(slot: 0, primary: (0.5, 0.2), secondary: idle, clicked: true)
         #expect(backend.pointer.count == 1)
     }

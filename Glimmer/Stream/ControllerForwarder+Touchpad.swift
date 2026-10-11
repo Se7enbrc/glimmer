@@ -34,26 +34,43 @@ extension InputForwarder {
 
     func forwardTouchpad(slot: UInt8, primary: (x: Float, y: Float), secondary: (x: Float, y: Float),
                          clicked: Bool = false, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
-        guard forwardsControllerEvents else { return }
+        guard quitChordDwellSlot != slot else { return }
+        publishInputSnapshot()
+        inputCore.forwardTouchpad(slot: slot, primary: primary, secondary: secondary, clicked: clicked, now: now)
+    }
+
+    func releaseControllerTouches(slot: UInt8? = nil) {
+        inputCore.releaseControllerTouches(slot: slot)
+    }
+}
+
+extension InputCore {
+    func forwardTouchpad(slot: UInt8, primary: (x: Float, y: Float), secondary: (x: Float, y: Float),
+                         clicked: Bool = false, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        lock.lock(); defer { lock.unlock() }
+        guard snapshot.ready, snapshot.focused, snapshot.controllersAnnounced,
+              !chordSlots.contains(slot) else { return }
         if controllerMouseStates[slot]?.isMouse == true {
             forwardTouchpadMouse(slot: slot, primary: primary, secondary: secondary, clicked: clicked, now: now)
             return
         }
-        var state = touchpadStates[slot] ?? TouchpadState()
+        var state = touchpadStates[slot] ?? InputForwarder.TouchpadState()
         updateFinger(&state.primary, position: primary, slot: slot)
         updateFinger(&state.secondary, position: secondary, slot: slot)
         touchpadStates[slot] = state
     }
 
     func releaseControllerTouches(slot: UInt8? = nil) {
+        lock.lock(); defer { lock.unlock() }
         for key in Array(touchpadStates.keys) where slot == nil || slot == key {
-            guard var state = touchpadStates.removeValue(forKey: key), isReady else { continue }
+            guard var state = touchpadStates.removeValue(forKey: key), snapshot.ready else { continue }
             endFinger(&state.primary, slot: key)
             endFinger(&state.secondary, slot: key)
         }
     }
 
-    private func updateFinger(_ finger: inout TouchpadFinger, position: (x: Float, y: Float), slot: UInt8) {
+    private func updateFinger(_ finger: inout InputForwarder.TouchpadFinger,
+                              position: (x: Float, y: Float), slot: UInt8) {
         let (rawX, rawY) = position
         let touching = rawX != 0 || rawY != 0
         // GameController: x ∈ [-1,1] left→right, y ∈ [-1,1] bottom→top.
@@ -84,7 +101,7 @@ extension InputForwarder {
         }
     }
 
-    private func endFinger(_ finger: inout TouchpadFinger, slot: UInt8) {
+    private func endFinger(_ finger: inout InputForwarder.TouchpadFinger, slot: UInt8) {
         guard finger.active else { return }
         finger.active = false
         let rc = backend?.sendControllerTouch(

@@ -16,7 +16,6 @@ final class HIDGamepadManager {
     private var ownershipObserver: NSObjectProtocol?
     var onAttach: ((HIDGamepadDevice) -> Void)?
     var onDetach: ((HIDGamepadDevice) -> Void)?
-    var onReport: ((HIDGamepadDevice) -> Void)?
     /// A pad attached without Input Monitoring; the launcher offers the prompt.
     var onPermissionNeeded: ((HIDGamepadDevice) -> Void)?
     private(set) var slots: [UInt8: HIDGamepadDevice] = [:]
@@ -25,6 +24,24 @@ final class HIDGamepadManager {
     private var rumbleFlushScheduled = false
 
     private init() {}
+
+    private func scheduleManager() {
+        let address = UInt(bitPattern: Unmanaged.passUnretained(manager).toOpaque())
+        HIDInputThread.shared.sync {
+            guard let pointer = UnsafeRawPointer(bitPattern: address) else { return }
+            let manager = Unmanaged<IOHIDManager>.fromOpaque(pointer).takeUnretainedValue()
+            IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.commonModes.rawValue)
+        }
+    }
+
+    private func unscheduleManager() {
+        let address = UInt(bitPattern: Unmanaged.passUnretained(manager).toOpaque())
+        HIDInputThread.shared.sync {
+            guard let pointer = UnsafeRawPointer(bitPattern: address) else { return }
+            let manager = Unmanaged<IOHIDManager>.fromOpaque(pointer).takeUnretainedValue()
+            IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.commonModes.rawValue)
+        }
+    }
 
     /// Input Monitoring as macOS reports it. Only asked for once a pad that
     /// GameController does not own is actually present, never at stream start.
@@ -42,7 +59,7 @@ final class HIDGamepadManager {
         let context = Unmanaged.passUnretained(self).toOpaque()
         IOHIDManagerRegisterDeviceMatchingCallback(manager, Self.matched, context)
         IOHIDManagerRegisterDeviceRemovalCallback(manager, Self.removed, context)
-        IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
+        scheduleManager()
         let result = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         Diag.notice("Generic HID manager open: \(result)", "Controller")
         ownershipObserver = NotificationCenter.default.addObserver(
@@ -63,7 +80,7 @@ final class HIDGamepadManager {
         for id in Array(devices.keys) { remove(id) }
         IOHIDManagerRegisterDeviceMatchingCallback(manager, nil, nil)
         IOHIDManagerRegisterDeviceRemovalCallback(manager, nil, nil)
-        IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
+        unscheduleManager()
         IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
     }
 
@@ -104,11 +121,11 @@ final class HIDGamepadManager {
     private static let matched: IOHIDDeviceCallback = { context, result, _, device in
         guard result == kIOReturnSuccess, let context else { return }
         let owner = Unmanaged<HIDGamepadManager>.fromOpaque(context).takeUnretainedValue()
-        // The synchronous callback runs on the scheduled main run loop; the device remains alive across this assertion.
-        let address = UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
-        MainActor.assumeIsolated {
+        // Retain the device across the lifecycle-only UI hop; report capture remains on the HID run loop.
+        let address = UInt(bitPattern: Unmanaged.passRetained(device).toOpaque())
+        DispatchQueue.main.async {
             guard let pointer = UnsafeRawPointer(bitPattern: address) else { return }
-            owner.add(Unmanaged<IOHIDDevice>.fromOpaque(pointer).takeUnretainedValue())
+            owner.add(Unmanaged<IOHIDDevice>.fromOpaque(pointer).takeRetainedValue())
         }
     }
 
@@ -116,7 +133,7 @@ final class HIDGamepadManager {
         guard let context else { return }
         let owner = Unmanaged<HIDGamepadManager>.fromOpaque(context).takeUnretainedValue()
         let address = UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
-        MainActor.assumeIsolated {
+        DispatchQueue.main.async {
             if let id = owner.devices.first(where: {
                 UInt(bitPattern: Unmanaged.passUnretained($0.value.device).toOpaque()) == address
             })?.key { owner.remove(id) }
@@ -128,6 +145,7 @@ final class HIDGamepadManager {
     static var claimAll: Bool { UserDefaults.standard.bool(forKey: "hidGamepadClaimAll") }
 
     private func add(_ device: IOHIDDevice) {
+        guard clients > 0 else { return }
         let vendor = (IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? NSNumber)?.intValue ?? 0
         let product = (IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? NSNumber)?.intValue ?? 0
         let name = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String
@@ -149,7 +167,6 @@ final class HIDGamepadManager {
         }
         guard pad.open() else { return }
         devices[id] = pad
-        pad.onReport = { [weak self] pad in self?.onReport?(pad) }
         if readers > 0 { pad.startReading() }
         Diag.notice("HID attached: \(pad.name) \(pad.hardwareID) \(pad.transport) registry=\(id) "
             + "mapping=\(pad.mappingSource)", "Controller")

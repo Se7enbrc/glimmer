@@ -29,6 +29,10 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     private func forwardKeyDown(_ event: NSEvent, in view: StreamInputView) {
+        InputTimingContext.begin(source: .keyboard, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        noteInputEvent(keyCode: event.keyCode)
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if view.hasMarkedText(), !mods.isDisjoint(with: [.command, .control]) { view.cancelComposition() }
         releaseStaleModifiers(for: event)
@@ -91,14 +95,21 @@ extension InputForwarder: StreamInputViewDelegate {
         // Unless ⌘ goes to the PC (opted in and the stream key) a ⌘ chord
         // is the Mac's and never forwarded. Repeats are dropped: the PC makes its own.
         if mods.contains(.command), !forwardsCommand { return }
-        guard isReady else { return }
+        guard isReady, ownsKeyboard, flushPendingReleases() else { return }
         if !isMouseCaptured, view.handleTextInput(event) { return }
+        sendPhysicalKeyDown(event, modifiers: mods)
+    }
+
+    private func sendPhysicalKeyDown(_ event: NSEvent, modifiers mods: NSEvent.ModifierFlags) {
         guard !event.isARepeat else { return }
-        guard let key = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else {
+        guard let key = keyMapping(Int(event.keyCode)) else {
             noteUnmappedKey(event.keyCode)
             return
         }
-        if modifiersNeedResync { syncModifiers(to: event.modifierFlags) }
+        if modifiersNeedResync, !syncModifiers(to: event.modifierFlags) { return }
+        guard physicalKeys[event.keyCode] == nil else { return }
+        physicalKeys[event.keyCode] = key
+        releases.hold(.key(key))
         let rc = backend?.sendKeyboard(
             keyCode: key.wireCode,
             action: Int8(StreamProtocol.KEY_ACTION_DOWN),
@@ -107,37 +118,39 @@ extension InputForwarder: StreamInputViewDelegate {
         ) ?? -2
         record("LiSendKeyboardEvent2(down)", rc)
         heldKeys.insert(key)
+        updateReconciliationTimer()
     }
 
     func streamView(_ view: StreamInputView, handleKeyUp event: NSEvent) {
         if deferKeyboardEvent({ $0.streamView(view, handleKeyUp: event) }) { return }
+        InputTimingContext.begin(source: .keyboard, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        if let key = physicalKeys[event.keyCode] { InputTimingContext.allowRelease(.key(key)) }
+        noteInputEvent(keyCode: event.keyCode)
         guard !isDuplicateKeyUp(event) else { return }
         // Cancel a pending Esc hold FIRST, ahead of every gate below: a tap
         // must behave exactly as it did before the gesture existed, including
         // while the stream is mid-handshake and forwarding nothing.
         noteEscapeKeyUp(event)
         releaseStaleModifiers(for: event)
-        // Only a key the host holds gets an up: a down under the ⌘ gate never
-        // went out, and one released on focus loss or a reconnect already did.
-        guard isReady, let key = vkScanCode(forCarbonKeyCode: Int(event.keyCode)),
-              heldKeys.remove(key) != nil else { return }
-        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let rc = backend?.sendKeyboard(
-            keyCode: key.wireCode,
-            action: Int8(StreamProtocol.KEY_ACTION_UP),
-            modifiers: Int8(bitPattern: modifierByte(from: mods)),
-            flags: key.flags
-        ) ?? -2
-        record("LiSendKeyboardEvent2(up)", rc)
+        releaseKey(event.keyCode, modifiers: Int8(bitPattern: modifierByte(from: event.modifierFlags)))
     }
 
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent) {
         if deferKeyboardEvent({ $0.streamView(view, handleFlagsChanged: event) }) { return }
+        missingModifierVKs.removeAll()
+        defer { missingModifierVKs.removeAll() }
+        InputTimingContext.begin(source: .keyboard, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        InputTimingContext.allowModifierReleases()
+        noteInputEvent()
         noteEscapeModifiersChanged(event.modifierFlags)
         let capsLock = event.modifierFlags.contains(.capsLock)
         let capsChanged = capsLock != lastCapsLock
         lastCapsLock = capsLock
-        guard isReady else { return }
+        guard isReady, ownsKeyboard else { return }
         syncModifiers(to: event.modifierFlags)
         // Windows toggles Caps Lock on each press, so a Mac toggle is one full
         // press and release, and nothing is left held on the PC.
@@ -151,19 +164,26 @@ extension InputForwarder: StreamInputViewDelegate {
     /// Send the modifier sides that changed since the host was last told, so
     /// a Shift held through a reconnect, sleep or screen lock reaches the PC.
     /// Each SIDE is its own entry; ⌘ only counts while `forwardsCommand`.
-    private func syncModifiers(to flags: NSEvent.ModifierFlags) {
+    @discardableResult
+    private func syncModifiers(to flags: NSEvent.ModifierFlags) -> Bool {
         let downNow = ModifierSides.held(in: flags, includeCommand: forwardsCommand)
         let modByte = Int8(bitPattern: modifierByte(from: flags))
         for vk in heldModifierVKs.subtracting(downNow).sorted() { sendModifier(vk, down: false, modByte: modByte) }
-        for vk in downNow.subtracting(heldModifierVKs).sorted() { sendModifier(vk, down: true, modByte: modByte) }
-        heldModifierVKs = downNow
+        heldModifierVKs.formIntersection(downNow)
+        modifiersNeedResync = true
+        guard flushPendingReleases() else { return false }
+        for vk in downNow.subtracting(heldModifierVKs).sorted() {
+            guard sendModifier(vk, down: true, modByte: modByte) else { return false }
+            heldModifierVKs.insert(vk)
+        }
         modifiersNeedResync = false
+        updateReconciliationTimer()
+        return true
     }
 
     /// An interrupted client chord can lose its modifier-up. Recover before
     /// forwarding the next key, including repeats, without latching posted flags.
     private func releaseStaleModifiers(for event: NSEvent) {
-        guard isReady else { return }
         let released = ModifierSides.released(from: heldModifierVKs, in: event.modifierFlags,
                                               includeCommand: forwardsCommand)
         let modByte = Int8(bitPattern: modifierByte(from: event.modifierFlags))
@@ -177,12 +197,20 @@ extension InputForwarder: StreamInputViewDelegate {
         if initialConnectPending, let onCancelConnect { onCancelConnect() } else { onQuitHotkey?() }
     }
 
-    func sendModifier(_ vk: Int16, down: Bool, modByte: Int8) {
-        let action: Int8 = down ? Int8(StreamProtocol.KEY_ACTION_DOWN) : Int8(StreamProtocol.KEY_ACTION_UP)
-        let rc = backend?.sendKeyboard(
-            keyCode: VKScanCode(vk: vk).wireCode,
-            action: action, modifiers: modByte, flags: 0) ?? -2
+    @discardableResult
+    func sendModifier(_ vk: Int16, down: Bool, modByte: Int8) -> Bool {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        let key = VKScanCode(vk: vk)
+        if !down {
+            releases.release(.key(key), modifiers: modByte)
+            return flushPendingReleases()
+        }
+        guard isReady, ownsKeyboard, flushPendingReleases() else { return false }
+        releases.hold(.key(key))
+        let rc = backend?.sendKeyboard(keyCode: key.wireCode, action: Int8(StreamProtocol.KEY_ACTION_DOWN),
+                                       modifiers: modByte, flags: 0) ?? -2
         record("LiSendKeyboardEvent2(modifier)", rc)
+        return rc == 0
     }
 
     /// One notice per unmapped key per session, so a key that does nothing on
@@ -193,6 +221,10 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent) {
+        InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        noteInputEvent()
         guard isReady, forwardsMouseEvents else { return }
 
         // Absolute positions bypass relative coalescing, Cruise and residuals;
@@ -222,6 +254,7 @@ extension InputForwarder: StreamInputViewDelegate {
                                          inMode: .eventTracking, dequeue: true) },
             consume: { queued in
                 guard view.acceptsMotion(queued) else { return }
+                InputTimingContext.coalesced(timestamp: queued.timestamp)
                 let delta = mouseDelta(from: queued)
                 accumDx += delta.dx
                 accumDy += delta.dy
@@ -325,7 +358,11 @@ extension InputForwarder: StreamInputViewDelegate {
 
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {
         if view.hasMarkedText() { view.cancelComposition() }
-        guard isReady, forwardsMouseEvents else { return }
+        InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        noteInputEvent()
+        guard isReady, forwardsMouseEvents, flushPendingReleases() else { return }
         // Mini player: the click is the grab, and it still reaches the host
         // so the button under the pointer is pressed, not just aimed at.
         if isMiniPlayer, !isMouseCaptured { capturePointer(reason: "click on the mini player") }
@@ -336,21 +373,23 @@ extension InputForwarder: StreamInputViewDelegate {
         // No-op in full screen and while captured.
         sendAbsolutePointer(for: event, in: view)
         let hostButton = button(for: event)
+        physicalMouseButtons[event.buttonNumber] = hostButton
         updatePhysicalMouseButton(hostButton, pressed: true)
+        updateReconciliationTimer()
     }
 
     func streamView(_ view: StreamInputView, handleMouseUp event: NSEvent) {
-        guard isReady, forwardsMouseEvents else { return }
+        InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        InputTimingContext.allowRelease(.mouse(button(for: event)))
+        noteInputEvent()
         let hostButton = button(for: event)
-        // Window mode: never send a release for a press the host has already
-        // been told about. `releasePointer` raises held buttons first, so a
-        // button held through a capture release would otherwise double-release
-        // when the physical up arrives.
-        if !heldMouseButtons.contains(hostButton) { return }
-        // Land the release where the pointer actually ended up - a drag that
-        // moved between down and up must not release at the down position.
-        sendAbsolutePointer(for: event, in: view)
-        updatePhysicalMouseButton(hostButton, pressed: false)
+        guard releases.held.contains(.mouse(hostButton)) else { return }
+        // A drag releases at its final position even when the last motion was coalesced.
+        if isReady, forwardsMouseEvents { sendAbsolutePointer(for: event, in: view) }
+        physicalMouseButtons[event.buttonNumber] = nil
+        if !physicalMouseButtons.values.contains(hostButton) { releaseMouse(hostButton) }
     }
 
     /// Window mode's grab: the pointer crossing onto the picture takes it, no
@@ -370,6 +409,10 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleScroll event: NSEvent) {
+        InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        noteInputEvent()
         guard isReady, forwardsMouseEvents else { return }
         // DEADZONE REMOVED. This handler
         // used to clamp each event's delta to ±1.0 line before the WHEEL_DELTA

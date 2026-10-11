@@ -65,14 +65,15 @@ struct ControllerTouchpadMouseState {
     }
 }
 
-extension InputForwarder {
+extension InputCore {
     func forwardTouchpadMouse(slot: UInt8, primary: (x: Float, y: Float), secondary: (x: Float, y: Float),
                               clicked: Bool, now: TimeInterval) {
-        guard quitChordDwellSlot != slot, var state = controllerMouseStates[slot]?.touchpad else { return }
+        guard !chordSlots.contains(slot), var state = controllerMouseStates[slot]?.touchpad else { return }
         let movement = state.update(primary: ControllerTouchpadMouseState.contact(primary),
                                     secondary: ControllerTouchpadMouseState.contact(secondary),
                                     clicked: clicked, now: now)
         updateControllerTouchpadMouse(slot: slot, state: state)
+        guard flushReleases() else { return }
         if movement.dx != 0 || movement.dy != 0 {
             record("LiSendMouseMoveEvent(touchpad)", backend?.sendMouseMove(dx: movement.dx, dy: movement.dy) ?? -2)
         }

@@ -296,6 +296,22 @@ struct ControllerMouseTests {
         #expect(forwarder.controllerMouseTask == nil)
     }
 
+    @Test func reconciliationRepairsAMissedMouseModeButtonRelease() throws {
+        let (forwarder, backend) = rig()
+        let controller = GCController.withExtendedGamepad()
+        forwarder.attach(gamepad: controller)
+        defer { forwarder.detach() }
+        let state = try #require(forwarder.attachedControllers[ObjectIdentifier(controller)])
+        toggle(forwarder, slot: state.slot)
+        forwarder.routeControllerMouse(slot: state.slot, buttons: StreamProtocol.A_FLAG,
+                                       analog: neutral, chordHeld: false)
+        forwarder.reconcileControllerButtons()
+        #expect(backend.pointer.suffix(2) == [
+            .button(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: StreamProtocol.BUTTON_LEFT),
+            .button(action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: StreamProtocol.BUTTON_LEFT)
+        ])
+    }
+
     @Test func modeToastReusesTheStreamPillAndAnnouncesEachChange() {
         let window = StreamWindow()
         defer { window.close() }

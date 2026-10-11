@@ -3,12 +3,11 @@
 
 import Foundation
 
-@MainActor
 struct ControllerMouseState {
     static let holdSeconds = 0.75
     var isMouse = false
     var buttons: Int32 = 0
-    var analog = InputForwarder.neutralControllerAnalog
+    var analog = InputCore.neutral
     var clicks: Set<Int32> = []
     var touchpad = ControllerTouchpadMouseState()
     private var startDownAt: TimeInterval?
@@ -27,13 +26,13 @@ struct ControllerMouseState {
             && startDownAt.map { now - $0 > Self.holdSeconds } == true
         if !isDown { startDownAt = nil }
         self.buttons = buttons
-        self.analog = chordHeld ? InputForwarder.neutralControllerAnalog : analog
+        self.analog = chordHeld ? InputCore.neutral : analog
         if toggle { isMouse.toggle() }
         return toggle
     }
 }
 
-extension InputForwarder {
+extension InputCore {
     // Positional clicks match moonlight-qt/app/streaming/input/gamepad.cpp.
     static let controllerMouseClicks: [(Int32, Int32)] = [
         (StreamProtocol.A_FLAG, StreamProtocol.BUTTON_LEFT),
@@ -46,13 +45,18 @@ extension InputForwarder {
 
     @discardableResult
     func routeControllerMouse(slot: UInt8, buttons: Int32, analog: GamepadAnalog, chordHeld: Bool,
-                              now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Bool {
-        guard forwardsControllerEvents else { return controllerMouseStates[slot]?.isMouse ?? false }
+                              now: TimeInterval = ProcessInfo.processInfo.systemUptime,
+                              notifyMode: Bool = true) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard snapshot.ready, snapshot.focused else { return controllerMouseStates[slot]?.isMouse ?? false }
         var state = controllerMouseStates[slot] ?? ControllerMouseState()
         let previous = state.buttons
         let toggled = state.update(buttons: buttons, analog: analog, chordHeld: chordHeld, now: now)
         controllerMouseStates[slot] = state
-        if toggled || chordHeld { updateControllerTouchpadMouse(slot: slot, state: ControllerTouchpadMouseState()) }
+        if toggled || chordHeld {
+            mouseTimings[slot] = nil
+            updateControllerTouchpadMouse(slot: slot, state: ControllerTouchpadMouseState())
+        }
         let clicksChanged = (buttons ^ previous) & Self.controllerMouseClickFlags != 0
         // Surface-only frames must not allocate a button set on every touch sample.
         if (state.isMouse || !state.clicks.isEmpty) && (toggled || chordHeld || clicksChanged) {
@@ -63,24 +67,14 @@ extension InputForwarder {
         }
         if toggled {
             releaseControllerTouches(slot: slot)
-            ControllerMotion.shared.setInputEnabled(!state.isMouse && forwardsControllerEvents, slot: slot)
-            let rc = backend?.sendMultiController(num: Int16(slot), mask: Int16(bitPattern: gamepadMask),
-                                                  buttons: 0, analog: Self.neutralControllerAnalog) ?? -2
-            record("LiSendMultiControllerEvent(mouse toggle)", rc)
+            sendController(slot: slot, buttons: 0, analog: Self.neutral)
             Diag.info("controller \(slot): mouse mode \(state.isMouse ? "on" : "off")", "Controller")
-            onControllerMouseChanged?(controllerMouseMessage(enabled: state.isMouse, slot: slot))
+            ControllerMotion.shared.setInputEnabled(!state.isMouse && snapshot.focused, slot: slot)
+            if notifyMode { onMouseMode?(slot, state.isMouse) }
         }
         if state.isMouse && !chordHeld { sendControllerDpadScroll(buttons: buttons & ~previous) }
         updateControllerMousePolling()
         return state.isMouse
-    }
-
-    func controllerMouseMessage(enabled: Bool, slot: UInt8) -> String {
-        let native = attachedControllers.values.first { $0.slot == slot }?.controller
-        let hid = attachedHIDControllers.values.first { $0.slot == slot }?.device
-        let name = gamepadMask.nonzeroBitCount > 1
-            ? native?.vendorName ?? native?.productCategory ?? hid?.name ?? "Controller \(slot + 1)" : "Controller"
-        return enabled ? "\(name) is now a mouse. Hold Menu to go back." : "\(name) is back in the game."
     }
 
     func sendControllerDpadScroll(buttons: Int32) {
@@ -92,6 +86,7 @@ extension InputForwarder {
     }
 
     func sendControllerScroll(x: Int16, y: Int16) {
+        guard flushReleases() else { return }
         if y != 0 { record("LiSendHighResScrollEvent(controller)", backend?.sendScroll(y) ?? -2) }
         if x != 0 { record("LiSendHighResHScrollEvent(controller)", backend?.sendHScroll(x) ?? -2) }
     }
@@ -113,36 +108,48 @@ extension InputForwarder {
     }
 
     func sendMouseButtonEdges(before: Set<Int32>, after: Set<Int32>) {
-        guard isReady else { return }
         for button in before.symmetricDifference(after).sorted() {
-            let action = after.contains(button) ? StreamProtocol.BUTTON_ACTION_PRESS
-                : StreamProtocol.BUTTON_ACTION_RELEASE
-            record("LiSendMouseButtonEvent", backend?.sendMouseButton(action: Int8(action), button: button) ?? -2)
+            if after.contains(button) {
+                guard snapshot.ready, flushReleases() else { continue }
+                releases.hold(.mouse(button))
+                record("LiSendMouseButtonEvent", backend?.sendMouseButton(
+                    action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: button) ?? -2)
+            } else {
+                InputTimingContext.allowRelease(.mouse(button))
+                releases.release(.mouse(button))
+                flushReleases()
+            }
         }
     }
 
     func updatePhysicalMouseButton(_ button: Int32, pressed: Bool) {
         if pressed { heldMouseButtons.insert(button) } else { heldMouseButtons.remove(button) }
-        // Keep every physical edge, including extra mouse buttons sharing a wire button.
-        guard !controllerMouseButtons.contains(button), isReady else { return }
-        let action = pressed ? StreamProtocol.BUTTON_ACTION_PRESS : StreamProtocol.BUTTON_ACTION_RELEASE
-        record("LiSendMouseButtonEvent", backend?.sendMouseButton(action: Int8(action), button: button) ?? -2)
+        // Keep physical ownership distinct from clicks held by any controller.
+        guard !controllerMouseButtons.contains(button) else { return }
+        if pressed {
+            sendMouseButtonEdges(before: [], after: [button])
+        } else {
+            sendMouseButtonEdges(before: [button], after: [])
+        }
+    }
+
+    func mouseNeedsUpdate(slot: UInt8, buttons: Int32, analog: GamepadAnalog) -> Bool {
+        guard let state = controllerMouseStates[slot], state.isMouse else { return false }
+        return state.buttons != buttons || state.analog != analog
     }
 
     func updateControllerMousePolling() {
-        guard controllerMouseStates.values.contains(where: { $0.isMouse }), forwardsControllerEvents else {
-            controllerMouseTask?.cancel()
-            controllerMouseTask = nil
+        guard snapshot.ready, snapshot.focused, controllerMouseStates.values.contains(where: { $0.isMouse }) else {
+            controllerMouseTimer?.cancel()
+            controllerMouseTimer = nil
             return
         }
-        guard controllerMouseTask == nil else { return }
-        controllerMouseTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(50))
-                guard !Task.isCancelled, let self else { return }
-                self.pollControllerMouse()
-            }
-        }
+        guard controllerMouseTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: mouseQueue)
+        timer.schedule(deadline: .now() + .milliseconds(50), repeating: .milliseconds(50))
+        timer.setEventHandler { [weak self] in self?.pollControllerMouse() }
+        controllerMouseTimer = timer
+        timer.resume()
     }
 
     // The cubic curve and 50 ms cadence follow Moonlight; right stick scroll is Glimmer's mapping.
@@ -153,8 +160,13 @@ extension InputForwarder {
     }
 
     func pollControllerMouse() {
-        guard forwardsControllerEvents else { return }
-        for state in controllerMouseStates.values where state.isMouse {
+        lock.lock(); defer { lock.unlock() }
+        guard snapshot.ready, snapshot.focused, snapshot.controllersAnnounced, flushReleases() else { return }
+        for (slot, state) in controllerMouseStates where state.isMouse {
+            if let timing = mouseTimings.removeValue(forKey: slot) {
+                InputTimingContext.begin(samples: timing)
+            }
+            defer { InputTimingContext.end() }
             let dx = Self.controllerMouseDelta(state.analog.leftStickX)
             let dy = -Self.controllerMouseDelta(state.analog.leftStickY)
             if dx != 0 || dy != 0 {
@@ -166,22 +178,71 @@ extension InputForwarder {
     }
 
     func suspendControllerMouse() {
+        lock.lock(); defer { lock.unlock() }
+        mouseTimings.removeAll()
         for (slot, state) in controllerMouseStates {
             updateControllerTouchpadMouse(slot: slot, state: ControllerTouchpadMouseState())
             updateControllerMouseClicks(slot: slot, clicks: [])
             controllerMouseStates[slot] = ControllerMouseState(isMouse: state.isMouse)
         }
-        controllerMouseTask?.cancel()
-        controllerMouseTask = nil
+        controllerMouseTimer?.cancel()
+        controllerMouseTimer = nil
     }
 
     func resetControllerMouse(slot: UInt8? = nil) {
+        lock.lock(); defer { lock.unlock() }
         let slots = slot.map { [$0] } ?? Array(controllerMouseStates.keys)
         for slot in slots {
             updateControllerTouchpadMouse(slot: slot, state: ControllerTouchpadMouseState())
             updateControllerMouseClicks(slot: slot, clicks: [])
             controllerMouseStates[slot] = nil
+            mouseTimings[slot] = nil
         }
         updateControllerMousePolling()
     }
+}
+
+extension InputForwarder {
+    @discardableResult
+    func routeControllerMouse(slot: UInt8, buttons: Int32, analog: GamepadAnalog, chordHeld: Bool,
+                              now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Bool {
+        publishInputSnapshot()
+        return inputCore.withLock {
+            let wasMouse = inputCore.controllerMouseStates[slot]?.isMouse ?? false
+            let isMouse = inputCore.routeControllerMouse(slot: slot, buttons: buttons, analog: analog,
+                                                        chordHeld: chordHeld, now: now, notifyMode: false)
+            if chordHeld { inputCore.chordSlots.insert(slot) } else { inputCore.chordSlots.remove(slot) }
+            if wasMouse != isMouse { controllerMouseModeChanged(slot: slot, enabled: isMouse) }
+            return isMouse
+        }
+    }
+
+    func controllerMouseModeChanged(slot: UInt8, enabled: Bool) {
+        guard isReady, controllerMouseStates[slot]?.isMouse == enabled else { return }
+        onControllerMouseChanged?(controllerMouseMessage(enabled: enabled, slot: slot))
+    }
+
+    func controllerMouseMessage(enabled: Bool, slot: UInt8) -> String {
+        let native = attachedControllers.values.first { $0.slot == slot }?.controller
+        let hid = attachedHIDControllers.values.first { $0.slot == slot }?.device
+        let name = gamepadMask.nonzeroBitCount > 1
+            ? native?.vendorName ?? native?.productCategory ?? hid?.name ?? "Controller \(slot + 1)" : "Controller"
+        return enabled ? "\(name) is now a mouse. Hold Menu to go back." : "\(name) is back in the game."
+    }
+
+    @discardableResult
+    func updateControllerMouseClicks(slot: UInt8, clicks: Set<Int32>) -> Bool {
+        inputCore.withLock { inputCore.updateControllerMouseClicks(slot: slot, clicks: clicks) }
+    }
+
+    var controllerMouseButtons: Set<Int32> { inputCore.withLock { inputCore.controllerMouseButtons } }
+
+    func updatePhysicalMouseButton(_ button: Int32, pressed: Bool) {
+        inputCore.withLock { inputCore.updatePhysicalMouseButton(button, pressed: pressed) }
+    }
+
+    static func controllerMouseDelta(_ axis: Int16) -> Int16 { InputCore.controllerMouseDelta(axis) }
+    func pollControllerMouse() { inputCore.pollControllerMouse() }
+    func suspendControllerMouse() { inputCore.suspendControllerMouse() }
+    func resetControllerMouse(slot: UInt8? = nil) { inputCore.resetControllerMouse(slot: slot) }
 }

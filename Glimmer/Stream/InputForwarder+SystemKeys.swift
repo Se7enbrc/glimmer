@@ -33,7 +33,6 @@ extension InputForwarder {
         let sides = heldModifierVKs.intersection([0x5B, 0x5C]) // VK_LWIN, VK_RWIN
         guard !sides.isEmpty else { return }
         heldModifierVKs.subtract(sides)
-        guard isReady else { return }
         for vk in sides.sorted() { sendModifier(vk, down: false, modByte: 0) }
     }
 }

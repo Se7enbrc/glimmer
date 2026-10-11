@@ -117,6 +117,9 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// `histograms`) so it stays a Prometheus-only input-family signal without
     /// threading through the composite-snapshot plumbing. Observed off the present
     /// path on the batcher queue; the Stage is self-locked, so cross-thread is safe.
+    let inputTimingDropped = AtomicCounter()
+    let inputLatency = InputLatency()
+    let inputCallbackLatency = LatencyHistograms.Stage()
     let inputLocalLatency = LatencyHistograms.Stage()
     /// CLIENT-SIDE input DELIVER latency: the pre-hop main-thread leg from the
     /// GameController valueChangedHandler entry to the batcher slot stamp (the

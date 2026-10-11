@@ -139,6 +139,7 @@ struct TimedLatencyTests {
         let tracker = FrameTimingTracker(sessionId: "t", counters: TelemetryCounters())
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
                                          crypto: try ControlCrypto(rikey: EnetFixture.key))
+        EnetFixture.connect(channel)
         channel.reliableBackloggedFlag.store(true, ordering: .relaxed)
         let batcher = InputBatcher(enet: channel, now: { DispatchTime(uptimeNanoseconds: clock.now()) },
                                    tracker: { tracker })
