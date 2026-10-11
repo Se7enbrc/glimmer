@@ -9,6 +9,8 @@
 
 ### Bug fixes
 
+- Stream diagnostics no longer count packets that arrive late from an earlier
+  frame as lost.
 - Turning on a controller that needs Input Monitoring shows macOS's own
   permission prompt instead of opening System Settings on top of it. Once you
   allow it, the controller starts working when you come back to Glimmer, with

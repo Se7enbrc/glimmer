@@ -43,6 +43,104 @@ struct RtpReceiveQualityTests {
         #expect(queue.pendingReorderCredit == 0)
     }
 
+    @Test(arguments: [UInt16(1_000), UInt16.max], [UInt32(1), UInt32.max])
+    func olderFrameFillsSequenceGap(sequence: UInt16, frame: UInt32) {
+        let queue = queue()
+        receive(queue, seq: sequence, frame: frame, at: 1_000)
+        receive(queue, seq: sequence &+ 2, frame: frame &+ 1, at: 2_000)
+        #expect(queue.windowLostPreFec == 1)
+
+        receive(queue, seq: sequence &+ 1, frame: frame, at: 3_000)
+        #expect(queue.windowLostPreFec == 0)
+        #expect(queue.windowOutOfOrder == 1)
+        #expect(queue.pendingReorderCredit == 0)
+        #expect(queue.seqHighestSeen == sequence &+ 2)
+        #expect(queue.seqNewestFrame == frame &+ 1)
+        #expect(queue.reorderDispSessionMaxPackets == 1)
+        #expect(queue.reorderDispSessionMaxMs == 1)
+        #expect(queue.hasRecentSequence(sequence &+ 1))
+
+        receive(queue, seq: sequence &+ 1, frame: frame, at: 4_000)
+        #expect(queue.windowDuplicate == 1)
+        #expect(queue.windowOutOfOrder == 1)
+        #expect(queue.pendingReorderCredit == 0)
+    }
+
+    @Test(arguments: [UInt16(40_000), UInt16(0)], [UInt32(1), UInt32.max])
+    func obsoleteEpochCannotFillCurrentGap(sequence: UInt16, frame: UInt32) {
+        let queue = queue()
+        receive(queue, seq: 1_000, frame: frame, at: 1_000)
+        receive(queue, seq: sequence, frame: frame &+ 1, at: 1_002_000)
+        receive(queue, seq: sequence &+ 2, frame: frame &+ 2, at: 1_002_001)
+        #expect(queue.windowLostPreFec == 1)
+
+        receive(queue, seq: sequence &+ 1, frame: frame, at: 1_002_002)
+        #expect(queue.windowLostPreFec == 1)
+        #expect(queue.windowOutOfOrder == 0)
+        #expect(queue.pendingReorderCredit == 0)
+        #expect(!queue.hasRecentSequence(sequence &+ 1))
+
+        receive(queue, seq: sequence &+ 1, frame: frame &+ 1, at: 1_002_003)
+        #expect(queue.windowLostPreFec == 0)
+        #expect(queue.windowOutOfOrder == 1)
+        #expect(queue.seqHighestSeen == sequence &+ 2)
+        #expect(queue.seqNewestFrame == frame &+ 2)
+    }
+
+    @Test func olderFrameGapCreditSurvivesMetricFlush() {
+        let queue = queue()
+        receive(queue, seq: 1_000, frame: 1, at: 1_000)
+        receive(queue, seq: 1_002, frame: 2, at: 2_000_999)
+        #expect(queue.windowLostPreFec == 1)
+        receive(queue, seq: 1_003, frame: 2, at: 2_001_000)
+        #expect(queue.windowLostPreFec == 0)
+        #expect(queue.packetsInWindow == 0)
+
+        receive(queue, seq: 1_001, frame: 1, at: 2_001_001)
+        #expect(queue.windowOutOfOrder == 1)
+        #expect(queue.pendingReorderCredit == 1)
+        receive(queue, seq: 1_005, frame: 3, at: 2_001_002)
+        #expect(queue.windowLostPreFec == 1)
+        #expect(queue.applyPendingReorderCredit() == 0)
+        #expect(queue.pendingReorderCredit == 0)
+    }
+
+    @Test func obsoleteSequenceWrapCannotFillCurrentGap() {
+        let queue = queue()
+        for offset in 0...65_536 {
+            queue.accumulateReceiveQuality(seq: UInt16(truncatingIfNeeded: 1_000 + offset),
+                                           frameIndex: UInt32(offset + 1), receiveTimeUs: UInt64(offset + 1))
+        }
+        receive(queue, seq: 1_002, frame: 65_538, at: 66_000)
+        #expect(queue.windowLostPreFec == 1)
+        receive(queue, seq: 1_001, frame: 2, at: 66_001)
+        #expect(queue.windowLostPreFec == 1)
+        #expect(queue.windowOutOfOrder == 0)
+        #expect(!queue.hasRecentSequence(1_001))
+
+        receive(queue, seq: 1_001, frame: 65_537, at: 66_002)
+        #expect(queue.windowLostPreFec == 0)
+        #expect(queue.windowOutOfOrder == 1)
+        #expect(queue.seqHighestSeen == 1_002)
+        #expect(queue.seqNewestFrame == 65_538)
+    }
+
+    @Test func olderGapRemainsFillableAfterSequenceWrap() {
+        let queue = queue()
+        receive(queue, seq: 65_532, frame: 1, at: 1_000)
+        receive(queue, seq: 65_534, frame: 2, at: 2_000)
+        receive(queue, seq: 0, frame: 3, at: 3_000)
+        #expect(queue.windowLostPreFec == 2)
+
+        receive(queue, seq: 65_533, frame: 1, at: 4_000)
+        #expect(queue.windowLostPreFec == 1)
+        receive(queue, seq: 65_535, frame: 2, at: 5_000)
+        #expect(queue.windowLostPreFec == 0)
+        #expect(queue.windowOutOfOrder == 2)
+        #expect(queue.seqHighestSeen == 0)
+        #expect(queue.seqNewestFrame == 3)
+    }
+
     @Test(arguments: [UInt16(999), UInt16(100)])
     func staleArrivalPreservesBlackoutEligibility(stale: UInt16) {
         let queue = queue()
