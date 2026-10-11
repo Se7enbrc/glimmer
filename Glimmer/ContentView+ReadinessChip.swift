@@ -19,7 +19,6 @@ enum ChipPresentation: Equatable {
     case ready(rttMs: Int?)                     // green dot, "Ready" / "Ready · 12 ms"
     case streamingOurs                          // pulsing green, "Streaming" (our session)
     case connecting(phase: String)              // amber dot, current handshake phase
-    case streamingElsewhere(appName: String?)   // neutral dot, "Helldivers 2 running"
     case asleep                                 // dim gray dot, "Asleep"
     case certMismatch                           // amber dot, "Trust needed"
     case unknown                                // amber dot, "Checking..." (pre-first-poll)
@@ -29,7 +28,6 @@ enum ChipPresentation: Equatable {
     var label: String {
         switch self {
         case .connecting(let phase): Self.truncate(phase, to: 22)
-        case .streamingElsewhere(let name?): "\(Self.truncate(name, to: 14)) running"
         default: fullLabel
         }
     }
@@ -43,9 +41,6 @@ enum ChipPresentation: Equatable {
         case .streamingOurs: "Streaming"
         // Friendly strings ("Connecting to Tower...") - pass through.
         case .connecting(let phase): phase
-        // "Streaming" implied someone else was connected; the host only
-        // knows an app is running, not who (if anyone) is watching it.
-        case .streamingElsewhere(let name): name.map { "\($0) running" } ?? "App running"
         case .asleep: "Asleep"
         case .certMismatch: "Trust needed"
         case .unknown: "Checking…"
@@ -60,7 +55,6 @@ enum ChipPresentation: Equatable {
         case .ready(let ms?): return "PC ready, round trip \(ms) milliseconds"
         case .streamingOurs: return "Streaming"
         case .connecting(let phase): return phase
-        case .streamingElsewhere(let name): return "\(name ?? "An app") is running on this PC"
         case .asleep: return "PC is asleep or unreachable"
         // Matches the visible label so Voice Control's "Click Trust needed"
         // finds the button; the hint carries the re-pair action.
@@ -75,8 +69,6 @@ enum ChipPresentation: Equatable {
         case .ready: return Color.green
         case .streamingOurs: return Color.green
         case .connecting: return Color.orange
-        // Neutral, not blue: a running app doesn't mean anyone is connected.
-        case .streamingElsewhere: return Color.secondary
         case .asleep: return Color.secondary
         case .certMismatch: return Color.orange
         case .unknown: return Color.orange
@@ -99,9 +91,7 @@ enum ChipPresentation: Equatable {
         }
         switch live.state {
         case .unknown: self = .unknown
-        case .idle: self = .ready(rttMs: live.rttMs)
-        case .streamingApp(let name): self = .streamingElsewhere(appName: name)
-        case .streamingUnknownApp: self = .streamingElsewhere(appName: nil)
+        case .idle, .streamingApp, .streamingUnknownApp: self = .ready(rttMs: live.rttMs)
         case .asleep: self = .asleep
         case .certMismatch: self = .certMismatch
         }

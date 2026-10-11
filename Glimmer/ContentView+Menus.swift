@@ -27,6 +27,11 @@ private struct HostContextMenu: ViewModifier {
     @State private var showPairAgain = false
     @State private var draftName = ""
     @State private var codecPref: HostCodecPreference
+    /// The app the Quit item named when it was chosen; nil when the PC didn't say.
+    @State private var quitApp: String?
+    @State private var showQuitConfirm = false
+    @State private var quitFailure: String?
+    private var quitName: String { quitApp ?? "the running app" }
 
     init(host: Host, asButton: Bool) {
         self.host = host
@@ -72,6 +77,22 @@ private struct HostContextMenu: ViewModifier {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Shown in the launcher and PC list. Leave it empty to show the PC's own name.")
+        }
+        .confirmationDialog(
+            "Quit \(quitName) on \(host.displayName)?",
+            isPresented: $showQuitConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Quit \(quitApp ?? "App")", role: .destructive) { quitRunningApp() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Anything unsaved in \(quitName) will be lost.")
+        }
+        .alert("Couldn't quit \(quitName)", isPresented: Binding(
+            get: { quitFailure != nil }, set: { if !$0 { quitFailure = nil } })) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(quitFailure ?? "")
         }
         .confirmationDialog(
             "Unpair \(host.displayName)?",
@@ -134,8 +155,15 @@ private struct HostContextMenu: ViewModifier {
             Label("Pair Again…", systemImage: "key")
         }
         .disabled(isStreamingThisPC)
-        if let running = model.runningApp(on: host) {
-            QuitRunningAppButton(app: running, host: host)
+        // Only a fresh reading from this PC can offer a quit.
+        if !isStreamingThisPC, let live = model.hostLiveStatus, HostLiveStatus.isFresh(live, for: host.id),
+           let occupant = AppModel.occupant(of: live.state) {
+            Button {
+                quitApp = occupant
+                showQuitConfirm = true
+            } label: {
+                Label("Quit \(occupant ?? "the Running App") on \(host.displayName)…", systemImage: "xmark.circle")
+            }
         }
         Button(role: .destructive) {
             showUnpairConfirm = true
@@ -143,6 +171,16 @@ private struct HostContextMenu: ViewModifier {
             Label("Unpair…", systemImage: "minus.circle")
         }
         .disabled(isStreamingThisPC)
+    }
+
+    private func quitRunningApp() {
+        Task {
+            do {
+                try await model.quitRunningApp(on: host)
+            } catch {
+                quitFailure = AppModel.quitFailureMessage(for: error, hostName: host.displayName)
+            }
+        }
     }
 }
 

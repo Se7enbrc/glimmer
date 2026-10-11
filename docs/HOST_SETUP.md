@@ -50,8 +50,8 @@ change automatically. Sunshine's
 [resolution and refresh-rate examples](https://docs.lizardbyte.dev/projects/sunshine/latest/md_docs_2app__examples.html#changing-resolution-and-refresh-rate)
 use `xrandr` on X11 and compositor-specific tools on Wayland. The requested mode
 must be supported; use an Undo command to restore your previous mode when the PC
-app ends. Disconnecting Glimmer leaves that app running, so do not assume an
-app's Undo command runs on every disconnect.
+app ends. Stopping Glimmer's stream cancels its app on the PC, allowing Sunshine
+to run the app's Undo commands.
 
 ## The one rule
 

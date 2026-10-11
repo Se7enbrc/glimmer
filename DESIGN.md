@@ -435,10 +435,9 @@ Tactile and confident: the things on screen that ask to be pressed.
 ### Stream-Ended Toast
 
 - A thin-material capsule with a 0.5pt hairline, "Stream ended" in callout
-  medium, a separate Quit button when the running app is known, and an optional
-  receipt line in caption secondary. It slides down from the top edge (fades
-  under Reduce Motion), stays 2 seconds (4 with a receipt) and is announced to
-  VoiceOver.
+  medium and an optional receipt line in caption secondary. It slides down from
+  the top edge (fades under Reduce Motion), stays 2 seconds (4 with a receipt)
+  and is announced to VoiceOver.
 
 ## Do's and Don'ts
 

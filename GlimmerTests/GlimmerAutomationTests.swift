@@ -22,7 +22,7 @@ struct GlimmerAutomationTests {
         #expect(GlimmerCLI.parseURL(url) == .init(verb: .stream, arguments: ["Den PC", "Hades II"]))
         let literal = try #require(URL(string: "glimmer://stream?pc=Den%2520PC&app=A%2BB%26C"))
         #expect(GlimmerCLI.parseURL(literal)?.arguments == ["Den%20PC", "A+B&C"])
-        for verb in ["wake", "stop", "quit", "stream"] {
+        for verb in ["wake", "quit", "stream"] {
             let url = try #require(URL(string: "glimmer://\(verb)?pc=%5B2001%3Adb8%3A%3A1%5D"))
             let command = try #require(GlimmerCLI.parseURL(url))
             #expect(command.verb.rawValue == verb)
@@ -32,7 +32,7 @@ struct GlimmerAutomationTests {
     }
 
     @Test(arguments: [
-        "glimmer://pair?pc=Den", "glimmer://unknown?pc=Den", "https://stream?pc=Den",
+        "glimmer://pair?pc=Den", "glimmer://stop?pc=Den", "glimmer://unknown?pc=Den", "https://stream?pc=Den",
         "glimmer://stream", "glimmer://stream?pc=", "glimmer://stream?pc=%20",
         "glimmer://stream?pc", "glimmer://stream?pc=Den&pc=Other", "glimmer://stream?pc=Den&app=",
         "glimmer://stream?pc=Den&app=A&app=B", "glimmer://stream?pc=Den&force=1",
@@ -49,7 +49,7 @@ struct GlimmerAutomationTests {
         let model = AppModel()
         model.hosts = [pc()]
         var handled = Set<String>()
-        for verb in ["stream", "wake", "stop", "quit"] {
+        for verb in ["stream", "wake", "quit"] {
             let url = try #require(URL(string: "glimmer://\(verb)?pc=den%20pc"))
             var request: [String: String]?
             model.handleCommandURL(url, dispatch: { request = $0 })
@@ -59,8 +59,7 @@ struct GlimmerAutomationTests {
             let decision = CommandChannel.decide(info, handled: &handled, hosts: model.hosts, streamingFrom: "pc-id")
             switch verb {
             case "wake": #expect(decision == .wake(pc()))
-            case "quit": #expect(decision == .quit(pc()))
-            case "stop": #expect(decision == .stop)
+            case "quit": #expect(decision == .stop)
             default:
                 #expect(decision == .rejected(CommandChannel.alreadyStreaming))
                 var fresh = Set<String>()
@@ -108,7 +107,6 @@ struct GlimmerAutomationTests {
             #expect(host.id == "pc-id")
         }
         #expect(confirmations == 1)
-        #expect(model.quittingHostID == nil)
     }
 
     @Test func jsonFlagsAndStatusArityAreStrict() throws {

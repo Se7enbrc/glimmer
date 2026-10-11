@@ -10,7 +10,7 @@ extension GlimmerCLI {
               parts.scheme?.lowercased() == "glimmer", parts.user == nil, parts.password == nil,
               parts.port == nil, parts.path.isEmpty, parts.fragment == nil,
               let action = parts.host, let verb = Verb(rawValue: action),
-              [.stream, .wake, .stop, .quit].contains(verb) else { return nil }
+              [.stream, .wake, .quit].contains(verb) else { return nil }
         var values: [String: String] = [:]
         for item in parts.queryItems ?? [] {
             guard item.name == "pc" || (verb == .stream && item.name == "app"),

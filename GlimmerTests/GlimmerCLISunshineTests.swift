@@ -60,42 +60,6 @@ struct GlimmerCLISunshineTests {
         #expect(sunshine.paths == ["serverinfo", "applist"])
     }
 
-    @Test func jsonListsPCsAndAppsUsingTheExistingRequests() async throws {
-        let sunshine = FakeSunshine.scripted([
-            "serverinfo": [FakePCModel.serverInfo(game: 7)], "applist": [FakePCModel.appList]
-        ])
-        let fixture = try FakePCModel("cli-json", sunshine: sunshine)
-        defer { fixture.remove() }
-        try fixture.pairTower()
-        let (status, terminal) = try await run(CLI.list, ["list", "--json"], on: fixture)
-        let pcs = try #require(JSONSerialization.jsonObject(with: Data(terminal.out.utf8)) as? [String: Any])
-        let rows = try #require(pcs["pcs"] as? [[String: Any]])
-        #expect(status == CLI.Exit.ok && terminal.err.isEmpty)
-        #expect(pcs["version"] as? Int == 1 && rows.count == 1)
-        #expect(rows[0]["address"] as? String == "192.0.2.10")
-        #expect(rows[0]["paired"] as? Bool == true && rows[0]["default"] as? Bool == true)
-        #expect((rows[0]["runningApp"] as? [String: Any])?["id"] as? Int == 7)
-        #expect(fixture.model.hostLiveStatus?.runningAppID == 7)
-        #expect(sunshine.paths == ["serverinfo", "applist"])
-
-        let (appStatus, appTerminal) = try await run(CLI.list, ["list", "Tower", "--json"], on: fixture)
-        let result = try #require(JSONSerialization.jsonObject(with: Data(appTerminal.out.utf8)) as? [String: Any])
-        let apps = try #require(result["apps"] as? [[String: Any]])
-        #expect(appStatus == CLI.Exit.ok && appTerminal.err.isEmpty)
-        #expect(apps.count == 3)
-        #expect(apps.first { $0["id"] as? Int == 7 }?["running"] as? Bool == true)
-        #expect(apps.first { $0["id"] as? Int == 9 }?["hidden"] as? Bool == true)
-        #expect(sunshine.paths == ["serverinfo", "applist", "serverinfo", "applist"])
-    }
-
-    @Test func anEmptyJSONListStillPrintsOneDocument() async throws {
-        let fixture = try FakePCModel("cli-json-empty", sunshine: FakeSunshine.scripted([:]))
-        defer { fixture.remove() }
-        let (status, terminal) = try await run(CLI.list, ["list", "--json"], on: fixture)
-        #expect(status == CLI.Exit.ok && terminal.err.isEmpty)
-        #expect(terminal.out == #"{"pcs":[],"version":1}"# + "\n")
-    }
-
     @Test func listAsCSVQuotesEveryField() async throws {
         let sunshine = FakeSunshine.scripted(["serverinfo": [FakePCModel.serverInfo(game: 7)], "applist": [FakePCModel.appList]])
         let fixture = try FakePCModel("cli-list-csv", sunshine: sunshine)
@@ -105,7 +69,7 @@ struct GlimmerCLISunshineTests {
         let (status, terminal) = try await run(CLI.list, ["list", "--csv"], on: fixture)
 
         #expect(status == CLI.Exit.ok)
-        #expect(terminal.out == "Name,Address,Status\n\"Tower\",\"192.0.2.10\",\"Hades II running\"\n")
+        #expect(terminal.out == "Name,Address,Status\n\"Tower\",\"192.0.2.10\",\"Ready · 3 ms\"\n")
     }
 
     @Test func listWithNoPairedPCsSaysHowToPairOne() async throws {

@@ -35,7 +35,7 @@ extension GlimmerCLI {
             return Exit.usage
         }
         var takeover = command.flags.contains("--force")
-        if !takeover, !model.canResume(app, on: host),
+        if !takeover,
            let occupant = live.flatMap({ AppModel.occupant(of: $0.state) }) {
             // Glimmer's own stream may be what keeps the PC busy; it refuses a second one.
             if runningGlimmer() != nil, let reply = await ask([Key.verb: "check", Key.host: host.id], within: .seconds(2)),
@@ -51,7 +51,7 @@ extension GlimmerCLI {
     }
 
     /// The named app, matched as Stream from PC matches it, or the launcher's hero
-    /// target (the probe just selected this PC, so a running app is resumed).
+    /// target (the probe just selected this PC, so its running app is preferred).
     private static func pickApp(_ name: String?, on host: Host, model: AppModel) -> LibraryApp? {
         guard let name else {
             if model.heroTargetApp == nil { printError("Glimmer doesn't know any apps on \(host.displayName).") }

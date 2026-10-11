@@ -39,6 +39,23 @@ struct StatsOverlayRefreshTests {
             thresholds: { reads.thresholds += 1; return .default })
     }
 
+    @Test func occludedStreamSkipsHUDWorkAndRefreshesWhenVisibleAgain() {
+        let dec = VideoDecoder()
+        dec.statsOverlayEnabled = true
+        let overlay = attachedOverlay()
+        let banner = StreamBannerLayer(anchor: .bottomCenter, accent: NSColor.systemOrange.cgColor)
+        let refresh = StatsOverlayRefresh()
+        var reads = 0
+        refresh.tick(dec: dec, overlay: overlay, banner: banner, input: nil,
+                     rows: { reads += 1; return [.codec] }, thresholds: { .default }, visible: false)
+        #expect(reads == 0)
+        #expect(overlay.rowViews.isEmpty)
+        refresh.tick(dec: dec, overlay: overlay, banner: banner, input: nil,
+                     rows: { reads += 1; return [.codec] }, thresholds: { .default }, visible: true)
+        #expect(reads == 1)
+        #expect(Set(overlay.rowViews.keys) == [.codec])
+    }
+
     @Test func aHiddenHudSkipsTheRowsThresholdsAndLayout() {
         let dec = VideoDecoder()
         let overlay = attachedOverlay()

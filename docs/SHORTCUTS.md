@@ -15,7 +15,7 @@ stream before using its shortcuts.
 
 | Action                               | Default shortcut | Notes                                                                                  |
 | ------------------------------------ | ---------------- | -------------------------------------------------------------------------------------- |
-| Stop streaming                       | Control-Q · ⌃Q   | Disconnects and leaves the game running. Command-Q quits Glimmer.                      |
+| Stop streaming                       | Control-Q · ⌃Q   | Ends the stream and quits its app on the PC. Command-Q also quits Glimmer.             |
 | Enter or leave Mini Player           | Control-M · ⌃M   | Returns to the previous presentation when leaving Mini Player.                         |
 | Show or hide stream stats            | Control-I · ⌃I   | Applies to this stream; the next follows Settings → Quality.                           |
 | Capture or release the pointer       | Control-P · ⌃P   | Also switches fullscreen between a free pointer and captured game controls.            |
@@ -26,10 +26,9 @@ To leave fullscreen temporarily, use Command-Tab to switch apps or Control-M to
 open Mini Player. The stream keeps running. Select Back to Stream in the
 launcher to return.
 
-Stopping with a shortcut or controller, closing the stream window, and quitting
-Glimmer all leave the game running on the PC. Choose its app tile to resume. Use
-Quit from the app tile's context menu, the menu bar, or the stream-ended notice
-to close it. Confirmation names the app and PC and warns about unsaved progress.
+Stopping with a shortcut or controller, choosing Stop Streaming, closing the
+stream window, and quitting Glimmer all end the session and quit its app on the
+PC. Save your progress before stopping.
 
 ## Escape and mouse capture
 
@@ -43,9 +42,9 @@ capture when the pointer enters its picture while the window has focus.
 Controllers keep working while Mini Player is visible, even when another Mac app
 is active; keyboard and mouse input follow focus.
 
-An app named “Desktop” starts fullscreen with a free pointer that follows the
-picture. Other apps start with captured game controls. Control-P toggles either
-way and keeps that fullscreen choice across focus changes for this stream.
+Every app, including Desktop, starts fullscreen with captured game controls.
+Control-P toggles a free pointer that follows the picture and keeps that
+fullscreen choice across focus changes for this stream.
 
 While the pointer is free, macOS input methods and the character viewer can
 compose text for the PC. Capturing it sends physical keys instead. Committed

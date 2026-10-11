@@ -37,28 +37,6 @@ struct HostStatusPollerTests {
             })
     }
 
-    @Test(arguments: [0, 7, 9])
-    func observedAppReconcilesRememberedOwnership(running: Int) async throws {
-        let store = try IsolatedStore("poll-ownership")
-        defer { store.remove() }
-        let model = model(apps: [LibraryApp(id: 7, name: "Game", hdr: false, hidden: false)])
-        model.hostsDefaults = store.defaults
-        RunningAppOwnership.save(pc: hostID, appID: 7, clientID: "mac", defaults: store.defaults)
-        let sunshine = FakeSunshine { _ in FakeSunshine.xml("<currentgame>\(running)</currentgame>") }
-        _ = await poll(model, sunshine, appListFor: running)
-        #expect((RunningAppOwnership.load(pc: hostID, defaults: store.defaults) != nil) == (running == 7))
-    }
-
-    @Test func failedStatusReplyDoesNotForgetTheGame() async throws {
-        let store = try IsolatedStore("poll-ownership-failure")
-        defer { store.remove() }
-        let model = model()
-        model.hostsDefaults = store.defaults
-        RunningAppOwnership.save(pc: hostID, appID: 7, clientID: "mac", defaults: store.defaults)
-        _ = await poll(model, FakeSunshine { _ in throw URLError(.networkConnectionLost) })
-        #expect(RunningAppOwnership.load(pc: hostID, defaults: store.defaults)?.appID == 7)
-    }
-
     @Test func anIdlePCIsReadyWithItsVersionAndRtt() async {
         let model = model()
         model.hostUnreachableStreak = 2

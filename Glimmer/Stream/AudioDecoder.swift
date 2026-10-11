@@ -26,6 +26,7 @@ public final class AudioDecoder: @unchecked Sendable {
     var silencePool: AudioPCMBufferPool?
     var spliceLease: AudioPCMBufferPool.Lease?
     var renderMonitor: DispatchSourceTimer?
+    var renderProgress = AudioRenderProgress()
     lazy var maintenanceSource = makeMaintenanceSource()
     lazy var linkResolveSource = makeLinkResolveSource()
     var isShutdown = false

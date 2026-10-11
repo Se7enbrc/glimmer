@@ -53,8 +53,7 @@ extension InputForwarder {
     func updateReconciliationTimer() {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         let active = !physicalKeys.isEmpty || !heldModifierVKs.isEmpty || !heldMouseButtons.isEmpty
-            || !releases.pending.isEmpty || !releases.held.isEmpty
-            || controllerMouseStates.values.contains(where: { $0.isMouse })
+            || inputCore.needsReconciliation
         guard active else {
             inputCore.activityPublished = false
             reconciliationTimer?.invalidate()
@@ -63,13 +62,17 @@ extension InputForwarder {
         }
         guard reconciliationTimer == nil else { return }
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.reconcilePhysicalInputs()
-                self?.reconcileControllerButtons()
-            }
+            MainActor.assumeIsolated { self?.tickReconciliation() }
         }
+        timer.tolerance = 0.025
         reconciliationTimer = timer
         RunLoop.main.add(timer, forMode: .common)
+    }
+
+    func tickReconciliation() {
+        reconcilePhysicalInputs()
+        reconcileControllerButtons()
+        updateReconciliationTimer()
     }
 
     func reconcileControllerButtons() {

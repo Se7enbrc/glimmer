@@ -67,15 +67,16 @@ extension AudioDecoder {
 
     func installRenderMonitor() {
         renderMonitor?.cancel()
+        renderProgress = AudioRenderProgress()
         let timer = DispatchSource.makeTimerSource(queue: routeListenerQueue)
         timer.schedule(deadline: .now() + .milliseconds(10), repeating: .milliseconds(10))
         timer.setEventHandler { [weak self] in
             guard let self, self.stateLock.try() else { return }
             defer { self.stateLock.unlock() }
             guard !self.graphChanging, !self.isShutdown else { return }
-            self.refreshOutputRunningState()
+            let frames = self.observeRenderClock()
+            if self.renderProgress.needsRunningCheck(frames: frames) { self.refreshOutputRunningState() }
             if !self.engineRunning { self.maintenanceSource.add(data: 1) }
-            _ = self.observeRenderClock()
         }
         renderMonitor = timer
         timer.activate()
@@ -194,5 +195,16 @@ enum AudioDiagnostics {
 
     static func info(_ message: @autoclosure @escaping @Sendable () -> DiagMessage, _ category: String) {
         queue.async { Diag.info(message(), category) }
+    }
+}
+
+// Render progress proves HAL is running; query the device only when that evidence stops.
+struct AudioRenderProgress {
+    private var lastFrames: Int64?
+
+    mutating func needsRunningCheck(frames: Int64?) -> Bool {
+        defer { lastFrames = frames }
+        guard let frames, let lastFrames else { return true }
+        return frames <= lastFrames
     }
 }

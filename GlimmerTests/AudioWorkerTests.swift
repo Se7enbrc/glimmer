@@ -8,6 +8,16 @@ import os
 @testable import Glimmer
 
 struct AudioWorkerTests {
+    @Test func progressingAudioSkipsHALQueriesButStallsAndResetsStillCheck() {
+        var progress = AudioRenderProgress()
+        let samples: [(Int64?, Bool)] = [(nil, true), (0, true), (240, false), (480, false),
+                                          (480, true), (720, false), (0, true), (nil, true)]
+        for (frames, expected) in samples {
+            let check = progress.needsRunningCheck(frames: frames)
+            #expect(check == expected)
+        }
+    }
+
     @Test func queuePreservesOrderAndDropsNewestAtCapacity() async {
         let entered = DispatchSemaphore(value: 0)
         let release = DispatchSemaphore(value: 0)

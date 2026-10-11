@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamSession+Lifecycle.swift
-//
-//  Session teardown (stop/interrupt), resume and confirmed takeover.
-//  Split out of StreamSession.swift to keep each unit focused; see that file for
-//  the actor's stored state and the callback lifetime contract.
-//
+// Session teardown and launch recovery share the actor's ownership and callback lifetime.
 
 import Foundation
 import AppKit
@@ -48,6 +42,10 @@ extension StreamSession {
         launchTask?.cancel()
         await teardown.run { await self.performStop(cause: cause) }
     }
+
+    /// The stop's /cancel deadline: a LAN round trip with margin, and short
+    /// enough that a dead link doesn't keep the launcher waiting.
+    static let stopCancelSeconds: TimeInterval = 2
 
     private func performStop(cause: DisconnectReason) async {
         // Remove the sleep/wake observers + cancel any in-flight wake probe FIRST,
@@ -95,7 +93,7 @@ extension StreamSession {
         }
 
         // Teardown order: stop the backend (drains its threads), take down what
-        // the user sees, shut audio, then release the bridge. Its refs
+        // the user sees, shut audio, /cancel, then release the bridge. Its refs
         // are weak, so the order is about being well-behaved, not UAF safety.
 
         // 0. Hide the overlay before closing; stop timers before their RTT reads
@@ -123,8 +121,8 @@ extension StreamSession {
         //    its own state internally).
         backend.stopConnection()
 
-        // 2. Close the window and release input before draining audio, so a dead link
-        //    cannot hold a frozen full-screen frame and a hidden pointer.
+        // 2. Close the window and release input now, so a dead link can't hold a
+        //    frozen full-screen frame and a hidden pointer while /cancel waits.
         let dec = videoDecoder
         let win = window
         // Setup may have adopted input while the timer teardown was suspended.
@@ -138,12 +136,15 @@ extension StreamSession {
             win?.close()
         }
 
-        // 3. The HAL audio output teardown. Step 1 already drained the audio
-        //    receive thread, so no final sample can race it.
+        // 3. The receive and decode workers have drained, so HAL teardown cannot race their final sample.
         audioDecoder.shutdown()
 
-        // 4. Disconnect leaves the PC app running, including a late /launch success.
+        // 4. Briefly wait for ownership, then cancel. A late successful launch
+        //    gets its own cleanup without holding the launcher open.
         let net = cleanupNetwork
+        await settlePendingLaunch {
+            if let net { await Self.cancelOwnedSession(net) }
+        }
         if let net {
             // shutdown() is a no-op now (the control channel is per-request) -
             // kept for symmetry with the rest of the teardown.
@@ -153,7 +154,7 @@ extension StreamSession {
         hostSessionClientID = nil
         network = nil
 
-        // Close after teardown so the session log records backend and audio teardown outcomes.
+        // Close after teardown so the session log records backend, audio and /cancel outcomes.
         SessionLogFileSink.stop()
 
         // 5. Release the bridge. The bridge held weak refs to everything so
@@ -185,9 +186,20 @@ extension StreamSession {
         stopInProgress = false
     }
 
-    /// A reconnect may have dropped its client before teardown.
+    /// The client stop cancels with. A failed reconnect attempt clears `network`, but the session
+    /// may still own a launch on `reconnectServer`, and that game must not be left running.
     var cleanupNetwork: NetworkClient? {
         network ?? reconnectServer.map(makeNetwork)
+    }
+
+    private static func cancelOwnedSession(_ network: NetworkClient) async {
+        await network.setRequestDeadline(Date().addingTimeInterval(stopCancelSeconds))
+        do {
+            try await network.cancel()
+            Diag.notice("Teardown /cancel succeeded", "Stream")
+        } catch {
+            Diag.notice("Teardown /cancel failed: \(error, privacy: .private)", "Stream")
+        }
     }
 
     public func interrupt() async {
@@ -198,52 +210,26 @@ extension StreamSession {
 
     // MARK: - Launch with busy recovery
 
-    /// Resume only our requested app; destructive recovery always requires confirmation.
+    /// Idle host: /launch. Anything else: /cancel + /launch, so the host
+    /// renegotiates our config instead of /resume-ing a stale one.
     func launchWithBusyRecovery(
         network: NetworkClient, appID: Int, config: StreamConfig, info: ServerInfo, deadline: Date
     ) async throws -> LaunchResponse {
         try checkAttempt(deadline: deadline)
-        resumingHostApp = false
-        resumeFailure = nil
-        restoreOwnership(from: info)
         try await authorizeOccupancy(info, network: network, deadline: deadline)
-        if info.currentGameID == appID, ownsHostSession, !takeoverAuthorized {
-            resumingHostApp = true
-            // Sunshine src/nvhttp.cpp: resume() calls make_launch_session(args), which reads
-            // mode (width/height/fps) and hdrMode, then configure_display when no stream is active.
-            do {
-                return try await launchHost(network: network, appID: appID, config: config,
-                                            deadline: deadline, resume: true)
-            } catch {
-                if error is CancellationError { throw error }
-                Diag.notice("Resume /resume failed: \(error, privacy: .private)", "Stream")
-                if case StreamError.hostRefused(let message, 503) = error,
-                   message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "no running app" {
-                    resumingHostApp = false
-                    return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
-                }
-                let failure = ResumeFailed(underlying: error)
-                resumeFailure = failure
-                throw failure
+        do {
+            if info.currentGameID != 0 || info.isBusy {
+                return try await cancelThenLaunch(network: network, appID: appID, config: config, deadline: deadline)
             }
-        }
-        if info.currentGameID != 0 || info.isBusy {
-            // Owning a different app never authorizes quitting it.
-            guard takeoverAuthorized else { throw TakeoverRequired(appID: info.currentGameID) }
+            return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
+        } catch let first as StreamError {
+            log.error("primary launch path failed: \(String(describing: first), privacy: .private)")
+            try checkAttempt(deadline: deadline)
+            let fresh = try await network.fetchServerInfo()
+            try checkAttempt(deadline: deadline)
+            try await authorizeOccupancy(fresh, network: network, deadline: deadline)
             return try await cancelThenLaunch(network: network, appID: appID, config: config, deadline: deadline)
         }
-        return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
-    }
-
-    private func restoreOwnership(from info: ServerInfo) {
-        guard let server = reconnectServer else { return }
-        RunningAppOwnership.reconcile(pc: server.uniqueId, appID: info.currentGameID, defaults: ownershipStore.defaults)
-        guard !ownsHostSession,
-              let owner = RunningAppOwnership.load(pc: server.uniqueId, defaults: ownershipStore.defaults),
-              owner.appID == info.currentGameID else { return }
-        ownsHostSession = true
-        hostSessionClientID = owner.clientID
-        hostSessionAppID = owner.appID
     }
 
     func authorizeOccupancy(_ info: ServerInfo, network: NetworkClient, deadline: Date) async throws {
@@ -260,15 +246,14 @@ extension StreamSession {
     }
 
     private func launchHost(
-        network: NetworkClient, appID: Int, config: StreamConfig, deadline: Date, resume: Bool = false
+        network: NetworkClient, appID: Int, config: StreamConfig, deadline: Date
     ) async throws -> LaunchResponse {
         let client = await network.clientUniqueID
         try checkAttempt(deadline: deadline)
         let start = Date()
         defer { ConnectTimingTelemetry.shared.recordLaunchLeg(launchMs: Date().timeIntervalSince(start) * 1000) }
         let response = try await launchAndRecordOwnership(client: client, appID: appID) {
-            if resume { return try await network.resume(config: config) }
-            return try await network.launch(appID: appID, config: config)
+            try await network.launch(appID: appID, config: config)
         }
         try checkAttempt(deadline: deadline)
         return response
@@ -277,13 +262,15 @@ extension StreamSession {
     func launchAndRecordOwnership(
         client: String?, appID: Int, operation: @escaping @Sendable () async throws -> LaunchResponse
     ) async throws -> LaunchResponse {
-        // A late success still belongs to this Mac, unless another launch superseded it.
+        // Keep the response alive after cancellation so a late success can be
+        // cleaned up. Only its current waiter may change launch ownership.
         let key = launchPCKey
-        let task = try await Self.launchMutations.launch(pc: key, client: client, appID: appID,
-                                                        store: ownershipStore, operation: operation)
+        hostLaunchEpoch = try await Self.launchMutations.beginLaunch(for: key)
+        try Task.checkCancellation()
         ownsHostSession = true
         hostSessionClientID = client
         hostSessionAppID = appID
+        let task = Task { try await operation() }
         pendingLaunch = task
         defer { if pendingLaunch == task { pendingLaunch = nil } }
         return try await consumeLaunch(task)
@@ -301,12 +288,40 @@ extension StreamSession {
         }
     }
 
-    /// Explicit quits finish before a new launch on the same PC.
+    /// An old /cancel finishes before a new /launch on that PC, or skips the newer owner entirely.
     static let launchMutations = HostLaunchMutations()
 
     private var launchPCKey: String { reconnectServer?.uniqueId ?? "" }
 
-    nonisolated var terminationStopBoundSeconds: TimeInterval { TerminationGate.stopBoundSeconds }
+    func settlePendingLaunch(cancel: @escaping @Sendable () async -> Void) async {
+        let task = pendingLaunch
+        let key = launchPCKey
+        let epoch = hostLaunchEpoch
+        let settled: Bool
+        if let task {
+            settled = await TerminationGate.runBounded(seconds: Self.stopCancelSeconds) {
+                _ = try? await self.consumeLaunch(task)
+            }
+        } else {
+            settled = true
+        }
+        if ownsHostSession {
+            await Self.launchMutations.cancelIfCurrent(pc: key, epoch: epoch, operation: cancel)
+        }
+        if let task, !settled {
+            // The first /cancel can arrive before prep commands finish. Cancel again on a
+            // late success, unless a newer launch has started and now owns the PC.
+            Task.detached {
+                guard case .success = await task.result else { return }
+                await Self.launchMutations.cancelIfCurrent(pc: key, epoch: epoch, operation: cancel)
+            }
+        }
+    }
+
+    nonisolated var terminationStopBoundSeconds: TimeInterval {
+        // Allow the short ownership wait and /cancel, never the launch timeout.
+        Self.stopCancelSeconds + TerminationGate.stopBoundSeconds
+    }
 
     static func retainsLaunchOwnership(after error: Error) -> Bool {
         if case .hostRefused = error as? StreamError { return false }
@@ -365,18 +380,9 @@ extension StreamSession {
         launchTask = task
         defer { launchTask = nil }
         return try await withTaskCancellationHandler {
-            do {
-                let result = try await task.value
-                try checkAttempt(deadline: end)
-                return result
-            } catch {
-                if resumingHostApp, !(error is CancellationError) {
-                    let failure = error as? ResumeFailed ?? ResumeFailed(underlying: error)
-                    resumeFailure = failure
-                    throw failure
-                }
-                throw error
-            }
+            let result = try await task.value
+            try checkAttempt(deadline: end)
+            return result
         } onCancel: {
             task.cancel()
         }

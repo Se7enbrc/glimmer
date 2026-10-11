@@ -33,9 +33,33 @@ extension AppModel {
         if let dispatch { dispatch(request) } else { handleCommand(request, fromURL: true) }
     }
 
-    /// The alert is mandatory for URL requests, even before the first PC poll answers.
+    /// Web links must ask before discarding the PC's game.
     func confirmURLQuit(on host: Host, confirm: ((LibraryApp, Host) -> Void)? = nil) {
-        let app = runningApp(on: host) ?? LibraryApp(id: 0, name: "the running app", hdr: false, hidden: false)
-        if let confirm { confirm(app, host) } else { requestQuit(app, on: host) }
+        let name = hostLiveStatus.flatMap { live -> String? in
+            guard HostLiveStatus.isFresh(live, for: host.id), let occupant = Self.occupant(of: live.state) else {
+                return nil
+            }
+            return occupant
+        }
+        let live = isStreaming ? lastLaunchAttempt : nil
+        let app = live?.host.id == host.id ? live?.app : nil
+        let target = app ?? LibraryApp(id: 0, name: name ?? "the running app", hdr: false, hidden: false)
+        if let confirm { confirm(target, host); return }
+        let alert = NSAlert()
+        alert.messageText = "Quit \(target.name) on \(host.displayName)?"
+        alert.informativeText = "Unsaved progress may be lost."
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Quit").hasDestructiveAction = true
+        NSApp.activate()
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        Task {
+            if streamingHostID == host.id, await stopOwnStream(source: "a URL") { return }
+            do { try await quitRunningApp(on: host) } catch {
+                let failure = NSAlert()
+                failure.messageText = "Couldn't quit \(target.name) on \(host.displayName)."
+                failure.informativeText = Self.quitFailureMessage(for: error, hostName: host.displayName)
+                failure.runModal()
+            }
+        }
     }
 }

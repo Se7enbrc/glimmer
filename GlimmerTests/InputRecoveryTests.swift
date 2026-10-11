@@ -41,6 +41,24 @@ struct InputRecoveryTests {
         }
     }
 
+    @Test func reconciliationRetiresAfterControllerReleaseAndIgnoresIdleMouseMode() {
+        let rig = Rig()
+        defer { rig.input.detach() }
+        let controller = GCController.withExtendedGamepad()
+        defer { withExtendedLifetime(controller) {} }
+        rig.input.attach(gamepad: controller)
+        rig.input.sendControllerState(slot: 0, buttons: StreamProtocol.A_FLAG,
+                                      analog: InputForwarder.neutralControllerAnalog)
+        rig.input.updateReconciliationTimer()
+        #expect(rig.input.reconciliationTimer != nil)
+        rig.input.tickReconciliation()
+        #expect(rig.backend.calls.last?.buttons == 0)
+        #expect(rig.input.reconciliationTimer == nil)
+        rig.input.controllerMouseStates[0] = ControllerMouseState(isMouse: true)
+        rig.input.updateReconciliationTimer()
+        #expect(rig.input.reconciliationTimer == nil)
+    }
+
     @Test func deniedMonitoringNeverReleasesHeldKeys() throws {
         let rig = Rig()
         defer { rig.input.detach() }

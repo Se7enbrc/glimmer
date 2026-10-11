@@ -16,11 +16,9 @@ enum ConnectBannerAction: Equatable {
     case wakeAndConnect
     case pairAgain
     case tryAgain
-    case quitAndRelaunch
 
     init(kind: AppModel.StreamErrorKind, canWake: Bool) {
         switch kind {
-        case .resumeFailed: self = .quitAndRelaunch
         case .pairing: self = .pairAgain
         case .unreachable where canWake: self = .wakeAndConnect
         case .unreachable, .other: self = .tryAgain
@@ -32,7 +30,6 @@ enum ConnectBannerAction: Equatable {
         case .wakeAndConnect: "Wake and Connect"
         case .pairAgain: "Pair Again…"
         case .tryAgain: "Try Again"
-        case .quitAndRelaunch: "Quit and Relaunch…"
         }
     }
 
@@ -40,7 +37,7 @@ enum ConnectBannerAction: Equatable {
         switch self {
         case .wakeAndConnect: "power"
         case .pairAgain: "key"
-        case .tryAgain, .quitAndRelaunch: "arrow.clockwise"
+        case .tryAgain: "arrow.clockwise"
         }
     }
 }
@@ -66,10 +63,6 @@ extension AppModel {
         case .wakeAndConnect: if let host { wakeHost(host, thenConnect: true) }
         case .pairAgain: requestPairing(for: host)
         case .tryAgain: retryLastLaunch()
-        case .quitAndRelaunch:
-            guard let attempt = lastLaunchAttempt else { return }
-            pendingTakeover = PendingTakeover(app: attempt.app, host: attempt.host, occupantApp: attempt.app.name)
-            presentTakeoverAlertIfNeeded()
         }
     }
 }

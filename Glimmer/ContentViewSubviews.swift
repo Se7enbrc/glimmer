@@ -158,8 +158,7 @@ struct AppIconsRow: View {
                            hiddenStream: state == .hiddenStream)
             } else {
                 tileLabel(icon: app.icon, title: app.name, trailing: "play.fill",
-                          trailingText: state == .hiddenStream ? "Back to Stream"
-                            : (model.canResume(app, on: host) ? "Resume" : nil),
+                          trailingText: state == .hiddenStream ? "Back to Stream" : nil,
                           launching: state == .connecting || state == .reconnecting)
             }
         }
@@ -171,15 +170,11 @@ struct AppIconsRow: View {
         // since looking at other apps launches nothing.
         .disabled(model.isStreaming && state == .ready)
         .help(state.help ?? (model.isStreaming
-            ? "Finish the current stream first" : model.streamActionTitle(app, on: host)))
+            ? "Finish the current stream first" : "Stream \(app.name)"))
         // One name, not glyph + name + play glyph read in turn.
         .accessibilityLabel(app.name)
-        .accessibilityValue(model.canResume(app, on: host) ? "Running on \(host.displayName)"
-            : (state.spoken.value.isEmpty && isRunning(app) ? "Running" : state.spoken.value))
-        .accessibilityHint(model.canResume(app, on: host) ? "Resumes the app" : state.spoken.hint)
-        .contextMenu {
-            if model.runningApp(on: host)?.id == app.id { QuitRunningAppButton(app: app, host: host) }
-        }
+        .accessibilityValue(state.spoken.value.isEmpty && isRunning(app) ? "Running" : state.spoken.value)
+        .accessibilityHint(state.spoken.hint)
     }
 
     private func activate(_ app: LibraryApp) {
@@ -194,17 +189,13 @@ struct AppIconsRow: View {
 
     private var overflowMenu: some View {
         Menu {
-            if let running = model.runningApp(on: host) {
-                QuitRunningAppButton(app: running, host: host)
-                Divider()
-            }
             ForEach(overflowApps) { app in
                 Button {
                     model.requestStream(app: app, on: host)
                 } label: {
                     // macOS 27 hides a plain menu-item symbol image by default;
                     // these items name an app, so force the icon back on.
-                    Label { Text(model.streamActionTitle(app, on: host)) } icon: { app.icon }
+                    Label { Text("Stream \(app.name)") } icon: { app.icon }
                         .labelStyle(.titleAndIcon)
                 }
                 .disabled(model.isStreaming)
@@ -299,12 +290,6 @@ struct StreamEndedToast: View {
                     Text("Stream ended")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.primary)
-                    if let attempt = model.lastLaunchAttempt,
-                       let running = model.runningApp(on: attempt.host) {
-                        QuitRunningAppButton(app: running, host: attempt.host)
-                            .buttonStyle(.borderless)
-                            .font(.caption)
-                    }
                     // Session receipt - one quiet line ("2h 12m · 12 ms
                     // median"), only when the stash kept one (≥5 min sessions).
                     if let line = model.lastSessionReceiptToastLine {
@@ -319,8 +304,8 @@ struct StreamEndedToast: View {
                 .overlay(Capsule().stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
                 .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
                 .transition(Motion.overlayTransition(reduceMotion: reduceMotion))
-                // Keep the secondary quit button separately reachable by VoiceOver.
-                .accessibilityElement(children: .contain)
+                // Announce the receipt as one sentence.
+                .accessibilityElement(children: .combine)
                 // Keyed on the receipt so a back-to-back end re-arms the hold
                 // for the new content; the flag reset in stream() is the other
                 // half - the flag actually FALLS between cycles now, so a

@@ -188,16 +188,19 @@ extension StreamSession {
             }
             try checkAttempt(deadline: deadline)
         } catch {
-            // A failed transport leaves the PC app available for a later resume.
+            // A failed transport must release the PC app we already launched.
             let code: Int32
             if case let StreamError.sessionFailed(failureCode) = error {
                 code = failureCode
             } else {
                 code = -1
             }
-            log.error("startConnection failed with \(code) - disconnecting")
-            // Keep the frozen frame and event stream while the reconnect driver retries.
+            log.error("startConnection failed with \(code) - cancelling host session")
+            // Reconnect cancels only its failed launch, preserving the frozen frame and event stream
+            // while the driver retries. Initial connect failure runs the full teardown.
             if duringReconnect {
+                try checkAttempt(deadline: deadline)
+                try? await network.cancel()
                 try checkAttempt(deadline: deadline)
                 throw StreamError.sessionFailed(code)
             }

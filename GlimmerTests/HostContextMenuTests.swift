@@ -26,10 +26,10 @@ struct HostContextMenuTests {
         return model
     }
 
-    @Test func quitIsOfferedOnlyForAFreshBusyReadingOfThisPC() {
+    @Test func reachableReadingsShowReadyOnlyForThisPCWhileFresh() {
         #expect(model(polled: .streamingApp(name: "Elden Ring")).polledChip(for: host)
-            == .streamingElsewhere(appName: "Elden Ring"))
-        #expect(model(polled: .streamingUnknownApp(id: 7)).polledChip(for: host) == .streamingElsewhere(appName: nil))
+            == .ready(rttMs: nil))
+        #expect(model(polled: .streamingUnknownApp(id: 7)).polledChip(for: host) == .ready(rttMs: nil))
         #expect(model(polled: .idle).polledChip(for: host) == .ready(rttMs: nil))
         #expect(model(polled: .streamingApp(name: "x"), hostID: "other-pc").polledChip(for: host) == .unknown)
         #expect(model(polled: .streamingApp(name: "x"), age: HostLiveStatus.stale + 1).polledChip(for: host) == .unknown)

@@ -58,7 +58,7 @@ final class InputSendThread: @unchecked Sendable {
         condition.lock()
         self.deadline = deadline
         timer = action
-        condition.broadcast()
+        if Thread.current !== thread { condition.broadcast() }
         condition.unlock()
     }
 

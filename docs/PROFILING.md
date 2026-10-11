@@ -209,6 +209,34 @@ socket receive loops. Those three are the expected heavyweights. Targets:
 If a Swift hot path shows up unexpectedly, the input forwarder or the
 stats-snapshot timer are the usual suspects.
 
+### 2026.10.8 stream CPU audit
+
+The acceptance target is below the 2026.10.7 baseline of approximately 20% of
+one core during 4K240 HDR, with main near idle and lower CPU when hidden. The
+changes below remove identifiable work; they are not a measured CPU result.
+Compare the same Mac, PC, scene, codec, display, audio route and controller at
+both revisions. Keep telemetry and the HUD matched, warm up first, then record
+at least one minute visible and one minute hidden. Repeat with each off and on.
+Use process CPU and the per-thread resource fields, plus a Time Profiler trace;
+check frame timing, input tails and audio underruns alongside CPU.
+
+| Execution context             | Work retained or removed                                                                                                                                                                                                   | Expected effect                                                                                        |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Main, stats refresh           | Keep the 4 Hz history and hitch baselines; read RTT once. Skip HUD formatting, system stats, battery and layer work while occluded.                                                                                        | Less work with a hidden HUD window; fewer RTT reads in every stream.                                   |
+| Main, input recovery          | Reconcile held inputs at 4 Hz with 25 ms timer tolerance. Stop the timer when releases settle; idle mouse mode creates no recovery obligation. Neutral controller samples no longer request a main-thread activity update. | No idle recovery polling or neutral-sample main hops.                                                  |
+| Controller mouse queue        | Run the 20 Hz timer only while a stick produces a pointer or scroll delta.                                                                                                                                                 | Zero mouse timer wakes at rest; unchanged moving-stick cadence.                                        |
+| Input sender                  | Merge deadlines remain demand-driven at 1 ms. Scheduling from the sender itself no longer wakes waiting producers.                                                                                                         | No idle ticks and fewer unnecessary condition wakeups during merged input.                             |
+| Audio maintenance queue       | Keep the 10 ms render observation and recovery cadence. Query HAL running state only when the consumed-frame count fails to advance or resets.                                                                             | Avoid up to roughly 100 device queries/s during steady playback; no added render-thread work.          |
+| Controller capture and motion | GameController and raw HID callbacks run off main. Motion remains event-driven, requested by the PC, rate-limited and duplicate-suppressed. Battery polling remains 30 s.                                                  | No new main-thread polling; no motion work when disabled.                                              |
+| Launcher and readiness pulse  | Launcher navigation stops while streaming. The readiness pulse is a Core Animation opacity animation, removed when occluded.                                                                                               | No per-frame SwiftUI heartbeat or hidden pulse work.                                                   |
+| Telemetry                     | Export, process/thread sampling and renderer sampling remain opt-in at 1 Hz off main. Display sampling is opt-in at 1 Hz on main.                                                                                          | No added default sampling cost; retain diagnostic evidence.                                            |
+| Session/control safeguards    | Keep the 20 Hz present watchdog, 1 Hz frame watchdog, 2 s session tick, ENet keepalives/retransmits and 1 Hz AWDL lease renewal.                                                                                           | Preserve recovery deadlines and Wi-Fi protection. Hidden presentation takes the watchdog's early exit. |
+
+Video receive, decode and pacing retain their dedicated execution paths. Their
+normal frame flow does not dispatch a task to main for each frame; first-frame,
+colour transitions and coalesced renderer recovery still publish there. No
+pacing, bitrate, buffering or audio-cushion defaults changed in this audit.
+
 ### “Frames are dropping”
 
 `make profile-signposts`. Filter the `os_signpost` track by category

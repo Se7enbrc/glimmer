@@ -23,23 +23,22 @@ Everything Glimmer does, in more detail than the [README](../README.md).
   can match Nintendo face buttons by label instead of position.
 - **Mouse and keyboard.** Raw 1:1 aim at your Mac's tracking speed with the
   acceleration curve removed, an optional velocity-gated boost on fast flicks,
-  optional ⌘-shortcut forwarding. A free pointer follows the picture, including
-  fullscreen Desktop streams; the capture shortcut switches to game controls.
-  macOS input methods compose text while the pointer is free.
+  optional ⌘-shortcut forwarding. Every app starts fullscreen with captured game
+  controls. The capture shortcut frees the pointer to follow the picture; macOS
+  input methods compose text while it is free.
 - **Wi-Fi.** A helper parks AWDL (AirDrop's radio time-share), which can
   interrupt Wi-Fi streams. Glimmer offers it the first time it opens.
 - **PCs.** mDNS discovery, PIN pairing, PCs by address or name (Tailscale
   works), Wake on LAN and a one-time import of moonlight-qt pairings.
 - **Launcher.** Buttons or Covers per PC, with artwork from the PC. Controllers
   exposed by macOS GameController can choose apps and switch PCs. Stopping a
-  stream leaves the PC app running; choosing it again resumes it, while Quit
-  asks before closing it.
+  stream also quits its app on the PC. Reachable PCs show Ready and latency in
+  the readiness chip.
 - **Mac things.** Menu bar item, mini player, display-matched quality presets,
   stats overlay, hotkeys, notarized, self-updating. Shortcuts, Siri and
-  Spotlight actions stream from a PC or wake it. Shortcuts also offers Stop
-  Streaming and Quit App on PC. The command line supports versioned list/status
-  JSON, and `glimmer://` links can stream, wake, stop or request a confirmed
-  quit.
+  Spotlight actions stream from a PC or wake it. Shortcuts also offers Quit App
+  on PC. The command line supports versioned list/status JSON, and `glimmer://`
+  links can stream, wake or request a confirmed quit.
 
 Free, now and always. No accounts, no analytics. Glimmer talks to your own PC
 and the local network for discovery and Wake on LAN, plus its update feed and

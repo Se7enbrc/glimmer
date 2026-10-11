@@ -124,7 +124,6 @@ extension StreamSession {
         }
         let inp = InputForwarder()
         inp.onControllerMouseChanged = { [weak win] message in win?.showControllerMouseMode(message) }
-        inp.fullscreenRelativePointer = !config.prefersAbsolutePointer
         // Hotkey chords need to be readable LIVE on every keyDown so
         // changes in Settings take effect without restarting the
         // stream. Capture-at-attach silently strands edits. The

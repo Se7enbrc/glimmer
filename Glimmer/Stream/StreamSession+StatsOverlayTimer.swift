@@ -34,7 +34,8 @@ extension StreamSession {
                     guard let dec, let win else { return }
                     refresh.tick(
                         dec: dec, overlay: win.statsOverlay, banner: win.networkBanner, input: inp,
-                        rows: statsRowsProvider, thresholds: statsThresholdsProvider)
+                        rows: statsRowsProvider, thresholds: statsThresholdsProvider,
+                        visible: win.window.occlusionState.contains(.visible))
                 }
             }
             // 30 ms lets the run loop coalesce the timer, well under half the interval.
@@ -85,17 +86,19 @@ final class StatsOverlayRefresh {
     /// thresholds are read only while it's shown, so a Settings flip lands next tick.
     func tick(
         dec: VideoDecoder, overlay: StatsOverlayLayer, banner: StreamBannerLayer, input: InputForwarder?,
-        rows: @MainActor () -> Set<StatsRow.Kind>, thresholds: @MainActor () -> StatsThresholds
+        rows: @MainActor () -> Set<StatsRow.Kind>, thresholds: @MainActor () -> StatsThresholds,
+        visible: Bool = true
     ) {
-        gateAudit.tick(streamRtt: dec.telemetryEstimatedRtt()?.rttMs)
+        let rtt = dec.telemetryEstimatedRtt()
+        gateAudit.tick(streamRtt: rtt?.rttMs)
         var snap = dec.statsSnapshot(minWindowSeconds: Self.fpsWindowSeconds)
         history.tick(mbps: snap.measuredBitrateMbps, fps: snap.receivedFps,
-                     rttMs: dec.telemetryEstimatedRtt()?.rttMs)
+                     rttMs: rtt?.rttMs)
         // Perceived present hitching, not env_state (link contention anti-correlates with felt stutter).
         banner.setSustained(hitch.perceivedHitch(snap: snap), text: "Stream stuttering")
-        guard dec.statsOverlayEnabled else { return }
+        guard visible, dec.statsOverlayEnabled else { return }
         // The decoder's live backend survives a silent reconnect; nil renders "-".
-        if let rttInfo = dec.telemetryEstimatedRtt() {
+        if let rttInfo = rtt {
             snap.rttMs = rttInfo.rttMs
             snap.rttVarianceMs = rttInfo.varianceMs
         }

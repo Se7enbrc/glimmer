@@ -46,12 +46,14 @@ interface. macOS 26 or later, Apple Silicon. Free, open source, and always free.
 - **Audio:** stereo, 5.1 and 7.1, with spatial audio and AirPods head tracking.
 - **Controllers:** Xbox, DualSense and other pads, with rumble, gyro, touchpad
   and adaptive triggers.
-- **Mouse and keyboard:** raw aim, a pointer that follows the picture, and
-  composed text through macOS input methods.
+- **Mouse and keyboard:** captured raw aim in fullscreen for every app. The
+  capture shortcut frees the pointer for pointing and macOS text input.
 - **Launcher:** Buttons or Covers for each PC, with controller navigation.
 - **Wi-Fi:** a helper that stops AirDrop's radio from interrupting the stream.
 - **The Mac side:** menu bar, mini player, Wake on LAN, Shortcuts, Siri,
   Spotlight and a `glimmer` command.
+
+Stopping a stream also quits its app on the PC.
 
 No accounts, no analytics: Glimmer talks to your PC, the local network for
 discovery and Wake on LAN, and its update feed and downloads.

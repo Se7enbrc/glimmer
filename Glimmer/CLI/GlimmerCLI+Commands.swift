@@ -113,32 +113,13 @@ extension GlimmerCLI {
         case .streamingUnknownApp:
             running = "the running app"
         }
-        guard command.flags.contains("--force") || confirmQuit(app: running, pc: host.displayName) else {
-            return Exit.failed
-        }
-        return await quitConfirmed(running: running, on: host, model: model)
-    }
-
-    static func quitConfirmed(
-        running: String, on host: Host, model: AppModel,
-        appIsRunning: () -> Bool = { runningGlimmer() != nil },
-        send: ([String: String]) async -> [String: String]? = { await ask($0, within: .seconds(40)) }
-    ) async -> Int32 {
-        // A running Glimmer owns teardown; a missing reply must never race it with /cancel.
-        if appIsRunning() {
-            let request = [CommandChannel.Key.verb: "quit", CommandChannel.Key.host: host.id]
-            guard let reply = await send(request) else {
-                printError("Glimmer didn't finish quitting the app on \(host.displayName). Try again.")
-                return Exit.failed
-            }
-            if reply[CommandChannel.Key.event] == CommandChannel.Event.stopped {
-                printLine("Quit \(running) on \(host.displayName).")
-                return Exit.ok
-            }
-            if reply[CommandChannel.Key.event] != CommandChannel.Event.notMine {
-                printError(reply[CommandChannel.Key.detail] ?? "Couldn't quit \(running) on \(host.displayName).")
-                return Exit.failed
-            }
+        // A Glimmer stream from this PC has to end through the app: a /cancel
+        // from here would look like a host restart and the stream would relaunch.
+        let request = [CommandChannel.Key.verb: "quit", CommandChannel.Key.host: host.id]
+        if runningGlimmer() != nil,
+           await ask(request, within: .seconds(2))?[CommandChannel.Key.event] == CommandChannel.Event.stopped {
+            printLine("Quit \(running) on \(host.displayName).")
+            return Exit.ok
         }
         do {
             try await model.quitRunningApp(on: host)
@@ -148,41 +129,6 @@ extension GlimmerCLI {
             printError(message(for: error, host: host))
             return exitCode(for: error)
         }
-    }
-
-    static func confirmQuit(app: String, pc: String,
-                            interactive: Bool = isatty(STDIN_FILENO) == 1,
-                            answer: () -> String? = { readLine() }) -> Bool {
-        guard interactive else {
-            printError("\(AppModel.quitTitle(app: app, pc: pc)) \(AppModel.quitMessage)"
-                + " Run again with --force to quit.")
-            return false
-        }
-        printError("\(AppModel.quitTitle(app: app, pc: pc)) \(AppModel.quitMessage) [y/N] ", newline: false)
-        return ["y", "yes"].contains(answer()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "")
-    }
-
-    static func stop(
-        _ command: Command, model: AppModel,
-        appIsRunning: () -> Bool = { runningGlimmer() != nil },
-        send: ([String: String]) async -> [String: String]? = { await ask($0, within: .seconds(10)) }
-    ) async -> Int32 {
-        guard let host = resolveHost(command.arguments[0], model: model) else { return Exit.notPaired }
-        guard appIsRunning() else {
-            printError(AppModel.notStreamingMessage(host.displayName))
-            return Exit.failed
-        }
-        let reply = await send([CommandChannel.Key.verb: "stop", CommandChannel.Key.host: host.id])
-        if reply?[CommandChannel.Key.event] == CommandChannel.Event.notMine {
-            printError(AppModel.notStreamingMessage(host.displayName))
-            return Exit.failed
-        }
-        guard reply?[CommandChannel.Key.event] == CommandChannel.Event.stopped else {
-            printError("Couldn't disconnect from \(host.displayName). Choose Stop Streaming in Glimmer.")
-            return Exit.failed
-        }
-        printLine("Disconnected from \(host.displayName). The app is still running on the PC.")
-        return Exit.ok
     }
 
     /// The Glimmer app, if one is running. Every `glimmer` command registers

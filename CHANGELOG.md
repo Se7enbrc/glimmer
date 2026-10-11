@@ -6,17 +6,13 @@
 
 - Quieter, more consistent transitions across the launcher, stream and settings,
   including Reduce Motion.
-- Open a stream, wake a PC, stop streaming or ask to quit a PC app with a
-  `glimmer://` link. Quitting still asks before closing the game.
+- Open a stream, wake a PC or ask to quit a PC app with a `glimmer://` link.
+  Quitting still asks before closing the game.
 - The command line can list PCs and apps and report the current stream as
   versioned JSON for launchers and scripts.
 
 - The full-screen stream slides away when it ends, the way it slid in, instead
   of fading. Reduce Motion keeps the fade.
-- Ending a stream, including cancelling while it connects, leaves the game
-  running on the PC. Choose it again to resume, or use Quit to close it after
-  confirming that unsaved progress may be lost. Glimmer remembers the game until
-  it sees it stop, sees a different game running, or you unpair the PC.
 - Steam shows its own logo in the launcher, the menu and the PC list, instead of
   a generic controller.
 - Hold Menu, Options or Start for a moment, then release it to use the
@@ -39,11 +35,15 @@
   windowed games. Use the capture shortcut (⌃P by default) to send them as keys.
   Captured controls always use physical keys, even with an input method
   selected. Committed text stays ahead of the keys typed after it.
-- The app named “Desktop” uses a pointer that follows the picture in fullscreen.
-  Other apps can switch with the capture shortcut (⌃P by default), which toggles
-  between that pointer and captured game controls.
+- The capture shortcut (⌃P by default) switches fullscreen between captured game
+  controls and a free pointer. Every app starts captured, including Desktop.
+- The readiness chip shows Ready and latency when the PC is reachable.
 
 ### Bug fixes
+
+- Idle controller mouse mode no longer keeps polling, and hidden stream windows
+  skip stats-overlay updates. Audio avoids repeated device queries while sound
+  is playing.
 
 - Controller capture and input sending have dedicated threads to keep controls
   responsive when other apps are busy. Optional diagnostics now measure input

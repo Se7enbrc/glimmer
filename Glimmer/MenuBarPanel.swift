@@ -168,9 +168,6 @@ struct MenuBarPanel: View {
                 actionRow("Mini Player", systemImage: "pip.enter") { model.toggleMiniPlayer() }
             }
             stopRow
-            if let attempt = model.lastLaunchAttempt {
-                QuitRunningAppButton(app: attempt.app, host: attempt.host).buttonStyle(.plain)
-            }
             HStack(spacing: 8) {
                 Image(systemName: "chart.bar.xaxis")
                     .frame(width: 18)
@@ -258,8 +255,7 @@ struct MenuBarPanel: View {
     @ViewBuilder private func primaryControl(host: Host) -> some View {
         switch model.menuBarPrimaryAction {
         case .stream(let app):
-            prominentButton(model.heroTargetApp.map { model.streamActionTitle($0, on: host) }
-                            ?? "Stream \(app)", systemImage: "play.fill") {
+            prominentButton("Stream \(app)", systemImage: "play.fill") {
                 model.streamHeroApp()
                 activate()
             }
@@ -288,15 +284,12 @@ struct MenuBarPanel: View {
     }
 
     @ViewBuilder private func pcRows(host: Host) -> some View {
-        if let running = model.runningApp(on: host) {
-            QuitRunningAppButton(app: running, host: host).buttonStyle(.plain)
-        }
         let apps = host.apps.filter { !$0.hidden }
         if apps.count > 1 || model.hosts.count > 1 { Divider() }
         if apps.count > 1 {
             row("Stream App", systemImage: "square.grid.2x2") {
                 ForEach(apps) { app in
-                    Button(model.streamActionTitle(app, on: host)) {
+                    Button("Stream \(app.name)") {
                         model.requestStream(app: app, on: host); activate()
                     }
                 }

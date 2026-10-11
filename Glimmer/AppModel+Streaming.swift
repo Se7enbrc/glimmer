@@ -24,11 +24,7 @@ extension AppModel {
     /// Prompt at once when the launcher already knows the host is taken; the
     /// launch flow re-checks fresh server-info and prompts if that disagrees.
     func requestStream(app: LibraryApp, on host: Host) {
-        if let message = quitInProgressMessage {
-            showStreamFailure((message, .other), on: host)
-            return
-        }
-        if !isStreaming, !canResume(app, on: host), let live = hostLiveStatus, live.hostID == host.id,
+        if !isStreaming, let live = hostLiveStatus, live.hostID == host.id,
            Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
            let occupant = Self.occupant(of: live.state) {
             pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
@@ -94,7 +90,7 @@ extension AppModel {
         // isStreaming/streamPhase out from under the new one. The UI disables
         // its launch surfaces while a session exists, but a double-click can
         // land before SwiftUI re-renders - this guard is the actual wall.
-        guard !isStreaming, quittingHostID == nil else {
+        guard !isStreaming else {
             Diag.notice("Ignoring stream request (\(app.name) on \(host.displayName, privacy: .private)) "
                 + "- a session is already in flight", "Stream")
             return
@@ -150,13 +146,12 @@ extension AppModel {
 
         Task { [weak self] in
             guard let self else { return }
-            guard quittingHostID == nil, !menuStopInProgress else {
+            guard !menuStopInProgress else {
                 cleanupAfterStream(host: host, caughtError: CancellationError())
                 return
             }
             // The Swift-native engine is the only path.
-            let session = StreamSession(backend: NativeBackend(), makeNetwork: makeNetwork,
-                                        ownershipStore: RunningAppOwnershipStore(hostsDefaults))
+            let session = StreamSession(backend: NativeBackend(), makeNetwork: makeNetwork)
             self.nativeSession = session
             await session.authorizeTakeover(takeoverAuthorized)
             if let launch = cfg.bitrateDecision {
@@ -165,7 +160,7 @@ extension AppModel {
             var caughtError: Error?
             var takeover: TakeoverRequired?
             do {
-                guard quittingHostID == nil, !menuStopInProgress else { throw CancellationError() }
+                guard !menuStopInProgress else { throw CancellationError() }
                 // Provider closures (rather than captured values) so the user
                 // can edit either hotkey in Settings while a stream is live
                 // and the change takes effect on the next keyDown - no need
@@ -227,17 +222,13 @@ extension AppModel {
 
     private func finishStreamSession(_ session: StreamSession, app: LibraryApp, host: Host,
                                      error: Error?, takeover: TakeoverRequired?) async {
-        // Reconnect failures reach the event stream; retain a failed resume's confirmed recovery too.
-        let resumeError = await session.resumeFailure
-        let stoppedByUser = await session.stopCause == .userStopped
         await session.stop()
-        publishDisconnectedApp(app, on: host)
         if let takeover {
             let occupant = host.apps.first(where: { $0.id == takeover.appID })?.name
             pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
             isStreaming = false
         }
-        cleanupAfterStream(host: host, caughtError: error ?? (stoppedByUser ? nil : resumeError))
+        cleanupAfterStream(host: host, caughtError: error)
         if takeover != nil { presentTakeoverAlertIfNeeded() }
     }
 

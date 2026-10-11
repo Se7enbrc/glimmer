@@ -78,6 +78,11 @@ final class InputCore: @unchecked Sendable {
         withLock { current[slot] }
     }
 
+    var needsReconciliation: Bool {
+        !releases.pending.isEmpty || !releases.held.isEmpty
+            || controllerMouseStates.values.contains { $0.isMouse && ($0.buttons != 0 || $0.analog != Self.neutral) }
+    }
+
     func receive(slot: UInt8, buttons: Int32, analog: GamepadAnalog, chordButtons: Int32? = nil,
                  capturedAt: TimeInterval? = nil) {
         withLock {
@@ -107,7 +112,7 @@ final class InputCore: @unchecked Sendable {
             } else if !isMouse {
                 sendController(slot: slot, buttons: mapped, analog: analog)
             }
-            if !activityPublished { activityPublished = true; onActivity?() }
+            if !activityPublished, needsReconciliation { activityPublished = true; onActivity?() }
         }
     }
 

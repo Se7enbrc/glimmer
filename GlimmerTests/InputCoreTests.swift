@@ -16,6 +16,18 @@ struct InputCoreTests {
         return (core, backend)
     }
 
+    @Test func neutralControllerSamplesDoNotWakeMainForReconciliation() {
+        let (core, _) = rig()
+        let updates = OSAllocatedUnfairLock(initialState: 0)
+        core.onActivity = { updates.withLock { $0 += 1 } }
+        for _ in 0..<10 { core.receive(slot: 0, buttons: 0, analog: InputCore.neutral) }
+        #expect(updates.withLock { $0 } == 0)
+        core.receive(slot: 0, buttons: StreamProtocol.A_FLAG, analog: InputCore.neutral)
+        #expect(updates.withLock { $0 } == 1)
+        core.receive(slot: 0, buttons: StreamProtocol.A_FLAG, analog: InputCore.neutral)
+        #expect(updates.withLock { $0 } == 1)
+    }
+
     @MainActor @Test func firstResponderPublishesControllerFocusWithoutAKeyNotification() async {
         let forwarder = InputForwarder()
         let backend = InputRecordingBackend()

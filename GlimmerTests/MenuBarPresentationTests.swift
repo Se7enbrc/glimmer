@@ -54,7 +54,7 @@ struct MenuBarPresentationTests {
         #expect(action(chip: .asleep, waking: true) == .waking)
         #expect(action(chip: .certMismatch) == .pairAgain)
         #expect(action(.error("x"), chip: .certMismatch) == .pairAgain)
-        #expect(action(chip: .streamingElsewhere(appName: "Elden Ring")) == .stream(app: "Desktop"))
+        #expect(action(chip: .ready(rttMs: nil)) == .stream(app: "Desktop"))
         #expect(action(.streaming) == .backToStream)
     }
 
@@ -83,8 +83,8 @@ struct MenuBarPresentationTests {
                                                   capturedAt: now.addingTimeInterval(-age)), now: now)
         }
         #expect(chip(.idle) == .ready(rttMs: 4))
-        #expect(chip(.streamingApp(name: "Elden Ring")) == .streamingElsewhere(appName: "Elden Ring"))
-        #expect(chip(.streamingUnknownApp(id: 9)) == .streamingElsewhere(appName: nil))
+        #expect(chip(.streamingApp(name: "Elden Ring")) == .ready(rttMs: 4))
+        #expect(chip(.streamingUnknownApp(id: 9)) == .ready(rttMs: 4))
         #expect(chip(.certMismatch) == .certMismatch)
         #expect(chip(.asleep) == .asleep)
         #expect(chip(.asleep, age: HostLiveStatus.stale + 1) == .unknown)

@@ -462,7 +462,6 @@ extension AppModel {
         PinnedCertStore.delete(forHostID: host.id, defaults: defaults, base: supportBase)
         defaults.removeObject(forKey: "glimmer.lastConnected.\(host.id)")
         HostCodecPreference.forget(hostID: host.id, defaults: defaults)
-        RunningAppOwnership.clear(pc: host.id, defaults: defaults)
         LauncherStyle.forget(pcID: host.id, defaults: defaults)
         let artCache = supportBase == nil || supportBase == self.supportBase
             ? launcherArtCache : LauncherArtCache(base: supportBase)

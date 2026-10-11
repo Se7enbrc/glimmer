@@ -93,21 +93,20 @@ with a dash. Verbs run headless through the app's own `AppModel`, pairing and
 `NetworkClient` code. `glimmer stream` opens the app if needed and hands it the
 launch over distributed notifications (`CommandChannel`,
 `AppModel+Commands.swift`), so no stream ever runs in the terminal's process;
-`glimmer stop` disconnects that stream. `glimmer quit` confirms, disconnects,
-then cancels the PC app; scripts can confirm with `--force`. Run through a
+`glimmer quit` stops that stream and cancels its app on the PC. Run through a
 symlink, the binary re-execs through its real path so `Bundle.main` and the
 defaults domain resolve. `glimmer://` URLs parse into the same command type and
 dispatch through `AppModel+Commands`; URL quits always use the app's
 confirmation alert. `glimmer status --json` queries the running app over the
 same channel without opening it or contacting the PC.
 
-**Shortcuts, Siri and Spotlight.** `GlimmerIntents.swift` declares four App
-Intents: Stream from PC, Wake PC, Stop streaming and Quit App on PC, with the
-paired PCs as a `PCEntity` query. They run inside the app, once
-`AppModel.forIntent()` has loaded the PCs, and call the launcher's own entry
-points (`requestStream`, `sendWakeAndWait`, `quitRunningApp`), so they share its
-rules and its wording. `GlimmerShortcuts` refreshes the PC names Siri knows
-whenever one is paired, renamed or removed.
+**Shortcuts, Siri and Spotlight.** `GlimmerIntents.swift` declares three App
+Intents: Stream from PC, Wake PC and Quit App on PC, with the paired PCs as a
+`PCEntity` query. They run inside the app, once `AppModel.forIntent()` has
+loaded the PCs, and call the launcher's own entry points (`requestStream`,
+`sendWakeAndWait`, `quitRunningApp`), so they share its rules and its wording.
+`GlimmerShortcuts` refreshes the PC names Siri knows whenever one is paired,
+renamed or removed.
 
 ## The `StreamingBackend` boundary
 
@@ -219,20 +218,13 @@ event continuation so the connection UI lights up live.
 1. **Verify pairing**: `NetworkClient.fetchServerInfo()` (over HTTPS if the PC's
    cert is already pinned, plain HTTP otherwise). If `pairStatus != .paired`,
    throw: the launcher's pair sheet runs first, not us.
-2. **Launch, resume, or confirmed takeover**: idle PCs get `/launch`. A matching
-   app previously launched by this Mac gets `/resume`, with ownership retained
-   across Glimmer sessions in `RunningAppOwnership` with no time limit; missing
-   ownership requires takeover confirmation. Sunshine's `nvhttp.cpp` `resume()`
-   calls `make_launch_session()` with the new mode, FPS and HDR request, and
-   configures the display when no streaming session is active. Another app or
-   unknown ownership needs takeover confirmation, then `/cancel`, an idle poll
-   (up to 5 s for Undo commands), and `/launch`. A failed resume keeps the
-   underlying recovery action, or offers a confirmed quit and relaunch for other
-   failures; a 503 “No running app” launches fresh without confirmation. It
-   never automatically cancels the game, and observing idle or another app in
-   the status poller, or unpairing the PC, clears ownership. Sunshine exposes no
-   owner, so another device relaunching the same game while Glimmer was closed
-   remains undetectable.
+2. **Launch, or cancel and launch**: `launchWithBusyRecovery()` always
+   renegotiates. If the PC is idle we send `/launch`; otherwise `/cancel`, then
+   poll `/serverinfo` until idle (`waitForHostIdle`, up to 5 s), then `/launch`.
+   A stopped session is never resumed later on a different or degraded link.
+   Waiting for idle lets Sunshine finish its Undo commands before the fresh
+   launch applies this stream's configuration. An occupied PC that this session
+   does not own requires takeover confirmation before cancellation.
 3. **Build `BackendStreamConfig`**: `width`, `height`, `fps`, `bitrate`, the
    `supportedVideoFormats` codec bitmask, `colorSpace`, `colorRange`,
    `encryptionFlags`. The remote-input AES key and IV are copied in from the
@@ -273,9 +265,8 @@ Stopping cancels the initial server-info task as well as a pending launch.
 Native connection events carry their originating backend and preserve arrival
 order, so delayed callbacks cannot revive input or stop a replacement
 connection. Per-PC launch epochs serialize late cleanup against the next launch:
-a new launch waits for an explicitly requested quit, while a late response from
-an older epoch cannot overwrite a newer session's ownership. Different PCs
-remain independent.
+a new launch waits for cancellation already in flight, while cleanup from an
+older epoch cannot cancel a newer session. Different PCs remain independent.
 
 Teardown order is load-bearing:
 
@@ -286,15 +277,18 @@ Teardown order is load-bearing:
 3. Main-actor teardowns: `input.detach()`, `videoDecoder.teardown()`,
    `window.close()`, so a dead link cannot hold a frozen full-screen frame.
 4. `audioDecoder.shutdown()` (HAL output teardown).
-5. Close the control client without `/cancel`. The PC app keeps running,
-   including if a pending launch succeeds after disconnect.
+5. Briefly settle any pending launch, send `/cancel` for this session's app, and
+   close the control client. A late successful launch is cancelled again unless
+   a newer launch owns the PC.
 6. Clear `StreamBridgeContext.current`, release the bridge's
    `Unmanaged.passRetained` +1, then `finish()` the event stream.
 7. Release the `beginActivity` power assertion.
 
-An explicit quit first awaits disconnect and any pending launch, then sends
-`/cancel`. A pending launch that exceeds the quit deadline reports failure.
-Ordinary stop, errors, and app termination never send `/cancel`.
+Every stop path uses this teardown, including shortcuts, the menu, window close,
+app termination, CLI and App Intent quits, fatal errors and PC loss.
+Cancellation is bounded and best-effort when the PC is unreachable. A PC-side
+quit or another client's takeover clears session ownership so teardown cannot
+cancel its app.
 
 The bridge holds weak refs to every subsystem, so a callback firing against a
 torn-down subsystem just no-ops. But “no use-after-free” isn't “well-behaved”,
@@ -427,11 +421,11 @@ state between sends at least 1 ms apart on the reliable control channel; edges
 bypass that delay and return local channel acceptance in order.
 
 **Mouse.** Relative capture uses `CGAssociateMouseAndMouseCursorPosition(false)`
-to freeze the OS cursor. Fullscreen starts captured except for an app named
-“Desktop”, matched ignoring case. The capture shortcut toggles relative capture
-and a free absolute pointer in fullscreen too. `PointerMapping` maps the free
-pointer onto the aspect-fitted picture and clamps it to the stream bounds. Raw
-HID deltas come from the underlying `CGEvent`'s `kCGMouseEventDeltaX/Y` fields
+to freeze the OS cursor. Fullscreen starts captured for every app, including
+Desktop. The capture shortcut toggles relative capture and a free absolute
+pointer in fullscreen too. `PointerMapping` maps the free pointer onto the
+aspect-fitted picture and clamps it to the stream bounds. Raw HID deltas come
+from the underlying `CGEvent`'s `kCGMouseEventDeltaX/Y` fields
 (`NSEvent.deltaX/Y` goes to zero when the cursor is frozen). A sub-pixel
 residual accumulator carries fractional motion forward so slow trackpad moves
 don't round to zero. A cursor warp to screen center before associate-false keeps
@@ -514,13 +508,14 @@ to the stream resynchronizes the pad's current state.
 
 **Controller mouse.** Start alone, held longer than 750 ms and released, toggles
 per-slot mouse mode. Mouse and trackpad state live under the `InputCore` lock;
-stick polling runs on a separate user-interactive queue. Mouse edges share the
-release ledger with physical input, and capture timing follows both immediate
-mouse packets and the next stick poll without counting held repeats as captures.
-The shared GameController/HID route keeps short Start presses and stop chords,
-and ignores Home for toggling. Mouse mode neutralizes the virtual pad and
-suppresses controller touch and motion input. It uses the existing backend mouse
-sends at 50 ms intervals: left stick moves, right stick scrolls, A/B/X click
+stick polling runs on a separate user-interactive queue only while a stick
+produces movement or scrolling. Mouse edges share the release ledger with
+physical input, and capture timing follows both immediate mouse packets and the
+next stick poll without counting held repeats as captures. The shared
+GameController/HID route keeps short Start presses and stop chords, and ignores
+Home for toggling. Mouse mode neutralizes the virtual pad and suppresses
+controller touch and motion input. It uses the existing backend mouse sends at
+50 ms intervals: left stick moves, right stick scrolls, A/B/X click
 left/right/middle, L1/R1 click back/forward, and the D-pad scrolls one notch on
 press. The timing, click map, D-pad and cubic pointer curve follow
 [Moonlight's SdlInputHandler](https://github.com/moonlight-stream/moonlight-qt/blob/a57e947d7185fd01384f6973df4df59ae2968d01/app/streaming/input/gamepad.cpp).

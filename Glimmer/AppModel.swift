@@ -150,7 +150,7 @@ final class AppModel {
     var nativeStreamErrorHostID: String?
 
     enum StreamErrorKind {
-        case unreachable, pairing, other, resumeFailed
+        case unreachable, pairing, other
     }
 
     /// Effective HDR-active state from the native engine. True only when the
@@ -191,7 +191,6 @@ final class AppModel {
     @ObservationIgnored var postCommandReply: ([String: String]) -> Void = {
         CommandChannel.post(CommandChannel.reply, $0)
     }
-    var quittingHostID: String?
     struct PendingTakeover: Equatable {
         let app: LibraryApp
         let host: Host

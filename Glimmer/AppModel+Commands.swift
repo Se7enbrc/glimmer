@@ -83,7 +83,6 @@ enum CommandChannel {
         case rejected(String)
         case ready
         case stop
-        case quit(Host)
         case wake(Host)
         case status
         case notMine
@@ -117,14 +116,11 @@ enum CommandChannel {
                 return .rejected("Glimmer doesn't know that PC or app.")
             }
             return .stream(app, on: host, takeover: info[Key.takeover] == "1")
-        case "stop":
+        case "quit":
             return streamingFrom == hostID ? .stop : .notMine
         case "wake":
             guard let host = hosts.first(where: { $0.id == hostID }) else { return .notMine }
             return .wake(host)
-        case "quit":
-            guard let host = hosts.first(where: { $0.id == hostID }) else { return .notMine }
-            return .quit(host)
         default:
             return nil
         }
@@ -149,12 +145,17 @@ extension AppModel {
 
     func handleCommand(_ info: [String: String], fromURL: Bool = false,
                        confirmQuit: ((LibraryApp, Host) -> Void)? = nil) {
+        if fromURL, info[CommandChannel.Key.verb] == "quit",
+           let host = hosts.first(where: { $0.id == info[CommandChannel.Key.host] }) {
+            confirmURLQuit(on: host, confirm: confirmQuit)
+            return
+        }
         // A PC paired from the command line since launch is only in defaults.
         if !fromURL, info[CommandChannel.Key.verb] == "stream" { loadHosts() }
         guard let id = info[CommandChannel.Key.id],
               let decision = CommandChannel.decide(
                 info, handled: &Self.handledCommandIDs, hosts: hosts,
-                streamingFrom: quittingHostID ?? pendingCommandStream?.hostID ?? streamingHostID)
+                streamingFrom: pendingCommandStream?.hostID ?? streamingHostID)
         else { return }
         switch decision {
         case .stream(let app, let host, let takeover):
@@ -183,17 +184,6 @@ extension AppModel {
                     replyToCommand(id, CommandChannel.Event.rejected, "Couldn't read the stream status. Try again.")
                 }
             }
-        case .quit(let host):
-            if fromURL { confirmURLQuit(on: host, confirm: confirmQuit); return }
-            Task {
-                do {
-                    try await quitRunningApp(on: host)
-                    replyToCommand(id, CommandChannel.Event.stopped)
-                } catch {
-                    replyToCommand(id, CommandChannel.Event.rejected,
-                                   Self.quitFailureMessage(for: error, hostName: host.displayName))
-                }
-            }
         case .notMine:
             replyToCommand(id, CommandChannel.Event.notMine)
         }
@@ -202,10 +192,6 @@ extension AppModel {
     /// Retain the route wait so quit can invalidate it before any session exists.
     func beginCommandStream(_ id: String, app: LibraryApp, on host: Host, takeover: Bool,
                             waitForRoute: (@MainActor () async -> Void)? = nil) {
-        if let message = quitInProgressMessage {
-            replyToCommand(id, CommandChannel.Event.rejected, message)
-            return
-        }
         cancelPendingCommandStream()
         let request = PendingCommandStream(id: id, hostID: host.id)
         pendingCommandStream = request
@@ -217,10 +203,6 @@ extension AppModel {
             pendingCommandStream = nil
             guard !isStreaming else {
                 replyToCommand(id, CommandChannel.Event.rejected, CommandChannel.alreadyStreaming)
-                return
-            }
-            if let message = quitInProgressMessage {
-                replyToCommand(id, CommandChannel.Event.rejected, message)
                 return
             }
             stream(app: app, on: host, takeoverAuthorized: takeover)
@@ -267,32 +249,32 @@ extension AppModel {
         return !Task.isCancelled && settled()
     }
 
-    /// A stop only disconnects this Mac; another PC needs no action.
+    /// "notMine" leaves the /cancel to the command line.
     private func stopForCommand(_ id: String) {
         cancelPendingCommandStream()
-        if isStreaming { menuStopInProgress = true }
         guard let session = nativeSession else {
             replyToCommand(id, CommandChannel.Event.notMine)
             return
         }
         Task {
-            guard nativeSession === session else {
-                replyToCommand(id, CommandChannel.Event.notMine)
-                return
-            }
-            let stopped = await stopOwnStream(source: "the command line")
-            replyToCommand(id, stopped ? CommandChannel.Event.stopped : CommandChannel.Event.notMine)
+            let quit = await stopOwnStream(session, source: "the command line")
+            replyToCommand(id, quit ? CommandChannel.Event.stopped : CommandChannel.Event.notMine)
         }
     }
 
-    /// Wait for the teardown before another process can cancel the PC app.
+    /// Our stream ends through stop(), which can't trigger a reconnect. True when
+    /// that quit the app on the PC too: stop() cancels there only when this
+    /// session launched it.
     func stopOwnStream(source: String) async -> Bool {
-        cancelPendingCommandStream()
-        if isStreaming { menuStopInProgress = true }
         guard let session = nativeSession else { return false }
-        Diag.notice("Disconnect requested from \(source)", "Stream")
-        await session.stop()
-        return true
+        return await stopOwnStream(session, source: source)
+    }
+
+    private func stopOwnStream(_ session: StreamSession, source: String) async -> Bool {
+        let owns = await session.ownsHostSession
+        guard nativeSession === session else { return false }
+        stopStreamFromMenu(source: source)
+        return owns
     }
 
     private func replyToCommand(_ id: String, _ event: String, _ detail: String? = nil, extra: [String: String] = [:]) {
@@ -325,9 +307,6 @@ extension AppModel {
         let busy = pendingTakeover.map {
             "\($0.host.displayName) is busy. Choose Quit and Stream in Glimmer, or run again with --force."
         }
-        if nativeStreamErrorKind == .resumeFailed, let failure = nativeStreamError {
-            return failure + " Choose Quit and Relaunch… in Glimmer, or run again with --force."
-        }
         return nativeStreamError ?? busy
     }
 
@@ -346,6 +325,26 @@ extension AppModel {
             "build_ms": legs.buildMs
         ]
         return values.compactMapValues { $0.map { String(Int($0.rounded())) } }
+    }
+
+    /// Ends whatever the PC is running without streaming into it: /cancel
+    /// over the pinned connection, then a fresh readiness poll. Without a pin
+    /// the request refuses before sending anything.
+    func quitRunningApp(on host: Host) async throws {
+        let client = makeNetwork(nativeServerInfo(for: host))
+        defer { restartHostStatusPolling() }
+        do {
+            try await client.cancel()
+            await client.shutdown()
+        } catch StreamError.launchFailed, StreamError.hostRefused {
+            await client.shutdown()
+            // Older Sunshine answers 503 while another device is connected.
+            throw StreamError.launchFailed(
+                "\(host.displayName) wouldn't quit the app. If another device is streaming from it, stop that stream first.")
+        } catch {
+            await client.shutdown()
+            throw error
+        }
     }
 
     /// A failed quit in the launcher and Shortcuts: the refusal reads as the

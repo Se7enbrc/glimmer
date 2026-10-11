@@ -20,7 +20,6 @@ extension AppModel {
 
     func nativeStreamConfig(for host: Host, app: LibraryApp) -> StreamConfig {
         var config = nativeStreamConfig(for: host)
-        config.prefersAbsolutePointer = app.isDesktop
         config.windowTitle = Self.streamWindowTitle(hostName: host.displayName, appName: app.name)
         return config
     }

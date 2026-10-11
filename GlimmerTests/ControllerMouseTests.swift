@@ -25,6 +25,25 @@ struct ControllerMouseTests {
         forwarder.routeControllerMouse(slot: slot, buttons: 0, analog: neutral, chordHeld: false, now: now + 0.751)
     }
 
+    @Test func idleMouseModeSleepsAndMovementRearmsPolling() {
+        let (forwarder, backend) = rig()
+        defer { forwarder.detach() }
+        toggle(forwarder)
+        #expect(forwarder.controllerMouseStates[0]?.isMouse == true)
+        #expect(forwarder.controllerMouseTask == nil)
+        var analog = neutral
+        analog.leftStickX = 30_000
+        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false)
+        #expect(forwarder.controllerMouseTask != nil)
+        forwarder.pollControllerMouse()
+        #expect(!backend.mouseMoves.isEmpty)
+        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: neutral, chordHeld: false)
+        #expect(forwarder.controllerMouseTask == nil)
+        analog.rightStickY = 30_000
+        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false)
+        #expect(forwarder.controllerMouseTask != nil)
+    }
+
     @Test func togglesOnlyOnReleaseAfterMoonlightsThreshold() {
         var state = ControllerMouseState()
         let toggled1 = state.update(buttons: start, analog: neutral, chordHeld: false, now: 0)

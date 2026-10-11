@@ -139,7 +139,13 @@ extension InputCore {
     }
 
     func updateControllerMousePolling() {
-        guard snapshot.ready, snapshot.focused, controllerMouseStates.values.contains(where: { $0.isMouse }) else {
+        let moving = controllerMouseStates.values.contains { state in
+            state.isMouse && (Self.controllerMouseDelta(state.analog.leftStickX) != 0
+                || Self.controllerMouseDelta(state.analog.leftStickY) != 0
+                || Self.controllerMouseDelta(state.analog.rightStickX) != 0
+                || Self.controllerMouseDelta(state.analog.rightStickY) != 0)
+        }
+        guard snapshot.ready, snapshot.focused, moving else {
             controllerMouseTimer?.cancel()
             controllerMouseTimer = nil
             return

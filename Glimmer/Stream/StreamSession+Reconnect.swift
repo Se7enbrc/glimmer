@@ -108,10 +108,8 @@ extension StreamSession {
     /// The PC ended the session on purpose: end it like a clean close, with no
     /// error banner and no /launch.
     private func endStreamClosedByPC() async {
-        // A PC-side quit or takeover invalidates this Mac's remembered app.
-        if let server = reconnectServer {
-            RunningAppOwnership.clear(pc: server.uniqueId, defaults: ownershipStore.defaults)
-        }
+        // Nothing of ours left to /cancel, and a /cancel would quit whatever
+        // another device is streaming now.
         ownsHostSession = false
         hostSessionClientID = nil
         bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: 0))
@@ -217,8 +215,7 @@ extension StreamSession {
     /// What a failed attempt tells the user if the episode gives up. A deadline the PC never answered
     /// inside means the PC is gone (asleep, off the network), not an app slow to start.
     static func reconnectAttemptError(_ error: Error, pcAnswered: Bool) -> StreamError? {
-        let cause = (error as? ResumeFailed)?.underlying ?? error
-        guard let streamError = cause as? StreamError else { return nil }
+        guard let streamError = error as? StreamError else { return nil }
         if case .hostTimedOut = streamError, !pcAnswered {
             return .hostUnreachable("the PC didn't answer during the reconnect")
         }
@@ -291,7 +288,7 @@ extension StreamSession {
                 config: config, launch: launch, server: serverInfo)
             // duringReconnect: connectBackend's failure path must NOT run the
             // full stop() (that would blank the frozen frame + bounce to the
-            // launcher). It disconnects the failed transport and throws so we retry.
+            // launcher) - it cancels the failed launch and throws so we retry.
             try await connectBackend(
                 serverInfo: serverInfo, launch: launch, backendConfig: backendConfig,
                 setup: (win, inp, dec), network: net, duringReconnect: true, deadline: deadline)
@@ -372,8 +369,9 @@ extension StreamSession {
         if self.network === net { self.network = nil }
     }
 
-    /// Keep the window, decoders, bridge, event stream and power assertion while replacing
-    /// the transport. The PC app stays running so the new connection can resume it.
+    /// Keep the window, decoders, bridge, event stream and power assertion while replacing transport.
+    /// Do not cancel here: the old connection is gone and Sunshine may have restarted its session.
+    /// launchWithBusyRecovery cancels and launches on the new client after checking ownership.
     private func teardownConnectionForReconnect() async {
         backend.stopConnection()
         if let net = network { await net.shutdown() }

@@ -60,6 +60,30 @@ struct StreamViewCaptureTests {
         backend.pointer.filter { if case .button = $0 { true } else { false } }
     }
 
+    @Test(arguments: ["Desktop", "desktop", "Hades"])
+    func everyAppBuildsWithRelativeFullscreenCapture(name: String) throws {
+        let model = AppModel()
+        let app = LibraryApp(id: 1, name: name, hdr: false, hidden: false)
+        let host = Host(id: "pointer-pc", name: "Tower", customName: nil, localAddress: nil,
+                        manualAddress: nil, apps: [app], lastConnected: nil, serverCertPEM: nil,
+                        appVersion: nil, macAddress: nil)
+        var config = model.nativeStreamConfig(for: host, app: app)
+        config.displayMode = .fullScreen
+        let session = StreamSession(backend: InputRecordingBackend())
+        let setup = session.buildStreamSubsystems(.init(
+            config: config, negotiatedBitrateKbps: config.bitrateKbps,
+            initialStatsOverlay: false, initialStatsCorner: .topLeft,
+            quitHotkeyProvider: { .defaultQuit }, statsHotkeyProvider: { .defaultStats },
+            bookmarkHotkeyProvider: { .defaultQuit }, releasePointerHotkeyProvider: { .defaultQuit },
+            miniPlayerHotkeyProvider: { .defaultQuit }, controllerQuitChordProvider: { .none },
+            customControllerChordProvider: { [] }, onBackgroundedChanged: nil, onMiniPlayerChanged: nil,
+            onCancelConnect: nil))
+        defer { setup.1.detach(); setup.2.teardown(); setup.0.close() }
+        #expect(setup.1.fullscreenRelativePointer)
+        #expect(setup.0.fullscreenRelativePointer)
+        #expect(!setup.1.isWindowMode)
+    }
+
     @Test func hoverGrabsAndAHeldEscLatchHoldsItOffUntilThePointerLeaves() throws {
         let (forwarder, _, edges) = windowed()
         defer { forwarder.detach() }

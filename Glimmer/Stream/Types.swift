@@ -93,8 +93,6 @@ public struct StreamConfig: Sendable {
     /// screen (a borderless cover has no title bar).
     public var windowTitle: String = ""
 
-    public var prefersAbsolutePointer: Bool = false
-
     /// Moonlight's "play audio on host PC": the PC keeps its own sound and
     /// this Mac silences the stream (not the system volume).
     public var playAudioOnHost: Bool = false

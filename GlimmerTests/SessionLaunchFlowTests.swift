@@ -55,10 +55,7 @@ struct SessionLaunchFlowTests {
         on sunshine: FakeSunshine, server: ServerInfo, appID: Int = 7,
         prepare: (StreamSession) async -> Void = { _ in }
     ) async throws -> (StreamSession, LaunchResponse) {
-        let store = try IsolatedStore(UUID().uuidString)
-        defer { store.remove() }
-        let session = StreamSession(backend: InputRecordingBackend(),
-                                    ownershipStore: RunningAppOwnershipStore(store.defaults))
+        let session = StreamSession(backend: InputRecordingBackend())
         let network = sunshine.client(server)
         await session.prepareLaunchFlow(server: server)
         await prepare(session)
@@ -79,15 +76,18 @@ struct SessionLaunchFlowTests {
         #expect(await session.hostSessionAppID == 7)
     }
 
-    @Test func ourOwnRunningGameResumesWithTheNewMode() async throws {
+    /// Our own game still running is cancelled and launched fresh, so the PC renegotiates this
+    /// stream's mode instead of resuming the old one.
+    @Test func ourOwnRunningGameIsRelaunchedNeverResumed() async throws {
         let sunshine = FakeSunshine.scripted([
-            "serverinfo": [SessionFlow.running(7)], "resume": [SessionFlow.launched]
+            "serverinfo": [SessionFlow.running(7), SessionFlow.idle],
+            "cancel": [SessionFlow.cancelled], "launch": [SessionFlow.launched]
         ])
         _ = try await launch(on: sunshine, server: SessionFlow.pairedPC()) {
             await $0.claimPC(client: FakeSunshine.clientUniqueID, appID: 7)
         }
-        #expect(sunshine.paths == ["serverinfo", "resume"])
-        #expect(sunshine.requests.last?.query["mode"] == "1920x1080x60")
+        #expect(sunshine.paths == ["serverinfo", "cancel", "serverinfo", "launch"])
+        #expect(!sunshine.paths.contains("resume"))
     }
 
     @Test func anotherDevicesSessionNeedsATakeoverBeforeAnythingIsCancelled() async throws {
@@ -113,37 +113,39 @@ struct SessionLaunchFlowTests {
         #expect(await session.hostSessionAppID == 7)
     }
 
-    @Test func aRefusedLaunchIsReportedWithoutDestructiveRecovery() async throws {
+    /// A refused /launch gets one recovery: a fresh look at the PC, /cancel, wait for idle, /launch.
+    @Test func aRefusedLaunchRecoversWithCancelThenLaunch() async throws {
         let sunshine = FakeSunshine.scripted([
-            "serverinfo": [SessionFlow.idle], "launch": [.failure(.hostRefused(message: "Busy", code: 503))]
+            "serverinfo": [SessionFlow.idle],
+            "launch": [.failure(.hostRefused(message: "Busy", code: 503)), SessionFlow.launched],
+            "cancel": [SessionFlow.cancelled]
         ])
-        await #expect(throws: StreamError.self) {
-            _ = try await launch(on: sunshine, server: SessionFlow.pairedPC())
-        }
-        #expect(sunshine.paths == ["serverinfo", "launch"])
+        let (session, response) = try await launch(on: sunshine, server: SessionFlow.pairedPC())
+        #expect(sunshine.paths == ["serverinfo", "launch", "serverinfo", "cancel", "serverinfo", "launch"])
+        #expect(response.sessionURL == SessionFlow.sessionURL)
+        #expect(await session.ownsHostSession)
     }
 
-    @Test func aFailedResumeNeverCancelsTheGameAndOffersConfirmedRelaunch() async throws {
+    @Test func aLaunchThatFailsTwiceSurfacesTheRecoveryFailure() async throws {
         let sunshine = FakeSunshine.scripted([
-            "serverinfo": [SessionFlow.running(7)], "resume": [.failure(.hostTimedOut)]
+            "serverinfo": [SessionFlow.idle, .failure(.hostUnreachable("Connection closed"))],
+            "launch": [.failure(.hostTimedOut)]
         ])
-        let error = await #expect(throws: ResumeFailed.self) {
-            _ = try await launch(on: sunshine, server: SessionFlow.pairedPC()) {
-                await $0.claimPC(client: FakeSunshine.clientUniqueID, appID: 7)
-            }
+        let error = await #expect(throws: StreamError.self) {
+            _ = try await launch(on: sunshine, server: SessionFlow.pairedPC())
         }
-        #expect(sunshine.paths == ["serverinfo", "resume"])
-        let failure = AppModel.connectFailure(for: try #require(error), hostName: "Tower")
-        #expect(failure.message == AppModel.connectFailure(for: StreamError.hostTimedOut, hostName: "Tower").message)
-        #expect(ConnectBannerAction(kind: failure.kind, canWake: false) == .quitAndRelaunch)
+        guard case .hostUnreachable = error else {
+            Issue.record("expected the recovery's unreachable failure, got \(String(describing: error))")
+            return
+        }
+        // The failed look at the PC may add a plain probe; it must not go on to /cancel or /launch.
+        #expect(Array(sunshine.paths.prefix(3)) == ["serverinfo", "launch", "serverinfo"])
+        #expect(sunshine.paths.filter { $0 != "serverinfo" } == ["launch"])
     }
 
     @Test func anExpiredLaunchBudgetSendsNothing() async throws {
         let sunshine = FakeSunshine.scripted([:])
-        let store = try IsolatedStore(UUID().uuidString)
-        defer { store.remove() }
-        let session = StreamSession(backend: InputRecordingBackend(),
-                                    ownershipStore: RunningAppOwnershipStore(store.defaults))
+        let session = StreamSession(backend: InputRecordingBackend())
         await session.prepareLaunchFlow(server: SessionFlow.pairedPC())
         await #expect(throws: StreamError.self) {
             _ = try await session.launchWithDeadline(

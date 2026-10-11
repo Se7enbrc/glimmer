@@ -46,10 +46,6 @@ extension AppModel {
     nonisolated static func connectFailure(
         for error: Error, hostName: String
     ) -> (message: String, kind: StreamErrorKind) {
-        if let resume = error as? ResumeFailed {
-            let failure = connectFailure(for: resume.underlying, hostName: hostName)
-            return (failure.message, failure.kind == .other ? .resumeFailed : failure.kind)
-        }
         let unreachable = (message: unreachableMessage(hostName), kind: StreamErrorKind.unreachable)
         // The control layer always throws StreamError; anything else is most likely a reach failure.
         guard let streamError = error as? StreamError else { return unreachable }
