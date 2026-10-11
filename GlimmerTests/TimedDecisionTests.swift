@@ -161,11 +161,12 @@ struct TimedPresentPathTests {
     private let recorder = InputRecordingBackend()
 
     /// Decode fresh and the screen frozen (or fresh) for the whole test, whatever the real clock does.
+    /// A frozen present sits just after boot: an hour before uptime is negative on a fresh runner.
     private func decoder(presenting: Bool) -> VideoDecoder {
         let decoder = VideoDecoder()
         decoder.backend = recorder
         decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() + 3_600
-        decoder.statsCollector.lastPresentTime = CACurrentMediaTime() + (presenting ? 3_600 : -3_600)
+        decoder.statsCollector.lastPresentTime = presenting ? CACurrentMediaTime() + 3_600 : 1
         return decoder
     }
 
