@@ -63,7 +63,15 @@ extension StreamWindow {
     /// once per person, not once per launch.
     func showCaptureHintIfBudgetAllows() {
         guard HintBudget.windowCapture.claimShow() else { return }
-        captureHintBanner.setText("Hold Esc to free the pointer")
+        showPointerHint("Hold Esc to free the pointer")
+    }
+
+    func showPointerModeHint(captured: Bool) {
+        showPointerHint(captured ? "Pointer captured" : "Pointer follows the picture")
+    }
+
+    private func showPointerHint(_ text: String) {
+        captureHintBanner.setText(text)
         captureHintBanner.setVisible(true)
         // ~4s all in: 0.2s fade in, 3.6s legible, 0.2s fade out. The
         // generation stamp means a re-capture inside that window re-shows the

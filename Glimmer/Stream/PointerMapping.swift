@@ -1,24 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  PointerMapping.swift
-//
-//  Pure view-point → stream-pixel math for Window mode's absolute pointer. In
-//  a window the pointer is a normal Mac pointer and the host cursor tracks it
-//  1:1, so every motion, click and drag has to say WHERE it is rather than how
-//  far it moved - and that answer is a coordinate conversion with no AppKit,
-//  no window and no screen in it. Kept here so it can be unit-tested directly;
-//  InputForwarder+WindowPointer.swift feeds it the live view bounds and the
-//  stream's pixel size and hands the result to `sendMousePosition`.
-//
-//  Full screen never calls this: relative aim there sends deltas, exactly as
-//  it always has.
-//
+// Absolute pointer coordinates follow the aspect-fitted picture in any presentation.
 
 import CoreGraphics
 
 enum PointerMapping {
+    static func usesAbsolutePointer(windowed: Bool, captured: Bool, fullscreenRelative: Bool) -> Bool {
+        !captured && (windowed || !fullscreenRelative)
+    }
 
     /// A point in the host's stream-pixel space, with the reference frame it
     /// was measured against. Maps 1:1 onto the four arguments of

@@ -16,6 +16,7 @@
 		CA2026101100000000000001 /* ControllerForwarder+Mouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2026101100000000000002 /* ControllerForwarder+Mouse.swift */; };
 		2CFEE7336CB443DD9C058E88 /* VideoDecoder+Color.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */; };
 		06C9C49668CE4796823B104C /* VideoDecoder+ColorProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */; };
+		DEC0DE202610110A00000001 /* StreamInputView+Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610110A00000002 /* StreamInputView+Text.swift */; };
 		DA2026100900000000000021 /* AWDLProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000022 /* AWDLProcess.swift */; };
 		DA2026100900000000000023 /* AWDLProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000022 /* AWDLProcess.swift */; };
 		DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */; };
@@ -400,6 +401,7 @@
 		DEC0DE202609252800000001 /* InputBatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609252800000002 /* InputBatcherTests.swift */; };
 		DEC0DE202610100800000001 /* StreamViewPointerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100800000002 /* StreamViewPointerTests.swift */; };
 		DEC0DE202610100800000011 /* StreamViewKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100800000012 /* StreamViewKeyboardTests.swift */; };
+		A97D3C7B129E4D719A03C100 /* StreamTextRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97D3C7B129E4D719A03C200 /* StreamTextRoutingTests.swift */; };
 		DEC0DE202610100800000021 /* StreamViewCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610100800000022 /* StreamViewCaptureTests.swift */; };
 		DEC0DE202609221000000003 /* RtspClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221000000004 /* RtspClientTests.swift */; };
 		DEC0DE20261010E100000001 /* FakeSunshine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000002 /* FakeSunshine.swift */; };
@@ -536,6 +538,7 @@
 		CA2026101100000000000002 /* ControllerForwarder+Mouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+Mouse.swift"; sourceTree = "<group>"; };
 		2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Color.swift"; sourceTree = "<group>"; };
 		D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+ColorProbe.swift"; sourceTree = "<group>"; };
+		DEC0DE202610110A00000002 /* StreamInputView+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "StreamInputView+Text.swift"; path = "Stream/StreamInputView+Text.swift"; sourceTree = "<group>"; };
 		DA2026100900000000000022 /* AWDLProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLProcess.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperManagerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000002 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
@@ -940,6 +943,7 @@
 		DEC0DE202609252800000002 /* InputBatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputBatcherTests.swift; sourceTree = "<group>"; };
 		DEC0DE202610100800000002 /* StreamViewPointerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamViewPointerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202610100800000012 /* StreamViewKeyboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamViewKeyboardTests.swift; sourceTree = "<group>"; };
+		A97D3C7B129E4D719A03C200 /* StreamTextRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamTextRoutingTests.swift; sourceTree = "<group>"; };
 		DEC0DE202610100800000022 /* StreamViewCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamViewCaptureTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221000000004 /* RtspClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RtspClientTests.swift"; sourceTree = "<group>"; };
 		DEC0DE20261010E100000002 /* FakeSunshine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeSunshine.swift; sourceTree = "<group>"; };
@@ -1370,6 +1374,7 @@
 				447FF92C9458E21549E4965D /* HostStatusPoller.swift */,
 				398ABCA94CDDF4D5B2770B8F /* KeyboardScanMap.swift */,
 				C426DA508131A2723B2CF131 /* StreamInputView.swift */,
+				DEC0DE202610110A00000002 /* StreamInputView+Text.swift */,
 				B1755AEB5F01C33DF87D6FCE /* ControllerForwarder.swift */,
 				ABCD20260610000000004D03 /* ControllerForwarder+QuitChord.swift */,
 				ABCD20260609000000001801 /* ControllerBattery.swift */,
@@ -1519,6 +1524,7 @@
 				DEC0DE202609252800000002 /* InputBatcherTests.swift */,
 				DEC0DE202610100800000002 /* StreamViewPointerTests.swift */,
 				DEC0DE202610100800000012 /* StreamViewKeyboardTests.swift */,
+				A97D3C7B129E4D719A03C200 /* StreamTextRoutingTests.swift */,
 				DEC0DE202610100800000022 /* StreamViewCaptureTests.swift */,
 				DEC0DE202609221000000004 /* RtspClientTests.swift */,
 				DEC0DE20261010E100000002 /* FakeSunshine.swift */,
@@ -2001,6 +2007,7 @@
 				F5951726E170AD3E1F645B80 /* HostStatusPoller.swift in Sources */,
 				14DC834601C3BEE65839AC02 /* KeyboardScanMap.swift in Sources */,
 				5E6BA9AE8CE78DA47BAA02C4 /* StreamInputView.swift in Sources */,
+				DEC0DE202610110A00000001 /* StreamInputView+Text.swift in Sources */,
 				2025092633A13B85B01C5E46 /* ControllerForwarder.swift in Sources */,
 				ABCD20260610000000004D04 /* ControllerForwarder+QuitChord.swift in Sources */,
 				ABCD20260609000000001802 /* ControllerBattery.swift in Sources */,
@@ -2140,6 +2147,7 @@
 				DEC0DE202609252800000001 /* InputBatcherTests.swift in Sources */,
 				DEC0DE202610100800000001 /* StreamViewPointerTests.swift in Sources */,
 				DEC0DE202610100800000011 /* StreamViewKeyboardTests.swift in Sources */,
+				A97D3C7B129E4D719A03C100 /* StreamTextRoutingTests.swift in Sources */,
 				DEC0DE202610100800000021 /* StreamViewCaptureTests.swift in Sources */,
 				DEC0DE202609221000000003 /* RtspClientTests.swift in Sources */,
 				DEC0DE20261010E100000001 /* FakeSunshine.swift in Sources */,

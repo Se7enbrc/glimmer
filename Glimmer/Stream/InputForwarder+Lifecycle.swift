@@ -100,7 +100,8 @@ extension InputForwarder {
         installFocusObservers(for: window)
         installGestureSuppressionMonitor()
         installCommandKeyUpMonitor()
-        if window.isKeyWindow, !isWindowMode {
+        updateSystemKeyCapture()
+        if window.isKeyWindow, !isWindowMode, fullscreenRelativePointer {
             enterCapturedMode()
         }
         // Window mode grabs the pointer by hover, and the bring-up made the
@@ -130,6 +131,7 @@ extension InputForwarder {
         // via `setCursorHidden(false)`, so the user is never left with an
         // invisible cursor after teardown.
         exitCapturedMode()
+        GlobalHotKeys.setDisabled(false)
         // An Esc hold can be mid-dwell at teardown. No-op in full screen,
         // where nothing ever arms it.
         cancelEscapeHold()
@@ -145,6 +147,7 @@ extension InputForwarder {
         // The view survives in the closing window during its fade. Stop late
         // cursor updates from selecting its transparent image after teardown.
         inputView?.setTransparentCursorEnabled(false)
+        if let inputView, inputView.hasMarkedText() { inputView.cancelComposition() }
         inputView?.delegate = nil
         inputView = nil
         window = nil
@@ -171,6 +174,7 @@ extension InputForwarder {
         if !ready {
             releaseControllerTouches()
             suspendControllerMouse()
+            if let inputView, inputView.hasMarkedText() { inputView.cancelComposition() }
         }
         isReady = ready
         updateControllerBackgroundEvents()

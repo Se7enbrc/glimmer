@@ -32,7 +32,134 @@ struct StreamViewKeyboardTests {
         forwarder.isReady = true
         let view = StreamInputView()
         view.delegate = forwarder
+        view.interpretTextEvent = { view, event in
+            view.insertText(event.characters ?? "", replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
         return (forwarder, backend, view)
+    }
+
+    @Test func directLayoutCharactersKeepTheirPhysicalKeys() throws {
+        let (forwarder, backend, view) = ready()
+        forwarder.modifiersNeedResync = false
+        for text in ["a", "q", "ж", "あ"] {
+            view.keyDown(with: try key(.keyDown, kVK_ANSI_A, chars: text))
+            view.keyUp(with: try key(.keyUp, kVK_ANSI_A, chars: text, at: Double(backend.keyboard.count + 2)))
+        }
+        #expect(backend.texts.isEmpty)
+        #expect(backend.keyboard.map(\.keyCode) == Array(repeating: wire(0x41), count: 8))
+    }
+
+    @Test func unmappedPrintableInputUsesTextWhileEmptyInputFallsBack() async throws {
+        let (forwarder, backend, view) = ready()
+        view.keyDown(with: try key(.keyDown, 255, chars: "字"))
+        view.keyUp(with: try key(.keyUp, 255, chars: "字", at: 2))
+        await forwarder.pendingTextTask?.value
+        #expect(backend.texts == ["字"])
+        #expect(backend.keyboard.isEmpty)
+        view.keyDown(with: try key(.keyDown, kVK_Function))
+        #expect(forwarder.loggedUnmappedKeyCodes == [UInt16(kVK_Function)])
+    }
+
+    @Test func textDecisionDistinguishesCompositionAndUnmappedInput() throws {
+        let event = try key(.keyDown, kVK_ANSI_E, chars: "e")
+        #expect(StreamTextInput.usesPhysicalKey(text: "e", event: event, composing: false))
+        #expect(!StreamTextInput.usesPhysicalKey(text: "e", event: event, composing: true))
+        #expect(!StreamTextInput.usesPhysicalKey(text: "é", event: event, composing: false))
+        #expect(!StreamTextInput.usesPhysicalKey(text: "字", event: nil, composing: false))
+        let unmapped = try key(.keyDown, 255, chars: "字")
+        #expect(!StreamTextInput.usesPhysicalKey(text: "字", event: unmapped, composing: false))
+    }
+
+    @Test func markedInputStaysLocalUntilOneCommit() async throws {
+        let (forwarder, backend, view) = ready()
+        forwarder.modifiersNeedResync = false
+        view.interpretTextEvent = { view, _ in
+            view.setMarkedText(NSAttributedString(string: "ni"), selectedRange: NSRange(location: 2, length: 0),
+                               replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
+        view.keyDown(with: try key(.keyDown, kVK_ANSI_N, chars: "n"))
+        view.keyUp(with: try key(.keyUp, kVK_ANSI_N, chars: "n", at: 2))
+        #expect(view.hasMarkedText())
+        #expect(view.markedRange() == NSRange(location: 0, length: 2))
+        #expect(backend.keyboard.isEmpty)
+        #expect(backend.texts.isEmpty)
+        view.interpretTextEvent = { view, _ in
+            view.insertText(NSAttributedString(string: "你"), replacementRange: NSRange(location: 0, length: 2))
+        }
+        view.keyDown(with: try key(.keyDown, kVK_Return, chars: "\r", at: 3))
+        view.keyUp(with: try key(.keyUp, kVK_Return, chars: "\r", at: 4))
+        #expect(!view.hasMarkedText())
+        await forwarder.pendingTextTask?.value
+        #expect(backend.texts == ["你"])
+        #expect(backend.keyboard.isEmpty)
+    }
+
+    @Test func deadKeyCompositionAndCharacterViewerSendOnlyText() async throws {
+        let (forwarder, backend, view) = ready()
+        defer { forwarder.isReady = false }
+        view.setMarkedText("´", selectedRange: NSRange(location: 1, length: 0),
+                           replacementRange: NSRange(location: NSNotFound, length: 0))
+        view.interpretTextEvent = { view, _ in
+            view.insertText("é", replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
+        view.keyDown(with: try key(.keyDown, kVK_ANSI_E, chars: "é"))
+        view.insertText("\u{1F642}", replacementRange: NSRange(location: NSNotFound, length: 0))
+        await forwarder.pendingTextTask?.value
+        #expect(backend.texts == ["é", "\u{1F642}"])
+        #expect(backend.keyboard.isEmpty)
+    }
+
+    @Test func shortcutsBypassTextInterpretation() throws {
+        let (forwarder, backend, view) = ready()
+        forwarder.modifiersNeedResync = false
+        let calls = Tally()
+        view.interpretTextEvent = { _, _ in calls.calls += 1 }
+        view.keyDown(with: try key(.keyDown, kVK_ANSI_A, mods: [.control], chars: "a"))
+        #expect(calls.calls == 0)
+        #expect(backend.keyboard.last?.keyCode == wire(0x41))
+    }
+
+    @Test func escapeCancelsCompositionWithoutArmingThePointerHold() throws {
+        let (forwarder, backend, view) = ready()
+        forwarder.isWindowMode = true
+        view.setMarkedText("ni", selectedRange: NSRange(location: 2, length: 0),
+                           replacementRange: NSRange(location: NSNotFound, length: 0))
+        view.interpretTextEvent = { view, _ in view.doCommand(by: #selector(NSResponder.cancelOperation(_:))) }
+        view.keyDown(with: try key(.keyDown, kVK_Escape, chars: "\u{1b}"))
+        #expect(!view.hasMarkedText())
+        #expect(forwarder.escapeHoldTask == nil)
+        #expect(backend.keyboard.isEmpty)
+        #expect(backend.texts.isEmpty)
+    }
+
+    @Test func compositionCancellationAndClosedGateNeverCommit() {
+        let (forwarder, backend, view) = ready()
+        forwarder.inputView = view
+        view.setMarkedText("かな", selectedRange: NSRange(location: 2, length: 0),
+                           replacementRange: NSRange(location: NSNotFound, length: 0))
+        forwarder.windowResignedKey()
+        #expect(!view.hasMarkedText())
+        #expect(backend.texts.isEmpty)
+        forwarder.isReady = false
+        view.insertText("字", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(backend.texts.isEmpty)
+    }
+
+    @Test func unmarkCommitsOnlyOnceAndRangesUseUTF16() async throws {
+        let (forwarder, backend, view) = ready()
+        defer { forwarder.isReady = false }
+        view.setMarkedText("\u{1F642}", selectedRange: NSRange(location: 2, length: 0),
+                           replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(view.markedRange().length == 2)
+        #expect(view.selectedRange().location == 2)
+        var actual = NSRange()
+        #expect(view.attributedSubstring(forProposedRange: NSRange(location: 0, length: 100),
+                                         actualRange: &actual)?.string == "\u{1F642}")
+        #expect(actual == NSRange(location: 0, length: 2))
+        view.unmarkText()
+        view.unmarkText()
+        await forwarder.pendingTextTask?.value
+        #expect(backend.texts == ["\u{1F642}"])
     }
 
     @Test func aKeyGoesOutWithItsModifiersAfterTheModifierItself() throws {
@@ -64,8 +191,9 @@ struct StreamViewKeyboardTests {
     @Test func modifierByteFoldsCommandOnlyWhileItIsForwarded() {
         let forwarder = InputForwarder()
         #expect(forwarder.modifierByte(from: [.control, .shift, .option, .command]) == 0x07)
+        let window = PointerFocusTestWindow()
+        forwarder.window = window
         forwarder.captureSysKeys = true
-        forwarder.isMouseCaptured = true
         #expect(forwarder.modifierByte(from: [.control, .shift, .option, .command]) == 0x0F)
         #expect(forwarder.modifierByte(from: [.capsLock, .function]) == 0)
     }
@@ -113,11 +241,11 @@ struct StreamViewKeyboardTests {
                                                modifiers: Int8(StreamProtocol.MODIFIER_CTRL), flags: 0))
     }
 
-    @Test func pointerChordIsAKeyInFullScreen() throws {
+    @Test func pointerChordIsConsumedInFullScreen() throws {
         let (forwarder, backend, view) = ready()
         view.keyDown(with: try key(.keyDown, kVK_ANSI_P, mods: [.control], chars: "p"))
-        #expect(forwarder.heldKeys == [0x50])
-        #expect(backend.keyboard.last?.keyCode == wire(0x50))
+        #expect(forwarder.heldKeys.isEmpty)
+        #expect(backend.keyboard.isEmpty)
     }
 
     @Test func miniPlayerChordToggles() throws {
@@ -136,8 +264,9 @@ struct StreamViewKeyboardTests {
         let (forwarder, backend, view) = ready()
         let commandW = try key(.keyDown, kVK_ANSI_W, mods: [.command], chars: "w")
         #expect(!view.performKeyEquivalent(with: commandW))
+        let window = PointerFocusTestWindow()
+        forwarder.window = window
         forwarder.captureSysKeys = true
-        forwarder.isMouseCaptured = true
         #expect(view.performKeyEquivalent(with: commandW))
         #expect(backend.keyboard.last?.keyCode == wire(0x57))
         #expect(backend.keyboard.last?.modifiers == Int8(StreamProtocol.MODIFIER_META))
@@ -198,6 +327,9 @@ struct BookmarkChordTelemetryTests {
         forwarder.onBookmarkHotkey = { marks.calls += 1 }
         let view = StreamInputView()
         view.delegate = forwarder
+        view.interpretTextEvent = { view, event in
+            view.insertText(event.characters ?? "", replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
         view.keyDown(with: try #require(NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: [.control], timestamp: 1, windowNumber: 0,
             context: nil, characters: "b", charactersIgnoringModifiers: "b", isARepeat: false,

@@ -25,6 +25,14 @@
 - Use a controller to choose apps and switch PCs in the launcher. The d-pad or
   left stick moves focus, A or Cross opens the selection, and B or Circle
   dismisses a dialog. Raw-HID-only controllers don't navigate the launcher yet.
+- Type composed text with macOS input methods and the character viewer. Accents
+  and Option-letter combinations compose while the pointer is free, including in
+  windowed games. Use the capture shortcut (⌃P by default) to send them as keys.
+  Captured controls always use physical keys, even with an input method
+  selected. Committed text stays ahead of the keys typed after it.
+- The app named “Desktop” uses a pointer that follows the picture in fullscreen.
+  Other apps can switch with the capture shortcut (⌃P by default), which toggles
+  between that pointer and captured game controls.
 
 ### Bug fixes
 

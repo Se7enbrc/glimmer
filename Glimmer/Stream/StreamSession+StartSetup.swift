@@ -124,6 +124,7 @@ extension StreamSession {
         }
         let inp = InputForwarder()
         inp.onControllerMouseChanged = { [weak win] message in win?.showControllerMouseMode(message) }
+        inp.fullscreenRelativePointer = !config.prefersAbsolutePointer
         // Hotkey chords need to be readable LIVE on every keyDown so
         // changes in Settings take effect without restarting the
         // stream. Capture-at-attach silently strands edits. The
@@ -206,15 +207,7 @@ extension StreamSession {
         inp.captureSysKeys = config.captureSysKeys
         // Cruise ceiling is derived from the stream width (4K→2.0, 1080p→1.0 inert).
         CruiseTraversal.configure(inp, streamWidth: config.width)
-        // Window mode: the pointer is grabbed into relative capture while it
-        // is over the window, and is a normal Mac pointer mirrored onto the
-        // host as absolute positions the rest of the time. The window hides +
-        // shows the cursor off the capture edges (visibility stays
-        // StreamWindow's; the forwarder only reports the edge). Every hook is
-        // inert in full screen: the forwarder fires the edge callback only in
-        // window mode, and the mode callback only runs when a Path-B Space
-        // exit lands the session in a window mid-stream
-        // (StreamWindow+Windowed.swift).
+        // Share cursor ownership and capture edges across all presentations.
         inp.isWindowMode = config.displayMode == .window
         // The reference frame absolute positions are measured against.
         inp.streamPixelSize = CGSize(width: config.width, height: config.height)
@@ -252,8 +245,13 @@ extension StreamSession {
     private static func wireWindowPointerModel(
         win: StreamWindow, inp: InputForwarder, onMiniPlayerChanged: (@MainActor (Bool) -> Void)?
     ) {
-        inp.onPointerCaptureChanged = { [weak win] captured in
+        win.fullscreenRelativePointer = inp.fullscreenRelativePointer
+        inp.onPointerCaptureChanged = { [weak win, weak inp] captured in
+            win?.fullscreenRelativePointer = inp?.fullscreenRelativePointer ?? true
             win?.setPointerCaptured(captured)
+        }
+        inp.onPointerModeToggled = { [weak win] captured in
+            win?.showPointerModeHint(captured: captured)
         }
         win.onDisplayModeChanged = { [weak inp] mode in
             inp?.setWindowMode(mode == .window)

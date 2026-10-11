@@ -68,7 +68,7 @@ struct HeldKeyReleaseUnderCommandTests {
 }
 
 /// With ⌘ shortcuts sent to the game, a ⌘ key equivalent goes to the PC only
-/// while the stream holds the pointer; otherwise it stays the Mac's.
+/// while the stream is key; otherwise it stays the Mac's.
 @MainActor
 struct CommandKeyEquivalentTests {
 
@@ -76,23 +76,26 @@ struct CommandKeyEquivalentTests {
         try key(.keyDown, kVK_Tab, mods: [.command], chars: "\t")
     }
 
-    private func forwarder(optedIn: Bool, captured: Bool) -> InputForwarder {
+    private func forwarder(optedIn: Bool, window: NSWindow) -> InputForwarder {
         let forwarder = InputForwarder()
         forwarder.isReady = true
         forwarder.captureSysKeys = optedIn
-        forwarder.isMouseCaptured = captured
+        forwarder.window = window
         return forwarder
     }
 
-    @Test func capturedStreamSendsCommandChordsToThePC() throws {
-        let forwarder = forwarder(optedIn: true, captured: true)
+    @Test func focusedStreamSendsCommandChordsToThePC() throws {
+        let window = PointerFocusTestWindow()
+        let forwarder = forwarder(optedIn: true, window: window)
         #expect(forwarder.streamView(StreamInputView(), handleKeyEquivalent: try commandTab()))
         #expect(forwarder.heldKeys.count == 1)
     }
 
-    @Test func commandChordsStayWithTheMacUnlessOptedInAndCaptured() throws {
-        for (optedIn, captured) in [(false, true), (true, false), (false, false)] {
-            let forwarder = forwarder(optedIn: optedIn, captured: captured)
+    @Test func commandChordsStayWithTheMacUnlessOptedInAndFocused() throws {
+        for (optedIn, focused) in [(false, true), (true, false), (false, false)] {
+            let window = PointerFocusTestWindow()
+            window.focused = focused
+            let forwarder = forwarder(optedIn: optedIn, window: window)
             #expect(!forwarder.streamView(StreamInputView(), handleKeyEquivalent: try commandTab()))
             #expect(forwarder.heldKeys.isEmpty)
         }
@@ -104,20 +107,23 @@ struct CommandKeyEquivalentTests {
         return try key(.flagsChanged, kVK_Command, mods: flags, chars: "")
     }
 
-    /// Opted in with the pointer free, ⌘ is the Mac's, so ⌘V pastes and ⌘-Tab
-    /// leaves with no Win key held on the PC for a release to turn into Start.
-    @Test func commandIsNotTheWinKeyWhileThePointerIsFree() throws {
-        let forwarder = forwarder(optedIn: true, captured: false)
+    /// A background stream must not send a stray Win tap to the PC.
+    @Test func commandIsNotTheWinKeyWhileTheWindowIsNotKey() throws {
+        let window = PointerFocusTestWindow()
+        window.focused = false
+        let forwarder = forwarder(optedIn: true, window: window)
         forwarder.streamView(StreamInputView(), handleFlagsChanged: try leftCommandDown())
         #expect(forwarder.heldModifierVKs.isEmpty)
         #expect(forwarder.modifierByte(from: [.command]) == 0)
     }
 
-    @Test func capturedCommandIsTheWinKeyUntilCaptureEnds() throws {
-        let forwarder = forwarder(optedIn: true, captured: true)
+    @Test func focusedCommandIsTheWinKeyUntilFocusEnds() throws {
+        let window = PointerFocusTestWindow()
+        let forwarder = forwarder(optedIn: true, window: window)
         forwarder.streamView(StreamInputView(), handleFlagsChanged: try leftCommandDown())
         #expect(forwarder.heldModifierVKs == [0x5B])
-        forwarder.exitCapturedMode()
+        window.focused = false
+        forwarder.windowResignedKey()
         #expect(forwarder.heldModifierVKs.isEmpty)
     }
 }
@@ -321,8 +327,8 @@ struct HostKeyFlagsTests {
         let forwarder = InputForwarder()
         forwarder.isReady = true
         let view = StreamInputView()
-        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Function))
-        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Function, at: 2))
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Function, chars: ""))
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Function, chars: "", at: 2))
         #expect(forwarder.heldKeys.isEmpty)
         #expect(forwarder.loggedUnmappedKeyCodes == [UInt16(kVK_Function)])
     }

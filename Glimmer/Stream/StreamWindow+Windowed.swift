@@ -141,14 +141,13 @@ extension StreamWindow {
         onCloseRequested?()
     }
 
-    /// InputForwarder's capture edge in window mode. Visibility stays with the
-    /// single `setCursorHidden` owner; the per-view transparent cursor
-    /// backstop is switched with it so a free pointer shows the arrow over the
-    /// picture and a captured one never can. Entering capture spends one of
-    /// the hint's few shows - the only teaching surface left now that the grab
-    /// is the pointer being over the window rather than a control to press.
+    /// Cursor ownership stays here for both presentations; startup waits for a picture.
     func setPointerCaptured(_ captured: Bool) {
-        guard displayMode == .window, !didClose else { return }
+        guard !didClose else { return }
+        if displayMode == .fullScreen {
+            setCursorHidden(captured && !awaitingFirstFrameFadeIn)
+            return
+        }
         setCursorHidden(captured)
         updateMiniPlayerControls()
         if captured {

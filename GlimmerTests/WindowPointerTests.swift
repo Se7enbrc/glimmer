@@ -18,6 +18,18 @@ import Testing
 
 struct WindowPointerTests {
 
+    @Test func pointerPolicyUsesAbsoluteOnlyWhenFreeAndRequested() {
+        for windowed in [false, true] {
+            for captured in [false, true] {
+                for relative in [false, true] {
+                    let absolute = PointerMapping.usesAbsolutePointer(
+                        windowed: windowed, captured: captured, fullscreenRelative: relative)
+                    #expect(absolute == (!captured && (windowed || !relative)))
+                }
+            }
+        }
+    }
+
     // MARK: Motion queue ordering
 
     @Test func motionDrainStopsAtButtonAndKeyEvents() throws {

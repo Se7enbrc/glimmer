@@ -49,8 +49,16 @@ enum PointerSend: Equatable, Sendable {
     case hScroll(Int16)
 }
 
+enum OrderedKeyboardSend: Equatable, Sendable {
+    case text(String)
+    case key(Int16, Bool)
+}
+
 final class InputRecordingBackend: StreamingBackend {
     private let sends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
+
+    private let orderedKeyboardSends = OSAllocatedUnfairLock(initialState: [OrderedKeyboardSend]())
+    var orderedKeyboard: [OrderedKeyboardSend] { orderedKeyboardSends.withLock { $0 } }
 
     private let textSends = OSAllocatedUnfairLock(initialState: [String]())
     private let touchSends = OSAllocatedUnfairLock(initialState: [ControllerTouchSend]())
@@ -97,6 +105,7 @@ final class InputRecordingBackend: StreamingBackend {
     func launchUrlQueryParameters() -> String { "" }
     func stageName(for stage: Int32) -> String { "" }
     func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 {
+        orderedKeyboardSends.withLock { $0.append(.key(keyCode, action == StreamProtocol.KEY_ACTION_DOWN)) }
         keyboardSends.withLock { $0.append(.init(keyCode: keyCode, action: action, modifiers: modifiers, flags: flags)) }
         return 0
     }
@@ -137,6 +146,7 @@ final class InputRecordingBackend: StreamingBackend {
         return 0
     }
     func sendUtf8Text(_ text: String) -> Int32 {
+        orderedKeyboardSends.withLock { $0.append(.text(text)) }
         textSends.withLock { $0.append(text) }
         return 0
     }

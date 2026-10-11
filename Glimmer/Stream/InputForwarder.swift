@@ -153,9 +153,7 @@ public final class InputForwarder {
     /// a closure rather than a stored chord value.
     public var bookmarkHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultBookmark }
 
-    /// Provider for the Window-mode pointer chord. Same live-read closure
-    /// shape as the quit/stats chords. Only consulted while `isWindowMode` is
-    /// on, where it TOGGLES capture.
+    /// Read live like the quit/stats chords; toggles capture in every presentation.
     public var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
 
     /// Precise scroll slices summed into whole wheel notches (ScrollQuantizer.swift).
@@ -173,14 +171,11 @@ public final class InputForwarder {
     /// close button off this edge.
     var onMiniPlayerHoverChanged: (@MainActor (Bool) -> Void)?
 
-    /// Window mode: relative capture is grabbed by the pointer being over the
-    /// picture and left with a held Esc, the pointer chord, or switching apps.
-    /// Outside capture the pointer is a normal Mac pointer mirrored onto the
-    /// host as absolute positions. Full screen keeps the always-on capture
-    /// that follows key status. Set by the session at attach; flipped live by
-    /// a Space exit (`setWindowMode`). What it gates lives in
-    /// InputForwarder+WindowPointer.swift and +HoverCapture.swift.
+    /// Window mode grabs on hover; fullscreen follows the app's initial policy
+    /// and the user's live capture toggle across focus changes.
     var isWindowMode: Bool = false
+    var fullscreenRelativePointer = true
+    var onPointerModeToggled: (@MainActor (Bool) -> Void)?
 
     /// The stream's pixel dimensions, the reference frame absolute pointer
     /// positions are measured in. Set by the session at start and re-set on a
@@ -205,11 +200,7 @@ public final class InputForwarder {
     /// table in InputForwarder+HoverCapture.swift and this is its only writer.
     var isHoverCaptureSuppressed = false
 
-    /// Fired on every capture edge (true = engaged) while `isWindowMode` is
-    /// on. StreamWindow hides and shows the cursor off it - visibility stays
-    /// the window's, this only reports the edge. NEVER fired in full screen,
-    /// where the window's own show / resign / becomeKey path owns the cursor
-    /// exactly as before.
+    /// StreamWindow owns cursor visibility in every presentation.
     var onPointerCaptureChanged: (@MainActor (Bool) -> Void)?
 
     /// Controller-side quit chord. The ControllerForwarder extension
@@ -241,38 +232,17 @@ public final class InputForwarder {
     /// the dwell fields above; the logic is in ControllerForwarder+QuitChord.
     var quitChordCrumbs = QuitChordBreadcrumbState()
 
-    /// Whether macOS-level "system" modifier combos that use the Cmd key
-    /// should be forwarded to the host or left to macOS.
-    ///
-    /// macOS owns a lot of meaningful Cmd chords - ⌘-Tab (app switcher),
-    /// ⌘-Space (Spotlight), ⌘-Q (quit), ⌘-` (window cycle), ⌘-H/⌘-M (hide/
-    /// miniaturise). The Cmd key reports as `VK_LWIN`/`VK_RWIN` to the host,
-    /// so the naive thing to do - forward everything - turns ⌘-Tab into a
-    /// Win+Tab on the gaming PC, popping Windows' Task View while the
-    /// streamer is trying to leave the stream. That's the bug we're closing.
-    ///
-    /// When this is `false` (the default), the InputForwarder:
-    ///   * Drops `keyDown` events whose modifier mask contains `.command`
-    ///     so they're handled by the macOS responder chain instead. ⌘-Q
-    ///     quits Glimmer; ⌘-Tab switches apps; ⌘-Space opens Spotlight.
-    ///   * Skips the `flagsChanged` path for the `.command` modifier so
-    ///     we never emit a LWIN/RWIN down/up to the host.
-    ///   * Strips `MODIFIER_META` from `modifierByte(from:)` so a
-    ///     non-Cmd key that happens to be pressed while the user holds
-    ///     Cmd doesn't reach the host with a phantom Win-key modifier.
-    ///
-    /// When this is `true` and the stream holds the pointer (`forwardsCommand`),
-    /// every Cmd chord is forwarded as a Win-key chord - at the cost of macOS no
-    /// longer reacting to those combos while the pointer is held. That's the
-    /// mode power users on dedicated streaming hardware want.
-    ///
-    /// Note: the configured quit hotkey (see `quitHotkey`) is detected BEFORE
-    /// this gate, so it keeps working regardless of capture state - including
-    /// the default ⌃⌥Q, which carries no Cmd and so never reaches the gate.
+    /// Opted-in Command chords become Win-key chords in fullscreen or a captured window.
+    /// Otherwise key-downs, modifier transitions and the meta byte stay local to avoid phantom Win keys.
+    /// Client quit/stats chords run before this gate so they work in either mode.
     public var captureSysKeys: Bool = false
 
     /// Delayed input belongs to one ready connection and one uninterrupted focus interval.
     var inputGeneration: UInt64 = 0
+
+    /// Keyboard events wait behind text until cross-channel modifier releases settle.
+    var pendingTextTask: Task<Void, Never>?
+    var pendingKeyboardEvents: [(InputForwarder) -> Void] = []
 
     /// Opens when the backend can accept input; reconnects invalidate delayed work.
     public internal(set) var isReady: Bool = false {
