@@ -4,8 +4,8 @@
 
 """Cut the next release candidate for the pushed, reviewed HEAD (`make rc`).
 
-The `rc` pull request label runs the same cut in CI with --ci-sha: the app tags as itself
-and the approval link goes to the pull request instead of a browser."""
+A labelled pull request runs the same cut in CI with --ci-sha once its checks pass: the app
+tags as itself and the approval link goes to the pull request instead of a browser."""
 
 import argparse
 import importlib.util
@@ -25,7 +25,7 @@ SCRIPTS = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("release_checks", SCRIPTS / "release-checks.py")
 CHECKS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECKS)
-LIVE_APPCAST = "https://se7enbrc.github.io/glimmer/appcast.xml"
+FEED_BRANCH = "appcast"
 BRANCH = "release-candidate"
 POLL_SECONDS = 60
 TIMEOUT_SECONDS = 90 * 60
@@ -74,16 +74,10 @@ def show(url, dry_run, pr=None):
 
 
 def check_build(version, build):
-    fetched = subprocess.run(["curl", "-fsSL", "--max-time", "30", LIVE_APPCAST],
-                             capture_output=True, text=True, timeout=60)
-    try:
-        root = ET.fromstring(fetched.stdout) if fetched.returncode == 0 else None
-    except ET.ParseError:
-        root = None
-    if root is None:
-        print("WARNING: couldn't fetch the live appcast; checking the committed appcast.xml", file=sys.stderr)
-        root = ET.parse("appcast.xml").getroot()
-    channel = root.find("channel")
+    output(["git", "fetch", "--quiet", "origin", f"+refs/heads/{FEED_BRANCH}:refs/remotes/origin/{FEED_BRANCH}"],
+           "couldn't fetch the appcast branch")
+    channel = ET.fromstring(output(["git", "show", f"refs/remotes/origin/{FEED_BRANCH}:appcast.xml"],
+                                   "couldn't read the appcast")).find("channel")
     if channel is None:
         raise ValueError("appcast has no channel")
     builds = [int(text) for text in (item.findtext(f"{{{SPARKLE}}}version", "") for item in channel.findall("item"))
@@ -156,19 +150,15 @@ def reviewed_head():
     return sha, branch
 
 
-def cut(dry_run, ci_sha=None, pr=None, wait_only=False):
+def cut(dry_run, ci_sha=None, pr=None):
     if ci_sha:
-        # The workflow checks out exactly the labelled pull request head.
+        # CI never checks out the pull request; it reads the candidate commit from history.
         sha, branch = ci_sha, f"pull request #{pr}"
-        if output(["git", "rev-parse", "HEAD"], "couldn't resolve HEAD") != sha:
-            raise ValueError(f"checkout is not the pull request head {sha[:12]}")
-        if wait_only:
-            wait_for_checks(sha, dry_run)
-            return
+        output(["git", "cat-file", "-e", f"{sha}^{{commit}}"], f"commit {sha[:12]} is not in this clone")
     else:
         sha, branch = reviewed_head()
-    values = dict(re.findall(r"^(MARKETING_VERSION|CURRENT_PROJECT_VERSION)\s*=\s*(\S+)\s*$",
-                             Path("Glimmer/Version.xcconfig").read_text(), re.M))
+    config = output(["git", "show", f"{sha}:Glimmer/Version.xcconfig"], "couldn't read the candidate version")
+    values = dict(re.findall(r"^(MARKETING_VERSION|CURRENT_PROJECT_VERSION)\s*=\s*(\S+)\s*$", config, re.M))
     version, build = values["MARKETING_VERSION"], values["CURRENT_PROJECT_VERSION"]
     tags = {ref.removeprefix("refs/tags/"): target for ref, target in remote_refs("refs/tags/*").items()}
     if version in tags:
@@ -222,15 +212,12 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="print every step without pushing, tagging or dispatching")
     parser.add_argument("--ci-sha", help="CI only: the labelled pull request head to cut")
     parser.add_argument("--pr", type=int, help="CI only: the pull request to comment the run on")
-    parser.add_argument("--wait-only", action="store_true", help="CI only: wait for the required checks, then stop")
     args = parser.parse_args()
     if bool(args.ci_sha) != bool(args.pr) or (args.ci_sha and not re.fullmatch(r"[0-9a-f]{40}", args.ci_sha)):
         parser.error("--ci-sha needs a full commit SHA and --pr")
-    if args.wait_only and not args.ci_sha:
-        parser.error("--wait-only needs --ci-sha and --pr")
     os.chdir(SCRIPTS.parent)
     try:
-        cut(args.dry_run, args.ci_sha, args.pr, args.wait_only)
+        cut(args.dry_run, args.ci_sha, args.pr)
     except (ValueError, KeyError, OSError, ET.ParseError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
         parser.exit(1, f"ERR: {error}\n")
 
