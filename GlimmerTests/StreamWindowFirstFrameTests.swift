@@ -336,6 +336,26 @@ struct StreamWindowFirstFrameTests {
         #expect(NSCursor.current === NSCursor.arrow)
     }
 
+    @Test func fullscreenAbsolutePointerStaysVisibleAcrossCursorReassertions() {
+        let stream = StreamWindow()
+        stream.fullscreenRelativePointer = false
+        let view = StreamInputView()
+        stream.window.contentView = view
+        defer { stream.setCursorHidden(false) }
+        stream.setCursorHidden(true)
+        stream.reassertCursorHiddenIfNeeded()
+        #expect(stream.cursorHideCount == 0)
+        #expect(NSCursor.current === NSCursor.arrow)
+        stream.fullscreenRelativePointer = true
+        stream.awaitingFirstFrameFadeIn = false
+        stream.setPointerCaptured(true)
+        #expect(stream.cursorHideCount == 1)
+        stream.fullscreenRelativePointer = false
+        stream.setPointerCaptured(false)
+        #expect(stream.cursorHideCount == 0)
+        #expect(NSCursor.current === NSCursor.arrow)
+    }
+
     @Test func repeatedDisplayHidesReleaseTheirImageAndCountTogether() throws {
         let stream = StreamWindow()
         let view = StreamInputView()
@@ -408,6 +428,7 @@ private final class MotionRecorder: StreamInputViewDelegate {
     func streamViewPointerDidEnter(_ view: StreamInputView) {}
     func streamViewPointerDidExit(_ view: StreamInputView) {}
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool { false }
+    func streamView(_ view: StreamInputView, commitText text: String) {}
     func streamViewPaste(_ view: StreamInputView) {}
 
     @Test func noEscapeChordLeavesTheSpace() {

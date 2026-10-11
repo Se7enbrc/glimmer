@@ -68,14 +68,8 @@ extension InputForwarder: StreamInputViewDelegate {
             return
         }
 
-        // Pointer chord - WINDOW MODE ONLY, and a TOGGLE: it captures a free
-        // pointer and frees a captured one, so the combo is never a dead key
-        // and a user who learned it keeps it. Same client-only intercept as
-        // quit/stats, and ordered BEFORE the sys-keys gate for the same
-        // reason. In full screen capture follows key status and there is
-        // nothing to toggle, so the chord is never intercepted there and
-        // reaches the host like any key.
-        if !event.isARepeat, isWindowMode,
+        // The same chord frees or captures the pointer in every presentation.
+        if !event.isARepeat,
            releasePointerHotkeyProvider().matches(event: event, modifiers: mods) {
             log.info("Pointer hotkey detected - toggling capture")
             togglePointerCapture(reason: "pointer chord")
@@ -100,22 +94,20 @@ extension InputForwarder: StreamInputViewDelegate {
             return
         }
 
-        // Paste chord (moonlight's ⌃⌥⇧V): types the Mac clipboard into the PC.
+        // Paste types the Mac clipboard into the PC independently of keyboard layout.
         if !event.isARepeat, PasteText.chord.matches(event: event, modifiers: mods) {
             pasteClipboardAsText()
             return
         }
 
-        // Hold Esc to free the pointer (window mode, captured only). NOT
-        // consumed and never returns early: Esc is a game input, so the tap
-        // that opens a menu must forward on this very event with no added
-        // latency. Only a ~1s hold releases; see InputForwarder+EscapeHold.
-        noteEscapeKeyDown(event)
-
         // Unless ⌘ goes to the game (opted in and the pointer held) a ⌘ chord
         // is the Mac's and never forwarded. Repeats are dropped: the PC makes its own.
         if mods.contains(.command), !forwardsCommand { return }
-        guard !event.isARepeat, isReady else { return }
+        guard isReady else { return }
+        if view.handleTextInput(event) { return }
+        // Composition owns Escape while marked; ordinary taps still reach the game immediately.
+        noteEscapeKeyDown(event)
+        guard !event.isARepeat else { return }
         guard let key = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else {
             noteUnmappedKey(event.keyCode)
             return
@@ -215,14 +207,8 @@ extension InputForwarder: StreamInputViewDelegate {
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent) {
         guard isReady, forwardsMouseEvents else { return }
 
-        // WINDOW MODE with the pointer free: the host cursor tracks this Mac's
-        // cursor 1:1, so send WHERE the pointer is rather than how far it
-        // moved. Everything below - the coalescing drain, the drag-delta
-        // compensation, Cruise, the sub-pixel residual - exists to make
-        // RELATIVE aim feel right and would actively break a 1:1 mapping, so
-        // the absolute path returns before any of it. Drags route through this
-        // handler too, so a held button tracks the same way. Constant `false`
-        // in full screen: nothing here changes for the fullscreen path.
+        // Absolute positions bypass relative coalescing, Cruise and residuals;
+        // applying a velocity curve here would break the picture's 1:1 mapping.
         if sendsAbsolutePointer {
             sendAbsolutePointer(for: event, in: view)
             return
@@ -374,7 +360,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // been told about. `releasePointer` raises held buttons first, so a
         // button held through a capture release would otherwise double-release
         // when the physical up arrives.
-        if isWindowMode, !heldMouseButtons.contains(hostButton) { return }
+        if !heldMouseButtons.contains(hostButton) { return }
         // Land the release where the pointer actually ended up - a drag that
         // moved between down and up must not release at the down position.
         sendAbsolutePointer(for: event, in: view)

@@ -1,31 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  InputForwarder+WindowPointer.swift
-//
-//  Window mode's pointer model. Capture (relative aim, cursor hidden,
-//  associate-false) is grabbed by the pointer simply being OVER the picture,
-//  the way a VM window or a game does it, and left again with a held Esc, the
-//  pointer chord, or Cmd-Tab. The grab rule itself and its suppression latch
-//  are in InputForwarder+HoverCapture.swift.
-//
-//  Outside capture the pointer is a NORMAL Mac pointer: visible, owned by the
-//  OS, and mirrored onto the host as ABSOLUTE positions so the two cursors sit
-//  on top of each other. That state is transient now (the pointer is free only
-//  while it is off the picture, or the window is not key, or a release latch
-//  is holding the grab off) but it is the honest thing to send there.
-//
-//  Everything here is gated on `isWindowMode`, which only a window-mode
-//  session (or a Path-B Space exit landing in window mode) turns on. Full
-//  screen keeps its always-on relative capture - entered on key, released on
-//  resign - and never reaches the absolute path. The engagement mechanics
-//  themselves (associate-false, coalescing, acceleration) are unchanged and
-//  shared: `enterCapturedMode()` / `exitCapturedMode()` in
-//  InputForwarder+Capture.swift. Cursor VISIBILITY is never touched here; the
-//  capture edge is reported to StreamWindow, which owns the one hide/show
-//  latch.
-//
+// Free pointers map onto the picture; relative capture shares its existing
+// association, linear scaling and cursor-ownership paths in every presentation.
 
 import AppKit
 
@@ -35,18 +12,16 @@ extension InputForwarder {
     /// Relative aim requires capture; a key window also permits a free pointer.
     var forwardsMouseEvents: Bool {
         guard let window, window.isKeyWindow, !window.ignoresMouseEvents else { return false }
-        return isWindowMode || isMouseCaptured
+        return sendsAbsolutePointer || isMouseCaptured
     }
 
-    /// Whether pointer motion should be sent as an absolute POSITION rather
-    /// than a relative delta: window mode with the pointer free. Constant
-    /// `false` in full screen, so the relative path there is untouched.
-    var sendsAbsolutePointer: Bool { isWindowMode && !isMouseCaptured }
+    /// A free pointer mirrors the picture whenever the current policy permits it.
+    var sendsAbsolutePointer: Bool {
+        PointerMapping.usesAbsolutePointer(windowed: isWindowMode, captured: isMouseCaptured,
+                                          fullscreenRelative: fullscreenRelativePointer)
+    }
 
-    /// Switch pointer policy mid-session. Used by the Path-B Space exit that
-    /// lands a fullscreen session in a window: the always-on capture is
-    /// released (association restored, cursor shown via the reported edge) and
-    /// the pointer goes back to being a normal Mac pointer. Idempotent.
+    /// A presentation change restores its pointer policy without retaining a stale hover latch.
     func setWindowMode(_ enabled: Bool) {
         guard isWindowMode != enabled else { return }
         isWindowMode = enabled
@@ -58,7 +33,12 @@ extension InputForwarder {
             // to: full screen never reads it, and a later return to a window
             // must not inherit a stale "do not grab" from the last release.
             isHoverCaptureSuppressed = false
-            log.info("Pointer policy: always-on relative capture (full screen)")
+            if fullscreenRelativePointer {
+                enterCapturedMode()
+            } else {
+                exitCapturedMode()
+            }
+            log.info("Pointer policy: full screen, relative=\(self.fullscreenRelativePointer, privacy: .public)")
         }
     }
 
@@ -81,25 +61,21 @@ extension InputForwarder {
         log.info("Pointer policy: \(enabled ? "click to capture (mini player)" : "capture while over the window", privacy: .public)")
     }
 
-    /// The pointer chord (⌃⌥R). A toggle, so the combo is never a dead key:
-    /// it grabs a free pointer and frees a grabbed one. It is the way to
-    /// re-grab without leaving and re-entering the window, and the way to
-    /// release without reaching for Esc.
+    /// Fullscreen remembers the toggle across focus loss; window mode keeps its hover latch.
     func togglePointerCapture(reason: String) {
-        guard isWindowMode else { return }
+        guard let window, window.isKeyWindow, !window.ignoresMouseEvents else { return }
+        if !isWindowMode { fullscreenRelativePointer = !isMouseCaptured }
         if isMouseCaptured {
             releasePointer(reason: reason)
         } else {
             capturePointer(reason: reason)
         }
+        onPointerModeToggled?(isMouseCaptured)
     }
 
-    /// Enter relative capture. Only while the window is key - capturing while
-    /// it is not would hide the cursor over a window that cannot receive
-    /// input, so a pointer sweeping over a background stream window on its way
-    /// somewhere else would vanish into a game the user is not looking at.
+    /// Background windows must never take the pointer from the active Mac app.
     func capturePointer(reason: String) {
-        guard isWindowMode, !isMouseCaptured, let window, window.isKeyWindow else { return }
+        guard !isMouseCaptured, let window, window.isKeyWindow else { return }
         log.info("Pointer capture requested (\(reason, privacy: .public))")
         // Clear the latch as the grab lands: it exists to keep a release from
         // being undone, and the pointer is captured again, so the question it
@@ -149,25 +125,10 @@ extension InputForwarder {
         heldMouseButtons.removeAll()
     }
 
-    /// Mirror this event's pointer position onto the host, in stream pixels.
-    ///
-    /// The uplink (`sendMousePosition` → InputBatcher's latest-only absolute
-    /// slot → NV_ABS_MOUSE_MOVE_PACKET) has been implemented and unused; this
-    /// is its only caller. Latest-only per batcher tick is exactly right for
-    /// absolute positions: an intermediate point that a newer one supersedes
-    /// carries no information, which is why there is no delta-coalescing drain
-    /// on this path the way there is on the relative one.
-    ///
-    /// A no-op unless the pointer is free in a window, so every call site can
-    /// invoke it unconditionally and full screen pays one bool for it.
-    /// One absolute position for the pointer's CURRENT location, read from the
-    /// window rather than an event so the two capture paths that have no event
-    /// to hand (a hover grab, a Cmd-Tab back onto a resting pointer) can both
-    /// use it. Deliberately NOT routed through `sendAbsolutePointer`: that one
-    /// is gated on the pointer being free, which is exactly the state this is
-    /// leaving. Window mode only, so full screen never emits an absolute event.
+    /// Align the PC before relative aim takes over, including capture without an event.
+    /// This intentionally bypasses the free-pointer gate used by motion and clicks.
     func syncHostPointerToCurrentLocation() {
-        guard isReady, isWindowMode, let window, let view = inputView else { return }
+        guard isReady, let window, let view = inputView else { return }
         let viewPoint = view.convert(window.mouseLocationOutsideOfEventStream, from: nil)
         guard view.bounds.contains(viewPoint) else { return }
         guard let point = PointerMapping.streamPoint(

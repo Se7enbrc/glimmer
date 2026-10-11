@@ -4,6 +4,11 @@
 
 ### Features
 
+- Type composed text with macOS input methods, accents and the character viewer
+  while physical keys keep their game controls.
+- Desktop uses a pointer that follows the picture in fullscreen. The pointer
+  shortcut switches between that pointer and captured game controls in any app.
+
 - Steam shows its own logo in the launcher, the menu and the PC list, instead
   of a generic controller.
 

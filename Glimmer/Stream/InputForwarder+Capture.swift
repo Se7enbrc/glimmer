@@ -32,7 +32,7 @@ extension InputForwarder {
             object: window, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                if self?.isWindowMode == false {
+                if self?.isWindowMode == false, self?.fullscreenRelativePointer == true {
                     self?.enterCapturedMode()
                 }
                 // Window mode grabs on hover, and a Cmd-Tab back moves no
@@ -61,6 +61,7 @@ extension InputForwarder {
 
     func windowResignedKey() {
         inputGeneration &+= 1
+        inputView?.cancelComposition()
         // The physical key-up goes to the newly focused app, so release held
         // input here. Esc's key-up may be lost too, making its timer unsafe.
         raiseAllHeldInputs(reason: "focus loss")
@@ -118,8 +119,7 @@ extension InputForwarder {
             Mouse capture: relative aim engaged (associate-false; coalescing off; \
             cursor disassociated, visibility owned by StreamWindow)
             """)
-        // Window mode only: report the edge so the window hides the cursor.
-        if isWindowMode { onPointerCaptureChanged?(true) }
+        onPointerCaptureChanged?(true)
     }
 
     /// Restore cursor association and the settings capture changed on focus loss
@@ -152,8 +152,7 @@ extension InputForwarder {
             Mouse capture: relative aim disengaged (associate-true; coalescing restored; \
             cursor re-associated, visibility owned by StreamWindow)
             """)
-        // Window mode only: report the edge so the window shows the cursor.
-        if isWindowMode { onPointerCaptureChanged?(false) }
+        onPointerCaptureChanged?(false)
     }
 
     func installGestureSuppressionMonitor() {

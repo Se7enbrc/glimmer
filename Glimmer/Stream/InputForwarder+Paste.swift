@@ -35,6 +35,13 @@ enum PasteText {
 
 extension InputForwarder {
 
+    func streamView(_ view: StreamInputView, commitText text: String) {
+        guard isReady, !text.isEmpty, window?.isKeyWindow != false,
+              window?.ignoresMouseEvents != true else { return }
+        raiseAllHeldInputs(reason: "text commit")
+        record("LiSendUtf8TextEvent", backend?.sendUtf8Text(text) ?? -2)
+    }
+
     func streamViewPaste(_ view: StreamInputView) {
         pasteClipboardAsText()
     }

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DEC0DE202610110A00000001 /* StreamInputView+Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610110A00000002 /* StreamInputView+Text.swift */; };
 		DA2026100900000000000021 /* AWDLProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000022 /* AWDLProcess.swift */; };
 		DA2026100900000000000023 /* AWDLProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000022 /* AWDLProcess.swift */; };
 		DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */; };
@@ -506,6 +507,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		DEC0DE202610110A00000002 /* StreamInputView+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "StreamInputView+Text.swift"; path = "Stream/StreamInputView+Text.swift"; sourceTree = "<group>"; };
 		DA2026100900000000000022 /* AWDLProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLProcess.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperManagerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000002 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
@@ -1315,6 +1317,7 @@
 				447FF92C9458E21549E4965D /* HostStatusPoller.swift */,
 				398ABCA94CDDF4D5B2770B8F /* KeyboardScanMap.swift */,
 				C426DA508131A2723B2CF131 /* StreamInputView.swift */,
+				DEC0DE202610110A00000002 /* StreamInputView+Text.swift */,
 				B1755AEB5F01C33DF87D6FCE /* ControllerForwarder.swift */,
 				ABCD20260610000000004D03 /* ControllerForwarder+QuitChord.swift */,
 				ABCD20260609000000001801 /* ControllerBattery.swift */,
@@ -1925,6 +1928,7 @@
 				F5951726E170AD3E1F645B80 /* HostStatusPoller.swift in Sources */,
 				14DC834601C3BEE65839AC02 /* KeyboardScanMap.swift in Sources */,
 				5E6BA9AE8CE78DA47BAA02C4 /* StreamInputView.swift in Sources */,
+				DEC0DE202610110A00000001 /* StreamInputView+Text.swift in Sources */,
 				2025092633A13B85B01C5E46 /* ControllerForwarder.swift in Sources */,
 				ABCD20260610000000004D04 /* ControllerForwarder+QuitChord.swift in Sources */,
 				ABCD20260609000000001802 /* ControllerBattery.swift in Sources */,

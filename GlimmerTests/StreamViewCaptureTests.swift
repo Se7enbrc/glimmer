@@ -153,6 +153,49 @@ struct StreamViewCaptureTests {
         #expect(!forwarder.sendsAbsolutePointer)
     }
 
+    @Test func fullscreenDesktopMapsClicksAndTogglesToRelativeAndBack() throws {
+        let (forwarder, backend, edges) = windowed()
+        defer { forwarder.detach() }
+        forwarder.fullscreenRelativePointer = false
+        forwarder.setWindowMode(false)
+        let view = try #require(forwarder.inputView)
+        #expect(forwarder.sendsAbsolutePointer)
+        view.mouseEntered(with: try crossing(.mouseEntered))
+        #expect(!forwarder.isMouseCaptured)
+        view.mouseDown(with: try mouse(.leftMouseDown))
+        #expect(backend.pointer.first == .position(x: 160, y: 160, refW: 640, refH: 640))
+        view.keyDown(with: try pointerChord())
+        #expect(forwarder.isMouseCaptured)
+        #expect(forwarder.fullscreenRelativePointer)
+        #expect(!forwarder.sendsAbsolutePointer)
+        view.keyDown(with: try pointerChord())
+        #expect(forwarder.sendsAbsolutePointer)
+        #expect(!forwarder.fullscreenRelativePointer)
+        #expect(forwarder.heldMouseButtons.isEmpty)
+        view.mouseUp(with: try mouse(.leftMouseUp))
+        #expect(buttons(backend).count == 2)
+        #expect(edges.seen == [true, false])
+        #expect(backend.keyboard.isEmpty)
+        forwarder.windowResignedKey()
+        #expect(forwarder.sendsAbsolutePointer)
+    }
+
+    @Test func returningFromAWindowRestoresTheFullscreenPointerChoice() {
+        let (forwarder, _, _) = windowed()
+        defer { forwarder.detach() }
+        forwarder.fullscreenRelativePointer = false
+        forwarder.capturePointer(reason: "test")
+        #expect(forwarder.isMouseCaptured)
+        forwarder.setWindowMode(false)
+        #expect(!forwarder.isMouseCaptured)
+        #expect(forwarder.sendsAbsolutePointer)
+        forwarder.setWindowMode(true)
+        forwarder.fullscreenRelativePointer = true
+        forwarder.setWindowMode(false)
+        #expect(forwarder.isMouseCaptured)
+        #expect(!forwarder.sendsAbsolutePointer)
+    }
+
     // MARK: Diagnostic sampler
 
     @Test func diagnosticEventNamesFallBackToTheRawType() {

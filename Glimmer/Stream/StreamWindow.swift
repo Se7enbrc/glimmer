@@ -150,6 +150,7 @@ public final class StreamWindow {
 
     /// Window-mode title ("Tower - Desktop"). Ignored by the borderless cover.
     public var windowTitle: String = ""
+    var fullscreenRelativePointer = true
 
     /// The window as a small floating panel (StreamWindow+MiniPlayer.swift).
     /// A window-mode variant: `displayMode` reads `.window` while it is on.

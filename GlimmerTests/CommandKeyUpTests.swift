@@ -321,8 +321,8 @@ struct HostKeyFlagsTests {
         let forwarder = InputForwarder()
         forwarder.isReady = true
         let view = StreamInputView()
-        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Function))
-        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Function, at: 2))
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Function, chars: ""))
+        forwarder.streamView(view, handleKeyDown: try key(.keyDown, kVK_Function, chars: "", at: 2))
         #expect(forwarder.heldKeys.isEmpty)
         #expect(forwarder.loggedUnmappedKeyCodes == [UInt16(kVK_Function)])
     }

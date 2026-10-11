@@ -17,6 +17,7 @@ extension StreamWindow {
     /// Release disables the transparent image before balancing all display hides;
     /// otherwise a late tracking callback can leave an invisible image selected.
     func setCursorHidden(_ hidden: Bool) {
+        let hidden = hidden && (displayMode == .window || fullscreenRelativePointer)
         (window.contentView as? StreamInputView)?.setTransparentCursorEnabled(hidden)
         if hidden {
             CGDisplayHideCursor(CGMainDisplayID())
@@ -76,6 +77,7 @@ extension StreamWindow {
 
     /// Park the cursor mid-screen and retire motion spanning the warp.
     func warpCursorToCentre(of screen: NSScreen) {
+        guard displayMode == .window || fullscreenRelativePointer else { return }
         StreamCursor.warpToCentre(of: screen)
         (window.contentView as? StreamInputView)?.resetMotion()
     }

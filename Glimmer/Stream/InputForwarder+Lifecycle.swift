@@ -100,7 +100,7 @@ extension InputForwarder {
         installFocusObservers(for: window)
         installGestureSuppressionMonitor()
         installCommandKeyUpMonitor()
-        if window.isKeyWindow, !isWindowMode {
+        if window.isKeyWindow, !isWindowMode, fullscreenRelativePointer {
             enterCapturedMode()
         }
         // Window mode grabs the pointer by hover, and the bring-up made the
@@ -144,6 +144,7 @@ extension InputForwarder {
         // The view survives in the closing window during its fade. Stop late
         // cursor updates from selecting its transparent image after teardown.
         inputView?.setTransparentCursorEnabled(false)
+        inputView?.cancelComposition()
         inputView?.delegate = nil
         inputView = nil
         window = nil
@@ -167,7 +168,10 @@ extension InputForwarder {
     /// queue is closed and would just return -2).
     public func setReady(_ ready: Bool) {
         let was = isReady
-        if !ready { releaseControllerTouches() }
+        if !ready {
+            releaseControllerTouches()
+            inputView?.cancelComposition()
+        }
         isReady = ready
         updateControllerBackgroundEvents()
         if ready != was {

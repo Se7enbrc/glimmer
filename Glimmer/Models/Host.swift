@@ -51,11 +51,13 @@ struct LibraryApp: Identifiable, Hashable {
     let hdr: Bool
     let hidden: Bool
 
+    var isDesktop: Bool { name.lowercased() == "desktop" }
+
     /// Steam has no SF Symbol, so it gets its own mark, built as a custom symbol so it
     /// sizes and tints like the others.
     var icon: Image {
         switch name.lowercased() {
-        case "desktop": Image(systemName: "macwindow")
+        case _ where isDesktop: Image(systemName: "macwindow")
         case let lowered where lowered.contains("steam"): Image("steam")
         case let lowered where lowered.contains("big picture"): Image(systemName: "tv")
         default: Image(systemName: "app")
