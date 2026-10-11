@@ -2,6 +2,11 @@
 
 ## 2026.10.7 - Unreleased
 
+### Features
+
+- Steam shows its own logo in the launcher, the menu and the PC list, instead
+  of a generic controller.
+
 ### Bug fixes
 
 - Turning on a controller that needs Input Monitoring shows macOS's own

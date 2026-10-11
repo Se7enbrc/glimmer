@@ -102,10 +102,10 @@ struct AppIconsRow: View {
 
     /// Icon, name, and a quiet play glyph: a click streams this app at once. A hidden stream's
     /// tile says where it goes instead, so the way back doesn't look like the way in.
-    private func tileLabel(systemImage: String, title: String, trailing: String, trailingText: String? = nil,
+    private func tileLabel(icon: Image, title: String, trailing: String, trailingText: String? = nil,
                            launching: Bool = false) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: systemImage)
+            icon
                 .font(.system(size: 20, weight: .semibold))
                 .frame(width: 28, height: 28)
             Text(title)
@@ -142,7 +142,7 @@ struct AppIconsRow: View {
             case .hiddenStream: model.resumeStreamWindow()
             }
         } label: {
-            tileLabel(systemImage: app.systemImage, title: app.name, trailing: "play.fill",
+            tileLabel(icon: app.icon, title: app.name, trailing: "play.fill",
                       trailingText: state == .hiddenStream ? "Back to Stream" : nil,
                       launching: state == .connecting || state == .reconnecting)
         }
@@ -165,13 +165,13 @@ struct AppIconsRow: View {
                 } label: {
                     // macOS 27 hides a plain menu-item symbol image by default;
                     // these items name an app, so force the icon back on.
-                    Label(app.name, systemImage: app.systemImage)
+                    Label { Text(app.name) } icon: { app.icon }
                         .labelStyle(.titleAndIcon)
                 }
                 .disabled(model.isStreaming)
             }
         } label: {
-            tileLabel(systemImage: "ellipsis", title: "\(overflowApps.count) more", trailing: "chevron.down")
+            tileLabel(icon: Image(systemName: "ellipsis"), title: "\(overflowApps.count) more", trailing: "chevron.down")
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

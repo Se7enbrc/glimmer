@@ -236,7 +236,7 @@ struct StreamButton: View {
                     Button {
                         model.requestStream(app: app, on: host)
                     } label: {
-                        Label(app.name, systemImage: app.systemImage)
+                        Label { Text(app.name) } icon: { app.icon }
                             .labelStyle(.titleAndIcon)
                     }
                     // Same second-concurrent-session gate as the app tiles.

@@ -131,7 +131,7 @@ struct PCTile: View {
                 // Facts, not buttons: the PC's apps as plain glyphs.
                 HStack(spacing: 8) {
                     ForEach(host.apps.prefix(3)) { app in
-                        Image(systemName: app.systemImage)
+                        app.icon
                             .font(.system(size: 12, weight: .medium))
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)

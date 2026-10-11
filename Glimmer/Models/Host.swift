@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 // MARK: - Persisted host model
 
@@ -50,12 +51,14 @@ struct LibraryApp: Identifiable, Hashable {
     let hdr: Bool
     let hidden: Bool
 
-    var systemImage: String {
+    /// Steam has no SF Symbol, so it gets its own mark, built as a custom symbol so it
+    /// sizes and tints like the others.
+    var icon: Image {
         switch name.lowercased() {
-        case "desktop": return "macwindow"
-        case let lowered where lowered.contains("steam"): return "gamecontroller.fill"
-        case let lowered where lowered.contains("big picture"): return "tv"
-        default: return "app"
+        case "desktop": Image(systemName: "macwindow")
+        case let lowered where lowered.contains("steam"): Image("steam")
+        case let lowered where lowered.contains("big picture"): Image(systemName: "tv")
+        default: Image(systemName: "app")
         }
     }
 }
