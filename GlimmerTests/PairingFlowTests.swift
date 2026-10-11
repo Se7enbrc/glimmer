@@ -15,7 +15,7 @@ import Testing
 @testable import Glimmer
 
 /// Sunshine's half of the PIN handshake, computed the way the PC does it.
-private final class FakePairingHost: Sendable {
+final class FakePairingHost: Sendable {
     typealias Identity = (certPEM: String, keyPEM: String)
 
     let host: Identity
