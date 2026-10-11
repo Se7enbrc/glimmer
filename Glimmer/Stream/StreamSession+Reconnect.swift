@@ -98,7 +98,7 @@ extension StreamSession {
     private func probeRunningAppID() async -> Int? {
         guard let server = reconnectServer else { return nil }
         let deadline = Date().addingTimeInterval(Self.hostEndProbeSeconds)
-        let net = NetworkClient(server: server)
+        let net = makeNetwork(server)
         await net.setRequestDeadline(deadline)
         let info = try? await StreamAttempt.run(until: deadline) { try await net.fetchServerInfo() }
         await net.shutdown()
@@ -249,7 +249,7 @@ extension StreamSession {
         //    state can't be reused and interrupt() latches permanently). Re-point
         //    input + decoder on the MainActor so uplink + IDR requests go to the
         //    new backend, not the dead one.
-        let fresh = NativeBackend()
+        let fresh = makeBackend()
         self.backend = fresh
         await MainActor.run {
             inp.setBackend(fresh)
@@ -265,7 +265,7 @@ extension StreamSession {
         }
 
         // 3. Fresh NetworkClient + full handshake against the restarted host.
-        let net = NetworkClient(server: server)
+        let net = makeNetwork(server)
         self.network = net
         await net.setRequestDeadline(deadline)
         let backendConfig: BackendStreamConfig
@@ -363,7 +363,7 @@ extension StreamSession {
     /// so no callback can fire after) and shut the client so the host drops its
     /// session record. Only nil `self.network` if it's still the one we built - a
     /// concurrent stop() may have already nil'd it.
-    private func tearDownSlippedInReconnect(fresh: NativeBackend, net: NetworkClient) async {
+    private func tearDownSlippedInReconnect(fresh: StreamingBackend, net: NetworkClient) async {
         fresh.interruptConnection()
         await net.shutdown()
         if self.network === net { self.network = nil }

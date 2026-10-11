@@ -58,6 +58,11 @@ final class InputRecordingBackend: StreamingBackend {
     private let keyboardSends = OSAllocatedUnfairLock(initialState: [KeyboardSend]())
     private let mouseMoveSends = OSAllocatedUnfairLock(initialState: [MouseMoveSend]())
     private let connectStarts = OSAllocatedUnfairLock(initialState: [BackendServerInfo]())
+    private let connectConfigs = OSAllocatedUnfairLock(initialState: [BackendStreamConfig]())
+    /// Thrown from every connect when set, as a PC that refuses the RTSP handshake would.
+    private let connectFailure: StreamError?
+
+    init(connectFailure: StreamError? = nil) { self.connectFailure = connectFailure }
     private let idrCount = OSAllocatedUnfairLock(initialState: 0)
     private let hostHDR = OSAllocatedUnfairLock<HdrMetadata?>(initialState: nil)
     private let pointerSends = OSAllocatedUnfairLock(initialState: [PointerSend]())
@@ -69,6 +74,7 @@ final class InputRecordingBackend: StreamingBackend {
     var keyboard: [KeyboardSend] { keyboardSends.withLock { $0 } }
     var mouseMoves: [MouseMoveSend] { mouseMoveSends.withLock { $0 } }
     var startedServers: [BackendServerInfo] { connectStarts.withLock { $0 } }
+    var startedConfigs: [BackendStreamConfig] { connectConfigs.withLock { $0 } }
     var idrRequests: Int { idrCount.withLock { $0 } }
     var hdr: HdrMetadata? {
         get { hostHDR.withLock { $0 } }
@@ -78,6 +84,8 @@ final class InputRecordingBackend: StreamingBackend {
 
     func startConnection(server: BackendServerInfo, config: BackendStreamConfig) throws {
         connectStarts.withLock { $0.append(server) }
+        connectConfigs.withLock { $0.append(config) }
+        if let connectFailure { throw connectFailure }
     }
     func stopConnection() {}
     func interruptConnection() {}

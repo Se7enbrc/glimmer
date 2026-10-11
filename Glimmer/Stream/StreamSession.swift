@@ -398,9 +398,16 @@ public actor StreamSession {
     var launchTask: Task<LaunchResponse, Error>?
     var pendingLaunch: Task<LaunchResponse, Error>?
 
-    /// - Parameter backend: the streaming engine. Defaults to the Swift-native
-    ///   engine, the only implementation.
-    public init(backend: StreamingBackend = NativeBackend()) {
+    /// Every Sunshine client and every reconnect's fresh engine come from these, so tests can
+    /// answer as the PC; production uses the real client and the native engine.
+    let makeNetwork: @Sendable (ServerInfo) -> NetworkClient
+    let makeBackend: @Sendable () -> StreamingBackend
+
+    init(backend: StreamingBackend = NativeBackend(),
+         makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) },
+         makeBackend: @escaping @Sendable () -> StreamingBackend = { NativeBackend() }) {
         self.backend = backend
+        self.makeNetwork = makeNetwork
+        self.makeBackend = makeBackend
     }
 }
