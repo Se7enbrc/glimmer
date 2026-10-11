@@ -45,6 +45,7 @@ verify; some `Logger(` calls put the category on the next line):
 | `Stream.Capabilities`  | `Glimmer/Stream/Types.swift` (the VT codec probe)                                 |
 | `Stream.Discovery`     | `Glimmer/Stream/Discovery.swift`                                                  |
 | `Stream.Identity`      | `Glimmer/Stream/Identity.swift`                                                   |
+| `Input`                | `Glimmer/Stream/InputCore.swift`                                                  |
 | `Stream.Input`         | `Glimmer/Stream/InputForwarder.swift` (+ extensions)                              |
 | `Stream.NativeBackend` | `Glimmer/Stream/NativeBackend.swift`                                              |
 | `Stream.Network`       | `Glimmer/Stream/Network.swift`                                                    |
@@ -186,9 +187,9 @@ Targets at 4K@60 AV1 HDR on high-end Apple Silicon (M-series Pro/Max):
 | `DecodeFrame` duration  | 16.6 ms       | < 8 ms     |
 | `EnqueueFrame` duration | 16.6 ms       | < 1 ms     |
 
-If `DecodeFrame` p99 > ~10 ms, the GPU is the bottleneck: switch to the **Metal
-System Trace** template. If `EnqueueFrame` is slow, look at the sample-buffer
-and format-description work in `enqueueDecodedFrame`.
+If `DecodeFrame` p99 > ~10 ms, inspect **Metal System Trace** and scheduling
+before attributing the delay to the GPU. If `EnqueueFrame` is slow, look at the
+sample-buffer and format-description work in `enqueueDecodedFrame`.
 
 ### “CPU spinning / fans ramping during a stream”
 
@@ -215,18 +216,17 @@ stats-snapshot timer are the usual suspects.
 - `no_image_buffer`: VT returned `noErr` but no pixel buffer (rare; should
   prompt a bug report).
 
-If `FrameDropped` events cluster near `IDRRequested` events, the PC's encoder is
-the upstream cause, not us. If they cluster near `RendererFailed`,
-`AVSampleBufferDisplayLayer` rejected a sample, typically a mid-stream
-HDR-metadata change or a corrupt sample.
+If `FrameDropped` events cluster near `IDRRequested`, inspect packet loss,
+bitstream validity and decoder recovery before assigning a cause. If they
+cluster near `RendererFailed`, `AVSampleBufferDisplayLayer` rejected a sample,
+typically a mid-stream HDR-metadata change or a corrupt sample.
 
 ### “Decode is slow on some streams but not others”
 
 `make profile-signposts`. Compare `DecodeFrame` interval p99 across codecs (the
 begin-message payload includes `idr=true/false` and `bytes=N`). IDR frames are
-always slower than P-frames; the interesting question is the P-frame p99. If
-H.264 P-frames are >2× the AV1 P-frames at the same resolution, the PC's encoder
-is producing pathological bitstreams.
+often slower than P-frames; compare P-frame p99 separately. A difference between
+codecs alone cannot establish that the PC is producing bad bitstreams.
 
 ### “Connection takes forever to establish”
 
@@ -321,12 +321,13 @@ Startup and stopped graphs do not count underruns. The prior player-clock poll
 could miss gaps shorter than a render quantum, so compare that baseline with
 this measurement change in mind. Check Audio System Trace and audible playback
 alongside `audio_underrun_total`, trims, re-primes and engine/stall recovery.
-`audio_output_latency_ms` is HAL latency + safety offset + buffer duration;
-`audio_device_recovery_ms` measures notification to first replacement-graph PCM,
-observed within the monitor interval. Acoustic latency still needs loopback. A
-successful Mach request does not prove the kernel never later demotes the
-thread; verify `Glimmer.audioDecode` in System Trace. Compare video
-output-to-present p99 for collateral regressions.
+`audio_output_latency_ms` is device latency + safety offset + buffer duration +
+the largest active output-stream latency; `audio_device_recovery_ms` measures
+notification to first replacement-graph PCM, observed within the monitor
+interval. Acoustic latency still needs loopback. A successful Mach request does
+not prove the kernel never later demotes the thread; verify
+`Glimmer.audioDecode` in System Trace. Compare video output-to-present p99 for
+collateral regressions.
 
 The asynchronous packet producer uses Mach scheduling rather than joining the
 device render workgroup, whose deadline it does not share. See
@@ -393,8 +394,8 @@ command line.
 
 The existing opt-in exporter samples AVFoundation's renderer metrics at its
 one-second cadence. No renderer sampler or polling exists when telemetry is off.
-These numeric fields use the existing local files and Prometheus endpoint;
-Diagnostics remains hidden by default, and LAN access still needs its separate
+These numeric fields use the existing local files and Prometheus endpoint. The
+Telemetry section remains hidden by default, and LAN access needs its separate
 opt-in. Preference changes apply to the next stream.
 
 NDJSON reports `renderer_frames_total`, `renderer_dropped_frames_total`,
@@ -462,12 +463,12 @@ lands in the frame trace as an `"event":"bookmark"` row on the same clock as the
 input rows (`t_ms`, milliseconds of Mac uptime). The input rows just before it
 show what Glimmer sent: a stray `input_mouse` delta, an `input_pad` button mask
 that changed, or an `input_scroll` whose `sent_y` differs from what macOS
-delivered (`dy`, `units_y`). Mouse movement, controller state and scroll are
-traced in full, apart from the neutral controller state sent when a pad
-connects; for those, no row means Glimmer didn't send it, so it came from the PC
-side. Motion is sampled at 20 Hz, so a missing `input_motion` row proves
-nothing. Keys, mouse buttons, pasted text and touchpad touches leave no row
-either way.
+delivered (`dy`, `units_y`). These rows trace merged mouse movement, controller
+state and scroll, with exceptions such as initial neutral controller state. The
+trace buffer can drop rows under disk pressure, and segments are pruned, so a
+missing row does not prove that input came from the PC. Motion is sampled at 20
+Hz, so a missing `input_motion` row proves nothing. Keys, mouse buttons, pasted
+text and touchpad touches leave no row either way.
 
 ```sh
 cd ~/Library/Logs/Glimmer
@@ -484,8 +485,8 @@ Each per-second row carries the radio (`wifi_rssi_dbm`, `wifi_tx_rate_mbps`,
 `wifi_channel`, `wifi_band`), whether the Wi-Fi helper had AWDL parked
 (`awdl_suppressing`), and how many datagrams the kernel dropped at a full socket
 buffer (`udp_fullsock_delta`). A `video_gap` event row marks every video arrival
-gap over 100 ms. If `udp_fullsock_delta` stays 0 through a gap, the packets were
-lost before they reached the Mac.
+gap over 100 ms. A zero `udp_fullsock_delta` rules out measured full-socket
+drops for that interval; it does not locate every possible loss or delay.
 
 To see what the radio was doing at that moment, turn on airportd's Wi-Fi debug
 logging before the stream, press **⌃B** at each freeze, then read airportd's log
@@ -505,7 +506,8 @@ each gap.
 
 ### Hidden defaults
 
-These have no Settings row. Each lives in the app's defaults domain
+Most of these have no Settings row; `diagFileLogDebug` also has a toggle in the
+hidden Telemetry section. Each lives in the app's defaults domain
 (`defaults write io.ugfugl.Glimmer <key> -bool YES` or `-float N`;
 `defaults delete io.ugfugl.Glimmer <key>` restores the default) and, unless its
 row says otherwise, applies from the next stream. The `pacerTick*` and `cruise*`
@@ -564,11 +566,9 @@ suspect TCP retransmissions or socket-buffer starvation.
 The split between “the bits never arrived” and “the bits arrived but VT rejected
 them” matters for triage:
 
-- **Bytes received but no decoded output**: a stream issue on the PC. Either its
-  encoder produced a bitstream VT can't accept (a mid-stream SPS/PPS change
-  without a fresh IDR; a malformed AV1 sequence header), or the FEC layer
-  recovered the bytes but their content is bad. Surfaces as `FrameDropped` with
-  `reason=vt_status_error`.
+- **Bytes received but no decoded output**: inspect assembly, FEC, bitstream
+  validity and decoder state. `FrameDropped` with `reason=vt_status_error`
+  identifies a VT failure, not which component caused it.
 - **Bytes not received**: a network issue. Surfaces as `NativeVideo` log lines
   (`unrecoverable frame`, `loss episode`) and, with telemetry on, as
   `loss_episode` and `video_gap` event rows.
@@ -607,8 +607,8 @@ declare a dead connection.
 
 ## Build configuration
 
-- **Debug** uses `-Onone` plus overflow checks. Don't profile with it: numbers
-  are 2-5× worse than production.
+- **Debug** uses `-Onone` plus overflow checks. Its timings do not represent
+  Release playback.
 - **Release** is what users see: `-O`, no debug asserts, dSYMs preserved.
 - `DEBUG_INFORMATION_FORMAT = dwarf-with-dsym` is set on Release so Time
   Profiler symbolicates without manual dSYM linking.
@@ -643,9 +643,9 @@ whole command.
   sudo log config --reset --subsystem io.ugfugl.Glimmer
   ```
 
-- **Signpost cost is real but tiny.** `OSSignposter` calls are ~5 ns when not
-  recording, ~50 ns when Instruments is active. We leave the signposts in
-  production builds; do not gate them behind a debug flag.
+- **Signposts remain in production builds.** Measure their overhead on the
+  target workload; do not assume a fixed nanosecond cost or gate them behind a
+  debug flag.
 
 ## Adding new signposts
 

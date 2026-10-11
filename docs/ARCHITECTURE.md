@@ -40,9 +40,11 @@ window covering the screen is the default; saved window and full-screen Space
 preferences are preserved. Decoded H.264, HEVC or AV1 (8- or 10-bit, SDR or
 HDR10) is paced by a display-link-driven `FramePacer` onto an
 `AVSampleBufferDisplayLayer` for the OS to paint. Mouse, keyboard and gamepad
-input goes to the PC through the `StreamingBackend` input methods (coalesced by
-an `InputBatcher` onto the reliable control channel). When the user hits the
-quit hotkey, the backend is told to disconnect and the window comes down.
+input goes to the PC through the `StreamingBackend` input methods.
+`InputBatcher` merges replaceable motion and controller state on the reliable
+control channel; key and button edges retain ordering and local acceptance. When
+the user hits the quit hotkey, the backend is told to disconnect and the window
+comes down.
 
 ## Process model
 
@@ -204,10 +206,10 @@ Components:
 - **`UdpPinger`**: the keepalive ping plumbing and cadences the video and audio
   receivers share; each pings from its own socket.
 
-Inbound callbacks fire on the engine's receive threads and are routed through
-`StreamBridgeContext` (below). Stage events (`stageStarting`, `stageComplete`,
-`stageFailed`) yield through the bridge's event continuation so the connection
-UI lights up live.
+Inbound callbacks fire on the engine's receive threads or the audio packet
+worker and are routed through `StreamBridgeContext` (below). Stage events
+(`stageStarting`, `stageComplete`, `stageFailed`) yield through the bridge's
+event continuation so the connection UI lights up live.
 
 ## Stream session lifecycle
 
@@ -368,12 +370,12 @@ tone mapping to the destination display. HDR input and HDR output are distinct:
 output also requires current display EDR headroom above 1.
 
 HDR10 static metadata comes from the PC through
-`StreamingBackend.hdrMetadata()`.
-`VideoDecoder+HDR.refreshHDRMetadataFromHost()` builds MDCV in GBR, big-endian
-wire order and CLL as four big-endian bytes. These propagate from the pixel
-buffer into the sample format only for HDR input. Colour or metadata changes
-invalidate the cached sample format; SDR removes HDR metadata without replacing
-its declared colour tags.
+`StreamingBackend.hdrMetadata()`. `VideoDecoder.refreshHDRMetadataFromHost()` in
+`VideoDecoder+HDR.swift` builds MDCV in GBR, big-endian wire order and CLL as
+four big-endian bytes. These propagate from the pixel buffer into the sample
+format only for HDR input. Colour or metadata changes invalidate the cached
+sample format; SDR removes HDR metadata without replacing its declared colour
+tags.
 
 The colour probe records raw format extensions and attachments before edits,
 then final attachments and the applied dynamic range. HDR transitions log
@@ -420,12 +422,16 @@ responder chain consumes events for content views that accept first responder
 before the local-monitor block fires.
 
 All uplink goes through the `StreamingBackend` send methods (`sendKeyboard`,
-`sendMouseMove`, `sendMultiController`, …), which the native engine merges
-(`InputBatcher`, sends at least 1 ms apart) onto the reliable control channel.
+`sendMouseMove`, `sendMultiController`, …). `InputBatcher` merges replaceable
+state between sends at least 1 ms apart on the reliable control channel; edges
+bypass that delay and return local channel acceptance in order.
 
-**Mouse.** `CGAssociateMouseAndMouseCursorPosition(false)` freezes the OS cursor
-at its current position the moment the window becomes key. Raw HID deltas come
-from the underlying `CGEvent`'s `kCGMouseEventDeltaX/Y` fields
+**Mouse.** Relative capture uses `CGAssociateMouseAndMouseCursorPosition(false)`
+to freeze the OS cursor. Fullscreen starts captured except for an app named
+“Desktop”, matched ignoring case. The capture shortcut toggles relative capture
+and a free absolute pointer in fullscreen too. `PointerMapping` maps the free
+pointer onto the aspect-fitted picture and clamps it to the stream bounds. Raw
+HID deltas come from the underlying `CGEvent`'s `kCGMouseEventDeltaX/Y` fields
 (`NSEvent.deltaX/Y` goes to zero when the cursor is frozen). A sub-pixel
 residual accumulator carries fractional motion forward so slow trackpad moves
 don't round to zero. A cursor warp to screen center before associate-false keeps
@@ -442,34 +448,37 @@ fullscreen exit animation cannot hide the pointer over the launcher. Closing
 windows immediately pass mouse clicks through while their fade and fullscreen
 exit finish.
 
-**Keyboard.** Positional scancodes via `sendKeyboard`, with the high bit
-(`0x8000`) set to ask the PC to skip layout correction (it otherwise remaps
-AZERTY → QWERTY; we want the user's physical key position to win). Every
-physical key-down and key-up emits one keyboard event: no per-event modifier
-reset, no “release before press” coalescing. NKRO works because AppKit delivers
-each transition as its own `NSEvent` and the responder chain hands each to
-`keyDown(with:)` / `keyUp(with:)` independently. Held keys, mouse buttons and
-modifiers are released on focus/responder loss, deactivation, sleep, a paste,
-readiness loss and `detach()`. Physical ownership is separate from the release
-ledger, which retains each key's down-time wire mapping. Failed releases remain
-pending until ENet accepts them, and form a barrier before new presses. A
-replacement connection repeats releases that the old one may not have ACKed; it
-never replays old presses, and retires that history at the connection boundary.
-Key events after a 100 ms gap and a 250 ms timer reconcile missing ups only with
-Input Monitoring granted and the stream view first responder in the key window.
-Two consecutive missing samples without a key event are required. Mouse checks
-use original button numbers 0–4; extra buttons wait for their real up events.
-Recovery, refocus and wake run the same reconciliation. Controller button edges,
-trigger zero crossings and neutral frames return channel acceptance; replaceable
-axes and trigger travel merge. Paste and live text commits wait for pending
-releases to be accepted; later keys and commits stay queued in order. AppKit
-retains IME composition while the pointer is free, and captured input stays
-physical. Committing text preserves held game keys while releasing modifiers.
+**Keyboard.** Captured controls use positional scancodes via `sendKeyboard`,
+with the high bit (`0x8000`) set to ask the PC to skip layout correction (it
+otherwise remaps AZERTY → QWERTY; we want the user's physical key position to
+win). Forwarded physical key-down and key-up transitions emit keyboard events:
+no per-event modifier reset, no “release before press” coalescing. NKRO works
+because AppKit delivers each transition as its own `NSEvent` and the responder
+chain hands each to `keyDown(with:)` / `keyUp(with:)` independently. Held keys,
+mouse buttons and modifiers are released on focus/responder loss, deactivation,
+sleep, a paste, readiness loss and `detach()`. Physical ownership is separate
+from the release ledger, which retains each key's down-time wire mapping. Failed
+releases remain pending until ENet accepts them, and form a barrier before new
+presses. A replacement connection repeats releases that the old one may not have
+ACKed; it never replays old presses, and retires that history at the connection
+boundary. Input events after a 100 ms gap and a 250 ms timer reconcile missing
+ups. Keyboard reconciliation requires Input Monitoring and the stream view as
+first responder in the key window; mouse-button reconciliation does not.
+Keyboard releases require two consecutive missing samples without a key event.
+Mouse checks use original button numbers 0–4; extra buttons wait for their real
+up events. Recovery, refocus and wake run the same reconciliation. Controller
+button edges, trigger zero crossings and neutral frames return channel
+acceptance; replaceable axes and trigger travel merge. Paste and live text
+commits wait for pending releases to be accepted; later keys and commits stay
+queued in order. AppKit retains IME composition while the pointer is free, and
+captured input stays physical. Committing text preserves held game keys while
+releasing modifiers.
 
 The Cmd key reports as `VK_LWIN` / `VK_RWIN`. By default
 (`captureSysKeys == false`) the InputForwarder drops Cmd-bearing keyDown and
 `.command` `flagsChanged` events so ⌘-Tab, ⌘-Space and ⌘-Q stay local-Mac
-chords. `captureSysKeys = true` forwards everything as a Win-key chord. The
+chords. `captureSysKeys = true` forwards Command as a Win-key chord while the
+stream window is key and either fullscreen or capturing the pointer. The
 configured quit and stats hotkeys are detected before the `captureSysKeys` gate
 so a Cmd-bearing custom quit chord keeps working in either mode.
 
@@ -485,7 +494,7 @@ slot it holds, so the forwarder remembers each slot's last arrival
 whose pad left or changed before it replays the arrivals. Old controller release
 frames are discarded on connection loss so arrivals precede live-state resync.
 An entry is cleared only there, since a removal sent into a link that has
-already died is lost. Each controller has a serial `.userInteractive` handler
+already died is lost. Controllers share a serial `.userInteractive` capture
 queue. `InputCore` owns forwarding snapshots and the shared release ledger under
 a recursive lock, so capture, focus changes and pending releases remain ordered.
 AppKit responders stay on main; keyboard/button encoding runs on the sender.
@@ -531,13 +540,14 @@ release mouse buttons and cancel holds without changing the selected mode.
 position, including Nintendo pads: A is bottom, B right, X left, Y top, per the
 [Apple buttonA contract](https://developer.apple.com/documentation/gamecontroller/gcextendedgamepad/buttona)
 and `GCExtendedGamepad.h`'s diamond. SDL's macOS DB also maps to these
-positions. Input settings offers label matching only for connected
-Nintendo-layout types; the per-type default is off. Both input routes swap only
-outgoing A/B and X/Y, after positional mouse and stop-chord handling. Generic
-GameController pads can also identify Nintendo labels through the bottom
-button's B symbol; generic HID pads use their DB type name, including the SN30,
-Pro 2, Lite 2 and related Nintendo-label models. Xbox editions stay excluded.
-See
+positions. Input settings shows “Use Nintendo button layout” when a
+Nintendo-layout controller is connected. One shared preference, off by default,
+applies to all recognized Nintendo-layout controllers; individual Joy-Con sides
+are excluded. Both input routes swap only outgoing A/B and X/Y, after positional
+mouse and stop-chord handling. Generic GameController pads can also identify
+Nintendo labels through the bottom button's B symbol; generic HID pads use their
+DB type name, including the SN30, Pro 2, Lite 2 and related Nintendo-label
+models. Xbox editions stay excluded. See
 [8BitDo's SN30/Pro 2 Switch labels](https://shop.8bitdo.com/products/8bitdo-abxy-buttons-for-sn30-sn30-pro-sn30-pro-and-pro-4).
 A pad with no trustworthy layout metadata keeps positional mapping.
 
@@ -588,9 +598,9 @@ flooding the log with -2s.
 
 `StreamWindow` (`Glimmer/Stream/StreamWindow.swift`). One `KeyableWindow` per
 session, borderless in full screen. `KeyableWindow` is a thin `NSWindow`
-subclass that returns true for `canBecomeKeyWindow` and `canBecomeMainWindow`:
-borderless windows default to false, which silently breaks
-`makeKeyAndOrderFront` and the responder chain.
+subclass that returns true for `canBecomeKey` and `canBecomeMain`: borderless
+windows default to false, which silently breaks `makeKeyAndOrderFront` and the
+responder chain.
 
 **Window level.** `.normal`. We tried the shielding-window level
 (`CGShieldingWindowLevel()`): AppKit marks the window key and the responder
@@ -603,9 +613,8 @@ away, the window is ordered out, as Backgrounding describes.)
 
 **Display layer as root.** `AVSampleBufferDisplayLayer` is installed as the
 content view's root layer (`view.layer = layer` before
-`view.wantsLayer = true`), not a sublayer of a default backing layer.
-Compositing through an intermediate sRGB layer flattens EDR back to SDR before
-the panel sees it.
+`view.wantsLayer = true`), avoiding an intermediate backing layer in the HDR
+presentation path.
 
 **Stats overlay.** A `StatsOverlayLayer` is attached as a sublayer of the
 display layer (not a sibling: root-layer status is the precondition). The OS
@@ -625,8 +634,8 @@ session config:
   notch area as safe inset. Same path SDL's
   `SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES=1` uses.
 
-Both paths support HDR: EDR follows the layer's PQ content, not the window's
-Space membership.
+Both paths support HDR: PQ or HLG input requests high dynamic range, and active
+HDR output also requires current display EDR headroom above 1.
 
 On displays without a notch, “Use a full-screen Space” defaults off. On notched
 displays, “Keep picture below the camera” defaults off: a Space can't draw
@@ -663,10 +672,9 @@ recordings and shares. It is not a privacy boundary; see
 
 ## Crossing isolation: receive threads ↔ Swift actors
 
-The native engine delivers frames, audio and control events on its own receive
-threads, which neither the actor system nor `@MainActor` knows about, and
-round-tripping every frame through an actor costs too much latency. The bridge
-handles this:
+The native engine delivers frames and control events on receive threads, and
+audio on its packet worker. These callbacks run outside actor isolation; the
+bridge avoids an actor hop for each frame:
 
 - **`StreamBridgeContext`** (`Glimmer/Stream/StreamBridgeContext.swift`) is the
   single instance allocated per session. It holds _weak_ references to the
@@ -697,8 +705,9 @@ at the property and the synchronisation justified inline. Examples:
 - `VideoDecoder._displayLayer` is guarded by an `NSLock` (the renderer's
   `enqueue` is thread-safe, but the pointer load and store race the main actor's
   nil-out at teardown).
-- `VideoDecoder.decompressionSession` / `formatDescription` / SPS / PPS / VPS /
-  stream parameters all live on `decodeQueue` and are serialised by it.
+- `VideoDecoder.decompressionSession`, SPS / PPS / VPS and stream parameters
+  live on `decodeQueue`. The compressed `formatDescription` is also read by VT
+  output and is held in the locked `inputFormatBox`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#nonisolatedunsafe) for the rule on when
 `nonisolated(unsafe)` is acceptable.

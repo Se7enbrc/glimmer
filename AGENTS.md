@@ -53,8 +53,9 @@ tests and makes the app worse is a regression with a green check mark.
 
 ## Setup and commands
 
-Xcode 26.6 or later. Hosted verification, CodeQL and releases all use Xcode 26.6
-on macOS 26. Keep their toolchains aligned; the deployment target is 26.0.
+Xcode 26.6 or later. Hosted verification, Swift CodeQL and releases use Xcode
+26.6 on macOS 26; CodeQL's Python and Actions jobs run on Linux. Keep the Mac
+toolchains aligned; the deployment target is 26.0.
 
 ```bash
 brew install python swiftlint actionlint trufflehog pre-commit
@@ -87,9 +88,9 @@ earns its own privacy record, so use `make verify` for correctness and
 copies" in CONTRIBUTING.
 
 Never run the publishing or keychain setup targets (`dist`, `release-publish`,
-`brew-bump`, `sparkle-keys`, `creds-init`, `setup-notary`, `codesign-setup`,
-`codesign-teardown`) unless the maintainer asks for that exact thing. They
-publish to users or rewrite signing state.
+`brew-bump`, `rc`, `sparkle-keys`, `creds-init`, `setup-notary`,
+`codesign-setup`, `codesign-teardown`) unless the maintainer asks for that exact
+thing. They publish to users or rewrite signing state.
 
 Signing material lives outside the repo, in
 `~/Library/Keychains/developer-id.keychain-db` and `~/.config/developer-id/`.
@@ -197,7 +198,8 @@ These are settled. A pull request is not the place to reopen them.
 - The deployment target is macOS 26. Anything newer sits behind `#available`,
   and the macOS 26 path must still look finished.
 - No analytics, tracking or third-party network calls. Glimmer talks to the PC,
-  to its local network for discovery and Wake on LAN, and to its update feed.
+  to its local network for discovery and Wake on LAN, and to its update feed and
+  update downloads.
 
 ## Choices that look wrong and aren't
 
@@ -211,8 +213,8 @@ numbers or a new platform API, never as cleanup.
   Objective-C exception shim or bridging header.
 - **`DatagramBatch` calls `recvmsg_x` through `dlsym`.** It receives video in
   batches with one syscall, and falls back to `recvfrom` if the symbol is gone.
-- **The FEC kernels in `ReedSolomon.swift` are portable SIMD Swift**, about 2.5×
-  slower than the NEON code they replaced. They only run when packets are lost.
+- **The FEC kernels in `ReedSolomon.swift` are portable SIMD Swift**. They only
+  run when packets are lost.
 - **The control channel turns TLS session resumption off**, so every connection
   re-checks the PC's pinned certificate.
 - **`scripts/sign-bundle.sh` signs inside out.** Never `codesign --deep`: it

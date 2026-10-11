@@ -83,7 +83,7 @@ The canonical xcodebuild invocation (what `make app` runs) is:
 
 ```bash
 scripts/generate-build-info.sh
-xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+SWIFT_DETERMINISTIC_HASHING=1 xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
     -xcconfig Glimmer/StreamLib.xcconfig \
     CODE_SIGNING_ALLOWED=NO \
     -derivedDataPath ./build -destination 'platform=macOS' build
@@ -105,7 +105,8 @@ notarized Release build, installed and relaunched on the same signing path as
    for you).
 2. Base the Debug configuration on `Glimmer/StreamLib.xcconfig` (project editor
    → Info → Configurations), and keep that change out of commits. It supplies
-   the bridging header and the version from `Glimmer/Version.xcconfig`.
+   the version from `Glimmer/Version.xcconfig`, the arm64 architecture and
+   compiler hardening settings. There is no bridging header.
 3. Build and run.
 
 Useful log tails:
@@ -229,7 +230,9 @@ building. Treat a warning as a failure. Thresholds worth knowing from
 - `force_unwrapping`, `force_cast`, `force_try`: warnings, so strict fails them.
 - File length and type body warn at 600, function body at 80, and strict holds
   every file to that.
-- `line_length` warns at 140, errors at 280, ignoring URLs and comments.
+- Keep new and changed lines within 120 columns. The current `line_length`
+  configuration warns at 140 and errors at 280, ignoring URLs, comments and
+  function declarations; strict mode fails warnings.
 
 The pre-commit wrapper runs `swiftlint --fix` first; if it rewrites any Swift
 file, the commit is **refused** and you are told to re-stage the diff. The hook
@@ -293,9 +296,9 @@ Rules:
 
 ### `nonisolated(unsafe)`
 
-`nonisolated(unsafe)` IS acceptable in this codebase, and there are about 70 of
-them. Every use must document the invariant in a comment on the property: what
-the synchronisation discipline is, and why a regular actor or lock isn't viable.
+`nonisolated(unsafe)` is acceptable only with a documented invariant. Every use
+must document the invariant in a comment on the property: what the
+synchronisation discipline is, and why a regular actor or lock isn't viable.
 
 Acceptable patterns:
 
@@ -305,10 +308,10 @@ Acceptable patterns:
   `nonisolated(unsafe)` because Swift weak storage is atomic per spec and the
   engine serialises its callbacks per stream. Swift 6 strict concurrency can't
   see through to that guarantee, but the load is sound.
-- **VT decode-queue state.** `decompressionSession`, `formatDescription`, SPS /
-  PPS / VPS, stream parameters in `VideoDecoder.swift` are touched from the
-  engine's receive thread (submit) and the VT output callback (decode). They
-  live on `decodeQueue` (a serial `DispatchQueue`) and are serialised by it.
+- **VT decode-queue state.** `decompressionSession`, SPS / PPS / VPS and stream
+  parameters in `VideoDecoder.swift` live on the serial `decodeQueue`. The
+  compressed `formatDescription`, also read by VT output, uses the locked
+  `inputFormatBox`.
 - **Single-writer-from-MainActor reads-from-anywhere.**
   `VideoDecoder.hdrEnabled` is written on the main actor, read by the VT output
   callback. A Bool load/store is naturally atomic on every supported arch; the
@@ -342,7 +345,7 @@ the comment at `StreamBridgeContext.eventContinuation` (in
 
 ## Logging
 
-`Logger` from `os`, never `print`, never `os_log`.
+`Logger` from `os`, never `print` (except CLI output), never `os_log`.
 
 - Subsystem: **`io.ugfugl.Glimmer`** (capital G). Every `Logger` in the app uses
   this string; no `.Stream` suffix on the subsystem. The privileged AWDL helper
@@ -371,8 +374,8 @@ the comment at `StreamBridgeContext.eventContinuation` (in
     - URLs carrying `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, `uuid`, or
       `uniqueid`. `NetworkClient.sensitiveQueryKeys` is the set; the redaction
       that consumes it lives in `NetworkClient+Endpoints.swift`.
-    - Cert PEMs or fingerprints at `.public` (a hostile log scraper could read
-      the pinned cert; see [SECURITY.md](SECURITY.md)).
+    - Certificates or cert PEMs. Keep any diagnostic fingerprint private; see
+      [SECURITY.md](SECURITY.md).
     - PIN values, AES keys, signed pairing-secret bytes.
 
 The current Swift 6 strict-concurrency posture means
@@ -448,7 +451,9 @@ Practically, before you call something done:
 - Start with an issue. Describe the problem or the change, and wait for the
   maintainer to agree on the approach before you write code. A pull request that
   doesn't link an agreed issue is closed.
-- `main` is the active development branch; releases are tags on it.
+- `main` is the active development branch. Candidate and final release tags
+  identify the tested candidate commit; promotion compares its shipped inputs
+  with reviewed `main` (see [RELEASE.md](RELEASE.md)).
 - Fork, push your branch to the fork, and open the PR from there against `main`.
   Only the maintainer can merge into `main`. Renovate, run by the maintainer,
   keeps one grouped update branch; other contributors use forks.
@@ -478,12 +483,13 @@ Practically, before you call something done:
   run, and a newer push to a pull request replaces its older run. PR jobs
   receive no signing credentials and cannot publish releases.
 
-Hosted verification, CodeQL and releases use the same Xcode 26.6 toolchain on
-macOS 26. These checks exercise the minimum supported OS family, but do not
-replace real streaming checks of audio devices, mouse capture and controllers.
-The macOS 27 Hot Corner option uses its documented public enum value so builds
-made with Xcode 26 preserve that behavior on newer systems. Release signing uses
-a separate protected workflow; see [RELEASE.md](RELEASE.md).
+Hosted verification, Swift CodeQL and releases use Xcode 26.6 on macOS 26.
+CodeQL's Python and Actions jobs run on Linux. These checks exercise the minimum
+supported OS family, but do not replace real streaming checks of audio devices,
+mouse capture and controllers. The macOS 27 Hot Corner option uses its
+documented public enum value so builds made with Xcode 26 preserve that behavior
+on newer systems. Release signing uses a separate protected workflow; see
+[RELEASE.md](RELEASE.md).
 
 CodeQL scans Swift, Python and GitHub Actions with the `security-extended` query
 suite on pull requests, including approved fork PRs, and on every `main` commit.
