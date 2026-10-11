@@ -74,6 +74,7 @@ struct PCsPane: View {
 }
 
 struct PCTile: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let host: Host
     @Environment(AppModel.self) private var model
 
@@ -92,7 +93,8 @@ struct PCTile: View {
                 } label: {
                     Image(systemName: isDefault ? "star.fill" : "star")
                         .symbolRenderingMode(.hierarchical)
-                        .contentTransition(.symbolEffect(.replace))
+                        .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
+                        .animation(Motion.fade, value: isDefault)
                         .foregroundStyle(isDefault ? Color.yellow : .secondary)
                 }
                 .buttonStyle(.plain)
@@ -162,6 +164,7 @@ struct PCTile: View {
 // MARK: - Shortcuts
 
 struct ShortcutsPane: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
     @State private var showChordCapture = false
     @State private var nintendoPresence = NintendoControllerPresence()
@@ -307,6 +310,8 @@ struct ShortcutsPane: View {
             }
         }
         .formStyle(.grouped)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.controllerConnected)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.rawHIDControllerEnabled)
         .onAppear { nintendoPresence.start() }
         .onDisappear { nintendoPresence.stop() }
         .sheet(isPresented: $showChordCapture) {

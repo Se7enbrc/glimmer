@@ -14,6 +14,13 @@ import Testing
 @testable import Glimmer
 
 struct MenuBarPresentationTests {
+    @Test func controllerIdentitySurvivesBatteryChangesAndDistinguishesMatchingNames() {
+        let first = MenuBarController(name: "Controller", percent: 80, charging: false, sourceID: "gc:one")
+        let refreshed = MenuBarController(name: "Controller", percent: 79, charging: true, sourceID: "gc:one")
+        let second = MenuBarController(name: "Controller", percent: 80, charging: false, sourceID: "gc:two")
+        #expect(first.id == refreshed.id)
+        #expect(first.id != second.id)
+    }
 
     @Test func iconFollowsThePhaseAndAttentionWins() {
         #expect(MenuBarPresentation.icon(phase: .idle, reconnecting: false, error: nil) == .idle)

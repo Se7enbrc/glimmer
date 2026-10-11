@@ -22,11 +22,10 @@ extension StreamWindow {
 
     static let coverSlideKey = "glimmer.coverSlide"
 
-    /// Only the borderless cover slides: a Space's swipe is AppKit's, and
-    /// Reduce Motion keeps the existing fade or snap.
+    /// Spaces keep AppKit's motion; the borderless cover uses a fade under Reduce Motion.
     nonisolated static func coverTransition(_ event: CoverSlideEvent, borderlessCover: Bool,
                                             reduceMotion: Bool) -> CoverTransition {
-        if borderlessCover, !reduceMotion { return .slide }
+        if borderlessCover { return reduceMotion ? .fade : .slide }
         return event == .firstFrame ? .fade : .snap
     }
 
@@ -52,9 +51,8 @@ extension StreamWindow {
         let inFlight = layer.animation(forKey: Self.coverSlideKey) == nil ? nil
             : (layer.presentation()?.value(forKeyPath: "transform.translation.x") as? NSNumber)
                 .map { CGFloat($0.doubleValue) }
-        // Space switching's feel: critically damped (an overshoot would bare the
-        // left edge), the same response as SwiftUI's .smooth at 0.4 s.
-        let spring = CASpringAnimation(perceptualDuration: 0.4, bounce: 0)
+        // Critical damping keeps the left edge covered throughout the slide.
+        let spring = CASpringAnimation(perceptualDuration: Motion.structural, bounce: 0)
         spring.keyPath = "transform.translation.x"
         spring.fromValue = Self.slideStart(entering: entering, inFlight: inFlight, width: width)
         spring.toValue = entering ? 0 : width
@@ -63,6 +61,7 @@ extension StreamWindow {
         spring.isRemovedOnCompletion = false
 
         coverSlideGeneration &+= 1
+        presentationRevealInProgress = entering
         let generation = coverSlideGeneration
         // Clear only while sliding, so the desktop shows beside the picture.
         window.isOpaque = false
@@ -81,6 +80,7 @@ extension StreamWindow {
 
     /// Back to rest: identity, opaque, clickable. Cancels any slide in flight.
     func resetCoverSlide() {
+        presentationRevealInProgress = false
         coverSlideGeneration &+= 1
         displayLayer.removeAnimation(forKey: Self.coverSlideKey)
         window.isOpaque = true
@@ -91,6 +91,10 @@ extension StreamWindow {
     /// The switch away: slide out, then order out. Clicks pass through
     /// meanwhile so they reach the app the user switched to.
     func retreatCover() {
+        if coverTransition(.away) == .fade {
+            fadeCover(entering: false) { [weak self] in self?.window.orderOut(nil) }
+            return
+        }
         guard coverTransition(.away) == .slide else {
             resetCoverSlide()
             window.orderOut(nil)
@@ -102,8 +106,37 @@ extension StreamWindow {
 
     /// The return: slide back in from wherever the picture is.
     func returnCover() {
-        guard coverTransition(.back) == .slide else { resetCoverSlide(); return }
+        let completion: @MainActor () -> Void = { [weak self] in
+            guard let self else { return }
+            self.applyPresentationOptions(coversNotch: self.coversNotch)
+            self.refreshPresentationVisibility()
+        }
+        if coverTransition(.back) == .fade {
+            fadeCover(entering: true, completion: completion)
+            return
+        }
+        guard coverTransition(.back) == .slide else { resetCoverSlide(); completion(); return }
         window.ignoresMouseEvents = awaitingFirstFrameFadeIn
-        slideCover(entering: true) {}
+        slideCover(entering: true, completion: completion)
+        if !awaitingFirstFrameFadeIn { window.alphaValue = 1 }
+    }
+
+    /// A stale completion must not hide a cover that has already returned.
+    func fadeCover(entering: Bool, completion: @escaping @MainActor () -> Void) {
+        resetCoverSlide()
+        presentationRevealInProgress = entering
+        let generation = coverSlideGeneration
+        window.ignoresMouseEvents = !entering || awaitingFirstFrameFadeIn
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = Motion.short
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().alphaValue = entering ? 1 : 0
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.didClose, self.coverSlideGeneration == generation else { return }
+                self.presentationRevealInProgress = false
+                completion()
+            }
+        })
     }
 }

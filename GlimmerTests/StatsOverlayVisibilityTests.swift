@@ -9,6 +9,22 @@ import Testing
 @MainActor
 struct StatsOverlayVisibilityTests {
 
+    @Test func visibilityUsesAnExplicitFadeAndInkChangesNeverSnapshotLiveValues() throws {
+        let overlay = StatsOverlayLayer()
+        overlay.setVisible(true)
+        let fade = try #require(overlay.layer.animation(forKey: "visibility") as? CABasicAnimation)
+        #expect(fade.duration == Motion.short)
+        #expect(fade.fromValue as? Float == 0)
+        #expect(fade.toValue as? Int == 1)
+        overlay.updateBackdropLuminance(1)
+        #expect(overlay.layer.animation(forKey: "ink") == nil)
+        overlay.setVisible(false)
+        let hideGeneration = overlay.visibilityGeneration
+        overlay.setVisible(true)
+        overlay.finishHide(generation: hideGeneration)
+        #expect(!overlay.layer.isHidden)
+    }
+
     @Test func bitrateAndCodecShareOneRow() throws {
         var snapshot = StreamStatsSnapshot()
         snapshot.measuredBitrateMbps = 46.2

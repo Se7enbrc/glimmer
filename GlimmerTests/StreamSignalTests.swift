@@ -31,6 +31,19 @@ struct StreamSignalTests {
         return (pill, host, spoken)
     }
 
+    @Test func pillVisibilityUsesTheSharedExplicitFade() throws {
+        let (pill, _, _) = banner()
+        pill.setText("Reconnecting…")
+        pill.setVisible(true)
+        let fade = try #require(pill.layer.animation(forKey: "visibility") as? CABasicAnimation)
+        #expect(fade.duration == Motion.short)
+        #expect(fade.toValue as? Int == 1)
+        pill.setVisible(false)
+        pill.setVisible(true)
+        #expect(!pill.layer.isHidden)
+        #expect(pill.layer.opacity == 1)
+    }
+
     private let longText = "Weak connection. Lowering quality to 150 Mbps… and then some more words"
 
     // MARK: Width

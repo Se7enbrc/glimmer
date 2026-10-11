@@ -110,14 +110,17 @@ extension AppModel {
     private func readMenuBarControllers() -> [MenuBarController] {
         let pads = GCController.controllers().map { controller in
             let name = controller.vendorName ?? "Controller"
+            let sourceID = "gc:\(ObjectIdentifier(controller))"
             if let hid = DualSenseHID.shared.state(for: ObjectIdentifier(controller))?.battery {
-                return MenuBarController(name: name, percent: hid.percent, charging: hid.charging)
+                return MenuBarController(name: name, percent: hid.percent, charging: hid.charging, sourceID: sourceID)
             }
             let reading = controller.battery.flatMap(ControllerBattery.uiReading)
-            return MenuBarController(name: name, percent: reading?.percent, charging: reading?.charging == true)
+            return MenuBarController(name: name, percent: reading?.percent,
+                                     charging: reading?.charging == true, sourceID: sourceID)
         }
         let raw = HIDGamepadManager.shared.devices.values.sorted { $0.id < $1.id }.map {
-            MenuBarController(name: $0.name, percent: $0.batteryPercentage.map(Int.init), charging: false)
+            MenuBarController(name: $0.name, percent: $0.batteryPercentage.map(Int.init),
+                              charging: false, sourceID: "hid:\($0.id)")
         }
         return MenuBarPresentation.controllers(gameController: pads, rawHID: raw)
     }

@@ -162,16 +162,17 @@ struct ReadinessChip: View {
                 .accessibilityHint(chip == .certMismatch ? "Pairs again to trust this PC's new certificate." : "")
             }
         }
-        .animation(.snappy(duration: 0.3, extraBounce: reduceMotion ? 0 : 0.1), value: presentation)
-        .animation(.snappy(duration: 0.3, extraBounce: reduceMotion ? 0 : 0.1), value: model.hostRoute.routeClass)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: presentation)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.hostRoute.routeClass)
     }
 
     /// The dot + label + route-glyph capsule, shared by the plain chip and
     /// the certMismatch Button so both render identically.
     private func pill(for chip: ChipPresentation) -> some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(chip.dotColor)
+            Image(systemName: "circle.fill")
+                .font(.system(size: 7))
+                .foregroundStyle(chip.dotColor)
                 .frame(width: 7, height: 7)
                 .symbolEffect(.pulse, options: .repeating, isActive: chip.pulsing && !reduceMotion)
             Text(chip.label)

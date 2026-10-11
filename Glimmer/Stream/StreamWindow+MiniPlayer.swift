@@ -163,9 +163,9 @@ extension StreamWindow {
     func updateMiniPlayerControls() {
         guard isMiniPlayer, let close = window.standardWindowButton(.closeButton) else { return }
         let visible = miniPlayerHovering && !didHideCursor
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            close.alphaValue = visible ? 1 : 0
-        } else {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Motion.short
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             close.animator().alphaValue = visible ? 1 : 0
         }
     }
