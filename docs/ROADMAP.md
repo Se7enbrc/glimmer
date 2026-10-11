@@ -36,6 +36,12 @@ Each item names the evidence it comes from.
 - **Network protocol assessment.** Document what stock Sunshine encrypts and
   what it does not, without requiring a patched PC. Source: security roadmap,
   `crypto_used_network`.
+- **Homebrew's main cask repository.** Move from the `se7enbrc/glimmer` tap to
+  plain `brew install --cask glimmer` once Glimmer meets Homebrew's notability
+  bar (75 stars for a submission by someone else, 225 for one by the
+  maintainer), keeping the tap for a release or two so installs move cleanly.
+  Source: Homebrew's
+  [acceptance policy](https://docs.brew.sh/Package-Acceptance-Policy).
 
 - **Apple TV, and possibly iPhone.** Bring the same native streaming engine to
   Apple TV, and consider an iPhone client, which Moonlight already offers there.
