@@ -223,6 +223,13 @@ numbers or a new platform API, never as cleanup.
 
 ## UI and copy
 
+- **Writing docs:** Lead with what readers do or get; no intros or hedging.
+  Number procedures, one action per step, with copy-paste commands where useful.
+  Keep sections within one screen and lists near five items; split recovery
+  steps. Put detail in hints; move tests, telemetry fields, internals and code
+  paths to developer pages. End each user page with a next-step link; first and
+  last lines must explain purpose and destination.
+
 - Copy is short, plain and specific, like the app's own “Couldn't reach Den PC.
   Make sure it's awake and on the same network.” Sentence case. No em dashes, no
   emoji, no exclamation marks, no jargon a player wouldn't use.

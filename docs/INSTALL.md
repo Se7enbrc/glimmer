@@ -1,45 +1,28 @@
-# Install
+# Install Glimmer on your Mac
 
-macOS 26+, Apple Silicon.
+## Homebrew
 
-```bash
-brew tap se7enbrc/glimmer
-brew trust --tap se7enbrc/glimmer   # Homebrew requires this for third-party taps
-brew install --cask glimmer
-```
+1. Run in Terminal:
 
-Or the notarized `.dmg` from
-[Releases](https://github.com/Se7enbrc/glimmer/releases). Either way it updates
-itself. The cask also links the `glimmer` command. An existing Homebrew install
-gets it with `brew upgrade --greedy glimmer` (or
-`brew reinstall --cask glimmer`), because the app updates itself outside
-Homebrew.
+   ```bash
+   brew tap se7enbrc/glimmer
+   brew trust --tap se7enbrc/glimmer
+   brew install --cask glimmer
+   ```
 
-Signed and notarized, distributed outside the App Store. Glimmer runs without
-App Sandbox and offers an optional administrator-approved Wi-Fi helper
-([security details](SECURITY.md)). You can
-[verify a download](SECURITY.md#verifying-a-download) before opening it.
+## Download
 
-Glimmer has earned the
-[OpenSSF Best Practices Passing badge](https://www.bestpractices.dev/en/projects/15346).
-The public assessment records the evidence and protocol limitations; the
-[security roadmap](SECURITY_ROADMAP.md) tracks work toward higher levels.
+1. Download the [DMG](https://github.com/Se7enbrc/glimmer/releases/latest).
+2. Open the DMG.
+3. Drag Glimmer to Applications.
 
-Your PC needs Sunshine and a physical or virtual display to capture. Matching
-its mode to the stream requires configuration that differs between Windows and
-Linux; [the PC setup guide](HOST_SETUP.md) walks through it.
+{% hint style="info" %}
 
-The Wi-Fi helper lives in Settings › Quality › Wi-Fi; macOS asks for one
-approval under Login Items & Extensions. If registration fails, follow the
-recovery guidance shown in Settings. Resetting macOS's entire background-task
-database affects other apps too and is not a routine installation step.
+Requires [Apple Silicon and macOS 26](REQUIREMENTS.md).
+[Verify the download](VERIFY_DOWNLOAD.md) for signature checks. The optional
+[Wi-Fi helper](guides/WIFI.md) needs approval; see [Security](SECURITY.md). Both
+installs [update in-app](UPDATES.md).
 
-If AirPods playback becomes muffled only while a voice app uses their
-microphone, try selecting your Mac's microphone or a USB microphone in that app
-while leaving AirPods as the output. Apple documents this
-[Bluetooth microphone quality change](https://support.apple.com/en-us/102217).
-See [Audio on macOS](AUDIO.md) for voice-chat and volume-recovery guidance.
+{% endhint %}
 
-The [shortcut guide](SHORTCUTS.md) covers keyboard and controller shortcuts,
-getting the mouse back, and what copy and paste can do. Settings › Input shows
-your current bindings.
+Next: [pair your PC](GETTING_STARTED.md#3-pair-the-pc).

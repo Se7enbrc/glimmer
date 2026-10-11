@@ -3,385 +3,249 @@ description: Prepare, test, and publish a release candidate.
 icon: box-archive
 ---
 
-# Release Glimmer
+# Release process
 
-Releases use CalVer `YYYY.M.MICRO` and a tested release candidate. Every code
-change goes through a PR. A candidate must pass the hosted checks before it is
-built, then pass a playback test before the PR is merged or the candidate is
-promoted. A green build alone is not release acceptance.
+Build one verified candidate, test the published artifact, then promote those
+exact files. For installing updates or joining the candidate channel, use
+[Releases and updates](UPDATES.md).
 
 ## 1. Prepare the candidate
 
-Keep the final numeric marketing version in `Glimmer/Version.xcconfig`, such as
-`2026.10.6`. Increment `CURRENT_PROJECT_VERSION` for every changed candidate.
-Build numbers are increasing integers, not dates, and must exceed every build in
-the shared appcast. GitHub tags distinguish candidates, such as
-`2026.10.6-rc.1`; do not put that suffix in either bundle version field.
+Choose a numeric CalVer version and a build number above every build in the
+shared appcast.
 
-Use `make verify` for development checks. It runs workflow lint, the SPDX notice
-check, strict Swift lint, release-tool tests, hostless Swift tests and protocol
-tests under AddressSanitizer. Inspect compiler output for warnings. Ordinary
-unsigned compile checks and tests can run while fixing a failing check; signing
-or packaging a candidate must wait for the hosted checks to pass.
+| Value                     | Rule                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| `MARKETING_VERSION`       | `YYYY.M.MICRO`, such as `2026.10.8`; no candidate suffix.                          |
+| `CURRENT_PROJECT_VERSION` | Increasing integer; bump for every changed candidate.                              |
+| Candidate tag             | Version plus `-rc.N`; never replace an existing tag.                               |
+| Release notes             | The version's `CHANGELOG.md` section, in plain words about changes players notice. |
 
-Push the reviewed PR commit and wait for Verify's macOS job and all three CodeQL
-jobs (Swift, Python and Actions) to succeed. The release workflow checks that
-exact commit, the upstream workflow identities and their analysis results.
-Missing, pending, skipped, cancelled or failed required checks stop it before
-compilation. Open CodeQL alerts on the analyzed ref also stop the release;
-findings from other code-scanning tools, such as Scorecard, do not.
+1. Prepare the focused PR, changelog and both version fields.
+2. Run `make verify` and inspect compiler output; no warnings.
+3. Push the reviewed commit and wait for hosted Verify and all three CodeQL
+   jobs.
+4. Point `release-candidate` at that exact commit and create/push its signed
+   candidate tag.
+5. Dispatch **Release** on `release-candidate`, operation `candidate`, with
+   `expected_sha` and `rc_tag`.
+6. Review the SHA and workflow, then approve the protected `release` deployment.
 
-Once all checks pass, point the maintainer-controlled `release-candidate` branch
-at that exact reviewed commit. Fork-owned workflow runs cannot authorize a
-release: after mirroring a reviewed fork commit, run Verify and CodeQL on
-`release-candidate` and wait for both to pass. Create its candidate tag with the
-maintainer's normal signed Git workflow and push it over SSH. Do not replace an
-existing tag. The publisher requires the tag to exist already, so the scoped
-release token does not create a tag for a commit containing workflow changes.
+Unsigned checks may run while fixing failures. Do not sign or package a
+candidate before the hosted checks pass. Missing, skipped, pending, cancelled or
+failed checks, missing analysis results or open CodeQL alerts on that ref stop
+release. Fork runs cannot authorize it: mirror the reviewed commit and run
+upstream checks.
 
-Dispatch **Release** on `release-candidate`, choose `candidate`, and supply
-`expected_sha` and `rc_tag`. Review the exact SHA and workflow before approving
-the protected `release` deployment. The workflow verifies again, builds once,
-signs and notarizes, packages the final DMG and ZIP, attests them, then
-publishes a GitHub prerelease and its Sparkle `rc` appcast item. It does not
-update Homebrew.
+### Cut a candidate from the command line
 
-**One command.** From the pushed PR branch, `make rc` does the steps above. It
-refuses a dirty or unpushed tree, a build number that doesn't exceed every build
-on the `appcast` branch, and a marketing version that already has a final tag.
-It waits up to 90 minutes for the required checks, stopping at once on a
-failure, then moves `release-candidate` to HEAD, creates and pushes the next
-signed `-rc.N` tag and dispatches **Release**. It opens the run; approving the
-protected `release` deployment there is the remaining step. Rerunning prints the
-existing run. `make rc DRY_RUN=1` prints each step without changing anything.
+Use `make rc` only when you intend to push a candidate and dispatch Release.
 
-**From the pull request.** Adding the `rc` label to a pull request from this
-repository runs the same cut in the **Release candidate** workflow, which
-comments the Release run on the pull request; approving the deployment is still
-the maintainer's step. It runs when the label is added and again each time
-Verify or CodeQL finishes, and cuts only once every required check is green on
-the pull request's current head; until then it stops in seconds without loading
-the app's key. It runs main's tooling and never checks out the pull request.
-While the label stays, each new head that passes gets the next candidate. The
-workflow tags as the release GitHub App rather than with a personal signature;
-the run's attestation identifies the build. It needs a GitHub App installed only
-on this repository, with read and write access to contents, workflows, actions
-and pull requests and read access to checks and code scanning alerts, no
-webhook, and a bypass on the ruleset that protects `release-candidate`. Its
-client ID and private key live in the `rc-cut` environment (no required
-reviewers) as `GLIMMER_RC_APP_CLIENT_ID` and `GLIMMER_RC_APP_PRIVATE_KEY`,
-synced from Doppler like the release secrets.
+It requires a clean, pushed PR branch, a new build number and no final tag for
+the marketing version. It waits up to 90 minutes for checks, stops on failure,
+updates `release-candidate`, pushes the next signed tag and dispatches Release.
+Rerunning prints the existing run. `make rc DRY_RUN=1` previews without changes.
+Deployment approval remains a separate maintainer action.
+
+### Cut a candidate from a PR label
+
+Add `rc` to an upstream PR to request the same cut after its exact head passes
+checks.
+
+The **Release candidate** workflow runs main's tooling without checking out PR
+code. It retries when Verify/CodeQL finishes; each passing new head gets a new
+candidate while the label remains. The release GitHub App creates the tag.
+
+Its `rc-cut` environment has no required reviewer and contains
+`GLIMMER_RC_APP_CLIENT_ID` and `GLIMMER_RC_APP_PRIVATE_KEY`, synced from
+Doppler. Install the App only here, without a webhook, with
+Contents/Workflows/Actions/PR write, Checks/Code scanning read, and the
+`release-candidate` ruleset bypass. The protected release deployment still needs
+approval.
 
 ## 2. Test, then promote the same files
 
-For the first candidate, download its DMG from the GitHub prerelease and verify
-its provenance as described below. Stop streaming, quit Glimmer, and install
-that app. Test the downloaded candidate itself, rather than a local rebuild.
+Install the published candidate DMG after verifying it; a local rebuild does not
+count.
 
-Enroll this Mac once to receive future candidates through Sparkle:
+1. [Verify provenance and Apple signing](VERIFY_DOWNLOAD.md), save your game,
+   stop streaming, quit Glimmer and install the downloaded app.
+2. Record candidate tag, source SHA, build number, macOS, audio devices and Game
+   Mode state.
+3. Test at Highest quality with [telemetry](PROFILING.md#opt-in-telemetry) and
+   bookmarks.
+4. Mark each check passed, failed or not tested. Stop the final session to write
+   its scorecard.
+5. If anything changes, use a new build number/tag, repeat checks and test a new
+   candidate.
 
-```bash
-defaults write io.ugfugl.Glimmer GlimmerUpdateChannel -string rc
-```
+[Candidate enrollment](UPDATES.md#try-release-candidates) persists across stable
+releases; promotion does not change the preference or the signed app.
 
-Restart Glimmer after setting the preference. Enrollment persists across stable
-releases and future candidates. It belongs to this user's Glimmer preferences,
-so copies with the same bundle identifier share it. Regular installs remain on
-stable updates. To leave the candidate channel, set the value to `stable` and
-restart. The signed app is identical for both groups; the preference is never
-embedded in the app or changed automatically during promotion.
+### Playback acceptance
 
-Record the candidate tag, source SHA, build number, macOS version, audio devices
-and Game Mode state with playback results. Test at Highest quality. For this
-release, use the following acceptance checks:
+Exercise the interactions this release can change on a real Mac and PC.
 
-- Play a familiar scene and check the basic overlay's negotiated codec. Bookmark
-  any freeze or pop with **⌃B**, noting whether video, sound or both stopped.
-- In native fullscreen, switch to another Mac app, move the pointer to the top
-  of the screen, then switch back. Repeat several times. The game camera must
-  not replay that movement or jump when capture resumes.
-- Enter Mini Player, tap Escape in a game menu, and hold Escape to release
-  capture. Neither action should open the PC's Start menu. With another Mac app
-  frontmost, the gamepad should still control the game in Mini Player.
-- Switch speakers → AirPods → speakers during one stream. Sound must follow both
-  switches; check screen-anchored spatial audio with AirPods. Compare with
-  Discord's microphone inactive and with a separate microphone selected.
-- Save a custom resolution, reopen its editor and confirm the saved dimensions.
-- Choose Stream → Stop Streaming from fullscreen and from Mini Player. Confirm
-  the PC game keeps running, resume it with different resolution/FPS/HDR
-  settings, then use Quit and confirm the named app closes. Check cancellation
-  leaves it running. The Mac pointer must be visible, and clicks must work in
-  Glimmer and other apps. Start another stream and confirm input capture works
-  again.
+| Check                                          | Expected result                                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Familiar game scene                            | Correct negotiated codec; bookmark freezes/pops and distinguish picture from sound.  |
+| Native fullscreen, switch away/back repeatedly | Moving to the screen edge while away does not replay camera movement on return.      |
+| Mini Player, Escape tap/hold                   | Tap reaches the game; hold releases capture; neither opens the PC's Start menu.      |
+| Mini Player with another app focused           | Controller still works; keyboard/mouse follow focus.                                 |
+| Speakers → AirPods → speakers                  | Sound follows; check spatial anchoring and voice chat with a separate microphone.    |
+| Edit/reopen custom resolution                  | Saved dimensions remain.                                                             |
+| Stop from fullscreen and Mini Player           | Stream ends and its PC app quits; pointer and clicks work in Glimmer and other apps. |
+| Start a fresh stream with changed quality      | New resolution/FPS/HDR apply and input captures correctly.                           |
+| Confirmed URL quit and cancellation            | Quit closes the named PC app; cancelling the alert leaves it running.                |
 
-Stop the final session so telemetry writes its scorecard, then review it with
-the bookmarks and listening notes. Record each result as passed, failed or not
-tested; earlier local-build results do not count for this artifact. A fix after
-acceptance requires a new build number, tag, green checks and another candidate
-test. See [PROFILING](PROFILING.md) for the telemetry files.
+There is no disconnect-and-resume acceptance path in this release. Keep the
+[audio device checks](PROFILING.md#audio-device-checks) and any targeted
+input/pacing comparisons with the candidate's evidence.
 
-Only after the maintainer accepts the candidate, merge the PR. Wait for main's
-required checks to pass, then dispatch **Release** on `main` with operation
-`promote`, its current `expected_sha`, the tested `rc_tag`, and that candidate's
-full `candidate_sha`.
+### Promote
 
-Promotion verifies the downloaded DMG and ZIP against their attestations and
-published digests. Main must have the same shipped inputs as the candidate: the
-app, login item and helper sources, the Xcode project and package pins, the
-Makefile and the build, signing and packaging scripts (`SHIPPED` in
-`scripts/promote-release.py`). Release tooling, docs and tests may move on. The
-workflow first creates an annotated final marketing-version tag at the exact
-`candidate_sha`, using the release GitHub App. An existing tag at that commit is
-already done; a tag at a different commit stops promotion. It then marks the
-existing release stable and latest, removes the item's `rc` channel, and updates
-Homebrew. It never rebuilds, re-signs or repackages. The original candidate tag
-and asset URLs stay in place; the stable release title uses the final marketing
-version. The appcast keeps the exact ZIP URL, signature and size that the
-candidate used.
+Merge only after the maintainer accepts the candidate, then wait for main's
+required checks.
 
-Release notes come from the version's `CHANGELOG.md` section: a flat list of
-changes players will notice. The publisher includes these notes in GitHub and
-Sparkle. Candidate and stable items share one appcast; normal Sparkle clients
-ignore items in the `rc` channel, while enrolled clients can receive both.
+1. Dispatch **Release** on `main`, operation `promote`, with current
+   `expected_sha`, tested `rc_tag` and full `candidate_sha`.
+2. Approve the reviewed deployment.
+3. Confirm the stable release, appcast, Homebrew update and Pages deployment.
 
-Local `make release` and `make dist` remain available for explicitly requested
-local builds. Local `make release-publish` is a separate direct publication
-path, not the candidate promotion procedure. Do not use it to bypass acceptance
-or to rebuild an already published candidate. Packaging and publication require
-a clean worktree, including untracked files, and validate signatures,
-notarization, Gatekeeper acceptance and app/helper launch authorization.
+Promotion verifies downloaded DMG/ZIP attestations and digests. Main's shipped
+inputs must match `SHIPPED` in `scripts/promote-release.py`: app/helpers,
+project/package pins, Makefile and build/sign/package scripts. Docs, tests and
+release tooling may advance.
 
-### Website and update feed
+It creates the final annotated tag at `candidate_sha`, marks the existing
+release stable/latest, removes the appcast's `rc` channel and updates Homebrew.
+The candidate tag, asset URLs, ZIP signature and size remain. It never rebuilds,
+re-signs or repackages. A conflicting final tag stops promotion.
 
-GitHub Pages serves `https://se7enbrc.github.io/glimmer/`, the address
-`SUFeedURL` reads, from the **Pages** workflow, which uploads `main`'s files as
-they are (no Jekyll) plus `appcast.xml` from the `appcast` branch. `index.html`
-and `website/` are the static landing page. The `appcast` branch holds only the
-machine-written feed: releases and promotions commit there, so they never move
-`main` or put open pull requests behind it. Preview the site with
-`python3 -m http.server 8765` from the repository root.
+### Local publication
 
-The workflow deploys on every push to `main`, after every **Release** run and on
-demand. A push to `appcast` cannot start it, because push events run the
-workflows on the pushed branch and that branch has none. After a manual change
-to the feed, run `gh workflow run pages.yml -R Se7enbrc/glimmer`; local
-`make release-publish` does this itself.
+Use local distribution targets only when the maintainer requests that exact
+operation.
 
-One-time setup, in this order. Promote any pending candidate first with the
-tooling already on `main`, then:
+`make release` and `make dist` build locally; `make release-publish` directly
+publishes and is not candidate promotion. Packaging/publication need a fully
+clean tree and valid signatures, notarization, Gatekeeper and launch
+authorization. Do not use this path to bypass acceptance or replace published
+bytes.
 
-1. Create the `appcast` branch as a single signed commit holding `main`'s
-   current feed blob, and nothing else. The ruleset that covers every branch
-   except `main` and `dependabot/**` already limits it to the maintainer and the
-   release app.
+## Website and update feed
 
-   ```bash
-   git fetch origin main
-   TREE="$(printf '100644 blob %s\tappcast.xml\n' "$(git rev-parse origin/main:appcast.xml)" | git mktree)"
-   COMMIT="$(git commit-tree -S "$TREE" -m "appcast: start the update feed branch")"
-   git push git@github.com:Se7enbrc/glimmer.git "$COMMIT:refs/heads/appcast"
-   git fetch origin appcast
-   git ls-tree -r --name-only origin/appcast   # only appcast.xml
-   curl -fsSL https://se7enbrc.github.io/glimmer/appcast.xml | cmp - <(git show origin/appcast:appcast.xml)
-   ```
+Check that the public appcast returns HTTPS 200 without a redirect after every
+deployment change.
 
-2. Switch the Pages source to GitHub Actions:
-   `gh api -X PUT repos/Se7enbrc/glimmer/pages -f build_type=workflow`. The last
-   legacy deployment stays live until the workflow's first deploy.
-3. Merge the pull request that adds the workflow. Its push to `main` deploys the
-   site; confirm the run passed and the live feed still matches the branch.
+| Location                                         | Purpose                                                                                     |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `main`: `index.html`, `website/`                 | Static site, uploaded as files without Jekyll.                                              |
+| `appcast` branch                                 | Machine-written `appcast.xml`; release metadata does not move main.                         |
+| `https://se7enbrc.github.io/glimmer/appcast.xml` | Feed read by released apps.                                                                 |
+| **Pages** workflow                               | Deploys main's site plus the appcast branch on main pushes, Release completion or dispatch. |
 
-Until step 2 the legacy build keeps serving `main`'s feed, and between steps 2
-and 3 its last deployment stays live, so publish nothing in between. Merging
-before step 2 would let the legacy build publish a site without `appcast.xml`.
+An appcast push alone cannot trigger Pages because that branch has no workflow.
+After a manual feed edit, dispatch
+`gh workflow run pages.yml -R Se7enbrc/glimmer`. Local publication dispatches
+it. Preview the site locally with `python3 -m http.server 8765`.
 
-The site has no custom domain. A custom domain makes Pages redirect the
-github.io address, which every released app reads, so add one only after a
-release that reads the feed from the custom domain directly has reached users.
-After any Pages change, confirm that
-`https://se7enbrc.github.io/glimmer/appcast.xml` answers 200 over HTTPS with no
-redirect.
+Keep the site without a custom domain until an app release using the new feed
+address has reached users; Pages otherwise redirects the existing address. Do
+not repoint a live feed while a candidate awaits promotion.
 
-### Hosted release
+## Hosted release
 
-The manual **Release** workflow uses GitHub's standard Apple Silicon `macos-26`
-runner with Xcode 26.6, matching Verify and CodeQL. Candidate dispatches accept
-only `release-candidate`; promotion dispatches accept only `main`. Both bind the
-reviewed full SHA to the dispatch, checkout and current upstream branch. Moving
-the branch stops the next protected phase. Runs are serialized, not cancelled by
-a later dispatch.
+Keep verification, compilation, signing, packaging and publication as separate
+gated phases.
 
-The `release` environment requires a maintainer reviewer, allows deployments
-from exactly `main` and `release-candidate`, and disables administrator bypass.
-For a sole maintainer, self-review remains allowed; deployment approval is still
-separate from dispatch. Review the workflow and SHA before approving. Adding an
-allowed branch expands access to release secrets and requires maintainer
-approval.
+| Phase        | Gate and credentials                                                                                                               |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Dispatch     | Candidate only on `release-candidate`, promotion only on `main`; full SHA bound to upstream ref.                                   |
+| Approval     | Protected `release` environment, exact two branches, maintainer reviewer, no admin bypass; sole-maintainer self-review allowed.    |
+| Verify/build | Xcode 26.6 on `macos-26`; all hooks with `GLIMMER_SECRET_SCAN_ALL_FILES=1`, `make verify`, warnings fatal. No signing credentials. |
+| Sign         | Existing compiled outputs only; temporary Apple credentials, profiles and keychain.                                                |
+| Package      | Requires signing completion and successful credential cleanup; final DMG/ZIP digests recorded.                                     |
+| Attest       | Pinned `actions/attest`, GitHub OIDC and public Sigstore record for final files; no release credentials.                           |
+| Publish      | Requires packaging/attestation; Sparkle key and scoped content token only.                                                         |
+| Promote      | Release App token and scoped publication token; no Apple signing material or Sparkle private key.                                  |
 
-Before any candidate compilation, the workflow requires the existing hosted
-checks to be green. It then runs all pre-commit hooks with
-`GLIMMER_SECRET_SCAN_ALL_FILES=1` and `make verify`. App and helper compilation
-finish before Apple signing credentials are exposed. Signing reuses those
-outputs; it cannot compile. Completion records bind each phase to this run and
-SHA. Compiler warnings fail both Xcode and standalone helper builds. Pull
-requests receive no release secrets, and releases use no pull-request artifacts
-or restored caches. Promotion receives the release GitHub App token for the
-final tag and the scoped publication token, with no Apple signing material or
-Sparkle private key. Make the existing `GLIMMER_RC_APP_CLIENT_ID` and
-`GLIMMER_RC_APP_PRIVATE_KEY` secrets available in the `release` environment as
-well as `rc-cut`; the App token needs Contents and Workflows write permission.
+Runs serialize instead of cancelling each other. Moving a branch stops the next
+protected phase. No PR artifacts or restored caches enter release builds.
+Completion records bind phases to this run/SHA; they are not independent
+attestations.
 
-Store these nine values as **environment secrets**, not repository secrets:
+### Configure release secrets
 
-| Secret                           | Existing material or permission                                                            |
-| -------------------------------- | ------------------------------------------------------------------------------------------ |
-| `DEVELOPER_ID_P12_BASE64`        | Single-line base64 of the existing Developer ID certificate and private-key export         |
-| `P12_PASSWORD`                   | Password for that export                                                                   |
-| `NOTARY_KEY_BASE64`              | Single-line base64 of the existing notarization API key                                    |
-| `NOTARY_KEY_ID`                  | Existing API key identifier                                                                |
-| `NOTARY_ISSUER_ID`               | Existing API issuer identifier                                                             |
-| `APP_PROVISIONPROFILE_BASE64`    | Single-line base64 of the approved Glimmer Developer ID profile                            |
-| `HELPER_PROVISIONPROFILE_BASE64` | Single-line base64 of the approved network-helper Developer ID profile                     |
-| `SPARKLE_ED_PRIVATE_KEY`         | Existing update-signing private key; never generate a replacement for CI                   |
-| `RELEASE_CONTENTS_TOKEN`         | Expiring fine-grained token for only `glimmer` and `homebrew-glimmer`, Contents read/write |
+Store approved material in Doppler project `glimmer`, config `release`, synced
+to the protected GitHub environment.
 
-The publishing token belongs to the maintainer whose existing repository role
-can publish through the ruleset. It needs neither Workflows nor Administration
-permission. Do not substitute the broad personal token used by a local `gh`
-login, or grant GitHub Actions a general ruleset bypass. This scoped token still
-permits content changes throughout the two selected repositories; it is not
-restricted to the appcast and cask files. Record its expiry and renew it before
-the next release when necessary.
+| Environment secret                                              | Purpose                                                                                     |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `DEVELOPER_ID_P12_BASE64`, `P12_PASSWORD`                       | Existing Developer ID export and password.                                                  |
+| `NOTARY_KEY_BASE64`, `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID`        | Existing notarization API key and identifiers.                                              |
+| `APP_PROVISIONPROFILE_BASE64`, `HELPER_PROVISIONPROFILE_BASE64` | Approved separate app/helper profiles.                                                      |
+| `SPARKLE_ED_PRIVATE_KEY`                                        | Existing update-signing key; never generate a replacement for CI.                           |
+| `RELEASE_CONTENTS_TOKEN`                                        | Expiring fine-grained token for only `glimmer` and `homebrew-glimmer`, Contents read/write. |
+| `GLIMMER_RC_APP_CLIENT_ID`, `GLIMMER_RC_APP_PRIVATE_KEY`        | Also available in `release`; promotion needs Contents and Workflows write.                  |
 
-For Doppler-managed credentials, use the dedicated `glimmer` project and
-`release` config. Configure its GitHub Actions sync for `Se7enbrc/glimmer` and
-the protected `release` environment. Keep unrelated secrets out of that config
-and leave syncing unmasked values as variables disabled. Make changes in
-Doppler; the sync can overwrite edits made only in GitHub. The workflow reads
-GitHub environment secrets directly and needs no Doppler service token at
-runtime.
+Do not use repository secrets, unmasked variables, a broad local `gh` token or a
+general Actions ruleset bypass. Change values in Doppler; sync can overwrite
+GitHub-only edits. The workflow needs no Doppler runtime token.
 
-The publishing token currently has a 30-day lifetime. Rotate it before expiry:
-create a replacement with the same two-repository scope, update Doppler, confirm
-the sync and permissions, then revoke the old token. A day-25 reminder leaves
-time to resolve an access problem. This schedule does not apply to the Apple
-certificate, provisioning profiles or Sparkle update key.
+The content token can change all contents in its two repositories, not just feed
+and cask. Its current lifetime is 30 days; remind at day 25, replace with the
+same scope, confirm sync/permissions, then revoke the old token.
 
-Prepare and review the workflow before transferring any signing material. The
-repository's signing-material restrictions still apply: obtain the maintainer's
-explicit authorization for the specific secret transfer. Reuse the existing
-certificate and profiles; this setup does not require new certificates or keys.
+### Protect signing material
 
-`scripts/ci-release.sh` decodes signing files under the runner's temporary
-directory with private permissions, generates a fresh keychain password, and
-cleans up the keychain and files when signing finishes or fails. Publication
-receives only the Sparkle key and scoped publishing token. The token stays in
-the process environment; an HTTPS credential helper reads it without putting it
-in a remote URL or Git configuration. The tap uses a fresh HTTPS checkout. An
-unconditional cleanup step also runs at job completion. Do not enable Actions
-debug logging for release runs; the script rejects it. Never upload the runner
-temporary directory, credentials, keychains or raw signing inputs as artifacts.
-The provisioning profiles embedded in the signed distribution are intentional.
+Obtain explicit maintainer authorization before transferring or replacing any
+signing material.
 
-The DMG and Sparkle ZIP are packaged in a separate step after signing
-credentials are removed. Packaging requires a successful signing record for this
-run and SHA, and publication requires completed packaging and artifact
-attestation. A keychain-deletion or file-cleanup failure fails the signing phase
-and cannot authorize packaging, even when notarization succeeded. The completion
-records enforce sequencing on this trusted runner; they are not independent
-attestations of the build.
+Prepare/review the workflow first. Never fetch or print cloud secret values for
+debugging, enable Actions debug logging, or upload temporary signing inputs.
+`scripts/ci-release.sh` uses private temporary files and a fresh keychain
+password, then removes both; cleanup failure blocks packaging.
 
-The pinned `actions/attest` action attests exactly the final DMG and Sparkle ZIP
-before publication. It receives no release credentials and uses GitHub OIDC with
-a short-lived public Sigstore certificate, not a stored signing key. GitHub
-stores the signed build provenance; Sigstore records it in a public transparency
-log. Publication checks both files against their packaging digests before
-preparing credentials, and never recreates the ZIP. A failed or missing
-attestation stops publication. This records the build's source and workflow
-identity; it does not claim a SLSA level or replace Developer ID, notarization
-or Sparkle signatures. See
-[GitHub's artifact attestation guide](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
+The content token stays in the environment and an HTTPS credential helper, not a
+remote URL or Git config. Tap updates use a fresh checkout. The runner remains
+trusted across all phases; credential timing does not isolate processes. A
+forced kill can bypass traps; hosted VM decommissioning is the final boundary.
 
-For a downloaded asset, verify its provenance and release-workflow identity:
+### Verify and recover publication
 
-```bash
-gh attestation verify path/to/Glimmer-VERSION.dmg --repo Se7enbrc/glimmer \
-  --signer-workflow Se7enbrc/glimmer/.github/workflows/release.yml \
-  --source-ref refs/heads/release-candidate \
-  --source-digest CANDIDATE_FULL_SHA
-```
+Preserve original assets if any publication step fails.
 
-Use the ZIP path to verify the update archive. Local `make release-publish`
-still prepares and publishes both assets, but does not create a hosted build
-attestation.
+Attestations cover source/workflow identity, not a SLSA level or full-package
+reproducibility. Use [download verification](VERIFY_DOWNLOAD.md) with
+`--source-digest CANDIDATE_FULL_SHA` for an exact commit. Local direct
+publication creates no hosted attestation.
 
-All these steps share the same job and runner. The reviewed source, build tools
-and dependencies remain trusted throughout the run. Limiting each step's
-credentials and deleting temporary files reduces exposure; it does not provide
-process isolation from earlier steps on that runner.
+Appcast and hosted cask commits use GitHub's signed `createCommitOnBranch` API,
+checking the expected head and GitHub signing key. On an uncertain response,
+inspect the remote before retrying; never fall back to an unsigned commit. Local
+cask updates use the maintainer's normal signing method.
 
-Cleanup traps cannot run after a forced process kill or runner failure. GitHub
-decommissions its hosted VM when the job completes, providing the final boundary
-for temporary runner state. Cleanup remains best effort in those failure cases;
-it is not a guarantee that no credential ever existed in memory or on disk. See
-[GitHub's hosted-runner lifecycle](https://docs.github.com/en/actions/how-tos/manage-runners/github-hosted-runners/use-github-hosted-runners).
-
-Publication uses the existing immutable-release checks and commits the appcast
-to the `appcast` branch after pinning the release tag. Every appcast update,
-hosted or local, and hosted cask updates use GitHub's `createCommitOnBranch`
-API, which signs the commit with GitHub's key. The request includes the expected
-branch-head SHA (the `appcast` head the feed was read from), so a concurrent
-update fails instead of being overwritten. The script requires GitHub to report
-both a valid signature and its own signing key. No personal SSH signing key goes
-to the runner. Local cask updates continue using normal Git commits and the
-maintainer's configured signing method.
-
-The API commit updates the remote branch; the disposable hosted checkout keeps
-its generated metadata without resetting other files. If a response fails or
-does not confirm the signature, inspect the remote branch before retrying: the
-commit may already exist. The script never retries a commit mutation or falls
-back to an unsigned commit. See
-[GitHub's commit API](https://docs.github.com/en/graphql/reference/commits#createcommitonbranch).
-
-The Pages workflow deploys the new feed when the Release run finishes, whether
-or not a later step failed. Check that Pages finishes and the public appcast
-contains the new version. The repository token provided automatically by Actions
-has read-only Contents, Actions and Security events access, plus write access to
-Attestations. The job also has OIDC token permission for the attestation
-certificate. These job permissions apply throughout the run; they do not isolate
-the attestation step from other trusted build steps. The separate scoped token
-still owns content publication.
-
-If publication succeeds but the tap step fails, the release is already public.
-The appcast commit updates the `appcast` branch. A rerun still requires `main`
-to match the dispatched SHA. Bump the cask from a current main checkout with
-`make brew-bump VERSION=<version>`, which finds the stable release's tag (a
-promoted candidate keeps its `-rc.N` tag) and checksums the published DMG. Do
-not rebuild the published version. If the appcast push fails after assets
-publish, preserve the original assets and resolve that publication step without
-replacing them. A new build of the same source can contain different signed
-bytes and must not overwrite an existing release.
+If publication succeeds but Homebrew fails, run
+`make brew-bump VERSION=<version>` from current main only when authorized. It
+checksums the published DMG, including promoted candidates. If the feed step
+fails, repair that step without rebuilding or replacing assets. A rerun still
+requires main to match the dispatch SHA. Confirm Pages publishes the new feed.
 
 ## 3. Signing credentials
 
-Installed builds require two explicit macOS **Developer ID** provisioning
-profiles, made with the existing Developer ID Application certificate:
+Use explicit Developer ID profiles with the existing certificate for installed
+builds.
 
-| Profile                             | Explicit App ID            | Capabilities                                        |
-| ----------------------------------- | -------------------------- | --------------------------------------------------- |
-| Glimmer Developer ID                | `io.ugfugl.Glimmer`        | Head Pose, Spatial Audio Profile, Enhanced Security |
-| Glimmer Network Helper Developer ID | `io.ugfugl.glimmer.helper` | Network Topology Observation                        |
+| Profile                             | Bundle ID                  | Capabilities                                         |
+| ----------------------------------- | -------------------------- | ---------------------------------------------------- |
+| Glimmer Developer ID                | `io.ugfugl.Glimmer`        | Head Pose, Spatial Audio Profile, Enhanced Security. |
+| Glimmer Network Helper Developer ID | `io.ugfugl.glimmer.helper` | Network Topology Observation.                        |
 
-Store these files with mode 0600 in the mode-0700 directory
-`~/.config/glimmer/profiles/`, outside the repository:
-
-- `Glimmer_Developer_ID.provisionprofile`
-- `Glimmer_Network_Helper_Developer_ID.provisionprofile`
-
-These are the Makefile's default paths, so normal `make release`, `make dev` and
-`make reinstall` commands need no extra arguments. The signing private key
-remains in the existing Developer ID keychain. To use profiles elsewhere,
-override their paths:
+Store mode-0600 files in mode-0700 `~/.config/glimmer/profiles/`:
+`Glimmer_Developer_ID.provisionprofile` and
+`Glimmer_Network_Helper_Developer_ID.provisionprofile`. Override paths when
+needed:
 
 ```bash
 make release \
@@ -389,119 +253,73 @@ make release \
   HELPER_PROVISIONING_PROFILE="$HOME/Downloads/Glimmer_Network_Helper_Developer_ID.provisionprofile"
 ```
 
-Use the actual filenames. The same variables apply to `make dev`,
-`make reinstall` and distribution targets; they can also be exported in the
-shell. Profile names are labels; the build validates the bundle identifier,
-team, expiration, distribution scope and requested entitlement grants. It
-derives the signing identifiers from the profiles and embeds each one in its own
-bundle before signing inside out. It uses only the two configured paths; it
-never scans other signing directories. Both `.provisionprofile` and
-`.mobileprovision` files are gitignored as a second safeguard.
+Validation checks identifier, team, expiry, scope and grants, then embeds each
+profile in its own bundle. Missing/expired profiles stop installation; replace
+the profile, not the keys. Unsigned checks/tests need no profiles. No ad hoc
+installation fallback exists.
 
-Missing or incompatible profiles stop signing. There is no ad hoc installation
-fallback for these restricted capabilities. `make app`, `make test` and
-`make verify` remain unsigned and need no profiles or signing credentials.
+### Set up a signing machine
 
-Fresh machine, one-time: `make creds-init`, fill in the file it prints (or set
-its `OP_SOURCE`), then `make codesign-setup setup-notary sparkle-keys`. Secrets
-live in that 0600 file and its 1Password item, never in the repo.
+Run setup targets only when the maintainer explicitly requests them.
 
-Sparkle's command-line tools are downloaded only after their archive matches the
-SHA-256 pinned in `scripts/sparkle-tools.sh`. When overriding `SPARKLE_VERSION`,
-supply `SPARKLE_SHA256` from that release's trusted digest. Keep the framework
-package pin and the tools version in step, and refresh Sparkle's full license
-text in `Glimmer/ThirdPartyNotices.txt`. The app bundles that file, `CREDITS.md`
-and `LICENSE` as resources.
+`make creds-init` creates the credentials file; fill it or set `OP_SOURCE`, then
+use `make codesign-setup setup-notary sparkle-keys` for a new setup. Existing
+releases must keep their Sparkle key. Secrets stay in the mode-0600 file and its
+1Password item, never the repository.
 
-These belong to your Developer ID, not to Glimmer: `~/.config/developer-id/` and
-`~/Library/Keychains/developer-id.keychain-db` hold one identity and one
-`notary` profile, and any other project can sign and notarize with them. Exactly
-one Developer ID Application identity should be reachable, or signing by name
-fails as ambiguous.
+`~/.config/developer-id/` and `~/Library/Keychains/developer-id.keychain-db` are
+shared signing state, not repository files. Keep exactly one reachable matching
+Developer ID identity. The App Store Connect team API key uses the `notary`
+profile; Developer access is sufficient, and it does not depend on the Apple ID
+password.
 
-- The **Developer ID Application certificate** (`P12_PATH`, `P12_PASSWORD`)
-  signs the app. Create it on the G2 Sub-CA; the previous sub-CA ends
-  2027-02-01, and nothing it issued signs after that. Apple says G2 certificates
-  expire yearly, though the first one issued here runs to 2031-09-17, so go by
-  the date `make dist` prints. Shipped builds keep working after their
-  certificate expires, because every signature is timestamped. Never revoke a
-  certificate that signed a release: Gatekeeper would then block those builds.
-- The **App Store Connect team API key** (`NOTARY_KEY_PATH`, `NOTARY_KEY_ID`,
-  `NOTARY_ISSUER_ID`) notarizes through the `notary` notarytool profile that
-  `make setup-notary` stores in the signing keychain. Developer access is
-  enough. It doesn't expire and doesn't depend on the Apple ID password.
+### Renew credentials and tooling
 
-`make dist` prints the certificate's expiry and warns 60 days ahead. To renew:
+Renew the expiring item without replacing unrelated signing state.
 
-```bash
-D=~/.config/developer-id; umask 077
-/usr/bin/openssl req -new -newkey rsa:2048 -nodes -keyout $D/developer-id.key \
-    -out ~/Downloads/Glimmer-Developer-ID.certSigningRequest -subj "/CN=Glimmer Developer ID/C=US"
-# developer.apple.com → Certificates → + → Developer ID Application → G2 Sub-CA → upload it
-/usr/bin/openssl x509 -inform der -in ~/Downloads/developerID_application.cer -out $D/developer-id.pem
-P="$(/usr/bin/openssl rand -base64 24)"
-/usr/bin/openssl pkcs12 -export -inkey $D/developer-id.key -in $D/developer-id.pem \
-    -out $D/developer-id.p12 -passout "pass:$P"
-scripts/signing-creds.sh set P12_PATH $D/developer-id.p12
-scripts/signing-creds.sh set P12_PASSWORD "$P"
-rm $D/developer-id.key $D/developer-id.pem
-make codesign-teardown codesign-setup setup-notary
-```
+`make dist` reports certificate expiry and warns 60 days ahead. Use the actual
+certificate date. Create Developer ID certificates on Apple's G2 Sub-CA; the
+older sub-CA stops signing on 2027-02-01. Timestamped builds survive expiry, but
+revoking a release-signing certificate can block those builds. Never revoke one.
 
-Then put the new `.p12` and its passphrase in the 1Password item. The signing
-identity is matched by name and the app's designated requirement by team, so
-updates, privacy permissions and the helpers carry over to the new certificate.
+For an authorized certificate renewal, create the CSR/key outside the
+repository, obtain the G2 certificate, export a password-protected P12, update
+`P12_PATH` and `P12_PASSWORD` through `scripts/signing-creds.sh`, then rerun
+`make codesign-teardown codesign-setup setup-notary`. Store the P12/passphrase
+in 1Password. Team/name continuity preserves helper and update identity.
+
+Sparkle tools downloads must match `scripts/sparkle-tools.sh`'s pinned digest. A
+`SPARKLE_VERSION` override needs a trusted `SPARKLE_SHA256`. Keep the framework
+pin, tool version and bundled full license in `ThirdPartyNotices.txt` aligned.
 
 ## 4. Reproducible payload
 
-The unsigned Release bundle is compared across clean builds of the same commit
-and toolchain. `make CONFIG=Release app embed-helper` produces the payload the
-hosted Release workflow goes on to sign. The comparison checks bytes, modes and
-symlinks, with the `Assets.car` exception described below. Three things used to
-differ between builds, and the build itself fixes them. `BuildInfo.date` stamps
-the commit time instead of the wall clock (`SOURCE_DATE_EPOCH` overrides it; a
-dirty tree still stamps the clock so local builds stay distinguishable). Release
-binaries are stripped of their debug map (`STRIP_STYLE=debugging`): the SO, OSO
-and AST stabs that named the building machine's checkout and DerivedData paths.
-The symbol table stays, so crash logs still name functions without a dSYM. The
-App Intents metadata processor wrote its JSON in Swift's per-process hash order,
-so `make app` runs xcodebuild with `SWIFT_DETERMINISTIC_HASHING=1`. The linker
-already zeroes stab timestamps, derives `LC_UUID` from the content and ad-hoc
-signs by hashing it, so nothing else varies.
+Compare clean unsigned Release payloads from the same commit, Xcode and macOS
+build.
 
-Prove it with `scripts/compare-builds.sh [WORKDIR]`: it clones HEAD twice,
-builds each clone from clean and compares the two bundles, every entry's mode
-and link target plus a SHA-256 of every file.
-`scripts/compare-builds.sh A.app B.app` compares two existing bundles the same
-way. One file is compared through `assetutil --info` rather than by bytes:
-actool stamps `Assets.car` with the build time and names the renditions it
-rasterizes from `AppIcon.icon` after temporary files, and those renditions'
-digests change with their names. No environment variable or flag pins them.
-Everything else in the catalog, including every other rendition's digest, must
-match. Byte for byte, the two catalogs of the last proof differed only in the
-header stamp, those seven names and a few index bytes beside them; every
-rendition's image data matched. The **Reproducible build** workflow runs the
-two-clone comparison on the hosted runner on dispatch and monthly; it is not
-part of Verify because it costs two clean Release builds. The comparison holds
-for one toolchain: `Info.plist` records `DTXcodeBuild`, `DTSDKBuild` and
-`BuildMachineOSBuild`, so a different Xcode or macOS build is a different
-payload, and a local rebuild must use the hosted runner's Xcode. Last proved
-locally on 2026-10-10 with Xcode 27.0 (27A266a) on macOS 27.0.1: identical, 69
-files, with `Assets.car` as above.
+| Command                                                       | Comparison                                                                                      |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `scripts/compare-builds.sh [WORKDIR]`                         | Clone HEAD twice, build both, compare bytes, modes and symlinks.                                |
+| `scripts/compare-builds.sh A.app B.app`                       | Compare existing bundles.                                                                       |
+| `scripts/compare-builds.sh --normalize Shipped.app Local.app` | Compare copied bundles after removing signatures/profiles/ticket and normalizing Mach-O layout. |
 
-What is reproducible is the unsigned payload: the app, login helper and network
-helper binaries, the Info.plists, the resources and the Sparkle framework as its
-pinned package ships it. What is not, by design: the Developer ID signatures and
-their timestamps, the embedded provisioning profiles, the stapled notarization
-ticket and `_CodeSignature` seals, the dSYMs (not shipped, and they record the
-build directory), and the DMG and ZIP containers (file times, `.DS_Store`,
-hdiutil layout).
+`make CONFIG=Release app embed-helper` builds the unsigned payload. Commit-time
+build stamps, stripped path-bearing debug maps and deterministic App Intents
+JSON remove build variation. Linker UUIDs and ad hoc signatures are
+content-derived. Dirty builds retain wall-clock stamps; `SOURCE_DATE_EPOCH` can
+override the timestamp.
 
-A shipped bundle binds to the payload through normalization.
-`scripts/compare-builds.sh --normalize Shipped.app Local.app` copies both,
-removes the seals, profiles and ticket, strips every Mach-O's signature with
-`codesign --remove-signature` and runs `strip -S` so `__LINKEDIT` is laid out
-without the room the removed signature took, then compares. On a local build
-re-signed ad-hoc with the hardened runtime and the app's entitlements, the
-normalized copies were identical. This has not yet been run against a hosted,
-Developer ID-signed release, so treat that binding as untested until it has.
+### Comparison boundary
+
+State exactly what matched; do not call the full release package reproducible.
+
+| Included                                                               | Excluded or normalized                                                                             |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| App/login/helper binaries, plists, resources, pinned Sparkle framework | Developer ID signatures/timestamps, profiles, ticket, seals, dSYMs, DMG/ZIP container metadata.    |
+| `Assets.car` semantic comparison through `assetutil --info`            | Build stamp and temporary Icon Composer rendition names/digests; other catalog content must match. |
+
+The recorded local proof was 2026-10-10, Xcode 27.0 (27A266a), macOS 27.0.1: 69
+files matched with that catalog exception. The **Reproducible build** workflow
+runs on dispatch/monthly, outside Verify. Hosted Xcode 26.6 proof and normalized
+comparison against a published Developer ID candidate remain to be recorded. A
+normalized local ad hoc comparison is not that evidence.

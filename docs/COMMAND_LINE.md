@@ -1,166 +1,115 @@
-# Command line
+# Run Glimmer from Terminal
 
-`glimmer` is the app itself, run from a terminal: it pairs, lists, wakes and
-quits headless, and hands a stream to the app so it gets its window. Stream
-settings come from Glimmer's Settings. `glimmer help` is the full reference.
-Installed from the `.dmg`, choose Glimmer › Install Command Line Tool… once and
-macOS asks for an administrator password to link `glimmer` into
-`/usr/local/bin`.
+## Install the command
 
-```bash
-glimmer pair 192.0.2.10          # prints the PIN to enter in Sunshine
-glimmer list                     # paired PCs and whether each is ready
-glimmer stream "Living Room" Steam --wait
-```
+| Task                          | Command or control                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| Homebrew install              | [Install Glimmer](INSTALL.md); includes `glimmer`.                                           |
+| DMG install                   | Glimmer › Install command line tool…; administrator approval links `/usr/local/bin/glimmer`. |
+| Missing command in older cask | `brew reinstall --cask glimmer`                                                              |
+| Help / open app               | `glimmer help` / `glimmer`                                                                   |
+| Examples                      | Replace “Living Room”, “Steam” and `192.0.2.10` with your PC and app.                        |
 
-Coming from moonlight-qt:
+## Commands and flags
 
-| moonlight-qt                         | Glimmer                               | Difference                                     |
-| ------------------------------------ | ------------------------------------- | ---------------------------------------------- |
-| `moonlight pair <host> [--pin NNNN]` | `glimmer pair <address> [--pin NNNN]` | None.                                          |
-| `moonlight list <host> [--csv]`      | `glimmer list <pc> [--csv]`           | `glimmer list [--csv]` lists the paired PCs.   |
-| `moonlight stream <host> <app> ...`  | `glimmer stream <pc> [<app>]`         | The app is optional; see below.                |
-| `moonlight quit <host>`              | `glimmer quit <pc>`                   | Quits the app and ends its stream.             |
-|                                      | `glimmer wake <pc> [--wait]`          | Wake on LAN, optionally waiting for an answer. |
+| Command                                | Result                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------- |
+| `glimmer pair 192.0.2.10 [--pin NNNN]` | Pair; enter generated or supplied four-digit PIN on Sunshine's PIN page.  |
+| `glimmer list [<pc>] [--csv\|--json]`  | List PCs, or a PC's apps. CSV app columns: Name, ID, HDR Support, Hidden. |
+| `glimmer status [--json]`              | Local stream; doesn't open Glimmer or contact PC.                         |
+| `glimmer stream <pc> [<app>]`          | Stream; omitted app prefers running app, then Start with.                 |
 
-Stopping a stream, closing its window, or quitting Glimmer ends the session and
-quits its app on the PC. `glimmer quit <pc>` and the Quit App on PC shortcut use
-the same teardown when this Mac is streaming, or cancel the PC app directly
-otherwise. Save progress before stopping.
+| PC action                    | Result                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------- |
+| `glimmer wake <pc> [--wait]` | Wake; optionally wait for answer.                                                           |
+| `glimmer quit <pc>`          | Quit PC app and session without confirmation. Save first.                                   |
+| `<pc>`                       | Saved name, ID or address; case-insensitive.                                                |
+| Stream quality               | Glimmer Settings; `--resolution`, `--bitrate` and other moonlight-qt quality flags refused. |
 
-Without an app, `glimmer stream` streams the PC's running app, else follows
-Settings › General › Start with. The `--resolution`, `--bitrate` and other
-moonlight-qt stream options are refused, since Settings holds them; Glimmer adds
-`--force`, `--wait`, `--exit-after-first-frame` and `--json`. The CSV from
-`glimmer list <pc> --csv` has Name, ID, HDR Support and Hidden.
+| Stream flag                | Result                                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| None                       | Return when launch request accepted. Occupied PC prompts in terminal, fails in script.          |
+| `--force`                  | Authorize quitting occupied PC app; unsaved progress may be lost.                               |
+| `--wait`                   | Return when stream ends.                                                                        |
+| `--exit-after-first-frame` | Return after first frame; keep streaming.                                                       |
+| `--json`                   | One JSON object per connection event; return at live unless `--wait`. `_ms` values are numbers. |
 
-`<pc>` is a paired PC's name, ID or address, ignoring case. Exit status: 0
-success, 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired or no
-paired PC by that name.
+{% hint style="warning" %}
+
+Stopping, closing the window or quitting Glimmer quits the PC app. Save first.
+There is no disconnect command.
+
+{% endhint %}
+
+## Exit status
+
+| Code | Meaning                                           |
+| ---- | ------------------------------------------------- |
+| 0    | Success.                                          |
+| 1    | Failure, including running Glimmer not answering. |
+| 2    | Usage error.                                      |
+| 3    | PC unreachable.                                   |
+| 4    | Unpaired PC, trust failure or no saved match.     |
 
 ## URL commands
 
-Glimmer handles these URLs through the same commands as the command line:
+| URL                                           | Result                                                                               |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `glimmer://stream?pc=Living%20Room&app=Steam` | Start or bring matching stream forward; normal takeover checks.                      |
+| `glimmer://wake?pc=Living%20Room`             | Wake without activating Glimmer; shell: `open -g 'glimmer://wake?pc=Living%20Room'`. |
+| `glimmer://quit?pc=Living%20Room`             | Always confirm, even when running app unknown.                                       |
 
-```text
-glimmer://stream?pc=Living%20Room&app=Steam
-glimmer://wake?pc=Living%20Room
-glimmer://quit?pc=Living%20Room
-```
-
-`pc` is required and matches a saved PC's name, ID or address, ignoring case.
-Percent-encode query values; `+` is a literal plus, not a space. Only `stream`
-accepts `app`. Without it, the current running app is preferred when known, then
-Settings › General › Start with. A link to the current stream brings its window
-forward. A new stream uses the normal launch and takeover confirmation. Wake
-does not activate Glimmer; launchers should open its URL without activation
-(from a shell, `open -g 'glimmer://wake?pc=Living%20Room'`).
-
-Quit opens Glimmer's confirmation alert, even if the running app isn't known
-yet. A URL cannot skip confirmation. `glimmer://pair` is unsupported. Unknown
-actions, unknown PCs or apps, duplicate or unknown parameters, empty values,
-paths, credentials, ports and fragments are ignored. A notice records that the
-request was ignored without including the URL or PC name.
+| Parameter | Rule                                                                                                                          |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `pc`      | Required saved name, ID or address; case-insensitive.                                                                         |
+| `app`     | Optional for stream only; omitted prefers known running app, then Start with.                                                 |
+| Encoding  | Percent-encode; `%20` is space, `+` is literal plus.                                                                          |
+| Rejected  | Unknown action/PC/app, unknown or duplicate parameters, empty/control-character values, paths, credentials, ports, fragments. |
+| Limits    | No flags, confirmation bypass, stop or pair action. Invalid links ignored without logging URL or PC name.                     |
 
 ## JSON for automation
 
-`list --json`, `list <pc> --json` and `status --json` each print one JSON object
-followed by a newline. Their top-level `version` is `1`. Keys and value types
-below are stable within that version; consumers should ignore additional keys.
-Unknown values are `null`, and empty collections are `[]`. Errors go to stderr
-and keep the exit codes above. `--csv` and `--json` cannot be combined. The
-existing `stream --json` event format is unchanged.
+| Contract                                           | Rule                                                            |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| `list --json`, `list <pc> --json`, `status --json` | One object plus newline; `version: 1`.                          |
+| Compatibility                                      | Stable keys/types within version; ignore new keys.              |
+| Missing values                                     | `null`; empty collections `[]`.                                 |
+| Errors                                             | stderr and exit codes above; check exit code before parsing.    |
+| Formats                                            | Don't combine `--csv` and `--json`; stream events are separate. |
 
 ### PCs
 
-```bash
-glimmer list --json
-```
-
-```json
-{
-  "version": 1,
-  "pcs": [
-    {
-      "id": "pc-uuid",
-      "name": "Living Room",
-      "address": "living-room.local",
-      "paired": true,
-      "state": "reachable",
-      "runningApp": { "id": 7, "name": "Steam" },
-      "default": true
-    }
-  ]
-}
-```
-
-`id` is the saved PC ID and `name` is its display name. `address` is only the
-saved manually entered address, with its spelling preserved; it is `null` when
-none was saved. A discovered or updated network address is never substituted.
-Pairing may already have normalized a pasted URL before saving its address.
-`paired` means a pinned pairing exists and the status probe did not report a
-trust failure; an asleep PC can still be paired. `state` is `ready` (awake and
-idle), `reachable` (running an app or needing trust), `asleep` (unreachable), or
-`unknown` (no usable answer). `runningApp` is `null` when no running app is
-known; its name or ID may be `null` if only the other is known. `default` marks
-the PC selected before polling. This command uses the existing readiness probe.
+| `glimmer list --json` → `pcs` array | Meaning                                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `id`, `name`                        | Strings: saved ID and display name.                                                                          |
+| `address`                           | Saved address or `null`; never substituted by discovery. Pairing may normalize pasted URLs.                  |
+| `paired`                            | Pin exists with no detected trust failure; can be true asleep.                                               |
+| `state`                             | `ready`: idle; `reachable`: app running or trust needed; `asleep`: unreachable; `unknown`: no usable answer. |
+| `runningApp`, `default`             | Known app or `null` (integer ID/string name independently nullable); boolean selection before polling.       |
 
 ### Apps on a PC
 
-```bash
-glimmer list "Living Room" --json
-```
-
-```json
-{
-  "version": 1,
-  "apps": [
-    { "id": 7, "name": "Steam", "hdr": true, "hidden": false, "running": true },
-    {
-      "id": 9,
-      "name": "Desktop",
-      "hdr": false,
-      "hidden": true,
-      "running": false
-    }
-  ]
-}
-```
-
-All apps returned by the PC are included, including hidden apps. IDs are
-integers. `hdr` is the app's reported HDR capability; `hidden` is its reported
-visibility flag. `running` matches the running app ID from the same request's PC
-status check.
+| `glimmer list "Living Room" --json` → `apps` array, including hidden | Meaning                                                 |
+| -------------------------------------------------------------------- | ------------------------------------------------------- |
+| `id`, `name`                                                         | Integer ID, string name.                                |
+| `hdr`, `hidden`                                                      | Booleans: reported HDR support and visibility flag.     |
+| `running`                                                            | Matches running ID from this request's PC status check. |
 
 ### This Mac's stream
 
-```bash
-glimmer status --json
-```
+| `glimmer status --json` field | Meaning                                                                          |
+| ----------------------------- | -------------------------------------------------------------------------------- |
+| `live`                        | Boolean; true only during playback, false idle/connecting/reconnecting/stopping. |
+| `pc`, `app`                   | Objects with ID/name; PC ID string, app ID integer.                              |
+| `resolution`, `fps`           | Integer pixel width/height; negotiated frame-rate limit.                         |
+| `hdr`, `codec`                | Active HDR output and selected codec label.                                      |
+| `bitrateMbps`                 | Negotiated Mbps, not measured traffic.                                           |
 
-```json
-{
-  "version": 1,
-  "live": true,
-  "pc": { "id": "pc-uuid", "name": "Living Room" },
-  "app": { "id": 7, "name": "Steam" },
-  "resolution": { "width": 2560, "height": 1440 },
-  "fps": 120,
-  "hdr": true,
-  "codec": "HEVC",
-  "bitrateMbps": 82.5
-}
-```
+| Availability        | Result                                      |
+| ------------------- | ------------------------------------------- |
+| Unknown detail      | `null`.                                     |
+| Glimmer not running | Success; `live: false`, all details `null`. |
+| Running, no answer  | Exit 1.                                     |
+| Plain text          | “Streaming.” or “Not streaming.”            |
 
-`live` is true while the stream is playing, and false while idle, connecting,
-reconnecting or stopping. PC and app describe the current session when one
-exists. Resolution is in pixels; `fps` is the negotiated frame-rate limit, `hdr`
-is active HDR output, `codec` is the engine's selected codec label, and
-`bitrateMbps` is the negotiated video bitrate in megabits per second, not
-measured traffic. Unavailable stream details are `null`.
-
-Status reads the running app's session without contacting the PC or opening
-Glimmer. If Glimmer isn't running, it succeeds with `live: false` and all stream
-details `null`. An app that is running but doesn't answer returns exit code 1,
-so a timeout cannot be mistaken for an idle stream. Without `--json`, `status`
-prints “Streaming.” or “Not streaming.”
+Next: [build launcher buttons and scripts](AUTOMATION.md#add-a-launcher-button).
