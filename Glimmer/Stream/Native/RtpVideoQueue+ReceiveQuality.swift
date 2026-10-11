@@ -25,8 +25,12 @@ extension RtpVideoQueue {
             windowDuplicate += 1
             return
         }
-        // An unseen packet from an older frame cannot fill a gap in this sequence epoch.
-        if Self.isBefore32(frameIndex, seqNewestFrame) { return }
+        // Older frames can fill this epoch's gaps, but a forward alias or a frame
+        // from before the baseline must not cancel loss in the current epoch.
+        if Self.isBefore32(frameIndex, seqNewestFrame) {
+            let firstFrame = seq > seqHighestSeen ? seqPreviousEpochFirstFrame : seqEpochFirstFrame
+            if Self.isBefore32(frameIndex, firstFrame) || !Self.isBefore16(seq, seqHighestSeen) { return }
+        }
         if !Self.isBefore16(seq, seqHighestSeen) {
             let jump = Int(Self.u16(Int(seq) - Int(seqHighestSeen)))
             if jump > 1 {
@@ -35,6 +39,11 @@ extension RtpVideoQueue {
                 gapOpenHighSeq = seq &- 1
                 gapOpenAtUs = receiveTimeUs
                 haveOpenGap = true
+            }
+            // The preceding frame may own missing packets on either side of zero.
+            if seq < seqHighestSeen {
+                seqPreviousEpochFirstFrame = seqEpochFirstFrame
+                seqEpochFirstFrame = seqNewestFrame
             }
             seqHighestSeen = seq
             sequenceBlackoutEligible = false
@@ -124,6 +133,8 @@ extension RtpVideoQueue {
         recentSeqHead = 0
         seqHighestSeen = seq
         seqNewestFrame = frameIndex
+        seqEpochFirstFrame = frameIndex
+        seqPreviousEpochFirstFrame = frameIndex
         haveSeqBaseline = true
         haveOpenGap = false
         pendingReorderCredit = 0

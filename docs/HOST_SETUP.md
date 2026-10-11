@@ -12,6 +12,8 @@ session. Without one, the stream falls back to a wrong size or fails to start.
 
 A headless gaming PC, or one whose real monitor cannot do your Mac's exact mode,
 needs a virtual display that can.
+Apollo and Vibepollo's per-client virtual display also works with Glimmer because
+Glimmer requests the Mac's exact resolution and refresh rate.
 
 1. **Sunshine.** Install a current release (it manages the VDD per session):
    <https://github.com/LizardByte/Sunshine>

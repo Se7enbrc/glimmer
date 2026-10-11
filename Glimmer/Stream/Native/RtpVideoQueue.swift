@@ -244,6 +244,9 @@ final class RtpVideoQueue {
     var recentSeqCount = 0
     static let recentSeqCapacity = 512
     var seqNewestFrame: UInt32 = 0
+    // Frame floors reject obsolete sequence aliases after a reseed or a full wrap.
+    var seqEpochFirstFrame: UInt32 = 0
+    var seqPreviousEpochFirstFrame: UInt32 = 0
     var sequenceBlackoutEligible = false
     /// Cap on the parked cross-window reorder credit. A credit legitimately spans
     /// only ONE ~2s window boundary (gap at the tail of a window, late filler at the
