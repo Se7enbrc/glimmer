@@ -50,8 +50,8 @@ final class CommandStreamEnd {
 }
 
 /// Plain string dictionaries keyed by a request id, posted with immediate
-/// delivery so an inactive app still hears them. No URL scheme on purpose:
-/// a web page can't start a stream.
+/// delivery so an inactive app still hears them. URL requests use this same
+/// dispatch, with confirmation kept inside the app.
 enum CommandChannel {
     private static let prefix = Bundle.main.bundleIdentifier ?? "io.ugfugl.Glimmer"
     static let request = Notification.Name(prefix + ".command")
@@ -84,6 +84,8 @@ enum CommandChannel {
         case ready
         case stop
         case quit(Host)
+        case wake(Host)
+        case status
         case notMine
     }
 
@@ -100,7 +102,10 @@ enum CommandChannel {
     static func decide(
         _ info: [String: String], handled: inout Set<String>, hosts: [Host], streamingFrom: String?
     ) -> Decision? {
-        guard let id = info[Key.id], let hostID = info[Key.host], handled.insert(id).inserted else { return nil }
+        guard let id = info[Key.id] else { return nil }
+        // Status is read-only and polled often; don't retain every sample's request ID.
+        if info[Key.verb] == "status" { return .status }
+        guard let hostID = info[Key.host], handled.insert(id).inserted else { return nil }
         switch info[Key.verb] {
         case "check":
             return streamingFrom == nil ? .ready : .rejected(alreadyStreaming)
@@ -114,6 +119,9 @@ enum CommandChannel {
             return .stream(app, on: host, takeover: info[Key.takeover] == "1")
         case "stop":
             return streamingFrom == hostID ? .stop : .notMine
+        case "wake":
+            guard let host = hosts.first(where: { $0.id == hostID }) else { return .notMine }
+            return .wake(host)
         case "quit":
             guard let host = hosts.first(where: { $0.id == hostID }) else { return .notMine }
             return .quit(host)
@@ -139,9 +147,10 @@ extension AppModel {
         }
     }
 
-    func handleCommand(_ info: [String: String]) {
+    func handleCommand(_ info: [String: String], fromURL: Bool = false,
+                       confirmQuit: ((LibraryApp, Host) -> Void)? = nil) {
         // A PC paired from the command line since launch is only in defaults.
-        if info[CommandChannel.Key.verb] == "stream" { loadHosts() }
+        if !fromURL, info[CommandChannel.Key.verb] == "stream" { loadHosts() }
         guard let id = info[CommandChannel.Key.id],
               let decision = CommandChannel.decide(
                 info, handled: &Self.handledCommandIDs, hosts: hosts,
@@ -149,18 +158,33 @@ extension AppModel {
         else { return }
         switch decision {
         case .stream(let app, let host, let takeover):
-            Diag.notice("Stream requested from the command line", "Stream")
+            Diag.notice(fromURL ? "Stream requested from a URL" : "Stream requested from the command line", "Stream")
             // The terminal settled the takeover; an older unanswered prompt no longer applies.
             pendingTakeover = nil
             selectHost(host)
-            beginCommandStream(id, app: app, on: host, takeover: takeover)
+            beginCommandStream(id, app: app, on: host, takeover: !fromURL && takeover)
         case .rejected(let why):
             replyToCommand(id, CommandChannel.Event.rejected, why)
         case .ready:
             replyToCommand(id, CommandChannel.Event.accepted)
         case .stop:
             stopForCommand(id)
+        case .wake(let host):
+            Task {
+                await CLITerminal.$write.withValue({ _, _ in }, operation: {
+                    _ = await GlimmerCLI.wake(.init(verb: .wake, arguments: [host.id]), model: self)
+                })
+            }
+        case .status:
+            Task {
+                do {
+                    replyToCommand(id, CommandChannel.Event.accepted, try await commandStatusJSON())
+                } catch {
+                    replyToCommand(id, CommandChannel.Event.rejected, "Couldn't read the stream status. Try again.")
+                }
+            }
         case .quit(let host):
+            if fromURL { confirmURLQuit(on: host, confirm: confirmQuit); return }
             Task {
                 do {
                     try await quitRunningApp(on: host)

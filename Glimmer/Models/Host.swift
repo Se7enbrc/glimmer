@@ -341,6 +341,8 @@ struct HostLiveStatus: Equatable {
     /// "Streaming X" reading if the host stops answering - we don't want
     /// the chip lying about a half-hour-old session.
     var capturedAt: Date
+    /// Names need not be unique, so automation keeps the PC's reported app ID.
+    var runningAppID: Int?
 
     static let stale: TimeInterval = 60
 

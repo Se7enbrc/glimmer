@@ -94,7 +94,10 @@ launch over distributed notifications (`CommandChannel`,
 `glimmer stop` disconnects that stream. `glimmer quit` confirms, disconnects,
 then cancels the PC app; scripts can confirm with `--force`. Run through a
 symlink, the binary re-execs through its real path so `Bundle.main` and the
-defaults domain resolve.
+defaults domain resolve. `glimmer://` URLs parse into the same command type and
+dispatch through `AppModel+Commands`; URL quits always use the app's
+confirmation alert. `glimmer status --json` queries the running app over the
+same channel without opening it or contacting the PC.
 
 **Shortcuts, Siri and Spotlight.** `GlimmerIntents.swift` declares four App
 Intents: Stream from PC, Wake PC, Stop streaming and Quit App on PC, with the

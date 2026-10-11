@@ -32,7 +32,7 @@ struct GlimmerCLIContractTests {
     }
 
     @Test func theHelpNamesEveryVerbAndFlagTheParserTakes() {
-        for verb in ["pair", "list", "stream", "quit", "wake", "help"] {
+        for verb in ["pair", "list", "status", "stream", "quit", "wake", "help"] {
             #expect(GlimmerCLI.usage.contains("  \(verb)"), "\(verb)")
         }
         for flag in ["--pin", "--csv", "--force", "--wait", "--exit-after-first-frame", "--json"] {

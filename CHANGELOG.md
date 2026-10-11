@@ -6,6 +6,11 @@
 
 - Quieter, more consistent transitions across the launcher, stream and settings,
   including Reduce Motion.
+- Open a stream, wake a PC, stop streaming or ask to quit a PC app with a
+  `glimmer://` link. Quitting still asks before closing the game.
+- The command line can list PCs and apps and report the current stream as
+  versioned JSON for launchers and scripts.
+
 - The full-screen stream slides away when it ends, the way it slid in, instead
   of fading. Reduce Motion keeps the fade.
 - Ending a stream, including cancelling while it connects, leaves the game
