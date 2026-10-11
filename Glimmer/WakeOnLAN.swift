@@ -85,6 +85,11 @@ enum WakeOnLAN {
     /// Send the packet to every target; returns how many sends succeeded. Each
     /// address resolves once, here, so callers run this off the main thread.
     static func send(mac: String, hostAddresses: [String?]) -> Int {
+        send(mac: mac, to: targets(hostAddresses: hostAddresses, broadcasts: interfaceBroadcastAddresses()))
+    }
+
+    /// Send the packet to each target and port; tests aim this at a loopback listener.
+    static func send(mac: String, to targets: [Target]) -> Int {
         guard let packet = magicPacket(mac: mac) else { return 0 }
         let socketFD = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
         guard socketFD >= 0 else { return 0 }
@@ -92,7 +97,7 @@ enum WakeOnLAN {
         var enable: Int32 = 1
         setsockopt(socketFD, SOL_SOCKET, SO_BROADCAST, &enable, socklen_t(MemoryLayout<Int32>.size))
         var sent = 0
-        for target in targets(hostAddresses: hostAddresses, broadcasts: interfaceBroadcastAddresses()) {
+        for target in targets {
             guard var address = resolveIPv4(target.host) else { continue }
             for port in target.ports {
                 address.sin_port = port.bigEndian

@@ -68,6 +68,12 @@ public enum HostReachability {
     public static func measureRTT(host: String,
                                   port: Int = 47989,
                                   timeoutMs: Int = 2_000) async -> Outcome {
+        await measureRTT(host: host, port: port, timeoutMs: timeoutMs, prohibitedInterfaces: [.loopback])
+    }
+
+    /// The probe itself; tests lift the loopback ban to time a listener on 127.0.0.1.
+    static func measureRTT(host: String, port: Int, timeoutMs: Int,
+                           prohibitedInterfaces: [NWInterface.InterfaceType]) async -> Outcome {
         guard let rawPort = UInt16(exactly: port), rawPort > 0,
               let nwPort = NWEndpoint.Port(rawValue: rawPort) else {
             return .unreachable
@@ -80,7 +86,7 @@ public enum HostReachability {
         tcp.connectionTimeout = max(1, timeoutMs / 1000)
         tcp.noDelay = true
         let params = NWParameters(tls: nil, tcp: tcp)
-        params.prohibitedInterfaceTypes = [.loopback]
+        params.prohibitedInterfaceTypes = prohibitedInterfaces
 
         let conn = NWConnection(
             host: NWEndpoint.Host(host),
