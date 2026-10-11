@@ -60,6 +60,26 @@ final class FakeSunshine: Sendable {
 
     static let clientUniqueID = "C11E47C11E47C11E47C11E47C11E47C1"
 
+    /// Answers each path (`"serverinfo"`, `"launch"`…) from its own script in order, repeating the
+    /// last reply; an unscripted path fails, so a request the test didn't expect can't pass quietly.
+    static func scripted(_ script: [String: [Result<ControlTransport.Response, StreamError>]]) -> FakeSunshine {
+        let served = OSAllocatedUnfairLock<[String: Int]>(initialState: [:])
+        return FakeSunshine { request in
+            let path = String(request.path.dropFirst())
+            guard let replies = script[path], let last = replies.last else {
+                throw StreamError.launchFailed("unscripted \(path)")
+            }
+            let index = served.withLock { counts in
+                defer { counts[path, default: 0] += 1 }
+                return counts[path, default: 0]
+            }
+            return try (index < replies.count ? replies[index] : last).get()
+        }
+    }
+
+    /// The paths requested so far, in order, without the leading slash.
+    var paths: [String] { requests.map { String($0.path.dropFirst()) } }
+
     /// A 200 reply whose body is `<root status_code=…>` around `body`.
     static func xml(_ body: String, status: Int = 200) -> ControlTransport.Response {
         ControlTransport.Response(status: 200, body: Data("<root status_code=\"\(status)\">\(body)</root>".utf8))
