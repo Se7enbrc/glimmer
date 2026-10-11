@@ -39,7 +39,8 @@ interface. macOS 26 or later, Apple Silicon. Free, open source, and always free.
 ## What you get
 
 - **Video:** H.264, HEVC and AV1, 8- and 10-bit, real HDR10, up to 4K 240 Hz.
-- **Pacing:** the display locks to the stream, tuned against per-frame telemetry.
+- **Pacing:** the display locks to the stream, tuned against per-frame
+  telemetry.
 - **Audio:** stereo, 5.1 and 7.1, with spatial audio and AirPods head tracking.
 - **Controllers:** Xbox, DualSense and other pads, with rumble, gyro, touchpad
   and adaptive triggers.
@@ -63,23 +64,23 @@ Or the notarized `.dmg` from
 [Releases](https://github.com/Se7enbrc/glimmer/releases). Glimmer updates
 itself. Your PC needs Sunshine and a display that can show your Mac's exact
 mode; [set up the PC](docs/HOST_SETUP.md), then see
-[the install guide](docs/INSTALL.md) for the Wi-Fi helper, verifying a
-download and audio tips.
+[the install guide](docs/INSTALL.md) for the Wi-Fi helper, verifying a download
+and audio tips.
 
 ## Documentation
 
-| Guide                                      | What's in it                                             |
-| ------------------------------------------ | -------------------------------------------------------- |
-| [Features](docs/FEATURES.md)               | Video, pacing, audio, controllers, input, Wi-Fi, the Mac |
-| [Install](docs/INSTALL.md)                 | Homebrew, the download, the Wi-Fi helper, audio tips     |
-| [Setting up the PC](docs/HOST_SETUP.md)    | Sunshine and a virtual display                           |
-| [Shortcuts](docs/SHORTCUTS.md)             | Keyboard and controller shortcuts, copy and paste        |
-| [Command line](docs/COMMAND_LINE.md)       | `glimmer`, and moving over from moonlight-qt             |
-| [Audio on macOS](docs/AUDIO.md)            | Voice chat, AirPods and volume recovery                  |
-| [Security](docs/SECURITY.md)               | The Wi-Fi helper, signing and verifying a download       |
-| [Contributing](docs/CONTRIBUTING.md)       | Building, testing and sending a change                   |
-| [Architecture](docs/ARCHITECTURE.md)       | How the engine fits together                             |
-| [Roadmap](docs/ROADMAP.md)                 | What's next                                              |
+| Guide                                   | What's in it                                             |
+| --------------------------------------- | -------------------------------------------------------- |
+| [Features](docs/FEATURES.md)            | Video, pacing, audio, controllers, input, Wi-Fi, the Mac |
+| [Install](docs/INSTALL.md)              | Homebrew, the download, the Wi-Fi helper, audio tips     |
+| [Setting up the PC](docs/HOST_SETUP.md) | Sunshine and a virtual display                           |
+| [Shortcuts](docs/SHORTCUTS.md)          | Keyboard and controller shortcuts, copy and paste        |
+| [Command line](docs/COMMAND_LINE.md)    | `glimmer`, and moving over from moonlight-qt             |
+| [Audio on macOS](docs/AUDIO.md)         | Voice chat, AirPods and volume recovery                  |
+| [Security](docs/SECURITY.md)            | The Wi-Fi helper, signing and verifying a download       |
+| [Contributing](docs/CONTRIBUTING.md)    | Building, testing and sending a change                   |
+| [Architecture](docs/ARCHITECTURE.md)    | How the engine fits together                             |
+| [Roadmap](docs/ROADMAP.md)              | What's next                                              |
 
 ## Build
 

@@ -22,10 +22,9 @@ open Mini Player. The stream keeps running. Select Back to Stream in the
 launcher to return.
 
 Stopping with a shortcut or controller, closing the stream window, and quitting
-Glimmer all leave the game running on the PC. Choose its app tile to resume.
-Use Quit from the app tile's context menu, the menu bar, or the stream-ended
-notice to close it. Confirmation names the app and PC and warns about unsaved
-progress.
+Glimmer all leave the game running on the PC. Choose its app tile to resume. Use
+Quit from the app tile's context menu, the menu bar, or the stream-ended notice
+to close it. Confirmation names the app and PC and warns about unsaved progress.
 
 ## Escape and mouse capture
 

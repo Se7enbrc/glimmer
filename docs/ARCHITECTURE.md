@@ -92,17 +92,17 @@ with a dash. Verbs run headless through the app's own `AppModel`, pairing and
 launch over distributed notifications (`CommandChannel`,
 `AppModel+Commands.swift`), so no stream ever runs in the terminal's process;
 `glimmer stop` disconnects that stream. `glimmer quit` confirms, disconnects,
-then cancels the PC app; scripts can confirm with `--force`. Run through
-a symlink, the binary re-execs through its real path so `Bundle.main` and the
+then cancels the PC app; scripts can confirm with `--force`. Run through a
+symlink, the binary re-execs through its real path so `Bundle.main` and the
 defaults domain resolve.
 
 **Shortcuts, Siri and Spotlight.** `GlimmerIntents.swift` declares four App
-Intents: Stream from PC, Wake PC, Stop streaming and Quit App on PC, with the paired PCs as a
-`PCEntity` query. They run inside the app, once `AppModel.forIntent()` has
-loaded the PCs, and call the launcher's own entry points (`requestStream`,
-`sendWakeAndWait`, `quitRunningApp`), so they share its rules and its wording.
-`GlimmerShortcuts` refreshes the PC names Siri knows whenever one is paired,
-renamed or removed.
+Intents: Stream from PC, Wake PC, Stop streaming and Quit App on PC, with the
+paired PCs as a `PCEntity` query. They run inside the app, once
+`AppModel.forIntent()` has loaded the PCs, and call the launcher's own entry
+points (`requestStream`, `sendWakeAndWait`, `quitRunningApp`), so they share its
+rules and its wording. `GlimmerShortcuts` refreshes the PC names Siri knows
+whenever one is paired, renamed or removed.
 
 ## The `StreamingBackend` boundary
 
@@ -203,16 +203,18 @@ UI lights up live.
    throw: the launcher's pair sheet runs first, not us.
 2. **Launch, resume, or confirmed takeover**: idle PCs get `/launch`. A matching
    app previously launched by this Mac gets `/resume`, with ownership retained
-   across Glimmer sessions in `RunningAppOwnership` for eight hours after recording;
-   expired or missing ownership requires takeover confirmation. Sunshine's `nvhttp.cpp`
-   `resume()` calls `make_launch_session()` with the new mode, FPS and HDR
-   request, and configures the display when no streaming session is active.
-   Another app or unknown ownership needs takeover confirmation, then `/cancel`,
-   an idle poll (up to 5 s for Undo commands), and `/launch`. A failed resume
-   keeps the underlying recovery action, or offers a confirmed quit and relaunch
-   for other failures; a 503 “No running app” launches fresh without confirmation.
-   It never automatically cancels the game, and observing idle or another app clears ownership.
-   Sunshine exposes no owner, so same-app takeovers between observations remain undetectable within those eight hours.
+   across Glimmer sessions in `RunningAppOwnership` for eight hours after
+   recording; expired or missing ownership requires takeover confirmation.
+   Sunshine's `nvhttp.cpp` `resume()` calls `make_launch_session()` with the new
+   mode, FPS and HDR request, and configures the display when no streaming
+   session is active. Another app or unknown ownership needs takeover
+   confirmation, then `/cancel`, an idle poll (up to 5 s for Undo commands), and
+   `/launch`. A failed resume keeps the underlying recovery action, or offers a
+   confirmed quit and relaunch for other failures; a 503 “No running app”
+   launches fresh without confirmation. It never automatically cancels the game,
+   and observing idle or another app clears ownership. Sunshine exposes no
+   owner, so same-app takeovers between observations remain undetectable within
+   those eight hours.
 3. **Build `BackendStreamConfig`**: `width`, `height`, `fps`, `bitrate`, the
    `supportedVideoFormats` codec bitmask, `colorSpace`, `colorRange`,
    `encryptionFlags`. The remote-input AES key and IV are copied in from the
@@ -254,7 +256,8 @@ Native connection events carry their originating backend and preserve arrival
 order, so delayed callbacks cannot revive input or stop a replacement
 connection. Per-PC launch epochs serialize late cleanup against the next launch:
 a new launch waits for an explicitly requested quit, while a late response from
-an older epoch cannot overwrite a newer session's ownership. Different PCs remain independent.
+an older epoch cannot overwrite a newer session's ownership. Different PCs
+remain independent.
 
 Teardown order is load-bearing:
 

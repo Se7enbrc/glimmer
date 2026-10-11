@@ -24,11 +24,12 @@ Coming from moonlight-qt:
 |                                      | `glimmer stop <pc>`                   | Disconnects and leaves the PC app running.            |
 |                                      | `glimmer wake <pc> [--wait]`          | Wake on LAN, optionally waiting for an answer.        |
 
-Stopping a stream, closing its window, or quitting Glimmer leaves the game running
-on the PC. Choose the same app again to resume with this Mac's current stream
-settings. Quit the app separately from its launcher context menu, the menu bar,
-or the stream-ended notice. Glimmer asks first because unsaved progress may be
-lost. Shortcuts has separate Stop Streaming and Quit App on PC actions.
+Stopping a stream, closing its window, or quitting Glimmer leaves the game
+running on the PC. Choose the same app again to resume with this Mac's current
+stream settings. Quit the app separately from its launcher context menu, the
+menu bar, or the stream-ended notice. Glimmer asks first because unsaved
+progress may be lost. Shortcuts has separate Stop Streaming and Quit App on PC
+actions.
 
 Without an app, `glimmer stream` streams the PC's running app, else follows
 Settings › General › Start with. The `--resolution`, `--bitrate` and other
@@ -39,4 +40,3 @@ moonlight-qt stream options are refused, since Settings holds them; Glimmer adds
 `<pc>` is a paired PC's name or address, ignoring case. Exit status: 0 success,
 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired or no paired PC by
 that name.
-
