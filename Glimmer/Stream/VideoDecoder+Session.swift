@@ -65,7 +65,7 @@ extension VideoDecoder {
         // last other reference is gone, and the deinit backstop doesn't drain async frames.
         // `releaseOutputCallbackRefcon()` balances it at every session-invalidation site.
         let refcon = Unmanaged.passRetained(self)
-        var callback = VTDecompressionOutputCallbackRecord(
+        let callback = VTDecompressionOutputCallbackRecord(
             decompressionOutputCallback: VideoDecoder.decompressionOutputCallback,
             decompressionOutputRefCon: refcon.toOpaque())
 
@@ -74,14 +74,7 @@ extension VideoDecoder {
         // for Instruments + a wall-clock ms gauge (glimmer_vt_session_create_ms).
         let createSignpostState = OSSignposter.decode.beginInterval("VTSessionCreate")
         let createStart = CFAbsoluteTimeGetCurrent()
-        var sessionOut: VTDecompressionSession?
-        let status = VTDecompressionSessionCreate(
-            allocator: kCFAllocatorDefault,
-            formatDescription: formatDesc,
-            decoderSpecification: decoderSpec as CFDictionary,
-            imageBufferAttributes: destImageBufferAttrs as CFDictionary,
-            outputCallback: &callback,
-            decompressionSessionOut: &sessionOut)
+        let (status, sessionOut) = makeSession(formatDesc, decoderSpec, destImageBufferAttrs, callback)
         let createMs = (CFAbsoluteTimeGetCurrent() - createStart) * 1000.0
         OSSignposter.decode.endInterval(
             "VTSessionCreate", createSignpostState,
@@ -120,6 +113,24 @@ extension VideoDecoder {
         // counter (total + by-cause) + publish the live DECODE state (gate-on).
         noteSessionCreatedTelemetry(outputPixelFormat: outputPixelFormat, cause: cause)
         return true
+    }
+
+    typealias SessionFactory = @Sendable (
+        CMVideoFormatDescription, _ decoderSpec: [String: Any], _ imageBufferAttributes: [String: Any],
+        VTDecompressionOutputCallbackRecord
+    ) -> (OSStatus, VTDecompressionSession?)
+
+    nonisolated static let createSession: SessionFactory = { format, decoderSpec, imageBufferAttributes, callback in
+        var callback = callback
+        var session: VTDecompressionSession?
+        let status = VTDecompressionSessionCreate(
+            allocator: kCFAllocatorDefault,
+            formatDescription: format,
+            decoderSpecification: decoderSpec as CFDictionary,
+            imageBufferAttributes: imageBufferAttributes as CFDictionary,
+            outputCallback: &callback,
+            decompressionSessionOut: &session)
+        return (status, session)
     }
 
     /// Release the +1 self-retain the VT output callback holds via its refcon

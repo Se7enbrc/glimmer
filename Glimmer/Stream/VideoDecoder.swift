@@ -18,8 +18,14 @@ public final class VideoDecoder {
 
     // MARK: Public API
 
-    public init() {
+    // Tests pass a factory that never reaches VideoToolbox.
+    init(makeSession: @escaping SessionFactory) {
         self.log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.VideoDecoder")
+        self.makeSession = makeSession
+    }
+
+    public convenience init() {
+        self.init(makeSession: VideoDecoder.createSession)
     }
 
     /// Safety-net teardown for the VTDecompressionSession. Normally
@@ -149,6 +155,7 @@ public final class VideoDecoder {
         _sampleBufferRenderer = renderer
     }
 
+    nonisolated let makeSession: SessionFactory
     // Decode session + format desc. Both live on the decode queue.
     nonisolated(unsafe) var decompressionSession: VTDecompressionSession?
     nonisolated(unsafe) var formatDescription: CMVideoFormatDescription?
