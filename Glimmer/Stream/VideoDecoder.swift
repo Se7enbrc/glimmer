@@ -18,8 +18,12 @@ public final class VideoDecoder {
 
     // MARK: Public API
 
-    public init() {
+    /// Uptime clock for the decode gate's lift stamp; tests script it.
+    nonisolated let now: @Sendable () -> UInt64
+
+    public init(now: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }) {
         self.log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.VideoDecoder")
+        self.now = now
     }
 
     /// Safety-net teardown for the VTDecompressionSession. Normally

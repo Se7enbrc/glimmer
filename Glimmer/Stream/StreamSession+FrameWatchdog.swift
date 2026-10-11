@@ -64,7 +64,7 @@ extension StreamSession {
         let dec = videoDecoder
         await MainActor.run {
             self.frameWatchdogTimer?.invalidate()
-            self.frameWatchdogArmedAt = CACurrentMediaTime()
+            self.frameWatchdogArmedAt = self.uptimeSeconds
             let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self, weak dec] _ in
                 guard let self, let dec else { return }
                 self.frameWatchdogTick(decoder: dec)
@@ -78,7 +78,7 @@ extension StreamSession {
     /// trips nothing; stopConnection clears the gate, so it can never shield a dead session from teardown.
     nonisolated func frameWatchdogTick(decoder dec: VideoDecoder) {
         if dec.decodeGated { return }
-        let sinceArm = CACurrentMediaTime() - frameWatchdogArmedAt
+        let sinceArm = uptimeSeconds - frameWatchdogArmedAt
         let sinceDecoded = dec.secondsSinceLastDecodedFrame()
         let decodeIdle = Self.watchdogDecodeIdle(
             sinceDecoded: sinceDecoded, sinceGateLift: dec.secondsSinceDecodeGateLifted(), sinceArm: sinceArm)
@@ -126,7 +126,7 @@ extension StreamSession {
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
         if didLogDecodeOnlyStall { return }
         didLogDecodeOnlyStall = true
-        stallStartPackets = (TelemetryCounters.shared.videoPacketsTotal.value, ProcessInfo.processInfo.systemUptime)
+        stallStartPackets = (TelemetryCounters.shared.videoPacketsTotal.value, uptimeSeconds)
         // .public privacy so this lands in `log show` without --info - the
         // user reproducing "black screen, no error" needs this line.
         log.error("""
@@ -167,7 +167,7 @@ extension StreamSession {
     /// the hold keeps the session while the control link lives, and dead-peer detection ends it.
     fileprivate func attemptDecodeStallRecovery(decodeIdle: Double, receiveIdle: Double) async {
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
-        downshift.noteStall(atUptime: ProcessInfo.processInfo.systemUptime)
+        downshift.noteStall(atUptime: uptimeSeconds)
         // Packets arriving on a remote path mean overload, and a keyframe only adds to it; the downshift
         // tier owns that case. A silent PC is a paused encoder that a keyframe can wake.
         let overloaded = isRemotePathSession && receiveIdle < Self.decodeOnlyStallThreshold
@@ -267,7 +267,7 @@ extension StreamSession {
     /// Video packets per second since the stall was first logged, for the hold line.
     private func stallPacketRate() -> String {
         guard let start = stallStartPackets else { return "video packets" }
-        let elapsed = ProcessInfo.processInfo.systemUptime - start.uptime
+        let elapsed = uptimeSeconds - start.uptime
         guard elapsed >= 1 else { return "video packets" }
         let rate = Double(TelemetryCounters.shared.videoPacketsTotal.value &- start.total) / elapsed
         return "\(Int(rate)) video pkts/s"

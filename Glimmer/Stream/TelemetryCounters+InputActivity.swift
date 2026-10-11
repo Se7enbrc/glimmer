@@ -23,8 +23,7 @@ extension TelemetryCounters {
     /// Stamp an input event: update the last-input instant and flag an idle→active
     /// edge when the previous event was more than `idleGapSeconds` ago. Called from
     /// the InputBatcher producers (same sites as `inputEventsTotal.increment()`).
-    func noteInputEvent() {
-        let now = DispatchTime.now().uptimeNanoseconds
+    func noteInputEvent(now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
         os_unfair_lock_lock(inputLock)
         let prev = lastInputNanosValue
         lastInputNanosValue = now
@@ -56,12 +55,11 @@ extension TelemetryCounters {
 
     /// Milliseconds since the last input event, or nil if no input yet. Read by
     /// the exporter on its 1Hz queue (never the hot path).
-    func timeSinceLastInputMs() -> Double? {
+    func timeSinceLastInputMs(now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Double? {
         os_unfair_lock_lock(inputLock)
         let last = lastInputNanosValue
         os_unfair_lock_unlock(inputLock)
         guard last != 0 else { return nil }
-        let now = DispatchTime.now().uptimeNanoseconds
         guard now >= last else { return 0 }
         return Double(now &- last) / 1_000_000.0
     }

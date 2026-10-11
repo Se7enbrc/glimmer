@@ -36,8 +36,7 @@ extension RtpAudioReceiver {
     /// the per-packet path stays a straight decode and the exporter derives the
     /// per-second rates from the totals. On the receive thread only (no lock); the
     /// counters are only ever READ by the exporter when telemetry is on.
-    func flushAudioMetricsIfDue() {
-        let now = DispatchTime.now().uptimeNanoseconds
+    func flushAudioMetricsIfDue(now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
         if audioMetricsWindowStartNanos == 0 { audioMetricsWindowStartNanos = now }
         guard now &- audioMetricsWindowStartNanos >= Self.audioMetricsWindowNanos else { return }
         audioMetricsWindowStartNanos = now

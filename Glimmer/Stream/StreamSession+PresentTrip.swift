@@ -296,10 +296,10 @@ extension StreamSession {
                 // A giveup ENDS the episode - stamp the cluster clear-clock so a
                 // post-re-enable re-trip inside the window continues the cluster
                 // (and goes straight back to direct) instead of starting fresh.
-                Self.presentTripLastClearedAt = CFAbsoluteTimeGetCurrent()
+                Self.presentTripLastClearedAt = clock.absolute()
                 // Always arm the re-enable - the jitter safeguard returns on its
                 // own once the direct path is healthy. Never a one-way latch.
-                self.pacingDisabledSince = CFAbsoluteTimeGetCurrent()
+                self.pacingDisabledSince = clock.absolute()
             }
             return
         }
@@ -377,10 +377,10 @@ extension StreamSession {
         let presentHealthy =
             sincePresent.isFinite && sincePresent < StreamSession.presentStallThreshold
         if decodeIdle >= StreamSession.presentStallThreshold || !presentHealthy {
-            self.pacingDisabledSince = CFAbsoluteTimeGetCurrent()
+            self.pacingDisabledSince = clock.absolute()
             return
         }
-        let healthyFor = CFAbsoluteTimeGetCurrent() - disabledSince
+        let healthyFor = clock.absolute() - disabledSince
         guard healthyFor >= StreamSession.presentPacingReenableHealthySeconds else { return }
         // The decoder remembers the driving view from startPacing and rebuilds
         // the CADisplayLink onto the same screen; if the view is gone (window
@@ -403,7 +403,7 @@ extension StreamSession {
             // restore (the link-dead-during-grace re-trip that burned the budget).
             self.lastWatchdogTotalTicks = 0
             self.sawLinkSilentLastTick = false
-            self.presentWatchdogStartedAt = CFAbsoluteTimeGetCurrent()
+            self.presentWatchdogStartedAt = clock.absolute()
         }
     }
 }

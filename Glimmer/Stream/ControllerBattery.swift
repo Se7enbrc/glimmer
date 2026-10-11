@@ -158,13 +158,16 @@ final class ControllerBattery: @unchecked Sendable {
                       repeating: Self.pollSeconds,
                       leeway: .seconds(5))
         poll.setEventHandler { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                for (slot, pad) in self.pads { self.report(slot: slot, pad: pad) }
-            }
+            MainActor.assumeIsolated { self?.pollTick() }
         }
         timer = poll
         poll.resume()
+    }
+
+    /// One poll: report every registered pad. The timer's body; tests call it directly.
+    @MainActor
+    func pollTick() {
+        for (slot, pad) in pads { report(slot: slot, pad: pad) }
     }
 
     /// Read → map → duplicate-suppress → send one pad's reading. `lastSent`

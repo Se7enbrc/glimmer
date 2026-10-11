@@ -156,7 +156,7 @@ extension StreamSession {
             let delayMs = UInt64(min(reconnectAttempts, 3)) * 800
             do {
                 let delay = min(Double(delayMs) / 1000, max(0, budgetEnd.timeIntervalSinceNow))
-                try await Task.sleep(for: .seconds(delay))
+                try await clock.sleep(.seconds(delay))
             } catch {
                 break
             }
@@ -174,7 +174,7 @@ extension StreamSession {
             if resumed {
                 // The new connection's stats read as never decoded, so its
                 // first-frame allowance starts here instead of at session start.
-                await MainActor.run { self.frameWatchdogArmedAt = CACurrentMediaTime() }
+                await MainActor.run { self.frameWatchdogArmedAt = self.uptimeSeconds }
                 isReconnecting = false
                 reconnectAttempts = 0
                 // Count the genuine reconnect HERE. The established-edge inference
