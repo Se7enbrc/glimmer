@@ -87,8 +87,8 @@ log show --predicate 'subsystem == "io.ugfugl.Glimmer" \
 
 ```sh
 log show --predicate 'subsystem == "io.ugfugl.Glimmer" \
-    AND category == "Stream.VideoDecoder" \
-    AND eventMessage CONTAINS "HDR"' \
+    AND (category == "Stream.VideoDecoder" OR category == "Stream") \
+    AND (eventMessage CONTAINS "HDR" OR eventMessage CONTAINS "Colour probe")' \
     --last 5m
 ```
 

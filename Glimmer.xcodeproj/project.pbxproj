@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2CFEE7336CB443DD9C058E88 /* VideoDecoder+Color.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */; };
+		06C9C49668CE4796823B104C /* VideoDecoder+ColorProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */; };
 		DA2026100900000000000021 /* AWDLProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000022 /* AWDLProcess.swift */; };
 		DA2026100900000000000023 /* AWDLProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000022 /* AWDLProcess.swift */; };
 		DEC0DE202609258300000003 /* AWDLHelperManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */; };
@@ -506,6 +508,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Color.swift"; sourceTree = "<group>"; };
+		D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+ColorProbe.swift"; sourceTree = "<group>"; };
 		DA2026100900000000000022 /* AWDLProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLProcess.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperManagerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000002 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
@@ -1304,6 +1308,8 @@
 				AB00000021 /* Signposts.swift */,
 				CC00000001 /* StatsCollector.swift */,
 				CC0000000A /* StatsCollector+Record.swift */,
+				D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */,
+				2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */,
 				CC00000003 /* VideoDecoder+HDR.swift */,
 				DEC0DE2026091900000000E7 /* PairingAttempt.swift */,
 				DEC0DE2026091900000000E5 /* StreamSession+Attempt.swift */,
@@ -1913,6 +1919,8 @@
 				AB00000022 /* Signposts.swift in Sources */,
 				CC00000002 /* StatsCollector.swift in Sources */,
 				CC0000000B /* StatsCollector+Record.swift in Sources */,
+				06C9C49668CE4796823B104C /* VideoDecoder+ColorProbe.swift in Sources */,
+				2CFEE7336CB443DD9C058E88 /* VideoDecoder+Color.swift in Sources */,
 				CC00000004 /* VideoDecoder+HDR.swift in Sources */,
 				DEC0DE2026091900000000E8 /* PairingAttempt.swift in Sources */,
 				DEC0DE2026091900000000E6 /* StreamSession+Attempt.swift in Sources */,

@@ -359,6 +359,10 @@ extension TelemetryRenderer {
                             + "interval still stretched (the link skipped a vsync delivery - "
                             + "RT working, residual is the display server).",
                             snap.tickMissLinkskipTotal)
+        promDisplayColor(&builder, snap)
+    }
+
+    private static func promDisplayColor(_ builder: inout PromBuilder, _ snap: TelemetrySnapshot) {
         builder.emit("glimmer_display_edr_headroom_min",
                      "EDR headroom min this window (1.0 = SDR, >1.0 = HDR engaged).",
                      snap.edrHeadroomMin)
@@ -368,8 +372,11 @@ extension TelemetryRenderer {
                      "EDR headroom max this window.", snap.edrHeadroomMax)
         guard let state = snap.displayState else { return }
         let screenLabels = [("screen", state.screenName)]
+        builder.emitLabeled("glimmer_display_hdr_input",
+                            "1 if the resolved input is PQ or HLG, including on an SDR display.",
+                            state.hdrInput ? 1 : 0, labels: screenLabels)
         builder.emitLabeled("glimmer_display_hdr_engaged",
-                            "1 if HDR is engaged end-to-end on this screen, else 0.",
+                            "1 if PQ/HLG input has current display EDR headroom above 1, else 0.",
                             state.hdrEngaged ? 1 : 0, labels: screenLabels)
         builder.emitLabeled("glimmer_display_promotion_capable",
                             "1 if the compositing screen supports ProMotion (>60Hz), else 0.",

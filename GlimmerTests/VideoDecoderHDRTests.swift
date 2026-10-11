@@ -45,13 +45,13 @@ let sampleHostHDR = HdrMetadata(
 @MainActor
 struct VideoDecoderHDRTests {
 
-    struct ColorCase: Sendable, CustomTestStringConvertible {
+    struct ColorCase: Sendable {
         let format: Int32
-        let hostHDR: Bool
+        let controlHDR: Bool
         let primaries: String?
         let transfer: String?
-        let key: String
-        var testDescription: String { "\(String(format, radix: 16)) hdr=\(hostHDR) \(primaries ?? "-") → \(key)" }
+        let expectedPrimaries: String
+        let expectedTransfer: String
     }
 
     nonisolated static let main10 = StreamProtocol.VIDEO_FORMAT_H265_MAIN10
@@ -59,41 +59,53 @@ struct VideoDecoderHDRTests {
     nonisolated static let bt2020 = kCVImageBufferColorPrimaries_ITU_R_2020 as String
     nonisolated static let bt709 = kCVImageBufferColorPrimaries_ITU_R_709_2 as String
     nonisolated static let pq = kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ as String
+    nonisolated static let hlg = kCVImageBufferTransferFunction_ITU_R_2100_HLG as String
+    nonisolated static let sdr = kCVImageBufferTransferFunction_ITU_R_709_2 as String
     nonisolated static let p3 = kCVImageBufferColorPrimaries_P3_D65 as String
 
     nonisolated static let colorCases: [ColorCase] = [
-        // Sunshine tags Main10 PQ as BT.709 on some GPUs: the PC's HDR signal wins.
-        ColorCase(format: main10, hostHDR: true, primaries: bt709, transfer: nil, key: "itur_2100_PQ"),
-        ColorCase(format: main10, hostHDR: true, primaries: nil, transfer: nil, key: "itur_2100_PQ"),
-        ColorCase(format: main10, hostHDR: false, primaries: bt2020, transfer: pq, key: "itur_2100_PQ"),
-        ColorCase(format: main10, hostHDR: false, primaries: bt2020, transfer: nil, key: "itur_2020"),
-        ColorCase(format: main10, hostHDR: false, primaries: bt709, transfer: nil, key: "itur_709"),
-        ColorCase(format: main10, hostHDR: false, primaries: p3, transfer: nil, key: "itur_2020"),
-        ColorCase(format: main10, hostHDR: false, primaries: nil, transfer: nil, key: "itur_2020"),
-        ColorCase(format: main8, hostHDR: true, primaries: nil, transfer: nil, key: "itur_709"),
-        ColorCase(format: main8, hostHDR: false, primaries: p3, transfer: nil, key: "itur_709"),
-        ColorCase(format: main8, hostHDR: false, primaries: bt2020, transfer: pq, key: "itur_2100_PQ")
+        ColorCase(format: main8, controlHDR: false, primaries: bt709, transfer: sdr,
+                  expectedPrimaries: bt709, expectedTransfer: sdr),
+        ColorCase(format: main10, controlHDR: true, primaries: bt709, transfer: sdr,
+                  expectedPrimaries: bt709, expectedTransfer: sdr),
+        ColorCase(format: main10, controlHDR: true, primaries: bt2020, transfer: sdr,
+                  expectedPrimaries: bt2020, expectedTransfer: sdr),
+        ColorCase(format: main10, controlHDR: false, primaries: nil, transfer: nil,
+                  expectedPrimaries: bt709, expectedTransfer: sdr),
+        ColorCase(format: main10, controlHDR: true, primaries: nil, transfer: nil,
+                  expectedPrimaries: bt2020, expectedTransfer: pq),
+        ColorCase(format: main8, controlHDR: true, primaries: nil, transfer: nil,
+                  expectedPrimaries: bt709, expectedTransfer: sdr),
+        ColorCase(format: main10, controlHDR: false, primaries: bt2020, transfer: pq,
+                  expectedPrimaries: bt2020, expectedTransfer: pq),
+        ColorCase(format: main10, controlHDR: true, primaries: bt2020, transfer: hlg,
+                  expectedPrimaries: bt2020, expectedTransfer: hlg),
+        ColorCase(format: main10, controlHDR: false, primaries: bt2020, transfer: hlg,
+                  expectedPrimaries: bt2020, expectedTransfer: hlg),
+        ColorCase(format: main10, controlHDR: true, primaries: bt709, transfer: nil,
+                  expectedPrimaries: bt709, expectedTransfer: sdr),
+        ColorCase(format: main10, controlHDR: true, primaries: nil, transfer: sdr,
+                  expectedPrimaries: bt709, expectedTransfer: sdr),
+        ColorCase(format: main10, controlHDR: false, primaries: p3, transfer: sdr,
+                  expectedPrimaries: p3, expectedTransfer: sdr)
     ]
 
     @Test(arguments: colorCases)
-    func derivedKeyFollowsTagsAndThePCsHDRSignal(_ testCase: ColorCase) throws {
+    func resolvedColorPreservesDeclarations(_ testCase: ColorCase) throws {
         let decoder = VideoDecoder()
         decoder.streamVideoFormat = testCase.format
-        decoder.hdrEnabled = testCase.hostHDR
         let buffer = try makeTaggedPixelBuffer(
             primaries: testCase.primaries.map { $0 as CFString }, transfer: testCase.transfer.map { $0 as CFString })
-        #expect(decoder.derivedColorSpaceKey(for: buffer) == testCase.key)
-    }
-
-    @Test func eachKeyBuildsItsNamedColorSpace() {
-        let decoder = VideoDecoder()
-        let expected: [String: CFString] = [
-            "itur_2100_PQ": CGColorSpace.itur_2100_PQ, "itur_2020": CGColorSpace.itur_2020,
-            "itur_709": CGColorSpace.itur_709, "srgb": CGColorSpace.sRGB, "unknown": CGColorSpace.itur_709
-        ]
-        for (key, name) in expected {
-            #expect(decoder.makeCGColorSpace(forKey: key)?.name == name, "\(key)")
+        if testCase.primaries == Self.bt2020 {
+            CVBufferSetAttachment(buffer, kCVImageBufferYCbCrMatrixKey,
+                                  kCVImageBufferYCbCrMatrix_ITU_R_2020, .shouldPropagate)
         }
+        let color = decoder.resolveColorDescription(for: buffer, controlHDR: testCase.controlHDR)
+        #expect(color.primaries == testCase.expectedPrimaries)
+        #expect(color.transfer == testCase.expectedTransfer)
+        #expect(color.isHDR == [Self.pq, Self.hlg].contains(testCase.expectedTransfer))
+        #expect(color.range == kCVPixelFormatComponentRange_VideoRange as String)
+        #expect(color.makeColorSpace() != nil)
     }
 
     // MARK: HDR10 metadata blobs
@@ -147,7 +159,7 @@ struct VideoDecoderHDRTests {
 
     // MARK: Layer HDR mode
 
-    @Test func tenBitHDRStreamEngagesTheLayerAndBackOff() {
+    @Test func tenBitHDRStreamEngagesTheLayerAndBackOff() throws {
         let decoder = VideoDecoder()
         let layer = AVSampleBufferDisplayLayer()
         decoder.attach(to: layer)
@@ -160,14 +172,21 @@ struct VideoDecoderHDRTests {
         decoder.onHDRActiveChanged = { flips.append($0) }
 
         decoder.setHDR(enabled: true)
+        #expect(!decoder.isHDRActive)
+        let hdr = try makeTaggedPixelBuffer()
+        decoder.attachColorAndHDRMetadata(to: hdr,
+            color: decoder.resolveColorDescription(for: hdr, controlHDR: true))
+        decoder.configureLayerColorspace()
         #expect(layer.preferredDynamicRange == .high)
-        #expect(Self.colorSpaceName(of: layer) == CGColorSpace.itur_2100_PQ)
         #expect(decoder.isHDRActive)
         #expect(decoder.hdrMetadataStore.snapshot.mdcv?.count == 24)
 
         decoder.setHDR(enabled: false)
+        let sdr = try makeTaggedPixelBuffer()
+        decoder.attachColorAndHDRMetadata(to: sdr,
+            color: decoder.resolveColorDescription(for: sdr, controlHDR: false))
+        decoder.configureLayerColorspace()
         #expect(layer.preferredDynamicRange == .standard)
-        #expect(layer.value(forKey: "colorspace") == nil)
         #expect(!decoder.isHDRActive)
         #expect(decoder.hdrMetadataStore.snapshot == .empty)
         #expect(flips == [true, false])
@@ -234,10 +253,155 @@ struct VideoDecoderHDRTests {
             allocator: nil, imageBuffer: buffer, formatDescriptionOut: &format) == noErr)
         return try #require(format)
     }
+}
 
-    private static func colorSpaceName(of layer: AVSampleBufferDisplayLayer) -> CFString? {
-        guard let value = layer.value(forKey: "colorspace") as CFTypeRef?,
-              CFGetTypeID(value) == CGColorSpace.typeID else { return nil }
-        return unsafeDowncast(value, to: CGColorSpace.self).name
+@MainActor
+struct VideoDecoderColorTransitionTests {
+    private let bt2020 = kCVImageBufferColorPrimaries_ITU_R_2020
+    private let pq = kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ
+    private let hlg = kCVImageBufferTransferFunction_ITU_R_2100_HLG
+    private let sdr = kCVImageBufferTransferFunction_ITU_R_709_2
+
+    @Test func aMatrixAlonePreventsTheUntaggedPQFallback() throws {
+        let decoder = VideoDecoder()
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_H265_MAIN10
+        let buffer = try makeTaggedPixelBuffer()
+        CVBufferSetAttachment(buffer, kCVImageBufferYCbCrMatrixKey,
+                              kCVImageBufferYCbCrMatrix_ITU_R_601_4, .shouldPropagate)
+        let color = decoder.resolveColorDescription(for: buffer, controlHDR: true)
+        #expect(color.primaries == kCVImageBufferColorPrimaries_ITU_R_709_2 as String)
+        #expect(color.transfer == sdr as String)
+        #expect(color.matrix == kCVImageBufferYCbCrMatrix_ITU_R_601_4 as String)
+        #expect(!color.isHDR)
+    }
+
+    @Test func independentTagsAndGammaSurviveAttachment() throws {
+        let decoder = VideoDecoder()
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_H265_MAIN10
+        let buffer = try makeTaggedPixelBuffer(primaries: kCVImageBufferColorPrimaries_P3_D65,
+                                               transfer: kCVImageBufferTransferFunction_UseGamma)
+        CVBufferSetAttachment(buffer, kCVImageBufferYCbCrMatrixKey,
+                              kCVImageBufferYCbCrMatrix_ITU_R_601_4, .shouldPropagate)
+        CVBufferSetAttachment(buffer, kCVImageBufferGammaLevelKey, 2.2 as CFNumber, .shouldPropagate)
+        let declaredGamma = try #require(CVBufferCopyAttachment(buffer, kCVImageBufferGammaLevelKey, nil) as? Double)
+        let color = decoder.resolveColorDescription(for: buffer, controlHDR: true)
+        decoder.attachColorAndHDRMetadata(to: buffer, color: color)
+        #expect(color.primaries == kCVImageBufferColorPrimaries_P3_D65 as String)
+        #expect(color.transfer == kCVImageBufferTransferFunction_UseGamma as String)
+        #expect(color.matrix == kCVImageBufferYCbCrMatrix_ITU_R_601_4 as String)
+        #expect(abs(declaredGamma - 2.2) < 0.000001)
+        #expect(color.gamma == declaredGamma)
+        #expect(!color.isHDR)
+        #expect(CVBufferCopyAttachment(buffer, kCVImageBufferGammaLevelKey, nil) as? Double == declaredGamma)
+    }
+
+    @Test(arguments: [kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
+                      kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange])
+    func outputRangeIsNotReplacedWithTheRequestedRange(_ format: OSType) throws {
+        let decoder = VideoDecoder(colorRange: .full)
+        let buffer = try makeTaggedPixelBuffer(format: format)
+        let color = decoder.resolveColorDescription(for: buffer, controlHDR: false)
+        decoder.attachColorAndHDRMetadata(to: buffer, color: color)
+        let full = format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+        #expect(color.range == (full ? kCVPixelFormatComponentRange_FullRange as String
+            : kCVPixelFormatComponentRange_VideoRange as String))
+        #expect(CVPixelBufferGetPixelFormatType(buffer) == format)
+    }
+
+    @Test func inputFormatTagsFillMissingVTAttachments() throws {
+        let decoder = VideoDecoder()
+        let tagged = try makeTaggedPixelBuffer(primaries: bt2020, transfer: hlg)
+        CVBufferSetAttachment(tagged, kCVImageBufferYCbCrMatrixKey,
+                              kCVImageBufferYCbCrMatrix_ITU_R_2020, .shouldPropagate)
+        var format: CMVideoFormatDescription?
+        try #require(CMVideoFormatDescriptionCreateForImageBuffer(
+            allocator: nil, imageBuffer: tagged, formatDescriptionOut: &format) == noErr)
+        decoder.formatDescription = format
+        let untagged = try makeTaggedPixelBuffer()
+        let color = decoder.resolveColorDescription(for: untagged, controlHDR: false)
+        #expect(color.primaries == bt2020 as String)
+        #expect(color.transfer == hlg as String)
+        #expect(color.matrix == kCVImageBufferYCbCrMatrix_ITU_R_2020 as String)
+        #expect(color.isHDR)
+        let probe = try #require(decoder.beginColorProbe(untagged, color: color, controlHDR: false))
+        #expect(probe.rawFormat.contains("ITU_R_2020"))
+        #expect(probe.rawFormat.contains("ITU_R_2100_HLG"))
+        #expect(!probe.rawAttachments.contains("ITU_R_2100_HLG"))
+    }
+
+    @Test func hdrToSDRRemovesMetadataAndInvalidatesTheFormat() throws {
+        let decoder = VideoDecoder()
+        decoder.attach(to: AVSampleBufferDisplayLayer())
+        decoder.isStreaming = true
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_H265_MAIN10
+        decoder.hdrEnabled = true
+        defer { decoder.teardown() }
+        let metadata = HDRMetadata(mdcv: Data(repeating: 1, count: 24), contentLightLevel: Data([0, 1, 0, 1]))
+        decoder.hdrMetadataStore.publish(metadata)
+        let buffer = try makeTaggedPixelBuffer(primaries: bt2020, transfer: pq)
+        decoder.enqueueDecodedFrame(buffer, hostPTS: .zero)
+        let hdrFormat = try #require(decoder.cachedHDRFormatDescription)
+        #expect(CVBufferCopyAttachment(buffer, kCVImageBufferMasteringDisplayColorVolumeKey, nil) != nil)
+
+        CVBufferSetAttachment(buffer, kCVImageBufferTransferFunctionKey, sdr, .shouldPropagate)
+        decoder.enqueueDecodedFrame(buffer, hostPTS: .zero)
+        let sdrFormat = try #require(decoder.cachedHDRFormatDescription)
+        #expect(sdrFormat !== hdrFormat)
+        #expect(CVBufferCopyAttachment(buffer, kCVImageBufferMasteringDisplayColorVolumeKey, nil) == nil)
+        #expect(CVBufferCopyAttachment(buffer, kCVImageBufferContentLightLevelInfoKey, nil) == nil)
+        #expect(CMFormatDescriptionGetExtension(sdrFormat,
+            extensionKey: kCMFormatDescriptionExtension_MasteringDisplayColorVolume) == nil)
+        #expect(CMFormatDescriptionGetExtension(sdrFormat,
+            extensionKey: kCMFormatDescriptionExtension_ContentLightLevelInfo) == nil)
+        #expect(decoder.resolvedColor.withLock { $0?.primaries } == bt2020 as String)
+        #expect(decoder.resolvedColor.withLock { $0?.isHDR } == false)
+
+        CVBufferSetAttachment(buffer, kCVImageBufferTransferFunctionKey, hlg, .shouldPropagate)
+        decoder.enqueueDecodedFrame(buffer, hostPTS: .zero)
+        #expect(decoder.cachedHDRFormatDescription !== sdrFormat)
+        #expect(CVBufferCopyAttachment(buffer, kCVImageBufferContentLightLevelInfoKey, nil) as? Data
+            == metadata.contentLightLevel)
+    }
+
+    @Test func taggedHDRControlsReplacementLayersWithoutAControlSignal() throws {
+        let decoder = VideoDecoder()
+        defer { decoder.teardown() }
+        for transfer in [pq, hlg, sdr] {
+            let buffer = try makeTaggedPixelBuffer(primaries: bt2020, transfer: transfer)
+            let color = decoder.resolveColorDescription(for: buffer, controlHDR: false)
+            decoder.attachColorAndHDRMetadata(to: buffer, color: color)
+            let layer = AVSampleBufferDisplayLayer()
+            decoder.attach(to: layer)
+            decoder.configureLayerColorspace()
+            #expect(layer.preferredDynamicRange == (color.isHDR ? .high : .standard))
+            #expect(decoder.isHDRActive == color.isHDR)
+        }
+    }
+
+    @Test func probeCapturesRawStateAndOnlyRepeatsForChanges() throws {
+        let decoder = VideoDecoder()
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_H265_MAIN10
+        let buffer = try makeTaggedPixelBuffer()
+        let color = decoder.resolveColorDescription(for: buffer, controlHDR: false)
+        let first = try #require(decoder.beginColorProbe(buffer, color: color, controlHDR: false))
+        #expect(!first.rawAttachments.contains("ITU_R_709_2"))
+        decoder.attachColorAndHDRMetadata(to: buffer, color: color)
+        #expect(decoder.colorAttachmentSummary(buffer).contains("ITU_R_709_2"))
+        let next = try makeTaggedPixelBuffer()
+        #expect(decoder.beginColorProbe(next, color: color, controlHDR: false) == nil)
+        #expect(decoder.beginColorProbe(next, color: color, controlHDR: true) != nil)
+        #expect(decoder.beginColorProbe(next, color: color, controlHDR: true) == nil)
+        let tagged = try makeTaggedPixelBuffer(primaries: bt2020, transfer: hlg)
+        let changed = decoder.resolveColorDescription(for: tagged, controlHDR: true)
+        #expect(decoder.beginColorProbe(tagged, color: changed, controlHDR: true) != nil)
+        #expect(decoder.beginColorProbe(tagged, color: changed, controlHDR: true) == nil)
+    }
+
+    @Test func inputHDRSurvivesMovementWhileOutputTracksCurrentEDR() {
+        let outputs = [1.0, 2.0, 1.0, 4.0].map {
+            VideoColorDescription.hdrDisplayOutput(inputHDR: true, currentEDR: $0)
+        }
+        #expect(outputs == [false, true, false, true])
+        #expect(!VideoColorDescription.hdrDisplayOutput(inputHDR: false, currentEDR: 4))
     }
 }

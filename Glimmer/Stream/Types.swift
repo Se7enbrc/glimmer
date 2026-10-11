@@ -58,7 +58,7 @@ public struct StreamConfig: Sendable {
     /// can decode," so the host's RTSP codec negotiation never picks a
     /// format we'd have to reject in `handleSetup`.
     public var videoFormats: VideoFormats = .probedSupported
-    public var colorSpace: ColorSpace = .rec2020
+    public var colorSpace: ColorSpace = .rec709
     public var colorRange: ColorRange = .full
 
     /// When true, system-level keyboard combos that use the macOS Cmd key

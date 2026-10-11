@@ -90,7 +90,7 @@ struct TelemetryPrometheusRenderTests {
             "glimmer_tick_miss_coalesced_total": 42, "glimmer_tick_miss_preempted_total": 43,
             "glimmer_tick_miss_linkskip_total": 44, "glimmer_display_edr_headroom_min": 1,
             "glimmer_display_edr_headroom_avg": 2.5, "glimmer_display_edr_headroom_max": 4,
-            "glimmer_display_hdr_engaged": 1, "glimmer_display_promotion_capable": 1,
+            "glimmer_display_hdr_input": 1, "glimmer_display_hdr_engaged": 1, "glimmer_display_promotion_capable": 1,
             "glimmer_display_max_refresh_hz": 120, "glimmer_input_events_per_second": 250.5,
             "glimmer_input_flush_per_second": 125, "glimmer_input_idle_to_active_total": 9,
             "glimmer_input_since_last_ms": 33.5, "glimmer_input_flush_backpressure_skips_total": 16,

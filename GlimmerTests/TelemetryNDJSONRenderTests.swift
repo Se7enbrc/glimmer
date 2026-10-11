@@ -134,6 +134,7 @@ struct TelemetryNDJSONRenderTests {
         #expect(row["decode_pixel_format"] as? String == "x420")
         #expect(row["decode_colorspace"] as? String == "itur_2100_PQ")
         #expect(row["hdr_engaged"] as? Bool == true)
+        #expect(row["hdr_input"] as? Bool == true)
         #expect(row["promotion_capable"] as? Bool == true)
         #expect(row["screen"] as? String == "Studio \"Display\"")
     }
