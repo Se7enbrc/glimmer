@@ -296,11 +296,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        terminationReply()
+    }
+
+    /// Tests stand in for the system-wide pointer restore, the session stop and AppKit's reply.
+    func terminationReply(restorePointer: () -> Void = { MouseAccelerationControl.restoreOrphanedOverride() },
+                          stop: @escaping @Sendable (StreamSession) async -> Void = { await $0.stop() },
+                          reply: @escaping @MainActor () -> Void = { NSApp.reply(toApplicationShouldTerminate: true) })
+        -> NSApplication.TerminateReply {
         model?.shutdown()
         // Cmd-Q / menu Quit mid-stream skips the session's stop()/exitCapturedMode(),
         // so the SYSTEM-WIDE pointer-acceleration override would survive process exit.
         // Restore it synchronously (idempotent; no-op when nothing is overridden).
-        MouseAccelerationControl.restoreOrphanedOverride()
+        restorePointer()
         // A live (or connecting) session must reach the host's /cancel before
         // the process exits. Returning .terminateNow after kicking off an async
         // stop let the process die first and left Sunshine holding a phantom
@@ -314,11 +322,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Task { @MainActor in
             let bound = session.terminationStopBoundSeconds
-            let finished = await TerminationGate.runBounded(seconds: bound) { await session.stop() }
+            let finished = await TerminationGate.runBounded(seconds: bound) { await stop(session) }
             Diag.notice(finished
                 ? "Quit: stream stopped and the host session cancelled"
                 : "Quit: host didn't acknowledge /cancel within \(Int(bound))s - exiting anyway", "Stream")
-            NSApp.reply(toApplicationShouldTerminate: true)
+            reply()
         }
         return .terminateLater
     }

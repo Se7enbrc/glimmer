@@ -57,6 +57,8 @@
 		DEC0DE202609222400000001 /* SettingsShortcutRecorders.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222400000002 /* SettingsShortcutRecorders.swift */; };
 		DEC0DE202609222400000003 /* ShortcutRecordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */; };
 		DEC0DE202609222400000005 /* LoginItemReconcileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */; };
+		5E5A5E202610100000000001 /* LoginItemApplyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5A5E202610100000000002 /* LoginItemApplyTests.swift */; };
+		5E5A5E202610100000000003 /* SystemServiceSeamTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5A5E202610100000000004 /* SystemServiceSeamTests.swift */; };
 		A100019A /* AboutPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019B /* AboutPane.swift */; };
 		DEC0DE2026092000000000D1 /* WakeOnLAN.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D2 /* WakeOnLAN.swift */; };
 		DEC0DE20260922030000000F /* AppShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220300000010 /* AppShellTests.swift */; };
@@ -550,6 +552,8 @@
 		DEC0DE202609222400000002 /* SettingsShortcutRecorders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsShortcutRecorders.swift; sourceTree = "<group>"; };
 		DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRecordingTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemReconcileTests.swift; sourceTree = "<group>"; };
+		5E5A5E202610100000000002 /* LoginItemApplyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemApplyTests.swift; sourceTree = "<group>"; };
+		5E5A5E202610100000000004 /* SystemServiceSeamTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemServiceSeamTests.swift; sourceTree = "<group>"; };
 		A100019B /* AboutPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPane.swift; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D2 /* WakeOnLAN.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLAN.swift"; sourceTree = "<group>"; };
 		DEC0DE202609220300000010 /* AppShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppShellTests.swift"; sourceTree = "<group>"; };
@@ -1462,6 +1466,8 @@
 				6E2026101000000000000008 /* VideoDecoderLifecycleTests.swift */,
 				DEC0DE202609222400000004 /* ShortcutRecordingTests.swift */,
 				DEC0DE202609222400000006 /* LoginItemReconcileTests.swift */,
+				5E5A5E202610100000000002 /* LoginItemApplyTests.swift */,
+				5E5A5E202610100000000004 /* SystemServiceSeamTests.swift */,
 				DEC0DE202609230400000002 /* GlimmerIntentsTests.swift */,
 				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE202609232100000004 /* LauncherWindowTests.swift */,
@@ -2048,6 +2054,8 @@
 				6E2026101000000000000007 /* VideoDecoderLifecycleTests.swift in Sources */,
 				DEC0DE202609222400000003 /* ShortcutRecordingTests.swift in Sources */,
 				DEC0DE202609222400000005 /* LoginItemReconcileTests.swift in Sources */,
+				5E5A5E202610100000000001 /* LoginItemApplyTests.swift in Sources */,
+				5E5A5E202610100000000003 /* SystemServiceSeamTests.swift in Sources */,
 				DEC0DE202609230400000001 /* GlimmerIntentsTests.swift in Sources */,
 				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */,

@@ -156,12 +156,19 @@ final class UpdateAvailability {
     private(set) var canCheckForUpdates = false
     @ObservationIgnored private var observation: NSKeyValueObservation?
 
-    init(_ updater: SPUUpdater) {
-        observation = updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
-            // Sparkle posts this KVO change on the main thread; assert it so the
-            // @MainActor reads/writes are isolation-clean without a Task hop.
-            MainActor.assumeIsolated { self?.canCheckForUpdates = updater.canCheckForUpdates }
+    convenience init(_ updater: SPUUpdater) {
+        self.init { report in
+            updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { updater, _ in
+                // Sparkle posts this KVO change on the main thread; assert it so the
+                // @MainActor reads/writes are isolation-clean without a Task hop.
+                MainActor.assumeIsolated { report(updater.canCheckForUpdates) }
+            }
         }
+    }
+
+    /// `observe` reports each availability change and returns its observation.
+    init(observe: (@escaping @MainActor @Sendable (Bool) -> Void) -> NSKeyValueObservation?) {
+        observation = observe { [weak self] in self?.canCheckForUpdates = $0 }
     }
 }
 

@@ -53,6 +53,8 @@ final class AppModel {
     @ObservationIgnored var nativeSession: StreamSession?
     /// A command-line launch waiting for its route, before a session exists.
     @ObservationIgnored var pendingCommandStream: PendingCommandStream?
+    /// The panel's native mode; tests stand in a display of their own.
+    @ObservationIgnored var displayProbe: @MainActor () -> (width: Int, height: Int, fps: Int) = AppModel.mainDisplayMode
 
     // Quality
     // Default `.matchDisplay` (panel-native resolution + refresh) - the option
