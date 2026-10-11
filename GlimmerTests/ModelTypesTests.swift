@@ -10,6 +10,7 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
 @testable import Glimmer
 
@@ -42,10 +43,10 @@ struct ModelTypesTests {
     }
 
     @Test func appIconsFollowTheName() {
-        #expect(app(1, "Desktop").systemImage == "macwindow")
-        #expect(app(2, "Steam Big Picture").systemImage == "gamecontroller.fill")
-        #expect(app(3, "Big Picture").systemImage == "tv")
-        #expect(app(4, "Helldivers 2").systemImage == "app")
+        #expect(app(1, "Desktop").icon == Image(systemName: "macwindow"))
+        #expect(app(2, "Steam Big Picture").icon == Image("steam"))
+        #expect(app(3, "Big Picture").icon == Image(systemName: "tv"))
+        #expect(app(4, "Helldivers 2").icon == Image(systemName: "app"))
     }
 
     @Test func chordsReadAndSerializeInModifierOrder() {
