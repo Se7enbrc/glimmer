@@ -5,20 +5,23 @@
 ### Features
 
 - Type composed text with macOS input methods and the character viewer. Accents
-  work with the pointer free; captured game controls keep physical keys.
+  and Option-letter combinations compose while the pointer is free, including in
+  windowed games. Use the capture shortcut (⌃P by default) to send them as keys.
+  Captured controls always use physical keys, even with an input method
+  selected. Committed text stays ahead of the keys typed after it.
 - The app named “Desktop” uses a pointer that follows the picture in fullscreen.
   Other apps can switch with the capture shortcut (⌃P by default), which toggles
   between that pointer and captured game controls.
 
-- Steam shows its own logo in the launcher, the menu and the PC list, instead
-  of a generic controller.
+- Steam shows its own logo in the launcher, the menu and the PC list, instead of
+  a generic controller.
 
 ### Bug fixes
 
 - Turning on a controller that needs Input Monitoring shows macOS's own
   permission prompt instead of opening System Settings on top of it. Once you
-  allow it, the controller starts working when you come back to Glimmer, with
-  no relaunch.
+  allow it, the controller starts working when you come back to Glimmer, with no
+  relaunch.
 
 ## 2026.10.6 - 2026-10-09
 

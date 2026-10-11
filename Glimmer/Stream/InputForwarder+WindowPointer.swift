@@ -25,6 +25,7 @@ extension InputForwarder {
     func setWindowMode(_ enabled: Bool) {
         guard isWindowMode != enabled else { return }
         isWindowMode = enabled
+        defer { updateSystemKeyCapture() }
         if enabled {
             exitCapturedMode()
             log.info("Pointer policy: relative capture while the pointer is over the window")

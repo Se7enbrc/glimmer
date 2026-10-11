@@ -24,8 +24,13 @@ import os.log
 
 extension InputForwarder: StreamInputViewDelegate {
     func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) {
+        if deferKeyboardEvent({ $0.streamView(view, handleKeyDown: event) }) { return }
+        forwardKeyDown(event, in: view)
+    }
+
+    private func forwardKeyDown(_ event: NSEvent, in view: StreamInputView) {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if !mods.isDisjoint(with: [.command, .control]) { view.cancelComposition() }
+        if view.hasMarkedText(), !mods.isDisjoint(with: [.command, .control]) { view.cancelComposition() }
         releaseStaleModifiers(for: event)
         noteEscapeModifiersChanged(event.modifierFlags)
 
@@ -37,31 +42,14 @@ extension InputForwarder: StreamInputViewDelegate {
             return
         }
 
-        // Stats-overlay hotkey. Same intercept story as the quit hotkey:
-        // ordered BEFORE the sys-keys gate so a non-Cmd default (⌃⌥S) is
-        // honoured regardless of `captureSysKeys`, and a Cmd-bearing custom
-        // chord still works when the user has explicitly opted in to capture.
-        // Consumed - never forwarded to the host.
+        // Client chords precede the Command gate so custom shortcuts work in either mode.
         if !event.isARepeat, statsHotkeyProvider().matches(event: event, modifiers: mods) {
             log.info("Stats hotkey detected - invoking onStatsHotkey")
             onStatsHotkey?()
             return
         }
 
-        // Telemetry-bookmark chord (signal 4 - "that felt bad"). CLIENT-ONLY:
-        // consumed here and NEVER forwarded to the host, exactly like the
-        // quit/stats intercepts above (and the exit-chord interception this
-        // mirrors). Ordered BEFORE the sys-keys gate so the non-Cmd default (⌃B)
-        // fires regardless of `captureSysKeys`. The handler writes a timestamped
-        // jank marker into the telemetry.
-        //
-        // GATED on telemetry being ON: the chord is only intercepted (swallowed)
-        // when there's a handler wired AND `TelemetryGate.isEnabled`. With
-        // telemetry OFF - the default for normal play - recording the marker
-        // would be a no-op (`telemetryExporter` is nil), so swallowing ⌃B would
-        // just EAT a keystroke the host should have seen. Letting it fall through
-        // to the normal forward path below means ⌃B reaches the host like any
-        // other key when there's no live telemetry to bookmark into.
+        // Without live telemetry a bookmark would do nothing, so let the PC use the chord.
         if !event.isARepeat, onBookmarkHotkey != nil,
            bookmarkHotkeyProvider().matches(event: event, modifiers: mods), TelemetryGate.isEnabled {
             log.info("Bookmark hotkey detected - invoking onBookmarkHotkey")
@@ -77,30 +65,26 @@ extension InputForwarder: StreamInputViewDelegate {
             return
         }
 
-        // Mini player chord: the same client-only intercept as quit/stats,
-        // and the way back to the full presentation from inside the panel.
+        // The mini player chord also returns to the full presentation from the panel.
         if !event.isARepeat, miniPlayerHotkeyProvider().matches(event: event, modifiers: mods) {
             log.info("Mini player hotkey detected - toggling")
             onMiniPlayerHotkey?()
             return
         }
 
-        // Until the first connection is live the invisible stream window holds
-        // key focus, so a bare Esc cancels the connect as the launcher's would.
-        // From then on Esc is game input, reconnects included.
+        // Before the first connection, bare Escape cancels like the launcher.
+        // Once live, Escape belongs to the PC, including during reconnects.
         if initialConnectPending, !event.isARepeat, Int(event.keyCode) == kVK_Escape,
            mods.isDisjoint(with: [.command, .option, .control, .shift]) {
             log.info("Esc before the stream went live - cancelling the connect")
             quitOrCancelConnect()
             return
         }
-
         // Paste types the Mac clipboard into the PC independently of keyboard layout.
         if !event.isARepeat, PasteText.chord.matches(event: event, modifiers: mods) {
             pasteClipboardAsText()
             return
         }
-
         // Composition owns Escape; a reconnect must still allow the pointer hold.
         if !view.hasMarkedText() { noteEscapeKeyDown(event) }
 
@@ -108,7 +92,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // is the Mac's and never forwarded. Repeats are dropped: the PC makes its own.
         if mods.contains(.command), !forwardsCommand { return }
         guard isReady else { return }
-        if !isMouseCaptured || view.usesInputMethod, view.handleTextInput(event) { return }
+        if !isMouseCaptured, view.handleTextInput(event) { return }
         guard !event.isARepeat else { return }
         guard let key = vkScanCode(forCarbonKeyCode: Int(event.keyCode)) else {
             noteUnmappedKey(event.keyCode)
@@ -126,6 +110,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleKeyUp event: NSEvent) {
+        if deferKeyboardEvent({ $0.streamView(view, handleKeyUp: event) }) { return }
         guard !isDuplicateKeyUp(event) else { return }
         // Cancel a pending Esc hold FIRST, ahead of every gate below: a tap
         // must behave exactly as it did before the gesture existed, including
@@ -147,6 +132,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent) {
+        if deferKeyboardEvent({ $0.streamView(view, handleFlagsChanged: event) }) { return }
         noteEscapeModifiersChanged(event.modifierFlags)
         let capsLock = event.modifierFlags.contains(.capsLock)
         let capsChanged = capsLock != lastCapsLock
@@ -338,7 +324,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {
-        view.cancelComposition()
+        if view.hasMarkedText() { view.cancelComposition() }
         guard isReady, forwardsMouseEvents else { return }
         // Mini player: the click is the grab, and it still reaches the host
         // so the button under the pointer is pressed, not just aimed at.

@@ -232,39 +232,17 @@ public final class InputForwarder {
     /// the dwell fields above; the logic is in ControllerForwarder+QuitChord.
     var quitChordCrumbs = QuitChordBreadcrumbState()
 
-    /// Whether macOS-level "system" modifier combos that use the Cmd key
-    /// should be forwarded to the host or left to macOS.
-    ///
-    /// macOS owns a lot of meaningful Cmd chords - ⌘-Tab (app switcher),
-    /// ⌘-Space (Spotlight), ⌘-Q (quit), ⌘-` (window cycle), ⌘-H/⌘-M (hide/
-    /// miniaturise). The Cmd key reports as `VK_LWIN`/`VK_RWIN` to the host,
-    /// so the naive thing to do - forward everything - turns ⌘-Tab into a
-    /// Win+Tab on the gaming PC, popping Windows' Task View while the
-    /// streamer is trying to leave the stream. That's the bug we're closing.
-    ///
-    /// When this is `false` (the default), the InputForwarder:
-    ///   * Drops `keyDown` events whose modifier mask contains `.command`
-    ///     so they're handled by the macOS responder chain instead. ⌘-Q
-    ///     quits Glimmer; ⌘-Tab switches apps; ⌘-Space opens Spotlight.
-    ///   * Skips the `flagsChanged` path for the `.command` modifier so
-    ///     we never emit a LWIN/RWIN down/up to the host.
-    ///   * Strips `MODIFIER_META` from `modifierByte(from:)` so a
-    ///     non-Cmd key that happens to be pressed while the user holds
-    ///     Cmd doesn't reach the host with a phantom Win-key modifier.
-    ///
-    /// When this is `true` and the stream is key (`forwardsCommand`), Cmd chords
-    /// reach the PC as Win-key chords in both absolute and captured pointer modes.
-    ///
-    /// Note: the configured quit hotkey (see `quitHotkey`) is detected BEFORE
-    /// this gate, so it keeps working regardless of capture state - including
-    /// the default ⌃⌥Q, which carries no Cmd and so never reaches the gate.
+    /// Opted-in Command chords become Win-key chords in fullscreen or a captured window.
+    /// Otherwise key-downs, modifier transitions and the meta byte stay local to avoid phantom Win keys.
+    /// Client quit/stats chords run before this gate so they work in either mode.
     public var captureSysKeys: Bool = false
 
     /// Delayed input belongs to one ready connection and one uninterrupted focus interval.
     var inputGeneration: UInt64 = 0
 
-    /// Preserve commit order when several modifier-release waits finish together.
+    /// Keyboard events wait behind text until cross-channel modifier releases settle.
     var pendingTextTask: Task<Void, Never>?
+    var pendingKeyboardEvents: [(InputForwarder) -> Void] = []
 
     /// Opens when the backend can accept input; reconnects invalidate delayed work.
     public internal(set) var isReady: Bool = false {

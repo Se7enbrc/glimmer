@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  InputForwarder+Paste.swift
-//
-//  Paste as text (⌃V): the Mac clipboard is typed into the PC as characters,
-//  so passwords, links, codes and accented text arrive as written whatever the
-//  PC's keyboard layout. Keys are otherwise positional.
-//
+// Text commits preserve held game input; clipboard pastes release it first.
 
 import AppKit
 
@@ -36,7 +30,7 @@ enum PasteText {
 extension InputForwarder {
 
     func streamView(_ view: StreamInputView, commitText text: String) {
-        guard isReady, !text.isEmpty, window?.isKeyWindow != false,
+        guard isReady, !isMouseCaptured, !text.isEmpty, window?.isKeyWindow != false,
               window?.ignoresMouseEvents != true else { return }
         queueText(text)
     }
@@ -60,29 +54,55 @@ extension InputForwarder {
         guard isReady, backend != nil else { return nil }
         let text = PasteText.prepared(clipboard)
         guard !text.isEmpty else { return nil }
+        if deferKeyboardEvent({ $0.queuePasteText(clipboard) }) { return pendingTextTask }
         raiseAllHeldInputs(reason: "paste")
         log.info("Pasting \(text.utf8.count, privacy: .public) bytes as text")
-        return queueText(text)
+        return queueText(text, waitForRelease: true)
     }
 
     @discardableResult
-    func queueText(_ text: String, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags) -> Task<Void, Never>? {
+    func queueText(_ text: String, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags,
+                   waitForRelease: Bool = false) -> Task<Void, Never>? {
         guard isReady, let backend, !text.isEmpty else { return nil }
+        if deferKeyboardEvent({ $0.queueText(text, modifiers: modifiers, waitForRelease: waitForRelease) }) {
+            return pendingTextTask
+        }
+        let needsDelay = waitForRelease || !heldModifierVKs.isEmpty
         for vk in heldModifierVKs.sorted() { sendModifier(vk, down: false, modByte: 0) }
         // Modifiers still down (the chord's own) are up on the PC now: count them
         // as held, so letting go sends a harmless release instead of a press.
         heldModifierVKs = ModifierSides.held(in: modifiers, includeCommand: forwardsCommand)
         modifiersNeedResync = false
+        guard needsDelay else {
+            record("LiSendUtf8TextEvent", backend.sendUtf8Text(text))
+            return nil
+        }
         let generation = inputGeneration
-        let previous = pendingTextTask
         let deadline = ContinuousClock.now.advanced(by: .milliseconds(50))
         let task = Task { [weak self] in
             try? await Task.sleep(until: deadline, clock: .continuous)
-            await previous?.value
-            guard !Task.isCancelled, let self, self.isReady, self.inputGeneration == generation else { return }
-            self.record("LiSendUtf8TextEvent", backend.sendUtf8Text(text))
+            guard let self else { return }
+            self.pendingTextTask = nil
+            let queued = self.pendingKeyboardEvents
+            self.pendingKeyboardEvents.removeAll()
+            if !Task.isCancelled, self.isReady, self.inputGeneration == generation {
+                self.record("LiSendUtf8TextEvent", backend.sendUtf8Text(text))
+            }
+            for event in queued { event(self) }
+            await self.pendingTextTask?.value
         }
         pendingTextTask = task
         return task
+    }
+
+    /// Replay through the same handlers so a later composition can start its own release wait.
+    func deferKeyboardEvent(_ event: @escaping (InputForwarder) -> Void) -> Bool {
+        guard pendingTextTask != nil else { return false }
+        let generation = inputGeneration
+        pendingKeyboardEvents.append { forwarder in
+            guard forwarder.isReady, forwarder.inputGeneration == generation else { return }
+            event(forwarder)
+        }
+        return true
     }
 }

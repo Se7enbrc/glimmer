@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-// Keep opted-in Windows-key chords with the focused stream in either pointer mode.
+// A free pointer in a window keeps Mac shortcuts local. Fullscreen can forward them.
 
 import AppKit
 
 extension InputForwarder {
 
-    var forwardsCommand: Bool { captureSysKeys && window?.isKeyWindow == true }
+    var forwardsCommand: Bool {
+        captureSysKeys && window?.isKeyWindow == true && (!isWindowMode || isMouseCaptured)
+    }
 
     func updateSystemKeyCapture(setDisabled: @MainActor (Bool) -> Void = GlobalHotKeys.setDisabled) {
         setDisabled(forwardsCommand)
@@ -17,7 +19,9 @@ extension InputForwarder {
     /// A ⌘ key equivalent, offered before the main menu sees it. Claimed and
     /// forwarded to the PC only while ⌘ is.
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool {
-        if !event.modifierFlags.isDisjoint(with: [.command, .control]) { view.cancelComposition() }
+        if view.hasMarkedText(), !event.modifierFlags.isDisjoint(with: [.command, .control]) {
+            view.cancelComposition()
+        }
         guard forwardsCommand, event.modifierFlags.contains(.command) else { return false }
         streamView(view, handleKeyDown: event)
         return true

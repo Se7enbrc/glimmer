@@ -43,24 +43,19 @@ final class StreamInputView: NSView {
 
     private var trackingArea: NSTrackingArea?
     var textInput = StreamTextInput()
-    var usesInputMethod = false
-    var inputSourceObservation: (NotificationCenter, NSObjectProtocol)?
+    var discardMarkedText: (StreamInputView) -> Void = { $0.inputContext?.discardMarkedText() }
     var interpretTextEvent: (StreamInputView, NSEvent) -> Void = { $0.interpretKeyEvents([$1]) }
-
-    isolated deinit {
-        if let (center, token) = inputSourceObservation { center.removeObserver(token) }
-    }
 
     override func doCommand(by selector: Selector) {
         // Editing commands outside composition still belong to the PC.
         if textInput.wasComposing {
             textInput.consumed = true
-            if selector == #selector(cancelOperation(_:)) { cancelComposition() }
+            if selector == #selector(cancelOperation(_:)), hasMarkedText() { cancelComposition() }
         }
     }
 
     override func resignFirstResponder() -> Bool {
-        cancelComposition()
+        if hasMarkedText() { cancelComposition() }
         return super.resignFirstResponder()
     }
 

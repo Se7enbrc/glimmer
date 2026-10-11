@@ -63,7 +63,7 @@ extension InputForwarder {
     func windowResignedKey() {
         GlobalHotKeys.setDisabled(false)
         inputGeneration &+= 1
-        inputView?.cancelComposition()
+        if let inputView, inputView.hasMarkedText() { inputView.cancelComposition() }
         // The physical key-up goes to the newly focused app, so release held
         // input here. Esc's key-up may be lost too, making its timer unsafe.
         raiseAllHeldInputs(reason: "focus loss")
@@ -116,7 +116,8 @@ extension InputForwarder {
             }
         }
         isMouseCaptured = true
-        inputView.cancelComposition()
+        updateSystemKeyCapture()
+        if inputView.hasMarkedText() { inputView.cancelComposition() }
         log.info("""
             Mouse capture: relative aim engaged (associate-false; coalescing off; \
             cursor disassociated, visibility owned by StreamWindow)
@@ -129,6 +130,7 @@ extension InputForwarder {
     func exitCapturedMode() {
         guard isMouseCaptured else { return }
         isMouseCaptured = false
+        if isWindowMode { updateSystemKeyCapture() }
         inputView?.resumeMotion()
         // Re-associate: hand cursor control back to the OS so the pointer tracks
         // the device again wherever the user goes after leaving the stream.

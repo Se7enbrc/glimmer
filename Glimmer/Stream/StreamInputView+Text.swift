@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import AppKit
-import Carbon.HIToolbox
 
 struct StreamTextInput {
     var marked = NSAttributedString(string: "")
@@ -21,7 +20,7 @@ extension StreamInputView: @MainActor NSTextInputClient {
     /// Shortcuts bypass interpretation; mapped direct characters retain positional input.
     func handleTextInput(_ event: NSEvent) -> Bool {
         guard event.modifierFlags.isDisjoint(with: [.command, .control]) else {
-            cancelComposition()
+            if hasMarkedText() { cancelComposition() }
             return false
         }
         // The PC repeats physical keys; AppKit repeats would open the accent picker.
@@ -64,7 +63,7 @@ extension StreamInputView: @MainActor NSTextInputClient {
 
     func cancelComposition() {
         clearMarkedText()
-        inputContext?.discardMarkedText()
+        discardMarkedText(self)
     }
 
     private func clearMarkedText() {
@@ -101,38 +100,5 @@ extension StreamInputView: @MainActor NSTextInputClient {
     private static func inputString(_ value: Any) -> NSAttributedString {
         if let attributed = value as? NSAttributedString { return attributed }
         return NSAttributedString(string: value as? String ?? "")
-    }
-}
-
-extension StreamInputView {
-    func observeInputSource(
-        center: NotificationCenter = DistributedNotificationCenter.default(),
-        read: @escaping @MainActor () -> Bool = StreamInputView.currentSourceUsesInputMethod
-    ) {
-        stopObservingInputSource()
-        usesInputMethod = read()
-        let token = center.addObserver(
-            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
-            object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.cancelComposition()
-                self?.usesInputMethod = read()
-            }
-        }
-        inputSourceObservation = (center, token)
-    }
-
-    func stopObservingInputSource() {
-        if let (center, token) = inputSourceObservation { center.removeObserver(token) }
-        inputSourceObservation = nil
-    }
-
-    static func currentSourceUsesInputMethod() -> Bool {
-        guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
-              let property = TISGetInputSourceProperty(source, kTISPropertyInputSourceType) else { return false }
-        let type = Unmanaged<CFString>.fromOpaque(property).takeUnretainedValue()
-        return type == kTISTypeKeyboardInputMode || type == kTISTypeKeyboardInputMethodModeEnabled
-            || type == kTISTypeKeyboardInputMethodWithoutModes
     }
 }

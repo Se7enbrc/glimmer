@@ -46,7 +46,6 @@ extension InputForwarder {
         view.translatesAutoresizingMaskIntoConstraints = true
         view.autoresizingMask = [.width, .height]
         view.delegate = self
-        view.observeInputSource()
 
         if let existing = window.contentView {
             // Re-parent the existing contentView (which hosts the Metal layer)
@@ -147,8 +146,7 @@ extension InputForwarder {
         // The view survives in the closing window during its fade. Stop late
         // cursor updates from selecting its transparent image after teardown.
         inputView?.setTransparentCursorEnabled(false)
-        inputView?.cancelComposition()
-        inputView?.stopObservingInputSource()
+        if let inputView, inputView.hasMarkedText() { inputView.cancelComposition() }
         inputView?.delegate = nil
         inputView = nil
         window = nil
@@ -174,7 +172,7 @@ extension InputForwarder {
         let was = isReady
         if !ready {
             releaseControllerTouches()
-            inputView?.cancelComposition()
+            if let inputView, inputView.hasMarkedText() { inputView.cancelComposition() }
         }
         isReady = ready
         updateControllerBackgroundEvents()
