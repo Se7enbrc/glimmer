@@ -149,7 +149,8 @@ icon is final and is not redrawn, recoloured or reinterpreted.
   explaining.
 - Continuous (squircle) corners, concentric where one shape sits in another.
 - Windows sized to their content; no empty space, no stretched columns.
-- Motion is snappy and short, and every pulse or bounce respects Reduce Motion.
+- Motion is snappy and short, happens only when something changes, and never
+  repeats or runs continuously; Reduce Motion drops bounce and movement.
 
 ## Colors
 

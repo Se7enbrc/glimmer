@@ -241,6 +241,8 @@ numbers or a new platform API, never as cleanup.
   `.fixedSize(horizontal: false, vertical: true)`. Never add a flexible frame (a
   `minHeight` floor, `maxWidth: .infinity`, a trailing `Spacer`) outside that.
   Prove a geometry change with the osascript check in CONTRIBUTING.
+- Nothing animates continuously or repeats: motion runs once, on a state change.
+  A looping animation keeps the main thread busy for as long as it is on screen.
 - Run it and look at it before calling it done: empty, one PC, many apps,
   mid-stream, disconnected, light and dark, the smallest and largest window.
   Check VoiceOver labels and keyboard navigation. A UI change comes with before
