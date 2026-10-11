@@ -135,18 +135,22 @@ extension ControllerHaptics {
     /// by construction - a pad without a light (the cap is only advertised
     /// when gamepad.light != nil) just drops the event.
     func applyLight(slot: UInt8, red: UInt8, green: UInt8, blue: UInt8) {
-        guard let pad = pads[slot], let light = pad.controller?.light else { return }
-        // Mirror to DualSenseHID's merge (see apply()): so an adaptive-trigger
-        // OUTPUT report re-emits this color rather than blanking the light bar.
+        guard let pad = pads[slot] else { return }
+        let applied = lightSink?(slot, (red, green, blue)) ?? writeLight(pad, red: red, green: green, blue: blue)
+        guard applied else { return }
+        // Mirror to DualSenseHID's merge (see apply()) so a trigger report keeps this color.
         mirrorLightToHID(pad: pad, red: red, green: green, blue: blue)
-        light.color = GCColor(red: Float(red) / 255.0,
-                              green: Float(green) / 255.0,
-                              blue: Float(blue) / 255.0)
         if !pad.announcedLightActive {
             pad.announcedLightActive = true
             Diag.info("light bar set: controller \(slot) rgb(\(red),\(green),\(blue))",
                       Self.logCategory)
         }
+    }
+
+    private func writeLight(_ pad: PadHaptics, red: UInt8, green: UInt8, blue: UInt8) -> Bool {
+        guard let light = pad.controller?.light else { return false }
+        light.color = GCColor(red: Float(red) / 255.0, green: Float(green) / 255.0, blue: Float(blue) / 255.0)
+        return true
     }
 
     /// Player LEDs (SET_PLAYER_LEDS) → GCController.playerIndex, which drives the
@@ -170,6 +174,7 @@ extension ControllerHaptics {
     }
 
     private func setMotor(pad: PadHaptics, slot: UInt8, locality: GCHapticsLocality, intensity: Float) {
+        if let motorSink { motorSink(slot, locality, intensity); return }
         let key = locality.rawValue
         if let channel = pad.engines[key] {
             sendIntensity(intensity, to: channel, pad: pad, slot: slot, localityKey: key)
@@ -428,7 +433,7 @@ extension ControllerHaptics {
         /// ever giving up on it.
         var nextEngineAttemptNanos: UInt64 = 0
 
-        init(controller: GCController) {
+        init(controller: GCController?) {
             self.controller = controller
         }
     }
