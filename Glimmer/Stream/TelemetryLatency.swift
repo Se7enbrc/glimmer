@@ -90,9 +90,10 @@ final class FrameTimingTracker: @unchecked Sendable {
     /// Install a fresh tracker iff the gate is on, and start its trace writer.
     /// Called from the exporter's `start()`. No-op (and nothing installed) when
     /// off, so `shared` stays nil and the hot path stays zero-cost.
-    static func startIfEnabled(sessionId: String, isoStamp: String) {
+    static func startIfEnabled(sessionId: String, isoStamp: String,
+                               directory: URL = TelemetryExporter.logsDirectory) {
         guard TelemetryGate.isEnabled else { return }
-        let tracker = FrameTimingTracker(sessionId: sessionId)
+        let tracker = FrameTimingTracker(sessionId: sessionId, traceDirectory: directory)
         tracker.traceWriter.start(isoStamp: isoStamp)
         sharedBox.withLock { $0 = tracker }
     }
@@ -186,7 +187,7 @@ final class FrameTimingTracker: @unchecked Sendable {
 
     /// Both internal (not private): the trace renderer + drop-stub emitter in
     /// TelemetryLatency+Trace.swift are the only cross-file consumers.
-    let traceWriter = FrameTraceWriter()
+    let traceWriter: FrameTraceWriter
     let sessionId: String
 
     /// One in-flight frame's stage timestamps (nanoseconds, monotonic uptime).
@@ -317,8 +318,9 @@ final class FrameTimingTracker: @unchecked Sendable {
     }
 
     /// Internal for tests; the engine only reaches a tracker through `shared`.
-    init(sessionId: String) {
+    init(sessionId: String, traceDirectory: URL = TelemetryExporter.logsDirectory) {
         self.sessionId = sessionId
+        self.traceWriter = FrameTraceWriter(directory: traceDirectory)
         mapLock.initialize(to: os_unfair_lock_s())
         warmupLock.initialize(to: os_unfair_lock_s())
     }

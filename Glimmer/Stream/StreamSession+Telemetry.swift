@@ -21,9 +21,14 @@ extension StreamSession {
 
     /// Build + start the telemetry exporter iff enabled. No-op (and no
     /// allocation) when the gate is off. Called from `start()` once the
-    /// connection is up and the decoder/backend are live.
-    func startTelemetryExporter(decoder: VideoDecoder, serverName: String) {
-        guard TelemetryGate.isEnabled else { return }
+    /// connection is up and the decoder/backend are live. Tests pass `enabled` and `make`.
+    func startTelemetryExporter(
+        decoder: VideoDecoder, serverName: String, enabled: Bool = TelemetryGate.isEnabled,
+        make: (TelemetrySource, String) -> TelemetryExporter? = {
+            TelemetryExporter.makeIfEnabled(source: $0, serverName: $1)
+        }
+    ) {
+        guard enabled else { return }
         // Capture the decoder weakly; its telemetry accessors are all
         // `nonisolated` + lock-guarded, so the exporter's utility queue can call
         // them directly. RTT / ENet health route through the decoder's LIVE
@@ -55,7 +60,7 @@ extension StreamSession {
                 fps: Int(decoder.streamFps), codec: VideoDecoder.codecLabel(for: decoder.streamVideoFormat),
                 bitrate: reconnectConfig?.bitrateDecision))
 
-        guard let exporter = TelemetryExporter.makeIfEnabled(source: source, serverName: serverName) else {
+        guard let exporter = make(source, serverName) else {
             // Gate off - the default. Nothing allocated, nothing started.
             return
         }
