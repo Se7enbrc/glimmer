@@ -60,9 +60,9 @@ extension NativeBackend {
     /// Routes through the batcher's pass-through (flush-pending-then-send) so
     /// low-rate edge events stay ordered relative to the merged mouse/controller
     /// stream. Falls back to -2 when input isn't ready.
-    func dispatchInput(_ plaintext: [UInt8], channel: UInt8) -> Int32 {
+    func dispatchInput(_ plaintext: @autoclosure () -> [UInt8], channel: UInt8) -> Int32 {
         guard let batcher = readyBatcher() else { return Self.inputNotReady }
-        return batcher.passThrough(plaintext, channel: channel)
+        return batcher.passThrough(plaintext(), channel: channel)
     }
 
     public func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 {
@@ -151,10 +151,7 @@ extension NativeBackend {
     /// text lands after everything already sent.
     public func sendUtf8Text(_ text: String) -> Int32 {
         guard let batcher = readyBatcher() else { return Self.inputNotReady }
-        for packet in InputEncoder.utf8TextPackets(text) {
-            _ = batcher.passThrough(packet, channel: Enet.ctrlChannelUtf8)
-        }
-        return 0
+        return batcher.passThroughText(text)
     }
 
     /// CTRL_CHANNEL_GAMEPAD_BASE + (controllerNumber % MAX_GAMEPADS).

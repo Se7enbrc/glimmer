@@ -11,6 +11,7 @@ extension InputForwarder {
     }
 
     func reconcilePhysicalInputs() {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         guard !physicalKeys.isEmpty || !heldModifierVKs.isEmpty || !heldMouseButtons.isEmpty
             || !releases.pending.isEmpty else { return }
         let before = physicalKeys.count + heldModifierVKs.count + heldMouseButtons.count
@@ -33,12 +34,14 @@ extension InputForwarder {
     }
 
     func updateReconciliationTimer() {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         let active = !physicalKeys.isEmpty || !heldModifierVKs.isEmpty || !heldMouseButtons.isEmpty
             || !releases.pending.isEmpty || releases.held.contains {
                 if case .controller = $0 { return true }
                 return false
             }
         guard active else {
+            inputCore.activityPublished = false
             reconciliationTimer?.invalidate()
             reconciliationTimer = nil
             return
@@ -55,6 +58,7 @@ extension InputForwarder {
     }
 
     func reconcileControllerButtons() {
+        publishInputSnapshot()
         guard forwardsControllerEvents else { return }
         for state in attachedControllers.values {
             guard let pad = state.controller?.extendedGamepad,
@@ -73,12 +77,15 @@ extension InputForwarder {
         }
     }
 
-    func inputOwnershipLost(reason: String) {
+    func inputOwnershipLost(reason: String, includingControllers: Bool = true) {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         inputGeneration &+= 1
         raiseAllHeldInputs(reason: reason)
-        neutralizeControllers()
+        if includingControllers || !isMiniPlayer {
+            neutralizeControllers()
+            cancelQuitChordDwell(reason: reason)
+        }
         cancelEscapeHold()
-        cancelQuitChordDwell(reason: reason)
     }
 
     func installInputRecoveryObservers() {
@@ -98,7 +105,9 @@ extension InputForwarder {
                         self?.reconcilePhysicalInputs()
                         self?.resyncControllers()
                     } else {
-                        self?.inputOwnershipLost(reason: "app inactive or sleeping")
+                        self?.inputOwnershipLost(
+                            reason: "app inactive or sleeping",
+                            includingControllers: name != NSApplication.didResignActiveNotification)
                     }
                 }
             }

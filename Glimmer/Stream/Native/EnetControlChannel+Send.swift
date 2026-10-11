@@ -16,26 +16,22 @@
 import Foundation
 
 extension EnetControlChannel {
-    /// Submit one datagram to the wire. The actual connection.send is hopped onto
-    /// the dedicated sendQueue so it can NEVER serialize ahead of (and starve) the
-    /// inbound receive/ACK callback running on `queue`. stateLock is NEVER held
-    /// across this call - callers always invoke it OUTSIDE their withState blocks,
-    /// matching moonlight's "release the mutex before any blocking op" invariant.
-    /// In-flight backpressure: count up before the send, down in its completion,
-    /// so the input flush path can back off via `sendBacklogged`.
-    func sendDatagram(_ bytes: [UInt8]) {
+    /// Input submits on its owned thread; outboundLock preserves reliable commit/submission order.
+    /// Never hold stateLock across submission: receive/ACK processing must remain independent.
+    /// currentConnection retains the socket under connLock so concurrent teardown cannot free it.
+    func sendDatagram(_ bytes: [UInt8], timing: InputTimingBatch? = nil) {
         withState { lastSendMs = serviceTimeMs }
-        // Locked read (see connLock): retains the connection under the lock so
-        // close()'s concurrent take-and-nil can never free it mid-load. nil
-        // here means teardown already took it - drop the datagram.
-        let conn = currentConnection()
+        guard let conn = currentConnection() else { return }
         inFlightSends.increment()
         let counter = inFlightSends
-        sendQueue.async {
-            guard let conn else { counter.decrement(); return }
-            conn.send(content: Data(bytes),
-                      completion: .contentProcessed { _ in counter.decrement() })
-        }
+        let content = Data(bytes)
+        let sent = DispatchTime.now().uptimeNanoseconds
+        conn.send(content: content, completion: .contentProcessed { _ in
+            let completed = DispatchTime.now().uptimeNanoseconds
+            counter.decrement()
+            timing?.completed(sent: sent, at: completed)
+        })
+        timing?.submitted(at: sent)
     }
 
     // MARK: - Public client→host input uplink
@@ -48,11 +44,11 @@ extension EnetControlChannel {
     /// control loop). Returns false if the seal/send failed (e.g. MTU) so the
     /// caller can surface -2/-1 to InputForwarder.
     @discardableResult
-    func sendInputPacket(_ plaintext: [UInt8], channel: UInt8) -> Bool {
+    func sendInputPacket(_ plaintext: [UInt8], channel: UInt8, timing: InputTimingBatch? = nil) -> Bool {
         do {
             _ = try sendEncryptedControl(
                 type: CtrlV2.inputData, payload: plaintext,
-                channel: channel, label: "INPUT", requireConnection: true)
+                channel: channel, label: "INPUT", requireConnection: true, timing: timing)
             return true
         } catch {
             Diag.error("ENet input send failed (ch \(channel)): \(error, privacy: .private)", Self.logCategory)
@@ -210,7 +206,7 @@ extension EnetControlChannel {
     /// Nonces are consumed even on failure, and the outbound lock preserves commit/send order.
     @discardableResult
     func sendEncryptedControl(type: UInt16, payload: [UInt8], channel requested: UInt8,
-                              label: String, requireConnection: Bool = false,
+                              label: String, requireConnection: Bool = false, timing: InputTimingBatch? = nil,
                               seal: ((UInt16, [UInt8], UInt32) throws -> [UInt8])? = nil) throws -> UInt16 {
         outboundLock.lock()
         defer { outboundLock.unlock() }
@@ -252,7 +248,7 @@ extension EnetControlChannel {
             unackedReliables.increment()
             return (next, cmd.bytes)
         }
-        sendDatagram(wrapDatagram(commands: [commandBytes], sentTime: true))
+        sendDatagram(wrapDatagram(commands: [commandBytes], sentTime: true), timing: timing)
         // Hot input sends stay out of Diag's process-global logging lock.
         return relSeq
     }

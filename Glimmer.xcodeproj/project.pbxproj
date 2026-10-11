@@ -480,6 +480,17 @@
 		D0C520261009000000000003 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = D0C520261009000000000000 /* LICENSE */; };
 		D0C520261009000000000004 /* CREDITS.md in Resources */ = {isa = PBXBuildFile; fileRef = D0C520261009000000000001 /* CREDITS.md */; };
 		D0C520261009000000000005 /* ThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = D0C520261009000000000002 /* ThirdPartyNotices.txt */; };
+		A9A473543FD740449620F954 /* InputSendThread.swift in Sources */ = {isa = PBXBuildFile; fileRef = 611B7394B5164EC483247793 /* InputSendThread.swift */; };
+		96AFDC8857604B9B9E1F4C00 /* InputLatency.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0452DBFB07341D19F5B3F44 /* InputLatency.swift */; };
+		3B48EA62232E4E4CAFEECF3D /* TelemetryExporter+RenderInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E5DA9A384944F01B901C609 /* TelemetryExporter+RenderInput.swift */; };
+		FD400C6BE16340179C394914 /* InputCore+Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFCC9963C7874789A8E1E9F8 /* InputCore+Controller.swift */; };
+		BDFBB23C586F4324AC8E344A /* InputForwarder+Core.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB65E5B3DCD24CBE8815F406 /* InputForwarder+Core.swift */; };
+		2D5DACB9DE6A4A96A604950F /* InputCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5ABE36C60744D8495D5DED8 /* InputCore.swift */; };
+		5B42984DADB44F10995572B9 /* HIDGamepadCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26243A8C57F546E1AED2C764 /* HIDGamepadCapture.swift */; };
+		EE13E673ECB2440B86BF720D /* HIDInputThread.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC7DB456C0634F42AB147FDB /* HIDInputThread.swift */; };
+		089034CA08D544209EC065CE /* InputCallbackProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0F483AD1784C568B813A61 /* InputCallbackProbe.swift */; };
+		FC0BF6D54C37471FB74A1E5E /* InputCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21C273D96FC84878A5D36D98 /* InputCoreTests.swift */; };
+		1105D470ADB149908E9A056B /* InputLatencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 532168BB71F64A82A6D9820D /* InputLatencyTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -991,6 +1002,17 @@
 		D0C520261009000000000000 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE"; sourceTree = SOURCE_ROOT; };
 		D0C520261009000000000001 /* CREDITS.md */ = {isa = PBXFileReference; lastKnownFileType = text; path = "CREDITS.md"; sourceTree = SOURCE_ROOT; };
 		D0C520261009000000000002 /* ThirdPartyNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Glimmer/ThirdPartyNotices.txt"; sourceTree = SOURCE_ROOT; };
+		611B7394B5164EC483247793 /* InputSendThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/InputSendThread.swift; sourceTree = "<group>"; };
+		D0452DBFB07341D19F5B3F44 /* InputLatency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/InputLatency.swift; sourceTree = "<group>"; };
+		4E5DA9A384944F01B901C609 /* TelemetryExporter+RenderInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+RenderInput.swift"; sourceTree = "<group>"; };
+		EFCC9963C7874789A8E1E9F8 /* InputCore+Controller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputCore+Controller.swift"; sourceTree = "<group>"; };
+		FB65E5B3DCD24CBE8815F406 /* InputForwarder+Core.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+Core.swift"; sourceTree = "<group>"; };
+		D5ABE36C60744D8495D5DED8 /* InputCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputCore.swift"; sourceTree = "<group>"; };
+		26243A8C57F546E1AED2C764 /* HIDGamepadCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDGamepadCapture.swift"; sourceTree = "<group>"; };
+		BC7DB456C0634F42AB147FDB /* HIDInputThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDInputThread.swift"; sourceTree = "<group>"; };
+		CA0F483AD1784C568B813A61 /* InputCallbackProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/InputCallbackProbe.swift"; sourceTree = "<group>"; };
+		21C273D96FC84878A5D36D98 /* InputCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputCoreTests.swift; sourceTree = "<group>"; };
+		532168BB71F64A82A6D9820D /* InputLatencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputLatencyTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1284,6 +1306,15 @@
 				D1B00003 /* BitrateDownshiftController.swift */,
 				D1B00001 /* StreamPathMTU.swift */,
 				D1000029 /* InputEncoder.swift */,
+				611B7394B5164EC483247793 /* InputSendThread.swift */,
+				D0452DBFB07341D19F5B3F44 /* InputLatency.swift */,
+				4E5DA9A384944F01B901C609 /* TelemetryExporter+RenderInput.swift */,
+				EFCC9963C7874789A8E1E9F8 /* InputCore+Controller.swift */,
+				FB65E5B3DCD24CBE8815F406 /* InputForwarder+Core.swift */,
+				D5ABE36C60744D8495D5DED8 /* InputCore.swift */,
+				26243A8C57F546E1AED2C764 /* HIDGamepadCapture.swift */,
+				BC7DB456C0634F42AB147FDB /* HIDInputThread.swift */,
+				CA0F483AD1784C568B813A61 /* InputCallbackProbe.swift */,
 				D1000037 /* InputBatcher.swift */,
 				D1000031 /* AudioFecDecoder.swift */,
 				D1000033 /* RtpAudioQueue.swift */,
@@ -1481,6 +1512,8 @@
 				6A0C06102026101000000006 /* RtpAudioStartupGateTests.swift */,
 				6A0C06102026101000000004 /* EnetControlLoopTests.swift */,
 				6A0C06102026101000000002 /* EnetControlInboundTests.swift */,
+				21C273D96FC84878A5D36D98 /* InputCoreTests.swift */,
+				532168BB71F64A82A6D9820D /* InputLatencyTests.swift */,
 				DEC0DE202609252800000002 /* InputBatcherTests.swift */,
 				DEC0DE202610100800000002 /* StreamViewPointerTests.swift */,
 				DEC0DE202610100800000012 /* StreamViewKeyboardTests.swift */,
@@ -1901,6 +1934,15 @@
 				D1B00004 /* BitrateDownshiftController.swift in Sources */,
 				D1B00002 /* StreamPathMTU.swift in Sources */,
 				D1000030 /* InputEncoder.swift in Sources */,
+				A9A473543FD740449620F954 /* InputSendThread.swift in Sources */,
+				96AFDC8857604B9B9E1F4C00 /* InputLatency.swift in Sources */,
+				3B48EA62232E4E4CAFEECF3D /* TelemetryExporter+RenderInput.swift in Sources */,
+				FD400C6BE16340179C394914 /* InputCore+Controller.swift in Sources */,
+				BDFBB23C586F4324AC8E344A /* InputForwarder+Core.swift in Sources */,
+				2D5DACB9DE6A4A96A604950F /* InputCore.swift in Sources */,
+				5B42984DADB44F10995572B9 /* HIDGamepadCapture.swift in Sources */,
+				EE13E673ECB2440B86BF720D /* HIDInputThread.swift in Sources */,
+				089034CA08D544209EC065CE /* InputCallbackProbe.swift in Sources */,
 				D1000038 /* InputBatcher.swift in Sources */,
 				D1000032 /* AudioFecDecoder.swift in Sources */,
 				D1000034 /* RtpAudioQueue.swift in Sources */,
@@ -2089,6 +2131,8 @@
 				6A0C06102026101000000005 /* RtpAudioStartupGateTests.swift in Sources */,
 				6A0C06102026101000000003 /* EnetControlLoopTests.swift in Sources */,
 				6A0C06102026101000000001 /* EnetControlInboundTests.swift in Sources */,
+				FC0BF6D54C37471FB74A1E5E /* InputCoreTests.swift in Sources */,
+				1105D470ADB149908E9A056B /* InputLatencyTests.swift in Sources */,
 				DEC0DE202609252800000001 /* InputBatcherTests.swift in Sources */,
 				DEC0DE202610100800000001 /* StreamViewPointerTests.swift in Sources */,
 				DEC0DE202610100800000011 /* StreamViewKeyboardTests.swift in Sources */,

@@ -99,7 +99,7 @@ final class DualSenseRouting: @unchecked Sendable {
         guard !devices.isEmpty else { return }
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
-                for device in devices { DualSenseHID.shared.onChange?(device) }
+                for device in devices { DualSenseHID.shared.notifyInputChange(device) }
             }
         }
     }
@@ -111,7 +111,7 @@ final class DualSenseRouting: @unchecked Sendable {
         scheduleResolution()
     }
 
-    @MainActor func gc(pad: GCExtendedGamepad) {
+    func gc(pad: GCExtendedGamepad) {
         guard pad is GCDualSenseGamepad, let controller = pad.controller else { return }
         let id = ObjectIdentifier(controller)
         let inputs: [(DualSenseFaceButton, Bool)] = [

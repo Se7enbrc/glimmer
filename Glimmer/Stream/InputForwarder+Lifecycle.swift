@@ -47,7 +47,9 @@ extension InputForwarder {
         view.translatesAutoresizingMaskIntoConstraints = true
         view.autoresizingMask = [.width, .height]
         view.delegate = self
-        view.onResignFirstResponder = { [weak self] in self?.inputOwnershipLost(reason: "first responder lost") }
+        view.onResignFirstResponder = { [weak self] in
+            self?.inputOwnershipLost(reason: "first responder lost", includingControllers: false)
+        }
         view.onBecomeFirstResponder = { [weak self] in self?.reconcilePhysicalInputs() }
 
         if let existing = window.contentView {
@@ -173,6 +175,8 @@ extension InputForwarder {
     /// callback fires. Inputs queued before this point are dropped (the C
     /// queue is closed and would just return -2).
     public func setReady(_ ready: Bool) {
+        defer { publishInputSnapshot() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         let was = isReady
         if !ready {
             releaseControllerTouches()

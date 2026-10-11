@@ -25,6 +25,7 @@ extension InputForwarder {
     }
 
     func updateControllerBackgroundEvents() {
+        publishInputSnapshot()
         ControllerBackgroundEvents.setEnabled(isMiniPlayer && isReady, for: controllerBackgroundEventsID)
         ControllerHaptics.shared.setBackgroundPlayEnabled(isMiniPlayer && isReady,
                                                           for: controllerBackgroundEventsID)
@@ -101,17 +102,7 @@ extension InputForwarder {
             cancelQuitChordDwell(reason: "released before the dwell elapsed", pad: pad)
         }
 
-        let lt = UInt8((pad.leftTrigger.value  * 255).rounded().clamped(to: 0...255))
-        let rt = UInt8((pad.rightTrigger.value * 255).rounded().clamped(to: 0...255))
-        let lx = Int16((pad.leftThumbstick.xAxis.value  * 32767).rounded().clamped(to: -32768...32767))
-        let ly = Int16((pad.leftThumbstick.yAxis.value  * 32767).rounded().clamped(to: -32768...32767))
-        let rx = Int16((pad.rightThumbstick.xAxis.value * 32767).rounded().clamped(to: -32768...32767))
-        let ry = Int16((pad.rightThumbstick.yAxis.value * 32767).rounded().clamped(to: -32768...32767))
-
-        sendControllerState(slot: slot, buttons: buttons,
-                            analog: GamepadAnalog(leftTrigger: lt, rightTrigger: rt,
-                                                  leftStickX: lx, leftStickY: ly,
-                                                  rightStickX: rx, rightStickY: ry))
+        sendControllerState(slot: slot, buttons: buttons, analog: Self.controllerAnalog(pad))
         return true
     }
 
@@ -121,7 +112,7 @@ extension InputForwarder {
     /// trips). The DualSense/DualShock touchpad *click* rides here as
     /// TOUCHPAD_FLAG (Sunshine's touchpad button); the touchpad *surface* is
     /// forwarded separately as touch events.
-    func pressedButtonFlags(pad: GCExtendedGamepad) -> Int32 {
+    nonisolated func pressedButtonFlags(pad: GCExtendedGamepad) -> Int32 {
         let mapping: [(Bool, Int32)] = [
             (pad.buttonA.isPressed, StreamProtocol.A_FLAG),
             (pad.buttonB.isPressed, StreamProtocol.B_FLAG),
@@ -166,12 +157,14 @@ extension InputForwarder {
     // MARK: - Focus loss
 
     /// The all-zero analog state a removal and a focus-loss release both send.
-    static let neutralControllerAnalog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
-                                                       leftStickX: 0, leftStickY: 0,
-                                                       rightStickX: 0, rightStickY: 0)
+    static let neutralControllerAnalog = InputCore.neutral
 
     /// Release every pad when focus leaves ordinary playback; Mini Player keeps its controller ownership.
     func neutralizeControllers() {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        controllerOwnershipSuspended = true
+        publishInputSnapshot(focused: false)
+        inputCore.chordSlots.removeAll()
         releaseControllerTouches()
         for state in attachedControllers.values {
             ControllerMotion.shared.setInputEnabled(false, slot: state.slot)
@@ -189,16 +182,5 @@ extension InputForwarder {
         if !slots.isEmpty {
             Diag.info("input: \(slots.count) controller release obligations on focus loss", "Stream")
         }
-    }
-}
-
-// MARK: - Local numeric helper
-
-// File-local clamp helper. A fileprivate extension can't be shared across files,
-// and promoting it to internal would leak the helper across the whole target, so
-// each file that needs it keeps a tight local copy.
-fileprivate extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self {
-        min(max(self, range.lowerBound), range.upperBound)
     }
 }

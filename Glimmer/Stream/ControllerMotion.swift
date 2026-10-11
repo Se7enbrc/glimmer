@@ -36,21 +36,17 @@
 //  detach or teardown drops the handler; halting an ACTIVE gyro also sends one (0,0,0) sample, the
 //  client halt ControlStream.c blesses, so the host's virtual pad can't hold a stale rotation.
 //
-//  THREADING: all mutable state is MainActor-confined (GameController's home
-//  isolation in this codebase - the forwarder treats the framework as
-//  main-domain). setMotionEventState/streamActivated/stopAll arrive on the
-//  enet receive thread / pipeline executor and hop to main first.
+//  THREADING: a recursive lock serializes lifecycle, enables and GC sampling.
+//  The uplink has its own lock so activation never waits for a sampler calling
+//  back into the backend's connection latch.
 //
 
 import Foundation
 import GameController
 
-/// Singleton sampler: ControllerForwarder registers slot→pad on attach (main
-/// thread), EnetControlChannel→NativeConnectionEvents feeds it 0x5501 enables
-/// (enet receive thread), and NativeBackend+Pipeline arms/clears the uplink
-/// per stream session. `@unchecked Sendable`: every entry point either is
-/// @MainActor or hops to main before touching state.
+/// The recursive lock owns registration, sensor gates and the uplink across lifecycle and GC handler threads.
 final class ControllerMotion: @unchecked Sendable {
+    private let lock = NSRecursiveLock()
     static let shared = ControllerMotion()
     static let logCategory = "Controller"
 
@@ -69,15 +65,17 @@ final class ControllerMotion: @unchecked Sendable {
     private static let accelType = UInt8(StreamProtocol.LI_MOTION_TYPE_ACCEL)
     private static let gyroType = UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO)
 
-    // MARK: - MainActor-confined state
+    // MARK: - Locked sampler state
 
     /// slot (the forwarder's 0..15 controllerNumber) → sampling state.
-    @MainActor private var pads: [UInt8: Pad] = [:]
-    /// The live stream's input uplink; nil = no stream (the quiesce gate - a
-    /// reading with no uplink sends nothing, mirroring the haptics
-    /// actuator's quiesced flag). Weak: the backend's lifetime belongs to
-    /// StreamSession, not to this singleton.
-    @MainActor private weak var uplink: (any StreamingBackend)?
+    private var pads: [UInt8: Pad] = [:]
+    // Activation holds the backend latch, so it must not wait for a sampler making a backend call.
+    private let uplinkLock = NSLock()
+    private weak var activeUplink: (any StreamingBackend)?
+    private var uplink: (any StreamingBackend)? {
+        get { uplinkLock.withLock { activeUplink } }
+        set { uplinkLock.withLock { activeUplink = newValue } }
+    }
 
     init() {}
 
@@ -89,8 +87,8 @@ final class ControllerMotion: @unchecked Sendable {
     /// hasRotationRate for gyro), not a blanket "motion != nil", so the caps
     /// we promise are caps we can deliver. Registration alone starts no
     /// sensors and installs no handlers.
-    @MainActor
     func register(slot: UInt8, controller: GCController, inputEnabled: Bool) -> UInt16 {
+        lock.lock(); defer { lock.unlock() }
         // A re-attach can reuse a slot before detach bookkeeping settles;
         // halt the stale pad's sampling so the swap can't strand a live handler.
         if let stale = pads.removeValue(forKey: slot) {
@@ -110,8 +108,8 @@ final class ControllerMotion: @unchecked Sendable {
     }
 
     /// Retain the PC's sensor requests while ownership is away, then resume from current motion.
-    @MainActor
     func setInputEnabled(_ enabled: Bool, slot: UInt8) {
+        lock.lock(); defer { lock.unlock() }
         guard let pad = pads[slot], pad.inputEnabled != enabled else { return }
         pad.inputEnabled = enabled
         if !enabled, pad.rates[Int(Self.gyroType) - 1] != 0 { sendGyroNull(slot: slot) }
@@ -124,8 +122,8 @@ final class ControllerMotion: @unchecked Sendable {
     }
 
     /// Drop a slot's mapping and halt its sampling (controller detach).
-    @MainActor
     func unregister(slot: UInt8) {
+        lock.lock(); defer { lock.unlock() }
         guard let pad = pads.removeValue(forKey: slot) else { return }
         halt(pad: pad, slot: slot, why: "controller detached")
     }
@@ -136,9 +134,7 @@ final class ControllerMotion: @unchecked Sendable {
     /// alongside enet.onSetMotionEvent, so samples become possible exactly
     /// when host enables can start arriving.
     func streamActivated(backend: any StreamingBackend) {
-        DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated { self?.uplink = backend }
-        }
+        uplink = backend
     }
 
     /// Stream over: halt all sampling and drop the uplink. Fired by
@@ -149,15 +145,9 @@ final class ControllerMotion: @unchecked Sendable {
     /// -2, which is fine - so is the host. Pads stay registered (the
     /// forwarder owns that lifetime); only the sampling state resets.
     func stopAll(reason: String) {
-        DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                for (slot, pad) in self.pads {
-                    self.halt(pad: pad, slot: slot, why: reason)
-                }
-                self.uplink = nil
-            }
-        }
+        lock.lock(); defer { lock.unlock() }
+        for (slot, pad) in pads { halt(pad: pad, slot: slot, why: reason) }
+        uplink = nil
     }
 
     // MARK: - Host enable intake (enet receive thread)
@@ -173,18 +163,14 @@ final class ControllerMotion: @unchecked Sendable {
         guard controllerNumber < UInt16(Enet.maxGamepads),
               motionType == Self.accelType || motionType == Self.gyroType else { return }
         let slot = UInt8(controllerNumber)
-        DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated {
-                self?.apply(slot: slot, motionType: motionType, reportRateHz: reportRateHz)
-            }
-        }
+        apply(slot: slot, motionType: motionType, reportRateHz: reportRateHz)
     }
 
-    // MARK: - Sampling state machine (main)
+    // MARK: - Sampling state machine
 
     /// Start/retune/stop one sensor's reporting per the host's request.
-    @MainActor
     func apply(slot: UInt8, motionType: UInt8, reportRateHz: UInt16) {
+        lock.lock(); defer { lock.unlock() }
         guard let pad = pads[slot] else { return }
         let idx = Int(motionType) - 1
         let rate = min(reportRateHz, Self.maxReportRateHz)
@@ -214,21 +200,20 @@ final class ControllerMotion: @unchecked Sendable {
             + "(host requested \(reportRateHz))", Self.logCategory)
     }
 
-    @MainActor
     private func refreshSampling(_ pad: Pad, slot: UInt8) {
         guard let motion = pad.controller?.motion else { return }
         let active = pad.inputEnabled && pad.rates.contains { $0 != 0 }
         setSensorsActive(pad, active)
         guard active else { motion.valueChangedHandler = nil; return }
         motion.valueChangedHandler = { [weak self] _ in
-            MainActor.assumeIsolated { self?.sample(slot: slot) }
+            self?.sample(slot: slot)
         }
     }
 
     /// One GCMotion change: convert each active sensor to the wire's SDL
     /// convention, skip unchanged readings, and send what the rate gate admits.
-    @MainActor
     private func sample(slot: UInt8) {
+        lock.lock(); defer { lock.unlock() }
         guard let pad = pads[slot], pad.inputEnabled, let motion = pad.controller?.motion,
               let backend = uplink else { return }
         let now = ProcessInfo.processInfo.systemUptime
@@ -246,7 +231,6 @@ final class ControllerMotion: @unchecked Sendable {
         }
     }
 
-    @MainActor
     private static func reading(_ motion: GCMotion, _ motionType: UInt8) -> (x: Float, y: Float, z: Float) {
         if motionType == accelType {
             // G (gravity DOWN at rest) → m/s^2 reaction-force convention
@@ -269,7 +253,6 @@ final class ControllerMotion: @unchecked Sendable {
     /// constraints" (and our reliable-only wire guarantees its delivery).
     /// Accel needs no null: a stale gravity vector just reads as a pad at
     /// rest.
-    @MainActor
     private func halt(pad: Pad, slot: UInt8, why: String) {
         guard pad.rates.contains(where: { $0 != 0 }) else { return }
         if pad.rates[Int(Self.gyroType) - 1] != 0 { sendGyroNull(slot: slot) }
@@ -284,7 +267,6 @@ final class ControllerMotion: @unchecked Sendable {
     }
 
     /// The reliable gyro null-state sample (see halt()).
-    @MainActor
     private func sendGyroNull(slot: UInt8) {
         guard let backend = uplink else { return }
         _ = backend.sendControllerMotion(num: slot, motionType: Self.gyroType,
@@ -294,7 +276,6 @@ final class ControllerMotion: @unchecked Sendable {
     /// Some pads gate their IMU behind explicit power-up; flip it with sensor
     /// liveness (the moonlight-ios sensorsRequireManualActivation discipline)
     /// so a motion-idle pad burns no sensor power.
-    @MainActor
     private func setSensorsActive(_ pad: Pad, _ active: Bool) {
         guard let motion = pad.controller?.motion,
               motion.sensorsRequireManualActivation else { return }
@@ -308,10 +289,7 @@ final class ControllerMotion: @unchecked Sendable {
 
     // MARK: - Per-pad state
 
-    /// Per-pad sampling state. Constructed and mutated exclusively on the
-    /// main actor - unlike ControllerHaptics' queue-owned box, motion never
-    /// leaves GameController's main-domain, so no Sendable box is needed.
-    @MainActor
+    /// Registration and sampling hold the recursive lock for the full lifetime of each access.
     private final class Pad {
         /// Weak: GameController owns the pad's lifetime; a disconnect must
         /// deallocate it even if our unregister is still in flight.

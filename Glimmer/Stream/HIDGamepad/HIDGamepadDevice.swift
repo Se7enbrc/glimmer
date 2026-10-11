@@ -15,18 +15,14 @@ final class HIDGamepadDevice: Identifiable {
     let name: String
     let mapping: HIDGamepadMapping
     let rumble: HIDGamepadRumble
-    private(set) var readings: HIDGamepadReadings
-    private(set) var reportCount: UInt64 = 0
+    let capture: HIDGamepadCapture
+    var reportCount: UInt64 { capture.count }
     private var elements: [UInt32: IOHIDElement] = [:]
     private var batteryElement: IOHIDElement?
-    private var pendingReport: UInt64?
-    private var pendingReportID: UInt32?
-    private var flushScheduled = false
     private var opened = false
     private var reading = false
-    var onReport: ((HIDGamepadDevice) -> Void)?
 
-    var state: (buttons: Int32, analog: GamepadAnalog) { mapping.translate(readings.snapshot) }
+    var state: (buttons: Int32, analog: GamepadAnalog) { capture.state }
     var hasBattery: Bool { batteryElement != nil }
     var hardwareID: String { String(format: "%04X:%04X", vendor, product) }
     var mappingSource: String { mapping.isHeuristic ? "heuristic" : mapping.name }
@@ -44,12 +40,13 @@ final class HIDGamepadDevice: Identifiable {
         transport = IOHIDDeviceGetProperty(device, kIOHIDTransportKey as CFString) as? String ?? "Unknown"
         let discovered = Self.discover(device)
         elements = discovered.references
-        readings = HIDGamepadReadings(descriptors: discovered.descriptors,
+        let readings = HIDGamepadReadings(descriptors: discovered.descriptors,
                                       logical: discovered.references.mapValues(Self.logicalRange))
         batteryElement = discovered.descriptors.first { $0.kind == .battery }.flatMap { discovered.references[$0.cookie] }
         mapping = GameControllerDB.lookup(vendor: vendor, product: product, version: version,
                                           bus: GameControllerDB.bus(forTransport: transport))
             ?? .heuristic(elements: discovered.descriptors)
+        capture = HIDGamepadCapture(readings: readings, mapping: mapping)
         rumble = HIDGamepadRumble(service: IOHIDDeviceGetService(device))
         if mapping.isHeuristic {
             Diag.notice("Unmapped HID pad \(name) \(hardwareID): assuming X/Y left stick, Z/Rz right stick, "
@@ -73,18 +70,28 @@ final class HIDGamepadDevice: Identifiable {
         for element in elements.values {
             if let value = read(element) { update(value) }
         }
-        IOHIDDeviceRegisterInputValueCallback(device, Self.inputValue, Unmanaged.passUnretained(self).toOpaque())
+        registerInputCallback(true)
     }
 
     func stopReading() {
         guard reading else { return }
         reading = false
-        IOHIDDeviceRegisterInputValueCallback(device, nil, nil)
-        pendingReport = nil
-        pendingReportID = nil
+        registerInputCallback(false)
     }
 
-    /// Close and open again (after an Input Monitoring grant); keeps `onReport`.
+    private func registerInputCallback(_ enabled: Bool) {
+        let address = UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
+        // Unregistration drains earlier callbacks before the main actor can release their capture context.
+        HIDInputThread.shared.sync { [capture] in
+            guard let pointer = UnsafeRawPointer(bitPattern: address) else { return }
+            let device = Unmanaged<IOHIDDevice>.fromOpaque(pointer).takeUnretainedValue()
+            capture.setReading(enabled)
+            IOHIDDeviceRegisterInputValueCallback(device, enabled ? HIDGamepadCapture.inputValue : nil,
+                                                  enabled ? Unmanaged.passUnretained(capture).toOpaque() : nil)
+        }
+    }
+
+    /// Close and open again (after an Input Monitoring grant); keeps the capture subscriber.
     func reopen() -> Bool {
         let wasReading = reading
         if opened {
@@ -101,7 +108,7 @@ final class HIDGamepadDevice: Identifiable {
         guard opened else { return }
         stopReading()
         opened = false
-        onReport = nil
+        capture.setHandler(nil)
         rumble.close()
         IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
     }
@@ -124,45 +131,10 @@ final class HIDGamepadDevice: Identifiable {
         return pointer.pointee.takeUnretainedValue()
     }
 
-    private static let inputValue: IOHIDValueCallback = { context, result, _, value in
-        guard result == kIOReturnSuccess, let context else { return }
-        let owner = Unmanaged<HIDGamepadDevice>.fromOpaque(context).takeUnretainedValue()
-        let element = IOHIDValueGetElement(value)
-        let cookie = IOHIDElementGetCookie(element)
-        let raw = IOHIDValueGetIntegerValue(value)
-        let timestamp = IOHIDValueGetTimeStamp(value)
-        let reportID = IOHIDElementGetReportID(element)
-        MainActor.assumeIsolated { owner.receive(cookie: cookie, raw: raw, timestamp: timestamp, reportID: reportID) }
-    }
-
-    private func receive(cookie: UInt32, raw: Int, timestamp: UInt64, reportID: UInt32) {
-        guard reading else { return }
-        if pendingReport != nil && (pendingReport != timestamp || pendingReportID != reportID) { flush() }
-        pendingReport = timestamp
-        pendingReportID = reportID
-        readings.update(cookie: cookie, raw: raw)
-        guard !flushScheduled else { return }
-        flushScheduled = true
-        // Element callbacks from one report share a timestamp; flush its final snapshot after the callback batch.
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.flushScheduled = false
-            self.flush()
-        }
-    }
-
-    private func flush() {
-        guard reading, pendingReport != nil else { return }
-        pendingReport = nil
-        pendingReportID = nil
-        reportCount &+= 1
-        onReport?(self)
-    }
-
     private func update(_ value: IOHIDValue) {
         let element = IOHIDValueGetElement(value)
         let cookie = IOHIDElementGetCookie(element)
-        readings.update(cookie: cookie, raw: IOHIDValueGetIntegerValue(value))
+        capture.update(cookie: cookie, raw: IOHIDValueGetIntegerValue(value))
     }
 
     private static func discover(_ device: IOHIDDevice)

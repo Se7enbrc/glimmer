@@ -24,6 +24,9 @@ import os.log
 
 extension InputForwarder: StreamInputViewDelegate {
     func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) {
+        InputTimingContext.begin(source: .keyboard, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         noteInputEvent()
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         releaseStaleModifiers(for: event)
@@ -137,6 +140,10 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleKeyUp event: NSEvent) {
+        InputTimingContext.begin(source: .keyboard, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        if let key = physicalKeys[event.keyCode] { InputTimingContext.allowRelease(.key(key)) }
         noteInputEvent()
         guard !isDuplicateKeyUp(event) else { return }
         // Cancel a pending Esc hold FIRST, ahead of every gate below: a tap
@@ -148,6 +155,10 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleFlagsChanged event: NSEvent) {
+        InputTimingContext.begin(source: .keyboard, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        InputTimingContext.allowModifierReleases()
         noteInputEvent()
         noteEscapeModifiersChanged(event.modifierFlags)
         let capsLock = event.modifierFlags.contains(.capsLock)
@@ -196,6 +207,7 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func sendModifier(_ vk: Int16, down: Bool, modByte: Int8) {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         let key = VKScanCode(vk: vk)
         if !down {
             releases.release(.key(key), modifiers: modByte)
@@ -217,6 +229,9 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseMoved event: NSEvent) {
+        InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         noteInputEvent()
         guard isReady, forwardsMouseEvents else { return }
 
@@ -253,6 +268,7 @@ extension InputForwarder: StreamInputViewDelegate {
                                          inMode: .eventTracking, dequeue: true) },
             consume: { queued in
                 guard view.acceptsMotion(queued) else { return }
+                InputTimingContext.coalesced(timestamp: queued.timestamp)
                 let delta = mouseDelta(from: queued)
                 accumDx += delta.dx
                 accumDy += delta.dy
@@ -355,6 +371,9 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseDown event: NSEvent) {
+        InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         noteInputEvent()
         guard isReady, forwardsMouseEvents, flushPendingReleases() else { return }
         // Mini player: the click is the grab, and it still reaches the host
@@ -376,6 +395,10 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleMouseUp event: NSEvent) {
+        InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        InputTimingContext.allowRelease(.mouse(button(for: event)))
         noteInputEvent()
         let hostButton = button(for: event)
         guard releases.held.contains(.mouse(hostButton)) else { return }
@@ -401,6 +424,9 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleScroll event: NSEvent) {
+        InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
+        defer { InputTimingContext.end() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         noteInputEvent()
         guard isReady, forwardsMouseEvents else { return }
         // DEADZONE REMOVED. This handler

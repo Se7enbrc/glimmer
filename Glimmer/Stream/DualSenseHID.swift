@@ -160,8 +160,12 @@ final class DualSenseHID: @unchecked Sendable {
     private let writeQueue = DispatchQueue(label: "io.ugfugl.Glimmer.dualsense-hid-write",
                                            qos: .userInitiated)
 
-    /// Called on the main queue whenever the decoded buttons change - lets the
-    /// input-test UI refresh. The forwarder routes it to the bound slot.
+    // Forwarding stays on the HID run loop; only the input-test UI hops to main.
+    private var inputHandler: (@Sendable (DualSenseDeviceKey, TimeInterval?) -> Void)?
+    var onInput: (@Sendable (DualSenseDeviceKey, TimeInterval?) -> Void)? {
+        get { lock.withLock { inputHandler } }
+        set { lock.withLock { inputHandler = newValue } }
+    }
     @MainActor var onChange: (@MainActor (DualSenseDeviceKey) -> Void)?
 
     /// Total raw input reports received since the manager opened - a live
@@ -221,7 +225,7 @@ final class DualSenseHID: @unchecked Sendable {
         let shouldStart = retainCount == 1 && !running
         if shouldStart { running = true }
         lock.unlock()
-        if shouldStart { start() }
+        if shouldStart { HIDInputThread.shared.sync { self.start() } }
     }
 
     func release() {
@@ -230,15 +234,14 @@ final class DualSenseHID: @unchecked Sendable {
         let shouldStop = retainCount == 0 && running
         if shouldStop { running = false }
         lock.unlock()
-        if shouldStop { stop() }
+        if shouldStop { HIDInputThread.shared.sync { self.stop() } }
     }
 
     /// After an in-app grant: re-open a running reader so reports flow without
     /// a relaunch (HIDGamepadManager.reopenAll's twin). Main thread only.
     func reopen() {
         guard isActive else { return }
-        stop()
-        start()
+        HIDInputThread.shared.sync { self.stop(); self.start() }
     }
 
     private func start() {
@@ -246,7 +249,7 @@ final class DualSenseHID: @unchecked Sendable {
         let ctx = Unmanaged.passUnretained(self).toOpaque()
         IOHIDManagerRegisterDeviceMatchingCallback(manager, Self.deviceMatched, ctx)
         IOHIDManagerRegisterDeviceRemovalCallback(manager, Self.deviceRemoved, ctx)
-        IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
+        IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.commonModes.rawValue)
         let rc = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         let monitoring = Self.accessGranted ? "granted"
             : (Self.accessDenied ? "DENIED" : "not-yet-determined")
@@ -267,9 +270,9 @@ final class DualSenseHID: @unchecked Sendable {
         let open = writeDevices.compactMap { key, entry in deviceBuffers[key].map { (entry.device, $0) } }
         lock.unlock()
         for (device, buf) in open {
-            IOHIDDeviceRegisterInputReportCallback(device, buf, bufLen, nil, nil)
+            IOHIDDeviceRegisterInputReportWithTimeStampCallback(device, buf, bufLen, nil, nil)
         }
-        IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue)
+        IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetCurrent(), CFRunLoopMode.commonModes.rawValue)
         IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         lock.lock()
         writeDevices.removeAll()
@@ -316,11 +319,11 @@ final class DualSenseHID: @unchecked Sendable {
         // Seed the full matching set before the first callback can infer a single pair.
         let devices = (IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice>) ?? [device]
         let ids = Set(devices.map { UInt(bitPattern: Unmanaged.passUnretained($0).toOpaque()) })
-        MainActor.assumeIsolated { DualSenseRouting.shared.syncControllers() }
+        DispatchQueue.main.async { DualSenseRouting.shared.syncControllers() }
         DualSenseRouting.shared.connectDevices(ids)
         notifyChange(UInt(bitPattern: key))
         let ctx = Unmanaged.passUnretained(self).toOpaque()
-        IOHIDDeviceRegisterInputReportCallback(device, buf, bufLen, Self.reportCallback, ctx)
+        IOHIDDeviceRegisterInputReportWithTimeStampCallback(device, buf, bufLen, Self.reportCallback, ctx)
         log.info("DualSense HID device matched (transport=\(transport, privacy: .public))")
     }
 
@@ -333,10 +336,10 @@ final class DualSenseHID: @unchecked Sendable {
         let buf = deviceBuffers[key]
         lock.unlock()
         let deviceID = UInt(bitPattern: key)
-        MainActor.assumeIsolated { onChange?(deviceID) }
+        notifyInputChange(deviceID)
         DualSenseRouting.shared.disconnectDevice(deviceID)
         guard wasOpen, let buf else { return }
-        IOHIDDeviceRegisterInputReportCallback(device, buf, bufLen, nil, nil)
+        IOHIDDeviceRegisterInputReportWithTimeStampCallback(device, buf, bufLen, nil, nil)
     }
 
     private static func makeReportBuffer(_ length: Int) -> UnsafeMutablePointer<UInt8> {
@@ -348,17 +351,18 @@ final class DualSenseHID: @unchecked Sendable {
     // MARK: Report decode
 
     // C-function-pointer-compatible (no captures). `report` is non-optional.
-    private static let reportCallback: IOHIDReportCallback = { context, result, sender, _, reportID, report, length in
-        guard result == kIOReturnSuccess, let context, let sender else { return }
-        let me = Unmanaged<DualSenseHID>.fromOpaque(context).takeUnretainedValue()
-        me.decode(device: sender, reportID: reportID, report: report, length: length)
+    private static let reportCallback: IOHIDReportWithTimeStampCallback = { ctx, rc, sender, _, rid, buf, len, stamp in
+        guard rc == kIOReturnSuccess, let ctx, let sender else { return }
+        let me = Unmanaged<DualSenseHID>.fromOpaque(ctx).takeUnretainedValue()
+        InputTimingContext.begin(source: .rawHID, timestamp: HIDInputThread.seconds(ticks: stamp))
+        defer { InputTimingContext.end() }
+        me.decode(device: sender, reportID: rid, report: buf, length: len, timestamp: stamp)
     }
 
     /// Per-report entry from the IOKit callback; the pure decode is in DualSenseHID+Decode.swift.
-    /// This half owns the lock and the change edge, delivered to `onChange` synchronously so a
-    /// press and its release drained in one callout both reach the forwarder.
+    /// `onInput` preserves edges synchronously; `onChange` publishes the latest UI state on main.
     private func decode(device: UnsafeMutableRawPointer, reportID: UInt32,
-                        report: UnsafeMutablePointer<UInt8>, length: CFIndex) {
+                        report: UnsafeMutablePointer<UInt8>, length: CFIndex, timestamp: UInt64) {
         guard let decoded = Self.decodeInputReport(
             reportID: reportID, bytes: UnsafeBufferPointer(start: report, count: length)) else { return }
         let time = ProcessInfo.processInfo.systemUptime
@@ -373,7 +377,12 @@ final class DualSenseHID: @unchecked Sendable {
         lock.unlock()
         let key = UInt(bitPattern: device)
         if !pressed.isEmpty { DualSenseRouting.shared.hid(device: key, pressed: pressed, at: time) }
-        if changed { MainActor.assumeIsolated { onChange?(key) } }
+        if changed { notifyInputChange(key, capturedAt: HIDInputThread.seconds(ticks: timestamp)) }
+    }
+
+    func notifyInputChange(_ device: DualSenseDeviceKey, capturedAt: TimeInterval? = nil) {
+        onInput?(device, capturedAt)
+        notifyChange(device)
     }
 
     private func notifyChange(_ device: DualSenseDeviceKey) {

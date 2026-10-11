@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.10.7 - Unreleased
+## 2026.10.8 - Unreleased
 
 ### Features
 
@@ -12,6 +12,10 @@
   a generic controller.
 
 ### Bug fixes
+
+- Controller capture and input sending have dedicated threads to keep controls
+  responsive when other apps are busy. Optional diagnostics now measure input
+  delays from the device event through network submission.
 
 - Keys and mouse or controller buttons no longer stay held after a slowdown,
   lost input event or reconnect. Releases recover when the connection returns.

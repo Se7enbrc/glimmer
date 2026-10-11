@@ -69,7 +69,11 @@ final class InputRecordingBackend: StreamingBackend {
     /// Thrown from every connect when set, as a PC that refuses the RTSP handshake would.
     private let connectFailure: StreamError?
 
-    init(connectFailure: StreamError? = nil) { self.connectFailure = connectFailure }
+    private let onInput: @Sendable () -> Void
+    init(connectFailure: StreamError? = nil, onInput: @escaping @Sendable () -> Void = {}) {
+        self.connectFailure = connectFailure
+        self.onInput = onInput
+    }
     private let idrCount = OSAllocatedUnfairLock(initialState: 0)
     private let hostHDR = OSAllocatedUnfairLock<HdrMetadata?>(initialState: nil)
     private let pointerSends = OSAllocatedUnfairLock(initialState: [PointerSend]())
@@ -104,6 +108,7 @@ final class InputRecordingBackend: StreamingBackend {
     func launchUrlQueryParameters() -> String { "" }
     func stageName(for stage: Int32) -> String { "" }
     func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 {
+        onInput()
         guard inputResult == 0 else { return inputResult }
         keyboardSends.withLock {
             $0.append(.init(keyCode: keyCode, action: action, modifiers: modifiers, flags: flags))
@@ -117,7 +122,10 @@ final class InputRecordingBackend: StreamingBackend {
     func sendMousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 {
         recordPointer(.position(x: x, y: y, refW: refW, refH: refH))
     }
-    func sendMouseButton(action: Int8, button: Int32) -> Int32 { recordPointer(.button(action: action, button: button)) }
+    func sendMouseButton(action: Int8, button: Int32) -> Int32 {
+        onInput()
+        return recordPointer(.button(action: action, button: button))
+    }
     func sendScroll(_ amount: Int16) -> Int32 { recordPointer(.scroll(amount)) }
     func sendHScroll(_ amount: Int16) -> Int32 { recordPointer(.hScroll(amount)) }
     private func recordPointer(_ send: PointerSend) -> Int32 {

@@ -61,19 +61,10 @@ final class EnetControlChannel: @unchecked Sendable {
     let controlConnectData: UInt32
     let crypto: ControlCrypto
 
-    /// NWConnection I/O queue. This is the SOLE context that runs the inbound
-    /// receive callback chain (startReceiveLoop → onDatagram → handleAcknowledge,
-    /// the only writer of lastAckRecvMs + the only place sentReliable drains).
-    /// QoS .userInteractive so ACK processing is never de-prioritized behind
-    /// main-thread UI/input. Critically it does NOT carry outbound sends anymore
-    /// (see sendQueue) - that is the primary fix for the all-stream wedge.
+    /// Receive callbacks and ACK processing own this queue. Outbound input submits on its separate
+    /// sender thread, so it cannot serialize ahead of inbound delivery.
     let queue = DispatchQueue(label: "io.ugfugl.Glimmer.enet", qos: .userInteractive)
-    /// Dedicated outbound-send queue. Every connection.send hops here so a
-    /// controller-driven send storm can NEVER block the receive/ACK chain on
-    /// `queue`. NWConnection.send is internally thread-safe and ordered
-    /// per-connection, so submitting from a separate serial queue preserves wire
-    /// order. Mirrors moonlight's separate InputSend pthread vs ControlRecv.
-    let sendQueue = DispatchQueue(label: "io.ugfugl.Glimmer.enet.send", qos: .userInteractive)
+    let inputCallbackProbe = InputCallbackProbe()
 
     /// Guards `connection` - the same discipline as RtspClient.connLock for the
     /// identical "set on the async pipeline, cancelled from another thread"
@@ -129,6 +120,12 @@ final class EnetControlChannel: @unchecked Sendable {
     /// count is at/over the cap. The InputBatcher flush path uses this to drop a
     /// superseded latest-state frame instead of enqueuing another datagram.
     var sendBacklogged: Bool { inFlightSends.value >= Self.maxInFlightSends }
+
+    var inputBacklogged: Bool {
+        guard sendBacklogged || reliableBacklogged else { return false }
+        // A missing local callback is not evidence that the PC or network has stopped draining.
+        return inputCallbackProbe.allowsGate(on: queue)
+    }
 
     /// Count of reliable commands sent but not yet ACKed - mirrors
     /// `sentReliable.count`, maintained lock-free at every append/remove site. No

@@ -349,6 +349,7 @@ extension EnetControlChannel {
                 $0.reliableSequenceNumber == receivedRelSeq && $0.channelID == ackChannelID
             }) else { return }
             lastAckRecvMs = serviceTimeMs
+            reliableBackloggedFlag.store(false, ordering: .relaxed)
             // SUB-MS RTT: the host echoes back the 16-bit `sentTime` token we
             // stamped on the datagram. We use that token ONLY to look up the
             // HIGH-RES local instant we recorded when sending (localSentByToken),

@@ -168,6 +168,7 @@ public final class InputForwarder {
     /// Mini player: no hover grab, a click takes the pointer. Set live by
     /// `setMiniPlayer` (InputForwarder+WindowPointer.swift).
     var isMiniPlayer = false
+    var controllerOwnershipSuspended = false
     let controllerBackgroundEventsID = UUID()
     /// The pointer entered or left the mini player; the window shows its
     /// close button off this edge.
@@ -216,11 +217,15 @@ public final class InputForwarder {
     /// consults this on every gamepad update and fires `onQuitHotkey`
     /// when all chord buttons are held simultaneously. Closure so live
     /// edits in Settings take effect on the next gamepad event.
-    public var controllerQuitChordProvider: (@MainActor () -> ControllerQuitChord) = { .none }
+    public var controllerQuitChordProvider: (@MainActor () -> ControllerQuitChord) = { .none } {
+        didSet { observeControllerConfiguration() }
+    }
 
     /// The user-recorded button set for the `.custom` quit chord.
     /// Consulted only when `controllerQuitChordProvider()` returns `.custom`.
-    public var customControllerChordProvider: (@MainActor () -> Set<ControllerButton>) = { [] }
+    public var customControllerChordProvider: (@MainActor () -> Set<ControllerButton>) = { [] } {
+        didSet { observeControllerConfiguration() }
+    }
 
     /// In-flight hold-to-quit dwell for the controller quit chord. Armed by
     /// the ControllerForwarder extension when the chord first reads fully
@@ -276,13 +281,18 @@ public final class InputForwarder {
 
     /// Opens when the backend can accept input; reconnects invalidate delayed work.
     public internal(set) var isReady: Bool = false {
-        didSet { if isReady != oldValue { inputGeneration &+= 1 } }
+        didSet {
+            if isReady != oldValue { inputGeneration &+= 1 }
+            publishInputSnapshot()
+        }
     }
 
     /// Supplied by the session; replacing it invalidates text queued for the old connection.
     var backend: StreamingBackend? {
         didSet {
+            inputCore.lock.lock(); defer { inputCore.lock.unlock() }
             inputGeneration &+= 1
+            publishInputSnapshot(focused: false)
             if oldValue != nil {
                 releases.releaseAll(connectionLost: true)
                 inputOwnershipLost(reason: "connection replaced")
@@ -305,22 +315,11 @@ public final class InputForwarder {
 
     /// Bitmask of slots currently in use; bit N == 1 means slot N is occupied.
     /// Sent to the host as `activeGamepadMask` on every controller event.
-    var gamepadMask: UInt16 = 0
+    var gamepadMask: UInt16 = 0 { didSet { publishInputSnapshot() } }
 
     /// What the PC may still hold in each slot. Only a stream start retires an entry,
     /// since a removal sent into a link that is already dead never arrives.
     var announcedControllers: [UInt8: ControllerArrival] = [:]
-
-    /// Per-slot DualSense/DualShock touchpad finger tracking, so the touchpad
-    /// surface can be forwarded as host touch events (down/move/up). Keyed by
-    /// controller slot. The physical touchpad *click* rides the normal button
-    /// bitmask (TOUCHPAD_FLAG); only the finger surface needs this state.
-    var touchpadStates: [UInt8: TouchpadState] = [:]
-
-    /// Monotonic pointer-id source for controller touch events. The host
-    /// correlates a finger's down→move→up by pointerId, so each new contact
-    /// gets a fresh id. Never 0 (some hosts treat 0 as "no pointer").
-    var nextTouchPointerId: UInt32 = 1
 
     /// Cached connection observers so we can deregister on `detach()`.
     var connectObserver: NSObjectProtocol?
@@ -454,6 +453,7 @@ public final class InputForwarder {
 
     init(cruiseTuning: CruiseTraversal.Tuning) {
         self.cruiseTuning = cruiseTuning
+        connectInputCore()
         setupGamepadObservers()
     }
 
@@ -500,10 +500,10 @@ public final class InputForwarder {
     var heldMouseButtons: Set<Int32> = []
     var keyMapping: (Int) -> VKScanCode? = { vkScanCode(forCarbonKeyCode: $0) }
     var physicalKeys: [UInt16: VKScanCode] = [:]
-    var releases = InputReleaseLedger()
-    var controllersNeedAnnouncement = false
-    var controllerButtons: [UInt8: Int32] = [:]
-    var controllerAnalogs: [UInt8: GamepadAnalog] = [:]
+    nonisolated let inputCore = InputCore()
+    nonisolated let controllerCaptureQueue = DispatchQueue(
+        label: "io.ugfugl.Glimmer.controllerCapture", qos: .userInteractive)
+    var controllersNeedAnnouncement = false { didSet { publishInputSnapshot() } }
     var reconciliationTimer: Timer?
     var lastInputEventTime: TimeInterval?
     var physicalKeyState: (UInt16) -> Bool = { CGEventSource.keyState(.combinedSessionState, key: $0) }

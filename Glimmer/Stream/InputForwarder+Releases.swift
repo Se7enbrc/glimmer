@@ -68,20 +68,11 @@ extension InputForwarder {
     /// A failed release is a barrier: later presses cannot overtake it.
     @discardableResult
     func flushPendingReleases() -> Bool {
-        guard isReady else { return releases.pending.isEmpty }
-        let count = releases.pending.count
-        while let release = releases.pending.first {
-            let result = sendRelease(release)
-            record("input release", result)
-            guard result == 0 else { updateReconciliationTimer(); return false }
-            releases.accepted(release)
-            if case .controller(let slot) = release {
-                controllerButtons[slot] = 0
-                controllerAnalogs[slot] = Self.neutralControllerAnalog
-            }
-        }
-        if count > 0 { releases.flushCount += 1; reportReleaseRecovery() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
+        guard inputCore.flushReleases() else { updateReconciliationTimer(); return false }
+        if releases.flushCount > 0 { reportReleaseRecovery() }
         if controllersNeedAnnouncement {
+            let timing = InputTimingContext.suspend(); defer { timing?.restore() }
             controllersNeedAnnouncement = false
             announceControllers()
             controllersNeedAnnouncement = !releases.pending.isEmpty
@@ -100,21 +91,8 @@ extension InputForwarder {
         releases.reconciledCount = 0
     }
 
-    private func sendRelease(_ release: InputReleaseLedger.Release) -> Int32 {
-        switch release {
-        case .key(let key):
-            return backend?.sendKeyboard(keyCode: key.wireCode, action: Int8(StreamProtocol.KEY_ACTION_UP),
-                                         modifiers: releases.keyReleaseModifiers[key] ?? 0, flags: key.flags) ?? -2
-        case .mouse(let button):
-            return backend?.sendMouseButton(action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: button) ?? -2
-        case .controller(let slot):
-            let mask = releases.controllerRemovals.contains(slot) ? gamepadMask & ~(1 << slot) : gamepadMask
-            return backend?.sendMultiController(num: Int16(slot), mask: Int16(bitPattern: mask),
-                                                 buttons: 0, analog: Self.neutralControllerAnalog) ?? -2
-        }
-    }
-
     func releaseKey(_ physical: UInt16, modifiers: Int8 = 0) {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         guard let key = physicalKeys.removeValue(forKey: physical) else { return }
         heldKeys.remove(key)
         releases.release(.key(key), modifiers: modifiers)
@@ -122,6 +100,7 @@ extension InputForwarder {
     }
 
     func releaseMouse(_ button: Int32) {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         heldMouseButtons.remove(button)
         releases.release(.mouse(button))
         flushPendingReleases()
@@ -129,6 +108,7 @@ extension InputForwarder {
 
     /// Physical ownership ends now; offline release obligations survive until channel acceptance.
     func raiseAllHeldInputs(reason: String) {
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         releases.releaseKeyboardAndMouse()
         heldKeys.removeAll()
         physicalKeys.removeAll()
@@ -142,22 +122,7 @@ extension InputForwarder {
     }
 
     func sendControllerState(slot: UInt8, buttons: Int32, analog: GamepadAnalog) {
-        guard isReady, flushPendingReleases() else {
-            releases.release(.controller(slot))
-            updateReconciliationTimer()
-            return
-        }
-        releases.hold(.controller(slot))
-        let result = backend?.sendMultiController(num: Int16(slot), mask: Int16(bitPattern: gamepadMask),
-                                                  buttons: buttons, analog: analog) ?? -2
-        record("LiSendMultiControllerEvent", result)
-        if result == 0 {
-            controllerButtons[slot] = buttons
-            controllerAnalogs[slot] = analog
-            if buttons == 0 && analog == Self.neutralControllerAnalog { releases.accepted(.controller(slot)) }
-        } else {
-            releases.release(.controller(slot))
-        }
+        inputCore.withLock { inputCore.sendController(slot: slot, buttons: buttons, analog: analog) }
         updateReconciliationTimer()
     }
 
@@ -171,8 +136,8 @@ extension InputForwarder {
     }
 
     func controllerNeedsRelease(slot: UInt8, buttons: Int32, leftDown: Bool, rightDown: Bool) -> Bool {
-        let analog = controllerAnalogs[slot] ?? Self.neutralControllerAnalog
-        return (controllerButtons[slot] ?? 0) & ~buttons != 0
-            || (analog.leftTrigger > 0 && !leftDown) || (analog.rightTrigger > 0 && !rightDown)
+        inputCore.withLock {
+            inputCore.needsRelease(slot: slot, buttons: buttons, leftDown: leftDown, rightDown: rightDown)
+        }
     }
 }
