@@ -4,16 +4,8 @@
 //
 //  StreamSession+StatsOverlayTimer.swift
 //
-//  The 4 Hz stats-overlay update timer and the perceived-hitch pill's
-//  cross-tick rate memory. Split out of StreamSession+Watchdog.swift (pure
-//  move) to keep each unit under the length limit; see StreamSession.swift for
-//  the actor's stored state and lifetime contract, and StreamSession+Watchdog /
-//  +FrameWatchdog for the self-heal timers this one sits alongside.
-//
-//  The timer body runs on the MAIN run loop and touches only main-actor state
-//  (the decoder, the window's overlay + banner layers), so it reads the live
-//  snapshot directly rather than hopping actors. Everything it reads is either
-//  a cached ~1s stats window or a cheap gauge - never a hot path.
+//  The 4 Hz stats-overlay timer; its body is `StatsOverlayRefresh.tick`, a function
+//  of the decoder, overlay and pill, so tests drive one tick at a time.
 //
 
 import Foundation
@@ -28,112 +20,24 @@ extension StreamSession {
         statsRowsProvider: @escaping @MainActor () -> Set<StatsRow.Kind>,
         statsThresholdsProvider: @escaping @MainActor () -> StatsThresholds
     ) async {
-        // Build a snapshot closure with weak refs. The timer fires on the
-        // main run loop; the backend's RTT estimate is safe to read from any
-        // thread while the connection is up, so the main thread is fine.
         let dec = videoDecoder
         let win = window
         let inp = input
         await MainActor.run {
             self.statsOverlayTimer?.invalidate()
-            // `Timer.scheduledTimer` registers the timer on the *current*
-            // run loop. Since we're inside `MainActor.run`, that's the main
-            // run loop - exactly where the overlay layer + decoder live.
-            // The block closure runs synchronously on the main thread when
-            // the timer fires, so `dec` and `win` (both `@MainActor`-
-            // isolated) are safe to touch directly.
-            // Capture FPS and live gauges update each tick. Raw pipeline rates
-            // keep a separate one-second window for telemetry and hitch detection.
-            let overlayFpsWindowSeconds = 1.0
-            // Per-second-rate baselines for the perceived-hitch pill, carried
-            // across ticks. Reference type so the timer closure mutates one box.
-            let hitchBox = PerceivedHitchBox()
-            let gateAudit = LinkGateAuditBox()
-            let history = StreamHistoryFeed()
+            // Scheduled inside `MainActor.run`, so it fires on the main run loop
+            // where the decoder and window live.
+            let clock = self.clock
+            let refresh = StatsOverlayRefresh(now: { Double(clock.uptimeNanos()) / 1_000_000_000 })
             let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak dec, weak win, weak inp] _ in
                 MainActor.assumeIsolated {
                     guard let dec, let win else { return }
-                    gateAudit.tick(streamRtt: dec.telemetryEstimatedRtt()?.rttMs)
-                    // Cheap stats read FIRST (cached ~1s window) so the pill
-                    // works with the HUD off - the expensive host/controller
-                    // probes below stay gated on `statsOverlayEnabled`.
-                    var snap = dec.statsSnapshot(minWindowSeconds: overlayFpsWindowSeconds)
-                    history.tick(mbps: snap.measuredBitrateMbps, fps: snap.receivedFps,
-                                 rttMs: dec.telemetryEstimatedRtt()?.rttMs)
-                    // Auto pill, independent of the stats-HUD toggle so a
-                    // degrading PRESENT path reaches the user with the HUD off.
-                    // Drives off PERCEIVED present-hitching (render-gap / stale
-                    // repeats / late drops), not env_state (which measures link
-                    // contention and anti-correlates with felt stutter).
-                    let composite = hitchBox.perceivedHitch(snap: snap)
-                    win.networkBanner.setSustained(composite, text: "Stream stuttering")
-                    // Cheap early-out: if the overlay is hidden, skip the
-                    // expensive enrichment + HUD render. The decoder's collectors
-                    // keep ticking so a re-enable shows fresh numbers immediately.
-                    guard dec.statsOverlayEnabled else { return }
-                    // Read RTT through the decoder's LIVE backend (re-pointed on
-                    // reconnect) so it survives a silent reconnect; nil when not
-                    // connected (transient drop / native stub) → row renders "-".
-                    if let rttInfo = dec.telemetryEstimatedRtt() {
-                        // RTT is now measured from a HIGH-RES local monotonic clock
-                        // (fractional ms, EWMA as Double) - no widen/truncation; the
-                        // overlay shows true sub-ms latency uniformly with jitter.
-                        snap.rttMs = rttInfo.rttMs
-                        snap.rttVarianceMs = rttInfo.varianceMs
-                    }
-                    // Jitter: prefer the FINE RFC-3550 smoothed receive jitter
-                    // (already Double, ~0.09ms on a clean wired link) over the
-                    // whole-ms ENet RTT variance - an integer variance rounds a
-                    // clean link to "0 ms" (no signal). `recvJitterMs` is the same
-                    // gauge the telemetry exporter ships, refreshed by the RTP
-                    // receive path. Falls back to the RTT-variance proxy
-                    // (rttVarianceMs, set above) only when no fine jitter has been
-                    // measured yet (gauge still 0 / pre-first-sample) - the row
-                    // resolves `jitterMs ?? rttVarianceMs`.
-                    let fineJitter = TelemetryCounters.shared.recvJitterMs
-                    if fineJitter > 0 {
-                        snap.jitterMs = fineJitter
-                    }
-                    // Host-Mac vitals (battery, CPU%, RAM%). Probes are
-                    // cheap (IOPS + two host_statistics calls) but we
-                    // still gate on the overlay being on so a disabled
-                    // overlay doesn't keep the sampler ticking.
-                    let mac = MacSystemStats.shared.snapshot()
-                    snap.macBatteryPercent = mac.batteryPercent
-                    snap.macBatteryCharging = mac.batteryCharging
-                    snap.macCpuPercent = mac.cpuPercent
-                    snap.macRamPercent = mac.ramPercent
-                    // Connected controller battery (first attached pad that
-                    // reports one). Read live each tick so it tracks a pad
-                    // that connects/disconnects mid-stream.
-                    if let inp, let batt = inp.currentControllerBattery() {
-                        snap.controllerBatteryPercent = batt.percent
-                        snap.controllerBatteryCharging = batt.charging
-                    }
-                    // Read the enabled row set live every tick so a
-                    // Settings flip (preset change, custom checkbox
-                    // toggle) takes effect on the next 1Hz refresh - no
-                    // need to restart the stream to see the new layout.
-                    // The provider closure resolves through
-                    // AppModel.effectiveStatsRows, which routes
-                    // through statsOverlayPreset + statsOverlayCustomRows.
-                    let enabled = statsRowsProvider()
-                    let thresholds = statsThresholdsProvider()
-                    win.statsOverlay.videoSize = CGSize(width: CGFloat(dec.streamWidth), height: CGFloat(dec.streamHeight))
-                    win.statsOverlay.update(
-                        snapshot: snap,
-                        enabled: enabled,
-                        targetFps: Double(dec.streamFps),
-                        thresholds: thresholds)
-                    // The decoder samples the picture under the column for the HUD's ink.
-                    dec.hudBackdropRect = win.statsOverlay.backdropSampleRect
-                    if let luminance = dec.hudBackdropLuminance { win.statsOverlay.updateBackdropLuminance(luminance) }
+                    refresh.tick(
+                        dec: dec, overlay: win.statsOverlay, banner: win.networkBanner, input: inp,
+                        rows: statsRowsProvider, thresholds: statsThresholdsProvider)
                 }
             }
-            // Tolerance saves the OS some power - at 4 Hz a 30 ms tolerance is
-            // invisible to the user but lets the run loop coalesce the timer.
-            // Under half the 250ms interval so a coalesced tick can't drift
-            // into the next one.
+            // 30 ms lets the run loop coalesce the timer, well under half the interval.
             timer.tolerance = 0.03
             self.statsOverlayTimer = timer
         }
@@ -161,16 +65,75 @@ extension StreamSession {
     }
 }
 
+/// One 4 Hz overlay refresh, with the per-tick memory the pill and audit carry.
+/// Runs on the main run loop and reads only cached ~1s windows or cheap gauges.
+@MainActor
+final class StatsOverlayRefresh {
+    // Capture FPS rolls across ticks; raw pipeline rates keep their own 1 s window.
+    static let fpsWindowSeconds = 1.0
+    let hitch: PerceivedHitchBox
+    private let gateAudit: LinkGateAuditBox
+    private let history = StreamHistoryFeed()
+
+    init(now: @escaping @MainActor () -> CFTimeInterval = CACurrentMediaTime) {
+        hitch = PerceivedHitchBox(now: now)
+        gateAudit = LinkGateAuditBox(now: now)
+    }
+
+    /// The pill updates every tick, HUD or not; the HUD's enrichment, row set and
+    /// thresholds are read only while it's shown, so a Settings flip lands next tick.
+    func tick(
+        dec: VideoDecoder, overlay: StatsOverlayLayer, banner: StreamBannerLayer, input: InputForwarder?,
+        rows: @MainActor () -> Set<StatsRow.Kind>, thresholds: @MainActor () -> StatsThresholds
+    ) {
+        gateAudit.tick(streamRtt: dec.telemetryEstimatedRtt()?.rttMs)
+        var snap = dec.statsSnapshot(minWindowSeconds: Self.fpsWindowSeconds)
+        history.tick(mbps: snap.measuredBitrateMbps, fps: snap.receivedFps,
+                     rttMs: dec.telemetryEstimatedRtt()?.rttMs)
+        // Perceived present hitching, not env_state (link contention anti-correlates with felt stutter).
+        banner.setSustained(hitch.perceivedHitch(snap: snap), text: "Stream stuttering")
+        guard dec.statsOverlayEnabled else { return }
+        // The decoder's live backend survives a silent reconnect; nil renders "-".
+        if let rttInfo = dec.telemetryEstimatedRtt() {
+            snap.rttMs = rttInfo.rttMs
+            snap.rttVarianceMs = rttInfo.varianceMs
+        }
+        // Fine RFC 3550 jitter beats whole-ms RTT variance, which reads a clean link as 0 ms.
+        let fineJitter = TelemetryCounters.shared.recvJitterMs
+        if fineJitter > 0 { snap.jitterMs = fineJitter }
+        let mac = MacSystemStats.shared.snapshot()
+        snap.macBatteryPercent = mac.batteryPercent
+        snap.macBatteryCharging = mac.batteryCharging
+        snap.macCpuPercent = mac.cpuPercent
+        snap.macRamPercent = mac.ramPercent
+        if let input, let batt = input.currentControllerBattery() {
+            snap.controllerBatteryPercent = batt.percent
+            snap.controllerBatteryCharging = batt.charging
+        }
+        overlay.videoSize = CGSize(width: CGFloat(dec.streamWidth), height: CGFloat(dec.streamHeight))
+        overlay.update(snapshot: snap, enabled: rows(), targetFps: Double(dec.streamFps), thresholds: thresholds())
+        // The decoder samples the picture under the column for the HUD's ink.
+        dec.hudBackdropRect = overlay.backdropSampleRect
+        if let luminance = dec.hudBackdropLuminance { overlay.updateBackdropLuminance(luminance) }
+    }
+}
+
 /// One-shot, ~10 s into the stream: grade the connect-time RTT prior against
 /// what the stream itself measures, so every session leaves a verdict in the log.
 @MainActor
-private final class LinkGateAuditBox {
+final class LinkGateAuditBox {
     private var done = false
-    private let firstTime = CACurrentMediaTime()
+    private let now: @MainActor () -> CFTimeInterval
+    private let firstTime: CFTimeInterval
     private let settleSeconds: CFTimeInterval = 10
 
+    init(now: @escaping @MainActor () -> CFTimeInterval) {
+        self.now = now
+        firstTime = now()
+    }
+
     func tick(streamRtt: Double?) {
-        guard !done, CACurrentMediaTime() - firstTime >= settleSeconds else { return }
+        guard !done, now() - firstTime >= settleSeconds else { return }
         guard let streamRtt, let gate = StreamPathMTU.currentGateDecision, let assumed = gate.rtt else { return }
         done = true
         let ratio = streamRtt > 0 ? assumed.steadyMs / streamRtt : 0
@@ -186,7 +149,8 @@ private final class LinkGateAuditBox {
 /// Carries per-second-rate baselines for the perceived-hitch pill across the
 /// 4Hz overlay ticks. MainActor-isolated: only ever touched from the timer body.
 @MainActor
-private final class PerceivedHitchBox {
+final class PerceivedHitchBox {
+    private let now: @MainActor () -> CFTimeInterval
     private var prevLate: UInt64 = 0
     private var prevGap: UInt64 = 0
     private var prevTime: CFTimeInterval = 0
@@ -197,6 +161,8 @@ private final class PerceivedHitchBox {
     /// the instant a game starts. ~6s covers the launch transient.
     private let graceSeconds: CFTimeInterval = 6.0
 
+    init(now: @escaping @MainActor () -> CFTimeInterval) { self.now = now }
+
     /// True when the PRESENT path drops frames the user would feel. Render-gap
     /// (decoded-but-never-rendered) catches sustained starvation; the late-drop
     /// burst is gated on a PERCEIVED GAP (renderer showed nothing fresh) so healthy
@@ -204,7 +170,7 @@ private final class PerceivedHitchBox {
     /// Stale-repeats and cadence stay excluded (normal at fps<refresh); the
     /// banner's leaky integrator debounces; deltas guard a reconnect reset.
     func perceivedHitch(snap: StreamStatsSnapshot) -> Bool {
-        let now = CACurrentMediaTime()
+        let now = now()
         if firstTime == 0 { firstTime = now }
         let dt = prevTime > 0 ? now - prevTime : 0.25
         prevTime = now
