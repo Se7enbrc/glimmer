@@ -1,4 +1,9 @@
-# Profiling Glimmer
+---
+description: Use Instruments and local diagnostics to investigate a stream.
+icon: gauge-high
+---
+
+# Measure stream performance
 
 Glimmer is a real-time game-streaming client, so “perf” means latency and frame
 consistency, not throughput. This document is the playbook for profiling Glimmer

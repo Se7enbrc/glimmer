@@ -1,4 +1,9 @@
-# Release
+---
+description: Prepare, test, and publish a release candidate.
+icon: box-archive
+---
+
+# Release Glimmer
 
 Releases use CalVer `YYYY.M.MICRO` and a tested release candidate. Every code
 change goes through a PR. A candidate must pass the hosted checks before it is

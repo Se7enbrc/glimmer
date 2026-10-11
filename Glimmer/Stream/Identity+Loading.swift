@@ -40,28 +40,6 @@ extension IdentityManager {
         }
 
         // -----------------------------------------------------------------
-        // Step 2 - legacy-keychain migration (the keychain-era build's three generic-password
-        // items at service "io.ugfugl.Glimmer.identity").
-        //
-        // We do this BEFORE the UserDefaults branch because if the
-        // legacy-keychain-only flag was set, UserDefaults has already been
-        // wiped by the keychain-era build and the only live copy is in the keychain.
-        //
-        // The `try?` swallows keychain read errors so we still fall through
-        // to the next migration source if the user denies the prompt or the
-        // ACL fails. The orphaned items get nuked by
-        // `cleanupOrphanLoginKeychainEntries` on a subsequent launch.
-        // -----------------------------------------------------------------
-        if let migrated = (try? loadFromLegacyKeychain()) {
-            try writeIdentityToFileStore(migrated)
-            deleteLegacyKeychainItems()
-            defaults.set(Self.fileStorageVersion, forKey: Self.fileStorageFlag)
-            cached = migrated
-            log.info("Migrated from login keychain to file store (and deleted keychain items)")
-            return migrated
-        }
-
-        // -----------------------------------------------------------------
         // Step 3 - original UserDefaults plaintext (the earliest builds).
         //
         // If the legacy-keychain-only flag is set, the keychain-era build already wiped
@@ -254,70 +232,6 @@ extension IdentityManager {
                                     account: Self.accountKey, base: supportBase)
         try FileIdentityStore.write(Data(identity.uniqueID.utf8),
                                     account: Self.accountUID, base: supportBase)
-    }
-
-    // MARK: Legacy keychain (read-only migration source)
-
-    /// Read the three generic-password items the keychain-era build wrote into the login
-    /// keychain. Returns nil if any of the required components is missing.
-    /// Throws on any keychain error that isn't `errSecItemNotFound` so the
-    /// outer `try?` can decide whether to skip this migration source.
-    func loadFromLegacyKeychain() throws -> Identity? {
-        guard let certPEM = try readLegacyKeychainString(account: Self.accountCert),
-              !certPEM.isEmpty else { return nil }
-        guard let keyPEM = try readLegacyKeychainString(account: Self.accountKey),
-              !keyPEM.isEmpty else { return nil }
-        // `??` can't take a throwing RHS without an outer `try`, and that
-        // would mis-tag this whole expression as a single throw site. Unfold
-        // to an if-let so the missing-UID case can call into the throwing
-        // generator cleanly.
-        let uid: String
-        if let stored = try readLegacyKeychainString(account: Self.accountUID), !stored.isEmpty {
-            uid = stored
-        } else {
-            uid = try generateUniqueID()
-        }
-        return Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
-    }
-
-    func readLegacyKeychainString(account: String) throws -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        switch status {
-        case errSecSuccess:
-            guard let data = item as? Data,
-                  let str = String(data: data, encoding: .utf8) else {
-                return nil
-            }
-            return str
-        case errSecItemNotFound:
-            return nil
-        default:
-            throw StreamError.crypto("SecItemCopyMatching(legacy \(account)) failed: \(status)")
-        }
-    }
-
-    /// Best-effort delete of the three legacy generic-password items. Called
-    /// after a successful migration to the file store. Safe to call multiple
-    /// times - SecItemDelete on a missing item returns `errSecItemNotFound`
-    /// which we treat as success.
-    func deleteLegacyKeychainItems() {
-        for account in [Self.accountCert, Self.accountKey, Self.accountUID] {
-            let query: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: keychainService,
-                kSecAttrAccount as String: account,
-                kSecMatchLimit as String: kSecMatchLimitAll
-            ]
-            _ = deleteKeychainItems(query)
-        }
     }
 
     // MARK: UserDefaults plaintext cleanup

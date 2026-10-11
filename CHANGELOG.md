@@ -68,6 +68,15 @@
   allow it, the controller starts working when you come back to Glimmer, with no
   relaunch.
 
+## 2026.10.7 - 2026-10-11
+
+### Bug fixes
+
+- Glimmer no longer deletes anything from the keychain. A cleanup that ran when
+  Glimmer first opened, meant for leftovers from early test builds, could delete
+  another app's signing certificate and its key
+  ([#138](https://github.com/Se7enbrc/glimmer/issues/138)).
+
 ## 2026.10.6 - 2026-10-09
 
 ### Features

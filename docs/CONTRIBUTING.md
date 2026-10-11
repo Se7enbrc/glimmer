@@ -1,4 +1,9 @@
-# Contributing
+---
+description: Build, test, and prepare a change for review.
+icon: code
+---
+
+# Contribute to Glimmer
 
 ## Setup
 
@@ -520,8 +525,9 @@ Glimmer has one maintainer, who triages issues, reviews and merges every change,
 picks versions, and approves each release in the protected `release`
 environment. Contributors propose changes through issues and fork pull requests.
 Security reports follow [SECURITY.md](SECURITY.md). Everyone taking part follows
-the [code of conduct](../CODE_OF_CONDUCT.md); report problems to
-glimmer-conduct@ugfugl.io.
+the
+[code of conduct](https://github.com/Se7enbrc/glimmer/blob/main/CODE_OF_CONDUCT.md);
+report problems to <glimmer-conduct@ugfugl.io>.
 
 The maintainer's GitHub account uses a passkey for two-factor authentication,
 and only the maintainer has write access. Release secrets live in Doppler, which

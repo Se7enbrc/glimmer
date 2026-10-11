@@ -58,9 +58,6 @@ extension AppModel {
         // Age out old Logs/Glimmer files off the main thread, diagnostics on or off.
         TelemetryExporter.sweepLogsAtLaunch()
         log.info("Glimmer stream engine: Swift-native")
-        // Install step: build the client SecIdentity once, into Glimmer's own
-        // keychain, so streams don't prompt the user for keychain access.
-        await IdentityManager.shared.preflight()
         // Seed the Custom fields from the display when Custom is ALREADY the
         // live preset and has no values on record (a preset restored from
         // defaults, or a moonlight-qt migration).

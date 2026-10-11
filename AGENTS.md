@@ -68,7 +68,8 @@ pre-commit install
   release-tool tests, `make test` and protocol fuzz tests under
   AddressSanitizer. This is the gate: hosted Verify runs its three parts
   (`make check`, `make test`, `make test-asan`) as parallel jobs under the
-  required `macOS` check on every pull request and `main` commit, and
+  required `macOS` check on every `main` commit and every pull request that
+  touches more than documentation (those run `make check` alone), and
   `make dist` runs it, so nothing is done until it passes there. Locally it does
   not fail on compiler warnings, so read the build log: there must be none.
 - `make dev`: tests, then the Release build installed and relaunched. On a Mac
