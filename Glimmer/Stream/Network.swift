@@ -280,10 +280,24 @@ public actor NetworkClient {
     let log = Logger(subsystem: "io.ugfugl.Glimmer",
                              category: "Stream.Network")
 
+    /// The client credential and uniqueid requests carry; tests pass a generated one.
+    typealias Identity = @Sendable () async throws -> (certPEM: String, keyPEM: String, uniqueID: String)
+
+    static let installIdentity: Identity = {
+        let im = IdentityManager.shared
+        return (try await im.clientCertPEM(), try await im.clientKeyPEM(), try await im.uniqueID())
+    }
+
+    let transport: ControlTransport.Get
+    let identity: Identity
+
     // MARK: Init
 
-    public init(server: ServerInfo) {
+    init(server: ServerInfo, transport: @escaping ControlTransport.Get = ControlTransport.get,
+         identity: @escaping Identity = NetworkClient.installIdentity) {
         self.server = server
+        self.transport = transport
+        self.identity = identity
         // The host-cert pin (if any) rides on `server.serverCertPEM` already;
         // ControlTransport reads it per request. Nothing else to set up - the
         // control channel is connectionless from this object's point of view.
@@ -315,10 +329,7 @@ public actor NetworkClient {
 
     func ensureIdentityLoaded() async throws {
         if clientCertPEM != nil { return }
-        let im = IdentityManager.shared
-        clientCertPEM   = try await im.clientCertPEM()
-        clientKeyPEM    = try await im.clientKeyPEM()
-        clientUniqueID  = try await im.uniqueID()
+        (clientCertPEM, clientKeyPEM, clientUniqueID) = try await identity()
     }
 
     /// Flatten the immediate-child element names + brief text of an XML node

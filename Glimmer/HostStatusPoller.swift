@@ -135,6 +135,7 @@ extension AppModel {
     func pollHostStatusOnce(
         for expectedHostID: String, appListFor: Int?,
         probe: @Sendable (String, Int, Int) async -> HostReachability.Outcome = HostReachability.measureRTT,
+        makeClient: (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) },
         macHasRoute: Bool? = nil, publishMiss: ((String, String) async -> Void)? = nil
     ) async -> (appListFor: Int?, noPath: Bool) {
         // Snapshot the host on MainActor so we can hand its address etc.
@@ -173,14 +174,14 @@ extension AppModel {
             return (appListFor, false)
 
         case .reachable(let rttMs):
-            let fetchedFor = await pollReachableHost(snap.info, hostID: snap.id, rttMs: rttMs,
+            let fetchedFor = await pollReachableHost(makeClient(snap.info), hostID: snap.id, rttMs: rttMs,
                                                      appListFor: appListFor)
             return (fetchedFor, false)
         }
     }
 
     /// The PC took the TCP probe: /serverinfo decides idle, busy or a changed certificate.
-    private func pollReachableHost(_ server: ServerInfo, hostID: String, rttMs: Int, appListFor: Int?) async -> Int? {
+    private func pollReachableHost(_ client: NetworkClient, hostID: String, rttMs: Int, appListFor: Int?) async -> Int? {
         // Host answered → clear the unreachable streak so a later transient
         // miss starts counting from zero again, and any stale wake failure.
         hostUnreachableStreak = 0
@@ -190,7 +191,6 @@ extension AppModel {
         }
         // Once TCP answers, ask /serverinfo who the PC is and whether it's busy.
         // A fresh NetworkClient per poll has no persistent connection to reuse.
-        let client = NetworkClient(server: server)
         do {
             let info = try await client.fetchServerInfo()
             await client.shutdown()

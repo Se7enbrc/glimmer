@@ -95,12 +95,10 @@ extension NetworkClient {
             clientKeyPEM: usePaired ? clientKeyPEM : nil,
             pinnedCertPEM: usePaired ? server.serverCertPEM : nil)
         let requestTarget = target
+        let transport = transport
         let operation: @Sendable () async throws -> ControlTransport.Response = {
-            try await ControlTransport.get(
-                host: address, port: port, target: requestTarget,
-                userAgent: "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
-                tls: usePaired, credential: credential,
-                timeout: min(timeout, max(0.001, deadline.timeIntervalSinceNow)))
+            try await transport(address, port, requestTarget, "Mozilla/5.0 (compatible; Moonlight/Glimmer)",
+                                usePaired, credential, min(timeout, max(0.001, deadline.timeIntervalSinceNow)))
         }
         let resp: ControlTransport.Response
         do {

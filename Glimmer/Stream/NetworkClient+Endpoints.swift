@@ -299,15 +299,7 @@ extension NetworkClient {
         // logs persist; an attacker pulling logs from a compromised box
         // could replay/decrypt captured input traffic from the matching
         // session window. Drop them here, period.
-        let queryDump = query.sorted(by: { $0.key < $1.key })
-            .map { (key, value) -> String in
-                if Self.sensitiveQueryKeys.contains(key.lowercased()) {
-                    return "\(key)=<redacted>"
-                }
-                return "\(key)=\(value)"
-            }
-            .joined(separator: "&")
-        let fullQuery = queryDump + (extraTail ?? "")
+        let fullQuery = Self.redactedQueryDump(query) + (extraTail ?? "")
         log.info("\(verb, privacy: .public) URL query (sensitive params redacted): \(fullQuery, privacy: .public)")
 
         let xml = try await rawRequest(path: verb,
@@ -357,6 +349,13 @@ extension NetworkClient {
         return LaunchResponse(sessionURL: sessionURL,
                               gcmKey: gcmKey,
                               gcmKeyId: gcmKeyId)
+    }
+
+    /// The launch query as logged: sorted, with every `sensitiveQueryKeys` value replaced.
+    static func redactedQueryDump(_ query: [String: String]) -> String {
+        query.sorted(by: { $0.key < $1.key })
+            .map { Self.sensitiveQueryKeys.contains($0.key.lowercased()) ? "\($0.key)=<redacted>" : "\($0.key)=\($0.value)" }
+            .joined(separator: "&")
     }
 
     /// The keyed part of the /launch and /resume query (HDR rides separately,
