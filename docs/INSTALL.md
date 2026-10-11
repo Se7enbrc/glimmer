@@ -40,7 +40,6 @@ while leaving AirPods as the output. Apple documents this
 [Bluetooth microphone quality change](https://support.apple.com/en-us/102217).
 See [Audio on macOS](AUDIO.md) for voice-chat and volume-recovery guidance.
 
-The [shortcut guide](SHORTCUTS.md) covers keyboard and controller
-shortcuts, getting the mouse back, and what copy and paste can do. Settings ›
-Input shows your current bindings.
-
+The [shortcut guide](SHORTCUTS.md) covers keyboard and controller shortcuts,
+getting the mouse back, and what copy and paste can do. Settings › Input shows
+your current bindings.

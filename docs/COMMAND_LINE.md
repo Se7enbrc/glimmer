@@ -32,4 +32,3 @@ moonlight-qt stream options are refused, since Settings holds them; Glimmer adds
 `<pc>` is a paired PC's name or address, ignoring case. Exit status: 0 success,
 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired or no paired PC by
 that name.
-

@@ -32,4 +32,3 @@ Free, now and always. No accounts, no analytics. Glimmer talks to your own PC
 and, if you leave updates on, to the update feed; nothing else. Diagnostics are
 off by default, write local files under `~/Library/Logs/Glimmer`, and show your
 PC's address and names as short codes.
-
