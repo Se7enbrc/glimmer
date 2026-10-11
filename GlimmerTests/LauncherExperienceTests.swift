@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import AppKit
 import Foundation
+import os
+import SwiftUI
 import ImageIO
 import Testing
 import UniformTypeIdentifiers
@@ -57,6 +60,8 @@ struct LauncherExperienceTests {
         for (count, columns) in expected.enumerated() {
             #expect(LauncherLayout.columns(appCount: count) == columns)
         }
+        #expect(LauncherLayout.windowWidth == LauncherLayout.contentWidth + 2 * LauncherLayout.horizontalPadding)
+        #expect(LauncherLayout.windowWidth == 580)
         for count in 1...200 {
             #expect((1...4).contains(LauncherLayout.columns(appCount: count)))
             #expect(LauncherLayout.coverHeight(appCount: count) <= 240)
@@ -89,7 +94,7 @@ struct LauncherExperienceTests {
         let sunshine = FakeSunshine { _ in ControlTransport.Response(status: 404, body: Data()) }
         await #expect(throws: StreamError.self) { try await sunshine.client(FakeSunshine.server()).appAsset(appID: 1) }
         #expect(sunshine.requests.isEmpty)
-        await #expect(throws: StreamError.self) {
+        await #expect(throws: NetworkClient.AssetError.self) {
             try await sunshine.client(FakeSunshine.server(pin: "pin")).appAsset(appID: 1)
         }
         #expect(sunshine.requests.count == 1)
@@ -233,6 +238,75 @@ struct LauncherExperienceTests {
         #expect(await cache.image(pcID: "pc", appID: 1, revision: "a", fetch: { Data() }) == nil)
     }
 
+    @Test func transientArtworkFailuresRetryWithoutChangingTheRevision() async throws {
+        let store = try IsolatedStore("launcher-art-retry")
+        defer { store.remove() }
+        let data = try Self.png(width: 3, height: 4)
+        let cache = LauncherArtCache(base: store.directory)
+        let errors: [any Error & Sendable] = [
+            StreamError.hostTimedOut, StreamError.hostUnreachable("asleep"),
+            StreamError.launchFailed("HTTP 503 on /appasset"), CancellationError()
+        ]
+        for (id, error) in errors.enumerated() {
+            #expect(await cache.image(pcID: "pc", appID: id, revision: "same", fetch: { throw error }) == nil)
+            #expect(await cache.image(pcID: "pc", appID: id, revision: "same", fetch: { data }) == data)
+        }
+        #expect(await cache.image(pcID: "pc", appID: 10, revision: "same", fetch: { Data([0]) }) == nil)
+        #expect(await cache.image(pcID: "pc", appID: 10, revision: "same", fetch: { data }) == data)
+        let placeholder = try Self.png(width: 130, height: 180)
+        #expect(await cache.image(pcID: "pc", appID: 11, revision: "same", fetch: { placeholder }) == nil)
+        #expect(await cache.image(pcID: "pc", appID: 11, revision: "same", fetch: { data }) == nil)
+    }
+
+    @Test @MainActor func coverMemoryHitsDoNotConstructClientsAndReachabilityRetries() async throws {
+        let store = try IsolatedStore("launcher-art-client")
+        defer { store.remove() }
+        let model = AppModel()
+        model.supportBase = store.directory
+        let data = try Self.png(width: 3, height: 4)
+        let sunshine = FakeSunshine.scripted(["appasset": [
+            .failure(.hostTimedOut), .success(.init(status: 200, body: data))
+        ]])
+        let clients = OSAllocatedUnfairLock(initialState: 0)
+        model.makeNetwork = { server in
+            clients.withLock { $0 += 1 }
+            return sunshine.client(server)
+        }
+        let app = LibraryApp(id: 1, name: "Game", hdr: false, hidden: false)
+        let host = Host(id: "pc", name: "PC", customName: nil, localAddress: "192.0.2.1", manualAddress: nil,
+                        apps: [app], lastConnected: nil, serverCertPEM: "pin", appVersion: nil, macAddress: nil)
+        model.hostLiveStatus = .init(hostID: "pc", state: .asleep, capturedAt: .now)
+        #expect(!model.launcherArtReachable(for: host.id))
+        #expect(await model.launcherArt(for: app, on: host, revision: "a") == nil)
+        model.hostLiveStatus?.state = .idle
+        #expect(model.launcherArtReachable(for: host.id))
+        #expect(!model.launcherArtReachable(for: "other"))
+        #expect(await model.launcherArt(for: app, on: host, revision: "a") == data)
+        #expect(clients.withLock { $0 } == 2)
+        #expect(await model.launcherArt(for: app, on: host, revision: "a") == data)
+        #expect(clients.withLock { $0 } == 2)
+        model.isStreaming = true
+        #expect(await model.launcherArt(for: app, on: host, revision: "b") == nil)
+        #expect(clients.withLock { $0 } == 2)
+    }
+
+    @Test @MainActor func streamMenuAllowsPCSelectionDuringAStream() throws {
+        let store = try IsolatedStore("launcher-stream-menu")
+        defer { store.remove() }
+        let model = AppModel()
+        model.hostsDefaults = store.defaults
+        model.supportBase = store.directory
+        defer { model.hostStatusTask?.cancel() }
+        let host = Host(id: "pc", name: "Other PC", customName: nil, localAddress: nil, manualAddress: nil,
+                        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+        model.hosts = [host]
+        model.isStreaming = true
+        let menu = NSHostingMenu(rootView: StreamMenu(model: model))
+        menu.update()
+        let item = try #require(menu.items.first { $0.title == host.displayName })
+        #expect(item.isEnabled)
+    }
+
     private static func png(width: Int, height: Int) throws -> Data {
         let context = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
                                             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
@@ -248,6 +322,20 @@ struct LauncherExperienceTests {
 }
 
 struct LauncherNavigationTests {
+    @Test func controllerFocusUsesOneTargetAndOneActivationWithEitherKeyboardSetting() {
+        #expect(LauncherNavigation.needsControllerFocus(keyboardNavigation: false))
+        #expect(!LauncherNavigation.needsControllerFocus(keyboardNavigation: true))
+        for keyboard in [false, true] {
+            for focused in [false, true] {
+                for enabled in [false, true] {
+                    #expect(LauncherNavigation.handlesSpace(keyboardNavigation: keyboard,
+                                                           focused: focused, enabled: enabled)
+                            == (!keyboard && focused && enabled))
+                }
+            }
+        }
+    }
+
     @Test func navigationRequiresTheLauncherAndYieldsToStreamingAndDiagnostics() {
         func enabled(streaming: Bool = false, testing: Bool = false, active: Bool = true,
                      launcher: Bool = true, sheet: Bool = false) -> Bool {

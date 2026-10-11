@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import AppKit
 import SwiftUI
 
 enum LauncherFocus: Hashable {
@@ -68,6 +69,12 @@ struct LauncherControllerRepeat {
 }
 
 enum LauncherNavigation {
+    static func needsControllerFocus(keyboardNavigation: Bool) -> Bool { !keyboardNavigation }
+
+    static func handlesSpace(keyboardNavigation: Bool, focused: Bool, enabled: Bool) -> Bool {
+        needsControllerFocus(keyboardNavigation: keyboardNavigation) && focused && enabled
+    }
+
     static func isEnabled(streaming: Bool, testing: Bool, active: Bool, launcherKey: Bool, sheetKey: Bool) -> Bool {
         !streaming && !testing && active && (launcherKey || sheetKey)
     }
@@ -96,6 +103,55 @@ enum LauncherNavigation {
         case .right:
             return (index + 1) % columns == 0 ? focus : grid[min(index + 1, grid.count - 1)]
         case .activate, .dismiss: return focus
+        }
+    }
+}
+
+struct LauncherControlFocus: ViewModifier {
+    let focus: FocusState<LauncherFocus?>.Binding
+    let target: LauncherFocus
+    var activate: (() -> Void)?
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var keyboardNavigation = NSApp.isFullKeyboardAccessEnabled
+
+    func body(content: Content) -> some View {
+        Group {
+            if LauncherNavigation.needsControllerFocus(keyboardNavigation: keyboardNavigation) {
+                // Replace the control's focus target, so accessibility never sees two stops.
+                // Edit focus also works with Keyboard navigation off; activation stays on the control.
+                content.focusable(false)
+                    .focusable(interactions: .edit)
+                    .focused(focus, equals: target)
+                    .onKeyPress(.space) {
+                        guard let activate, LauncherNavigation.handlesSpace(
+                            keyboardNavigation: keyboardNavigation, focused: focus.wrappedValue == target,
+                            enabled: isEnabled) else { return .ignored }
+                        activate()
+                        return .handled
+                    }
+                    .modifier(LauncherMenuShortcut(isMenu: activate == nil, focused: focus.wrappedValue == target))
+            } else {
+                content.focused(focus, equals: target)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            keyboardNavigation = NSApp.isFullKeyboardAccessEnabled
+        }
+        .onChange(of: focus.wrappedValue) { _, _ in
+            keyboardNavigation = NSApp.isFullKeyboardAccessEnabled
+        }
+    }
+}
+
+private struct LauncherMenuShortcut: ViewModifier {
+    let isMenu: Bool
+    let focused: Bool
+
+    func body(content: Content) -> some View {
+        if isMenu {
+            content.keyboardShortcut(focused ? KeyboardShortcut(.space, modifiers: []) : nil)
+        } else {
+            content
         }
     }
 }

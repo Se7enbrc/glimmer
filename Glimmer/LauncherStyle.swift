@@ -41,6 +41,8 @@ enum LauncherStyle: String, CaseIterable {
 
 enum LauncherLayout {
     static let contentWidth: CGFloat = 532
+    static let horizontalPadding: CGFloat = 24
+    static var windowWidth: CGFloat { contentWidth + 2 * horizontalPadding }
     static let coverPadding: CGFloat = 12
 
     /// Prefer filled rows, with four columns keeping large libraries compact.

@@ -179,7 +179,7 @@ struct MainWindow: View {
 }
 
 /// The Stream menu: the launcher's one action in its words, where ⌘? finds it, and the PCs
-/// on ⌘1-⌘9 (nine at most; ⌘0 reads as reset). PCs lock while streaming, since ⌘ stays with the Mac.
+/// on ⌘1-⌘9 (nine at most; ⌘0 reads as reset). Browsing another PC leaves the stream running.
 struct StreamMenu: View {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
@@ -195,7 +195,6 @@ struct StreamMenu: View {
             Toggle(host.displayName, isOn: Binding(
                 get: { model.selectedHost?.id == host.id }, set: { if $0 { model.selectHost(host) } }))
                 .keyboardShortcut(index < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)"))) : nil)
-                .disabled(model.isStreaming)
         }
     }
 
@@ -302,7 +301,7 @@ private struct ConnectSurface: View {
         // in GlimmerApp). 532pt of content in 24pt margins is the 580pt window, and
         // must stay in step with GlimmerApp's minWidth, or the window can be dragged.
         .frame(width: LauncherLayout.contentWidth)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, LauncherLayout.horizontalPadding)
         .padding(.top, 4)
         .padding(.bottom, 18)
         // TAKE THE IDEAL HEIGHT, NOT THE OFFERED ONE. Removing the Spacer was
@@ -435,7 +434,7 @@ private struct PCHeader: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .focused(focus, equals: .pc)
+        .modifier(LauncherControlFocus(focus: focus, target: .pc))
         .help("Choose a PC")
         .accessibilityLabel("PC")
         .accessibilityValue(host?.displayName ?? "None")

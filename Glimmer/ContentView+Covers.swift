@@ -69,6 +69,7 @@ struct LauncherCoverArt: View {
 
     @State private var shownKey: String?
     private var key: String { "\(host.id):\(app.id):\(revision)" }
+    private var reachable: Bool { model.launcherArtReachable(for: host.id) }
 
     var body: some View {
         ZStack {
@@ -83,16 +84,39 @@ struct LauncherCoverArt: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contentShape(.focusEffect, RoundedRectangle(cornerRadius: 14, style: .continuous))
         .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 4)
-        .task(id: "\(key)-\(model.isStreaming)") {
+        .task(id: "\(key)-\(model.isStreaming)-\(reachable)") {
             if shownKey != key { image = nil; shownKey = key }
             guard !model.isStreaming, image == nil else { return }
-            let client = model.makeNetwork(model.nativeServerInfo(for: host))
-            let data = await model.launcherArtCache.image(pcID: host.id, appID: app.id, revision: revision) {
-                try await client.appAsset(appID: app.id)
-            }
-            await client.shutdown()
+            let data = await model.launcherArt(for: app, on: host, revision: revision)
             guard !Task.isCancelled, let data else { return }
             image = LauncherArtCache.decode(data)
+        }
+    }
+}
+
+extension AppModel {
+    func launcherArtReachable(for pcID: String) -> Bool {
+        guard let status = hostLiveStatus, status.hostID == pcID else { return false }
+        switch status.state {
+        case .idle, .streamingApp, .streamingUnknownApp: return true
+        case .unknown, .asleep, .certMismatch: return false
+        }
+    }
+
+    func launcherArt(for app: LibraryApp, on host: Host, revision: String) async -> Data? {
+        guard !isStreaming else { return nil }
+        let makeNetwork = makeNetwork
+        let server = nativeServerInfo(for: host)
+        return await launcherArtCache.image(pcID: host.id, appID: app.id, revision: revision) {
+            let client = makeNetwork(server)
+            do {
+                let data = try await client.appAsset(appID: app.id)
+                await client.shutdown()
+                return data
+            } catch {
+                await client.shutdown()
+                throw error
+            }
         }
     }
 }

@@ -47,9 +47,19 @@ actor LauncherArtCache {
             return data
         }
         let generation = generations[pcID, default: 0]
-        let fetched = try? await fetch()
+        let data: Data
+        do {
+            data = try await fetch()
+        } catch {
+            if !Task.isCancelled, generations[pcID, default: 0] == generation,
+               case NetworkClient.AssetError.missing = error { missing.insert(key) }
+            return nil
+        }
         guard !Task.isCancelled, generations[pcID, default: 0] == generation else { return nil }
-        guard let data = fetched, Self.decode(data) != nil else { missing.insert(key); return nil }
+        guard Self.decode(data) != nil else {
+            if Self.isPlaceholder(data) { missing.insert(key) }
+            return nil
+        }
         remember(data, key: key)
         if let directory, let file, data.count <= byteLimit {
             do {
@@ -104,6 +114,16 @@ actor LauncherArtCache {
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceShouldCacheImmediately: true
         ] as CFDictionary)
+    }
+
+    private static func isPlaceholder(_ data: Data) -> Bool {
+        guard data.count <= 4 * 1024 * 1024,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
+            return false
+        }
+        return properties[kCGImagePropertyPixelWidth] as? Int == 130
+            && properties[kCGImagePropertyPixelHeight] as? Int == 180
     }
 
     private func evict(in directory: URL) throws {

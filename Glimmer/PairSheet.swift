@@ -67,10 +67,11 @@ struct PairSheet: View {
                 .font(.title2.bold())
                 .contentTransition(.opacity)
 
-            if let pairedHost, LauncherStyle.offersChoice(apps: pairedHost.apps) {
-                PairLauncherChoice(host: pairedHost)
-            } else if paired {
+            if paired {
                 successBody
+                if let pairedHost, LauncherStyle.offersChoice(apps: pairedHost.apps) {
+                    PairLauncherChoice(host: pairedHost)
+                }
             } else if !chosen {
                 HostChooser(selected: { addr, name in
                     hostnameOrIP = addr
@@ -88,6 +89,7 @@ struct PairSheet: View {
         // Float above all other Glimmer windows so the PIN being read off isn't
         // hidden behind the launcher or Settings. Reverts on dismiss.
         .background(FloatingWindowLevel())
+        .sensoryFeedback(.success, trigger: paired)
         .onDisappear { cancelPairing() }
     }
 
@@ -110,15 +112,7 @@ struct PairSheet: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
-        .sensoryFeedback(.success, trigger: paired)
-        // Auto-close after a brief beat so the check + haptic register; select
-        // the freshly-paired host so the launcher lands on it.
-        .task(id: paired) {
-            guard paired else { return }
-            // No auto-dismiss: the success screen shows Done / "Stream Now" buttons,
-            // and a 900ms auto-close made them unclickable. The user dismisses it.
-            selectPairedHost()
-        }
+        // No auto-dismiss: Done and Stream Now must stay available until the user chooses.
     }
 
     @ViewBuilder private var pinBody: some View {

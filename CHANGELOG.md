@@ -7,18 +7,21 @@
 - Choose Buttons or Covers for each PC when pairing, or in Settings › PCs next
   to Codec. Existing PCs keep Buttons.
 - Use a controller to choose apps and switch PCs in the launcher. The d-pad or
-  left stick moves focus, A or Cross opens the selection, and B or Circle dismisses a dialog.
-  Raw-HID-only controllers don't navigate the launcher yet.
+  left stick moves focus, A or Cross opens the selection, and B or Circle
+  dismisses a dialog. Raw-HID-only controllers don't navigate the launcher yet.
 
-- Steam shows its own logo in the launcher, the menu and the PC list, instead
-  of a generic controller.
+- Steam shows its own logo in the launcher, the menu and the PC list, instead of
+  a generic controller.
 
 ### Bug fixes
 
+- Controller navigation works with Keyboard navigation off. Covers retry after a
+  temporary connection failure, and the Stream menu lets you browse another PC
+  during a stream. Pairing keeps its success checkmark before the app choices.
 - Turning on a controller that needs Input Monitoring shows macOS's own
   permission prompt instead of opening System Settings on top of it. Once you
-  allow it, the controller starts working when you come back to Glimmer, with
-  no relaunch.
+  allow it, the controller starts working when you come back to Glimmer, with no
+  relaunch.
 
 ## 2026.10.6 - 2026-10-09
 

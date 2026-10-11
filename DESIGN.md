@@ -409,8 +409,8 @@ Tactile and confident: the things on screen that ask to be pressed.
 - **Settings sidebar:** the standard source list, each row with an SF Symbol on
   a 6pt coloured glyph chip.
 - **Stream menu:** in the main menu bar: Stream, Mini Player and Stop Streaming,
-  then the PCs with a checkmark on the selected one and ⌘1 to ⌘9. The PCs lock
-  while a stream is running.
+  then the PCs with a checkmark on the selected one and ⌘1 to ⌘9. Choosing
+  another PC leaves the current stream running, just like the header's switcher.
 - **Toolbar:** only the Settings gear, on the trailing edge; the PC switcher is
   the header's name.
 - **Menu bar panel:** 300pt wide, with cards on 12pt quaternary fill, each

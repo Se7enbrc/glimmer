@@ -120,6 +120,7 @@ extension NetworkClient {
         // GameStream puts protocol errors in the body XML with HTTP 200, so a
         // non-2xx is transport-level breakage (e.g. a 401 from a reverse proxy).
         if !(200...299).contains(resp.status) {
+            if path == "appasset", resp.status == 404 { throw AssetError.missing }
             throw StreamError.launchFailed("HTTP \(resp.status) on /\(path)")
         }
         return resp.body

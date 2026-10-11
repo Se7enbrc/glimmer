@@ -149,15 +149,7 @@ struct AppIconsRow: View {
 
     func appTile(_ app: LibraryApp, revision: String = "") -> some View {
         let state = tileState(app)
-        return Button {
-            switch state {
-            case .ready: model.requestStream(app: app, on: host)
-            case .connecting: model.cancelConnect()
-            // A reconnect is a live stream, so its way out ends it rather than cancelling.
-            case .reconnecting: model.stopStreamFromMenu(source: "the launcher")
-            case .hiddenStream: model.resumeStreamWindow()
-            }
-        } label: {
+        return Button { activate(app) } label: {
             if model.launcherStyle == .covers {
                 coverLabel(app, revision: revision, connecting: state == .connecting || state == .reconnecting,
                            hiddenStream: state == .hiddenStream)
@@ -168,7 +160,7 @@ struct AppIconsRow: View {
             }
         }
         .buttonStyle(LauncherTileStyle(covers: model.launcherStyle == .covers))
-        .focused(focus, equals: .app(app.id))
+        .modifier(LauncherControlFocus(focus: focus, target: .app(app.id), activate: { activate(app) }))
         .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
         // Only the streaming app stays live while a stream exists; the others can't start one.
         .disabled(model.isStreaming && state == .ready)
@@ -177,6 +169,16 @@ struct AppIconsRow: View {
         .accessibilityLabel(app.name)
         .accessibilityValue(state.spoken.value.isEmpty && isRunning(app) ? "Running" : state.spoken.value)
         .accessibilityHint(state.spoken.hint)
+    }
+
+    private func activate(_ app: LibraryApp) {
+        switch tileState(app) {
+        case .ready: model.requestStream(app: app, on: host)
+        case .connecting: model.cancelConnect()
+        // A reconnect is a live stream, so its way out ends it rather than cancelling.
+        case .reconnecting: model.stopStreamFromMenu(source: "the launcher")
+        case .hiddenStream: model.resumeStreamWindow()
+        }
     }
 
     private var overflowMenu: some View {
@@ -195,7 +197,7 @@ struct AppIconsRow: View {
         } label: {
             tileLabel(icon: Image(systemName: "ellipsis"), title: "\(overflowApps.count) more", trailing: "chevron.down")
         }
-        .focused(focus, equals: .overflow)
+        .modifier(LauncherControlFocus(focus: focus, target: .overflow))
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         // Glass, not violet: it opens a list rather than streaming.
