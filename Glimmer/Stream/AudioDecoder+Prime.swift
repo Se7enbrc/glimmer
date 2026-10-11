@@ -173,7 +173,7 @@ extension AudioDecoder {
         // Accounted above, scheduled here (outside the meter lock, AV-call
         // discipline): a completion in the sliver between sees fill briefly
         // overstated - harmless, and it can't mistake the moment for a drain.
-        playerNode.scheduleBuffer(silence) { [weak self] in
+        schedulePlayout(silence) { [weak self] in
             self?.meterCompleteOnePlayout(frames: silenceFrames, isSilence: true)
         }
         // Uniform prime edge, made exception-safe: the silence stays scheduled
