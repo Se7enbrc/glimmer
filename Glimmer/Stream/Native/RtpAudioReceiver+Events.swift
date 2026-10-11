@@ -96,23 +96,30 @@ extension RtpAudioReceiver {
         DispatchQueue.global(qos: .utility).asyncAfter(
             deadline: .now() + (due - elapsed)
         ) { [weak self] in
-            guard let self, !self.interrupted.isSet, !self.firstRtpReceived.isSet else { return }
-            let pings = self.pingsSent.load()
-            if due == Self.audioPendingProbeSeconds {
-                Diag.warn("NativeAudio no audio RTP \(Int(due))s after "
-                    + "receive start (\(pings) pings sent - ping loop alive; host hasn't aimed audio "
-                    + "at us yet; still retrying)", Self.cat)
-                self.emitAudioEvent([
-                    "\"event\":\"audio_pending\"",
-                    "\"after_ms\":\(Int(due * 1000))",
-                    "\"pings\":\(pings)"
-                ])
-            } else {
-                Diag.notice("NativeAudio still no audio RTP \(Int(due))s after receive start "
-                    + "(\(pings) pings sent - the host still hasn't sent audio; still retrying)", Self.cat)
-            }
+            guard let self, self.audioPendingProbeFired(due: due) else { return }
             self.armAudioPendingProbe(after: due)
         }
+    }
+
+    /// One probe at `due` seconds: report the silence, and say whether to re-arm (false once
+    /// audio arrived or the stream stopped). The timer's body; tests call it directly.
+    func audioPendingProbeFired(due: Double) -> Bool {
+        guard !interrupted.isSet, !firstRtpReceived.isSet else { return false }
+        let pings = pingsSent.load()
+        if due == Self.audioPendingProbeSeconds {
+            Diag.warn("NativeAudio no audio RTP \(Int(due))s after "
+                + "receive start (\(pings) pings sent - ping loop alive; host hasn't aimed audio "
+                + "at us yet; still retrying)", Self.cat)
+            emitAudioEvent([
+                "\"event\":\"audio_pending\"",
+                "\"after_ms\":\(Int(due * 1000))",
+                "\"pings\":\(pings)"
+            ])
+        } else {
+            Diag.notice("NativeAudio still no audio RTP \(Int(due))s after receive start "
+                + "(\(pings) pings sent - the host still hasn't sent audio; still retrying)", Self.cat)
+        }
+        return true
     }
 
     /// EVENT carrier, two sinks like the exporter's bookmark events (NOTICE line

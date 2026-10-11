@@ -106,8 +106,15 @@ final class InputBatcher: @unchecked Sendable {
     /// 32-slot scan - when the host never enabled motion (zero-overhead-off).
     private var motionDirtyCount = 0
 
-    init(enet: EnetControlChannel) {
+    /// Queue-to-wire stamps and the latency tracker, injectable so tests can script both.
+    private let now: @Sendable () -> DispatchTime
+    private let tracker: @Sendable () -> FrameTimingTracker?
+
+    init(enet: EnetControlChannel, now: @escaping @Sendable () -> DispatchTime = { .now() },
+         tracker: @escaping @Sendable () -> FrameTimingTracker? = { FrameTimingTracker.shared }) {
         self.enet = enet
+        self.now = now
+        self.tracker = tracker
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.setEventHandler { [weak self] in self?.flushTimerFired() }
         self.timer = timer
@@ -137,8 +144,8 @@ final class InputBatcher: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self else { return }
             // Send the earlier absolute position before relative motion can move from it.
-            if self.absMouseDirty { self.flushAbsoluteMouse(tracker: FrameTimingTracker.shared) }
-            if !self.relMouseDirty { self.relMouseStamp = DispatchTime.now() }
+            if self.absMouseDirty { self.flushAbsoluteMouse(tracker: self.tracker()) }
+            if !self.relMouseDirty { self.relMouseStamp = self.now() }
             self.relMouseDX += Int(dx)
             self.relMouseDY += Int(dy)
             self.relMouseDirty = true
@@ -155,10 +162,10 @@ final class InputBatcher: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self else { return }
             // Send the earlier relative motion before an absolute grab overwrites it.
-            if self.relMouseDirty { self.flushRelativeMouse(tracker: FrameTimingTracker.shared) }
+            if self.relMouseDirty { self.flushRelativeMouse(tracker: self.tracker()) }
             // Latest-only: keep the oldest stamp (set on the clean→dirty edge);
             // a superseding sample discards its own newer stamp.
-            if !self.absMouseDirty { self.absMouseStamp = DispatchTime.now() }
+            if !self.absMouseDirty { self.absMouseStamp = self.now() }
             self.absMouseX = x
             self.absMouseY = y
             self.absMouseRefW = refW
@@ -188,11 +195,11 @@ final class InputBatcher: @unchecked Sendable {
             if self.controllers[slot].dirty,
                self.controllers[slot].buttons != safeButtons {
                 // Button-flag change ends the batch: emit the pending slot first.
-                self.flushController(slot, tracker: FrameTimingTracker.shared)
+                self.flushController(slot, tracker: self.tracker())
             }
             // Stamp the oldest unflushed state per slot (clean→dirty edge) with its
             // deliver leg; a superseding update in the same batch keeps both.
-            let stampNow = DispatchTime.now()
+            let stampNow = self.now()
             let deliverMs = self.observeInputDeliverAge(slot: slot, enqueued: stampNow)
             if !self.controllers[slot].dirty {
                 self.controllers[slot].stamp = stampNow
@@ -245,7 +252,7 @@ final class InputBatcher: @unchecked Sendable {
             if !self.motionStates[idx].dirty {
                 self.motionStates[idx].dirty = true
                 self.motionDirtyCount += 1
-                self.motionStates[idx].stamp = DispatchTime.now()  // oldest-unflushed
+                self.motionStates[idx].stamp = self.now()  // oldest-unflushed
             }
             self.motionStates[idx].x = x
             self.motionStates[idx].y = y
@@ -353,8 +360,8 @@ final class InputBatcher: @unchecked Sendable {
         // slot. Tracker is nil when telemetry is off (gate), so it's one optional
         // load + (when on) two local DispatchTime reads + a subtract - no behavior
         // change. Both clocks local (host/present-clock independent).
-        let latencyTracker = FrameTimingTracker.shared
-        let drainNow = latencyTracker != nil ? DispatchTime.now() : nil
+        let latencyTracker = tracker()
+        let drainNow = latencyTracker != nil ? now() : nil
 
         // (1)+(2) Mouse: relative and absolute are never dirty together, because a
         //     switch between them drains the other kind first.
@@ -450,7 +457,7 @@ final class InputBatcher: @unchecked Sendable {
     /// stale with telemetry off; off the GameController path the take returns 0.
     private func observeInputDeliverAge(slot: Int, enqueued: DispatchTime) -> Double {
         let entry = InputDeliverStamp.shared.take(slot: slot)
-        guard let tracker = FrameTimingTracker.shared,
+        guard let tracker = self.tracker(),
               entry != 0, enqueued.uptimeNanoseconds >= entry else { return 0 }
         let deliverMs = Double(enqueued.uptimeNanoseconds &- entry) / 1_000_000.0
         tracker.inputDeliverLatency.observe(deliverMs)
@@ -461,7 +468,7 @@ final class InputBatcher: @unchecked Sendable {
     /// clock. `fields` is only built when telemetry is on (the tracker is nil off).
     private func trace(_ tracker: FrameTimingTracker?, _ fields: @autoclosure () -> String) {
         guard let tracker else { return }
-        let nowMs = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0
+        let nowMs = Double(now().uptimeNanoseconds) / 1_000_000.0
         tracker.traceWriter.append(
             "{\"session\":\"\(tracker.sessionId)\",\(fields()),\"t_ms\":\(TelemetryRenderer.jsonNumber(nowMs))}")
     }
@@ -496,7 +503,7 @@ final class InputBatcher: @unchecked Sendable {
                 channel: Enet.ctrlChannelMouse)
         }
         relMouseDirty = false
-        observeInputAge(from: relMouseStamp, to: tracker != nil ? DispatchTime.now() : nil,
+        observeInputAge(from: relMouseStamp, to: tracker != nil ? now() : nil,
                         tracker: tracker, deliverMs: 0)
         trace(tracker, "\"event\":\"input_mouse\",\"dx\":\(dx),\"dy\":\(dy)")
     }
@@ -510,7 +517,7 @@ final class InputBatcher: @unchecked Sendable {
                                        refW: absMouseRefW, refH: absMouseRefH),
             channel: Enet.ctrlChannelMouse)
         absMouseDirty = false
-        observeInputAge(from: absMouseStamp, to: tracker != nil ? DispatchTime.now() : nil,
+        observeInputAge(from: absMouseStamp, to: tracker != nil ? now() : nil,
                         tracker: tracker, deliverMs: 0)
         trace(tracker, "\"event\":\"input_mouse_abs\",\"x\":\(absMouseX),\"y\":\(absMouseY)")
     }
@@ -526,7 +533,7 @@ final class InputBatcher: @unchecked Sendable {
             InputEncoder.multiController(num: pending.num, mask: pending.mask,
                                         buttons: pending.buttons, analog: pending.analog),
             channel: Enet.ctrlChannelGamepadBase &+ UInt8(slot))
-        observeInputAge(from: pending.stamp, to: tracker != nil ? DispatchTime.now() : nil,
+        observeInputAge(from: pending.stamp, to: tracker != nil ? now() : nil,
                         tracker: tracker, deliverMs: pending.deliverMs)
         trace(tracker, "\"event\":\"input_pad\",\"slot\":\(slot),\"buttons\":\(pending.buttons),"
             + "\"lx\":\(analog.leftStickX),\"ly\":\(analog.leftStickY),\"rx\":\(analog.rightStickX),"

@@ -26,7 +26,7 @@ extension FrameTimingTracker {
         var total = 0.0
         var haveAny = false
         if hostEncodeMs > 0 { total += hostEncodeMs; haveAny = true }
-        let rtt = TelemetryCounters.shared.rttMs
+        let rtt = counters.rttMs
         if rtt > 0 { total += rtt / 2.0; haveAny = true }
         if let pipelineMs { total += pipelineMs; haveAny = true }
         return haveAny ? total : nil
@@ -37,7 +37,7 @@ extension FrameTimingTracker {
     /// input. The host doesn't mark which frame reflects an input.
     func computeInputToPhoton(presentNanos: UInt64, glassToGlassMs: Double?,
                               hostFrameIntervalMs: Double) -> Double? {
-        guard let lastInputNanos = TelemetryCounters.shared.lastInputNanos else { return nil }
+        guard let lastInputNanos = counters.lastInputNanos else { return nil }
         guard presentNanos > lastInputNanos else { return nil }
         // Consume-once gate on the lock this present path already takes for
         // the warmup/resume tags - one extra compare+store, gate-on only.
@@ -49,7 +49,7 @@ extension FrameTimingTracker {
         guard !alreadyConsumed, let glassToGlassMs else { return nil }
         return Self.composeInputToPhoton(
             glassToGlassMs: glassToGlassMs, clientLegsMs: clientLegsMs,
-            rttMs: TelemetryCounters.shared.rttMs, hostFrameIntervalMs: hostFrameIntervalMs)
+            rttMs: counters.rttMs, hostFrameIntervalMs: hostFrameIntervalMs)
     }
 
     /// The input round trip: client legs (deliver + queue→wire), uplink ~RTT/2, the

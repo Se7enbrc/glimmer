@@ -19,7 +19,7 @@ extension StreamSession {
             EnvSignalController.shared.beginSession()
             self.prevMetricTotalTicks = 0
             self.prevMetricTotalReleases = 0
-            self.prevMetricTime = CFAbsoluteTimeGetCurrent()
+            self.prevMetricTime = clock.absolute()
             self.lastPresentMetricNoticeTime = self.prevMetricTime
             let timer = Timer.scheduledTimer(
                 withTimeInterval: 2.0, repeats: true
@@ -44,8 +44,8 @@ extension StreamSession {
     }
 
     @MainActor
-    private func emitPresentMetric(dec: VideoDecoder) {
-        let now = CFAbsoluteTimeGetCurrent()
+    func emitPresentMetric(dec: VideoDecoder) {
+        let now = clock.absolute()
         let decodeIdle = dec.secondsSinceLastDecodedFrame()
         // Only emit once frames have started flowing, so a quiet handshake
         // window doesn't spam the log.

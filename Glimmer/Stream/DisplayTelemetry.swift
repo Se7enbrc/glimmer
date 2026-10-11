@@ -98,14 +98,17 @@ final class DisplayTelemetry: @unchecked Sendable {
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 1.0, repeating: 1.0, leeway: .milliseconds(200))
         timer.setEventHandler { [weak self] in
-            guard let self else { return }
-            MainActor.assumeIsolated {
-                guard let sample = self.probe() else { return }
-                self.accumulate(sample)
-            }
+            MainActor.assumeIsolated { self?.sampleTick() }
         }
         samplerTimer = timer
         timer.resume()
+    }
+
+    /// One sampler tick: probe the display and fold it in. The timer's body; tests call it directly.
+    @MainActor
+    func sampleTick() {
+        guard let sample = probe() else { return }
+        accumulate(sample)
     }
 
     /// Stop the sampler. Synchronous teardown semantics (cancel is immediate).
