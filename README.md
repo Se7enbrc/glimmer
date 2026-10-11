@@ -10,7 +10,7 @@
   <a href="https://se7enbrc.github.io/glimmer/">Website</a> ·
   <a href="https://github.com/Se7enbrc/glimmer/releases/latest">Download for Mac</a> ·
   <a href="#install">Homebrew</a> ·
-  <a href="https://ugfugl-io.gitbook.io/ugfugl.io-docs/">Docs</a> ·
+  <a href="https://ugfugl-io.gitbook.io/docs/">Docs</a> ·
   <a href="docs/SHORTCUTS.md">Shortcuts</a> ·
   <a href=".github/SUPPORT.md">Get help</a>
 </p>
@@ -69,7 +69,7 @@ download and audio tips.
 
 ## Documentation
 
-Read them on the [documentation site](https://ugfugl-io.gitbook.io/ugfugl.io-docs/), or right here in `docs/`.
+Read them on the [documentation site](https://ugfugl-io.gitbook.io/docs/), or right here in `docs/`.
 
 | Guide                                      | What's in it                                             |
 | ------------------------------------------ | -------------------------------------------------------- |
