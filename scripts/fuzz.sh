@@ -22,7 +22,7 @@ sources() {
         video) echo "$NATIVE/RtpVideoQueue*.swift $NATIVE/VideoDepacketizer*.swift $NATIVE/ReedSolomon.swift" \
             "Glimmer/Stream/StreamingBackend.swift Glimmer/Stream/StreamProtocolConstants.swift" ;;
         audio) echo "$NATIVE/RtpAudioQueue*.swift $NATIVE/AudioFecDecoder.swift $NATIVE/ReedSolomon.swift" ;;
-        fec) echo "$NATIVE/AudioFecDecoder.swift $NATIVE/ReedSolomon.swift" ;;
+        fec) echo "$NATIVE/AudioFecDecoder.swift $NATIVE/RtpAudioQueue*.swift $NATIVE/ReedSolomon.swift" ;;
         opus) echo "Glimmer/Stream/OpusDecoder+Packet.swift" ;;
     esac
 }
