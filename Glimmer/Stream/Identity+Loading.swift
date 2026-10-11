@@ -23,8 +23,6 @@ extension IdentityManager {
     func load() throws -> Identity {
         if let cached { return cached }
 
-        let defaults = UserDefaults.standard
-
         // -----------------------------------------------------------------
         // Step 1 - file-store fast path.
         // -----------------------------------------------------------------
@@ -170,7 +168,7 @@ extension IdentityManager {
     /// the moonlight-qt UserDefaults suite. Returns nil when the suite is
     /// unreadable or doesn't carry a usable cert+key pair.
     private func adoptMoonlightQtIdentity(currentID: String?) throws -> AdoptedQtIdentity? {
-        guard let moonlight = UserDefaults(suiteName: Self.moonlightQtSuiteName),
+        guard let moonlight = UserDefaults(suiteName: moonlightQtSuite),
               let adopted = try Self.adoptedIdentity(fromMoonlightQt: moonlight,
                                                  currentID: currentID) else {
             return nil
@@ -214,19 +212,19 @@ extension IdentityManager {
     /// IO errors throw so a real read failure surfaces instead of silently
     /// triggering a destructive regen.
     func loadFromFileStore() throws -> Identity? {
-        guard let certData = try FileIdentityStore.read(account: Self.accountCert),
+        guard let certData = try FileIdentityStore.read(account: Self.accountCert, base: supportBase),
               let certPEM = String(data: certData, encoding: .utf8),
               !certPEM.isEmpty else {
             return nil
         }
-        guard let keyData = try FileIdentityStore.read(account: Self.accountKey),
+        guard let keyData = try FileIdentityStore.read(account: Self.accountKey, base: supportBase),
               let keyPEM = String(data: keyData, encoding: .utf8),
               !keyPEM.isEmpty else {
             return nil
         }
         _ = try PEM.identity(certPEM: certPEM, keyPEM: keyPEM)
         let uid: String
-        if let uidData = try FileIdentityStore.read(account: Self.accountUID),
+        if let uidData = try FileIdentityStore.read(account: Self.accountUID, base: supportBase),
            let stored = String(data: uidData, encoding: .utf8)?
                     .trimmingCharacters(in: .whitespacesAndNewlines),
            !stored.isEmpty {
@@ -239,7 +237,7 @@ extension IdentityManager {
             // us in this state.
             uid = try generateUniqueID()
             let uidBytes = Data(uid.utf8)
-            try FileIdentityStore.write(uidBytes, account: Self.accountUID)
+            try FileIdentityStore.write(uidBytes, account: Self.accountUID, base: supportBase)
             log.info("File store missing uniqueID - synthesised and wrote a fresh one")
         }
         return Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
@@ -251,11 +249,11 @@ extension IdentityManager {
     func writeIdentityToFileStore(_ identity: Identity) throws {
         _ = try PEM.identity(certPEM: identity.certPEM, keyPEM: identity.keyPEM)
         try FileIdentityStore.write(Data(identity.certPEM.utf8),
-                                    account: Self.accountCert)
+                                    account: Self.accountCert, base: supportBase)
         try FileIdentityStore.write(Data(identity.keyPEM.utf8),
-                                    account: Self.accountKey)
+                                    account: Self.accountKey, base: supportBase)
         try FileIdentityStore.write(Data(identity.uniqueID.utf8),
-                                    account: Self.accountUID)
+                                    account: Self.accountUID, base: supportBase)
     }
 
     // MARK: Legacy keychain (read-only migration source)
@@ -285,7 +283,7 @@ extension IdentityManager {
     func readLegacyKeychainString(account: String) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.legacyKeychainService,
+            kSecAttrService as String: keychainService,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
@@ -314,7 +312,7 @@ extension IdentityManager {
         for account in [Self.accountCert, Self.accountKey, Self.accountUID] {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: Self.legacyKeychainService,
+                kSecAttrService as String: keychainService,
                 kSecAttrAccount as String: account,
                 kSecMatchLimit as String: kSecMatchLimitAll
             ]
@@ -328,7 +326,6 @@ extension IdentityManager {
     /// wiped too - once we're in file-store mode the only authoritative copy
     /// lives on disk. Idempotent: removing missing keys is a no-op.
     func wipeUserDefaultsPlaintext() {
-        let defaults = UserDefaults.standard
         defaults.removeObject(forKey: IdentityKey.certificate)
         defaults.removeObject(forKey: IdentityKey.privateKey)
         defaults.removeObject(forKey: IdentityKey.uniqueID)

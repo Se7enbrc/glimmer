@@ -24,15 +24,15 @@ extension AppModel {
 
     /// A positive `Int`, or nil when the key is absent (`integer(forKey:)`
     /// returns 0) or non-positive.
-    static func persistedPositiveInt(_ key: String) -> Int? {
-        let value = UserDefaults.standard.integer(forKey: key)
+    static func persistedPositiveInt(_ key: String, defaults: UserDefaults = .standard) -> Int? {
+        let value = defaults.integer(forKey: key)
         return value > 0 ? value : nil
     }
 
     /// A `Bool`, or nil when the key was never written (so the default holds).
-    static func persistedBool(_ key: String) -> Bool? {
-        guard UserDefaults.standard.object(forKey: key) != nil else { return nil }
-        return UserDefaults.standard.bool(forKey: key)
+    static func persistedBool(_ key: String, defaults: UserDefaults = .standard) -> Bool? {
+        guard defaults.object(forKey: key) != nil else { return nil }
+        return defaults.bool(forKey: key)
     }
 
     /// The persisted quality preset, with the presets dropped in the rework
@@ -45,26 +45,27 @@ extension AppModel {
     /// differs from what was on disk, so a legacy string is rewritten exactly
     /// once and every later launch takes the plain decode path. Idempotent -
     /// re-running over an already-migrated key writes nothing.
-    static func persistedQualityPreset() -> QualityPreset? {
-        guard let raw = UserDefaults.standard.string(forKey: "qualityPreset") else { return nil }
+    static func persistedQualityPreset(defaults: UserDefaults = .standard) -> QualityPreset? {
+        guard let raw = defaults.string(forKey: "qualityPreset") else { return nil }
         let preset = QualityPreset.migrated(fromPersistedRawValue: raw)
         if raw != preset.rawValue {
-            UserDefaults.standard.set(preset.rawValue, forKey: "qualityPreset")
+            defaults.set(preset.rawValue, forKey: "qualityPreset")
         }
         return preset
     }
 
     /// Decode a string-backed `RawRepresentable` from its persisted raw value.
     static func persistedRawValue<T: RawRepresentable>(
-        _ key: String, _ type: T.Type
+        _ key: String, _ type: T.Type, defaults: UserDefaults = .standard
     ) -> T? where T.RawValue == String {
-        guard let raw = UserDefaults.standard.string(forKey: key) else { return nil }
+        guard let raw = defaults.string(forKey: key) else { return nil }
         return T(rawValue: raw)
     }
 
     /// JSON-decode a `Codable` from its persisted data blob.
-    static func persistedDecoded<T: Decodable>(_ key: String, _ type: T.Type) -> T? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+    static func persistedDecoded<T: Decodable>(
+        _ key: String, _ type: T.Type, defaults: UserDefaults = .standard) -> T? {
+        guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }
 
@@ -86,8 +87,8 @@ extension AppModel {
 
     /// Decode the persisted stats-overlay custom-row set, or nil when the key is
     /// absent or decodes to an empty set (so the default initial set holds).
-    static func persistedCustomRows() -> Set<StatsRow.Kind>? {
-        guard let raw = UserDefaults.standard.array(forKey: "statsOverlayCustomRows") as? [String] else {
+    static func persistedCustomRows(defaults: UserDefaults = .standard) -> Set<StatsRow.Kind>? {
+        guard let raw = defaults.array(forKey: "statsOverlayCustomRows") as? [String] else {
             return nil
         }
         let decoded = raw.compactMap(StatsRow.Kind.init(rawValue:))

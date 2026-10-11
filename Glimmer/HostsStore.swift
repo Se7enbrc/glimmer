@@ -28,21 +28,21 @@ extension AppModel {
     /// The moonlight-qt install does not have to be present - we're just
     /// reading a plist that may or may not exist. Safe to call on every
     /// launch; the flag short-circuits after the first successful pass.
-    func migrateFromMoonlightQtIfNeeded() {
+    func migrateFromMoonlightQtIfNeeded(defaults: UserDefaults = .standard,
+                                        moonlightSuite: String = IdentityManager.moonlightQtSuiteName) {
         let flagKey = "glimmer.hostsMigratedFromMoonlightQt"
-        guard !UserDefaults.standard.bool(forKey: flagKey) else { return }
+        guard !defaults.bool(forKey: flagKey) else { return }
 
-        guard let mq = UserDefaults(suiteName: "com.moonlight-stream.Moonlight") else {
-            UserDefaults.standard.set(true, forKey: flagKey)
+        guard let mq = UserDefaults(suiteName: moonlightSuite) else {
+            defaults.set(true, forKey: flagKey)
             return
         }
         let count = mq.integer(forKey: "hosts.size")
         guard count > 0 else {
-            UserDefaults.standard.set(true, forKey: flagKey)
+            defaults.set(true, forKey: flagKey)
             return
         }
 
-        let defaults = UserDefaults.standard
         defaults.set(count, forKey: "hosts.size")
         for i in 1...count {
             func copy(_ key: String) {
@@ -174,25 +174,23 @@ extension AppModel {
         return 0
     }
 
-    func setWakeOnLAN(_ host: Host, enabled: Bool) {
-        let defaults = UserDefaults.standard
+    func setWakeOnLAN(_ host: Host, enabled: Bool, defaults: UserDefaults = .standard) {
         let slot = Self.hostSlot(for: host.id, defaults: defaults)
         guard slot > 0 else { return }
         defaults.set(enabled, forKey: "hosts.\(slot).wol")
-        loadHosts()
+        loadHosts(defaults: defaults)
     }
 
     /// Backfill/refresh a host's MAC from a successful /serverinfo. Zeroed or
     /// empty MACs are rejected so a bad refresh never clobbers a real one.
-    func updateHostMac(hostID: String, mac: String?) {
+    func updateHostMac(hostID: String, mac: String?, defaults: UserDefaults = .standard) {
         guard let normalized = WakeOnLAN.normalizeMac(mac) else { return }
-        let defaults = UserDefaults.standard
         let slot = Self.hostSlot(for: hostID, defaults: defaults)
         guard slot > 0 else { return }
         let key = "hosts.\(slot).mac"
         guard defaults.string(forKey: key) != normalized else { return }
         defaults.set(normalized, forKey: key)
-        loadHosts()
+        loadHosts(defaults: defaults)
     }
 
     /// Set (or clear) a user-facing custom name for a host. Persists into the
@@ -200,9 +198,8 @@ extension AppModel {
     /// matching the moonlight-qt schema. An empty/whitespace name clears the
     /// override (the tile falls back to the real hostname). Keyed by UUID like
     /// `unpair`, since hostname can differ from displayName for renamed hosts.
-    func renameHost(_ host: Host, to newName: String) {
+    func renameHost(_ host: Host, to newName: String, defaults: UserDefaults = .standard) {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let defaults = UserDefaults.standard
         let count = defaults.integer(forKey: "hosts.size")
         guard count > 0 else { return }
         var matchIndex: Int?
@@ -228,17 +225,19 @@ extension AppModel {
             defaults.set(true, forKey: "\(prefix).customname")
             defaults.set(trimmed, forKey: "\(prefix).name")
         }
-        loadHosts()
+        loadHosts(defaults: defaults)
     }
 
     /// Persists a freshly paired PC into the `hosts.N.*` schema `loadHosts` reads, reusing
     /// its slot on a re-pair and appending one otherwise. `apps` come from /applist.
     func saveHost(uuid: String, hostname: String, address: String,
                   serverCertPEM: String?, appVersion: String?,
-                  apps: [PairedApp], macAddress: String? = nil) throws {
+                  apps: [PairedApp], macAddress: String? = nil,
+                  defaults: UserDefaults = .standard, supportBase: URL? = nil) throws {
         // Commit the file pin first so a failed write cannot leave a conflicting hint.
-        if let pem = serverCertPEM { try PinnedCertStore.store(pem: pem, forHostID: uuid) }
-        let defaults = UserDefaults.standard
+        if let pem = serverCertPEM {
+            try PinnedCertStore.store(pem: pem, forHostID: uuid, defaults: defaults, base: supportBase)
+        }
         let prefix = "hosts.\(saveSlot(for: uuid, defaults: defaults))"
         defaults.set(hostname, forKey: "\(prefix).hostname")
         defaults.set(uuid, forKey: "\(prefix).uuid")
@@ -258,7 +257,7 @@ extension AppModel {
 
         Self.writeApps(apps, prefix: prefix, defaults: defaults)
 
-        loadHosts()
+        loadHosts(defaults: defaults)
     }
 
     /// Resolve the `hosts.N` slot `saveHost` should write into: the slot that
@@ -412,15 +411,15 @@ extension AppModel {
         guard !Task.isCancelled, !hostPolling.systemSleeping, result == .unreachable,
               Self.storeAddress(moved, hostID: host.id, in: defaults) else { return false }
         Diag.notice("\(host.displayName, privacy: .private) answered at a new network address; saved it", "Host")
-        loadHosts()
+        loadHosts(defaults: defaults)
         return true
     }
 
-    func selectHost(_ host: Host) {
+    func selectHost(_ host: Host, defaults: UserDefaults = .standard) {
         guard !isStreaming else { return }
         // A prior PC's red banner would name the wrong machine after a switch.
         nativeStreamError = nil
-        UserDefaults.standard.set(host.id, forKey: "glimmer.selectedHostID")
+        defaults.set(host.id, forKey: "glimmer.selectedHostID")
         selectedHost = host
     }
 
@@ -454,14 +453,13 @@ extension AppModel {
     /// duplicated, or corrupt record (e.g. left over from the namespace
     /// migration) still ends up gone. Safe to call repeatedly; a no-op once the
     /// host is already clean.
-    func unpair(_ host: Host) {
-        let defaults = UserDefaults.standard
+    func unpair(_ host: Host, defaults: UserDefaults = .standard, supportBase: URL? = nil) {
 
         // --- Unconditional, id-keyed cleanup (runs even if no slot matches) ---
         // File-store + legacy UserDefaults pinned cert.
-        PinnedCertStore.delete(forHostID: host.id)
+        PinnedCertStore.delete(forHostID: host.id, defaults: defaults, base: supportBase)
         defaults.removeObject(forKey: "glimmer.lastConnected.\(host.id)")
-        HostCodecPreference.forget(hostID: host.id)
+        HostCodecPreference.forget(hostID: host.id, defaults: defaults)
         if defaults.string(forKey: "glimmer.selectedHostID") == host.id {
             defaults.removeObject(forKey: "glimmer.selectedHostID")
         }
@@ -496,6 +494,6 @@ extension AppModel {
             }
         }
 
-        loadHosts()
+        loadHosts(defaults: defaults)
     }
 }
