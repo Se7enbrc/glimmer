@@ -486,6 +486,13 @@
 		D0C520261009000000000003 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = D0C520261009000000000000 /* LICENSE */; };
 		D0C520261009000000000004 /* CREDITS.md in Resources */ = {isa = PBXBuildFile; fileRef = D0C520261009000000000001 /* CREDITS.md */; };
 		D0C520261009000000000005 /* ThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = D0C520261009000000000002 /* ThirdPartyNotices.txt */; };
+		AC2026101100000000000000A /* LauncherStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026101100000000000000B /* LauncherStyle.swift */; };
+		AC2026101100000000000001A /* LauncherArtCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026101100000000000001B /* LauncherArtCache.swift */; };
+		AC2026101100000000000002A /* LauncherNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026101100000000000002B /* LauncherNavigation.swift */; };
+		AC2026101100000000000003A /* LauncherController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026101100000000000003B /* LauncherController.swift */; };
+		AC2026101100000000000004A /* ContentView+Covers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026101100000000000004B /* ContentView+Covers.swift */; };
+		AC2026101100000000000005A /* LauncherExperienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026101100000000000005B /* LauncherExperienceTests.swift */; };
+		AC202610120000000000000A /* PairSheet+Launcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC202610120000000000000B /* PairSheet+Launcher.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1003,6 +1010,13 @@
 		D0C520261009000000000000 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE"; sourceTree = SOURCE_ROOT; };
 		D0C520261009000000000001 /* CREDITS.md */ = {isa = PBXFileReference; lastKnownFileType = text; path = "CREDITS.md"; sourceTree = SOURCE_ROOT; };
 		D0C520261009000000000002 /* ThirdPartyNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Glimmer/ThirdPartyNotices.txt"; sourceTree = SOURCE_ROOT; };
+		AC2026101100000000000000B /* LauncherStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherStyle.swift"; sourceTree = "<group>"; };
+		AC2026101100000000000001B /* LauncherArtCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherArtCache.swift"; sourceTree = "<group>"; };
+		AC2026101100000000000002B /* LauncherNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherNavigation.swift"; sourceTree = "<group>"; };
+		AC2026101100000000000003B /* LauncherController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherController.swift"; sourceTree = "<group>"; };
+		AC2026101100000000000004B /* ContentView+Covers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Covers.swift"; sourceTree = "<group>"; };
+		AC2026101100000000000005B /* LauncherExperienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherExperienceTests.swift"; sourceTree = "<group>"; };
+		AC202610120000000000000B /* PairSheet+Launcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairSheet+Launcher.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1101,6 +1115,12 @@
 				A100014B /* LogViewerView.swift */,
 				A100015B /* AppModel+Audio.swift */,
 				A100016B /* ContentViewSubviews.swift */,
+				AC2026101100000000000004B /* ContentView+Covers.swift */,
+				AC2026101100000000000003B /* LauncherController.swift */,
+				AC2026101100000000000002B /* LauncherNavigation.swift */,
+				AC2026101100000000000001B /* LauncherArtCache.swift */,
+				AC202610120000000000000B /* PairSheet+Launcher.swift */,
+				AC2026101100000000000000B /* LauncherStyle.swift */,
 				DEC0DE01000000000000000B /* ContentView+Menus.swift */,
 				DEC0DE02000000000000000B /* ContentView+ReadinessChip.swift */,
 				DEC0DE04000000000000000B /* ContentView+StreamButton.swift */,
@@ -1542,6 +1562,7 @@
 				A41BFF01D15C4000ABCDEF01 /* DisconnectRegressionTests.swift */,
 				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE202609232100000004 /* LauncherWindowTests.swift */,
+				AC2026101100000000000005B /* LauncherExperienceTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
 				DEC0DE20261010D5E0000002 /* DualSenseOutputReportTests.swift */,
 				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
@@ -1725,6 +1746,12 @@
 				A100014A /* LogViewerView.swift in Sources */,
 				A100015A /* AppModel+Audio.swift in Sources */,
 				A100016A /* ContentViewSubviews.swift in Sources */,
+				AC2026101100000000000004A /* ContentView+Covers.swift in Sources */,
+				AC2026101100000000000003A /* LauncherController.swift in Sources */,
+				AC2026101100000000000002A /* LauncherNavigation.swift in Sources */,
+				AC2026101100000000000001A /* LauncherArtCache.swift in Sources */,
+				AC202610120000000000000A /* PairSheet+Launcher.swift in Sources */,
+				AC2026101100000000000000A /* LauncherStyle.swift in Sources */,
 				DEC0DE01000000000000000A /* ContentView+Menus.swift in Sources */,
 				DEC0DE02000000000000000A /* ContentView+ReadinessChip.swift in Sources */,
 				DEC0DE04000000000000000A /* ContentView+StreamButton.swift in Sources */,
@@ -2156,6 +2183,7 @@
 				A41BFF01D15C4000ABCDEF02 /* DisconnectRegressionTests.swift in Sources */,
 				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */,
+				AC2026101100000000000005A /* LauncherExperienceTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
 				DEC0DE20261010D5E0000001 /* DualSenseOutputReportTests.swift in Sources */,
 				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,

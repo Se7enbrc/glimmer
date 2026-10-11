@@ -20,6 +20,12 @@
   Y by their labels for all Nintendo-layout controllers. Single Joy-Con sides
   keep their positional layout.
 
+- Choose Buttons or Covers for each PC when pairing, or in Settings › PCs next
+  to Codec. Existing PCs keep Buttons.
+- Use a controller to choose apps and switch PCs in the launcher. The d-pad or
+  left stick moves focus, A or Cross opens the selection, and B or Circle
+  dismisses a dialog. Raw-HID-only controllers don't navigate the launcher yet.
+
 ### Bug fixes
 
 - Stream diagnostics no longer count packets that arrive late from an earlier

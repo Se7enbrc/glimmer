@@ -48,7 +48,11 @@ final class AppModel {
     var selectedHost: Host? { didSet { selectionChanged(from: oldValue) } }
 
     // Stream lifecycle
-    var isStreaming = false
+    var isStreaming = false {
+        didSet { launcherController.streamingChanged(isStreaming) }
+    }
+    @ObservationIgnored let launcherController = LauncherController()
+    @ObservationIgnored lazy var launcherArtCache = LauncherArtCache(base: supportBase)
     /// Active native session, retained while streaming.
     @ObservationIgnored var nativeSession: StreamSession?
     /// A command-line launch waiting for its route, before a session exists.

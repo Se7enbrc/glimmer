@@ -249,6 +249,16 @@ extension NetworkClient {
         }
     }
 
+    enum AssetError: Error { case missing }
+
+    // moonlight-qt app/backend/nvhttp.cpp, NvHTTP::getBoxArt; Sunshine src/nvhttp.cpp, appasset.
+    // Sunshine returns image bytes here, not the XML used by the other endpoints.
+    func appAsset(appID: Int) async throws -> Data {
+        try await dataRequest(path: "appasset",
+                              query: ["appid": String(appID), "AssetType": "2", "AssetIdx": "0"],
+                              usePaired: true, timeout: Self.controlTimeout)
+    }
+
     // MARK: - Endpoints: /launch and /resume
 
     public func launch(appID: Int, config: StreamConfig) async throws -> LaunchResponse {

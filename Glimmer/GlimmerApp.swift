@@ -115,7 +115,7 @@ struct GlimmerApp: App {
                 // 532pt content + 24pt margins per side = 580. This MUST equal the
                 // connect surface's real width (its .horizontal padding): a floor
                 // below it leaves the window a range to be dragged through.
-                .frame(minWidth: 580)
+                .frame(minWidth: LauncherLayout.windowWidth)
                 // Frosted Liquid Glass is the launcher's surface: see-through enough to show
                 // colour behind it, blurred enough that text behind turns to colour.
                 .containerBackground(for: .window) { Color.clear.glassEffect(.regular, in: .rect) }

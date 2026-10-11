@@ -66,6 +66,7 @@ struct StreamButton: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var isConnecting: Bool = false
+    var launcherFocus: FocusState<LauncherFocus?>.Binding?
 
     /// The success haptic belongs on the actual "we're live" beat - this flag
     /// gives sensoryFeedback a precise connectionEstablished edge, not a tap.
@@ -119,24 +120,26 @@ struct StreamButton: View {
         role == .connecting || role == .reconnecting || role == .waking
     }
 
+    private func activate() {
+        switch role {
+        case .noPC: break                                  // disabled - copy is the affordance
+        case .connect: model.streamHeroApp()
+        case .connecting: model.cancelConnect()        // the working exit from a stuck connect
+        case .reconnecting: model.stopStreamFromMenu(source: "the launcher")  // a live stream, so it stops
+        case .liveBackgrounded: model.resumeStreamWindow()
+        case .pairAgain: model.requestPairing(for: model.selectedHost)
+        case .wake:
+            if let host = model.selectedHost { model.wakeHost(host, thenConnect: true) }
+        case .waking:
+            // The working exit from a wake that is taking too long. Drops
+            // our wait only; the tile falls back to offline + Wake and a
+            // fresh Wake starts clean (see AppModel.cancelWake).
+            if let host = model.selectedHost { model.cancelWake(host) }
+        }
+    }
+
     var body: some View {
-        Button {
-            switch role {
-            case .noPC: break                                  // disabled - copy is the affordance
-            case .connect: model.streamHeroApp()
-            case .connecting: model.cancelConnect()        // the working exit from a stuck connect
-            case .reconnecting: model.stopStreamFromMenu(source: "the launcher")  // a live stream, so it stops
-            case .liveBackgrounded: model.resumeStreamWindow()
-            case .pairAgain: model.requestPairing(for: model.selectedHost)
-            case .wake:
-                if let host = model.selectedHost { model.wakeHost(host, thenConnect: true) }
-            case .waking:
-                // The working exit from a wake that is taking too long. Drops
-                // our wait only; the tile falls back to offline + Wake and a
-                // fresh Wake starts clean (see AppModel.cancelWake).
-                if let host = model.selectedHost { model.cancelWake(host) }
-            }
-        } label: {
+        Button(action: activate) {
             HStack(spacing: 10) {
                 switch role {
                 case .noPC:
@@ -217,6 +220,7 @@ struct StreamButton: View {
         // Custom style = the hero's accent gradient + glass + soft rim.
         // `.glassProminent` was too saturated; `.glass` near-neutral.
         .buttonStyle(StreamButtonStyle())
+        .modifier(LauncherStateFocus(focus: launcherFocus, activate: activate))
         // ENTER-TO-PLAY: Return fires the hero verb from anywhere in the
         // window (.disabled keeps it a no-op; sheets/alerts own Return while
         // up). The cancel roles bind ⎋ instead - Escape-to-cancel is
@@ -304,5 +308,18 @@ struct StreamButton: View {
         }
         if let selectedName { return "Connecting to \(selectedName)…" }
         return "Connecting…"
+    }
+}
+
+private struct LauncherStateFocus: ViewModifier {
+    let focus: FocusState<LauncherFocus?>.Binding?
+    let activate: () -> Void
+
+    func body(content: Content) -> some View {
+        if let focus {
+            content.modifier(LauncherControlFocus(focus: focus, target: .state, activate: activate))
+        } else {
+            content
+        }
     }
 }

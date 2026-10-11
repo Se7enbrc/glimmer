@@ -40,17 +40,20 @@ extension NetworkClient {
         return .pairingFailed("\(name) isn't paired with this Mac. Choose Pair Again… to keep streaming.")
     }
 
-    /// Workhorse. Builds the URL, attaches our uniqueid + a per-request UUID
-    /// (matches GFE's expectation that every request has a unique nonce),
-    /// optionally appends an unescaped query tail (for the backend's launch
-    /// params, which must NOT be URL-percent-encoded - they arrive already
-    /// encoded).
-    func rawRequest(path: String,
-                    query: [String: String],
-                    extraQuery: String?,
-                    usePaired: Bool,
-                    timeout: TimeInterval) async throws -> XMLNode {
+    func rawRequest(path: String, query: [String: String], extraQuery: String?,
+                    usePaired: Bool, timeout: TimeInterval) async throws -> XMLNode {
+        let data = try await dataRequest(path: path, query: query, extraQuery: extraQuery,
+                                         usePaired: usePaired, timeout: timeout)
+        do {
+            return try XMLTreeBuilder.parse(data: data)
+        } catch {
+            throw StreamError.launchFailed("Malformed XML on /\(path): \(error)")
+        }
+    }
 
+    /// Assets and XML use the same identity, pin, deadlines and bounded transport.
+    func dataRequest(path: String, query: [String: String], extraQuery: String? = nil,
+                     usePaired: Bool, timeout: TimeInterval) async throws -> Data {
         // SECURITY: TLS without a pin would hand /launch's input key to any
         // certificate. The pin only comes from a finished PIN handshake.
         if usePaired && server.serverCertPEM == nil { throw Self.notPaired(server.serverName) }
@@ -117,13 +120,10 @@ extension NetworkClient {
         // GameStream puts protocol errors in the body XML with HTTP 200, so a
         // non-2xx is transport-level breakage (e.g. a 401 from a reverse proxy).
         if !(200...299).contains(resp.status) {
+            if path == "appasset", resp.status == 404 { throw AssetError.missing }
             throw StreamError.launchFailed("HTTP \(resp.status) on /\(path)")
         }
-        do {
-            return try XMLTreeBuilder.parse(data: resp.body)
-        } catch {
-            throw StreamError.launchFailed("Malformed XML on /\(path): \(error)")
-        }
+        return resp.body
     }
 
     /// Without a request deadline (only /launch and a reconnect set one), a

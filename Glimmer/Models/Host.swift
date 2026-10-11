@@ -32,6 +32,7 @@ struct Host: Identifiable, Hashable {
 
     /// Per-PC "Wake on LAN": on by default; only matters when a MAC is known.
     var wakeOnLAN: Bool = true
+    var launcherStyle: LauncherStyle = .buttons
 
     var displayName: String { customName ?? name }
 

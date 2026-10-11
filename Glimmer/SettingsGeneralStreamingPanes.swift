@@ -1,17 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  SettingsGeneralStreamingPanes.swift
-//
-//  The General and Quality settings panes (+ their resolution/stats helpers),
-//  split out of SettingsView.swift. SettingsRoot composes them across files, so
-//  the pane types are internal. (Filename keeps the pane's pre-rename
-//  "Streaming" spelling - renaming the file means touching the pbxproj for
-//  zero behavioural gain.) `LoginItemManager`, the registration plumbing behind
-//  the General pane's launch toggles, lives in
-//  SettingsGeneralStreamingPanes+LoginItem.swift.
-//
+// General and Quality panes; login-item registration lives in the LoginItem extension.
 
 import AppKit
 import os

@@ -15,9 +15,10 @@ import SwiftUI
 struct AppIconsRow: View {
     let apps: [LibraryApp]
     let host: Host
+    let focus: FocusState<LauncherFocus?>.Binding
     /// The connect is on screen (past the 400 ms hold), so the app being launched shows it.
     var connectingShown = false
-    @Environment(AppModel.self) private var model
+    @Environment(AppModel.self) var model
 
     /// Two columns of large app buttons fill the window's width with two apps or
     /// four; past four the last cell is the overflow menu.
@@ -36,6 +37,21 @@ struct AppIconsRow: View {
     }
 
     var body: some View {
+        Group {
+            if model.launcherStyle == .covers { coverGrid } else { buttonGrid }
+        }
+        .preference(key: LauncherFocusCells.self, value: navigationCells)
+    }
+
+    private var navigationCells: [LauncherFocus] {
+        let visible = model.launcherStyle == .covers ? apps : inlineApps
+        var cells = visible.filter { !model.isStreaming || tileState($0) != .ready }
+            .map { LauncherFocus.app($0.id) }
+        if model.launcherStyle == .buttons, !overflowApps.isEmpty { cells.append(.overflow) }
+        return cells
+    }
+
+    private var buttonGrid: some View {
         // No GlassEffectContainer: it composites its glass above the app buttons' labels.
         LazyVGrid(columns: Self.columns, spacing: 10) {
             ForEach(inlineApps) { app in
@@ -132,23 +148,21 @@ struct AppIconsRow: View {
         .contentShape(Rectangle())
     }
 
-    private func appTile(_ app: LibraryApp) -> some View {
-        let state = Self.tileState(app, on: host, model: model, connectingShown: connectingShown)
-        return Button {
-            switch state {
-            case .ready: model.requestStream(app: app, on: host)
-            case .connecting: model.cancelConnect()
-            // A reconnect is a live stream, so its way out ends it rather than cancelling.
-            case .reconnecting: model.stopStreamFromMenu(source: "the launcher")
-            case .hiddenStream: model.resumeStreamWindow()
+    func appTile(_ app: LibraryApp, revision: String = "") -> some View {
+        let state = tileState(app)
+        return Button { activate(app) } label: {
+            if model.launcherStyle == .covers {
+                coverLabel(app, revision: revision, connecting: state == .connecting || state == .reconnecting,
+                           hiddenStream: state == .hiddenStream)
+            } else {
+                tileLabel(icon: app.icon, title: app.name, trailing: "play.fill",
+                          trailingText: state == .hiddenStream ? "Back to Stream"
+                            : (model.canResume(app, on: host) ? "Resume" : nil),
+                          launching: state == .connecting || state == .reconnecting)
             }
-        } label: {
-            tileLabel(icon: app.icon, title: app.name, trailing: "play.fill",
-                      trailingText: state == .hiddenStream ? "Back to Stream"
-                        : (model.canResume(app, on: host) ? "Resume" : nil),
-                      launching: state == .connecting || state == .reconnecting)
         }
-        .buttonStyle(AppTileStyle())
+        .buttonStyle(LauncherTileStyle(covers: model.launcherStyle == .covers))
+        .modifier(LauncherControlFocus(focus: focus, target: .app(app.id), activate: { activate(app) }))
         .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
         // Only the streaming app stays live while a stream exists; the others can't start one.
         .disabled(model.isStreaming && state == .ready)
@@ -156,10 +170,21 @@ struct AppIconsRow: View {
             ? "Finish the current stream first" : model.streamActionTitle(app, on: host)))
         // One name, not glyph + name + play glyph read in turn.
         .accessibilityLabel(app.name)
-        .accessibilityValue(model.canResume(app, on: host) ? "Running on \(host.displayName)" : state.spoken.value)
+        .accessibilityValue(model.canResume(app, on: host) ? "Running on \(host.displayName)"
+            : (state.spoken.value.isEmpty && isRunning(app) ? "Running" : state.spoken.value))
         .accessibilityHint(model.canResume(app, on: host) ? "Resumes the app" : state.spoken.hint)
         .contextMenu {
             if model.runningApp(on: host)?.id == app.id { QuitRunningAppButton(app: app, host: host) }
+        }
+    }
+
+    private func activate(_ app: LibraryApp) {
+        switch tileState(app) {
+        case .ready: model.requestStream(app: app, on: host)
+        case .connecting: model.cancelConnect()
+        // A reconnect is a live stream, so its way out ends it rather than cancelling.
+        case .reconnecting: model.stopStreamFromMenu(source: "the launcher")
+        case .hiddenStream: model.resumeStreamWindow()
         }
     }
 
@@ -183,6 +208,7 @@ struct AppIconsRow: View {
         } label: {
             tileLabel(icon: Image(systemName: "ellipsis"), title: "\(overflowApps.count) more", trailing: "chevron.down")
         }
+        .modifier(LauncherControlFocus(focus: focus, target: .overflow))
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         // Glass, not violet: it opens a list rather than streaming.
