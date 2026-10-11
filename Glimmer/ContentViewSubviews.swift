@@ -107,6 +107,10 @@ struct AppIconsRow: View {
         }
     }
 
+    func tileState(_ app: LibraryApp) -> TileState {
+        Self.tileState(app, on: host, model: model, connectingShown: connectingShown)
+    }
+
     /// A hidden stream wins, as the Stream button's roles do; a (re)connect shows once past the hold.
     static func tileState(_ app: LibraryApp, on host: Host, model: AppModel,
                           connectingShown: Bool) -> TileState {
