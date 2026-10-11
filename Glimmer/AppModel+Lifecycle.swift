@@ -162,6 +162,7 @@ extension AppModel {
             Task { @MainActor in
                 guard let self else { return }
                 self.controllerConnected = !GCController.controllers().isEmpty
+                self.launcherController.refresh()
                 self.maybeOfferRawHID()
             }
         })
@@ -173,6 +174,7 @@ extension AppModel {
             // hop to the next runloop tick so the registry reflects reality.
             Task { @MainActor in
                 self?.controllerConnected = !GCController.controllers().isEmpty
+                self?.launcherController.refresh()
             }
         })
         observeHostPollingSleep()

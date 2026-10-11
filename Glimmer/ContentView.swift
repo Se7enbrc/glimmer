@@ -19,6 +19,7 @@ enum TakeoverDialogCopy {
 struct MainWindow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
+    @FocusState private var launcherFocus: LauncherFocus?
     @State private var showAWDLPrompt = false
     @State private var awdlPromptChecked = false
     /// Lifted out of EmptyPairingState so the sheet survives the swap to
@@ -32,9 +33,15 @@ struct MainWindow: View {
             if model.hosts.isEmpty {
                 EmptyPairingState(showPair: $showPair)
             } else {
-                ConnectSurface()
+                ConnectSurface(focus: $launcherFocus)
             }
         }
+        .background {
+            LauncherControllerWindow(controller: model.launcherController, handle: navigateLauncher)
+                .frame(width: 0, height: 0)
+        }
+        .onChange(of: model.selectedHost?.id) { _, _ in launcherFocus = nil }
+        .onChange(of: model.launcherStyle) { _, _ in launcherFocus = nil }
         .onAppear { model.setHIDDiscovery(true, for: .launcher) }
         .onDisappear { model.setHIDDiscovery(false, for: .launcher) }
         .sheet(isPresented: $showPair) {
@@ -137,6 +144,36 @@ struct MainWindow: View {
         }
         .navigationTitle("Glimmer")
     }
+
+    private func navigateLauncher(_ command: LauncherCommand) {
+        guard !model.isStreaming else { return }
+        let modal = showPair || showAWDLPrompt || model.pairSheetShown || model.showRawHIDPrompt
+            || model.showHIDPermissionPrompt || model.pendingTakeover != nil
+        if command == .dismiss {
+            if modal { model.launcherController.postKey(.dismiss) }
+            return
+        }
+        guard !modal else { return }
+        let apps = model.selectedHost?.apps ?? []
+        let inline = model.launcherStyle == .covers ? apps : AppIconsRow.inlineApps(apps)
+        var cells = inline.map { LauncherFocus.app($0.id) }
+        if inline.count < apps.count { cells.append(.overflow) }
+        if command == .activate {
+            if case .app(let id) = launcherFocus, let host = model.selectedHost,
+               let app = host.apps.first(where: { $0.id == id }) {
+                model.requestStream(app: app, on: host)
+            } else if launcherFocus != nil {
+                model.launcherController.postKey(.activate)
+            } else {
+                launcherFocus = cells.first ?? (model.hosts.count > 1 ? .pc : nil)
+            }
+            return
+        }
+        let columns = model.launcherStyle == .covers ? LauncherLayout.columns(appCount: apps.count) : 2
+        launcherFocus = LauncherNavigation.destination(from: launcherFocus, command: command,
+                                                        cells: cells, columns: columns,
+                                                        hasSwitcher: model.hosts.count > 1)
+    }
 }
 
 /// The Stream menu: the launcher's one action in its words, where ⌘? finds it, and the PCs
@@ -186,6 +223,7 @@ struct StreamMenu: View {
 // MARK: - Connect surface
 
 private struct ConnectSurface: View {
+    let focus: FocusState<LauncherFocus?>.Binding
     @Environment(AppModel.self) private var model
 
     /// The raw connecting edge: `streamPhase` alone, since `isStreaming` flips at
@@ -234,7 +272,8 @@ private struct ConnectSurface: View {
     private var launchIsOnAButton: Bool {
         guard let attempt = model.lastLaunchAttempt, let host = model.selectedHost,
               attempt.host.id == host.id else { return false }
-        return AppIconsRow.inlineApps(host.apps).contains { $0.id == attempt.app.id }
+        let apps = model.launcherStyle == .covers ? host.apps : AppIconsRow.inlineApps(host.apps)
+        return apps.contains { $0.id == attempt.app.id }
     }
 
     var body: some View {
@@ -244,9 +283,9 @@ private struct ConnectSurface: View {
             // Banner first so it can't be missed. NOT behind the 400 ms hold:
             // errors must surface the instant they exist.
             ConnectBanner()
-            PCHeader(host: model.selectedHost)
+            PCHeader(host: model.selectedHost, focus: focus)
             if let host = model.selectedHost, !host.apps.isEmpty {
-                AppIconsRow(apps: host.apps, host: host, connectingShown: showsConnectingUI)
+                AppIconsRow(apps: host.apps, host: host, focus: focus, connectingShown: showsConnectingUI)
             }
             if showsStateButton {
                 StreamButton(isConnecting: showsConnectingUI)
@@ -339,6 +378,7 @@ var accentSurfaceGradient: LinearGradient {
 /// one PC), the specs under it and the readiness chip. Right-click for the PC's menu.
 private struct PCHeader: View {
     let host: Host?
+    let focus: FocusState<LauncherFocus?>.Binding
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -392,6 +432,9 @@ private struct PCHeader: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
+        .focusable()
+        .focused(focus, equals: .pc)
+        .disabled(model.isStreaming)
         .help("Choose a PC")
         .accessibilityLabel("PC")
         .accessibilityValue(host?.displayName ?? "None")

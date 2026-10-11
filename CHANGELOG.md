@@ -4,6 +4,11 @@
 
 ### Features
 
+- Choose Covers in Settings › General to browse the PC's apps by their cover art.
+  The familiar Buttons look remains the default.
+- Use a controller to choose apps and switch PCs in the launcher. The d-pad or
+  left stick moves focus, A or Cross opens the selection, and B or Circle dismisses a dialog.
+
 - Steam shows its own logo in the launcher, the menu and the PC list, instead
   of a generic controller.
 

@@ -15,9 +15,10 @@ import SwiftUI
 struct AppIconsRow: View {
     let apps: [LibraryApp]
     let host: Host
+    let focus: FocusState<LauncherFocus?>.Binding
     /// The connect is on screen (past the 400 ms hold), so the app being launched shows it.
     var connectingShown = false
-    @Environment(AppModel.self) private var model
+    @Environment(AppModel.self) var model
 
     /// Two columns of large app buttons fill the window's width with two apps or
     /// four; past four the last cell is the overflow menu.
@@ -36,6 +37,14 @@ struct AppIconsRow: View {
     }
 
     var body: some View {
+        if model.launcherStyle == .covers {
+            coverGrid
+        } else {
+            buttonGrid
+        }
+    }
+
+    private var buttonGrid: some View {
         // No GlassEffectContainer: it composites its glass above the app buttons' labels.
         LazyVGrid(columns: Self.columns, spacing: 10) {
             ForEach(inlineApps) { app in
@@ -131,7 +140,7 @@ struct AppIconsRow: View {
         .contentShape(Rectangle())
     }
 
-    private func appTile(_ app: LibraryApp) -> some View {
+    func appTile(_ app: LibraryApp) -> some View {
         let state = tileState(app)
         return Button {
             switch state {
@@ -142,18 +151,25 @@ struct AppIconsRow: View {
             case .hiddenStream: model.resumeStreamWindow()
             }
         } label: {
-            tileLabel(icon: app.icon, title: app.name, trailing: "play.fill",
-                      trailingText: state == .hiddenStream ? "Back to Stream" : nil,
-                      launching: state == .connecting || state == .reconnecting)
+            if model.launcherStyle == .covers {
+                coverLabel(app, connecting: state == .connecting || state == .reconnecting,
+                           hiddenStream: state == .hiddenStream)
+            } else {
+                tileLabel(icon: app.icon, title: app.name, trailing: "play.fill",
+                          trailingText: state == .hiddenStream ? "Back to Stream" : nil,
+                          launching: state == .connecting || state == .reconnecting)
+            }
         }
-        .buttonStyle(AppTileStyle())
+        .buttonStyle(LauncherTileStyle(covers: model.launcherStyle == .covers))
+        .focusable()
+        .focused(focus, equals: .app(app.id))
         .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
         // Only the streaming app stays live while a stream exists; the others can't start one.
         .disabled(model.isStreaming && state == .ready)
         .help(state.help ?? (model.isStreaming ? "Finish the current stream first" : "Stream \(app.name)"))
         // One name, not glyph + name + play glyph read in turn.
         .accessibilityLabel(app.name)
-        .accessibilityValue(state.spoken.value)
+        .accessibilityValue(state.spoken.value.isEmpty && isRunning(app) ? "Running" : state.spoken.value)
         .accessibilityHint(state.spoken.hint)
     }
 
@@ -173,6 +189,8 @@ struct AppIconsRow: View {
         } label: {
             tileLabel(icon: Image(systemName: "ellipsis"), title: "\(overflowApps.count) more", trailing: "chevron.down")
         }
+        .focusable()
+        .focused(focus, equals: .overflow)
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         // Glass, not violet: it opens a list rather than streaming.
