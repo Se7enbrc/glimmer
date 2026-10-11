@@ -73,11 +73,17 @@ extension InputCore {
         }
     }
 
-    func receiveCenterButtons(device: DualSenseDeviceKey, capturedAt: TimeInterval? = nil) {
+    func receiveCenterButtons(
+        device: DualSenseDeviceKey, capturedAt: TimeInterval? = nil,
+        controller: (DualSenseDeviceKey) -> ObjectIdentifier? = { DualSenseRouting.shared.controller(for: $0) },
+        buttons: (ObjectIdentifier) -> DualSenseExtraButtons = {
+            DualSenseHID.shared.state(for: $0)?.buttons ?? DualSenseExtraButtons()
+        }
+    ) {
         withLock {
             if let capturedAt, capturedAt < snapshot.acceptEventsAfter { return }
-            guard let id = DualSenseRouting.shared.controller(for: device), let sample = controllers[id] else { return }
-            let hid = DualSenseHID.shared.state(for: id)?.buttons ?? DualSenseExtraButtons()
+            guard let id = controller(device), let sample = controllers[id] else { return }
+            let hid = buttons(id)
             let centerMask = StreamProtocol.PLAY_FLAG | StreamProtocol.BACK_FLAG
                 | StreamProtocol.SPECIAL_FLAG | StreamProtocol.MISC_FLAG
             var buttons = sample.buttons & ~centerMask

@@ -43,7 +43,7 @@ final class AudioHALOutput {
     }
 
     func configure(format: AVAudioFormat, route: AudioOutputRoute,
-                   hardware: () throws -> AudioHALDevice = AudioHALDevice.current,
+                   hardware: () throws -> AudioHALDevice = { try AudioHALDevice.current() },
                    connectHardware: Bool = true) throws {
         guard stop() else { throw Failure(status: kAudioUnitErr_CannotDoInCurrentContext) }
         spatial = false

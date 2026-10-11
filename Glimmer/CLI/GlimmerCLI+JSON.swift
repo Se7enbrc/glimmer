@@ -99,11 +99,14 @@ extension GlimmerCLI {
 }
 
 extension AppModel {
-    func commandStatusJSON() async throws -> String {
+    func commandStatusJSON(
+        details: @MainActor (StreamSession) async -> (snapshot: StreamStatsSnapshot, overlayShown: Bool,
+                                          resolution: (width: Int, height: Int))? = { await $0.menuBarDetails() }
+    ) async throws -> String {
         guard isStreaming, let session = nativeSession, let attempt = lastLaunchAttempt else {
             return try CommandJSON.status(live: false)
         }
-        let details = await session.menuBarDetails()
+        let details = await details(session)
         // Teardown or a replacement session can finish while the snapshot crosses actors.
         guard isStreaming, nativeSession === session else { return try CommandJSON.status(live: false) }
         return try CommandJSON.status(

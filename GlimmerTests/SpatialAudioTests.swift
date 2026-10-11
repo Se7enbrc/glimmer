@@ -124,6 +124,35 @@ struct SpatialAudioTests {
         #expect(!graph.isRunning)
     }
 
+    @Test func softwareGraphNegotiatesFormatAndRejectsInvalidProperties() throws {
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+        let graph = AudioHALOutput(channels: 2)
+        #expect(graph.start() == kAudioUnitErr_Uninitialized)
+        #expect(graph.setRate(1) == kAudioUnitErr_Uninitialized)
+        try graph.configure(format: format, route: .init(),
+                            hardware: { AudioHALDevice(id: 42, rate: 96_000, latencyMs: 7.5) }, connectHardware: false)
+        #expect(graph.device == 42 && graph.sampleRate == 96_000 && graph.latencyMs == 7.5)
+        #expect(graph.channels == 2 && !graph.spatial && !graph.isRunning)
+        #expect(graph.setRate(1.001) == noErr)
+        let unit = try #require(graph.speed)
+        var output = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        #expect(AudioUnitGetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output,
+                                     0, &output, &size) == noErr)
+        #expect(output.mSampleRate == 96_000 && output.mChannelsPerFrame == 2)
+        #expect(output.mBitsPerChannel == 32 && output.mBytesPerFrame == 4)
+        #expect(output.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0)
+        do {
+            try graph.set(unit, UInt32.max, value: UInt32(0))
+            Issue.record("An unknown property must fail")
+        } catch let failure as AudioHALOutput.Failure {
+            #expect(failure.property == UInt32.max && failure.status != noErr)
+        }
+        #expect(throws: AudioHALOutput.Failure.self) { try graph.makeUnit(type: 0, subtype: 0) }
+        #expect(graph.stop())
+        #expect(graph.units.isEmpty && graph.speed == nil)
+    }
+
     private func renderImpulse(channels: Int, route: AudioOutputRoute, source: Int,
                                outputRate: Double = 48_000,
                                preferredLayout: AVAudioChannelLayout? = nil) throws -> [Double] {

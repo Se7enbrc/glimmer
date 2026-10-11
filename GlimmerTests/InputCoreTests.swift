@@ -16,6 +16,65 @@ struct InputCoreTests {
         return (core, backend)
     }
 
+    @Test func capturedControllerUpdatesRegisteredSlotAndRetiresItsChordOnRemoval() {
+        let (core, backend) = rig()
+        let identity = NSObject()
+        let id = ObjectIdentifier(identity)
+        let analog = GamepadAnalog(leftTrigger: 127, rightTrigger: 255, leftStickX: -32767,
+                                   leftStickY: 32767, rightStickX: 123, rightStickY: -456)
+        core.registerController(id: id, slot: 1, buttons: 0, analog: InputCore.neutral)
+        core.receiveController(id: id, buttons: StreamProtocol.A_FLAG, analog: analog,
+                               chordButtons: StreamProtocol.A_FLAG, capturedAt: .infinity)
+        #expect(backend.calls.last?.num == 1)
+        #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG)
+        #expect(core.withLock { core.controllers[id]?.analog } == analog)
+        #expect(core.state(slot: 1)?.analog == analog)
+        #expect(core.withLock { core.chordSlots.insert(1).inserted })
+        core.removeController(id: id)
+        core.removeController(id: id)
+        core.receiveController(id: id, buttons: StreamProtocol.B_FLAG, analog: analog,
+                               chordButtons: 0, capturedAt: .infinity)
+        #expect(backend.calls.count == 1)
+        #expect(core.state(slot: 1) == nil)
+        #expect(core.withLock { !core.chordSlots.contains(1) })
+    }
+
+    @Test func rawCenterButtonsReplaceStaleCenterStateAndKeepCapturedAxes() {
+        let (core, backend) = rig()
+        let identity = NSObject()
+        let id = ObjectIdentifier(identity)
+        let partials = OSAllocatedUnfairLock(initialState: [UInt8]())
+        core.onCenterPartial = { slot in partials.withLock { $0.append(slot) } }
+        let analog = GamepadAnalog(leftTrigger: 12, rightTrigger: 34, leftStickX: 56,
+                                   leftStickY: 78, rightStickX: 90, rightStickY: 123)
+        core.registerController(id: id, slot: 0, buttons: StreamProtocol.A_FLAG | StreamProtocol.PLAY_FLAG,
+                                analog: analog)
+        core.receiveCenterButtons(device: 17, capturedAt: .infinity, controller: { _ in id }, buttons: { _ in
+            DualSenseExtraButtons(create: true, ps: true, mute: true)
+        })
+        #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG | StreamProtocol.BACK_FLAG
+            | StreamProtocol.SPECIAL_FLAG | StreamProtocol.MISC_FLAG)
+        #expect(core.state(slot: 0)?.analog == analog)
+        #expect(partials.withLock { $0 } == [0])
+        core.receiveCenterButtons(device: 17, capturedAt: 0, controller: { _ in
+            Issue.record("Pre-handoff input must be rejected before routing")
+            return id
+        })
+        core.receiveCenterButtons(device: 17, controller: { _ in nil })
+        #expect(backend.calls.count == 1)
+        core.receiveCenterButtons(device: 17, capturedAt: .infinity, controller: { _ in id }, buttons: { _ in
+            DualSenseExtraButtons()
+        })
+        #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG)
+        #expect(partials.withLock { $0 } == [0])
+        core.withLock { core.snapshot.chord = .l1r1 }
+        core.receiveCenterButtons(device: 17, capturedAt: .infinity, controller: { _ in id }, buttons: { _ in
+            DualSenseExtraButtons(options: true, l1: true, r1: true)
+        })
+        #expect(core.withLock { core.chordSlots.contains(0) })
+        #expect(partials.withLock { $0 } == [0])
+    }
+
     @Test func neutralControllerSamplesDoNotWakeMainForReconciliation() {
         let (core, _) = rig()
         let updates = OSAllocatedUnfairLock(initialState: 0)

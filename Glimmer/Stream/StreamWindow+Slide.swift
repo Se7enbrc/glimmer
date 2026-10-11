@@ -37,9 +37,9 @@ extension StreamWindow {
 
     var isBorderlessCover: Bool { displayMode == .fullScreen && coversNotch }
 
-    func coverTransition(_ event: CoverSlideEvent) -> CoverTransition {
+    func coverTransition(_ event: CoverSlideEvent, reduceMotion: Bool? = nil) -> CoverTransition {
         Self.coverTransition(event, borderlessCover: isBorderlessCover,
-                             reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+                             reduceMotion: reduceMotion ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
     /// Slides the video layer, not the window: a transform runs in the render
@@ -90,12 +90,12 @@ extension StreamWindow {
 
     /// The switch away: slide out, then order out. Clicks pass through
     /// meanwhile so they reach the app the user switched to.
-    func retreatCover() {
-        if coverTransition(.away) == .fade {
+    func retreatCover(reduceMotion: Bool? = nil) {
+        if coverTransition(.away, reduceMotion: reduceMotion) == .fade {
             fadeCover(entering: false) { [weak self] in self?.window.orderOut(nil) }
             return
         }
-        guard coverTransition(.away) == .slide else {
+        guard coverTransition(.away, reduceMotion: reduceMotion) == .slide else {
             resetCoverSlide()
             window.orderOut(nil)
             return
@@ -105,17 +105,21 @@ extension StreamWindow {
     }
 
     /// The return: slide back in from wherever the picture is.
-    func returnCover() {
+    func returnCover(reduceMotion: Bool? = nil) {
         let completion: @MainActor () -> Void = { [weak self] in
             guard let self else { return }
             self.applyPresentationOptions(coversNotch: self.coversNotch)
             self.refreshPresentationVisibility()
         }
-        if coverTransition(.back) == .fade {
+        if coverTransition(.back, reduceMotion: reduceMotion) == .fade {
             fadeCover(entering: true, completion: completion)
             return
         }
-        guard coverTransition(.back) == .slide else { resetCoverSlide(); completion(); return }
+        guard coverTransition(.back, reduceMotion: reduceMotion) == .slide else {
+            resetCoverSlide()
+            completion()
+            return
+        }
         window.ignoresMouseEvents = awaitingFirstFrameFadeIn
         slideCover(entering: true, completion: completion)
         if !awaitingFirstFrameFadeIn { window.alphaValue = 1 }

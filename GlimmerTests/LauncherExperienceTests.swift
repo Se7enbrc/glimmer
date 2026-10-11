@@ -307,6 +307,50 @@ struct LauncherExperienceTests {
         #expect(item.isEnabled)
     }
 
+    @Test @MainActor func runningCoverFollowsTheLiveSessionOrFreshPCStatus() {
+        let model = AppModel()
+        let app = LibraryApp(id: 7, name: "Game", hdr: false, hidden: false)
+        let other = LibraryApp(id: 8, name: "Other", hdr: false, hidden: false)
+        let host = Host(id: "pc", name: "PC", customName: nil, localAddress: nil, manualAddress: nil,
+                        apps: [app, other], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+        #expect(!model.launcherAppIsRunning(app, on: host))
+        for state in [HostLiveStatus.State.idle, .asleep, .unknown, .certMismatch] {
+            model.hostLiveStatus = .init(hostID: host.id, state: state, capturedAt: .now)
+            #expect(!model.launcherAppIsRunning(app, on: host))
+        }
+        for state in [HostLiveStatus.State.streamingApp(name: app.name), .streamingUnknownApp(id: app.id)] {
+            model.hostLiveStatus = .init(hostID: host.id, state: state, capturedAt: .now)
+            #expect(model.launcherAppIsRunning(app, on: host))
+            #expect(!model.launcherAppIsRunning(other, on: host))
+            model.hostLiveStatus?.capturedAt = .distantPast
+            #expect(!model.launcherAppIsRunning(app, on: host))
+            model.hostLiveStatus = .init(hostID: "other", state: state, capturedAt: .now)
+            #expect(!model.launcherAppIsRunning(app, on: host))
+        }
+        model.isStreaming = true
+        model.lastLaunchAttempt = (app, host)
+        model.streamPhase = .streaming
+        #expect(model.launcherAppIsRunning(app, on: host))
+        #expect(!model.launcherAppIsRunning(other, on: host))
+        model.streamPhase = .connecting(stage: "Connecting")
+        #expect(!model.launcherAppIsRunning(app, on: host))
+    }
+
+    @Test func unusableCacheDirectoryStillReturnsArtAndKeepsItInMemory() async throws {
+        let store = try IsolatedStore("launcher-art-unwritable")
+        defer { store.remove() }
+        let file = store.directory.appendingPathComponent("not-a-directory")
+        try Data([1]).write(to: file)
+        let cache = LauncherArtCache(base: file)
+        let data = try Self.png(width: 3, height: 4)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "a", fetch: { data }) == data)
+        #expect(await cache.image(pcID: "pc", appID: 1, revision: "a", fetch: {
+            Issue.record("A failed disk write must not evict usable memory art")
+            return Data()
+        }) == data)
+        #expect(try Data(contentsOf: file) == Data([1]))
+    }
+
     private static func png(width: Int, height: Int) throws -> Data {
         let context = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
                                             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),

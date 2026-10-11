@@ -109,6 +109,64 @@ struct StreamWindowSlideTests {
         stream.resetCoverSlide()
     }
 
+    @Test func completedEntryClearsTheRevealAndInvalidatedFadeCannotComplete() async {
+        let stream = StreamWindow()
+        defer { stream.resetCoverSlide() }
+        let completed = DispatchSemaphore(value: 0)
+        stream.slideCover(entering: true) { completed.signal() }
+        #expect(await completed.waitAsync(for: .seconds(2)) == .success)
+        #expect(!stream.presentationRevealInProgress)
+        #expect(stream.window.isOpaque)
+        #expect(stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) == nil)
+        let stale = DispatchSemaphore(value: 0)
+        stream.fadeCover(entering: false) { stale.signal() }
+        #expect(stream.window.ignoresMouseEvents)
+        stream.awaitingFirstFrameFadeIn = true
+        stream.resetCoverSlide()
+        #expect(stream.window.ignoresMouseEvents)
+        #expect(await stale.waitAsync(for: .seconds(0.3)) == .timedOut)
+    }
+
+    @Test func completedFadeClearsRevealAndRestoresEntryAlpha() async {
+        let stream = StreamWindow()
+        defer { stream.resetCoverSlide() }
+        let completed = DispatchSemaphore(value: 0)
+        stream.window.alphaValue = 0
+        stream.fadeCover(entering: true) { completed.signal() }
+        #expect(await completed.waitAsync(for: .seconds(2)) == .success)
+        #expect(!stream.presentationRevealInProgress)
+        #expect(!stream.window.ignoresMouseEvents)
+        #expect(stream.window.alphaValue == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func returnAndRetreatRespectMotionAndLeaveNativeSpacesAtRest(reduceMotion: Bool) async throws {
+        let stream = StreamWindow()
+        defer { stream.resetCoverSlide() }
+        stream.window.alphaValue = 0
+        stream.returnCover(reduceMotion: reduceMotion)
+        #expect(!stream.window.ignoresMouseEvents)
+        #expect((stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) == nil) == reduceMotion)
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(stream.window.alphaValue == 1)
+        #expect(!stream.presentationRevealInProgress)
+        #expect(stream.window.isOpaque)
+        #expect(stream.presentationSuppressed)
+        stream.retreatCover(reduceMotion: reduceMotion)
+        #expect(stream.window.ignoresMouseEvents)
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(!stream.window.isVisible)
+        #expect(stream.window.alphaValue == (reduceMotion ? 0 : 1))
+        stream.coversNotch = false
+        stream.returnCover(reduceMotion: reduceMotion)
+        #expect(stream.window.isOpaque)
+        #expect(!stream.presentationRevealInProgress)
+        #expect(stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) == nil)
+        stream.retreatCover(reduceMotion: reduceMotion)
+        #expect(!stream.window.isVisible)
+        #expect(!stream.window.ignoresMouseEvents)
+    }
+
     @Test func visualCloseWaitsForTheWindowAndSupportsLateWaiters() async {
         let stream = StreamWindow()
         stream.didClose = true

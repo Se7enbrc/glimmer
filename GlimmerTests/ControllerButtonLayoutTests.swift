@@ -58,6 +58,8 @@ struct ControllerButtonLayoutTests {
         presence.start { reads += 1; return connected }
         defer { presence.stop() }
         #expect(presence.isConnected)
+        presence.start { Issue.record("Repeated appearance must not install duplicate observers"); return false }
+        #expect(presence.isConnected)
         for name in [Notification.Name.GCControllerDidDisconnect, .GCControllerDidConnect,
                      HIDGamepadManager.devicesDidChange, HIDGamepadManager.devicesDidChange] {
             connected.toggle()

@@ -206,6 +206,66 @@ struct AudioEngineLifecycleTests {
         #expect(!decoder.primed)
     }
 
+    @Test func exhaustedRestartLadderKeepsPrimeRecoveryArmedAndResetsAfterSuccess() {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+        decoder.engineRestartRetries = AudioDecoder.maxEngineRestartRetries
+        decoder.startOutput = { _ in kAudioUnitErr_Uninitialized }
+        let before = LogStore.shared.snapshot().last?.id ?? 0
+        decoder.retryEngineStart(attempt: AudioDecoder.maxEngineRestartRetries,
+                                 generation: decoder.engineRestartGeneration)
+        #expect(!decoder.engineRunning)
+        #expect(decoder.outputGraphNeedsReconnect)
+        #expect(decoder.engineRestartRetries == AudioDecoder.maxEngineRestartRetries)
+        #expect(LogStore.shared.snapshot().contains {
+            $0.id > before && $0.message == "audio restart ladder exhausted; packet and device recovery remain armed"
+        })
+        #expect(!decoder.ensureEngineAtPrimeEdge(now: 1_000_000_000))
+        #expect(decoder.primeEdgeRetryAtNanos == 1_100_000_000)
+        decoder.startOutput = { _ in noErr }
+        #expect(!decoder.ensureEngineAtPrimeEdge(now: 1_050_000_000))
+        #expect(decoder.ensureEngineAtPrimeEdge(now: 1_100_000_000))
+        #expect(decoder.engineRunning)
+        #expect(decoder.engineRestartRetries == 0)
+        #expect(decoder.startPlayoutAtPrimeEdge())
+        #expect(!decoder.primeEdgeFailureStreak)
+        #expect(decoder.primeEdgeRetryAtNanos == 0)
+    }
+
+    @Test func successfulRetryClearsTheLadderAndAlreadyRunningOrUnconfiguredEnginesDoNotStart() {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        decoder.startOutput = { _ in Issue.record("An unconfigured engine must not start"); return noErr }
+        decoder.retryEngineStart(attempt: 1, generation: decoder.engineRestartGeneration)
+        #expect(!decoder.engineRunning)
+        decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+        decoder.engineRestartRetries = 2
+        decoder.startOutput = { _ in noErr }
+        decoder.retryEngineStart(attempt: 2, generation: decoder.engineRestartGeneration)
+        #expect(decoder.engineRunning && decoder.engineRestartRetries == 0)
+        decoder.startOutput = { _ in Issue.record("A running engine must not restart"); return noErr }
+        decoder.retryEngineStart(attempt: 3, generation: decoder.engineRestartGeneration)
+        #expect(decoder.engineRunning)
+    }
+
+    @Test func failedDeviceRecoveryKeepsTheOriginalRecoveryTimeAndArmsRetries() {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+        decoder.startOutput = { _ in kAudioUnitErr_Uninitialized }
+        decoder.handleEngineConfigurationChange(changedAt: 123)
+        #expect(!decoder.engineRunning)
+        #expect(decoder.outputGraphNeedsReconnect)
+        #expect(decoder.engineRestartRetries == 1)
+        decoder.handleEngineConfigurationChange(changedAt: 456)
+        #expect(decoder.deviceRecoveryStarted == 123)
+        #expect(decoder.engineRestartRetries == 2)
+        #expect(!decoder.startPlayoutAtPrimeEdge(allowRecovery: false))
+        decoder.routeListenerQueue.sync {}
+        #expect(!decoder.engineRunning)
+    }
+
     private static let rawListenerFired = DispatchSemaphore(value: 0)
 
     /// The per-session listener leak: Swift hands a C API a fresh block per call, so a block remove never matched.

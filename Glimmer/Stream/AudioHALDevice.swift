@@ -12,17 +12,26 @@ struct AudioHALDevice {
     let latencyMs: Double
     var channelLayout: AVAudioChannelLayout?
 
-    static func current() throws -> Self {
-        let device: UInt32 = try read(AudioObjectID(kAudioObjectSystemObject),
-                                     selector: kAudioHardwarePropertyDefaultOutputDevice, initial: UInt32(0))
+    static func current(
+        readUInt: (AudioObjectID, AudioObjectPropertySelector) throws -> UInt32 = {
+            try read($0, selector: $1, initial: UInt32(0))
+        },
+        readRate: (AudioDeviceID) throws -> Double = {
+            try read($0, selector: kAudioDevicePropertyNominalSampleRate, initial: 0.0)
+        },
+        latency: (AudioDeviceID, Double) throws -> Double = { try outputLatencyMs(device: $0, rate: $1) },
+        preferred: (AudioDeviceID) -> AVAudioChannelLayout? = { preferredLayout($0) }
+    ) throws -> Self {
+        let device: UInt32 = try readUInt(AudioObjectID(kAudioObjectSystemObject),
+                                         kAudioHardwarePropertyDefaultOutputDevice)
         guard device != 0 else { throw AudioHALOutput.Failure(status: kAudioHardwareBadDeviceError) }
-        let alive: UInt32 = try read(device, selector: kAudioDevicePropertyDeviceIsAlive, initial: UInt32(0))
-        let rate: Double = try read(device, selector: kAudioDevicePropertyNominalSampleRate, initial: 0.0)
+        let alive: UInt32 = try readUInt(device, kAudioDevicePropertyDeviceIsAlive)
+        let rate: Double = try readRate(device)
         guard alive != 0, rate.isFinite, rate > 0 else {
             throw AudioHALOutput.Failure(status: kAudioHardwareBadDeviceError)
         }
-        return Self(id: device, rate: rate, latencyMs: try outputLatencyMs(device: device, rate: rate),
-                    channelLayout: preferredLayout(device))
+        return Self(id: device, rate: rate, latencyMs: try latency(device, rate),
+                    channelLayout: preferred(device))
     }
 
     static func stereoChannelMap(channels: Int, preferred: (UInt32, UInt32)) throws -> [Int32] {
@@ -60,15 +69,23 @@ struct AudioHALDevice {
         return (Double(latency) + Double(safety) + Double(buffer) + Double(streamLatency)) / rate * 1000
     }
 
-    private static func preferredLayout(_ device: AudioDeviceID) -> AVAudioChannelLayout? {
+    static func preferredLayout(
+        _ device: AudioDeviceID,
+        dataSize: (AudioObjectID, inout AudioObjectPropertyAddress, inout UInt32) -> OSStatus = {
+            AudioObjectGetPropertyDataSize($0, &$1, 0, nil, &$2)
+        },
+        data: (AudioObjectID, inout AudioObjectPropertyAddress, inout UInt32, UnsafeMutableRawPointer) -> OSStatus = {
+            AudioObjectGetPropertyData($0, &$1, 0, nil, &$2, $3)
+        }
+    ) -> AVAudioChannelLayout? {
         var address = address(kAudioDevicePropertyPreferredChannelLayout, scope: kAudioDevicePropertyScopeOutput)
         var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr,
+        guard dataSize(device, &address, &size) == noErr,
               size >= 3 * MemoryLayout<UInt32>.size else { return nil }
         let storage = UnsafeMutableRawPointer.allocate(byteCount: Int(size),
                                                       alignment: MemoryLayout<AudioChannelLayout>.alignment)
         defer { storage.deallocate() }
-        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, storage) == noErr else { return nil }
+        guard data(device, &address, &size, storage) == noErr else { return nil }
         let layout = storage.assumingMemoryBound(to: AudioChannelLayout.self)
         let needed = 3 * MemoryLayout<UInt32>.size
             + Int(layout.pointee.mNumberChannelDescriptions) * MemoryLayout<AudioChannelDescription>.size
@@ -77,12 +94,16 @@ struct AudioHALDevice {
     }
 
     static func read<T>(_ object: AudioObjectID, selector: AudioObjectPropertySelector,
-                        scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal, initial: T) throws -> T {
+                        scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal, initial: T,
+                        data: (AudioObjectID, inout AudioObjectPropertyAddress, inout UInt32,
+                               UnsafeMutableRawPointer) -> OSStatus = {
+                            AudioObjectGetPropertyData($0, &$1, 0, nil, &$2, $3)
+                        }) throws -> T {
         var address = address(selector, scope: scope)
         var value = initial
         var size = UInt32(MemoryLayout<T>.size)
         let status = withUnsafeMutablePointer(to: &value) {
-            AudioObjectGetPropertyData(object, &address, 0, nil, &size, $0)
+            data(object, &address, &size, $0)
         }
         guard status == noErr else { throw AudioHALOutput.Failure(status: status) }
         return value
@@ -110,10 +131,18 @@ struct AudioHALDevice {
 }
 
 extension AudioDecoder {
-    func installDeviceListeners() {
-        removeDeviceListeners()
-        let fallback = try? AudioHALDevice.read(AudioObjectID(kAudioObjectSystemObject),
-                                                selector: kAudioHardwarePropertyDefaultOutputDevice, initial: UInt32(0))
+    func installDeviceListeners(
+        defaultDevice: () -> AudioDeviceID? = {
+            try? AudioHALDevice.read(AudioObjectID(kAudioObjectSystemObject),
+                                    selector: kAudioHardwarePropertyDefaultOutputDevice, initial: UInt32(0))
+        },
+        streams: (AudioDeviceID) -> [AudioStreamID]? = AudioOutputRoute.outputStreams,
+        add: (AudioObjectID, AudioObjectPropertyAddress, @escaping @Sendable () -> Void)
+            -> (key: Int, status: OSStatus) = HALListener.add,
+        remove: (AudioObjectID, AudioObjectPropertyAddress, Int) -> OSStatus = HALListener.remove
+    ) {
+        removeDeviceListeners(remove: remove)
+        let fallback = defaultDevice()
         guard let device = halOutput?.device ?? fallback, device != 0 else { return }
         let properties: [(AudioObjectPropertySelector, AudioObjectPropertyScope)] = [
             (kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal),
@@ -126,18 +155,21 @@ extension AudioDecoder {
             (kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeGlobal)
         ]
         for (selector, scope) in properties {
-            observeAudioProperty(device, address: AudioHALDevice.address(selector, scope: scope))
+            observeAudioProperty(device, address: AudioHALDevice.address(selector, scope: scope), add: add)
         }
-        for stream in AudioOutputRoute.outputStreams(device: device) ?? [] {
+        for stream in streams(device) ?? [] {
             for selector in [kAudioStreamPropertyVirtualFormat, kAudioStreamPropertyPhysicalFormat,
                              kAudioStreamPropertyLatency, kAudioStreamPropertyIsActive] {
-                observeAudioProperty(stream, address: AudioHALDevice.address(selector))
+                observeAudioProperty(stream, address: AudioHALDevice.address(selector), add: add)
             }
         }
     }
 
-    private func observeAudioProperty(_ object: AudioObjectID, address: AudioObjectPropertyAddress) {
-        let result = HALListener.add(object, address) { [weak self] in
+    private func observeAudioProperty(
+        _ object: AudioObjectID, address: AudioObjectPropertyAddress,
+        add: (AudioObjectID, AudioObjectPropertyAddress, @escaping @Sendable () -> Void) -> (key: Int, status: OSStatus)
+    ) {
+        let result = add(object, address) { [weak self] in
             guard let self else { return }
             let changedAt = DispatchTime.now().uptimeNanoseconds
             self.routeListenerQueue.async { self.handleEngineConfigurationChange(changedAt: changedAt) }
@@ -149,9 +181,11 @@ extension AudioDecoder {
         }
     }
 
-    func removeDeviceListeners() {
+    func removeDeviceListeners(
+        remove: (AudioObjectID, AudioObjectPropertyAddress, Int) -> OSStatus = HALListener.remove
+    ) {
         for (device, address, key) in deviceListeners {
-            let status = HALListener.remove(device, address, key: key)
+            let status = remove(device, address, key)
             if status != noErr {
                 Diag.error("audio device listener remove failed (OSStatus \(status))", "Stream.Audio")
             }

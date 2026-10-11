@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CE2026100810000000000002 /* AudioHALDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2026100800000000000002 /* AudioHALDeviceTests.swift */; };
+		CE2026100810000000000001 /* InputMonitoringFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2026100800000000000001 /* InputMonitoringFlowTests.swift */; };
+		CE2026100810000000000000 /* LauncherControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2026100800000000000000 /* LauncherControllerTests.swift */; };
 		A71A20261011000000000001 /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71A20261011000000000002 /* Motion.swift */; };
 		CA202610110000000000000D /* ControllerTouchpadMouseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA202610110000000000000E /* ControllerTouchpadMouseTests.swift */; };
 		CA202610110000000000000B /* ControllerForwarder+TouchpadMouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA202610110000000000000C /* ControllerForwarder+TouchpadMouse.swift */; };
@@ -556,6 +559,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CE2026100800000000000002 /* AudioHALDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioHALDeviceTests.swift; sourceTree = "<group>"; };
+		CE2026100800000000000001 /* InputMonitoringFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputMonitoringFlowTests.swift; sourceTree = "<group>"; };
+		CE2026100800000000000000 /* LauncherControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LauncherControllerTests.swift; sourceTree = "<group>"; };
 		A71A20261011000000000002 /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		CA202610110000000000000E /* ControllerTouchpadMouseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerTouchpadMouseTests.swift"; sourceTree = "<group>"; };
 		CA202610110000000000000C /* ControllerForwarder+TouchpadMouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+TouchpadMouse.swift"; sourceTree = "<group>"; };
@@ -1650,6 +1656,9 @@
 				DEC0DE2026092000000000C6 /* MenuBarPresentationTests.swift */,
 				DEC0DE202609232100000004 /* LauncherWindowTests.swift */,
 				AC2026101100000000000005B /* LauncherExperienceTests.swift */,
+				CE2026100800000000000002 /* AudioHALDeviceTests.swift */,
+				CE2026100800000000000001 /* InputMonitoringFlowTests.swift */,
+				CE2026100800000000000000 /* LauncherControllerTests.swift */,
 				DEC0DE2026091900000000F2 /* MutedOutputTests.swift */,
 				DEC0DE20261010D5E0000002 /* DualSenseOutputReportTests.swift */,
 				DEC0DE2026091900000000FC /* DualSenseDeviceStateTests.swift */,
@@ -2300,6 +2309,9 @@
 				DEC0DE2026092000000000C5 /* MenuBarPresentationTests.swift in Sources */,
 				DEC0DE202609232100000003 /* LauncherWindowTests.swift in Sources */,
 				AC2026101100000000000005A /* LauncherExperienceTests.swift in Sources */,
+				CE2026100810000000000002 /* AudioHALDeviceTests.swift in Sources */,
+				CE2026100810000000000001 /* InputMonitoringFlowTests.swift in Sources */,
+				CE2026100810000000000000 /* LauncherControllerTests.swift in Sources */,
 				DEC0DE2026091900000000F1 /* MutedOutputTests.swift in Sources */,
 				DEC0DE20261010D5E0000001 /* DualSenseOutputReportTests.swift in Sources */,
 				DEC0DE2026091900000000FB /* DualSenseDeviceStateTests.swift in Sources */,

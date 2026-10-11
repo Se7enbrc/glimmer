@@ -47,15 +47,7 @@ extension AppIconsRow {
     }
 
     func isRunning(_ app: LibraryApp) -> Bool {
-        if model.isStreaming {
-            return model.streamPhase == .streaming && model.lastLaunchAttempt?.host.id == host.id
-                && model.lastLaunchAttempt?.app.id == app.id
-        }
-        guard let status = model.hostLiveStatus,
-              HostLiveStatus.isFresh(status, for: host.id) else { return false }
-        if case .streamingApp(let name) = status.state { return name == app.name }
-        if case .streamingUnknownApp(let id) = status.state { return id == app.id }
-        return false
+        model.launcherAppIsRunning(app, on: host)
     }
 }
 
@@ -95,6 +87,18 @@ struct LauncherCoverArt: View {
 }
 
 extension AppModel {
+    func launcherAppIsRunning(_ app: LibraryApp, on host: Host) -> Bool {
+        if isStreaming {
+            return streamPhase == .streaming && lastLaunchAttempt?.host.id == host.id
+                && lastLaunchAttempt?.app.id == app.id
+        }
+        guard let status = hostLiveStatus,
+              HostLiveStatus.isFresh(status, for: host.id) else { return false }
+        if case .streamingApp(let name) = status.state { return name == app.name }
+        if case .streamingUnknownApp(let id) = status.state { return id == app.id }
+        return false
+    }
+
     func launcherArtReachable(for pcID: String) -> Bool {
         guard let status = hostLiveStatus, status.hostID == pcID else { return false }
         switch status.state {
