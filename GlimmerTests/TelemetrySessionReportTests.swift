@@ -42,6 +42,24 @@ struct TelemetrySessionReportTests {
         (dict[key] as? NSNumber)?.doubleValue
     }
 
+    @Test func resourceSummaryIncludesZeroAndOmitsUnavailableReadings() throws {
+        var aggregate = SessionAggregate()
+        var snap = TelemetrySnapshot()
+        aggregate.accumulate(snap, segment: .bringUp)
+        snap.clusterResidency = ClusterResidencySnapshot(
+            packagePowerW: 2, gpuResidencyPercent: 0, gpuPowerW: 0)
+        aggregate.accumulate(snap, segment: .active)
+        snap.clusterResidency = ClusterResidencySnapshot(
+            packagePowerW: 4, gpuResidencyPercent: 48, gpuPowerW: 0.69)
+        aggregate.accumulate(snap, segment: .gated)
+        let resources = try object(json(report(aggregate: aggregate)), "resources")
+        let gpu = try object(resources, "gpu_power_w")
+        #expect(number(gpu, "min") == 0 && number(gpu, "max") == 0.69 && number(gpu, "avg") == 0.345)
+        #expect(number(try object(resources, "package_power_w"), "avg") == 3)
+        #expect(number(try object(resources, "gpu_residency_percent"), "avg") == 24)
+        #expect(try object(json(report()), "resources").isEmpty)
+    }
+
     @Test func headerCarriesSchemaIdentityBuildAndDuration() throws {
         let root = try json(report())
         #expect(root["schema"] as? String == "glimmer.session_report.v1")

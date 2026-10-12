@@ -69,6 +69,7 @@ extension AppModel {
         wakingHostID = host.id
         wakeFailedHostID = nil
         wakeFailureReason = nil
+        cancelHostReadiness(for: host.id)
         hostStatusTask?.cancel()
         hostStatusTask = nil
         WakeNotifier.shared.prepare(for: self, host: host)

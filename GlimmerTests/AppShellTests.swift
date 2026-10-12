@@ -201,6 +201,26 @@ struct AppShellTests {
         #expect(reply?[CommandChannel.Key.detail] == "Stream request cancelled.")
     }
 
+    @Test @MainActor func aCommandWaitsForReadinessAndQuitStillCancelsIt() async throws {
+        let model = AppModel()
+        let readiness = CommandRouteWait()
+        let readyTask = Task { await readiness.wait() }
+        model.hostPolling.readinessTasks[tower.id] = readyTask
+        model.hostPolling.readinessReasons[tower.id] = "Finishing the last stream…"
+        defer { model.cancelHostReadiness() }
+        let route = CommandRouteWait()
+        let (request, task) = try await pendingStream(model, route: route)
+        route.settle()
+        await Task.yield()
+        #expect(model.pendingCommandStream === request)
+        #expect(!model.isStreaming && model.nativeSession == nil)
+        model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
+        readiness.settle()
+        await task.value
+        #expect(task.isCancelled && model.pendingCommandStream == nil)
+        #expect(!model.isStreaming && model.nativeSession == nil)
+    }
+
     @Test @MainActor func quittingAnotherPCLeavesThePendingLaunchAlone() async throws {
         let model = AppModel()
         let route = CommandRouteWait()

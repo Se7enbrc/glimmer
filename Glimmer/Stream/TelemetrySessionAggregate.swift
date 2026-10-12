@@ -73,6 +73,12 @@ struct SessionAggregate {
     }
 
     // ---- fps stats: HEADLINE over ACTIVE seconds, raw over every tick ----
+    var gpuPowerW = Stat()
+    var packagePowerW = Stat()
+    var gpuResidencyPercent = Stat()
+
+    init() {}
+
     var receivedFps = Stat()
     var decodedFps = Stat()
     var renderedFps = Stat()
@@ -185,10 +191,17 @@ struct SessionAggregate {
         envStateChangesTotal = changesTotal
     }
 
+    private mutating func accumulateResources(_ resources: ClusterResidencySnapshot?) {
+        if let value = resources?.gpuPowerW { gpuPowerW.add(value) }
+        if let value = resources?.packagePowerW { packagePowerW.add(value) }
+        if let value = resources?.gpuResidencyPercent { gpuResidencyPercent.add(value) }
+    }
+
     /// Fold one per-second snapshot into the rollup. Called on the exporter
     /// queue, after `classifyTick` decided this tick's segment.
     mutating func accumulate(_ snap: TelemetrySnapshot, segment: TickSegment) {
         tickCount += 1
+        accumulateResources(snap.clusterResidency)
         let isActive = segment == .active
         if let value = snap.receivedFps {
             receivedFpsRaw.add(value)

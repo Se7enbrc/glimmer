@@ -176,8 +176,8 @@ These are settled. A pull request is not the place to reopen them.
 
 - The renderer is `AVSampleBufferDisplayLayer`. Not Metal.
 - Glimmer stays light: real time and fast, but cheap to run. No feature may cost
-  meaningful CPU or GPU in steady state, and nothing shown during a stream may
-  push the video off the direct-to-display path. Prove it with telemetry.
+  meaningful CPU, GPU or power in steady state; judge cost in watts
+  (`gpu_power_w`, `package_power_w`), not GPU residency.
 - Fullscreen defaults to a borderless window covering the whole panel, notch
   included; a native full-screen Space is opt-in. Preserve saved fullscreen
   preferences. macOS owns the Game Mode toggle; never use private APIs or

@@ -152,20 +152,18 @@ extension TelemetryRenderer {
                          "P-cluster (performance cores) active residency this window, 0..1 (IOReport) "
                          + "- the SoC-side confirmation the hot path is on the fast cores.",
                          cluster.pClusterActive)
-            // IOReport bring-up #2 (power/GPU) rides the SAME snapshot - the
-            // sampler is delta-based, so it is read exactly once per tick (in
-            // fillResource) and shared with NDJSON; a second read here would
-            // corrupt its baselines. Each gauge degrades to nil independently
-            // (group unavailable / first-tick baseline) and `emit` then omits
-            // the family - the sampler's fail-quiet design, absent ≠ 0.
+            // Both formats share fillResource's single delta; a second read would corrupt baselines.
+            // Unavailable groups and first-tick baselines stay absent, never zero.
             builder.emit("glimmer_package_power_w",
                          "SoC package power this window, watts - IOReport Energy Model "
                          + "CPU+GPU+ANE rails (powermetrics' Combined Power).",
                          cluster.packagePowerW)
             builder.emit("glimmer_gpu_residency_percent",
-                         "GPU active residency this window, 0..100 (IOReport GPU Stats: non-OFF "
-                         + "share of the GPUPH states) - PERCENT, unlike the 0..1 cluster gauges.",
+                         "GPU time awake at any clock this window, 0..100 percent; not capacity or power cost.",
                          cluster.gpuResidencyPercent)
+            builder.emit("glimmer_gpu_power_w",
+                         "GPU power this window, watts (IOReport Energy Model GPU Energy rail).",
+                         cluster.gpuPowerW)
         }
     }
 

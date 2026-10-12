@@ -1,17 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AppModel+StreamFailure.swift
-//
-//  What the launcher banner and the menu bar say when a stream fails to start
-//  or ends badly, and which fix each failure asks for. The mappings are pure
-//  and tested; showStreamFailure is the one place they reach the UI.
-//
+// Shared failure copy keeps the launcher, commands and menu bar consistent.
 
 import Foundation
 
 extension AppModel {
+
+    /// A first decoded frame proves this PC's video path, unlike a handshake or last-played stamp.
+    func noteVideoReceived(from host: Host) {
+        guard hostPolling.videoReceivedFrom.insert(host.id).inserted else { return }
+        var known = Set(hostsDefaults.stringArray(forKey: "glimmer.videoReceivedHosts") ?? [])
+        if known.insert(host.id).inserted {
+            hostsDefaults.set(known.sorted(), forKey: "glimmer.videoReceivedHosts")
+        }
+    }
+
+    func hasReceivedVideo(from host: Host) -> Bool {
+        hostPolling.videoReceivedFrom.contains(host.id)
+            || (hostsDefaults.stringArray(forKey: "glimmer.videoReceivedHosts") ?? []).contains(host.id)
+    }
 
     /// Show a failure on the launcher banner and the menu bar.
     func showStreamFailure(_ failure: (message: String, kind: StreamErrorKind), on host: Host) {
@@ -88,8 +96,12 @@ extension AppModel {
 
     /// The toast for a stream that ended with a nonzero code. The watchdog's bring-up codes (see
     /// watchdogTerminationCode) and Sunshine's own non-recoverable codes each name their fix.
-    nonisolated static func streamEndedMessage(code: Int32, hostName: String) -> String {
+    nonisolated static func streamEndedMessage(
+        code: Int32, hostName: String, hasReceivedVideo: Bool = false
+    ) -> String {
         switch code {
+        case StreamSession.noVideoTrafficTerminationCode where hasReceivedVideo:
+            "\(hostName) didn't start sending video. Try again."
         case StreamSession.noVideoTrafficTerminationCode:
             "No video from \(hostName) reached this Mac. Make sure the PC's firewall allows UDP port 47998."
         case StreamSession.noVideoFrameTerminationCode:

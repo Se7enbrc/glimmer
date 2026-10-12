@@ -45,6 +45,14 @@
 
 ### Bug fixes
 
+- After a stream ends, Glimmer briefly waits for the PC to finish before
+  offering another stream. The launcher explains the wait, and command-line
+  launches wait too.
+- If a PC that has streamed video before sends none, the message asks you to try
+  again instead of changing the firewall.
+- Optional diagnostics report GPU power in watts alongside time awake, so
+  low-clock activity is not mistaken for heavy GPU use.
+
 - Returning to a full-screen stream waits for its transition to settle before
   resuming video. A missed animation callback no longer leaves the window
   transparent.

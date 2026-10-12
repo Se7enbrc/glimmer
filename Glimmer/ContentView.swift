@@ -54,7 +54,10 @@ struct MainWindow: View {
             if focus == nil { model.launcherControllerNavigating = false }
         }
         .onChange(of: model.launcherStyle) { _, _ in launcherFocus = nil }
-        .onAppear { model.setHIDDiscovery(true, for: .launcher) }
+        .onAppear {
+            model.restartHostStatusPolling()
+            model.setHIDDiscovery(true, for: .launcher)
+        }
         .onDisappear { model.setHIDDiscovery(false, for: .launcher) }
         .sheet(isPresented: $showPair) {
             PairSheet().environment(model)
@@ -213,7 +216,10 @@ struct StreamMenu: View {
     @ViewBuilder private var primaryItem: some View {
         let host = model.selectedHost
         switch model.menuBarPrimaryAction {
-        case .stream(let app): Button("Stream \(app)") { model.streamHeroApp() }
+        case .stream(let app):
+            Button("Stream \(app)") { model.streamHeroApp() }
+                .disabled(model.selectedReadinessReason != nil)
+                .accessibilityHint(model.selectedReadinessReason ?? "")
         case .wake: Button("Wake and Connect") { if let host { model.wakeHost(host, thenConnect: true) } }
         case .waking: Button("Stop Waiting") { if let host { model.cancelWake(host) } }
         case .pairAgain:

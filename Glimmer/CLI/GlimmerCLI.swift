@@ -150,6 +150,7 @@ enum GlimmerCLI {
         model.loadHosts()
         // The restored selection starts the launcher's poll loop; verbs probe on demand.
         model.hostStatusTask?.cancel()
+        model.cancelHostReadiness()
         switch command.verb {
         case .pair: return await pair(command, model: model)
         case .list: return await list(command, model: model)
@@ -188,13 +189,20 @@ enum GlimmerCLI {
     /// One readiness probe through the launcher's own poller, in place of the loop
     /// a selection starts. A first poll that learns the PC's MAC reloads the host
     /// list and resets the selection, dropping its result; one retry covers that.
-    static func probe(_ host: Host, model: AppModel) async -> HostLiveStatus? {
+    static func probe(_ host: Host, model: AppModel, waitUntilIdle: Bool = false) async -> HostLiveStatus? {
         for _ in 0..<2 {
             model.selectedHost = model.hosts.first { $0.id == host.id } ?? host
             model.hostStatusTask?.cancel()
+            model.cancelHostReadiness()
             model.hostLiveStatus = nil
             _ = await model.pollHostStatusOnce(for: host.id, appListFor: nil)
-            if let live = model.hostLiveStatus, live.hostID == host.id { return live }
+            if let live = model.hostLiveStatus, live.hostID == host.id {
+                if waitUntilIdle, AppModel.occupant(of: live.state) != nil {
+                    model.beginHostReadiness(for: host)
+                    await model.hostPolling.readinessTasks[host.id]?.value
+                }
+                return model.hostLiveStatus
+            }
         }
         return nil
     }

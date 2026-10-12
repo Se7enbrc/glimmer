@@ -238,6 +238,14 @@ struct StreamSignalTests {
         #expect(![traffic, frame, lost, other].contains { $0.localizedCaseInsensitiveContains("host") })
     }
 
+    @Test func aKnownVideoPathAsksForRetryInsteadOfFirewallChanges() {
+        let message = AppModel.streamEndedMessage(code: -100, hostName: "Den PC", hasReceivedVideo: true)
+        #expect(message == "Den PC didn't start sending video. Try again.")
+        #expect(!message.contains("firewall"))
+        #expect(AppModel.streamEndedMessage(code: -100, hostName: "Den PC", hasReceivedVideo: false)
+            .contains("UDP port 47998"))
+    }
+
     // MARK: Stats HUD
 
     /// With Differentiate Without Color on, warning and critical values are

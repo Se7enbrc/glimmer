@@ -207,6 +207,7 @@ extension AppModel {
     func setHostPollingSleep(system: Bool, sleeping: Bool) {
         if system { hostPolling.systemSleeping = sleeping } else { hostPolling.displaysSleeping = sleeping }
         if sleeping {
+            cancelHostReadiness()
             hostStatusTask?.cancel()
             hostStatusTask = nil
             hostPolling.movedHostSearch?.cancel()

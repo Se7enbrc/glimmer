@@ -423,6 +423,35 @@ template asks for.
 `make enable-telem` / `make disable-telem` flip the same preference from the
 command line.
 
+### GPU power and time awake
+
+`gpu_residency_percent` is the percentage of time the GPU is awake at any clock,
+from IOReport's GPU Stats active states. It is not the percentage of GPU
+capacity used: 48% awake at the lowest clock does not mean 48% of the GPU.
+`gpu_power_w` is the cost in watts, from the Energy Model's “GPU Energy” rail.
+Each channel's own mJ, uJ or nJ unit is converted over the measured sample
+interval. `package_power_w` includes CPU, GPU and ANE compute rails.
+
+These are whole-SoC readings, including other apps. Compare watts with the same
+scene and background workload; residency alone cannot judge cost. The owner
+measured an M4 Pro playing 4K HDR AV1 at about 185 fps on a 240 Hz display: the
+direct path read 0 mW GPU power; composited playback read about 690 mW at P1.
+This is a workload reference, not a universal threshold.
+
+The stats overlay is what composites in that case. Any layer or window drawn
+over the video makes macOS blend every frame; on the same M4 Pro the overlay
+cost about 0.66 W of GPU power and 8% of a core while visible, and nothing when
+hidden. A child window over the video composites the same way.
+
+The per-second rows carry `gpu_power_w` and `gpu_residency_percent`; Prometheus
+prefixes both with `glimmer_`. The session scorecard's `resources` object
+carries min/avg/max for both and `package_power_w`, over all available session
+samples (including startup and hidden windows). Missing rails and first samples
+are omitted. A flat Energy Model window retains its baseline and emits no power
+reading; zero GPU power is valid when other compute rails advance. All fields
+reuse the opt-in sampler's existing one-second cadence. The stats overlay
+currently shows neither GPU residency nor GPU power.
+
 ### Kernel receive timing
 
 Video and audio enable the public `SO_TIMESTAMP_MONOTONIC` socket option.

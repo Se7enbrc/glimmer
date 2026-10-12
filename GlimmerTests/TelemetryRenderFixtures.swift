@@ -170,7 +170,7 @@ enum TelemetryRenderFixtures {
             physFootprintBytes: 512_000_000, onBattery: true, batteryCharging: false)
         snap.clusterResidency = ClusterResidencySnapshot(
             eClusterActive: 0.25, pClusterActive: 0.75, eClusterCount: 2, pClusterCount: 4,
-            packagePowerW: 9.5, gpuResidencyPercent: 38.5)
+            packagePowerW: 9.5, gpuResidencyPercent: 38.5, gpuPowerW: 0.69)
         snap.rfiTotal = 51
         snap.idrRequestedTotal = 52
         snap.backlogOverflowTotal = 53

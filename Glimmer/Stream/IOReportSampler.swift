@@ -1,93 +1,35 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  IOReportSampler.swift
-//
-//  Opt-in P1 RESOURCE sampler #2 (system-level): SoC P-cluster vs E-cluster
-//  ACTIVE RESIDENCY via Apple's IOReport "CPU Stats / CPU Complex Performance
-//  States" channels, plus (bring-up #2) SoC PACKAGE POWER via "Energy Model"
-//  and GPU ACTIVE RESIDENCY via "GPU Stats". The cluster half is the SYSTEM
-//  side of the "are we using P vs E cores right?" question - the per-process
-//  per-thread half lives in ResourceTelemetry. The power/GPU half closes the
-//  one resource question neither could answer: is a heavy session GPU-bound or
-//  thermal-budget-bound?
-//
-//  WHY IOReport (and the deliberate scope): IOReport is the same private-but-
-//  stable C API `powermetrics`/asitop/macmon read. We dlopen it at RUNTIME
-//  (/usr/lib/libIOReport.dylib resolves from the dyld shared cache) so there is
-//  NO link-time framework dependency and NO change to the Xcode project - a
-//  client-side-only addition.
-//
-//  SECOND BRING-UP (power + GPU), what attempt #1 missed: both groups needed a
-//  different DECODE, not a different subscription. "Energy Model" channels are
-//  SIMPLE-format integer accumulators - IOReportStateGetCount returns -1 for
-//  them, so the state-residency parse read nothing; they decode via
-//  IOReportSimpleGetIntegerValue plus the per-channel unit label ("CPU Energy"
-//  is mJ while "GPU Energy" is nJ on the SAME SoC). And the GPU "GPUPH" state
-//  channel matches neither the `E` nor `P` cluster-name prefix and idles in a
-//  bucket named "OFF", so the CPU-cluster fold skipped it. With those decode
-//  fixes the same minimal dlopen/subscription path reads both groups cleanly.
-//  Package power = the "CPU Energy" + "GPU Energy" + ANE rails - the sum
-//  powermetrics reports as "Combined Power (CPU + GPU + ANE)"; deliberately
-//  NOT the DRAM/display/PCIe rails, so it tracks the compute work we cause.
-//  Each group rides its OWN subscription, so a failure of either new read
-//  degrades to nil without touching the proven cluster-residency path.
-//
-//  GATING + HOT-PATH SAFETY (load-bearing - see TelemetryExporter.swift):
-//    * Constructed ONLY on the gate-on path (the exporter builds it in start()).
-//      When telemetry is off (default) NOTHING here is constructed: no dlopen, no
-//      subscription, no sample - zero overhead, exactly like WiFiTelemetry.
-//    * Sampled ONLY on the exporter's serial workQueue at ~1Hz - NEVER a hot
-//      path. There is no per-frame and no per-packet cost. Each IOReport delta
-//      between two ~1s-apart samples is one cheap framework call.
-//    * Any dlopen/symbol/subscription failure degrades to "no sample" (nil) so a
-//      bring-up hiccup can never affect the stream - but NEVER silently: every
-//      failing stage now leaves a one-time Diag NOTICE (see below). Without
-//      these breadcrumbs the fields can ship DARK (zero rows, zero clues) even
-//      when bring-up succeeds in a different environment - the many silent nil
-//      paths mean a packaged app could be dead-on-arrival invisibly.
-//
-//  FIX-OR-REMOVE DECISION (made on a packaged run's evidence - do not
-//  pre-empt it in code):
-//    * If a stage fails on a packaged build, the stage-naming NOTICEs below
-//      name it. If the dlopen/subscription is flat-out refused: remove this
-//      sampler honestly - delete the file, its exporter hook
-//      (TelemetryExporter+CaptureSections.fillResource), the NDJSON/prom
-//      render keys, and gate the dashboard power/GPU panels off.
-//    * If API-stage (a group/format change on a newer OS): fix the decode or
-//      drop only the failing group - each group already degrades independently.
-//    * What is NOT acceptable is the prior state: fields documented as shipped
-//      yet absent from every row with no way to know why.
-//
-//  PROCESS-LIFETIME, NEVER DEALLOCATED (2026-08-30 crash fix): the sampler is
-//  a keep-alive singleton. Releasing what IOReport hands back is not
-//  survivable in practice: the shipped 2026.8.15 crashed in objc_release
-//  inside the compiler-generated IOReportSampler.deinit (a dict -> array ->
-//  dict dealloc chain over freed memory) when a telemetry session's teardown
-//  released the duplicated-channels dictionaries and final retained samples
-//  alongside the subscriptions. The API's real ownership does not follow the
-//  CF Create/Get rules its names suggest (the memory-discipline note below
-//  records an earlier over-release found the same way), and every long-lived
-//  IOReport consumer - powermetrics, asitop, macmon - holds its subscription
-//  for the life of the process and never frees anything. So: construct once
-//  on the first gate-on session via `shared`, reset the delta baselines per
-//  session (`beginSession()`), keep the dlopen handle + subscriptions until
-//  process exit. The cost of the keep-alive is a few KB of dormant CF state
-//  after the first opted-in session; the alternative was a teardown crash.
-//
-//  SECRET-FREE: residency fractions and package watts are pure SoC physics. No
-//  host identity, keys, pairing material, or secrets.
-//
+// IOReport is resolved at runtime without a link-time dependency. Cluster residency tracks
+// where CPU work runs; GPU residency is time awake at any clock. GPU and package watts
+// measure energy cost, not utilization or the share of GPU capacity.
+
+// Energy Model channels use SIMPLE integer accumulators, not state residency. Read units
+// per channel: CPU Energy can be mJ while GPU Energy is nJ on the same SoC. Package power
+// sums CPU + GPU + ANE compute rails, never DRAM/display/PCIe or overlapping sub-rails.
+
+// GPUPH idles in OFF and matches neither the E nor P cluster prefix. Its separate state
+// subscription and the Energy Model subscription degrade independently, preserving CPU
+// residency if either optional group fails.
+
+// Construct only on the telemetry gate-on path and sample at about 1 Hz on the exporter
+// queue, never per frame or packet. When telemetry is off, there is no dlopen, subscription
+// or sampling work. Values contain only SoC measurements, never identity or secrets.
+
+// Every failing bring-up stage and the first sample outcome must leave a one-time Diag
+// notice. If packaged builds cannot subscribe, remove the sampler and its exports; if an
+// OS changes a group or format, fix its decode or drop that group, never ship silent absence.
+
+// Keep the singleton and its subscriptions alive until process exit, resetting only delta
+// baselines per session. Releasing IOReport's nested dictionaries crashed 2026.8.15 inside
+// objc_release: real ownership does not obey the CF Create/Get rules suggested by API names.
 
 import Foundation
 import os
 
-/// One ~1Hz SoC sample: P/E cluster active residency, package power, and GPU
-/// active residency. Plain value type built on the exporter queue from
-/// `IOReportSampler.sample()`; rendered to both wire forms. (The type name
-/// predates the power/GPU fields - bring-up #1 carried only the cluster
-/// residencies - and is kept so the capture/render call sites stay untouched.)
+/// One opt-in SoC sample shared by both wire formats: CPU/GPU time awake and compute watts.
+/// The original cluster snapshot name is retained for the existing capture/render call sites.
 struct ClusterResidencySnapshot: Sendable {
     /// E-cluster (efficiency cores) active residency this window, 0...1. The cluster
     /// the LOW-QoS / background work should land on; high here while the stream is
@@ -103,31 +45,17 @@ struct ClusterResidencySnapshot: Sendable {
     var eClusterCount: Int = 0
     /// Number of distinct P-cluster channels folded into `pClusterActive`.
     var pClusterCount: Int = 0
-    /// SoC package power this window, watts: the "CPU Energy" + "GPU Energy" +
-    /// ANE rails of the "Energy Model" group over the window's wall time - the
-    /// same sum powermetrics calls "Combined Power (CPU + GPU + ANE)". The
-    /// thermal-budget signal: a 4K120 HDR session that creeps toward the SoC's
-    /// sustained budget explains throttling before `thermal_state` moves. nil
-    /// until the first clean delta or if the Energy Model read is unavailable.
-    /// Export key `package_power_w` (T2 contract).
+    /// CPU + GPU + ANE compute watts, matching powermetrics' Combined Power, without DRAM/display rails.
+    /// This tracks thermal cost before thermal_state changes; nil until a clean Energy Model delta.
     var packagePowerW: Double?
-    /// GPU active residency this window, 0...100 - the non-OFF share of the
-    /// "GPU Stats / GPU Performance States" GPUPH window. PERCENT, not the 0...1
-    /// of the cluster gauges above, matching the `gpu_residency_percent` export
-    /// key (T2 contract). Answers "is heavy decode/present GPU-bound?". nil
-    /// until the first clean delta or if the GPU Stats read is unavailable.
+    /// GPU time awake at any clock, 0...100; this does not measure capacity or power cost.
     var gpuResidencyPercent: Double?
+    /// The GPU Energy rail alone, in watts. nil means unavailable; zero is a measured idle GPU.
+    var gpuPowerW: Double?
 }
 
-/// IOReport-backed SoC sampler (cluster residency + package power + GPU
-/// residency). A process-lifetime singleton (see PROCESS-LIFETIME above);
-/// each session's exporter borrows it via `shared` and calls `beginSession()`
-/// once, then `sample()` once per ~1Hz tick.
-///
-/// `@unchecked Sendable`: every access to mutable state goes through
-/// `stateLock`. The old single-queue-confinement argument died with the
-/// singleton - each session's exporter has its OWN serial queue, so across a
-/// session boundary two different queues touch this object.
+/// Process-lifetime sampler, borrowed by each opted-in session and reset with beginSession().
+/// @unchecked Sendable: stateLock guards every mutable field across successive exporters' queues.
 final class IOReportSampler: @unchecked Sendable {
 
     /// The one process-lifetime instance. Lazily built on first access, which
@@ -232,7 +160,7 @@ final class IOReportSampler: @unchecked Sendable {
     /// invoked - structurally invisible postmortem).
     private static func noteBringUpFailure(_ stage: String) {
         Diag.notice("IOReport power/GPU telemetry unavailable - \(stage). "
-            + "package_power_w / gpu_residency_percent / soc_* will be absent; "
+            + "package_power_w / gpu_power_w / gpu_residency_percent / soc_* will be absent; "
             + "see the entitle-or-remove criteria in IOReportSampler.swift.",
             TelemetryExporter.logCategory)
     }
@@ -347,19 +275,17 @@ final class IOReportSampler: @unchecked Sendable {
         loggedUnknownEnergyUnit = false
     }
 
-    /// Capture one SoC sample (a delta over the window since the last call).
-    /// Returns nil on the FIRST call (no previous samples to delta against) and
-    /// when every group read hiccupped; otherwise whichever of the cluster /
-    /// power / GPU reads came through cleanly. ~1Hz from the exporter's queue -
-    /// never the hot path. The first post-baseline outcome is logged ONCE
-    /// (LIVE with the per-group inventory, or DARK naming the failing stage) so
-    /// no session can ship these fields silently absent again.
+    /// Sample once per exporter tick, never on a hot path. The baseline tick and unavailable
+    /// groups remain nil; the first post-baseline outcome logs LIVE with inventory or DARK with
+    /// the failing stage so packaged sessions never ship silently absent fields.
     func sample() -> ClusterResidencySnapshot? {
         stateLock.lock()
         defer { stateLock.unlock() }
         sampleTicks += 1
         var snapshot = sampleClusters() ?? ClusterResidencySnapshot()
-        snapshot.packagePowerW = samplePackagePower()
+        let power = samplePackagePower()
+        snapshot.packagePowerW = power?.package
+        snapshot.gpuPowerW = power?.gpu
         snapshot.gpuResidencyPercent = sampleGpuResidency()
         let sawClusters = snapshot.eClusterCount > 0 || snapshot.pClusterCount > 0
         guard sawClusters || snapshot.packagePowerW != nil || snapshot.gpuResidencyPercent != nil else {
@@ -374,7 +300,8 @@ final class IOReportSampler: @unchecked Sendable {
             Diag.notice("IOReport sampler LIVE - clusters E:\(snapshot.eClusterCount)"
                 + "/P:\(snapshot.pClusterCount), package power "
                 + "\(snapshot.packagePowerW != nil || energyWindowFlat ? "yes" : "NO"), GPU residency "
-                + "\(snapshot.gpuResidencyPercent != nil ? "yes" : "NO").",
+                + "\(snapshot.gpuResidencyPercent != nil ? "yes" : "NO"), GPU power "
+                + "\(snapshot.gpuPowerW != nil ? "yes" : "NO").",
                 TelemetryExporter.logCategory)
         }
         return snapshot
@@ -403,11 +330,9 @@ final class IOReportSampler: @unchecked Sendable {
         return parsed
     }
 
-    /// One package-power delta, watts: the CPU + GPU + ANE compute aggregates
-    /// (rail set in `isPackageEnergyRail`). Units are read PER CHANNEL (mJ/uJ/nJ
-    /// on one SoC); an unknown-unit rail is dropped but logged once. nil on the
-    /// first call (baseline), when bring-up failed, and on any hiccup.
-    private func samplePackagePower() -> Double? {
+    /// One Energy Model delta feeds both watt gauges. Per-channel units can differ on the same SoC.
+    /// Keep a flat window's baseline until counters advance, so stale counters never claim zero cost.
+    private func samplePackagePower() -> EnergyPower? {
         guard let subscription = energySubscription, let channels = energyChannels,
               let simpleValue = simpleIntegerValue, let unitLabelOf = channelUnitLabel,
               let raw = createSamples(subscription, channels, nil)?.takeRetainedValue() else {
@@ -428,33 +353,23 @@ final class IOReportSampler: @unchecked Sendable {
             return nil
         }
         let elapsedSeconds = Double(nowNs - previousNs) / 1_000_000_000.0
-        var watts = 0.0
-        var matchedAny = false
+        var power = EnergyPower(elapsedSeconds: elapsedSeconds)
         for channel in reportChannels(in: delta) {
             guard let name = channelName(channel)?.takeUnretainedValue() as String?,
                   isPackageEnergyRail(name) else { continue }
             let value = Double(simpleValue(channel, 0))
             guard value >= 0 else { continue }  // counter reset mid-window - skip.
             let unit = unitLabelOf(channel)?.takeUnretainedValue() as String? ?? ""
-            switch unit {
-            case "mJ": watts += value / 1e3 / elapsedSeconds; matchedAny = true
-            case "uJ": watts += value / 1e6 / elapsedSeconds; matchedAny = true
-            case "nJ": watts += value / 1e9 / elapsedSeconds; matchedAny = true
-            default:
-                // Matched rail, unknown unit: drop it but say so once via Diag so
-                // it lands in the session log - a silent drop here hid the GPU rail.
-                if !loggedUnknownEnergyUnit {
-                    loggedUnknownEnergyUnit = true
-                    Diag.warn("IOReport Energy Model rail \"\(name)\" has unknown unit \"\(unit)\""
-                        + " - excluded from package_power_w (sum may undercount).",
-                        TelemetryExporter.logCategory)
-                }
+            if !power.add(name: name, value: value, unit: unit), !loggedUnknownEnergyUnit {
+                // A silent unknown-unit drop previously hid the GPU rail and understated package power.
+                loggedUnknownEnergyUnit = true
+                Diag.warn("IOReport Energy Model rail \"\(name)\" has unknown unit \"\(unit)\""
+                    + " - excluded from package_power_w and gpu_power_w (sum may undercount).",
+                    TelemetryExporter.logCategory)
             }
         }
-        // Every rail flat: the counters haven't published since the baseline.
-        // Keep it, so the next reading spans the whole interval instead of 0 W.
-        if matchedAny && watts == 0 { advanceBaseline = false; return nil }
-        return matchedAny ? watts : nil
+        if power.package == 0 { advanceBaseline = false; return nil }
+        return power
     }
 
     /// True only for the top-level CPU/GPU/ANE compute aggregates, matched by an
@@ -554,5 +469,31 @@ final class IOReportSampler: @unchecked Sendable {
         }
         guard total > 0 else { return nil }
         return active / total
+    }
+}
+
+/// Missing rails stay absent, while a zero GPU delta alongside advancing CPU rails is real zero power.
+struct EnergyPower {
+    private let elapsedSeconds: Double
+    private(set) var package: Double?
+    private(set) var gpu: Double?
+
+    init(elapsedSeconds: Double) {
+        self.elapsedSeconds = elapsedSeconds
+    }
+
+    mutating func add(name: String, value: Double, unit: String) -> Bool {
+        guard elapsedSeconds > 0, elapsedSeconds.isFinite, value >= 0, value.isFinite else { return false }
+        let scale: Double
+        switch unit {
+        case "mJ": scale = 1e3
+        case "uJ": scale = 1e6
+        case "nJ": scale = 1e9
+        default: return false
+        }
+        let watts = value / scale / elapsedSeconds
+        package = (package ?? 0) + watts
+        if name == "GPU Energy" { gpu = (gpu ?? 0) + watts }
+        return true
     }
 }

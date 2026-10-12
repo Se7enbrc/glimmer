@@ -75,6 +75,7 @@ struct SessionReport {
         top.append("\"segments\":\(segmentsObject())")
         top.append("\"fps\":\(fpsObject(active: true))")
         top.append("\"fps_raw\":\(fpsObject(active: false))")
+        top.append("\"resources\":\(resourcesObject())")
         top.append("\"peak_pacing_depth\":\(aggregate.peakPacingDepth)")
         top.append("\"latency_basis\":\"\(aggregate.activeLatency != nil ? "active_seconds" : "all_session")\"")
         top.append("\"latency\":\(latencyObject(aggregate.activeLatency ?? histograms))")
@@ -131,19 +132,29 @@ struct SessionReport {
         return "{" + parts.joined(separator: ",") + "}"
     }
 
-    private func fpsObject(active: Bool) -> String {
-        func stat(_ name: String, _ stat: SessionAggregate.Stat) -> String? {
-            var parts: [String] = []
-            if let value = stat.min { parts.append("\"min\":\(TelemetryRenderer.jsonNumber(value))") }
-            if let value = stat.avg { parts.append("\"avg\":\(TelemetryRenderer.jsonNumber(value))") }
-            if let value = stat.max { parts.append("\"max\":\(TelemetryRenderer.jsonNumber(value))") }
-            guard !parts.isEmpty else { return nil }
-            return "\"\(name)\":{" + parts.joined(separator: ",") + "}"
-        }
+    private func statObject(_ name: String, _ stat: SessionAggregate.Stat) -> String? {
+        var parts: [String] = []
+        if let value = stat.min { parts.append("\"min\":\(TelemetryRenderer.jsonNumber(value))") }
+        if let value = stat.avg { parts.append("\"avg\":\(TelemetryRenderer.jsonNumber(value))") }
+        if let value = stat.max { parts.append("\"max\":\(TelemetryRenderer.jsonNumber(value))") }
+        guard !parts.isEmpty else { return nil }
+        return "\"\(name)\":{" + parts.joined(separator: ",") + "}"
+    }
+
+    private func resourcesObject() -> String {
         let entries = [
-            stat("received", active ? aggregate.receivedFps : aggregate.receivedFpsRaw),
-            stat("decoded", active ? aggregate.decodedFps : aggregate.decodedFpsRaw),
-            stat("rendered", active ? aggregate.renderedFps : aggregate.renderedFpsRaw)
+            statObject("gpu_power_w", aggregate.gpuPowerW),
+            statObject("package_power_w", aggregate.packagePowerW),
+            statObject("gpu_residency_percent", aggregate.gpuResidencyPercent)
+        ].compactMap { $0 }
+        return "{" + entries.joined(separator: ",") + "}"
+    }
+
+    private func fpsObject(active: Bool) -> String {
+        let entries = [
+            statObject("received", active ? aggregate.receivedFps : aggregate.receivedFpsRaw),
+            statObject("decoded", active ? aggregate.decodedFps : aggregate.decodedFpsRaw),
+            statObject("rendered", active ? aggregate.renderedFps : aggregate.renderedFpsRaw)
         ].compactMap { $0 }
         return "{" + entries.joined(separator: ",") + "}"
     }

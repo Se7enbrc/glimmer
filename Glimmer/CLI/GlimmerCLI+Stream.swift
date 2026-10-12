@@ -19,7 +19,7 @@ extension GlimmerCLI {
 
     static func stream(_ command: Command, model: AppModel) async -> Int32 {
         guard let host = resolveHost(command.arguments[0], model: model) else { return Exit.notPaired }
-        let live = await probe(host, model: model)
+        let live = await probe(host, model: model, waitUntilIdle: true)
         switch live?.state {
         case .asleep, nil:
             let hint = model.canWake(host) ? " To wake it: glimmer wake \"\(host.displayName)\" --wait" : ""

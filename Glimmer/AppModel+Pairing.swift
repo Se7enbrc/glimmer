@@ -79,6 +79,7 @@ extension AppModel {
         let attempt = PairingAttempt(address: address)
         pairingAttempt = attempt
         pairingPhase = .idle
+        cancelHostReadiness()
         hostStatusTask?.cancel()
         hostStatusTask = nil
         return attempt

@@ -198,6 +198,7 @@ extension AppModel {
         request.task = Task {
             defer { request.task = nil }
             if let waitForRoute { await waitForRoute() } else { await awaitRouteSettled(for: host) }
+            if !Task.isCancelled { await hostPolling.readinessTasks[host.id]?.value }
             // A cancelled wait may still resume after a newer request took its place.
             guard !Task.isCancelled, pendingCommandStream === request else { return }
             pendingCommandStream = nil

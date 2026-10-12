@@ -498,6 +498,7 @@ final class AppModel {
         let tokens = notificationTokens
         for token in tokens { NotificationCenter.default.removeObserver(token) }
         hostStatusTask?.cancel()
+        for task in hostPolling.readinessTasks.values { task.cancel() }
     }
 
     init() {

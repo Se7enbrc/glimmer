@@ -284,6 +284,31 @@ struct GlimmerCLISunshineTests {
 
     // MARK: - stream
 
+    @Test func streamReadinessWaitsForBusyToClearWithoutCancellingThePC() async throws {
+        let sunshine = FakeSunshine.scripted([
+            "serverinfo": [FakePCModel.serverInfo(game: 7, state: "SUNSHINE_SERVER_BUSY"), FakePCModel.serverInfo()],
+            "applist": [FakePCModel.appList]
+        ])
+        let fixture = try FakePCModel("cli-readiness", sunshine: sunshine)
+        defer { fixture.remove() }
+        let host = try fixture.pairTower()
+        let live = await CLI.probe(host, model: fixture.model, waitUntilIdle: true)
+        #expect(live?.state == .idle)
+        #expect(sunshine.paths == ["serverinfo", "applist", "serverinfo"])
+    }
+
+    @Test func anIdleStreamProbeAddsNoReadinessRoundTrip() async throws {
+        let sunshine = FakeSunshine.scripted([
+            "serverinfo": [FakePCModel.serverInfo()], "applist": [FakePCModel.appList]
+        ])
+        let fixture = try FakePCModel("cli-already-ready", sunshine: sunshine)
+        defer { fixture.remove() }
+        let host = try fixture.pairTower()
+        let live = await CLI.probe(host, model: fixture.model, waitUntilIdle: true)
+        #expect(live?.state == .idle)
+        #expect(sunshine.paths == ["serverinfo", "applist"])
+    }
+
     @Test func streamingFromAPCThatIsDownSuggestsWakingIt() async throws {
         let fixture = try FakePCModel("cli-stream-down", sunshine: FakeSunshine.scripted([:]), rtt: .unreachable)
         defer { fixture.remove() }

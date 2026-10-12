@@ -125,7 +125,9 @@ struct StreamButton: View {
     private func activate() {
         switch role {
         case .noPC: break                                  // disabled - copy is the affordance
-        case .connect: model.streamHeroApp()
+        case .connect:
+            guard model.selectedReadinessReason == nil else { return }
+            model.streamHeroApp()
         case .connecting: model.cancelConnect()        // the working exit from a stuck connect
         case .reconnecting: model.stopStreamFromMenu(source: "the launcher")  // a live stream, so it stops
         case .liveBackgrounded: model.resumeStreamWindow()
@@ -231,7 +233,7 @@ struct StreamButton: View {
         // The cancel roles stay ENABLED - they're the way out.
         .disabled(
             role == .noPC ||
-            (role == .connect && model.isStreaming)
+            (role == .connect && (model.isStreaming || model.selectedReadinessReason != nil))
         )
         // Success haptic on the actual establish edge, not on click.
         .sensoryFeedback(.success, trigger: isLive)
@@ -245,14 +247,14 @@ struct StreamButton: View {
                             .labelStyle(.titleAndIcon)
                     }
                     // Same second-concurrent-session gate as the app tiles.
-                    .disabled(model.isStreaming)
+                    .disabled(model.isStreaming || model.selectedReadinessReason != nil)
                 }
             }
         }
-        .help(guidance.help)
+        .help(model.selectedReadinessReason ?? guidance.help)
         // VoiceOver hint mirrors the sighted-only `.help` so assistive-tech
         // users learn WHY the button is disabled (noPC) or what a click does.
-        .accessibilityHint(guidance.hint)
+        .accessibilityHint(model.selectedReadinessReason ?? guidance.hint)
         .animation(Motion.layout(reduceMotion: reduceMotion), value: role)
     }
 

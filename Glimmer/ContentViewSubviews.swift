@@ -45,6 +45,7 @@ struct AppIconsRow: View {
     }
 
     private var navigationCells: [LauncherFocus] {
+        guard model.readinessReason(for: host) == nil else { return [] }
         let visible = model.launcherStyle == .covers ? apps : inlineApps
         var cells = visible.filter { !model.isStreaming || tileState($0) != .ready }
             .map { LauncherFocus.app($0.id) }
@@ -168,18 +169,20 @@ struct AppIconsRow: View {
         .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
         // Only the streaming app stays live; the overflow menu remains openable,
         // since looking at other apps launches nothing.
-        .disabled(model.isStreaming && state == .ready)
-        .help(state.help ?? (model.isStreaming
+        .disabled((model.isStreaming || model.readinessReason(for: host) != nil) && state == .ready)
+        .help(model.readinessReason(for: host) ?? state.help ?? (model.isStreaming
             ? "Finish the current stream first" : "Stream \(app.name)"))
         // One name, not glyph + name + play glyph read in turn.
         .accessibilityLabel(app.name)
         .accessibilityValue(state.spoken.value.isEmpty && isRunning(app) ? "Running" : state.spoken.value)
-        .accessibilityHint(state.spoken.hint)
+        .accessibilityHint(model.readinessReason(for: host) ?? state.spoken.hint)
     }
 
     private func activate(_ app: LibraryApp) {
         switch tileState(app) {
-        case .ready: model.requestStream(app: app, on: host)
+        case .ready:
+            guard model.readinessReason(for: host) == nil else { return }
+            model.requestStream(app: app, on: host)
         case .connecting: model.cancelConnect()
         // A reconnect is a live stream, so its way out ends it rather than cancelling.
         case .reconnecting: model.stopStreamFromMenu(source: "the launcher")
@@ -198,7 +201,8 @@ struct AppIconsRow: View {
                     Label { Text("Stream \(app.name)") } icon: { app.icon }
                         .labelStyle(.titleAndIcon)
                 }
-                .disabled(model.isStreaming)
+                .disabled(model.isStreaming || model.readinessReason(for: host) != nil)
+                .accessibilityHint(model.readinessReason(for: host) ?? "")
             }
         } label: {
             tileLabel(icon: Image(systemName: "ellipsis"), title: "\(overflowApps.count) more", trailing: "chevron.down")

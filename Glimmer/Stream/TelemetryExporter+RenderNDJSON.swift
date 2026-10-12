@@ -394,13 +394,11 @@ extension TelemetryRenderer {
             builder.add("soc_pcluster_active", cluster.pClusterActive)
             builder.addInt("soc_ecluster_channels", cluster.eClusterCount)
             builder.addInt("soc_pcluster_channels", cluster.pClusterCount)
-            // IOReport bring-up #2 (T2 export keys): package watts + GPU
-            // residency (0..100, unlike the 0..1 cluster fields above) off the
-            // same once-per-tick sampler delta the prom family reads. A nil
-            // gauge (group unavailable / first-tick baseline) omits its key -
-            // fail-quiet, absent ≠ 0.
+            // Reuse the same once-per-tick delta as Prometheus; resampling would corrupt the baseline.
+            // Missing gauges are omitted, never reported as zero. GPU residency is time awake, not cost.
             builder.add("package_power_w", cluster.packagePowerW)
             builder.add("gpu_residency_percent", cluster.gpuResidencyPercent)
+            builder.add("gpu_power_w", cluster.gpuPowerW)
         }
     }
 

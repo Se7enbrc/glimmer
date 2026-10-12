@@ -105,7 +105,7 @@ struct TelemetryNDJSONRenderTests {
         check(row, [
             "phys_footprint_bytes": 512_000_000, "soc_ecluster_active": 0.25, "soc_pcluster_active": 0.75,
             "soc_ecluster_channels": 2, "soc_pcluster_channels": 4, "package_power_w": 9.5,
-            "gpu_residency_percent": 38.5
+            "gpu_residency_percent": 38.5, "gpu_power_w": 0.69
         ])
         #expect(row["on_battery"] as? Bool == true)
         #expect(row["battery_charging"] as? Bool == false)
@@ -230,7 +230,7 @@ struct TelemetryNDJSONRenderTests {
         #expect(!line.contains("null") && !line.contains("nan") && !line.contains("inf"))
         for absent in ["fps_received", "rtt_ms", "wifi_link", "stream_link", "threads", "decode_hw",
                        "audio_packets_total", "handshake_rtsp_ms", "lat_end_to_end_p50_ms", "host",
-                       "build_commit", "vt_session_create_ms", "audio_cushion_floor_ms"] {
+                       "build_commit", "vt_session_create_ms", "audio_cushion_floor_ms", "gpu_power_w"] {
             #expect(row[absent] == nil, "\(absent) should be omitted")
         }
         #expect(row["session"] as? String == "s1")
