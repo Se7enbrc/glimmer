@@ -244,6 +244,7 @@
 		D10000F5 /* TelemetryExporter+RenderP2.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F4 /* TelemetryExporter+RenderP2.swift */; };
 		D1000201 /* ResourceTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000200 /* ResourceTelemetry.swift */; };
 		DA2026100900000000000011 /* RendererTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000012 /* RendererTelemetry.swift */; };
+		DA2026101200000000000021 /* RendererTelemetry+Compositing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026101200000000000022 /* RendererTelemetry+Compositing.swift */; };
 		D1000203 /* IOReportSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000202 /* IOReportSampler.swift */; };
 		D1000AE1 /* RtpAudioReceiver+Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000AE0 /* RtpAudioReceiver+Telemetry.swift */; };
 		D1000B01 /* FramePacer+FrameRateRange.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B02 /* FramePacer+FrameRateRange.swift */; };
@@ -266,6 +267,7 @@
 		D6D80A720000000000000013 /* StreamWindow+Fade.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000014 /* StreamWindow+Fade.swift */; };
 		B1AC20261010000000000001 /* StreamWindowCloseState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1AC20261010000000000002 /* StreamWindowCloseState.swift */; };
 		5A1DE0C00000000000000001 /* StreamWindow+Slide.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */; };
+		DA2026101200000000000023 /* StreamWindow+RendererDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026101200000000000024 /* StreamWindow+RendererDiagnostics.swift */; };
 		D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */; };
 		D7D80A720000000000000015 /* StatsOverlayLayer+Traces.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */; };
 		D6D80A720000000000000017 /* EnvSignalController+Tunables.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */; };
@@ -817,6 +819,7 @@
 		D10000F4 /* TelemetryExporter+RenderP2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/TelemetryExporter+RenderP2.swift"; sourceTree = "<group>"; };
 		D1000200 /* ResourceTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/ResourceTelemetry.swift; sourceTree = "<group>"; };
 		DA2026100900000000000012 /* RendererTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/RendererTelemetry.swift"; sourceTree = "<group>"; };
+		DA2026101200000000000022 /* RendererTelemetry+Compositing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/RendererTelemetry+Compositing.swift"; sourceTree = "<group>"; };
 		D1000202 /* IOReportSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/IOReportSampler.swift; sourceTree = "<group>"; };
 		D1000AE0 /* RtpAudioReceiver+Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Telemetry.swift"; sourceTree = "<group>"; };
 		D1000B02 /* FramePacer+FrameRateRange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+FrameRateRange.swift"; sourceTree = "<group>"; };
@@ -839,6 +842,7 @@
 		D6D80A720000000000000014 /* StreamWindow+Fade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Fade.swift"; sourceTree = "<group>"; };
 		B1AC20261010000000000002 /* StreamWindowCloseState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindowCloseState.swift"; sourceTree = "<group>"; };
 		5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Slide.swift"; sourceTree = "<group>"; };
+		DA2026101200000000000024 /* StreamWindow+RendererDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+RendererDiagnostics.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayLayer+Rows.swift"; sourceTree = "<group>"; };
 		D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayLayer+Traces.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/EnvSignalController+Tunables.swift"; sourceTree = "<group>"; };
@@ -1229,6 +1233,7 @@
 				B1AC20261010000000000002 /* StreamWindowCloseState.swift */,
 				A71A20261011000000000002 /* Motion.swift */,
 				5A1DE0C00000000000000002 /* StreamWindow+Slide.swift */,
+				DA2026101200000000000024 /* StreamWindow+RendererDiagnostics.swift */,
 				D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */,
 				D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */,
 				D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */,
@@ -1337,6 +1342,7 @@
 				D10000E0 /* DisplayTelemetry.swift */,
 				D1000200 /* ResourceTelemetry.swift */,
 				DA2026100900000000000012 /* RendererTelemetry.swift */,
+				DA2026101200000000000022 /* RendererTelemetry+Compositing.swift */,
 				D1000202 /* IOReportSampler.swift */,
 				D10000E2 /* VideoDecoder+DecodeTelemetry.swift */,
 				D10000C4 /* BuildInfo.generated.swift */,
@@ -1889,6 +1895,7 @@
 				B1AC20261010000000000001 /* StreamWindowCloseState.swift in Sources */,
 				A71A20261011000000000001 /* Motion.swift in Sources */,
 				5A1DE0C00000000000000001 /* StreamWindow+Slide.swift in Sources */,
+				DA2026101200000000000023 /* StreamWindow+RendererDiagnostics.swift in Sources */,
 				D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */,
 				D7D80A720000000000000015 /* StatsOverlayLayer+Traces.swift in Sources */,
 				D6D80A720000000000000017 /* EnvSignalController+Tunables.swift in Sources */,
@@ -2003,6 +2010,7 @@
 				D10000E1 /* DisplayTelemetry.swift in Sources */,
 				D1000201 /* ResourceTelemetry.swift in Sources */,
 				DA2026100900000000000011 /* RendererTelemetry.swift in Sources */,
+				DA2026101200000000000021 /* RendererTelemetry+Compositing.swift in Sources */,
 				D1000203 /* IOReportSampler.swift in Sources */,
 				D10000E3 /* VideoDecoder+DecodeTelemetry.swift in Sources */,
 				D10000C5 /* BuildInfo.generated.swift in Sources */,

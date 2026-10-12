@@ -445,6 +445,18 @@ replacement or counter rollback starts a new baseline. Check sample age and the
 reported interval before interpreting cached values. Only one API request may be
 outstanding, and replies after teardown or renderer replacement are ignored.
 
+Completed intervals also detect renderer-path changes: optimized means more than
+half of the interval's frames used optimized compositing. The first nonempty
+interval establishes a baseline. Each subsequent flip can write a
+`Renderer path:` notice in `Stream.Window`, with at most one notice per five
+seconds; `suppressed` counts intervening flips since the last notice. The notice
+captures window, visible overlay, video-layer, HDR/EDR and display-ID state on
+the main actor after the metrics reply. `cursorVisible` is Glimmer's tracked
+hide state (`cursorSource=owned`), not an OS visibility query. Overlay roles are
+fixed names; arbitrary layer names, animation keys and text contents are never
+logged. This snapshot helps correlate changes but does not prove the
+compositor's cause.
+
 ### Comparing telemetry overhead
 
 Use the same Release executable, fixed scene, display mode, stream settings and

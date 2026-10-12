@@ -54,15 +54,20 @@ struct RendererPerformanceSnapshot: Sendable {
 struct RendererPerformanceSource: @unchecked Sendable {
     let identity: AnyObject
     let load: (@escaping @Sendable (RendererPerformanceValues?) -> Void) -> Void
+    let reportTransition: @Sendable (RendererPathTransition) -> Void
 
     init(identity: AnyObject,
+         reportTransition: @escaping @Sendable (RendererPathTransition) -> Void = { _ in },
          load: @escaping (@escaping @Sendable (RendererPerformanceValues?) -> Void) -> Void) {
         self.identity = identity
         self.load = load
+        self.reportTransition = reportTransition
     }
 
-    init(_ renderer: AVSampleBufferVideoRenderer) {
+    init(_ renderer: AVSampleBufferVideoRenderer,
+         reportTransition: @escaping @Sendable (RendererPathTransition) -> Void = { _ in }) {
         identity = renderer
+        self.reportTransition = reportTransition
         load = { completion in
             renderer.loadVideoPerformanceMetrics { metrics in
                 completion(metrics.flatMap(RendererPerformanceValues.init))
@@ -90,6 +95,7 @@ final class RendererTelemetry: @unchecked Sendable {
     private var baseline: (values: RendererPerformanceValues, time: CFTimeInterval)?
     private var latest = RendererPerformanceSnapshot()
     private var completedAt: CFTimeInterval?
+    private var pathTracker = RendererPathTracker()
 
     init(queue: DispatchQueue, probe: @escaping @Sendable () -> RendererPerformanceSource?) {
         self.queue = queue
@@ -133,6 +139,7 @@ final class RendererTelemetry: @unchecked Sendable {
         baseline = nil
         completedAt = nil
         latest = RendererPerformanceSnapshot()
+        pathTracker = RendererPathTracker()
     }
 
     private func observe(_ source: RendererPerformanceSource?) {
@@ -144,6 +151,7 @@ final class RendererTelemetry: @unchecked Sendable {
         baseline = nil
         completedAt = nil
         latest = RendererPerformanceSnapshot(resets: resets)
+        pathTracker.rebaseline()
     }
 
     private func complete(token: UInt64, values: RendererPerformanceValues?, now: CFTimeInterval) {
@@ -167,10 +175,14 @@ final class RendererTelemetry: @unchecked Sendable {
                 result.intervalSeconds = now - baseline.time
             } else {
                 result.resets &+= 1
+                pathTracker.rebaseline()
             }
         }
         baseline = (values, now)
         completedAt = now
         latest = result
+        if let delta = result.delta, let transition = pathTracker.observe(delta, now: now) {
+            current?.reportTransition(transition)
+        }
     }
 }

@@ -48,8 +48,16 @@ extension StreamSession {
             inFlightDecodeBacklog: { [weak decoder] in decoder?.inFlightDecodeBacklog() ?? 0 },
             refreshWindow: { [weak decoder] in decoder?.telemetryRefreshWindow() },
             displayProbe: { [weak decoder] in decoder?.telemetryDisplayProbe() },
-            rendererProbe: { [weak decoder] in
-                decoder?.sampleBufferRenderer.map(RendererPerformanceSource.init)
+            rendererProbe: { [weak decoder, weak window] in
+                guard let renderer = decoder?.sampleBufferRenderer else { return nil }
+                let identity = ObjectIdentifier(renderer)
+                return RendererPerformanceSource(renderer) { [weak decoder, weak window] transition in
+                    Task { @MainActor in
+                        guard let window, let decoder, !window.didClose,
+                              ObjectIdentifier(window.displayLayer.sampleBufferRenderer) == identity else { return }
+                        window.logRendererTransition(transition, hdrInput: decoder.isHDRActive)
+                    }
+                }
             },
             // The mode the session STARTED in (a Path-B Space exit can land it
             // in a window later; the per-second rows don't re-state it).
