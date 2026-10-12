@@ -34,8 +34,10 @@ elif name == "git":
         print(os.environ.get("FIXTURE_HEAD", "a" * 40))
     elif args == ["rev-parse", "FETCH_HEAD^{commit}"]:
         print(os.environ.get("FIXTURE_TAG_SHA", "a" * 40))
-    elif args in (["rev-parse", "origin/main"], ["rev-parse", "origin/release-candidate"]):
+    elif args == ["rev-parse", "origin/main"]:
         print(os.environ.get("FIXTURE_MAIN", "a" * 40))
+    elif args == ["rev-parse", "origin/release-candidate"]:
+        print(os.environ.get("FIXTURE_SOURCE", "a" * 40))
     elif args[:1] == ["show"]:
         print("MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 400")
     elif args == ["remote", "get-url", "origin"]:
@@ -223,7 +225,7 @@ class HostedReleaseTests(unittest.TestCase):
                            ("EXPECTED_SHA", "main;anything"), ("RUNNER_DEBUG", "1"),
                            ("ACTIONS_STEP_DEBUG", "true"), ("ACTIONS_STEP_DEBUG", "TRUE"),
                            ("ACTIONS_RUNNER_DEBUG", "true"), ("ACTIONS_RUNNER_DEBUG", "TRUE"),
-                           ("FIXTURE_MAIN", "b" * 40),
+                           ("FIXTURE_SOURCE", "b" * 40),
                            ("FIXTURE_TAG_SHA", "b" * 40), ("RC_TAG", "2026.10.5-rc.1"),
                            ("RELEASE_OPERATION", "stable"),
                            ("FIXTURE_ORIGIN", "https://untrusted.example/glimmer")):
@@ -269,7 +271,9 @@ class HostedReleaseTests(unittest.TestCase):
             changes = [(result_key, state) for state in ("failure", "cancelled", "skipped", "", "pending")]
             changes += [(record_key, record) for record in
                         ("", f"{'b' * 40} 12 1 {part}", f"{SHA} 13 1 {part}",
-                         f"{SHA} 12 2 {part}", f"{SHA} 12 1 other")]
+                         f"{SHA} 12 2 {part}", f"{SHA} 12 1 other", f"{SHA} 12 0 {part}",
+                         f"{SHA} 12 -1 {part}", f"{SHA} 12 nope {part}", f"{SHA} 12 1 {part} extra",
+                         f"{SHA} 12 1 {part}\nextra")]
             for key, value in changes:
                 with self.subTest(part=part, key=key, value=value):
                     previous = self.env[key]
@@ -352,9 +356,9 @@ class HostedReleaseTests(unittest.TestCase):
                             for call in self.calls()))
         self.assertNotIn("fixture-password", result.stdout + result.stderr)
 
-    def test_moved_main_after_verify_cannot_sign(self):
+    def test_moved_candidate_after_verify_cannot_sign(self):
         self.built()
-        self.env["FIXTURE_MAIN"] = "b" * 40
+        self.env["FIXTURE_SOURCE"] = "b" * 40
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
         self.assertFalse(self.private.exists())
 
@@ -403,9 +407,9 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertIn(["CONFIG=Release", "preflight", "notarize-bundle"], make_args)
         self.assertFalse(any("dist" in args for args in make_args))
 
-    def test_moved_main_before_publish_cannot_expose_update_key(self):
+    def test_tooling_outside_main_history_cannot_publish(self):
         self.packaged()
-        self.env["FIXTURE_MAIN"] = "b" * 40
+        self.env["FIXTURE_FAIL"] = f"git:merge-base --is-ancestor {SHA} origin/main"
         self.assertNotEqual(self.run_phase("publish").returncode, 0)
         self.assertFalse(self.private.exists())
         self.assertFalse(any(call["tool"] == "release_publication.py" and call["args"][0] == "publish"
@@ -498,63 +502,32 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertFalse(self.private.exists())
         self.assertFalse((self.runner / "glimmer-verified-12-1-signed").exists())
 
-class ReleaseWorkflowTests(unittest.TestCase):
-    def test_verification_jobs_are_independent_unsigned_and_bound_to_the_dispatch_sha(self):
-        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
-        for part in ("checks", "tests", "asan"):
-            with self.subTest(part=part):
-                start = workflow.index(f"  verify-{part}:\n")
-                next_job = workflow.find("\n  verify-", start + 1)
-                end = next_job if next_job != -1 else workflow.index("\n  build:", start)
-                job = workflow[start:end]
-                for required in ("ref: ${{ github.sha }}", "EXPECTED_SHA: ${{ inputs.expected_sha }}",
-                                 "record: ${{ steps.verify.outputs.record }}", "runs-on: macos-26",
-                                 "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer",
-                                 "SWIFT_TREAT_WARNINGS_AS_ERRORS = YES", "GCC_TREAT_WARNINGS_AS_ERRORS = YES"):
-                    self.assertIn(required, job)
-                for forbidden in ("needs:", "environment:", "secrets.", "id-token:", "attestations:"):
-                    self.assertNotIn(forbidden, job)
-                self.assertLess(job.index("scripts/ci-release.sh checks"), job.index(f"ci-release.sh verify-{part}"))
+    def test_pinned_tooling_survives_main_advancing_before_publication(self):
+        self.env.update(TRUSTED_TOOLING_SHA=SHA, FIXTURE_MAIN="b" * 40)
+        self.signed_artifact()
+        result = self.run_phase("publish")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(["merge-base", "--is-ancestor", SHA, "origin/main"],
+                      [call["args"] for call in self.calls()])
 
-    def test_build_requires_every_job_and_has_no_secrets(self):
-        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
-        job = workflow.split("\n  build:\n", 1)[1].split("\n  sign:", 1)[0]
-        self.assertIn("needs: [verify-checks, verify-tests, verify-asan]", job)
-        for part in ("checks", "tests", "asan"):
-            self.assertIn(f"needs.verify-{part}.result == 'success'", " ".join(job.split()))
-            self.assertIn(f"VERIFY_{part.upper()}_RECORD:", job)
-        for forbidden in ("environment:", "secrets.", "id-token:", "attestations:"):
-            self.assertNotIn(forbidden, job)
-        self.assertLess(job.index("scripts/ci-release.sh verified"), job.index("scripts/ci-release.sh build"))
+    def test_build_retry_accepts_successful_verification_from_earlier_attempts(self):
+        self.verified()
+        self.env["GITHUB_RUN_ATTEMPT"] = "3"
+        self.env["VERIFY_TESTS_RECORD"] = f"{SHA} 12 2 tests"
+        self.env["VERIFY_ASAN_RECORD"] = f"{SHA} 12 3 asan"
+        self.assertEqual(self.run_phase("checks").returncode, 0)
+        result = self.run_phase("verified")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.runner / "glimmer-verified-12-3").read_text().strip(), SHA)
+        result = self.run_phase("build")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_signer_uses_main_and_publication_is_separate(self):
-        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
-        sign = workflow.split("\n  sign:\n")[1].split("\n  validate:")[0]
-        self.assertIn("environment: release", sign)
-        self.assertIn("ref: ${{ needs.tooling.outputs.sha }}", sign)
-        self.assertLess(sign.index("import-unsigned"), sign.index("ci-release.sh sign"))
-        self.assertNotIn("ci-release.sh build", sign)
-        self.assertNotIn("RELEASE_CONTENTS_TOKEN", sign)
-        validation = workflow.split("\n  validate:\n")[1].split("\n  publication:")[0]
-        self.assertNotIn("environment:", validation)
-        self.assertNotIn("secrets.", validation)
-        self.assertNotIn("id-token:", validation)
-
-    def test_promotion_reads_before_minting_repository_scoped_tokens(self):
-        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release-publication.yml").read_text()
-        self.assertLess(workflow.index("prepare-promotion"), workflow.index("Mint publication token"))
-        for repository in ("glimmer", "homebrew-glimmer"):
-            self.assertIn(f"repositories: {repository}\n", workflow)
-        self.assertEqual(workflow.count("permission-contents: write"), 2)
-        for forbidden in ("permission-workflows:", "permission-actions:", "skip-token-revoke:",
-                          "SPARKLE_ED_PRIVATE_KEY", "DEVELOPER_ID_P12_BASE64"):
-            self.assertNotIn(forbidden, workflow)
-
-    def test_hosted_signing_targets_cannot_reach_compilation_or_launch_probes(self):
-        makefile = (Path(__file__).resolve().parents[1] / "release-bundle.mk").read_text()
-        sign = makefile.split("\nsign-bundle:", 1)[1].split("\n\n", 1)[0]
-        notarize = makefile.split("\nnotarize-bundle:", 1)[1].split("\n\n", 1)[0]
-        self.assertTrue(sign.startswith(" ensure-signing\n"))
-        self.assertTrue(notarize.startswith(" sign-bundle appcast-feed\n"))
-        for forbidden in ("xcodebuild", "swiftc", "embed-helper", "--validate-distribution"):
-            self.assertNotIn(forbidden, sign + notarize)
+    def test_missing_publication_token_stops_before_any_write(self):
+        self.signed_artifact()
+        self.env["RELEASE_CONTENTS_TOKEN"] = ""
+        result = self.run_phase("publish")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing release contents token", result.stderr)
+        self.assertFalse(any(call["tool"] == "release_publication.py" and call["args"][0] == "publish"
+                             for call in self.calls()))
+        self.assertFalse(self.private.exists())

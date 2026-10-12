@@ -80,7 +80,8 @@ check_source() {
         [ "$(git remote get-url origin)" = https://github.com/Se7enbrc/glimmer.git ] || die "unexpected origin"
     if [ -n "${TRUSTED_TOOLING_SHA:-}" ]; then
         git fetch --quiet origin main
-        [ "$(git rev-parse origin/main)" = "$TRUSTED_TOOLING_SHA" ] || die "trusted main tooling moved"
+        git merge-base --is-ancestor "$TRUSTED_TOOLING_SHA" origin/main ||
+            die "trusted tooling is not in main history"
         git diff --quiet "$EXPECTED_SHA" "$TRUSTED_TOOLING_SHA" -- \
             Glimmer/Glimmer.entitlements LoginHelper/LoginHelper.entitlements helper/Helper.entitlements ||
             die "candidate signing policy differs from trusted main"
@@ -130,14 +131,16 @@ accept_verification() {
     check_source
     [ "$OPERATION" = candidate ] || die "promotion never builds"
     [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
-    local part result record name
+    local part result record name attempt pattern
     for part in checks tests asan; do
         name="$(printf '%s' "$part" | tr '[:lower:]' '[:upper:]')"
         result="VERIFY_${name}_RESULT"
         record="VERIFY_${name}_RECORD"
         [ "${!result:-}" = success ] || die "$part verification did not succeed"
-        [ "${!record:-}" = "$EXPECTED_SHA $GITHUB_RUN_ID $GITHUB_RUN_ATTEMPT $part" ] ||
-            die "$part verification record differs from this SHA, run or attempt"
+        pattern="^$EXPECTED_SHA $GITHUB_RUN_ID ([1-9][0-9]*) $part$"
+        [[ "${!record:-}" =~ $pattern ]] || die "$part verification record differs from this SHA, run or check"
+        attempt="${BASH_REMATCH[1]}"
+        [ "$attempt" -le "$GITHUB_RUN_ATTEMPT" ] || die "$part verification attempt is in the future"
     done
     printf '%s\n' "$EXPECTED_SHA" > "$STAMP"
 }

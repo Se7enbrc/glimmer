@@ -216,11 +216,11 @@ Before any candidate compilation, three independent jobs check out the exact
 candidate SHA: all pre-commit hooks plus `make check`, `make test`, and
 `make test-asan`. Each checks the existing hosted Verify and CodeQL
 prerequisites, uses its own build directory, and has no release environment or
-secrets. Their records must match the SHA, run ID and attempt before the
-unsigned build job can start. A failed verification requires rerunning all
-verification jobs together. Compiler warnings fail both Xcode and the standalone
-helper build. An existing candidate release, including a draft, blocks
-rebuilding that tag.
+secrets. Their records must match the SHA, run ID and check name before the
+unsigned build job can start. Successful records from an earlier attempt of the
+same run remain valid when only failed jobs are rerun; future attempts are
+rejected. Compiler warnings fail both Xcode and the standalone helper build. An
+existing candidate release, including a draft, blocks rebuilding that tag.
 
 ### D. Fresh signing runner and artifact identity
 
@@ -232,13 +232,16 @@ outputs outside the bundle cross this boundary.
 
 An independent job pins `main` for tooling. The build cannot choose the signing
 checkout. After `release` approval, a fresh macOS runner checks out that pinned
-main SHA, rechecks source and prerequisites, and downloads the exact artifact
-ID. It checks GitHub's artifact metadata, source SHA, run, producing attempt,
-tag, manifest digest, file set and every payload digest before importing the
-bundle. Archive paths, special files, duplicate entries, escaping links and
-writes through symlink parents are rejected. Signing policy entitlements must
-match main; land signing-policy changes on main before making a candidate that
-depends on them.
+main SHA after proving it is an ancestor of `origin/main`, rechecks source and
+prerequisites, and downloads the exact artifact ID. Each tooling consumer checks
+out static `main` with full history, proves ancestry, then detaches at the pin.
+Main may advance during approval or retries without changing the code used. The
+signing runner checks GitHub's artifact metadata, source SHA, run, producing
+attempt, tag, manifest digest, file set and every payload digest before
+importing the bundle. Archive paths, special files, duplicate entries, escaping
+links and writes through symlink parents are rejected. Signing policy
+entitlements must match main; land signing-policy changes on main before making
+a candidate that depends on them.
 
 Signing calls `notarize-bundle`, whose dependency graph cannot compile or embed
 the helper. Tooling, entitlements and packaging scripts come from main, never
@@ -273,8 +276,11 @@ Developer ID, notarization and Sparkle signatures. See
 [GitHub's artifact attestation guide](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
 
 Land these workflow and tooling changes on main before dispatching a candidate
-with them. Review the candidate SHA and pinned tooling SHA before approving.
-Keep the `release` environment's reviewer, allowed branches (`main` and
+with them. The candidate cutter refuses differences from main in either release
+workflow or the release scripts executed by candidate jobs and their imported
+helpers. This check runs before moving the candidate branch or creating a tag.
+Review the candidate SHA and pinned tooling SHA before approving. Keep the
+`release` environment's reviewer, allowed branches (`main` and
 `release-candidate`) and disabled administrator bypass. Do not change `rc-cut`:
 its main-only environment and separate App retain their existing roles.
 
@@ -309,15 +315,15 @@ require GitHub's verified signature and signing key through
 
 Recovery is by rerunning the failed job in the **original Release run**:
 
-| Failed phase                               | Safe action                                                                                                       |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Verification or unsigned build             | Before a candidate exists, rerun all verification and build jobs together.                                        |
-| Signing or persistence, before publication | Resolve the failure and rerun the signing job; never use this to repair a public candidate.                       |
-| Distribution validation                    | Rerun validation against the already persisted signed artifact.                                                   |
-| Candidate upload or RC feed                | Rerun the publication job only. It can complete a partial draft or repair the feed after the candidate is public. |
-| Stable promotion or feed                   | Rerun the publication job only; it revalidates and reuses the same published assets.                              |
-| Homebrew                                   | Rerun only the tap job; an already current cask creates no second commit.                                         |
-| Pages                                      | Rerun Pages and confirm the public appcast, even if a later Release phase failed.                                 |
+| Failed phase                               | Safe action                                                                                                          |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Verification or unsigned build             | Before a candidate exists, rerun failed jobs; successful verification records remain valid for the same run and SHA. |
+| Signing or persistence, before publication | Resolve the failure and rerun the signing job; never use this to repair a public candidate.                          |
+| Distribution validation                    | Rerun validation against the already persisted signed artifact.                                                      |
+| Candidate upload or RC feed                | Rerun the publication job only. It can complete a partial draft or repair the feed after the candidate is public.    |
+| Stable promotion or feed                   | Rerun the publication job only; it revalidates and reuses the same published assets.                                 |
+| Homebrew                                   | Rerun only the tap job; an already current cask creates no second commit.                                            |
+| Pages                                      | Rerun Pages and confirm the public appcast, even if a later Release phase failed.                                    |
 
 Successful producer outputs survive a failed-job retry. Consumers use the
 explicit **producing** attempt, not the newer retry attempt; another run or SHA
@@ -325,15 +331,16 @@ is rejected. Do not select “Re-run all jobs” after signed bytes were accepte
 publication started. GitHub supports reruns for 30 days; see its
 [rerun guide](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
 
-Source and main-tooling movement still fail closed. If either moved, stop and
-review the recovery instead of weakening the checks. Stable promotion and tap
-repair can use a new promotion dispatch from reviewed current main with the same
-candidate SHA only when the shipped-input comparison still passes. If a
-candidate is partially published and its original run cannot resume, preserve
-its artifact and remote assets for an explicitly reviewed recovery. Do not
-rebuild, replace assets, or invent a manifest to bypass the producing run's
-identity. Expired artifacts also require maintainer review; keep the accepted
-public release.
+Source branch movement and tooling removed from main history still fail closed.
+If either happens, stop and review recovery instead of weakening the checks.
+Advancing main does not invalidate a tooling pin still in its history. Stable
+promotion and tap repair can use a new promotion dispatch from reviewed current
+main with the same candidate SHA only when the shipped-input comparison still
+passes. If a candidate is partially published and its original run cannot
+resume, preserve its artifact and remote assets for an explicitly reviewed
+recovery. Do not rebuild, replace assets, or invent a manifest to bypass the
+producing run's identity. Expired artifacts also require maintainer review; keep
+the accepted public release.
 
 GitHub Pages still deploys after the parent **Release** run, even if publication
 succeeded and the tap failed. A feed commit changes `appcast`, never `main`.
@@ -358,15 +365,16 @@ needs no Doppler runtime token. Editing only GitHub can be overwritten by sync.
 | `APP_PROVISIONPROFILE_BASE64`     | Approved app Developer ID profile, single-line base64                        |
 | `HELPER_PROVISIONPROFILE_BASE64`  | Approved helper Developer ID profile, single-line base64                     |
 | `SPARKLE_ED_PRIVATE_KEY`          | Existing update-signing key, used only before signed-asset persistence       |
-| `GLIMMER_RELEASE_APP_ID`          | New publication App's numeric App ID                                         |
+| `GLIMMER_RELEASE_APP_CLIENT_ID`   | New publication App's client ID                                              |
 | `GLIMMER_RELEASE_APP_PRIVATE_KEY` | New publication App's PEM private key                                        |
 | `RELEASE_CONTENTS_TOKEN`          | Temporary migration fallback PAT for the two release repositories            |
 
-The publication App does not exist yet. Until its ID is configured, the clearly
-marked PAT fallback remains active. A configured App that cannot mint a token
-fails; it does not fall back to the PAT. Keep the existing PAT's 30-day rotation
-and day-25 reminder until App acceptance is complete. Never use the broad token
-from a local `gh` login.
+The publication App does not exist yet. The marked PAT fallback is active only
+when both App secrets are absent, and each publication or tap job records that
+choice in its summary. A partial pair or an App that cannot mint a token fails;
+it does not fall back to the PAT. Keep the existing PAT's 30-day rotation and
+day-25 reminder until App acceptance is complete. Never use the broad token from
+a local `gh` login.
 
 Maintainer setup, without transferring or replacing Apple or Sparkle keys:
 
@@ -380,7 +388,7 @@ Maintainer setup, without transferring or replacing Apple or Sparkle keys:
    branches; do not give publication the RC cutter's workflow-write permission
    or unrestricted branch bypass. Keep verified-signature requirements. No
    workflow creates or changes these bypasses automatically.
-3. Generate the App key and store `GLIMMER_RELEASE_APP_ID` and
+3. Generate the App key and store `GLIMMER_RELEASE_APP_CLIENT_ID` and
    `GLIMMER_RELEASE_APP_PRIVATE_KEY` in Doppler's release config, synced to the
    protected environment. Treat the key as a long-lived credential; authorize
    its transfer explicitly and never print it. Do not configure half the pair.
@@ -405,7 +413,7 @@ The pinned `actions/create-github-app-token` action mints one token immediately
 before publication, scoped only to `glimmer`, and a separate token immediately
 before the tap write, scoped only to `homebrew-glimmer`. Each requests only
 Contents write. Its default post-job hook revokes the token; do not enable
-`skip-token-revoke`. This repository's pinned version accepts numeric `app-id`;
+`skip-token-revoke`. Use `client-id`; the pinned version deprecates `app-id`;
 see the
 [pinned action inputs](https://github.com/actions/create-github-app-token/blob/bcd2ba49218906704ab6c1aa796996da409d3eb1/action.yml).
 

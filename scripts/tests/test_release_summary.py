@@ -25,7 +25,8 @@ class ReleaseSummaryTests(unittest.TestCase):
             text = report(jobs, {'draft': False, 'prerelease': True}, {'release.zip': 'b' * 64}, '400')
             for value in ('a' * 40, '2026.10.6-rc.1', '400', '12s', '10s', 'b' * 64,
                           'candidate is public', 'Feed or tap may still need repair',
-                          'Never rerun build or signing', 'Pages deployment', 'Public appcast'):
+                          'Never rerun build or signing', 'Pages deployment', 'Public appcast',
+                          'earlier attempts of this run remain valid', 'tooling left main history'):
                 self.assertIn(value, text)
             self.assertNotIn('fixture-secret', text)
             self.assertIn('Nothing published', report([], {}, {}, '400'))

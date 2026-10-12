@@ -307,11 +307,17 @@ jobs:
           ref: main
           persist-credentials: false
           fetch-depth: 0
-      # Static ref for the checkout; fail closed if main moved after pinning.
-      - name: Require the pinned main tooling
+      # Keep checkout static; only a commit in main history may supply tooling.
+      - name: Check out the pinned main tooling
         env:
           TOOLING_SHA: ${{ needs.tooling.outputs.sha }}
-        run: test "$(git rev-parse HEAD)" = "$TOOLING_SHA"
+        run: |
+          [[ "$TOOLING_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          git merge-base --is-ancestor "$TOOLING_SHA" origin/main || {
+            echo "ERR: pinned tooling is not in main history" >&2
+            exit 1
+          }
+          git checkout --detach "$TOOLING_SHA"
       - name: Recheck source and prerequisites
         env:
           GH_TOKEN: ${{ github.token }}
@@ -393,11 +399,17 @@ jobs:
           ref: main
           persist-credentials: false
           fetch-depth: 0
-      # Static ref for the checkout; fail closed if main moved after pinning.
-      - name: Require the pinned main tooling
+      # Keep checkout static; only a commit in main history may supply tooling.
+      - name: Check out the pinned main tooling
         env:
           TOOLING_SHA: ${{ needs.tooling.outputs.sha }}
-        run: test "$(git rev-parse HEAD)" = "$TOOLING_SHA"
+        run: |
+          [[ "$TOOLING_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          git merge-base --is-ancestor "$TOOLING_SHA" origin/main || {
+            echo "ERR: pinned tooling is not in main history" >&2
+            exit 1
+          }
+          git checkout --detach "$TOOLING_SHA"
       - name: Validate final bundle without release credentials
         env:
           GH_TOKEN: ${{ github.token }}

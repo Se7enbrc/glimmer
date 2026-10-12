@@ -62,8 +62,8 @@ def report(jobs, release, hashes, build):
     lines += ['', 'Recovery: rerun only failed validation, publication or tap jobs from this run. '
               'They reuse the producing job\'s artifact ID, manifest digest and attempt. '
               'Never rerun build or signing to repair publication. Before compilation has succeeded, '
-              'rerun all verification jobs together because their records must share an attempt.',
-              'If source or trusted main moved, or the 30-day artifact expired, stop and review recovery; '
+              'rerun failed jobs; successful verification records from earlier attempts of this run remain valid.',
+              'If the source branch moved, tooling left main history, or the 30-day artifact expired, review recovery; '
               'do not replace assets. A promotion can be dispatched from newly reviewed main with the same '
               'candidate SHA only if its shipped inputs still match.',
               f'[Candidate]({BASE}/releases/tag/{tag}) · '

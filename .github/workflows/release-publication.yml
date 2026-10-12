@@ -48,7 +48,6 @@ jobs:
       TRUSTED_TOOLING_SHA: ${{ inputs.tooling }}
       SIGNED_MANIFEST: ${{ inputs.manifest }}
       SIGNED_ATTEMPT: ${{ inputs.attempt }}
-      RELEASE_APP_ID: ${{ secrets.GLIMMER_RELEASE_APP_ID }}
       ACTIONS_STEP_DEBUG:
         ${{ secrets.ACTIONS_STEP_DEBUG || vars.ACTIONS_STEP_DEBUG }}
       ACTIONS_RUNNER_DEBUG:
@@ -60,11 +59,17 @@ jobs:
           ref: main
           persist-credentials: false
           fetch-depth: 0
-      # Static ref for the checkout; fail closed if main moved after pinning.
-      - name: Require the pinned main tooling
+      # Keep checkout static; only a commit in main history may supply tooling.
+      - name: Check out the pinned main tooling
         env:
           TOOLING_SHA: ${{ inputs.tooling }}
-        run: test "$(git rev-parse HEAD)" = "$TOOLING_SHA"
+        run: |
+          [[ "$TOOLING_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          git merge-base --is-ancestor "$TOOLING_SHA" origin/main || {
+            echo "ERR: pinned tooling is not in main history" >&2
+            exit 1
+          }
+          git checkout --detach "$TOOLING_SHA"
       - name: Check source and prerequisites
         env:
           GH_TOKEN: ${{ github.token }}
@@ -82,12 +87,29 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh prepare-promotion
+      - name: Select publication credentials
+        id: credentials
+        env:
+          RELEASE_APP_CLIENT_ID: ${{ secrets.GLIMMER_RELEASE_APP_CLIENT_ID }}
+          RELEASE_APP_PRIVATE_KEY:
+            ${{ secrets.GLIMMER_RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [ -n "$RELEASE_APP_CLIENT_ID" ] && [ -n "$RELEASE_APP_PRIVATE_KEY" ]; then
+            echo 'mode=app' >> "$GITHUB_OUTPUT"
+            echo 'Publication credentials: GitHub App.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ -z "$RELEASE_APP_CLIENT_ID" ] && [ -z "$RELEASE_APP_PRIVATE_KEY" ]; then
+            echo 'mode=pat' >> "$GITHUB_OUTPUT"
+            echo 'Publication credentials: PAT fallback; both App secrets are absent.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'ERR: Configure both publication App secrets; refusing PAT fallback.' >&2
+            exit 1
+          fi
       - name: Mint publication token for glimmer only
-        if: env.RELEASE_APP_ID != ''
+        if: steps.credentials.outputs.mode == 'app'
         id: publication-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.GLIMMER_RELEASE_APP_ID }}
+          client-id: ${{ secrets.GLIMMER_RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.GLIMMER_RELEASE_APP_PRIVATE_KEY }}
           owner: Se7enbrc
           repositories: glimmer
@@ -95,14 +117,12 @@ jobs:
       - name: Publish candidate or promote accepted bytes
         env:
           GH_TOKEN: ${{ github.token }}
-          APP_TOKEN: ${{ steps.publication-token.outputs.token }}
           # Migration fallback only: remove after the App completes a normal release and tap update.
           RELEASE_CONTENTS_TOKEN:
-            ${{ env.RELEASE_APP_ID != '' &&
-            steps.publication-token.outputs.token ||
-            secrets.RELEASE_CONTENTS_TOKEN }}
+            ${{ steps.credentials.outputs.mode == 'pat' &&
+            secrets.RELEASE_CONTENTS_TOKEN ||
+            steps.publication-token.outputs.token }}
         run: |
-          if [ -n "$RELEASE_APP_ID" ] && [ -z "$APP_TOKEN" ]; then exit 1; fi
           case "$RELEASE_OPERATION" in
             candidate) scripts/ci-release.sh publish ;;
             promote) scripts/ci-release.sh promote ;;
@@ -135,7 +155,6 @@ jobs:
       RC_TAG: ${{ inputs.rc_tag }}
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       TRUSTED_TOOLING_SHA: ${{ inputs.tooling }}
-      RELEASE_APP_ID: ${{ secrets.GLIMMER_RELEASE_APP_ID }}
       ACTIONS_STEP_DEBUG:
         ${{ secrets.ACTIONS_STEP_DEBUG || vars.ACTIONS_STEP_DEBUG }}
       ACTIONS_RUNNER_DEBUG:
@@ -147,23 +166,46 @@ jobs:
           ref: main
           persist-credentials: false
           fetch-depth: 0
-      # Static ref for the checkout; fail closed if main moved after pinning.
-      - name: Require the pinned main tooling
+      # Keep checkout static; only a commit in main history may supply tooling.
+      - name: Check out the pinned main tooling
         env:
           TOOLING_SHA: ${{ inputs.tooling }}
-        run: test "$(git rev-parse HEAD)" = "$TOOLING_SHA"
+        run: |
+          [[ "$TOOLING_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          git merge-base --is-ancestor "$TOOLING_SHA" origin/main || {
+            echo "ERR: pinned tooling is not in main history" >&2
+            exit 1
+          }
+          git checkout --detach "$TOOLING_SHA"
       - name: Reverify the published candidate before touching the tap
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           scripts/ci-release.sh checks
           scripts/ci-release.sh prepare-promotion
+      - name: Select publication credentials
+        id: credentials
+        env:
+          RELEASE_APP_CLIENT_ID: ${{ secrets.GLIMMER_RELEASE_APP_CLIENT_ID }}
+          RELEASE_APP_PRIVATE_KEY:
+            ${{ secrets.GLIMMER_RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [ -n "$RELEASE_APP_CLIENT_ID" ] && [ -n "$RELEASE_APP_PRIVATE_KEY" ]; then
+            echo 'mode=app' >> "$GITHUB_OUTPUT"
+            echo 'Publication credentials: GitHub App.' >> "$GITHUB_STEP_SUMMARY"
+          elif [ -z "$RELEASE_APP_CLIENT_ID" ] && [ -z "$RELEASE_APP_PRIVATE_KEY" ]; then
+            echo 'mode=pat' >> "$GITHUB_OUTPUT"
+            echo 'Publication credentials: PAT fallback; both App secrets are absent.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'ERR: Configure both publication App secrets; refusing PAT fallback.' >&2
+            exit 1
+          fi
       - name: Mint tap token for homebrew-glimmer only
-        if: env.RELEASE_APP_ID != ''
+        if: steps.credentials.outputs.mode == 'app'
         id: tap-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.GLIMMER_RELEASE_APP_ID }}
+          client-id: ${{ secrets.GLIMMER_RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.GLIMMER_RELEASE_APP_PRIVATE_KEY }}
           owner: Se7enbrc
           repositories: homebrew-glimmer
@@ -171,13 +213,11 @@ jobs:
       - name: Update Homebrew from verified published bytes
         env:
           GH_TOKEN: ${{ github.token }}
-          APP_TOKEN: ${{ steps.tap-token.outputs.token }}
           # Migration fallback only: remove with the publication fallback after App acceptance.
           RELEASE_CONTENTS_TOKEN:
-            ${{ env.RELEASE_APP_ID != '' && steps.tap-token.outputs.token ||
-            secrets.RELEASE_CONTENTS_TOKEN }}
+            ${{ steps.credentials.outputs.mode == 'pat' &&
+            secrets.RELEASE_CONTENTS_TOKEN || steps.tap-token.outputs.token }}
         run: |
-          if [ -n "$RELEASE_APP_ID" ] && [ -z "$APP_TOKEN" ]; then exit 1; fi
           scripts/ci-release.sh tap
       - name: Remove temporary credentials
         if: always()
