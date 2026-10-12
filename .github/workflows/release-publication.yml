@@ -57,9 +57,14 @@ jobs:
       - name: Check out trusted main tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tooling }}
+          ref: main
           persist-credentials: false
           fetch-depth: 0
+      # Static ref for the checkout; fail closed if main moved after pinning.
+      - name: Require the pinned main tooling
+        env:
+          TOOLING_SHA: ${{ inputs.tooling }}
+        run: test "$(git rev-parse HEAD)" = "$TOOLING_SHA"
       - name: Check source and prerequisites
         env:
           GH_TOKEN: ${{ github.token }}
@@ -139,9 +144,14 @@ jobs:
       - name: Check out trusted main tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tooling }}
+          ref: main
           persist-credentials: false
           fetch-depth: 0
+      # Static ref for the checkout; fail closed if main moved after pinning.
+      - name: Require the pinned main tooling
+        env:
+          TOOLING_SHA: ${{ inputs.tooling }}
+        run: test "$(git rev-parse HEAD)" = "$TOOLING_SHA"
       - name: Reverify the published candidate before touching the tap
         env:
           GH_TOKEN: ${{ github.token }}
