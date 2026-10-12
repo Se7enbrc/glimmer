@@ -74,6 +74,7 @@ extension AudioDecoder {
             guard let self, self.stateLock.try() else { return }
             defer { self.stateLock.unlock() }
             guard !self.graphChanging, !self.isShutdown else { return }
+            self.halOutput?.observeOutputSilence()
             let frames = self.observeRenderClock()
             if self.renderProgress.needsRunningCheck(frames: frames) { self.refreshOutputRunningState() }
             if !self.engineRunning { self.maintenanceSource.add(data: 1) }

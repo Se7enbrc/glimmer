@@ -21,6 +21,7 @@ final class AudioPipelineTelemetry: Sendable {
         var renderUnderruns: UInt64 = 0
         var nearMisses: UInt64 = 0
         var realtime = false
+        var outputSilentSeconds: Double = 0
         var outputLatencyMs: Double?
         var deviceRecoveryMs: Double?
     }
@@ -50,6 +51,8 @@ final class AudioPipelineTelemetry: Sendable {
             if let recoveryMs { $0.deviceRecoveryMs = recoveryMs }
         }
     }
+
+    func noteOutputSilence(seconds: Double) { window.withLock { $0.outputSilentSeconds = seconds } }
 
     func noteNearMiss() { window.withLock { $0.nearMisses &+= 1 } }
     func setRealtime(_ enabled: Bool) { window.withLock { $0.realtime = enabled } }

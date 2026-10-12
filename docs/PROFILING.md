@@ -392,6 +392,14 @@ When enabled, a stream writes to `~/Library/Logs/Glimmer/`:
 - `glimmer-<timestamp>.log`: a richer per-session diagnostic log, with PC names,
   addresses and error text shown as `<private>`.
 
+`audio_output_silent_s` counts consecutive sampled seconds of nonzero input PCM
+with silent final-mixer output. The maintenance timer requests one
+render-quantum probe per second, even with export disabled. Two consecutive
+silent samples log once per episode. Muted/empty input, missing samples and
+route replacement reset the gauge. It cannot detect device mute or
+physical/acoustic faults after HAL; compare it with listening and
+`audio_output_state` before attributing silence.
+
 `audio_output_state` events in the per-second file capture mixer gains, output
 format and available device volume/mute readings after audio configuration
 changes or a bookmark. A bookmark-triggered snapshot names its marker number;

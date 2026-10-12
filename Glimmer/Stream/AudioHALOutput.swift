@@ -26,6 +26,7 @@ final class AudioHALOutput {
     private(set) var channels: UInt32 = 0
     private(set) var latencyMs: Double = 0
     var spatial = false
+    var outputSilence = AudioOutputSilence()
     let queue: UnsafeMutablePointer<AudioPCMQueue>
 
     init(channels: Int, capacity: Int = 48_000) {
@@ -47,6 +48,8 @@ final class AudioHALOutput {
                    connectHardware: Bool = true) throws {
         guard stop() else { throw Failure(status: kAudioUnitErr_CannotDoInCurrentContext) }
         spatial = false
+        outputSilence = AudioOutputSilence()
+        queue.pointee.outputProbe.reset()
         do {
             let hardware = try hardware()
             device = hardware.id
@@ -79,12 +82,15 @@ final class AudioHALOutput {
                           layout: spatial ? kAudioChannelLayoutTag_Stereo : format.channelLayout?.layoutTag)
             try setFormat(mixer, scope: kAudioUnitScope_Output, rate: sampleRate, channels: channels,
                           layout: AudioHALDevice.layout(channels: channels))
-            if let layout = hardware.channelLayout, layout.channelCount == channels {
+            // HAL's stereo map owns device positions; unknown speaker labels would silence the mixer.
+            if channels != 2, let layout = hardware.channelLayout, layout.channelCount == channels {
                 try setChannelLayout(mixer, scope: kAudioUnitScope_Output, layout: layout)
             }
             try connect(source, to: mixer)
             try check(AudioUnitSetParameter(mixer, kMultiChannelMixerParam_Volume, kAudioUnitScope_Input, 0, 1, 0))
             try check(AudioUnitSetParameter(mixer, kMultiChannelMixerParam_Volume, kAudioUnitScope_Output, 0, 1, 0))
+            try configureBuiltInDownmix(mixer, format: format, route: route)
+            try check(AudioUnitAddRenderNotify(mixer, observeAudioOutput, queue))
             if let hal {
                 try setFormat(hal, scope: kAudioUnitScope_Input, rate: sampleRate, channels: channels, layout: nil)
                 if channels == 2 { try configureStereoMap(hal) }

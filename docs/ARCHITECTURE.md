@@ -194,11 +194,14 @@ Components:
   device names or Bluetooth alone. `AudioHALOutput` inserts AUSpatialMixer after
   varispeed for multichannel sources on stereo outputs, with an ambience bed,
   output-type rendering and no reverb. Compatible headphones enable head
-  tracking and automatic personalized HRTF selection. Built-in and external
-  speakers use their corresponding renderers; the external renderer retains LFE.
-  Native 5.1/7.1 outputs bypass spatial processing and retain channel labels
-  through the output mixer. There is no app setting. HAL listeners cover the
-  default output, device-alive, sample rate and stream configuration/format;
+  tracking and automatic personalized HRTF selection. External speakers use the
+  external renderer, which retains LFE. Built-in speakers use an explicit stereo
+  matrix with center, LFE and surround channels folded in; the hardware-specific
+  spatial renderer dropped LFE offline. Stereo labels remain inside the graph;
+  HAL maps physical stereo channels because the device may advertise unknown
+  labels. Native 5.1/7.1 outputs bypass spatial processing and retain channel
+  labels through the output mixer. There is no app setting. HAL listeners cover
+  the default output, device-alive, sample rate and stream configuration/format;
   OSStatus failures retry off the render thread without restarting the stream.
   The app carries Apple's Head Pose and Spatial Audio Profile entitlements and
   never reads, stores or logs raw head-pose or profile data. See

@@ -16,7 +16,8 @@ struct AudioOutputRoute: Equatable, Sendable {
         guard sourceChannels > 2, channels == 2 else { return nil }
         switch kind {
         case .headphones: return AUSpatialMixerOutputType.spatialMixerOutputType_Headphones
-        case .builtInSpeakers: return AUSpatialMixerOutputType.spatialMixerOutputType_BuiltInSpeakers
+        // The built-in renderer drops LFE; an explicit stereo downmix keeps every source channel.
+        case .builtInSpeakers: return nil
         // The main mixer's stereo downmix omits LFE; Apple's speaker renderer retains it.
         case .other: return AUSpatialMixerOutputType.spatialMixerOutputType_ExternalSpeakers
         }

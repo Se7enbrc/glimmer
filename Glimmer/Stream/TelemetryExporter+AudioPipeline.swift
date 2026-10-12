@@ -11,6 +11,8 @@ extension TelemetryRenderer {
         }
         builder.emit("glimmer_audio_render_cushion_min_ms", "Minimum render-clock cushion this window.",
                           snapshot.window.minimumRenderCushionMs)
+        builder.emit("glimmer_audio_output_silent_s", "Consecutive sampled seconds of silent output with nonzero PCM.",
+                     snapshot.window.outputSilentSeconds)
         builder.emit("glimmer_audio_output_latency_ms", "HAL latency, safety offset and buffer duration.",
                      snapshot.window.outputLatencyMs)
         builder.emit("glimmer_audio_device_recovery_ms", "Device change to first rendered PCM.",
@@ -38,6 +40,7 @@ extension TelemetryRenderer {
             builder.fields.append("\"\(name)_buckets\":[\(buckets)]")
         }
         builder.add("audio_render_cushion_min_ms", snapshot.window.minimumRenderCushionMs)
+        builder.add("audio_output_silent_s", snapshot.window.outputSilentSeconds)
         builder.add("audio_output_latency_ms", snapshot.window.outputLatencyMs)
         builder.add("audio_device_recovery_ms", snapshot.window.deviceRecoveryMs)
         builder.addCount("audio_near_misses_window", snapshot.window.nearMisses)

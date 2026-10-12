@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A11020261012000300000001 /* AudioHALOutput+Silence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11020261012000300000000 /* AudioHALOutput+Silence.swift */; };
 		D81200000000000000000009 /* ReceiveTimingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000008 /* ReceiveTimingTests.swift */; };
 		D81200000000000000000007 /* ReceiveTimingTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000006 /* ReceiveTimingTelemetry.swift */; };
 		D81200000000000000000003 /* ReceiveTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000002 /* ReceiveTiming.swift */; };
@@ -600,6 +601,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A11020261012000300000000 /* AudioHALOutput+Silence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioHALOutput+Silence.swift"; sourceTree = "<group>"; };
 		D81200000000000000000008 /* ReceiveTimingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReceiveTimingTests.swift"; sourceTree = "<group>"; };
 		D81200000000000000000006 /* ReceiveTimingTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ReceiveTimingTelemetry.swift"; sourceTree = "<group>"; };
 		D81200000000000000000002 /* ReceiveTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/ReceiveTiming.swift"; sourceTree = "<group>"; };
@@ -1484,6 +1486,7 @@
 				AC2026083000000000000003 /* AudioDecoder+Decode.swift */,
 				A0D102202610091545000003 /* AudioDecoder+Spatial.swift */,
 				A11020261011000000000002 /* AudioHALDevice.swift */,
+				A11020261012000300000000 /* AudioHALOutput+Silence.swift */,
 				A11020261011000000000001 /* AudioHALOutput.swift */,
 				A11020261011000000000000 /* AudioPCMQueue.swift */,
 				A0D102202610091545000001 /* SpatialAudio.swift */,
@@ -2195,6 +2198,7 @@
 				AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */,
 				A0D102202610091545000004 /* AudioDecoder+Spatial.swift in Sources */,
 				A11020261011000100000002 /* AudioHALDevice.swift in Sources */,
+				A11020261012000300000001 /* AudioHALOutput+Silence.swift in Sources */,
 				A11020261011000100000001 /* AudioHALOutput.swift in Sources */,
 				A11020261011000100000000 /* AudioPCMQueue.swift in Sources */,
 				A0D102202610091545000002 /* SpatialAudio.swift in Sources */,
