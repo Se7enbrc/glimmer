@@ -24,6 +24,7 @@
 //  replaced.
 //
 
+import GlimmerEngine
 import Foundation
 import QuartzCore
 import os

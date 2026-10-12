@@ -14,6 +14,7 @@
 //  see that file for the shared stored state and wire facts.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension EnetControlChannel {
@@ -179,16 +180,6 @@ extension EnetControlChannel {
             return false
         }
         return true
-    }
-
-    /// Serial-number "newer than" for the 16-bit wrapping per-channel reliable
-    /// sequence (pre-incremented u16, wraps 65535 → 0 - the same silent `++`
-    /// wrap the vendored C does on the outgoing side). `seq` is strictly newer
-    /// than `last` when the forward distance is nonzero and under half the
-    /// window - the standard half-space rule, safe because the host can never
-    /// be more than its (small, ACK-clocked) retransmit backlog ahead of us.
-    static func reliableSeqIsNewer(_ seq: UInt16, than last: UInt16) -> Bool {
-        seq != last && (seq &- last) < 0x8000
     }
 
     /// Send an ACK for a received command iff it requested one AND the datagram

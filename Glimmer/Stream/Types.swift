@@ -9,6 +9,7 @@
 //  actor underneath. The backend's stream-configuration value types are filled
 //  in from these on the way down to startConnection.
 
+import GlimmerEngine
 import Foundation
 import CoreAudio
 import CoreMedia

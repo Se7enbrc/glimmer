@@ -41,6 +41,7 @@
 //  EnetControlChannel+Inbound.swift parses inbound datagrams; and
 //  EnetControlChannel+Send.swift holds the outbound send + client→host control.
 
+import GlimmerEngine
 import Foundation
 import Network
 import Synchronization

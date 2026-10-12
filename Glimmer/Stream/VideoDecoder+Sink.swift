@@ -9,6 +9,7 @@
 //  Sendable note. Split out of VideoDecoder.swift to keep each unit focused.
 //
 
+import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import Foundation

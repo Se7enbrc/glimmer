@@ -7,6 +7,7 @@
 // Sunshine can send from a different source port, so connecting the socket would discard valid video.
 // Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 
+import GlimmerEngine
 import Foundation
 import Network
 import Darwin
@@ -107,7 +108,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     }
 
     private var encrypted: Bool {
-        (encryptionFeaturesEnabled & RtspClient.ssEncVideo) != 0
+        (encryptionFeaturesEnabled & VideoPacketLayout.ssEncVideo) != 0
     }
 
     // MARK: - Lifecycle

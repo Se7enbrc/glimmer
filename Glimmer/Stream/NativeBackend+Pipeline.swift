@@ -10,6 +10,7 @@
 //  focused; see that file for the backend's stored state and lifecycle.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 
@@ -208,7 +209,7 @@ extension NativeBackend {
             host: host,
             videoPort: handshake.videoPort,
             pingPayload: handshake.videoPingPayload,
-            packetSize: VideoDecryptor.packetSize(
+            packetSize: VideoPacketLayout.packetSize(
                 Int(config.packetSize), encryptionFeaturesEnabled: handshake.encryptionFeaturesEnabled),
             bitrateKbps: Int(config.bitrate),
             negotiatedVideoFormat: handshake.negotiatedVideoFormat,

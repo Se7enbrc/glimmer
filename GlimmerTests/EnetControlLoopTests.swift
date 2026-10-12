@@ -8,6 +8,7 @@
 //  kept in sentReliable, so its exact wire bytes and the loop's decisions are readable there.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

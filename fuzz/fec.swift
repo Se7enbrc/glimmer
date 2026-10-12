@@ -8,6 +8,8 @@
 //  block size and erasure pattern the PC's packet headers control.
 //
 
+@testable import GlimmerEngine
+
 /// [data shards][parity shards][block size][erasure bits...][shard bytes...]; a parity
 /// count of 0 picks the fixed RS(4,2) audio decoder.
 @_cdecl("LLVMFuzzerTestOneInput")

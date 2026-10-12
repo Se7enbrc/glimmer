@@ -1,17 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamProtocolConstants.swift
-//
-//  Swift constants for the GameStream / Sunshine protocol values that cross the
-//  StreamingBackend boundary. `NativeBackend` (and the Swift value types in
-//  StreamingBackend.swift) reference these directly.
-//
-//  These values are the on-the-wire / ABI constants of the GameStream /
-//  Sunshine protocol; they are part of the host protocol, not an internal
-//  library detail. The names/groupings cite the corresponding Limelight.h
-//  sections for auditability against the protocol spec.
+// Sunshine wire constants crossing the StreamingBackend boundary, grouped by Limelight.h section
+// so their ABI values can be audited against the protocol rather than inferred from app types.
 
 import Foundation
 
@@ -86,10 +77,9 @@ public enum StreamProtocol {
     public static let CAPABILITY_REFERENCE_FRAME_INVALIDATION_AV1: Int32 = 0x40
 
     // MARK: Server codec-mode support - RAW SCM_* bitmask (Limelight.h:506-515)
-    //
-    // *** LANDMINE *** This is a DIFFERENT bit layout from VIDEO_FORMAT_*.
-    // e.g. SCM_AV1_MAIN10 (0x20000) vs VIDEO_FORMAT_AV1_MAIN10 (0x2000).
-    // serverCodecModeSupport takes the RAW SCM_* value; confusing it with the
+
+    // *** LANDMINE *** This is a DIFFERENT bit layout from VIDEO_FORMAT_*. e.g. SCM_AV1_MAIN10 (0x20000) vs
+    // VIDEO_FORMAT_AV1_MAIN10 (0x2000). serverCodecModeSupport takes the RAW SCM_* value; confusing it with the
     // VIDEO_FORMAT_* layout silently drops AV1 Main10 (no HDR).
     public static let SCM_H264: Int32 = 0x0000_0001
     public static let SCM_HEVC: Int32 = 0x0000_0100
@@ -162,7 +152,7 @@ public enum StreamProtocol {
     public static let LI_CCAP_DUAL_TOUCHPAD: Int32 = 0x100
 
     // MARK: Controller motion types (Limelight.h, LiSendControllerMotionEvent)
-    //
+
     // Units are part of the wire contract: ACCEL reports m/s^2 INCLUSIVE of
     // gravitational acceleration, GYRO reports deg/s; x/y/z follow SDL's
     // sensor axis convention (+X right, +Y up, +Z toward the player).
@@ -170,7 +160,7 @@ public enum StreamProtocol {
     public static let LI_MOTION_TYPE_GYRO: Int32 = 0x02
 
     // MARK: Controller battery (Limelight.h, LiSendControllerBatteryEvent)
-    //
+
     // Wire states for the SS_CONTROLLER_BATTERY uplink. GameController maps
     // onto a subset (full/charging/discharging/unknown); NOT_PRESENT and
     // NOT_CHARGING exist for clients whose pad APIs can distinguish them.
@@ -195,12 +185,10 @@ public enum StreamProtocol {
 }
 
 // MARK: - Connection-stage names
-//
-// Mirror of the protocol's LiGetStageName table. Lives here so the native
-// backend produces numerically + textually stable stage names for UI /
-// signposts without touching Limelight.h; `stageName(_:)` indexes this table
-// directly.
-//
+
+// Mirror of the protocol's LiGetStageName table. Lives here so the native backend produces numerically + textually
+// stable stage names for UI / signposts without touching Limelight.h; `stageName(_:)` indexes this table directly.
+
 // Values match Connection.c STAGE_* (Limelight.h:373-385).
 public enum StreamStageNames {
     /// 0 STAGE_NONE ... 12 STAGE_MAX. Index == the stage int.

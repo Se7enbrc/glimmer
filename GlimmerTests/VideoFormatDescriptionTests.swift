@@ -7,6 +7,7 @@
 //  Format descriptions built from real x264/x265 parameter sets and AV1 sequence headers.
 //
 
+@testable import GlimmerEngine
 import CoreMedia
 import Foundation
 import Testing

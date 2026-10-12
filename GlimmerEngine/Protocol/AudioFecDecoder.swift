@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+
+// Audio RS(4,2) MUST use Nvidia's hardcoded non-Cauchy matrix (RtpAudioQueue.c:52-58).
+// A generated Cauchy matrix silently decodes to garbage. ReedSolomon supplies only the GF(256) solver.
+// Transport provenance is in CREDITS.md.
+
+import Foundation
+
+/// Fixed RS(4,2) erasure decoder using Nvidia's hardcoded audio parity matrix.
+/// Thin wrapper over `ReedSolomon`, which owns the shared GF(256) erasure solver.
+package struct AudioFecDecoder {
+    package static let dataShards = 4
+    static let fecShards = 2
+    static let totalShards = 6
+
+    /// Nvidia's hardcoded audio parity matrix, 2x4 row-major (RtpAudioQueue.c:57).
+    /// m[row * dataShards + col]: row in [0,2) = parity shard, col in [0,4) = data shard.
+    package static let parity: [UInt8] = [0x77, 0x40, 0x38, 0x0e,
+                                          0xc7, 0xa7, 0x0d, 0x6c]
+
+    private let rs: ReedSolomon
+
+    package init() {
+        // Geometry and matrix are compile-time constants (ds=4, ps=2,
+        // matrix.count == 8 == ps*ds), so this init never returns nil. The guard
+        // states that invariant explicitly instead of trapping through a `!`.
+        guard let rs = ReedSolomon(matrix: Self.parity,
+                                   dataShards: Self.dataShards,
+                                   parityShards: Self.fecShards) else {
+            preconditionFailure("audio RS(4,2) parity matrix is a compile-time constant "
+                + "(2x4, matching dataShards/fecShards) and must always construct")
+        }
+        self.rs = rs
+    }
+
+    /// Reconstruct erased data shards in place; see `ReedSolomon.decode`. `shards`:
+    /// 6 buffers of `blockSize` (0..<4 data, 4..<6 parity). `marks`: length 6,
+    /// non-zero == missing. Returns false if unrecoverable (too few parity shards).
+    func decode(shards: inout [[UInt8]], marks: [UInt8], blockSize: Int) -> Bool {
+        rs.decode(shards: &shards, marks: marks.map { $0 != 0 }, bs: blockSize)
+    }
+}

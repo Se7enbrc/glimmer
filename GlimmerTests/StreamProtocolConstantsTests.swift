@@ -11,8 +11,8 @@
 //  VIDEO_FORMAT_* having DIFFERENT bit layouts) are anchored here.
 //
 
+@testable import GlimmerEngine
 import Testing
-@testable import Glimmer
 
 struct StreamProtocolConstantsTests {
 

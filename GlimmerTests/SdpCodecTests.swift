@@ -11,6 +11,7 @@
 //     exact header/attribute/tail framing, including the trailing-space quirks).
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -334,7 +335,7 @@ struct SdpCodecTests {
 
     @Test func decoderRefusesALayoutForAnotherChannelCount() {
         // A stereo layout on a 5.1 stream: opus would read six mapping entries from two.
-        let stereoLayout = RtspHandshakeResult.defaultOpusConfig
+        let stereoLayout = SdpScan.defaultOpusConfig
         #expect(AudioDecoder().initialize(audioConfig: AudioConfig.surround51.cValue, opus: stereoLayout) == -1)
     }
 

@@ -8,6 +8,7 @@
 //  age and idle edges, the decode gate, present recovery, display and audio windows, the quit dwell.
 //
 
+@testable import GlimmerEngine
 import AVFoundation
 import Foundation
 import os
@@ -304,7 +305,7 @@ struct TimedAudioReceiveTests {
 
     private static func receiver() -> RtpAudioReceiver {
         RtpAudioReceiver(host: .ipv4(.loopback), audioPort: 0, pingPayload: [], audioPacketDuration: 5,
-                         opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+                         opusConfig: SdpScan.defaultOpusConfig, audioConfig: 0,
                          audioEncryption: false, aesKey: EnetFixture.key,
                          aesIvId: [UInt8](repeating: 0, count: 16), sink: SilentSink())
     }

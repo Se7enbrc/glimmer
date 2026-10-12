@@ -33,6 +33,7 @@
 // Queue state belongs to RtpAudioReceiver's decode worker. Pooling shards and blocks keeps
 // the packet path allocation-free; startup/test callers may drive it synchronously.
 
+import GlimmerEngine
 import Foundation
 
 /// The dispatch result of `RtpAudioQueue.addPacket`. Mirrors the

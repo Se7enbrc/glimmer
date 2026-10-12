@@ -3,6 +3,7 @@
 
 // Decode, conceal and schedule audio packets. Engine lifecycle lives in AudioDecoder+Engine.swift.
 
+import GlimmerEngine
 import AVFoundation
 import Foundation
 import os

@@ -9,6 +9,7 @@
 //  THREADING: GameController haptics and light calls are thread-safe, so the work runs on `queue`.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import GameController

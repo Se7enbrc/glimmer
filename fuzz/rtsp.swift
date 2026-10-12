@@ -8,21 +8,7 @@
 //
 
 import Foundation
-
-// RtspClient's file needs Network and CryptoKit; SdpCodec reads only these from it.
-enum RtspClient {
-    static let clientVersion = 14
-}
-
-enum RtspHandshakeResult {
-    static let defaultOpusConfig = OpusConfig(
-        sampleRate: 48000, channelCount: 2, streams: 1, coupledStreams: 1,
-        samplesPerFrame: 240, mapping: [0, 1])
-}
-
-enum VideoDecryptor {
-    static func packetSize(_ configured: Int, encryptionFeaturesEnabled: UInt32) -> Int { configured }
-}
+import GlimmerEngine
 
 @_cdecl("LLVMFuzzerTestOneInput")
 public func fuzzRtsp(_ data: UnsafePointer<UInt8>, _ size: Int) -> CInt {

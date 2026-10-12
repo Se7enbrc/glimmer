@@ -41,6 +41,7 @@
 //    * RtpAudioReceiver+Events.swift      - the audio_ttf / audio_pending rows.
 //    * RtpAudioReceiver+Telemetry.swift   - the per-window receive-quality fold.
 
+import GlimmerEngine
 import Foundation
 import Network
 import Darwin

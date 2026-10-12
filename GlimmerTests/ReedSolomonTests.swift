@@ -4,6 +4,7 @@
 // Independent field arithmetic pins wire compatibility for video and audio FEC.
 // Round trips also exercise shard mutation and erasure geometry.
 
+@testable import GlimmerEngine
 import Testing
 @testable import Glimmer
 

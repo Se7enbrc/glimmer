@@ -8,6 +8,7 @@
 //  client's datagram came from, as Sunshine does, so receivers keep their ephemeral port.
 //
 
+@testable import GlimmerEngine
 import Darwin
 import Foundation
 import os

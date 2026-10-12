@@ -8,6 +8,7 @@
 //  the session token, the ping payload and the negotiated codec, plus the malformed replies refused.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

@@ -6,6 +6,7 @@
 //
 //  RtpVideoQueue+Reconstruct.swift
 //  FEC reconstruction and frame submission on the single RTP receive thread.
+import GlimmerEngine
 import Foundation
 
 /// A run of frames that needed Reed-Solomon recovery, summarized once the run

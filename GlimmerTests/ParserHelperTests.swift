@@ -26,6 +26,7 @@
 //  scope. Left `private`.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Network
 import Testing

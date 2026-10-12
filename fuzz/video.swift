@@ -8,6 +8,8 @@
 //  Reed-Solomon recovery and the depacketizer's frame assembly.
 //
 
+import GlimmerEngine
+
 private final class FrameSink: VideoDepacketizerDelegate {
     func depacketizerDidAssembleFrame(_ unit: DecodeUnit) {
         precondition(unit.fullLength >= 0 && Int(unit.fullLength) <= VideoDepacketizer.maxFrameBytes)

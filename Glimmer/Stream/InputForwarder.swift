@@ -97,6 +97,7 @@
 //     it `LiSendMultiControllerEvent` events appear to be silently dropped on
 //     newer Sunshine builds.
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics

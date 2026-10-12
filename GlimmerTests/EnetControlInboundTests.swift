@@ -8,6 +8,7 @@
 //  estimate, command framing, authentication bookkeeping and every host control message.
 //
 
+@testable import GlimmerEngine
 import CryptoKit
 import Foundation
 import Network

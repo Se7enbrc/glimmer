@@ -11,6 +11,7 @@
 //  see that file for the backend's stored state.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension NativeBackend {

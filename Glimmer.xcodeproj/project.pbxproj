@@ -532,6 +532,13 @@
 		A0D10A110000000000000006 /* AudioPacketWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D10A110000000000000005 /* AudioPacketWorker.swift */; };
 		A0D10A110000000000000008 /* AudioDecoder+Worker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D10A110000000000000007 /* AudioDecoder+Worker.swift */; };
 		A0D10A11000000000000000A /* AudioWorkerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D10A110000000000000009 /* AudioWorkerTests.swift */; };
+		E2610121000000000000000C /* StreamingBackend+Values.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2610121000000000000000B /* StreamingBackend+Values.swift */; };
+		E2610121000000000000000E /* StreamCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2610121000000000000000D /* StreamCrypto.swift */; };
+		E26101210000000000000010 /* StreamCrypto+VideoPacketLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2610121000000000000000F /* StreamCrypto+VideoPacketLayout.swift */; };
+		E26101210000000000000012 /* AudioFecDecoder+Recovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26101210000000000000011 /* AudioFecDecoder+Recovery.swift */; };
+		E26101210000000000000013 /* GlimmerEngine.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; };
+		E26101210000000000000014 /* GlimmerEngine.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; };
+		E26101210000000000000015 /* GlimmerEngine.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -549,6 +556,20 @@
 			remoteGlobalIDString = A10000040;
 			remoteInfo = Glimmer;
 		};
+		E26101210000000000000016 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000050 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E26101210000000000000002;
+			remoteInfo = GlimmerEngine;
+		};
+		E26101210000000000000018 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000050 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E26101210000000000000002;
+			remoteInfo = GlimmerEngine;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -561,6 +582,17 @@
 				086CF5A56FDAE0E5A8341CEA /* Glimmer Login Helper.app in Embed Login Helper */,
 			);
 			name = "Embed Login Helper";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E26101210000000000000008 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				E26101210000000000000015 /* GlimmerEngine.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -718,14 +750,14 @@
 		CC0000000A /* StatsCollector+Record.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsCollector+Record.swift"; sourceTree = "<group>"; };
 		CFAE5FA4BA5A94E9668B7089 /* QualityCalculator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QualityCalculator.swift; sourceTree = "<group>"; };
 		D1000001 /* StreamingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamingBackend.swift; sourceTree = "<group>"; };
-		D1000003 /* StreamProtocolConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamProtocolConstants.swift; sourceTree = "<group>"; };
+		D1000003 /* StreamProtocolConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamProtocolConstants.swift; sourceTree = "<group>"; };
 		D1000007 /* NativeBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/NativeBackend.swift; sourceTree = "<group>"; };
 		D100000F /* StreamCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/StreamCrypto.swift; sourceTree = "<group>"; };
-		D1000011 /* SdpCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/SdpCodec.swift; sourceTree = "<group>"; };
+		D1000011 /* SdpCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SdpCodec.swift; sourceTree = "<group>"; };
 		D1000013 /* RtspClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtspClient.swift; sourceTree = "<group>"; };
 		D1000015 /* EnetControlChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/EnetControlChannel.swift; sourceTree = "<group>"; };
-		D1000017 /* EnetWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/EnetWire.swift; sourceTree = "<group>"; };
-		D100001F /* ReedSolomon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/ReedSolomon.swift; sourceTree = "<group>"; };
+		D1000017 /* EnetWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnetWire.swift; sourceTree = "<group>"; };
+		D100001F /* ReedSolomon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReedSolomon.swift; sourceTree = "<group>"; };
 		D1000021 /* VideoDepacketizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoDepacketizer.swift; sourceTree = "<group>"; };
 		D1000023 /* RtpVideoQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpVideoQueue.swift; sourceTree = "<group>"; };
 		D1000025 /* VideoRtpReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoRtpReceiver.swift; sourceTree = "<group>"; };
@@ -735,8 +767,8 @@
 		D1B00005 /* StreamSession+Downshift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Downshift.swift"; sourceTree = "<group>"; };
 		D1B00003 /* BitrateDownshiftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/BitrateDownshiftController.swift; sourceTree = "<group>"; };
 		D1B00001 /* StreamPathMTU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/StreamPathMTU.swift; sourceTree = "<group>"; };
-		D1000029 /* InputEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/InputEncoder.swift; sourceTree = "<group>"; };
-		D1000031 /* AudioFecDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/AudioFecDecoder.swift; sourceTree = "<group>"; };
+		D1000029 /* InputEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputEncoder.swift; sourceTree = "<group>"; };
+		D1000031 /* AudioFecDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFecDecoder.swift; sourceTree = "<group>"; };
 		D1000033 /* RtpAudioQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpAudioQueue.swift; sourceTree = "<group>"; };
 		D1000035 /* RtpAudioReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpAudioReceiver.swift; sourceTree = "<group>"; };
 		D1000037 /* InputBatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/InputBatcher.swift; sourceTree = "<group>"; };
@@ -1095,6 +1127,11 @@
 		A0D10A110000000000000005 /* AudioPacketWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/AudioPacketWorker.swift"; sourceTree = "<group>"; };
 		A0D10A110000000000000007 /* AudioDecoder+Worker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Worker.swift"; sourceTree = "<group>"; };
 		A0D10A110000000000000009 /* AudioWorkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioWorkerTests.swift; sourceTree = "<group>"; };
+		E2610121000000000000000B /* StreamingBackend+Values.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamingBackend+Values.swift"; sourceTree = "<group>"; };
+		E2610121000000000000000D /* StreamCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamCrypto.swift"; sourceTree = "<group>"; };
+		E2610121000000000000000F /* StreamCrypto+VideoPacketLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamCrypto+VideoPacketLayout.swift"; sourceTree = "<group>"; };
+		E26101210000000000000011 /* AudioFecDecoder+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/AudioFecDecoder+Recovery.swift"; sourceTree = "<group>"; };
+		E26101210000000000000001 /* GlimmerEngine.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = GlimmerEngine.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1102,6 +1139,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E26101210000000000000013 /* GlimmerEngine.framework in Frameworks */,
 				A1009012 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1115,6 +1153,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D2000015 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E26101210000000000000014 /* GlimmerEngine.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E26101210000000000000007 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1166,6 +1212,7 @@
 		A10000030 = {
 			isa = PBXGroup;
 			children = (
+				E26101210000000000000009 /* GlimmerEngine */,
 				D0C520261009000000000000 /* LICENSE */,
 				D0C520261009000000000001 /* CREDITS.md */,
 				D0C520261009000000000002 /* ThirdPartyNotices.txt */,
@@ -1372,14 +1419,11 @@
 				D100003D /* EnetControlChannel+Inbound.swift */,
 				D100003B /* EnetControlChannel+ControlLoop.swift */,
 				D1000039 /* EnetControlChannel+Handshake.swift */,
-				D1000003 /* StreamProtocolConstants.swift */,
 				D1000007 /* NativeBackend.swift */,
 				D100000F /* StreamCrypto.swift */,
-				D1000011 /* SdpCodec.swift */,
+				E26101210000000000000011 /* AudioFecDecoder+Recovery.swift */,
 				D1000013 /* RtspClient.swift */,
 				D1000015 /* EnetControlChannel.swift */,
-				D1000017 /* EnetWire.swift */,
-				D100001F /* ReedSolomon.swift */,
 				D1000021 /* VideoDepacketizer.swift */,
 				D6D80A7200000000000000C1 /* VideoDepacketizer+FrameHeader.swift */,
 				D6D80A7200000000000000D1 /* VideoDepacketizer+AnnexB.swift */,
@@ -1400,7 +1444,6 @@
 				D1B00005 /* StreamSession+Downshift.swift */,
 				D1B00003 /* BitrateDownshiftController.swift */,
 				D1B00001 /* StreamPathMTU.swift */,
-				D1000029 /* InputEncoder.swift */,
 				611B7394B5164EC483247793 /* InputSendThread.swift */,
 				D0452DBFB07341D19F5B3F44 /* InputLatency.swift */,
 				4E5DA9A384944F01B901C609 /* TelemetryExporter+RenderInput.swift */,
@@ -1411,7 +1454,6 @@
 				BC7DB456C0634F42AB147FDB /* HIDInputThread.swift */,
 				CA0F483AD1784C568B813A61 /* InputCallbackProbe.swift */,
 				D1000037 /* InputBatcher.swift */,
-				D1000031 /* AudioFecDecoder.swift */,
 				D1000033 /* RtpAudioQueue.swift */,
 				ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */,
 				D1000035 /* RtpAudioReceiver.swift */,
@@ -1510,6 +1552,7 @@
 		A10000032 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				E26101210000000000000001 /* GlimmerEngine.framework */,
 				A10000010 /* Glimmer.app */,
 				68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */,
 				D2000019 /* GlimmerTests.xctest */,
@@ -1718,6 +1761,30 @@
 			path = GlimmerTests;
 			sourceTree = "<group>";
 		};
+		E26101210000000000000009 /* GlimmerEngine */ = {
+			isa = PBXGroup;
+			children = (
+				E2610121000000000000000A /* Protocol */,
+			);
+			path = GlimmerEngine;
+			sourceTree = "<group>";
+		};
+		E2610121000000000000000A /* Protocol */ = {
+			isa = PBXGroup;
+			children = (
+				D1000017 /* EnetWire.swift */,
+				D100001F /* ReedSolomon.swift */,
+				D1000031 /* AudioFecDecoder.swift */,
+				D1000029 /* InputEncoder.swift */,
+				D1000011 /* SdpCodec.swift */,
+				D1000003 /* StreamProtocolConstants.swift */,
+				E2610121000000000000000B /* StreamingBackend+Values.swift */,
+				E2610121000000000000000D /* StreamCrypto.swift */,
+				E2610121000000000000000F /* StreamCrypto+VideoPacketLayout.swift */,
+			);
+			path = Protocol;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1729,10 +1796,12 @@
 				A10000020 /* Frameworks */,
 				A10000043 /* Resources */,
 				94C986F80941C0DAC50BA0AE /* Embed Login Helper */,
+				E26101210000000000000008 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E26101210000000000000017 /* PBXTargetDependency */,
 				AB7BE451DDA95AEA958F4D81 /* PBXTargetDependency */,
 			);
 			name = Glimmer;
@@ -1770,12 +1839,29 @@
 			buildRules = (
 			);
 			dependencies = (
+				E26101210000000000000019 /* PBXTargetDependency */,
 				D2000017 /* PBXTargetDependency */,
 			);
 			name = GlimmerTests;
 			productName = GlimmerTests;
 			productReference = D2000019 /* GlimmerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		E26101210000000000000002 /* GlimmerEngine */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E26101210000000000000003 /* Build configuration list for PBXNativeTarget "GlimmerEngine" */;
+			buildPhases = (
+				E26101210000000000000006 /* Sources */,
+				E26101210000000000000007 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GlimmerEngine;
+			productName = GlimmerEngine;
+			productReference = E26101210000000000000001 /* GlimmerEngine.framework */;
+			productType = "com.apple.product-type.framework";
 		};
 /* End PBXNativeTarget section */
 
@@ -1808,6 +1894,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				E26101210000000000000002 /* GlimmerEngine */,
 				A10000040 /* Glimmer */,
 				AD84EE95363FBCE53F028062 /* Glimmer Login Helper */,
 				D2000010 /* GlimmerTests */,
@@ -1850,6 +1937,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E26101210000000000000012 /* AudioFecDecoder+Recovery.swift in Sources */,
 				A10000001 /* GlimmerApp.swift in Sources */,
 				A1009001 /* UpdaterController.swift in Sources */,
 				A10000002 /* ContentView.swift in Sources */,
@@ -2045,14 +2133,10 @@
 				D100003E /* EnetControlChannel+Inbound.swift in Sources */,
 				D100003C /* EnetControlChannel+ControlLoop.swift in Sources */,
 				D100003A /* EnetControlChannel+Handshake.swift in Sources */,
-				D1000004 /* StreamProtocolConstants.swift in Sources */,
 				D1000008 /* NativeBackend.swift in Sources */,
 				D1000010 /* StreamCrypto.swift in Sources */,
-				D1000012 /* SdpCodec.swift in Sources */,
 				D1000014 /* RtspClient.swift in Sources */,
 				D1000016 /* EnetControlChannel.swift in Sources */,
-				D1000018 /* EnetWire.swift in Sources */,
-				D1000020 /* ReedSolomon.swift in Sources */,
 				D1000022 /* VideoDepacketizer.swift in Sources */,
 				D1000024 /* RtpVideoQueue.swift in Sources */,
 				D10000D1 /* RtpVideoQueue+ReceiveQuality.swift in Sources */,
@@ -2069,7 +2153,6 @@
 				D1B00006 /* StreamSession+Downshift.swift in Sources */,
 				D1B00004 /* BitrateDownshiftController.swift in Sources */,
 				D1B00002 /* StreamPathMTU.swift in Sources */,
-				D1000030 /* InputEncoder.swift in Sources */,
 				A9A473543FD740449620F954 /* InputSendThread.swift in Sources */,
 				96AFDC8857604B9B9E1F4C00 /* InputLatency.swift in Sources */,
 				3B48EA62232E4E4CAFEECF3D /* TelemetryExporter+RenderInput.swift in Sources */,
@@ -2080,7 +2163,6 @@
 				EE13E673ECB2440B86BF720D /* HIDInputThread.swift in Sources */,
 				089034CA08D544209EC065CE /* InputCallbackProbe.swift in Sources */,
 				D1000038 /* InputBatcher.swift in Sources */,
-				D1000032 /* AudioFecDecoder.swift in Sources */,
 				D1000034 /* RtpAudioQueue.swift in Sources */,
 				ABCD20260609000000000602 /* RtpAudioQueue+Fec.swift in Sources */,
 				D1000036 /* RtpAudioReceiver.swift in Sources */,
@@ -2376,6 +2458,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E26101210000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1000018 /* EnetWire.swift in Sources */,
+				D1000020 /* ReedSolomon.swift in Sources */,
+				D1000032 /* AudioFecDecoder.swift in Sources */,
+				D1000030 /* InputEncoder.swift in Sources */,
+				D1000012 /* SdpCodec.swift in Sources */,
+				D1000004 /* StreamProtocolConstants.swift in Sources */,
+				E2610121000000000000000C /* StreamingBackend+Values.swift in Sources */,
+				E2610121000000000000000E /* StreamCrypto.swift in Sources */,
+				E26101210000000000000010 /* StreamCrypto+VideoPacketLayout.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -2390,6 +2488,16 @@
 			name = Glimmer;
 			target = A10000040 /* Glimmer */;
 			targetProxy = D2000018 /* PBXContainerItemProxy */;
+		};
+		E26101210000000000000017 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E26101210000000000000002 /* GlimmerEngine */;
+			targetProxy = E26101210000000000000016 /* PBXContainerItemProxy */;
+		};
+		E26101210000000000000019 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E26101210000000000000002 /* GlimmerEngine */;
+			targetProxy = E26101210000000000000018 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -2541,6 +2649,7 @@
 		A10000062 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				OTHER_SWIFT_FLAGS = "$(inherited) -package-name Glimmer";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Glimmer/Glimmer.entitlements;
@@ -2573,6 +2682,7 @@
 		A10000063 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				OTHER_SWIFT_FLAGS = "$(inherited) -package-name Glimmer";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Glimmer/Glimmer.entitlements;
@@ -2605,6 +2715,7 @@
 		D2000012 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				OTHER_SWIFT_FLAGS = "$(inherited) -package-name Glimmer";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
@@ -2619,6 +2730,7 @@
 		D2000013 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				OTHER_SWIFT_FLAGS = "$(inherited) -package-name Glimmer";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
@@ -2649,6 +2761,66 @@
 				SKIP_INSTALL = NO;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		E26101210000000000000004 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				OTHER_SWIFT_FLAGS = "$(inherited) -package-name Glimmer";
+				"ARCHS[sdk=macosx*]" = arm64;
+				CLANG_ENABLE_STACK_ZERO_INIT = YES;
+				CLANG_ENABLE_C_TYPED_ALLOCATOR_SUPPORT = YES;
+				CLANG_ENABLE_CPLUSPLUS_TYPED_ALLOCATOR_SUPPORT = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_SECURITY_COMPILER_WARNINGS = YES;
+				GCC_WARN_SHADOW = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_DYLIB_INSTALL_NAME = "@rpath/$(EXECUTABLE_PATH)";
+				LM_SKIP_METADATA_EXTRACTION = YES;
+				MACH_O_TYPE = mh_dylib;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.Engine;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E26101210000000000000005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				OTHER_SWIFT_FLAGS = "$(inherited) -package-name Glimmer";
+				"ARCHS[sdk=macosx*]" = arm64;
+				CLANG_ENABLE_STACK_ZERO_INIT = YES;
+				CLANG_ENABLE_C_TYPED_ALLOCATOR_SUPPORT = YES;
+				CLANG_ENABLE_CPLUSPLUS_TYPED_ALLOCATOR_SUPPORT = YES;
+				DEFINES_MODULE = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_SECURITY_COMPILER_WARNINGS = YES;
+				GCC_WARN_SHADOW = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_DYLIB_INSTALL_NAME = "@rpath/$(EXECUTABLE_PATH)";
+				LM_SKIP_METADATA_EXTRACTION = YES;
+				MACH_O_TYPE = mh_dylib;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.Engine;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -2687,6 +2859,15 @@
 			buildConfigurations = (
 				D2000012 /* Debug */,
 				D2000013 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E26101210000000000000003 /* Build configuration list for PBXNativeTarget "GlimmerEngine" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E26101210000000000000004 /* Debug */,
+				E26101210000000000000005 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

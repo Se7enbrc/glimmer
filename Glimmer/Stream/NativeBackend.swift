@@ -25,6 +25,7 @@
 //  under category "NativeConnection" trace each sub-stage so progress is
 //  watchable live.
 
+import GlimmerEngine
 import Foundation
 import Network
 import os

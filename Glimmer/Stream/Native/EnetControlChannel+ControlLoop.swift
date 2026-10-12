@@ -13,6 +13,7 @@
 //  to keep each unit focused; see that file for the shared stored state.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension EnetControlChannel {

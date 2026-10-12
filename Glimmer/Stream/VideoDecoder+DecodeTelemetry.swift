@@ -19,6 +19,7 @@
 //  rare events), and nothing here touches the proven decode/pace locks.
 //
 
+import GlimmerEngine
 import CoreMedia
 import CoreVideo
 import Foundation

@@ -3,31 +3,9 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  InputEncoder.swift
-//
-//  Pure value-type builders for the plaintext NV_INPUT_HEADER + body byte
-//  arrays sent over the encrypted control stream (ptype 0x0206) to a Sunshine
-//  host. Source: InputStream.c / Input.h.
-//
-//  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
-//
-//  ADDITIVE: this file produces ONLY bytes - no sockets, no crypto, no control
-//  state. The plaintext [UInt8] each method returns is handed verbatim to
-//  EnetControlChannel.sendEncryptedControl(type: 0x0206, ...) which performs the
-//  control-V2 AES-GCM seal. On Sunshine 7.1.431 encryptedControlStream is TRUE,
-//  so input bodies are PLAINTEXT (InputStream.c's per-input encryptData() is
-//  dead code on this path and is deliberately NOT ported).
-//
-//  Byte-order landmine (verified field-by-field against Input.h #pragma pack(1)):
-//    - NV_INPUT_HEADER.size is BIG-endian = sizeof(struct) - 4 (the size field).
-//    - NV_INPUT_HEADER.magic is LITTLE-endian.
-//    - Mouse deltas / abs x,y,w,h / scroll / hscroll amounts are BIG-endian 16-bit.
-//    - Controller stick/trigger/flags and all fixed MC_* constants are LITTLE-endian 16-bit.
-//    - netfloat is the raw 4 little-endian bytes of an IEEE-754 float (arm64 is LE).
-//
-//  Every method asserts the produced length matches the C struct size so a wrong
-//  layout fails loudly in debug rather than silently mis-driving the host.
+// Plaintext NV_INPUT_HEADER + body (InputStream.c / Input.h); provenance is in CREDITS.md.
+// EnetControlChannel seals these as control-V2 type 0x0206; Sunshine 7.1.431 needs no per-input encryption.
+// Header size and mouse fields are BE; magic, controller fields and netfloat's IEEE-754 bits are LE.
 
 import Foundation
 
@@ -112,14 +90,13 @@ private enum ControllerCap {
 /// Stateless builders, one per input message, each returning the plaintext NV_INPUT_HEADER + body the control
 /// channel seals. They mirror the C with IS_SUNSHINE true, since a GameStream PC is refused before a stream
 /// starts: GameStream's keyboard modifier fix-ups are skipped and the Sunshine extension fields always filled.
-enum InputEncoder {
+package enum InputEncoder {
 
     // MARK: Header helper
 
-    /// Writes NV_INPUT_HEADER: u32 size BIG-endian (= bodyLength, i.e. the rest
-    /// of the packet excluding this 4-byte size field) then u32 magic LITTLE-endian.
-    /// `bodyLength` = sizeof(struct) - sizeof(NV_INPUT_HEADER.size field's u32... )
-    /// - in C terms BE32(sizeof(STRUCT) - sizeof(uint32_t)).
+    /// Writes NV_INPUT_HEADER: u32 size BIG-endian (= bodyLength, i.e. the rest of the packet excluding this 4-byte
+    /// size field) then u32 magic LITTLE-endian. `bodyLength` = sizeof(struct) - sizeof(NV_INPUT_HEADER.size field's
+    /// u32... ) - in C terms BE32(sizeof(STRUCT) - sizeof(uint32_t)).
     private static func writeHeader(into w: inout InputWriter, magicLE: UInt32, bodyLength: UInt32) {
         w.u32BE(bodyLength)
         w.u32LE(magicLE)
@@ -130,7 +107,7 @@ enum InputEncoder {
     /// NV_KEYBOARD_PACKET: header + char flags + short keyCode LE + char modifiers + short zero2.
     /// `action` = KEY_ACTION_DOWN (0x03) / KEY_ACTION_UP (0x04). Sunshine passes
     /// `flags` and `modifiers` through unchanged (GFE modifier fix-ups skipped).
-    static func keyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> [UInt8] {
+    package static func keyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> [UInt8] {
         var w = InputWriter()
         let magic: UInt32 = (action == 0x04) ? InputMagic.keyUp : InputMagic.keyDown
         writeHeader(into: &w, magicLE: magic, bodyLength: 10) // 14 - 4
@@ -147,7 +124,7 @@ enum InputEncoder {
     /// NV_REL_MOUSE_MOVE_PACKET: header + short deltaX BE + short deltaY BE.
     /// Callers must split deltas that exceed Int16 range into multiple packets
     /// (InputStream.c:382-410) - this builder encodes one already-clamped chunk.
-    static func mouseMove(dx: Int16, dy: Int16) -> [UInt8] {
+    package static func mouseMove(dx: Int16, dy: Int16) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.mouseMoveRelGen5, bodyLength: 8) // 12 - 4
         w.i16BE(dx)
@@ -158,11 +135,10 @@ enum InputEncoder {
 
     // MARK: 3. Mouse position (absolute) - LiSendMousePositionEvent (18 bytes)
 
-    /// NV_ABS_MOUSE_MOVE_PACKET (Input.h #pragma pack(1), sizeof = 18): header +
-    /// short x BE + short y BE + short unused(0) + short width BE (= refW - 1) +
-    /// short height BE (= refH - 1). The -1 is the GFE rounding workaround
+    /// NV_ABS_MOUSE_MOVE_PACKET (Input.h #pragma pack(1), sizeof = 18): header + short x BE + short y BE + short
+    /// unused(0) + short width BE (= refW - 1) + short height BE (= refH - 1). The -1 is the GFE rounding workaround
     /// (InputStream.c:458-459).
-    static func mousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> [UInt8] {
+    package static func mousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.mouseMoveAbs, bodyLength: 14) // 18 - 4 (pack(1))
         w.i16BE(x)
@@ -178,7 +154,7 @@ enum InputEncoder {
 
     /// NV_MOUSE_BUTTON_PACKET: header + uint8 button. magic = LE32(action + 1)
     /// for Gen5+ → PRESS(0x07)→0x08 DOWN, RELEASE(0x08)→0x09 UP (InputStream.c:869).
-    static func mouseButton(action: Int8, button: UInt8) -> [UInt8] {
+    package static func mouseButton(action: Int8, button: UInt8) -> [UInt8] {
         var w = InputWriter()
         let magic = UInt32(UInt8(bitPattern: action)) &+ 1
         writeHeader(into: &w, magicLE: magic, bodyLength: 5) // 9 - 4
@@ -191,7 +167,7 @@ enum InputEncoder {
 
     /// NV_SCROLL_PACKET: header + short scrollAmt1 BE + short scrollAmt2 BE (= amt1)
     /// + short zero3(0). Sunshine: NO WHEEL_DELTA batching - raw amount sent.
-    static func scroll(_ amount: Int16) -> [UInt8] {
+    package static func scroll(_ amount: Int16) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.scrollGen5, bodyLength: 10) // 14 - 4
         w.i16BE(amount)
@@ -205,7 +181,7 @@ enum InputEncoder {
 
     /// SS_HSCROLL_PACKET: header + short scrollAmount BE. Sunshine-only on the wire, which is the only
     /// kind of PC a stream reaches, so the C's !IS_SUNSHINE → LI_ERR_UNSUPPORTED guard has no case here.
-    static func hscroll(_ amount: Int16) -> [UInt8] {
+    package static func hscroll(_ amount: Int16) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.ssHscroll, bodyLength: 6) // 10 - 4
         w.i16BE(amount)
@@ -215,15 +191,9 @@ enum InputEncoder {
 
     // MARK: 7. Multi-controller - LiSendMultiControllerEvent (30 bytes)
 
-    /// NV_MULTI_CONTROLLER_PACKET (all body fields LITTLE-endian):
-    /// header + headerB(0x001A) + controllerNumber + activeGamepadMask + midB(0x0014)
-    /// + buttonFlags(buttons & 0xFFFF) + leftTrigger(u8) + rightTrigger(u8)
-    /// + leftStickX + leftStickY + rightStickX + rightStickY + tailA(0x009C)
-    /// + buttonFlags2(buttons >> 16, Sunshine) + tailB(0x0055).
-    ///
-    /// Sign-extend guard (InputStream.c:1017): a negative `buttons` (legacy short
-    /// sign-extension) collapses to the low 16 bits.
-    static func multiController(num: Int16, mask: Int16, buttons: Int32, analog: GamepadAnalog) -> [UInt8] {
+    /// Input.h's NV_MULTI_CONTROLLER_PACKET body is LE, including MC_* constants and Sunshine's upper flags.
+    /// Negative legacy sign-extended `buttons` collapse to the low 16 bits (InputStream.c:1017).
+    package static func multiController(num: Int16, mask: Int16, buttons: Int32, analog: GamepadAnalog) -> [UInt8] {
         // Sign-extend guard: clients that pass a sign-extended short set every
         // extended bit; mask to the low 16 bits in that case.
         let safeButtons = buttons < 0 ? (buttons & 0xFFFF) : buttons
@@ -252,14 +222,10 @@ enum InputEncoder {
 
     // MARK: 8. Controller arrival - LiSendControllerArrivalEvent (16 bytes)
 
-    /// SS_CONTROLLER_ARRIVAL_PACKET: header + u8 controllerNumber + u8 type
-    /// + u16 capabilities LE + u32 supportedButtonFlags LE. Caps fix-up: dual
-    /// touchpad implies the legacy single-touchpad cap (InputStream.c:1439).
-    ///
-    /// NOTE: the caller must ALSO emit a fallback multiController(num, mask, 0, ...)
-    /// after this (InputStream.c:1471) - that dual-send is not the encoder's job.
-    static func controllerArrival(num: UInt8, mask: UInt16, type: UInt8,
-                                  supportedButtons: UInt32, caps: UInt16) -> [UInt8] {
+    /// Arrival uses LE capabilities/buttons; dual touchpad implies the legacy single cap (InputStream.c:1439).
+    /// The caller must also send fallback multiController(num, mask, 0, ...) afterward (InputStream.c:1471).
+    package static func controllerArrival(num: UInt8, mask: UInt16, type: UInt8,
+                                          supportedButtons: UInt32, caps: UInt16) -> [UInt8] {
         var fixedCaps = caps
         if fixedCaps & ControllerCap.dualTouchpad != 0 {
             fixedCaps |= ControllerCap.touchpad
@@ -276,12 +242,11 @@ enum InputEncoder {
 
     // MARK: 9. Controller touch - LiSendControllerTouchEvent2 (24 bytes)
 
-    /// SS_CONTROLLER_TOUCH_PACKET: header + u8 controllerNumber + u8 eventType
-    /// + u8 zero(0) + u8 touchpadIndex + u32 pointerId LE + netfloat x + netfloat y
-    /// + netfloat pressure. Requires SunshineFeatureFlags & LI_FF_CONTROLLER_TOUCH_EVENTS
-    /// (enforced by the caller).
-    static func controllerTouch(num: UInt8, eventType: UInt8, touchpadIndex: UInt8,
-                                pointerId: UInt32, x: Float, y: Float, pressure: Float) -> [UInt8] {
+    /// SS_CONTROLLER_TOUCH_PACKET: header + u8 controllerNumber + u8 eventType + u8 zero(0) + u8 touchpadIndex + u32
+    /// pointerId LE + netfloat x + netfloat y + netfloat pressure. Requires SunshineFeatureFlags &
+    /// LI_FF_CONTROLLER_TOUCH_EVENTS (enforced by the caller).
+    package static func controllerTouch(num: UInt8, eventType: UInt8, touchpadIndex: UInt8,
+                                        pointerId: UInt32, x: Float, y: Float, pressure: Float) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.ssControllerTouch, bodyLength: 24) // 28 - 4 (pack(1))
         w.u8(num)
@@ -298,15 +263,10 @@ enum InputEncoder {
 
     // MARK: 10. Controller motion - LiSendControllerMotionEvent (24 bytes)
 
-    /// SS_CONTROLLER_MOTION_PACKET (Input.h): header + u8 controllerNumber
-    /// + u8 motionType + u8 zero[2] (alignment/reserved) + netfloat x +
-    /// netfloat y + netfloat z. Units are the caller's contract (Limelight.h):
-    /// accel m/s^2 inclusive of gravity, gyro deg/s, axes per SDL's sensor
-    /// convention. Requires SunshineFeatureFlags & LI_FF_CONTROLLER_TOUCH_EVENTS
-    /// - motion shares touch's feature flag (LiSendControllerMotionEvent) -
-    /// enforced by the caller.
-    static func controllerMotion(num: UInt8, motionType: UInt8,
-                                 x: Float, y: Float, z: Float) -> [UInt8] {
+    /// Input.h motion uses reserved zero bytes and netfloat axes: accel m/s² including gravity, gyro deg/s,
+    /// SDL sensor axes. The caller gates on LI_FF_CONTROLLER_TOUCH_EVENTS, shared with touch (Limelight.h).
+    package static func controllerMotion(num: UInt8, motionType: UInt8,
+                                         x: Float, y: Float, z: Float) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.ssControllerMotion, bodyLength: 20) // 24 - 4 (pack(1))
         w.u8(num)
@@ -322,13 +282,9 @@ enum InputEncoder {
 
     // MARK: 11. Controller battery - LiSendControllerBatteryEvent (12 bytes)
 
-    /// SS_CONTROLLER_BATTERY_PACKET (Input.h): header + u8 controllerNumber
-    /// + u8 batteryState + u8 batteryPercentage + u8 zero[1] (alignment/
-    /// reserved). `state` is LI_BATTERY_STATE_*; `percentage` is 0...100 or
-    /// LI_BATTERY_PERCENTAGE_UNKNOWN. Unlike touch/motion there is NO
-    /// feature-flag requirement: LiSendControllerBatteryEvent (InputStream.c)
-    /// checks only `initialized` + IS_SUNSHINE, both structural on this wire.
-    static func controllerBattery(num: UInt8, state: UInt8, percentage: UInt8) -> [UInt8] {
+    /// Input.h battery uses LI_BATTERY_STATE_* and percentage 0...100 or LI_BATTERY_PERCENTAGE_UNKNOWN.
+    /// No touch/motion feature flag: LiSendControllerBatteryEvent checks initialized + IS_SUNSHINE only.
+    package static func controllerBattery(num: UInt8, state: UInt8, percentage: UInt8) -> [UInt8] {
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.ssControllerBattery, bodyLength: 8) // 12 - 4
         w.u8(num)
@@ -342,12 +298,12 @@ enum InputEncoder {
     // MARK: 12. UTF-8 text - LiSendUtf8TextEvent (8 + up to 32 bytes)
 
     /// UTF8_TEXT_EVENT_MAX_COUNT: the most text bytes one packet may carry.
-    static let utf8TextMaxBytes = 32
+    package static let utf8TextMaxBytes = 32
 
     /// NV_UNICODE_PACKET: header (size = magic + text length) + the UTF-8
     /// bytes, unterminated. The host decodes each packet on its own, so the
     /// text must be whole code points.
-    static func utf8Text(_ text: [UInt8]) -> [UInt8] {
+    package static func utf8Text(_ text: [UInt8]) -> [UInt8] {
         assert(text.count <= utf8TextMaxBytes, "NV_UNICODE_PACKET carries at most 32 text bytes, got \(text.count)")
         var w = InputWriter()
         writeHeader(into: &w, magicLE: InputMagic.utf8Text, bodyLength: UInt32(4 + text.count))
@@ -357,7 +313,7 @@ enum InputEncoder {
 
     /// The text as packets of whole code points, as many as fit in each.
     /// moonlight sends one code point a packet; packing sends fewer.
-    static func utf8TextPackets(_ text: String) -> [[UInt8]] {
+    package static func utf8TextPackets(_ text: String) -> [[UInt8]] {
         var packets: [[UInt8]] = []
         var chunk: [UInt8] = []
         for scalar in text.unicodeScalars {

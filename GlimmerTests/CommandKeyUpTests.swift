@@ -9,6 +9,7 @@
 //  Esc before the stream is live, and client chords on non-Latin layouts.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import Testing

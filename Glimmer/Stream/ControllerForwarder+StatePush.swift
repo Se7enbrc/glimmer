@@ -3,6 +3,7 @@
 
 // GameController owns full snapshots; raw HID contributes centre-button edges without repeating touch.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import GameController

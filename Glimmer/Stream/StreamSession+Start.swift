@@ -20,6 +20,7 @@
 //  driver) live in StreamSession+Connect.swift.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import os

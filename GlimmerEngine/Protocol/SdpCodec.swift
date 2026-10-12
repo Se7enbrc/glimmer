@@ -3,27 +3,9 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  SdpCodec.swift
-//
-//  RTSP message (de)serialization + SDP parsing/building for the Swift-native
-//  streaming engine. Source: RtspParser.c (serializeRtspMessage/parseRtspMessage)
-//  + SdpGenerator.c (getSdpPayloadForStreamConfig + getAttributesList +
-//  addGen5Options).
-//
-//  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
-//
-//  TARGET PROFILE: Sunshine reports app version 7.1.431, so only that branch of the C is built: RTSP
-//  over plain TCP, one PLAY "/", control stream "streamid=control/13/0" and RTSP client version 14.
-//  GameStream PCs are refused before a stream starts.
-//
-//  WIRE FORMAT (exact bytes - off-by-one here = silent host rejection):
-//   Request line:  "<COMMAND> <target> RTSP/1.0\r\n"
-//   Option line:   "<name>: <content>\r\n"               (colon-SPACE)
-//   Blank line:    "\r\n"
-//   Payload:       raw bytes, NO trailing CRLF added by the serializer.
-//   SDP attribute: "a=<name>:<value> \r\n"               (trailing SPACE!)
-//   SDP m=video:   "m=video <port>  \r\n"                (TWO spaces!)
+// RTSP/SDP from RtspParser.c and SdpGenerator.c; provenance is in CREDITS.md.
+// Sunshine 7.1.431 uses TCP, one PLAY "/", control stream "streamid=control/13/0", client version 14.
+// Wire whitespace is significant: RTSP colon-space, no payload suffix, SDP attributes one trailing space, m=video two.
 
 import Foundation
 
@@ -32,34 +14,37 @@ import Foundation
 /// One RTSP request or response. Headers are an ORDERED array because the host
 /// is sensitive to header order (CSeq first, then X-GS-ClientVersion). Lookup is
 /// case-SENSITIVE to match the C strcmp.
-struct RtspMessage {
-    /// Request command (e.g. "OPTIONS"); nil for parsed responses.
-    var command: String?
-    /// Request target (e.g. "streamid=audio/0/0"); nil for parsed responses.
-    var target: String?
-    /// Response status code; 0 for requests.
-    var statusCode: Int = 0
-    /// Response status string.
-    var statusString: String = ""
-    /// Ordered (name, content) pairs.
-    var headers: [(String, String)] = []
-    /// Raw payload bytes (SDP for ANNOUNCE; nil otherwise).
-    var payload: Data?
+package struct RtspMessage {
+    /// rtspClientVersion for app version 7, the one Sunshine reports (RtspConnection.c).
+    package static let clientVersion = 14
 
-    init(command: String? = nil, target: String? = nil) {
+    /// Request command (e.g. "OPTIONS"); nil for parsed responses.
+    package var command: String?
+    /// Request target (e.g. "streamid=audio/0/0"); nil for parsed responses.
+    package var target: String?
+    /// Response status code; 0 for requests.
+    package var statusCode: Int = 0
+    /// Response status string.
+    package var statusString: String = ""
+    /// Ordered (name, content) pairs.
+    package var headers: [(String, String)] = []
+    /// Raw payload bytes (SDP for ANNOUNCE; nil otherwise).
+    package var payload: Data?
+
+    package init(command: String? = nil, target: String? = nil) {
         self.command = command
         self.target = target
     }
 
     /// Case-sensitive header lookup (first match), matching the C strcmp.
-    func headerValue(_ name: String) -> String? {
+    package func headerValue(_ name: String) -> String? {
         for (key, value) in headers where key == name { return value }
         return nil
     }
 
     /// Serialize a REQUEST to wire bytes:
     /// "<cmd> <target> RTSP/1.0\r\n" + headers + "\r\n" + payload.
-    func serialize() -> Data {
+    package func serialize() -> Data {
         var text = "\(command ?? "") \(target ?? "") RTSP/1.0\r\n"
         for (name, content) in headers {
             text += "\(name): \(content)\r\n"
@@ -70,11 +55,9 @@ struct RtspMessage {
         return data
     }
 
-    /// Parse a RESPONSE from raw bytes. Status line "RTSP/1.0 <code> <str>",
-    /// headers until the blank line, remainder = payload. Header split on the
-    /// first ": " (a single leading space after ':' is stripped, like the C
-    /// `token+1`).
-    static func parseResponse(_ data: Data) -> RtspMessage? {
+    /// Parse a RESPONSE from raw bytes. Status line "RTSP/1.0 <code> <str>", headers until the blank line, remainder =
+    /// payload. Header split on the first ": " (a single leading space after ':' is stripped, like the C `token+1`).
+    package static func parseResponse(_ data: Data) -> RtspMessage? {
         // Find the "\r\n\r\n" boundary that ends the headers.
         let crlfcrlf = Data([0x0D, 0x0A, 0x0D, 0x0A])
         guard let boundary = data.range(of: crlfcrlf) else {
@@ -128,10 +111,16 @@ struct RtspMessage {
 /// Loose SDP attribute scanning that mirrors the C substring sniffing - NOT a
 /// strict SDP parser, on purpose (Sunshine labels HEVC as H264 MIME, so codec
 /// detection relies on payload substrings).
-enum SdpScan {
+package enum SdpScan {
+    /// Stereo Opus layout: the handshake default and the base every
+    /// `SdpScan.audioLayout` result is built from.
+    package static let defaultOpusConfig = OpusConfig(
+        sampleRate: 48000, channelCount: 2, streams: 1, coupledStreams: 1,
+        samplesPerFrame: 240, mapping: [0, 1])
+
     /// parseSdpAttributeToUInt: find `name`, then the next ':' after it, then
     /// strtoul the digits. Returns nil if the name isn't present.
-    static func attributeUInt(_ sdp: String, _ name: String) -> UInt32? {
+    package static func attributeUInt(_ sdp: String, _ name: String) -> UInt32? {
         guard let nameRange = sdp.range(of: name) else { return nil }
         guard let colon = sdp.range(of: ":", range: nameRange.upperBound..<sdp.endIndex) else {
             return nil
@@ -153,7 +142,7 @@ enum SdpScan {
         return UInt32(str, radix: 16)
     }
 
-    static func contains(_ sdp: String, _ needle: String) -> Bool {
+    package static func contains(_ sdp: String, _ needle: String) -> Bool {
         sdp.contains(needle)
     }
 }
@@ -163,9 +152,9 @@ enum SdpScan {
 extension SdpScan {
     /// parseOpusConfigurations (RtspConnection.c): the Opus layout to decode and whether to ask for the high tier.
     /// Stereo is the same in both tiers; surround takes high only when the PC lists a layout for it.
-    static func audioLayout(_ sdp: String, channelCount: Int) -> (opus: OpusConfig, highQuality: Bool) {
+    package static func audioLayout(_ sdp: String, channelCount: Int) -> (opus: OpusConfig, highQuality: Bool) {
         guard let fixed = fixedSurroundLayout(channelCount) else {
-            return (RtspHandshakeResult.defaultOpusConfig, true)
+            return (SdpScan.defaultOpusConfig, true)
         }
         let tiers = surroundParams(sdp, channelCount: channelCount)
         if tiers.count == 2 { return (tiers[1], true) }
@@ -203,7 +192,7 @@ extension SdpScan {
     }
 
     private static func opusLayout(_ channelCount: Int, streams: Int, coupled: Int, mapping: [UInt8]) -> OpusConfig {
-        var opus = RtspHandshakeResult.defaultOpusConfig
+        var opus = SdpScan.defaultOpusConfig
         opus.channelCount = Int32(channelCount)
         opus.streams = Int32(streams)
         opus.coupledStreams = Int32(coupled)
@@ -217,7 +206,7 @@ extension SdpScan {
 /// The control ANNOUNCE's SDP, faithful to moonlight's getSdpPayloadForStreamConfig. RFI is advertised only when
 /// the host and our decoder both support it (`referenceFrameInvalidationActive`); the codec block follows the
 /// negotiated format, and the encryption bits are the ones `computeEncryptionEnabled` settled on.
-struct SdpBuilder {
+package struct SdpBuilder {
     let config: BackendStreamConfig
     let videoPort: UInt16
     /// addrToUrlSafeString(RemoteAddr): IPv4 plain, IPv6 bracketed.
@@ -229,9 +218,8 @@ struct SdpBuilder {
     let negotiatedVideoFormat: Int32
     /// EncryptionFeaturesEnabled (control-V2 and audio when the PC supports them, video when it requires it).
     let encryptionFeaturesEnabled: UInt32
-    /// Host RFI support, parsed from the DESCRIBE SDP
-    /// (`x-nv-video[0].refPicInvalidation` ⇒ ReferenceFrameInvalidationSupported).
-    /// Defaulted false so a host that never offered RFI degrades to full-IDR
+    /// Host RFI support, parsed from the DESCRIBE SDP (`x-nv-video[0].refPicInvalidation` ⇒
+    /// ReferenceFrameInvalidationSupported). Defaulted false so a host that never offered RFI degrades to full-IDR
     /// recovery (today's behavior) - no breakage.
     var serverSupportsRfi: Bool = false
     /// Our decoder's RFI capability bits (VideoSink.capabilities:
@@ -241,6 +229,20 @@ struct SdpBuilder {
     /// Ask for the high Opus tier (`SdpScan.audioLayout`): always for stereo, for surround only when the PC
     /// lists a high-tier layout, since that is the layout the decoder is built from.
     var highQualityAudio = true
+
+    package init(config: BackendStreamConfig, videoPort: UInt16, urlSafeAddr: String,
+                 addrFamilyToken: String, negotiatedVideoFormat: Int32, encryptionFeaturesEnabled: UInt32,
+                 serverSupportsRfi: Bool = false, decoderRfiCapabilities: Int32 = 0, highQualityAudio: Bool = true) {
+        self.config = config
+        self.videoPort = videoPort
+        self.urlSafeAddr = urlSafeAddr
+        self.addrFamilyToken = addrFamilyToken
+        self.negotiatedVideoFormat = negotiatedVideoFormat
+        self.encryptionFeaturesEnabled = encryptionFeaturesEnabled
+        self.serverSupportsRfi = serverSupportsRfi
+        self.decoderRfiCapabilities = decoderRfiCapabilities
+        self.highQualityAudio = highQualityAudio
+    }
 
     private static let ML_FF_FEC_STATUS: UInt32 = 0x01
     private static let ML_FF_SESSION_ID_V1: UInt32 = 0x04
@@ -255,12 +257,11 @@ struct SdpBuilder {
     private var audioChannelMask: Int { Int((config.audioConfiguration >> 16) & 0xFFFF) }
     /// The configured packet size, less ENC_VIDEO_HEADER when video is encrypted.
     private var videoPacketSize: Int {
-        VideoDecryptor.packetSize(Int(config.packetSize), encryptionFeaturesEnabled: encryptionFeaturesEnabled)
+        VideoPacketLayout.packetSize(Int(config.packetSize), encryptionFeaturesEnabled: encryptionFeaturesEnabled)
     }
 
-    /// Port of moonlight-common-c's isReferenceFrameInvalidationSupportedByDecoder
-    /// (Misc.c): RFI is decoder-supported iff the negotiated codec FAMILY pairs
-    /// with the matching decoder capability bit. Our VideoSink advertises
+    /// Port of moonlight-common-c's isReferenceFrameInvalidationSupportedByDecoder (Misc.c): RFI is decoder-supported
+    /// iff the negotiated codec FAMILY pairs with the matching decoder capability bit. Our VideoSink advertises
     /// HEVC|AV1 (no AVC RFI), so H.264 is never decoder-supported here.
     private var rfiSupportedByDecoder: Bool {
         let fmt = negotiatedVideoFormat
@@ -281,19 +282,15 @@ struct SdpBuilder {
     }
 
     /// Returns the full SDP payload bytes.
-    func build() -> Data {
+    package func build() -> Data {
         var attrs: [(String, String)] = []
 
         // --- Sunshine (IS_SUNSHINE) feature flags ---
         let mlFlags = Self.ML_FF_FEC_STATUS | Self.ML_FF_SESSION_ID_V1
         attrs.append(("x-ml-general.featureFlags", "\(mlFlags)"))
         attrs.append(("x-ss-general.encryptionEnabled", "\(encryptionFeaturesEnabled)"))
-        // chromaSamplingType "1" = 4:4:4, "0" = 4:2:0. Mirror the host the
-        // codec the negotiator actually settled on: it only lands a YUV444
-        // VIDEO_FORMAT (HEVC RExt / AV1 High 4:4:4) when the host OFFERED it
-        // AND we PROBED hardware decode for it (RtspClient.negotiate +
-        // VideoFormats.probedSupported). So this attribute is purely derived -
-        // 4:4:4 is never forced; it engages only on a negotiated 4:4:4 format.
+        // chromaSamplingType follows the negotiated format: 4:4:4 requires both the PC's offer and our
+        // hardware probe (RtspClient.negotiate / VideoFormats.probedSupported). Never force 4:4:4 here.
         let is444 = negotiatedVideoFormat & StreamProtocol.VIDEO_FORMAT_MASK_YUV444 != 0
         attrs.append(("x-ss-video[0].chromaSamplingType", is444 ? "1" : "0"))
 
@@ -306,13 +303,8 @@ struct SdpBuilder {
         attrs.append(("x-nv-video[0].packetSize", "\(videoPacketSize)"))
         attrs.append(("x-nv-video[0].rateControlMode", "4"))
         attrs.append(("x-nv-video[0].timeoutLengthMs", "7000"))
-        // framesWithInvalidRefThreshold "0" is the moonlight-common-c default,
-        // set UNCONDITIONALLY (SdpGenerator.c). 0 = the host imposes no ceiling
-        // on how many frames may still reference an invalidated frame while an
-        // RFI recovery is outstanding - i.e. it keeps shipping P-frames against
-        // the older good reference instead of stalling on a full IDR. A
-        // non-zero value would cap that tolerance and force an IDR sooner,
-        // which is the opposite of the lossy-link win RFI buys, so "0" stays.
+        // Unconditional 0 matches SdpGenerator.c: no ceiling on frames referencing an invalidated frame.
+        // The PC can keep shipping P-frames against an older good reference; a nonzero ceiling forces earlier IDRs.
         attrs.append(("x-nv-video[0].framesWithInvalidRefThreshold", "0"))
 
         // adjustedBitrate = bitrate * 0.80, remote -=500 if >500, cap 200000.
@@ -325,29 +317,9 @@ struct SdpBuilder {
         if adjustedBitrate > 200_000 { adjustedBitrate = 200_000 }
         attrs.append(("x-nv-video[0].initialBitrateKbps", "\(adjustedBitrate)"))
         attrs.append(("x-nv-video[0].initialPeakBitrateKbps", "\(adjustedBitrate)"))
-        // THERE IS NO HOST-SIDE ABR. This range was previously described here as
-        // giving "Sunshine's host-side VQOS a RANGE to adapt within" so it could
-        // "step the encoder down under sustained loss". That is not true, and it
-        // was checked against Sunshine's source rather than inferred:
-        //
-        //   * `minimumBitrateKbps` appears ZERO times in the whole Sunshine tree
-        //     - it is never parsed, so the floor we send here is inert.
-        //   * `cmd_announce` (src/rtsp.cpp) reads
-        //     `x-nv-vqos[0].bw.maximumBitrateKbps` into `config.monitor.bitrate`
-        //     and then OVERWRITES it with `x-ml-video.configuredBitrateKbps`
-        //     when that is non-zero - which we always send. So the number the
-        //     host actually encodes at is the raw configured bitrate below, not
-        //     the 0.80-adjusted peak (this matches moonlight, which sends the
-        //     same pair).
-        //   * Nothing in Sunshine mutates the bitrate after ANNOUNCE.
-        //
-        // So the encoder rate is FIXED for the session, and the only lever that
-        // changes it is a new SDP - i.e. a reconnect (BitrateDownshiftController).
-        // The attributes stay because they are part of the wire format moonlight
-        // sends and the host parses one of them; they are not a control channel.
-        // The floor keeps its original shape - half the peak, never below 10
-        // Mbps, never above the peak so the range can't invert on a very low
-        // configured bitrate - purely so the SDP stays well-formed.
+        // No PC-side ABR: Sunshine cmd_announce (src/rtsp.cpp) ignores minimumBitrateKbps and overwrites
+        // maximumBitrateKbps with configuredBitrateKbps. Rate stays fixed until reconnect; this wire-compatible
+        // floor (half peak, at least 10 Mbps but never above peak) only keeps the SDP range well-formed.
         let minBitrate = min(max(10_000, adjustedBitrate / 2), adjustedBitrate)
         attrs.append(("x-nv-vqos[0].bw.minimumBitrateKbps", "\(minBitrate)"))
         attrs.append(("x-nv-vqos[0].bw.maximumBitrateKbps", "\(adjustedBitrate)"))
@@ -395,15 +367,8 @@ struct SdpBuilder {
         // q[0]>=7 video extras.
         let is10bit = negotiatedVideoFormat & StreamProtocol.VIDEO_FORMAT_MASK_10BIT != 0
         attrs.append(("x-nv-video[0].dynamicRangeMode", is10bit ? "1" : "0"))
-        // maxNumReferenceFrames "0" when RFI is active ⇒ the host keeps multiple
-        // reference frames so a loss can be recovered with a post-invalidation
-        // RFI frame (header type 4/5) instead of a full IDR - the wire signal by
-        // which the host learns the client accepts RFI recovery (there is no
-        // separate "client supports RFI" attribute; this IS it, SdpGenerator.c).
-        // "1" restricts the host to a single reference ⇒ EVERY loss recovery is
-        // a full IDR (today's behavior). RFI degrades gracefully: if the host
-        // ignores the 0 and still sends an IDR, the client's IDR accept-path
-        // handles it unchanged.
+        // SdpGenerator.c: 0 is the RFI capability signal, allowing multiple references and recovery types 4/5.
+        // 1 forces single-reference/IDR recovery. A PC ignoring 0 still works through the unchanged IDR path.
         attrs.append(("x-nv-video[0].maxNumReferenceFrames",
                       referenceFrameInvalidationActive ? "0" : "1"))
         attrs.append(("x-nv-video[0].clientRefreshRateX100", "\(config.clientRefreshRateX100)"))
@@ -425,7 +390,7 @@ struct SdpBuilder {
         // --- assemble: header + attrs + tail ---
         var sdp = ""
         sdp += "v=0\r\n"
-        sdp += "o=android 0 \(RtspClient.clientVersion) IN \(addrFamilyToken) \(urlSafeAddr)\r\n"
+        sdp += "o=android 0 \(RtspMessage.clientVersion) IN \(addrFamilyToken) \(urlSafeAddr)\r\n"
         sdp += "s=NVIDIA Streaming Client\r\n"
         for (name, value) in attrs {
             // "a=<name>:<value> \r\n" - trailing SPACE before CRLF is real.
