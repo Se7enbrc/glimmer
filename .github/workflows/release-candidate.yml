@@ -21,8 +21,9 @@ jobs:
     if: >-
       github.event_name == 'pull_request_target' && github.event.label.name ==
       'rc' && github.event.pull_request.head.repo.full_name == github.repository
-      || github.event_name == 'workflow_run' && github.event.workflow_run.event
-      == 'pull_request' && github.event.workflow_run.conclusion == 'success' &&
+      && github.event.pull_request.base.ref == 'main' || github.event_name ==
+      'workflow_run' && github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -40,7 +41,7 @@ jobs:
       - name: Check out main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Decide
@@ -58,12 +59,13 @@ jobs:
           if [ -z "$PR_NUMBER" ]; then
             echo "No pull request for $HEAD_SHA."
           else
-            read -r head state labelled < <(gh pr view "$PR_NUMBER" -R "$GITHUB_REPOSITORY" \
-              --json headRefOid,state,labels -q '"\(.headRefOid) \(.state) \(any(.labels[]; .name == "rc"))"')
+            read -r head state labelled base < <(gh pr view "$PR_NUMBER" -R "$GITHUB_REPOSITORY" \
+              --json headRefOid,state,labels,baseRefName \
+              -q '"\(.headRefOid) \(.state) \(any(.labels[]; .name == "rc")) \(.baseRefName)"')
             if [ "$head" != "$HEAD_SHA" ]; then
               echo "Pull request #$PR_NUMBER moved past ${HEAD_SHA:0:12}."
-            elif [ "$state" != OPEN ] || [ "$labelled" != true ]; then
-              echo "Pull request #$PR_NUMBER is not an open pull request labelled rc."
+            elif [ "$state" != OPEN ] || [ "$labelled" != true ] || [ "$base" != main ]; then
+              echo "Pull request #$PR_NUMBER must be open, labelled rc and target main."
             elif python3 scripts/release-checks.py "$HEAD_SHA"; then
               ready=true
             else
@@ -74,7 +76,10 @@ jobs:
 
   cut:
     needs: ready
-    if: needs.ready.outputs.ready == 'true'
+    if: >-
+      needs.ready.outputs.ready == 'true' && github.repository ==
+      'Se7enbrc/glimmer' && github.ref == 'refs/heads/main' &&
+      github.event.repository.default_branch == 'main'
     runs-on: ubuntu-latest
     concurrency:
       group: rc-cut
@@ -85,6 +90,24 @@ jobs:
       run:
         shell: bash
     steps:
+      # The triggering head is PR data; only main's tooling may receive the App key.
+      - name: Require main tooling before credentials
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TRIGGER_REPOSITORY:
+            ${{ github.event.pull_request.head.repo.full_name ||
+            github.event.workflow_run.head_repository.full_name }}
+        run: |
+          test "$GITHUB_REPOSITORY" = Se7enbrc/glimmer
+          test "$GITHUB_REF" = refs/heads/main
+          test "$DEFAULT_BRANCH" = main
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release-candidate.yml@refs/heads/main"
+          test "$TRIGGER_REPOSITORY" = "$GITHUB_REPOSITORY"
+          case "$GITHUB_EVENT_NAME" in
+            pull_request_target|workflow_run) ;;
+            *) exit 1 ;;
+          esac
+
       - name: Mint a scoped release token
         id: app
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -102,7 +125,7 @@ jobs:
       - name: Check out main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 

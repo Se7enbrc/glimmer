@@ -223,7 +223,7 @@ class CandidatePromotionTests(unittest.TestCase):
         PROMOTE.publish(TAG, SHA)
         config = f"MARKETING_VERSION = {SHORT}\nCURRENT_PROJECT_VERSION = {BUILD}\n"
         refs = "".join(f"{target}\t{name}\n" for name, target in self.remote_tags.items())
-        with patch.object(CANDIDATE, "output", side_effect=["", config, refs]), \
+        with patch.object(CANDIDATE, "output", side_effect=["", "", "", config, refs]), \
                 self.assertRaisesRegex(ValueError, f"{SHORT} already has a final tag; bump MARKETING_VERSION"):
             CANDIDATE.cut(False, ci_sha=SHA, pr=114)
 

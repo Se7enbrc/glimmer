@@ -7,6 +7,8 @@
 import argparse
 from datetime import datetime
 import json
+import os
+from pathlib import Path
 import re
 import subprocess
 import sys
@@ -115,6 +117,7 @@ def validate_analyses(analyses, jobs, sha, ref, parents):
 
 
 def check(sha):
+    prerequisite_runs = []
     codeql_run = None
     codeql_jobs = {}
     for workflow, required in REQUIRED.items():
@@ -124,6 +127,7 @@ def check(sha):
         pages = api(f"actions/workflows/{metadata['id']}/runs?head_sha={sha}&per_page=100")
         runs = [run for page in pages for run in page.get("workflow_runs", [])]
         run = latest_run(runs, workflow, sha, metadata["id"])
+        prerequisite_runs.append({"workflow": workflow, "id": run["id"], "attempt": run.get("run_attempt", 1)})
         pages = api(f"actions/runs/{run['id']}/jobs?filter=latest&per_page=100")
         jobs = validate_jobs([job for page in pages for job in page.get("jobs", [])], required, sha)
         if workflow.endswith("codeql.yml"):
@@ -147,6 +151,7 @@ def check(sha):
     pages = api(f"code-scanning/alerts?tool_name=CodeQL&state=open&ref={quote(ref, safe='')}&per_page=100")
     if any(page for page in pages):
         raise ValueError("open CodeQL alerts must be resolved before release")
+    return {"sha": sha, "runs": prerequisite_runs}
 
 
 def main():
@@ -156,7 +161,15 @@ def main():
     try:
         if not re.fullmatch(r"[0-9a-f]{40}", args.sha):
             raise ValueError("reviewed SHA must be a full lowercase commit SHA")
-        check(args.sha)
+        evidence = check(args.sha)
+        if os.environ.get("RELEASE_CHECKS_FILE"):
+            Path(os.environ["RELEASE_CHECKS_FILE"]).write_text(json.dumps(evidence) + "\n")
+        if os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+                summary.write(f"Prerequisites passed for `{args.sha}`:\n\n")
+                for run in evidence["runs"]:
+                    summary.write(f'- [{run["workflow"]}, attempt {run["attempt"]}]'
+                                  f'(https://github.com/{REPO}/actions/runs/{run["id"]})\n')
     except (ValueError, KeyError, TypeError, subprocess.TimeoutExpired, OSError) as error:
         parser.exit(1, f"ERR: {error}\n")
     print("Reviewed commit passed Verify, all CodeQL languages and code-scanning alert checks.")
