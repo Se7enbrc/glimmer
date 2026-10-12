@@ -18,6 +18,10 @@ struct ReceiveTiming {
     private var previousArrival: UInt64?
     private var lastNotice: UInt64?
 
+    init(telemetry: ReceiveTimingTelemetry) {
+        self.telemetry = telemetry
+    }
+
     mutating func observe(arrival: UInt64?, read: UInt64) -> Gap? {
         let scale = SocketTimestamp.millisecondsPerTick
         let valid = arrival.flatMap { $0 <= read ? $0 : nil }
