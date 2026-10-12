@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-"""Read a pull request's changed paths on stdin; exit 0 when the Swift scan must run.
-
-A pull request skips it only when it touches nothing the traced build compiles or reads."""
+"""Print run or skip only after successful classification.
+A pull request skips only when it touches nothing the traced build compiles or reads."""
 
 import re
 import sys
@@ -24,4 +23,4 @@ def must_scan(paths):
 
 
 if __name__ == "__main__":
-    sys.exit(0 if must_scan(sys.stdin) else 1)
+    print("run" if must_scan(sys.stdin) else "skip")

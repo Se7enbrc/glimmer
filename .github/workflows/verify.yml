@@ -48,7 +48,8 @@ jobs:
             if paths="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
                 --jq '.[] | .filename, (.previous_filename // empty)')" &&
                 [ "$(printf '%s\n' "$paths" | wc -l)" -lt 3000 ] &&
-                ! printf '%s\n' "$paths" | python3 scripts/verify-changed.py; then
+                decision="$(printf '%s\n' "$paths" | python3 scripts/verify-changed.py)" &&
+                [ "$decision" = skip ]; then
               build=false
               echo "Documentation only; the build and tests run when main gets it."
             fi

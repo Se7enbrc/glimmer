@@ -35,12 +35,12 @@ class SwiftScanScopeTests(unittest.TestCase):
         self.assertTrue(CHANGED.must_scan([]))
         self.assertTrue(CHANGED.must_scan(["", "  \n"]))
 
-    def test_the_command_line_exit_code_carries_the_decision(self):
-        def run(text):
-            return subprocess.run([sys.executable, str(SCRIPT)], input=text, text=True).returncode
-        self.assertEqual(run("Glimmer/AppModel.swift\n"), 0)
-        self.assertEqual(run("docs/SECURITY.md\n"), 1)
-        self.assertEqual(run(""), 0)
+    def test_the_command_line_prints_an_explicit_successful_decision(self):
+        for paths, decision in (("docs/README.md\n", "skip"), ("Glimmer/AppModel.swift\n", "run"), ("", "run")):
+            with self.subTest(paths=paths):
+                result = subprocess.run([sys.executable, str(SCRIPT)], input=paths, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, decision + "\n")
 
 
 if __name__ == "__main__":
