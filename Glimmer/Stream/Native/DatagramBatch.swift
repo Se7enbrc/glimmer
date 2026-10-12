@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  DatagramBatch.swift
-//
-//  Batched UDP receive on Darwin's recvmsg_x: up to `capacity` datagrams per syscall, into buffers allocated
-//  once. The system exports the call but the SDK declares neither it nor its record, so both are mirrored here.
-//
+// Batch storage is reused for payloads, addresses and kernel receive timestamps.
 
 import Darwin
 
@@ -34,11 +29,14 @@ final class DatagramBatch {
     let storage: UnsafeMutablePointer<UInt8>
     private let iovecs: UnsafeMutablePointer<iovec>
     private let records: UnsafeMutablePointer<Record>
+    private let controls: UnsafeMutableRawPointer
+    private(set) var readTicks: UInt64 = 0
     private let sources: UnsafeMutablePointer<sockaddr_storage>
 
     init(capacity: Int, stride: Int) {
         self.capacity = capacity
         self.stride = stride
+        controls = .allocate(byteCount: capacity * SocketTimestamp.controlSize, alignment: 8)
         storage = .allocate(capacity: capacity * stride)
         iovecs = .allocate(capacity: capacity)
         records = .allocate(capacity: capacity)
@@ -51,6 +49,7 @@ final class DatagramBatch {
     }
 
     deinit {
+        controls.deallocate()
         storage.deallocate()
         iovecs.deallocate()
         records.deallocate()
@@ -58,7 +57,7 @@ final class DatagramBatch {
     }
 
     /// Reads up to `capacity` datagrams in one call: the count, or -1 with errno set (ENOSYS without recvmsg_x,
-    /// EAGAIN on the socket's receive timeout, as recvfrom reports it).
+    /// EAGAIN on the socket's receive timeout, as recvmsg reports it).
     func receive(from socket: Int32) -> Int {
         guard let receiveX = Self.receiveX else {
             errno = ENOSYS
@@ -67,19 +66,32 @@ final class DatagramBatch {
         for index in 0..<capacity {
             records[index] = Record(name: sources + index,
                                     nameLength: socklen_t(MemoryLayout<sockaddr_storage>.size),
-                                    iov: iovecs + index, iovCount: 1)
+                                    iov: iovecs + index, iovCount: 1,
+                                    control: controls + index * SocketTimestamp.controlSize,
+                                    controlLength: socklen_t(SocketTimestamp.controlSize))
         }
-        return receiveX(socket, records, UInt32(capacity), 0)
+        let count = receiveX(socket, records, UInt32(capacity), 0)
+        readTicks = mach_absolute_time()
+        return count
     }
 
     func receiveOne(from socket: Int32) -> Int {
-        var length = socklen_t(MemoryLayout<sockaddr_storage>.size)
-        let count = sources.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-            recvfrom(socket, storage, stride, 0, $0, &length)
-        }
+        var message = msghdr(msg_name: sources,
+                             msg_namelen: socklen_t(MemoryLayout<sockaddr_storage>.size),
+                             msg_iov: iovecs, msg_iovlen: 1, msg_control: controls,
+                             msg_controllen: socklen_t(SocketTimestamp.controlSize), msg_flags: 0)
+        let count = recvmsg(socket, &message, 0)
+        readTicks = mach_absolute_time()
         guard count >= 0 else { return -1 }
-        records[0] = Record(name: sources, nameLength: length, dataLength: count)
+        records[0] = Record(name: sources, nameLength: message.msg_namelen,
+                            control: controls, controlLength: message.msg_controllen,
+                            flags: message.msg_flags, dataLength: count)
         return 1
+    }
+
+    func arrivalTicks(at index: Int) -> UInt64? {
+        SocketTimestamp.arrival(in: records[index].control, length: Int(records[index].controlLength),
+                                flags: records[index].flags)
     }
 
     func isExpectedPeer(at index: Int, expected: sockaddr_storage, expectedLength: socklen_t) -> Bool {

@@ -23,25 +23,25 @@ extension RtpAudioReceiver {
             // resolves it (cleared at exit; same medicine as the video loop).
             pthread_setname_np("Glimmer.audioRecv")
             defer { pthread_setname_np("") }
-            var buf = [UInt8](repeating: 0, count: bufSize)
-            var source = sockaddr_storage()
+            let batch = DatagramBatch(capacity: 1, stride: bufSize)
+            var timing = ReceiveTiming(telemetry: .audio)
             var foreignPeerNoted = false
             while let self, !self.interrupted.isSet {
-                var sourceLength = socklen_t(MemoryLayout<sockaddr_storage>.size)
-                let received = withUnsafeMutablePointer(to: &source) { address in
-                    address.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                        recvfrom(sock, &buf, bufSize, 0, $0, &sourceLength)
-                    }
-                }
-                if received >= 0, !UdpPinger.isExpectedPeer(source, length: sourceLength,
-                                                       expected: self.destAddr, expectedLength: self.destAddrLen) {
+                let count = batch.receiveOne(from: sock)
+                let received = count > 0 ? batch.datagram(0).length : -1
+                if received >= 0, !batch.isExpectedPeer(at: 0, expected: self.destAddr,
+                                                      expectedLength: self.destAddrLen) {
                     UdpPinger.noteForeignPeer(&foreignPeerNoted, stream: "Audio", category: Self.cat)
                     continue
+                }
+                if received >= 0 {
+                    timing.note(batch, index: 0, count: 1, socket: sock, stream: "audio")
                 }
                 if received > 0 {
                     let arrival = DispatchTime.now().uptimeNanoseconds
                     self.noteAudioArrivalGap(now: arrival)
-                    self.decodeWorker.enqueue(buf, count: received, arrival: arrival)
+                    self.decodeWorker.enqueue(UnsafeRawBufferPointer(start: batch.storage, count: received),
+                                              count: received, arrival: arrival)
                 } else if received == 0 {
                     // Quiet socket after we've heard from the peer: no kernel
                     // backlog remains, so a pending startup-pacing measurement

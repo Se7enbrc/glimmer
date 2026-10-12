@@ -3,18 +3,8 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  RtpAudioReceiver+Socket.swift
-//
-//  The unconnected-UDP socket bring-up: bind a wildcard ephemeral local port
-//  (NEVER connect() - the host sources RTP from a port != audioPort and aims
-//  it at the ping's UDP source port, see the core file's header), tag it
-//  NET_SERVICE_TYPE_VO for the Wi-Fi voice queue, size SO_RCVBUF, and set the
-//  100ms SO_RCVTIMEO the receive loop's stop polling rides. Split out of
-//  RtpAudioReceiver.swift - pure move, the FramePacer split idiom -
-//  to keep that file under the length limit; the fd/destAddr socket state
-//  stays declared on the receiver.
-//
+// The socket stays unconnected because Sunshine can source RTP from a different port.
+// Voice service, receive-buffer sizing and a 100 ms timeout keep audio responsive and stop polling bounded.
 
 import Foundation
 import Darwin
@@ -78,6 +68,9 @@ extension RtpAudioReceiver {
         }
         guard bound else { close(sock); throw EnetError.socketFailure("bind() errno \(errno)") }
 
+        if !SocketTimestamp.enable(on: sock) {
+            Diag.notice("Kernel receive timestamps unavailable errno \(errno)", Self.cat)
+        }
         fd = sock
         Diag.info("NativeAudio UDP socket ready (peer IP filtered, any source port) → \(host, privacy: .private):\(audioPort)",
                   Self.cat)

@@ -3,12 +3,9 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  VideoRtpReceiver.swift
-//
-//  One unconnected socket sends keepalives and receives video from the resolved PC.
-//  Sunshine can send from a different source port, so connecting the socket would discard valid video.
-//  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
+// One unconnected socket sends keepalives and receives video from the resolved PC.
+// Sunshine can send from a different source port, so connecting the socket would discard valid video.
+// Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 
 import Foundation
 import Network
@@ -225,6 +222,9 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         }
         guard bound else { close(sock); throw EnetError.socketFailure("bind() errno \(errno)") }
 
+        if !SocketTimestamp.enable(on: sock) {
+            Diag.notice("Kernel receive timestamps unavailable errno \(errno)", Self.cat)
+        }
         fd = sock
         Diag.info("NativeVideo UDP socket ready (peer IP filtered, any source port) → \(host, privacy: .private):\(videoPort)",
                   Self.cat)
@@ -268,8 +268,9 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             }
             // Batched receive: up to 32 datagrams per recvmsg_x into buffers allocated once; receive()
             // copies each out, so the win is the syscall count (~14k/s at 4K240). recvmsg_x is private
-            // SPI: ENOSYS drops to one recvfrom per datagram for the session, slower but correct.
+            // SPI: ENOSYS drops to one recvmsg per datagram for the session, slower but correct.
             let batch = DatagramBatch(capacity: 32, stride: bufSize)
+            var timing = ReceiveTiming(telemetry: .video)
             var batched = true
             var receiveFailed = false
             var foreignPeerNoted = false
@@ -282,6 +283,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
                         UdpPinger.noteForeignPeer(&foreignPeerNoted, stream: "Video", category: Self.cat)
                         continue
                     }
+                    timing.note(batch, index: index, count: count, socket: sock, stream: "video")
                     let datagram = batch.datagram(index)
                     guard datagram.length > 0 else { continue }
                     self.receive(datagram.bytes, count: datagram.length, decryptor: decryptor)
@@ -304,8 +306,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         switch err {
         case EAGAIN, EWOULDBLOCK, EINTR:
             rtpQueue.flushDeferredIfWindowElapsed(nowUs: DispatchTime.now().uptimeNanoseconds / 1000)
-        case ENOSYS where batched:
-            Diag.notice("recvmsg_x unavailable (ENOSYS) - falling back to recvfrom", Self.cat)
+        case ENOSYS where batched, EOPNOTSUPP where batched:
+            Diag.notice("recvmsg_x unavailable errno \(err) - falling back to recvmsg", Self.cat)
             batched = false
         case ENOBUFS, ENOMEM:
             if !loggedReceivePressure {

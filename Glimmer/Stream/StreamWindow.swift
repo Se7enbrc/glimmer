@@ -1,47 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamWindow.swift
-//
-//  Fullscreen NSWindow hosting the AVSampleBufferDisplayLayer that
-//  VideoDecoder enqueues decoded sample buffers into. Owned by StreamSession.
-//  Captures the cursor while frontmost, releases it when the user invokes
-//  the quit hotkey.
-//
-//  Why AVSampleBufferDisplayLayer and not CAMetalLayer
-//  ---------------------------------------------------
-//  We tried - three times - to get correct HDR out of a CAMetalLayer driven
-//  by a custom MSL fragment shader doing BT.2020 NCL YUV→RGB + range
-//  scaling. On the a 4K@240 HDR1000 panel, every variant landed somewhere
-//  on the same wrong axis: overbright midtones, washed highlights, milky
-//  blacks. moonlight-qt on the same display, host, and content shows inky
-//  blacks and proper bright highlights.
-//
-//  The reason: on macOS, moonlight-qt's HDR-correct path is not
-//  `vt_metal.mm` (its Metal-shader fallback). The default macOS path is
-//  `vt_avsamplelayer.mm`, which sidesteps Metal entirely. It hands the OS a
-//  CVPixelBuffer wrapped in a CMSampleBuffer and lets AVFoundation +
-//  CoreAnimation do colorspace conversion, PQ EOTF application, and EDR
-//  tone-mapping against the display's actual peak luminance. There is no
-//  shader. There is no manual CSC. The OS owns the pipeline end-to-end.
-//
-//  When you write PQ-encoded BT.2020 codes into a CAMetalLayer with a
-//  custom shader, even with all the right metadata (itur_2100_PQ
-//  colorspace, EDRMetadata, wantsExtendedDynamicRangeContent), the
-//  compositor still has to reverse-engineer what the shader did. The
-//  AVSampleBufferDisplayLayer path skips that round trip: the
-//  CVPixelBuffer carries primaries / transfer / matrix attachments,
-//  the CMFormatDescription carries mastering-display + content-light
-//  metadata, and the layer's colorspace tells the compositor exactly
-//  how to interpret the bits. No guesswork, no shader-vs-OS fight.
-//
-//  This is the same architectural choice moonlight-qt made on macOS and
-//  the reason their HDR output is correct on the same panel.
-//
-//  Full screen has two paths, picked in show() by `coversNotch`. A (default):
-//  a borderless window at mainMenuWindow + 1 with [.hideMenuBar, .hideDock] and
-//  no Space. B: a Space via toggleFullScreen with the auto-hide options.
+// AVSampleBufferDisplayLayer lets macOS own PQ conversion and EDR tone mapping; custom Metal washed out 4K240 HDR.
+// Pixel-buffer attachments and format metadata preserve that pipeline without manual color conversion.
+// StreamSession owns this cursor-capturing window; coversNotch selects a borderless cover or a full-screen Space.
 
 import AppKit
 import AVFoundation
@@ -250,6 +212,10 @@ public final class StreamWindow {
 
     /// Bumped by every cover slide and reset; a superseded slide's completion bails.
     var coverSlideGeneration = 0
+    var runSlideAnimation: @MainActor (@MainActor () -> Void, @escaping @MainActor () -> Void) -> Void =
+        StreamWindow.runSlideAnimation
+    var runFadeAnimation: @MainActor (NSWindow, CGFloat, @escaping @MainActor () -> Void) -> Void =
+        StreamWindow.runFadeAnimation
 
     /// Called once the window is on screen and key, and again by the first-frame
     /// fade-in: InputForwarder installs its first responder, then takes the

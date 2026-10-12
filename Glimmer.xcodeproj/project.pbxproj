@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D81200000000000000000009 /* ReceiveTimingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000008 /* ReceiveTimingTests.swift */; };
+		D81200000000000000000007 /* ReceiveTimingTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000006 /* ReceiveTimingTelemetry.swift */; };
+		D81200000000000000000003 /* ReceiveTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000002 /* ReceiveTiming.swift */; };
+		D81200000000000000000001 /* SocketTimestamp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000000 /* SocketTimestamp.swift */; };
 		CE2026100810000000000002 /* AudioHALDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2026100800000000000002 /* AudioHALDeviceTests.swift */; };
 		CE2026100810000000000001 /* InputMonitoringFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2026100800000000000001 /* InputMonitoringFlowTests.swift */; };
 		CE2026100810000000000000 /* LauncherControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE2026100800000000000000 /* LauncherControllerTests.swift */; };
@@ -561,6 +565,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		D81200000000000000000008 /* ReceiveTimingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReceiveTimingTests.swift"; sourceTree = "<group>"; };
+		D81200000000000000000006 /* ReceiveTimingTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ReceiveTimingTelemetry.swift"; sourceTree = "<group>"; };
+		D81200000000000000000002 /* ReceiveTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/ReceiveTiming.swift"; sourceTree = "<group>"; };
+		D81200000000000000000000 /* SocketTimestamp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/SocketTimestamp.swift"; sourceTree = "<group>"; };
 		CE2026100800000000000002 /* AudioHALDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioHALDeviceTests.swift; sourceTree = "<group>"; };
 		CE2026100800000000000001 /* InputMonitoringFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputMonitoringFlowTests.swift; sourceTree = "<group>"; };
 		CE2026100800000000000000 /* LauncherControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LauncherControllerTests.swift; sourceTree = "<group>"; };
@@ -1381,6 +1389,9 @@
 				D1000D10 /* RtpVideoQueue+AddPacket.swift */,
 				D1000D20 /* RtpVideoQueue+Reconstruct.swift */,
 				D1000025 /* VideoRtpReceiver.swift */,
+				D81200000000000000000000 /* SocketTimestamp.swift */,
+				D81200000000000000000002 /* ReceiveTiming.swift */,
+				D81200000000000000000006 /* ReceiveTimingTelemetry.swift */,
 				D2C0000D /* DatagramBatch.swift */,
 				DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */,
 				D1000027 /* UdpPinger.swift */,
@@ -1553,6 +1564,7 @@
 				D2B0000F /* HostResolutionTests.swift */,
 				D2C00001 /* ControlTransportTests.swift */,
 				D2C00009 /* OpusDecoderTests.swift */,
+				D81200000000000000000008 /* ReceiveTimingTests.swift */,
 				D2C0000F /* DatagramBatchTests.swift */,
 				D2000030 /* StreamCryptoTests.swift */,
 				D2000032 /* PairingCryptoTests.swift */,
@@ -2045,6 +2057,9 @@
 				D1000D11 /* RtpVideoQueue+AddPacket.swift in Sources */,
 				D1000D21 /* RtpVideoQueue+Reconstruct.swift in Sources */,
 				D1000026 /* VideoRtpReceiver.swift in Sources */,
+				D81200000000000000000001 /* SocketTimestamp.swift in Sources */,
+				D81200000000000000000003 /* ReceiveTiming.swift in Sources */,
+				D81200000000000000000007 /* ReceiveTimingTelemetry.swift in Sources */,
 				D2C0000E /* DatagramBatch.swift in Sources */,
 				DEC0DE202609221900000008 /* VideoRtpReceiver+Recovery.swift in Sources */,
 				D1000028 /* UdpPinger.swift in Sources */,
@@ -2208,6 +2223,7 @@
 				D2B00010 /* HostResolutionTests.swift in Sources */,
 				D2C00002 /* ControlTransportTests.swift in Sources */,
 				D2C0000A /* OpusDecoderTests.swift in Sources */,
+				D81200000000000000000009 /* ReceiveTimingTests.swift in Sources */,
 				D2C00010 /* DatagramBatchTests.swift in Sources */,
 				D2000031 /* StreamCryptoTests.swift in Sources */,
 				D2000033 /* PairingCryptoTests.swift in Sources */,
