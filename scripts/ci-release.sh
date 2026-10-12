@@ -18,11 +18,16 @@ SIGNED="$STAMP-signed"
 PACKAGED="$STAMP-packaged"
 ARTIFACTS="$PACKAGED-artifacts"
 GREEN="$STAMP-green"
-PROMOTED="$STAMP-promoted"
 PROMOTION="$RUNNER_TEMP/glimmer-promotion-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
 KEYCHAIN="$PRIVATE/signing.keychain-db"
 APP="$ROOT/build/Build/Products/Release/Glimmer.app"
-VERSION="$(sed -n 's/^MARKETING_VERSION = //p' Glimmer/Version.xcconfig | tr -d ' ')"
+export RELEASE_VERSION_CONFIG="${RELEASE_VERSION_CONFIG:-$ROOT/Glimmer/Version.xcconfig}"
+if [ -n "${TRUSTED_TOOLING_SHA:-}" ] && [ "${1:-}" != cleanup ]; then
+    [[ "${EXPECTED_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || die "invalid source SHA"
+    export RELEASE_VERSION_CONFIG="$RUNNER_TEMP/glimmer-version-$GITHUB_RUN_ID.xcconfig"
+    git show "$EXPECTED_SHA:Glimmer/Version.xcconfig" > "$RELEASE_VERSION_CONFIG"
+fi
+VERSION="$(sed -n 's/^MARKETING_VERSION = //p' "$RELEASE_VERSION_CONFIG" | tr -d ' ')"
 DMG="$ROOT/build/dist/Glimmer-$VERSION.dmg"
 ZIP="$ROOT/build/dist/Glimmer-$VERSION.zip"
 OPERATION="${RELEASE_OPERATION:-candidate}"
@@ -47,7 +52,8 @@ finish() {
 }
 
 check_context() {
-    [ "${GITHUB_ACTIONS:-}" = true ] && [ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ] || die "manual Actions release required"
+    [ "${GITHUB_ACTIONS:-}" = true ] && [ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ] ||
+        die "manual Actions release required"
     [ "${GITHUB_REPOSITORY:-}" = Se7enbrc/glimmer ] || die "release requires upstream repository"
     case "$OPERATION:${GITHUB_REF:-}" in
         candidate:refs/heads/release-candidate|promote:refs/heads/main) ;;
@@ -56,6 +62,9 @@ check_context() {
     [[ "${RC_TAG:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$ ]] &&
         [ "${RC_TAG%-rc.*}" = "$VERSION" ] || die "invalid candidate tag"
     [[ "${EXPECTED_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || die "expected_sha must be a full lowercase commit SHA"
+    if [ -n "${TRUSTED_TOOLING_SHA:-}" ]; then
+        [[ "$TRUSTED_TOOLING_SHA" =~ ^[0-9a-f]{40}$ ]] || die "invalid trusted tooling SHA"
+    fi
     [ "${GITHUB_SHA:-}" = "$EXPECTED_SHA" ] || die "dispatch SHA differs from reviewed SHA"
     [ "${RUNNER_DEBUG:-0}" != 1 ] || die "disable Actions debug logging for release"
     local debug
@@ -66,15 +75,25 @@ check_context() {
 
 check_source() {
     check_context
-    [ "$(git rev-parse HEAD)" = "$EXPECTED_SHA" ] || die "checkout differs from reviewed SHA"
+    [ "$(git rev-parse HEAD)" = "${TRUSTED_TOOLING_SHA:-$EXPECTED_SHA}" ] || die "checkout differs from reviewed SHA"
     [ "$(git remote get-url origin)" = https://github.com/Se7enbrc/glimmer ] ||
         [ "$(git remote get-url origin)" = https://github.com/Se7enbrc/glimmer.git ] || die "unexpected origin"
+    if [ -n "${TRUSTED_TOOLING_SHA:-}" ]; then
+        git fetch --quiet origin main
+        git merge-base --is-ancestor "$TRUSTED_TOOLING_SHA" origin/main ||
+            die "trusted tooling is not in main history"
+        git diff --quiet "$EXPECTED_SHA" "$TRUSTED_TOOLING_SHA" -- \
+            Glimmer/Glimmer.entitlements LoginHelper/LoginHelper.entitlements helper/Helper.entitlements ||
+            die "candidate signing policy differs from trusted main"
+    fi
     local branch="${GITHUB_REF#refs/heads/}"
     git fetch --quiet origin "$branch"
-    [ "$(git rev-parse "origin/$branch")" = "$EXPECTED_SHA" ] || die "source branch moved; review and dispatch its new SHA"
+    [ "$(git rev-parse "origin/$branch")" = "$EXPECTED_SHA" ] ||
+        die "source branch moved; review and dispatch its new SHA"
     if [ "$OPERATION" = candidate ]; then
         git fetch --quiet origin "refs/tags/$RC_TAG" || die "maintainer must create the reviewed candidate tag first"
-        [ "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$EXPECTED_SHA" ] || die "candidate tag identifies different source"
+        [ "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$EXPECTED_SHA" ] ||
+            die "candidate tag identifies different source"
     fi
     make --no-print-directory guard-clean-tree
 }
@@ -92,7 +111,7 @@ verify_part() {
     [ -n "${GITHUB_OUTPUT:-}" ] || die "workflow output file missing"
     case "$part" in
         checks) target=check; GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files ;;
-        tests) target=test ;;
+        tests) target="test" ;;
         asan) target=test-asan ;;
         *) die "unknown verification part" ;;
     esac
@@ -101,7 +120,7 @@ verify_part() {
     printf 'record=%s %s %s %s\n' "$EXPECTED_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$part" \
         >> "$GITHUB_OUTPUT"
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-        printf 'Verification %s: `%s`, run %s, attempt %s, %ss\n' \
+        printf 'Verification %s: %s, run %s, attempt %s, %ss\n' \
             "$part" "$EXPECTED_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$((SECONDS - started))" \
             >> "$GITHUB_STEP_SUMMARY"
     fi
@@ -112,14 +131,16 @@ accept_verification() {
     check_source
     [ "$OPERATION" = candidate ] || die "promotion never builds"
     [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
-    local part result record name
+    local part result record name attempt pattern
     for part in checks tests asan; do
         name="$(printf '%s' "$part" | tr '[:lower:]' '[:upper:]')"
         result="VERIFY_${name}_RESULT"
         record="VERIFY_${name}_RECORD"
         [ "${!result:-}" = success ] || die "$part verification did not succeed"
-        [ "${!record:-}" = "$EXPECTED_SHA $GITHUB_RUN_ID $GITHUB_RUN_ATTEMPT $part" ] ||
-            die "$part verification record differs from this SHA, run or attempt"
+        pattern="^$EXPECTED_SHA $GITHUB_RUN_ID ([1-9][0-9]*) $part$"
+        [[ "${!record:-}" =~ $pattern ]] || die "$part verification record differs from this SHA, run or check"
+        attempt="${BASH_REMATCH[1]}"
+        [ "$attempt" -le "$GITHUB_RUN_ATTEMPT" ] || die "$part verification attempt is in the future"
     done
     printf '%s\n' "$EXPECTED_SHA" > "$STAMP"
 }
@@ -138,12 +159,6 @@ private_directory() {
     trap finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
-}
-
-require_packaged_bytes() {
-    [ -s "$DMG" ] && [ -s "$ZIP" ] || die "packaged release asset missing"
-    [ -s "$ARTIFACTS" ] || die "packaged release digests missing"
-    shasum -a 256 "$DMG" "$ZIP" | cmp -s "$ARTIFACTS" - || die "packaged release assets changed"
 }
 
 write_signing_files() {
@@ -211,7 +226,8 @@ case "${1:-}" in
     checks)
         check_source
         rm -f "$GREEN"
-        python3 scripts/release-checks.py "$EXPECTED_SHA"
+        RELEASE_CHECKS_FILE="$RUNNER_TEMP/glimmer-prerequisites.json" \
+            python3 scripts/release-checks.py "$EXPECTED_SHA"
         printf '%s\n' "$EXPECTED_SHA" > "$GREEN"
         ;;
     verify-checks|verify-tests|verify-asan) verify_part "${1#verify-}" ;;
@@ -224,10 +240,23 @@ case "${1:-}" in
         check_source
         printf '%s\n' "$EXPECTED_SHA" > "$BUILT"
         ;;
+    import-unsigned)
+        rm -f "$STAMP" "$BUILT" "$SIGNED" "$PACKAGED" "$ARTIFACTS"
+        check_source
+        [ "$OPERATION" = candidate ] || die "promotion never imports unsigned code"
+        [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
+        [ -n "${TRUSTED_TOOLING_SHA:-}" ] || die "signing requires main tooling"
+        python3 scripts/release_artifact.py unpack "$RUNNER_TEMP/unsigned" \
+            --manifest "${UNSIGNED_MANIFEST:-}" --attempt "${UNSIGNED_ATTEMPT:-}" \
+            --destination "$ROOT/build/Build/Products/Release"
+        printf '%s\n' "$EXPECTED_SHA" > "$STAMP"
+        printf '%s\n' "$EXPECTED_SHA" > "$BUILT"
+        ;;
     sign)
         [ "$OPERATION" = candidate ] || die "promotion never signs"
         rm -f "$SIGNED" "$PACKAGED" "$ARTIFACTS"
         require_phase "$BUILT"
+        [ -n "${TRUSTED_TOOLING_SHA:-}" ] || die "signing requires main tooling"
         private_directory
         write_signing_files
         unset DEVELOPER_ID_P12_BASE64 P12_PASSWORD NOTARY_KEY_BASE64 NOTARY_KEY_ID NOTARY_ISSUER_ID
@@ -237,7 +266,7 @@ case "${1:-}" in
         export HELPER_PROVISIONING_PROFILE="$PRIVATE/helper.provisionprofile"
         make codesign-setup setup-notary
         # Compilation and helper embedding already succeeded without credentials.
-        make CONFIG=Release -o app -o embed-helper preflight notarize
+        make CONFIG=Release preflight notarize-bundle
         cleanup
         printf '%s\n' "$EXPECTED_SHA" > "$SIGNED"
         ;;
@@ -255,24 +284,11 @@ case "${1:-}" in
         ;;
     publish)
         [ "$OPERATION" = candidate ] || die "use the promotion phase"
-        require_phase "$PACKAGED"
-        require_packaged_bytes
-        [[ "${RELEASE_ATTESTATION_ID:-}" =~ ^[0-9]+$ ]] || die "release artifact attestation missing"
-        [ -s "${RELEASE_PROVENANCE_BUNDLE:-}" ] || die "release provenance bundle missing"
-        cp "$RELEASE_PROVENANCE_BUNDLE" "$ROOT/build/dist/Glimmer-$VERSION.intoto.jsonl"
+        check_source
+        python3 scripts/release_publication.py check "$RUNNER_TEMP/signed"
         private_directory
         publish_credentials
-        python3 - "$PRIVATE/signing.env" <<'PY'
-import os, pathlib, sys
-key = os.environ.get("SPARKLE_ED_PRIVATE_KEY", "")
-if not key or "\n" in key or "\r" in key:
-    sys.exit("ERR: missing or multiline Sparkle key")
-pathlib.Path(sys.argv[1]).write_text(f"SPARKLE_ED_PRIVATE_KEY={key}\n")
-PY
-        unset SPARKLE_ED_PRIVATE_KEY
-        export GLIMMER_SIGNING_CREDS="$PRIVATE/signing.env"
-        BUILD="$(sed -n 's/^CURRENT_PROJECT_VERSION = //p' Glimmer/Version.xcconfig | tr -d ' ')"
-        scripts/publish-release.sh "$VERSION" "$BUILD" "$ROOT/build/Build/Products/Release/Glimmer.app" "$ROOT/build/dist" Se7enbrc/glimmer "$RC_TAG"
+        python3 scripts/release_publication.py publish "$RUNNER_TEMP/signed"
         ;;
     prepare-promotion)
         check_source
@@ -288,12 +304,17 @@ PY
         private_directory
         publish_credentials
         python3 scripts/promote-release.py publish "$RC_TAG" "${CANDIDATE_SHA:-}"
-        printf '%s %s\n' "$EXPECTED_SHA" "$RC_TAG" > "$PROMOTED"
         ;;
     tap)
         check_context
         [ "$OPERATION" = promote ] || die "candidates never update Homebrew"
-        [ -f "$PROMOTED" ] && [ "$(cat "$PROMOTED")" = "$EXPECTED_SHA $RC_TAG" ] || die "candidate has not been promoted in this run"
+        check_source
+        python3 scripts/promote-release.py validate "$RC_TAG" "${CANDIDATE_SHA:-}"
+        [ "$(gh release view "$RC_TAG" -R Se7enbrc/glimmer --json isPrerelease,isDraft \
+            --jq '.isPrerelease == false and .isDraft == false')" = true ] || die "release is not stable"
+        export RELEASE_READ_TOKEN="${GH_TOKEN:-}"
+        export EXPECTED_DMG_SHA256
+        EXPECTED_DMG_SHA256="$(shasum -a 256 "$PROMOTION/Glimmer-$VERSION.dmg" | cut -d' ' -f1)"
         private_directory
         publish_credentials
         export GLIMMER_TAP_CACHE="$PRIVATE/tap"
@@ -306,6 +327,7 @@ PY
         rm -rf "$PROMOTION" || result=$?
         exit "$result"
         ;;
-    *) die "usage: ci-release.sh check|checks|verify-{checks,tests,asan}|verified|build|sign|package|publish" \
+    *) die "usage: ci-release.sh check|checks|verify-{checks,tests,asan}|verified|build|import-unsigned" \
+        "|sign|package|publish" \
         "|prepare-promotion|promote|tap|cleanup" ;;
 esac

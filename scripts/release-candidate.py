@@ -27,6 +27,10 @@ CHECKS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECKS)
 FEED_BRANCH = "appcast"
 BRANCH = "release-candidate"
+# Candidate workflows execute before protected tooling takes over, so these must already be reviewed on main.
+RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-publication.yml",
+                 "scripts/ci-release.sh", "scripts/install-ci-scanner.sh", "scripts/release-checks.py",
+                 "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py")
 POLL_SECONDS = 60
 TIMEOUT_SECONDS = 90 * 60
 
@@ -157,6 +161,10 @@ def cut(dry_run, ci_sha=None, pr=None):
         output(["git", "cat-file", "-e", f"{sha}^{{commit}}"], f"commit {sha[:12]} is not in this clone")
     else:
         sha, branch = reviewed_head()
+    output(["git", "fetch", "--quiet", "origin", "main"], "couldn't fetch main; nothing cut")
+    output(["git", "diff", "--quiet", "origin/main", sha, "--", *RELEASE_PATHS],
+           "candidate release workflow or script differs from main; "
+           "land workflow and release-script changes on main first")
     config = output(["git", "show", f"{sha}:Glimmer/Version.xcconfig"], "couldn't read the candidate version")
     values = dict(re.findall(r"^(MARKETING_VERSION|CURRENT_PROJECT_VERSION)\s*=\s*(\S+)\s*$", config, re.M))
     version, build = values["MARKETING_VERSION"], values["CURRENT_PROJECT_VERSION"]
