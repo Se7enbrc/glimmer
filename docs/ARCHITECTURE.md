@@ -611,13 +611,9 @@ content view's root layer (`view.layer = layer` before
 `view.wantsLayer = true`), avoiding an intermediate backing layer in the HDR
 presentation path.
 
-**Stats overlay.** `StatsOverlayWindow` hosts `StatsOverlayLayer` in a small,
-transparent, non-activating child panel above the stream window. Its bounds
-follow the existing picture, corner and safe-area layout; stats keep their SDR
-ink and 4 Hz cadence. Geometry and window state follow AppKit events. Stats
-leave the screen during a cover slide or window fade and close with the stream.
-The video root has no stats sublayers; transient banners stay on that root.
-Optimized compositing with the child visible must be verified on the target Mac.
+**Stats overlay.** A `StatsOverlayLayer` is attached as a sublayer of the
+display layer (not a sibling: root-layer status is the precondition). The OS
+composites the sRGB text against the HDR content correctly.
 
 **Dual-path fullscreen: the `coversNotch` toggle.** Two paths, picked per
 session config:

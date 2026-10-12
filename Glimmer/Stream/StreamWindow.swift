@@ -27,9 +27,13 @@ public final class StreamWindow {
     /// self-heal can recover a wedge that flush alone can't. Mutated on the main
     /// actor only.
     public private(set) var displayLayer: AVSampleBufferDisplayLayer
-    /// Stats live in a separate child window; the session drives their existing 4 Hz refresh.
+    /// In-stream stats overlay (toggled with the user's stats hotkey). Lives
+    /// as a *sublayer* of `displayLayer` so it composites above the video
+    /// without breaking the AVSampleBufferDisplayLayer-as-root-layer
+    /// requirement that keeps the EDR signal direct from the video layer to
+    /// the window surface. Created hidden; `StreamSession`'s overlay timer
+    /// drives visibility and content updates.
     public let statsOverlay: StatsOverlayLayer
-    let statsOverlayWindow: StatsOverlayWindow
     /// Top-center "Reconnecting..." banner shown over the frozen frame during a
     /// silent reconnect episode or a watchdog video-hold (the launcher's phase
     /// chip is occluded by this fullscreen window).
@@ -313,13 +317,14 @@ public final class StreamWindow {
         view.wantsLayer = true
         window.contentView = view
 
-        // Keep stats in their own small surface so the video has no stats sublayers.
-        // Layout still follows the picture and screen safe area at the existing 4 Hz cadence.
+        // Keep the HUD inside the HDR root layer. Its 4 Hz refresh also follows
+        // the picture's letterbox and this window's screen safe area.
         let overlay = StatsOverlayLayer()
         overlay.displayView = view
-        let overlayWindow = StatsOverlayWindow(parent: window, overlay: overlay, displayView: view)
+        overlay.attach(to: layer)
 
-        // Transient signal pills stay on the display layer, driven by session edges.
+        // Transient signal pills (sibling sublayers of the display layer, above
+        // the stats panel). Created hidden; the session drives them on edges.
         let reconnect = StreamBannerLayer(
             anchor: .topCenter, accent: NSColor.systemOrange.cgColor)
         reconnect.attach(to: layer)
@@ -348,8 +353,6 @@ public final class StreamWindow {
         self.window = window
         self.displayLayer = layer
         self.statsOverlay = overlay
-        self.statsOverlayWindow = overlayWindow
-        window.statsOverlayWindow = overlayWindow
         self.reconnectBanner = reconnect
         self.networkBanner = network
         self.leaveHintBanner = leaveHint
@@ -386,14 +389,27 @@ public final class StreamWindow {
         return layer
     }
 
-    /// A 4K240 HDR failure can latch the renderer; a flush alone cannot clear it.
-    /// Replace the root layer, then return it for the decoder to retarget, preserving the direct HDR path.
-    /// The decoder snapshots before enqueue, so in-flight work safely finishes on the old layer.
+    /// Rebuild the display layer from scratch and swap it in as the view's root
+    /// layer. The last-resort present-path self-heal: the
+    /// AVSampleBufferVideoRenderer can latch `.status == .failed` (a 4K240 HDR panel
+    /// 4K240 HDR hard-freeze) and stay failed after a bare `flush()` - a
+    /// hard-failed renderer only clears with a fresh layer. We create a new
+    /// AVSampleBufferDisplayLayer, re-attach the stats overlay sublayer, swap it
+    /// in as the view's ROOT layer (preserving the EDR-direct compositing
+    /// contract), and return it so the caller can re-point the decoder at it.
+    ///
+    /// Runs on the main actor (the only place that touches AppKit layers). The
+    /// decoder snapshots `displayLayer` into a local before each enqueue, so a
+    /// concurrent present on the pacer/decode queue keeps operating on the OLD
+    /// layer until it picks up the new reference - race-safe by construction.
     @discardableResult
     public func rebuildDisplayLayer() -> AVSampleBufferDisplayLayer {
         let view = displayView
         let fresh = StreamWindow.makeDisplayLayer(frame: view.bounds)
-        // Re-parent signal pills before the swap; stats stay in their separate window.
+        // Re-attach the stats overlay + signal pills as sublayers of the NEW
+        // root layer before the swap, so they keep compositing above the video.
+        // attach() re-parents (addSublayer removes from any prior superlayer).
+        statsOverlay.attach(to: fresh)
         reconnectBanner.attach(to: fresh)
         networkBanner.attach(to: fresh)
         leaveHintBanner.attach(to: fresh)

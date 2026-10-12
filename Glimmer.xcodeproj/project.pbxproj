@@ -208,7 +208,6 @@
 		D100006C /* InputForwarder+StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006B /* InputForwarder+StreamView.swift */; };
 		D100006E /* StreamWindow+Show.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006D /* StreamWindow+Show.swift */; };
 		D1000070 /* StatsOverlayLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006F /* StatsOverlayLayer.swift */; };
-		A81000120000000000000000 /* StatsOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A81000110000000000000000 /* StatsOverlayWindow.swift */; };
 		D1000E51 /* StreamBannerLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000E50 /* StreamBannerLayer.swift */; };
 		D1000072 /* VideoDecoder+AV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000071 /* VideoDecoder+AV1.swift */; };
 		D1000074 /* VideoDecoder+API.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000073 /* VideoDecoder+API.swift */; };
@@ -376,7 +375,6 @@
 		DEC0DE202609222500000001 /* StreamAwareUpdateAlertsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222500000002 /* StreamAwareUpdateAlertsTests.swift */; };
 		DEC0DE84000000000000001B /* WindowPointerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE84000000000000001C /* WindowPointerTests.swift */; };
 		DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */; };
-		A81000140000000000000000 /* StatsOverlayWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A81000130000000000000000 /* StatsOverlayWindowTests.swift */; };
 		DEC0DE202609220900000001 /* StreamSignalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220900000002 /* StreamSignalTests.swift */; };
 		DEC0DE202609222000000002 /* LogRetentionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609222000000001 /* LogRetentionTests.swift */; };
 		DEC0DE202609234000000001 /* LogPrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609234000000002 /* LogPrivacyTests.swift */; };
@@ -790,7 +788,6 @@
 		D100006B /* InputForwarder+StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+StreamView.swift"; sourceTree = "<group>"; };
 		D100006D /* StreamWindow+Show.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Show.swift"; sourceTree = "<group>"; };
 		D100006F /* StatsOverlayLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StatsOverlayLayer.swift; sourceTree = "<group>"; };
-		A81000110000000000000000 /* StatsOverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayWindow.swift"; sourceTree = "<group>"; };
 		D1000E50 /* StreamBannerLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamBannerLayer.swift; sourceTree = "<group>"; };
 		D1000071 /* VideoDecoder+AV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+AV1.swift"; sourceTree = "<group>"; };
 		D1000073 /* VideoDecoder+API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+API.swift"; sourceTree = "<group>"; };
@@ -959,7 +956,6 @@
 		DEC0DE202609222500000002 /* StreamAwareUpdateAlertsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamAwareUpdateAlertsTests.swift; sourceTree = "<group>"; };
 		DEC0DE84000000000000001C /* WindowPointerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPointerTests.swift; sourceTree = "<group>"; };
 		DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsOverlayVisibilityTests.swift"; sourceTree = "<group>"; };
-		A81000130000000000000000 /* StatsOverlayWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsOverlayWindowTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609220900000002 /* StreamSignalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamSignalTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609222000000001 /* LogRetentionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogRetentionTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609234000000002 /* LogPrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogPrivacyTests.swift; sourceTree = "<group>"; };
@@ -1271,7 +1267,6 @@
 				D1A1B002 /* VideoDecoder+Backdrop.swift */,
 				D1000071 /* VideoDecoder+AV1.swift */,
 				D100006F /* StatsOverlayLayer.swift */,
-				A81000110000000000000000 /* StatsOverlayWindow.swift */,
 				D1000E50 /* StreamBannerLayer.swift */,
 				D100006D /* StreamWindow+Show.swift */,
 				D1000C02 /* StreamWindow+Cursor.swift */,
@@ -1590,7 +1585,6 @@
 				DEC0DE202609222500000002 /* StreamAwareUpdateAlertsTests.swift */,
 				DEC0DE84000000000000001C /* WindowPointerTests.swift */,
 				DEC0DE2026091300000000B2 /* StatsOverlayVisibilityTests.swift */,
-				A81000130000000000000000 /* StatsOverlayWindowTests.swift */,
 				DEC0DE202609220900000002 /* StreamSignalTests.swift */,
 				DEC0DE202609222000000001 /* LogRetentionTests.swift */,
 				DEC0DE202609234000000002 /* LogPrivacyTests.swift */,
@@ -1944,7 +1938,6 @@
 				D1A1B001 /* VideoDecoder+Backdrop.swift in Sources */,
 				D1000072 /* VideoDecoder+AV1.swift in Sources */,
 				D1000070 /* StatsOverlayLayer.swift in Sources */,
-				A81000120000000000000000 /* StatsOverlayWindow.swift in Sources */,
 				D1000E51 /* StreamBannerLayer.swift in Sources */,
 				D100006E /* StreamWindow+Show.swift in Sources */,
 				D1000C01 /* StreamWindow+Cursor.swift in Sources */,
@@ -2252,7 +2245,6 @@
 				DEC0DE202609222500000001 /* StreamAwareUpdateAlertsTests.swift in Sources */,
 				DEC0DE84000000000000001B /* WindowPointerTests.swift in Sources */,
 				DEC0DE2026091300000000B1 /* StatsOverlayVisibilityTests.swift in Sources */,
-				A81000140000000000000000 /* StatsOverlayWindowTests.swift in Sources */,
 				DEC0DE202609220900000001 /* StreamSignalTests.swift in Sources */,
 				DEC0DE202609222000000002 /* LogRetentionTests.swift in Sources */,
 				DEC0DE202609234000000001 /* LogPrivacyTests.swift in Sources */,

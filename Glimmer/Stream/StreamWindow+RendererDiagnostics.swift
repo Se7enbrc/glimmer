@@ -23,11 +23,7 @@ extension StreamWindow {
         // AppKit has no supported global cursor-visibility query. Record our counted hide ownership explicitly.
         let cursor = "cursorVisible=\(!didHideCursor) cursorSource=owned hideCount=\(cursorHideCount)"
         let overlays = rendererVisibleOverlays().joined(separator: ";")
-        let child = statsOverlayWindow.window
-        let statsWindow = "statsWindow={attached=\(child.parent === window),visible=\(child.isVisible),"
-            + "size=\(child.frame.width)x\(child.frame.height),level=\(child.level.rawValue)}"
-        return "\(windowState) \(cursor) \(statsWindow) overlays=[\(overlays)] "
-            + "video={\(Self.rendererLayerState(displayLayer))} "
+        return "\(windowState) \(cursor) overlays=[\(overlays)] video={\(Self.rendererLayerState(displayLayer))} "
             + "currentEDR=\(currentEDR) potentialEDR=\(potentialEDR) hdrInput=\(hdrInput) hdrOutput=\(hdrOutput) "
             + "dynamicRange=\(displayLayer.preferredDynamicRange.rawValue) displayID=\(displayID)"
     }

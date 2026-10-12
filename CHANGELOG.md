@@ -7,8 +7,6 @@
 - Smoother motion when the PC can't hold your display's refresh rate. On a
   variable-refresh display, the display follows the stream's real frame rate; on
   a fixed one, repeated frames are spaced evenly.
-- The stats overlay no longer makes the Mac composite every video frame, which
-  cost about half the GPU at 4K HDR while stats were showing.
 
 - Quieter, more consistent transitions across the launcher, stream and settings,
   including Reduce Motion.
