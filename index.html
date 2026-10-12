@@ -12,7 +12,7 @@
     <meta property="og:title" content="Glimmer · The other room. Right here.">
     <meta property="og:description" content="Your PC games. A native Mac app. Free, now and always.">
     <meta property="og:url" content="https://se7enbrc.github.io/glimmer/">
-    <meta property="og:image" content="https://se7enbrc.github.io/glimmer/docs/assets/launcher.png">
+    <meta property="og:image" content="https://se7enbrc.github.io/glimmer/docs/assets/launcher-art-dark.png">
     <meta property="og:image:alt" content="Glimmer's Mac launcher with Desktop and Steam Big Picture ready to stream">
     <link rel="canonical" href="https://se7enbrc.github.io/glimmer/">
     <link rel="icon" type="image/png" href="docs/assets/icon-512.png">
@@ -25,7 +25,8 @@
     <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <symbol id="icon-display" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
         <symbol id="icon-desktop" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M6 8h.01M9 8h.01M12 8h.01"/></symbol>
-        <symbol id="icon-gamepad" viewBox="0 0 28 24"><path fill="currentColor" stroke="none" fill-rule="evenodd" d="M8 5h12c3 0 4 3 5 7l1 4c1 4-3 5-5 2l-2-2H9l-2 2c-2 3-6 2-5-2l1-4c1-4 2-7 5-7ZM7 9v2H5v2h2v2h2v-2h2v-2H9V9Zm11 1a1.3 1.3 0 1 0 2.6 0 1.3 1.3 0 1 0-2.6 0Zm3 3a1.3 1.3 0 1 0 2.6 0 1.3 1.3 0 1 0-2.6 0Z"/></symbol>
+        <!-- Steam mark from Simple Icons 16.33.0 (CC0). Steam is a trademark of Valve Corporation. -->
+        <symbol id="icon-steam" viewBox="1391 1048 85 85"><path fill="currentColor" stroke="none" d="M1433.476 1048.520C1411.291 1048.520 1393.099 1065.631 1391.377 1087.379l22.646 9.358c1.919 -1.306 4.236 -2.077 6.732 -2.077 0.222 0.000 0.440 0.014 0.662 0.021l10.073 -14.583V1079.890c0.000 -8.784 7.140 -15.928 15.928 -15.928 8.781 0.000 15.928 7.151 15.928 15.939s-7.147 15.932 -15.928 15.932h-0.370l-14.351 10.249c0.000 0.183 0.014 0.370 0.014 0.560 0.000 6.601 -5.334 11.957 -11.936 11.957 -5.757 0.000 -10.619 -4.130 -11.728 -9.601L1392.835 1102.283C1397.856 1120.017 1414.136 1133.019 1433.476 1133.019c23.332 0.000 42.246 -18.917 42.246 -42.250S1456.804 1048.520 1433.476 1048.520zM1417.847 1112.634l-5.186 -2.148c0.922 1.912 2.514 3.517 4.626 4.401 4.566 1.898 9.834 -0.268 11.731 -4.841 0.926 -2.218 0.929 -4.644 0.018 -6.862s-2.641 -3.947 -4.848 -4.869c-2.197 -0.915 -4.542 -0.877 -6.612 -0.106l5.362 2.218c3.366 1.408 4.961 5.281 3.552 8.644 -1.398 3.369 -5.271 4.964 -8.640 3.563H1417.847zm40.190 -32.754c0.000 -5.852 -4.764 -10.615 -10.615 -10.615 -5.862 0.000 -10.615 4.764 -10.615 10.615 0.000 5.862 4.753 10.615 10.615 10.615 5.855 0.000 10.615 -4.753 10.615 -10.615zm-18.565 -0.018c0.000 -4.408 3.567 -7.978 7.975 -7.978 4.397 0.000 7.978 3.570 7.978 7.978 0.000 4.405 -3.581 7.975 -7.978 7.975 -4.412 0.000 -7.975 -3.570 -7.975 -7.975z"/></symbol>
         <symbol id="icon-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z" fill="currentColor" stroke="none"/></symbol>
         <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
         <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 17v4h14v-4"/></symbol>
@@ -94,7 +95,7 @@
                                         <span class="tile-name">Desktop</span><span class="tile-trailing" aria-hidden="true"><span class="play-icon"><svg><use href="#icon-play"/></svg></span><span class="spinner" hidden></span><span class="back-to-stream" hidden>Back to Stream</span></span>
                                     </button>
                                     <button class="app-tile" type="button" data-app="Steam Big Picture" disabled>
-                                        <svg class="tile-icon" aria-hidden="true"><use href="#icon-gamepad"/></svg>
+                                        <svg class="tile-icon" aria-hidden="true"><use href="#icon-steam"/></svg>
                                         <span class="tile-name">Steam Big Picture</span><span class="tile-trailing" aria-hidden="true"><span class="play-icon"><svg><use href="#icon-play"/></svg></span><span class="spinner" hidden></span><span class="back-to-stream" hidden>Back to Stream</span></span>
                                     </button>
                                 </div>

@@ -6,7 +6,10 @@ analytics.
 
 [Website](https://se7enbrc.github.io/glimmer/) · [Help](docs/README.md)
 
-![Glimmer's launcher with a paired PC.](docs/assets/launcher.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/launcher-art-dark.png">
+  <img alt="Glimmer's launcher, ready to stream Desktop or Steam from a PC." src="docs/assets/launcher-art-light.png">
+</picture>
 
 ## Install
 

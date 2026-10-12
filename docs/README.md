@@ -12,7 +12,10 @@ layout:
 
 # Play your PC games on your Mac
 
-![Glimmer's launcher with a paired PC.](assets/launcher.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/launcher-art-dark.png">
+  <img alt="Glimmer's launcher, ready to stream Desktop or Steam from a PC." src="assets/launcher-art-light.png">
+</picture>
 
 | Need       | Go here                                                              |
 | ---------- | -------------------------------------------------------------------- |
