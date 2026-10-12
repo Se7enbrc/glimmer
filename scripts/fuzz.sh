@@ -32,10 +32,10 @@ mkdir -p "$OUT/engine"
 # Linux has no CryptoKit. Compile the parser/FEC slice as its own instrumented module;
 # the Mac ASan suites retain control crypto coverage.
 swiftc -swift-version 6 -strict-concurrency=complete -package-name Glimmer -O -g -parse-as-library \
-    -sanitize=fuzzer,address -whole-module-optimization -enable-testing -emit-object -emit-module \
+    -sanitize=fuzzer,address -whole-module-optimization -emit-object -emit-module \
     -module-name GlimmerEngine -emit-module-path "$OUT/engine/GlimmerEngine.swiftmodule" \
     "$ENGINE/EnetWire.swift" "$ENGINE/ReedSolomon.swift" "$ENGINE/AudioFecDecoder.swift" \
-    "$ENGINE/InputEncoder.swift" "$ENGINE/SdpCodec.swift" "$ENGINE/StreamProtocolConstants.swift" \
+    "$ENGINE/AudioFecDecoder+Recovery.swift" "$ENGINE/InputEncoder.swift" "$ENGINE/SdpCodec.swift" "$ENGINE/StreamProtocolConstants.swift" \
     "$ENGINE/StreamingBackend+Values.swift" "$ENGINE/StreamCrypto+VideoPacketLayout.swift" \
     -o "$OUT/engine/GlimmerEngine.o"
 for target in ${FUZZ_TARGETS:-rtsp video audio fec opus}; do

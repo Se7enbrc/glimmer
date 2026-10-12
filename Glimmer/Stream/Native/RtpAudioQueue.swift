@@ -184,7 +184,6 @@ final class RtpAudioQueue {
         self.audioPacketDuration = audioPacketDuration
         blocks.reserveCapacity(Self.maxQueuedBlocks + 1)
         freeBlocks.reserveCapacity(Self.maxQueuedBlocks + 1)
-        _ = GF256.inv
     }
 
     // MARK: - 16-bit wraparound helpers (Limelight-internal.h)

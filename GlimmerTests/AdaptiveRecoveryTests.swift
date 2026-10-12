@@ -9,7 +9,7 @@
 //  escalation and reconnect-while-hidden gate.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import Foundation
 import QuartzCore
 import Testing

@@ -8,7 +8,7 @@
 //  age and idle edges, the decode gate, present recovery, display and audio windows, the quit dwell.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import AVFoundation
 import Foundation
 import os

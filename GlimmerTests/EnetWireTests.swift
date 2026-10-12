@@ -10,7 +10,7 @@
 //  produced bytes and the read-back values, plus the EOF behaviour.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import Testing
 
 struct EnetWireTests {

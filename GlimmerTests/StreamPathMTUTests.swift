@@ -8,7 +8,7 @@
 //  reconnect ask). The syscall probe runs only against loopback here.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import Foundation
 import Network
 import Testing

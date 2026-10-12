@@ -8,7 +8,7 @@
 //  a forged VERIFY_CONNECT refused, and NativeBackend's input landing on its per-class channels.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

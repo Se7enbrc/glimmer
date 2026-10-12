@@ -9,7 +9,7 @@
 //  cipher), and the audio receiver and FEC queue that negotiation sets up.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import CommonCrypto
 import CryptoKit
 import Foundation

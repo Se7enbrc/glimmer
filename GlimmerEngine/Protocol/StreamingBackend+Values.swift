@@ -6,17 +6,17 @@ import Foundation
 /// Analog state for one controller frame (triggers + both sticks), grouped so
 /// `sendMultiController` mirrors LiSendMultiControllerEvent without a 9-argument
 /// signature.
-public struct GamepadAnalog: Sendable, Equatable {
-    public var leftTrigger: UInt8
-    public var rightTrigger: UInt8
-    public var leftStickX: Int16
-    public var leftStickY: Int16
-    public var rightStickX: Int16
-    public var rightStickY: Int16
+package struct GamepadAnalog: Sendable, Equatable {
+    package var leftTrigger: UInt8
+    package var rightTrigger: UInt8
+    package var leftStickX: Int16
+    package var leftStickY: Int16
+    package var rightStickX: Int16
+    package var rightStickY: Int16
 
-    public init(leftTrigger: UInt8, rightTrigger: UInt8,
-                leftStickX: Int16, leftStickY: Int16,
-                rightStickX: Int16, rightStickY: Int16) {
+    package init(leftTrigger: UInt8, rightTrigger: UInt8,
+                 leftStickX: Int16, leftStickY: Int16,
+                 rightStickX: Int16, rightStickY: Int16) {
         self.leftTrigger = leftTrigger
         self.rightTrigger = rightTrigger
         self.leftStickX = leftStickX
@@ -29,25 +29,25 @@ public struct GamepadAnalog: Sendable, Equatable {
 /// Stream-configuration inputs for `start`. Mirrors STREAM_CONFIGURATION.
 /// `remoteInputAesKey`/`remoteInputAesIv` are the 16-byte per-session GCM
 /// key/IV-id from the launch handshake (launch.gcmKey / launch.gcmKeyId).
-public struct BackendStreamConfig: Sendable {
-    public var width: Int32
-    public var height: Int32
-    public var fps: Int32
-    public var bitrate: Int32
-    public var packetSize: Int32
-    public var streamingRemotely: Int32
-    public var audioConfiguration: Int32
-    public var supportedVideoFormats: Int32
-    public var clientRefreshRateX100: Int32
-    public var colorSpace: Int32
-    public var colorRange: Int32
-    public var encryptionFlags: Int32
+package struct BackendStreamConfig: Sendable {
+    package var width: Int32
+    package var height: Int32
+    package var fps: Int32
+    package var bitrate: Int32
+    package var packetSize: Int32
+    package var streamingRemotely: Int32
+    package var audioConfiguration: Int32
+    package var supportedVideoFormats: Int32
+    package var clientRefreshRateX100: Int32
+    package var colorSpace: Int32
+    package var colorRange: Int32
+    package var encryptionFlags: Int32
     /// Exactly 16 bytes.
-    public var remoteInputAesKey: [UInt8]
+    package var remoteInputAesKey: [UInt8]
     /// Exactly 16 bytes.
-    public var remoteInputAesIv: [UInt8]
+    package var remoteInputAesIv: [UInt8]
 
-    public init(
+    package init(
         width: Int32, height: Int32, fps: Int32, bitrate: Int32,
         packetSize: Int32, streamingRemotely: Int32, audioConfiguration: Int32,
         supportedVideoFormats: Int32, clientRefreshRateX100: Int32,
@@ -73,22 +73,22 @@ public struct BackendStreamConfig: Sendable {
     /// True when the connect-time path probe resolved this session to remote. `.auto` is resolved BEFORE this type is
     /// built (StreamSession .makeBackendConfig), so an unresolved STREAM_CFG_AUTO reaching here is treated as local -
     /// the pre-probe behaviour.
-    public var isRemoteSession: Bool {
+    package var isRemoteSession: Bool {
         streamingRemotely == StreamProtocol.STREAM_CFG_REMOTE
     }
 }
 
 /// Opus multistream configuration. Mirrors OPUS_MULTISTREAM_CONFIGURATION
 /// (AudioDecoder.swift:80-100).
-public struct OpusConfig: Sendable {
-    public var sampleRate: Int32
-    public var channelCount: Int32
-    public var streams: Int32
-    public var coupledStreams: Int32
-    public var samplesPerFrame: Int32
-    public var mapping: [UInt8]
+package struct OpusConfig: Sendable {
+    package var sampleRate: Int32
+    package var channelCount: Int32
+    package var streams: Int32
+    package var coupledStreams: Int32
+    package var samplesPerFrame: Int32
+    package var mapping: [UInt8]
 
-    public init(
+    package init(
         sampleRate: Int32, channelCount: Int32, streams: Int32,
         coupledStreams: Int32, samplesPerFrame: Int32, mapping: [UInt8]
     ) {

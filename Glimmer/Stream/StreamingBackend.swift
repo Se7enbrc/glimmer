@@ -41,110 +41,51 @@ import Foundation
 // MARK: - Glimmer-owned value types (no Limelight.h leakage)
 
 /// Server-identification inputs for `start`. Mirrors SERVER_INFORMATION.
-public struct BackendServerInfo: Sendable {
-    public var address: String
-    public var appVersion: String
-    public var rtspSessionUrl: String
+struct BackendServerInfo: Sendable {
+    var address: String
+    var appVersion: String
+    var rtspSessionUrl: String
     /// The RAW SCM_* bitmask straight from /serverinfo. NOT the VIDEO_FORMAT_*
     /// layout - see StreamProtocol.SCM_* landmine note.
-    public var serverCodecModeRaw: Int32
-
-    public init(
-        address: String, appVersion: String,
-        rtspSessionUrl: String, serverCodecModeRaw: Int32
-    ) {
-        self.address = address
-        self.appVersion = appVersion
-        self.rtspSessionUrl = rtspSessionUrl
-        self.serverCodecModeRaw = serverCodecModeRaw
-    }
+    var serverCodecModeRaw: Int32
 }
 
 /// One PLENTRY-equivalent buffer in a DecodeUnit's chain.
-public struct DecodeBuffer: Sendable {
-    public enum Kind: Sendable {
+struct DecodeBuffer: Sendable {
+    enum Kind: Sendable {
         case picData, sps, pps, vps
     }
-    public var kind: Kind
-    public var data: Data
-
-    public init(kind: Kind, data: Data) {
-        self.kind = kind
-        self.data = data
-    }
+    var kind: Kind
+    var data: Data
 }
 
 /// A video access unit. The native backend produces these and hands them to
 /// VideoDecoder.
-public struct DecodeUnit: Sendable {
-    public var frameNumber: Int32
-    public var frameType: Int32
-    public var fullLength: Int32
-    public var frameHostProcessingLatency: UInt16
-    public var receiveTimeUs: UInt64
-    public var enqueueTimeUs: UInt64
-    public var presentationTimeUs: UInt64
-    public var rtpTimestamp: UInt32
-    public var hdrActive: Bool
-    public var colorspace: Int32
-    public var buffers: [DecodeBuffer]
-
-    public init(
-        frameNumber: Int32, frameType: Int32, fullLength: Int32,
-        frameHostProcessingLatency: UInt16, receiveTimeUs: UInt64,
-        enqueueTimeUs: UInt64, presentationTimeUs: UInt64,
-        rtpTimestamp: UInt32, hdrActive: Bool, colorspace: Int32,
-        buffers: [DecodeBuffer]
-    ) {
-        self.frameNumber = frameNumber
-        self.frameType = frameType
-        self.fullLength = fullLength
-        self.frameHostProcessingLatency = frameHostProcessingLatency
-        self.receiveTimeUs = receiveTimeUs
-        self.enqueueTimeUs = enqueueTimeUs
-        self.presentationTimeUs = presentationTimeUs
-        self.rtpTimestamp = rtpTimestamp
-        self.hdrActive = hdrActive
-        self.colorspace = colorspace
-        self.buffers = buffers
-    }
+struct DecodeUnit: Sendable {
+    var frameNumber: Int32
+    var frameType: Int32
+    var fullLength: Int32
+    var frameHostProcessingLatency: UInt16
+    var receiveTimeUs: UInt64
+    var enqueueTimeUs: UInt64
+    var presentationTimeUs: UInt64
+    var rtpTimestamp: UInt32
+    var hdrActive: Bool
+    var colorspace: Int32
+    var buffers: [DecodeBuffer]
 }
 
 /// Flattened HDR10 static metadata. Primaries normalized to 50000, luminance
 /// in nits / 1-10000 nit. The native engine fills it from the host's SDP HDR
 /// mastering metadata.
-public struct HdrMetadata: Sendable, Equatable {
-    public var displayPrimariesRX, displayPrimariesRY: UInt16
-    public var displayPrimariesGX, displayPrimariesGY: UInt16
-    public var displayPrimariesBX, displayPrimariesBY: UInt16
-    public var whitePointX, whitePointY: UInt16
-    public var maxDisplayLuminance, minDisplayLuminance: UInt16
-    public var maxContentLightLevel, maxFrameAverageLightLevel: UInt16
-    public var maxFullFrameLuminance: UInt16
-
-    public init(
-        displayPrimariesRX: UInt16, displayPrimariesRY: UInt16,
-        displayPrimariesGX: UInt16, displayPrimariesGY: UInt16,
-        displayPrimariesBX: UInt16, displayPrimariesBY: UInt16,
-        whitePointX: UInt16, whitePointY: UInt16,
-        maxDisplayLuminance: UInt16, minDisplayLuminance: UInt16,
-        maxContentLightLevel: UInt16, maxFrameAverageLightLevel: UInt16,
-        maxFullFrameLuminance: UInt16
-    ) {
-        self.displayPrimariesRX = displayPrimariesRX
-        self.displayPrimariesRY = displayPrimariesRY
-        self.displayPrimariesGX = displayPrimariesGX
-        self.displayPrimariesGY = displayPrimariesGY
-        self.displayPrimariesBX = displayPrimariesBX
-        self.displayPrimariesBY = displayPrimariesBY
-        self.whitePointX = whitePointX
-        self.whitePointY = whitePointY
-        self.maxDisplayLuminance = maxDisplayLuminance
-        self.minDisplayLuminance = minDisplayLuminance
-        self.maxContentLightLevel = maxContentLightLevel
-        self.maxFrameAverageLightLevel = maxFrameAverageLightLevel
-        self.maxFullFrameLuminance = maxFullFrameLuminance
-    }
+struct HdrMetadata: Sendable, Equatable {
+    var displayPrimariesRX, displayPrimariesRY: UInt16
+    var displayPrimariesGX, displayPrimariesGY: UInt16
+    var displayPrimariesBX, displayPrimariesBY: UInt16
+    var whitePointX, whitePointY: UInt16
+    var maxDisplayLuminance, minDisplayLuminance: UInt16
+    var maxContentLightLevel, maxFrameAverageLightLevel: UInt16
+    var maxFullFrameLuminance: UInt16
 }
 
 // MARK: - Inbound sink/event protocols
@@ -158,7 +99,7 @@ public struct HdrMetadata: Sendable, Equatable {
 /// triggers, which GameController can't drive - the DualSense raw-HID write);
 /// the remaining controller-feedback slot (logMessage) is NULL today and given
 /// a no-op default below.
-public protocol ConnectionEvents: AnyObject, Sendable {
+protocol ConnectionEvents: AnyObject, Sendable {
     func stageStarting(_ name: String)
     func stageComplete(_ name: String)
     func stageFailed(_ name: String, code: Int32)
@@ -211,7 +152,7 @@ public protocol ConnectionEvents: AnyObject, Sendable {
     func setPlayerLEDs(controller: UInt16, solid: UInt8, flashing: UInt8)
 }
 
-public extension ConnectionEvents {
+extension ConnectionEvents {
     /// No-op defaults for the controller-feedback requirements: silence is
     /// correct for a conformer with no actuator/sampler behind it.
     func rumble(controller: UInt16, lowFreq: UInt16, highFreq: UInt16) {}
@@ -225,7 +166,7 @@ public extension ConnectionEvents {
 }
 
 /// = DECODER_RENDERER_CALLBACKS (VideoDecoder.swift:409-419).
-public protocol VideoSink: AnyObject, Sendable {
+protocol VideoSink: AnyObject, Sendable {
     /// Delivered first. Returns 0 on success, -1 to abort.
     func setup(videoFormat: Int32, width: Int32, height: Int32, redrawRate: Int32) -> Int32
     func start()
@@ -238,7 +179,7 @@ public protocol VideoSink: AnyObject, Sendable {
 }
 
 /// = AUDIO_RENDERER_CALLBACKS (AudioDecoder.swift:43-60).
-public protocol AudioSink: AnyObject, Sendable {
+protocol AudioSink: AnyObject, Sendable {
     /// Returns 0 on success, -1 on failure.
     func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32
     func cleanup()
@@ -255,7 +196,7 @@ public protocol AudioSink: AnyObject, Sendable {
 /// `@unchecked Sendable` because the concrete backend carries state guarded by
 /// actor isolation and its own serialization; it is passed across the
 /// StreamSession actor boundary.
-public protocol StreamingBackend: AnyObject, Sendable {
+protocol StreamingBackend: AnyObject, Sendable {
 
     // MARK: Lifecycle
     //
@@ -352,7 +293,7 @@ public protocol StreamingBackend: AnyObject, Sendable {
     func sendUtf8Text(_ text: String) -> Int32
 }
 
-public extension StreamingBackend {
+extension StreamingBackend {
     /// Default: no control-stream health to report. Backends with an ENet
     /// control channel (NativeBackend) override this; a future C backend would
     /// inherit nil rather than be forced to fabricate the numbers.

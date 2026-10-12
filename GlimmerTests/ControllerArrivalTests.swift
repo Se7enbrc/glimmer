@@ -9,7 +9,7 @@
 //  and what a session leaves behind when it ends.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import AppKit
 import GameController
 import Testing

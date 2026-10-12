@@ -3,7 +3,7 @@
 
 // Client chords, Caps Lock and modifier bytes on the way to the backend.
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import Testing

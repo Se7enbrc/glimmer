@@ -34,6 +34,7 @@ package struct AudioFecDecoder {
                 + "(2x4, matching dataShards/fecShards) and must always construct")
         }
         self.rs = rs
+        _ = GF256.inv
     }
 
     /// Reconstruct erased data shards in place; see `ReedSolomon.decode`. `shards`:

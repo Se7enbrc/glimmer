@@ -12,7 +12,7 @@
 //  layout regression fails loudly instead of silently mis-driving the host.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import Testing
 
 struct InputEncoderTests {

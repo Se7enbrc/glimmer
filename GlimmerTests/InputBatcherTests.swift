@@ -3,7 +3,7 @@
 
 // Input ordering under a stalled reliable channel, and the one-shot flush timer.
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import CryptoKit
 import Foundation
 import os

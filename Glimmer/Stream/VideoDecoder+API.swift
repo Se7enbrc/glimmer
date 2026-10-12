@@ -353,7 +353,7 @@ extension VideoDecoder {
     /// right after `attach(to:)` and before the stream starts, so IDR requests
     /// (decode queue) and HDR-metadata pulls (main actor) route through the
     /// protocol. Set-once before any backend callback fires.
-    public func setBackend(_ backend: StreamingBackend) {
+    func setBackend(_ backend: StreamingBackend) {
         self.backend = backend
     }
 

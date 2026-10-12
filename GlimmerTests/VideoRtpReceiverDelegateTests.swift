@@ -8,7 +8,7 @@
 //  forward, frames handed to the sink, and the IDR requests a struggling decoder triggers.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

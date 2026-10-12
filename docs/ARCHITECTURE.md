@@ -131,10 +131,12 @@ Protocol constants live in a Swift mirror (`StreamProtocolConstants.swift`,
 `GlimmerEngine.framework` owns the slice 1 wire foundation: ENet layouts,
 Reed-Solomon and fixed audio FEC, input encoding, RTSP/SDP parsers, protocol
 constants, control crypto and their stream/Opus/controller values. The app keeps
-transport, pooled audio recovery and diagnostic video decryption. Pure sequence
-comparison, Opus defaults, RTSP version and encrypted-video packet sizing live
-with the wire types so this dependency runs only from app to engine. No wire
-values, algorithms, launch requests or diagnostics changed during extraction.
+transport, audio shard pooling and diagnostic video decryption. The audio
+recovery byte loop stays in the framework beside its GF(256) arithmetic. Pure
+sequence comparison, Opus defaults, RTSP version and encrypted-video packet
+sizing live with the wire types so this dependency runs only from app to engine.
+No wire values, algorithms, launch requests or diagnostics changed during
+extraction.
 
 `NativeBackend` runs the whole bring-up on a dedicated connect thread:
 

@@ -539,6 +539,7 @@
 		E26101210000000000000013 /* GlimmerEngine.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; };
 		E26101210000000000000014 /* GlimmerEngine.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; };
 		E26101210000000000000015 /* GlimmerEngine.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		E26101220000000000000002 /* AudioFecDecoder+Recovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26101220000000000000001 /* AudioFecDecoder+Recovery.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1132,6 +1133,7 @@
 		E2610121000000000000000F /* StreamCrypto+VideoPacketLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamCrypto+VideoPacketLayout.swift"; sourceTree = "<group>"; };
 		E26101210000000000000011 /* AudioFecDecoder+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/AudioFecDecoder+Recovery.swift"; sourceTree = "<group>"; };
 		E26101210000000000000001 /* GlimmerEngine.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = GlimmerEngine.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		E26101220000000000000001 /* AudioFecDecoder+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioFecDecoder+Recovery.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1775,6 +1777,7 @@
 				D1000017 /* EnetWire.swift */,
 				D100001F /* ReedSolomon.swift */,
 				D1000031 /* AudioFecDecoder.swift */,
+				E26101220000000000000001 /* AudioFecDecoder+Recovery.swift */,
 				D1000029 /* InputEncoder.swift */,
 				D1000011 /* SdpCodec.swift */,
 				D1000003 /* StreamProtocolConstants.swift */,
@@ -2465,6 +2468,7 @@
 				D1000018 /* EnetWire.swift in Sources */,
 				D1000020 /* ReedSolomon.swift in Sources */,
 				D1000032 /* AudioFecDecoder.swift in Sources */,
+				E26101220000000000000002 /* AudioFecDecoder+Recovery.swift in Sources */,
 				D1000030 /* InputEncoder.swift in Sources */,
 				D1000012 /* SdpCodec.swift in Sources */,
 				D1000004 /* StreamProtocolConstants.swift in Sources */,

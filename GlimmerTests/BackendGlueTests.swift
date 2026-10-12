@@ -9,7 +9,7 @@
 //  protocol's default async connect.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

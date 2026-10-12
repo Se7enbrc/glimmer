@@ -3,7 +3,7 @@
 
 // Mouse motion, buttons and scroll from StreamInputView to the backend.
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import AppKit
 import CoreGraphics
 import Testing

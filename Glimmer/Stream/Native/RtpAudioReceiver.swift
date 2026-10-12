@@ -48,7 +48,7 @@ import Darwin
 
 /// Receives post-FEC, decrypted Opus bytes and explicit loss concealment requests.
 /// AudioDecoder owns decode and HAL playout; the backend sink lacks an explicit concealment entry point.
-public protocol NativeAudioSink: AnyObject, Sendable {
+protocol NativeAudioSink: AnyObject, Sendable {
     /// Configure the opus decoder + audio engine. Returns 0 on success.
     /// `opus` is the negotiated multistream config; `audioConfig` is the
     /// GFE/Sunshine channel-layout code.
@@ -70,7 +70,7 @@ public protocol NativeAudioSink: AnyObject, Sendable {
     func noteArrivalGap(nanos: UInt64)
 }
 
-public extension NativeAudioSink {
+extension NativeAudioSink {
     func notePacketFlowResumed(afterGapMs: Double) {}
     func noteArrivalGap(nanos: UInt64) {}
 }

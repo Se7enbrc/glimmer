@@ -309,13 +309,14 @@ struct ReedSolomonTests {
         #expect(dec.decode(shards: &shards, marks: marks, blockSize: bs) == false)
     }
 
-    @Test func pooledAudioRecoveryMatchesParityForEveryRecoverableErasureMask() {
+    @Test(arguments: [0, 1, 17, 1_388, 1_400])
+    func pooledAudioRecoveryMatchesParityForEveryRecoverableErasureMask(blockSize: Int) {
         let decoder = AudioFecDecoder()
         for mask in 0..<64 {
-            let data = makeDataShards(ds: 4, bs: 1_388, seed: UInt8(mask + 1))
-            let parity = audioEncode(data: data, blockSize: 1_388)
+            let data = makeDataShards(ds: 4, bs: blockSize, seed: UInt8(mask + 1))
+            let parity = audioEncode(data: data, blockSize: blockSize)
             let block = RtpAudioQueue.FecBlock()
-            block.blockSize = 1_388
+            block.blockSize = blockSize
             var missingData = 0
             var presentParity = 0
             for index in 0..<6 {
@@ -330,11 +331,41 @@ struct ReedSolomonTests {
                     for byte in 0..<block.blockSize { block.parityShards[index - 4][byte] = parity[index - 4][byte] }
                 }
             }
+            let originalParity = block.parityShards
+            let originalMarks = block.marks
             let recovered = decoder.recover(block)
+            #expect(block.parityShards == originalParity)
+            #expect(block.marks == originalMarks)
+            for shard in block.dataShards {
+                #expect(shard.dropFirst(blockSize).allSatisfy { $0 == 0 })
+            }
             #expect(recovered == (missingData <= presentParity))
             if recovered {
                 for index in 0..<4 { #expect(Array(block.dataShards[index].prefix(block.blockSize)) == data[index]) }
             }
+        }
+    }
+
+    @Test func pooledAudioRecoveryRejectsInvalidBuffersWithoutMutation() {
+        let decoder = AudioFecDecoder()
+        let complete = [[UInt8]](repeating: [1, 2, 3], count: 4)
+        let parity = [[UInt8]](repeating: [4, 5, 6], count: 2)
+        let marks: [UInt8] = [1, 0, 0, 0, 0, 0]
+        let cases = [
+            (Array(complete.prefix(3)), parity, marks, 3),
+            (complete, Array(parity.prefix(1)), marks, 3),
+            (complete, parity, Array(marks.prefix(5)), 3),
+            (complete, parity, marks, -1),
+            (complete, parity, marks, 4),
+            (complete, [[4, 5], [4, 5, 6]], marks, 3)
+        ]
+        for (original, parity, marks, size) in cases {
+            var data = original
+            let recovered = data.withUnsafeMutableBufferPointer {
+                decoder.recover(data: $0, parity: parity, marks: marks, blockSize: size)
+            }
+            #expect(!recovered)
+            #expect(data == original)
         }
     }
 }

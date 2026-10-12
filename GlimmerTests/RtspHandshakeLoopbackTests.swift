@@ -8,7 +8,7 @@
 //  connection per message, replies delimited by close, and the ports, session and codec it settles.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import Foundation
 import Network
 import os

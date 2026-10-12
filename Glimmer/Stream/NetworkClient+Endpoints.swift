@@ -42,9 +42,9 @@ extension NetworkClient {
     //                              friction, the alternative is "the on-path
     //                              attacker rotates it for them".
 
-    public func fetchServerInfo(requiredUniqueId: String? = nil,
-                                timeout: TimeInterval = NetworkClient.controlTimeout,
-                                diagnosePinnedFailure: Bool = true) async throws -> ServerInfo {
+    func fetchServerInfo(requiredUniqueId: String? = nil,
+                         timeout: TimeInterval = NetworkClient.controlTimeout,
+                         diagnosePinnedFailure: Bool = true) async throws -> ServerInfo {
         try await ensureIdentityLoaded()
 
         var xml: XMLNode
@@ -59,7 +59,7 @@ extension NetworkClient {
                                            query: [:],
                                            extraQuery: nil,
                                            usePaired: true,
-                                           timeout: timeout)
+                                    timeout: timeout)
                 try Self.verifyStatus(xml)
                 fetchedOverPaired = true
             } catch let err as StreamError {
@@ -90,7 +90,7 @@ extension NetworkClient {
                                                          query: [:],
                                                          extraQuery: nil,
                                                          usePaired: false,
-                                                         timeout: 3),
+                                                  timeout: 3),
                        (try? Self.verifyStatus(probe)) != nil {
                         throw Self.classifyPairedPathFailure(detail, hostName: server.serverName)
                     }
@@ -110,7 +110,7 @@ extension NetworkClient {
                                        query: [:],
                                        extraQuery: nil,
                                        usePaired: false,
-                                       timeout: timeout)
+                                timeout: timeout)
             try Self.verifyStatus(xml)
         }
 
@@ -229,7 +229,7 @@ extension NetworkClient {
                                        query: [:],
                                        extraQuery: nil,
                                        usePaired: true,
-                                       timeout: Self.controlTimeout)
+                                timeout: Self.controlTimeout)
         try Self.verifyStatus(xml)
 
         // GFE returns <root><App>...</App><App>...</App></root>. Sunshine
@@ -261,11 +261,11 @@ extension NetworkClient {
 
     // MARK: - Endpoints: /launch and /resume
 
-    public func launch(appID: Int, config: StreamConfig) async throws -> LaunchResponse {
+    func launch(appID: Int, config: StreamConfig) async throws -> LaunchResponse {
         try await runLaunchLike(verb: "launch", appID: appID, config: config)
     }
 
-    public func resume(config: StreamConfig) async throws -> LaunchResponse {
+    func resume(config: StreamConfig) async throws -> LaunchResponse {
         // /resume doesn't take an appid - the host knows what game is paused.
         try await runLaunchLike(verb: "resume", appID: nil, config: config)
     }
@@ -316,7 +316,7 @@ extension NetworkClient {
                                        query: query,
                                        extraQuery: extraTail,
                                        usePaired: true,
-                                       timeout: timeout)
+                                timeout: timeout)
         try Self.verifyStatus(xml)
 
         // Dump the launch response so we can see what HDR-related fields the
@@ -398,7 +398,7 @@ extension NetworkClient {
                                        query: [:],
                                        extraQuery: nil,
                                        usePaired: true,
-                                       timeout: Self.controlTimeout)
+                                timeout: Self.controlTimeout)
         try Self.verifyStatus(xml)
     }
 }

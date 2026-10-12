@@ -31,7 +31,7 @@ extension StreamSession {
 
     /// Start a stream. Returns an AsyncStream of events the caller can consume
     /// to drive UI (connecting / streaming / reconnecting / disconnected).
-    public func start(
+    func start(
         server: ServerInfo,
         config: StreamConfig,
         appID: Int,

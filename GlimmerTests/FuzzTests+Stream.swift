@@ -9,7 +9,7 @@
 //  Same contract and fixed-seed SplitMix64 as FuzzTests.swift: never trap, bounded output.
 //
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

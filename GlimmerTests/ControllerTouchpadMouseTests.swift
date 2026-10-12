@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-@testable import GlimmerEngine
+import GlimmerEngine
 import AppKit
 import GameController
 import Testing
