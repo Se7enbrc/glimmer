@@ -348,6 +348,11 @@ Check
 [Pages runs](https://github.com/Se7enbrc/glimmer/actions/workflows/pages.yml)
 and confirm the public appcast contains the correct channel, URL and signature.
 
+Promotion is bound to `main`'s exact commit. If `main` moves after a promote
+dispatch, re-running its publication or tap job fails closed; dispatch a fresh
+promote on the new `main` instead. That works whenever the shipped paths are
+unchanged, and it reuses the same accepted candidate bytes.
+
 ### F. Publication GitHub App setup and PAT retirement
 
 Keep all release credentials as protected `release` **environment secrets**, not
