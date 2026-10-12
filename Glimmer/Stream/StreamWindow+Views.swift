@@ -10,6 +10,33 @@ import Carbon.HIToolbox
 final class KeyableWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+    weak var statsOverlayWindow: StatsOverlayWindow?
+
+    override var level: NSWindow.Level {
+        didSet { statsOverlayWindow?.synchronize() }
+    }
+
+    override var collectionBehavior: NSWindow.CollectionBehavior {
+        didSet { statsOverlayWindow?.synchronize() }
+    }
+
+    override var alphaValue: CGFloat {
+        didSet {
+            // Follow fade boundaries without updating a second window on every animation frame.
+            if (oldValue == 1) != (alphaValue == 1) { statsOverlayWindow?.synchronize() }
+        }
+    }
+
+    override func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
+        super.order(place, relativeTo: otherWin)
+        statsOverlayWindow?.refreshLayout()
+    }
+
+    override func orderOut(_ sender: Any?) {
+        super.orderOut(sender)
+        statsOverlayWindow?.synchronize()
+    }
+
     private var gameOverlayMonitor: Any?
     var fullScreenExitSource = "unobserved"
 
@@ -35,6 +62,7 @@ final class KeyableWindow: NSWindow {
     }
 
     override func close() {
+        statsOverlayWindow?.close()
         removeGameOverlayMonitor()
         super.close()
     }
