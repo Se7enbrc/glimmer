@@ -60,10 +60,54 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertLess(workflow.index("prepare-promotion"), workflow.index("Mint publication token"))
         for repository in ("glimmer", "homebrew-glimmer"):
             self.assertIn(f"repositories: {repository}\n", workflow)
-        self.assertEqual(workflow.count("permission-contents: write"), 2)
-        for forbidden in ("permission-workflows:", "permission-actions:", "skip-token-revoke:",
+        self.assertEqual(workflow.count("permission-contents: write"), 3)
+        self.assertEqual(workflow.count("permission-workflows: write"), 1)
+        for forbidden in ("permission-actions:", "skip-token-revoke:",
                           "SPARKLE_ED_PRIVATE_KEY", "DEVELOPER_ID_P12_BASE64"):
             self.assertNotIn(forbidden, workflow)
+        for job in self.jobs("release-publication.yml", ("publish", "tap")):
+            publication = job.split("- name: Select publication credentials", 1)[1]
+            self.assertNotIn("permission-workflows:", publication)
+            self.assertNotIn("GLIMMER_RC_APP", publication)
+
+    def test_final_tag_uses_candidate_app_identity_after_verification_before_publication(self):
+        job, = self.jobs("release-publication.yml", ("publish",))
+        checkout = job.index('git checkout --detach "$TOOLING_SHA"')
+        prepare = job.index("run: scripts/ci-release.sh prepare-promotion")
+        mint = job.index("- name: Mint a scoped release tag token")
+        tag = job.index("- name: Create final version tag at the verified candidate")
+        credentials = job.index("- name: Select publication credentials")
+        publish = job.index("- name: Publish candidate or promote accepted bytes")
+        self.assertLess(checkout, prepare)
+        self.assertLess(prepare, mint)
+        self.assertLess(mint, tag)
+        self.assertLess(tag, credentials)
+        self.assertLess(credentials, publish)
+        step = job[mint:credentials]
+        self.assertEqual(step.count("if: inputs.operation == 'promote'"), 2)
+        for required in ("secrets.GLIMMER_RC_APP_CLIENT_ID", "secrets.GLIMMER_RC_APP_PRIVATE_KEY",
+                         "owner: Se7enbrc\n", "repositories: glimmer\n", "permission-contents: write",
+                         "permission-workflows: write", "GH_TOKEN: ${{ steps.tag-app.outputs.token }}",
+                         "gh auth setup-git", 'git config user.name "${APP_SLUG}[bot]"',
+                         'git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"',
+                         'python3 scripts/promote-release.py tag "$RC_TAG" "$CANDIDATE_SHA"'):
+            self.assertIn(required, step)
+        self.assertNotIn("continue-on-error:", job)
+        self.assertNotIn("always()", job[:publish])
+        self.assertIn("CANDIDATE_SHA: ${{ inputs.candidate_sha }}", job)
+        self.assertIn("RC_TAG: ${{ inputs.rc_tag }}", job)
+        tap, = self.jobs("release-publication.yml", ("tap",))
+        self.assertNotIn("GLIMMER_RC_APP", tap)
+        self.assertNotIn("promote-release.py tag", tap)
+
+    def test_promotion_validates_with_a_token_before_publishing_credentials(self):
+        job, = self.jobs("release-publication.yml", ("publish",))
+        step = job.split("- name: Publish candidate or promote accepted bytes", 1)[1].split("- name:", 1)[0]
+        self.assertIn("GH_TOKEN: ${{ github.token }}", step)
+        self.assertIn("RELEASE_CONTENTS_TOKEN:", step)
+        self.assertIn("steps.publication-token.outputs.token", step)
+        self.assertNotIn("steps.tag-app.outputs.token", step)
+        self.assertIn("promote) scripts/ci-release.sh promote ;;", step)
 
     def test_hosted_signing_targets_cannot_reach_compilation_or_launch_probes(self):
         makefile = (Path(__file__).resolve().parents[1] / "release-bundle.mk").read_text()
@@ -131,7 +175,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
                              "${{ steps.credentials.outputs.mode == 'pat' && secrets.RELEASE_CONTENTS_TOKEN || "
                              f"steps.{token}.outputs.token " + "}}")
             self.assertLess(job.index("Select publication credentials"),
-                            job.index("uses: actions/create-github-app-token"))
+                            job.index(f"id: {token}\n"))
             shell = self.shell(job, "Select publication credentials")
             for client, key, mode in (("fixture-client", "fixture-key", "app"), ("", "", "pat"),
                                       ("fixture-client", "", None), ("", "fixture-key", None)):
