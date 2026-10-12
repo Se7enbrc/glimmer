@@ -276,13 +276,9 @@ final class FramePacer: @unchecked Sendable {
     @MainActor var displayLink: CADisplayLink?
     /// The view we bound the link to, kept so a screen change can rebind.
     @MainActor weak var boundView: NSView?
-    /// Signature of the screen the link was last bound to (display ID |
-    /// panel max | backing scale), seeded by `installLink`. `screenDidChange`
-    /// rebinds ONLY when this changes: macOS posts screen-parameter
-    /// notifications ~1/s on a ProMotion panel (VRR housekeeping), and the
-    /// unconditional rebind reset the cadence base 785 times in a ~12-minute
-    /// run - a standing micro-judder source invisible until the (re)bind
-    /// breadcrumbs landed. A no-op notification must stay a no-op.
+    /// Identity, refresh capabilities and backing scale distinguish a real move from housekeeping.
+    /// Unconditional ProMotion rebinds once reset cadence 785 times in a 12-minute run.
+    /// An unchanged notification must remain a no-op, including while realized refresh varies.
     @MainActor var boundScreenSignature: String?
 
     /// The `@objc` tick target. CADisplayLink retains its target; we keep the

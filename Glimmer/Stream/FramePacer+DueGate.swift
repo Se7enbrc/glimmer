@@ -228,7 +228,10 @@ extension FramePacer {
         } else if growing {
             due = sinceLast >= interval
         } else {
-            due = sinceLast + remainder >= interval - slack
+            // Subtracting uptime timestamps loses a few bits at an exact half-refresh boundary.
+            // Account only for that rounding so a fixed grid does not alternate early/late repeats.
+            let rounding = max(abs(targetTimestamp).ulp, interval.ulp) * 4
+            due = sinceLast + remainder >= interval - slack - rounding
         }
         guard due else {
             return DueGateResult(toPresent: nil,

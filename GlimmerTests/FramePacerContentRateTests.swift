@@ -24,10 +24,10 @@ struct FramePacerContentRateTests {
         let range = variableRange(fps)
         #expect(range.minimum == 180)
         #expect(range.maximum == 240)
-        #expect(range.preferred == Float(min(max(fps.rounded(), 180), 240)))
+        #expect(range.preferred == Float(min(max(fps, 180), 240)))
     }
 
-    @Test(arguments: [(240.0, 180.0), (144, 120), (120, 120), (60, 60)])
+    @Test(arguments: [(240.0, 180.0), (144, 108), (120, 90), (60, 45)])
     func variableFloorStaysWithinPanelLimits(panel: Double, floor: Double) {
         for fps in [30.0, 59, 120, 150, 190, 240, 480] {
             let range = FramePacer.preferredRange(
@@ -206,7 +206,7 @@ struct FramePacerContentRateTests {
         #expect(samePanel.preferred == 190)
         let slowerPanel = hint.rangeForRebind(
             configuredInterval: 1 / 240, panelMaxHz: 144, variableMinimumHz: 48)
-        #expect(slowerPanel.minimum == 120)
+        #expect(slowerPanel.minimum == 108)
         #expect(slowerPanel.preferred == 144)
         let fixed = hint.rangeForRebind(configuredInterval: 1 / 240, panelMaxHz: 240, variableMinimumHz: nil)
         #expect(fixed.minimum == 240)

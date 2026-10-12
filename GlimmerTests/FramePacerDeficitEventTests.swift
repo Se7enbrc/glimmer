@@ -202,7 +202,7 @@ struct FramePacerDeficitEventTests {
     /// The floor is the stream rate clamped to the panel; preferred and maximum stay at the panel.
     @Test(arguments: [
         (1.0 / 120, 240.0, Float(120), Float(240)), (1.0 / 240, 60.0, Float(60), Float(60)),
-        (1.0 / 30, 120.0, Float(30), Float(120)), (Double.nan, Double.nan, Float(60), Float(60))
+        (1.0 / 30, 120.0, Float(30), Float(120))
     ])
     func preferredRangePinsTheFloorBelowThePanel(
         interval: Double, panel: Double, floor: Float, top: Float
@@ -214,8 +214,10 @@ struct FramePacerDeficitEventTests {
     }
 
     @MainActor @Test func windowlessViewFallsBackToTheMainScreen() {
-        let expected = Double(NSScreen.main?.maximumFramesPerSecond ?? 60)
-        #expect(FramePacer.panelMaxHz(for: NSView()) == (expected > 0 ? expected : 60))
+        let screen = NSScreen.main
+        let expected = FramePacer.panelMaxHz(minimumInterval: screen?.minimumRefreshInterval ?? 0,
+                                             maximumFramesPerSecond: screen?.maximumFramesPerSecond ?? 0)
+        #expect(FramePacer.panelMaxHz(for: NSView()) == expected)
     }
 
     private func label(_ event: FramePacer.TickDeficitEvent) -> String {

@@ -227,6 +227,13 @@ extension FramePacer {
         // Logs the disengage + reconciles the off-tick timer OFF the lock -
         // the same discipline as every other caller of the service pass.
         handleTickDeficitEvents(events)
+        if wasSuppressed != suppressed {
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { releasePreferredRangeIfSuppressed() }
+            } else {
+                DispatchQueue.main.async { [weak self] in self?.releasePreferredRangeIfSuppressed() }
+            }
+        }
     }
 }
 

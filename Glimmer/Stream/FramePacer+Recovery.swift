@@ -135,10 +135,8 @@ extension FramePacer {
         // Only a callback hint changes; display modes and the user's refresh setting stay untouched.
         let panelMax = Self.panelMaxHz(for: view)
         let panelMinimum = Self.variableMinimumHz(for: view)
-        let range = rateHint.rangeForRebind(configuredInterval: configuredFrameIntervalSeconds,
-                                            panelMaxHz: panelMax, variableMinimumHz: panelMinimum)
-        rateHint = RateHint()
-        applyPreferredRange(range, to: link, variable: panelMinimum != nil)
+        configurePreferredRange(link: link, panelMax: panelMax, panelMinimum: panelMinimum)
+        let range = link.preferredFrameRateRange
         // Add the link to the PRIVATE tick run loop (default) so the present
         // callback isn't starved when the main thread is busy - the governor
         // callback-gap that trimmed ~73% of clean-link frame drops. `.main` is
@@ -172,8 +170,7 @@ extension FramePacer {
         // the session log with the exact range applied, so a collapse onset can
         // finally be correlated with a (re)bind/re-pin.
         Diag.info(
-            // `preferred` is optional in the Swift interface; we always set it,
-            // so the 0 fallback can't appear in practice.
+            // A zero range means presentation is suppressed and macOS owns the rate.
             "FramePacer link installed - floor=\(Double(range.minimum))Hz "
             + "preferred=\(Double(range.preferred ?? 0))Hz max=\(Double(range.maximum))Hz "
             + "(panelMax=\(panelMax)Hz)",
@@ -193,15 +190,9 @@ extension FramePacer {
             return running
         }()
         guard isRunning, let view = boundView else { return }
-        // MATERIAL-CHANGE GATE: macOS posts screen-parameter notifications
-        // ~1/s on a ProMotion panel (VRR housekeeping) with nothing actually
-        // changed - 785 unconditional rebinds in a ~12-minute wifi run,
-        // each one resetting the cadence base the due-gate paces against (a
-        // standing micro-judder source, invisible until the (re)bind
-        // breadcrumbs landed). Rebind only when the screen identity, panel
-        // max, or backing scale genuinely moved; the watchdog rebuild path
-        // (`rebuildDisplayLink`) stays unconditional for silent same-screen
-        // mode switches that change none of the three.
+        // ProMotion housekeeping once caused 785 rebinds in 12 minutes, resetting cadence each time.
+        // Rebind only for identity, scale or capability changes; a fixed/variable switch is material.
+        // The watchdog still rebuilds unconditionally when an unchanged link silently stops.
         let signature = Self.screenSignature(for: view)
         guard signature != boundScreenSignature else { return }
         log.info("FramePacer rebinding display link after screen change")
@@ -211,14 +202,17 @@ extension FramePacer {
         installLink(on: view)
     }
 
-    /// Display ID | panel max | backing scale of `view`'s screen, the changes that make a rebind
-    /// material (other screen-parameter notices are VRR/HDR housekeeping the link follows).
-    /// "none" for a missing window, screen or display ID never matches, so that case rebinds.
+    /// Capabilities, not realized callback rates, distinguish mode changes from VRR housekeeping.
     @MainActor
     static func screenSignature(for view: NSView) -> String {
         guard let screen = view.window?.screen else { return "none" }
         let displayID = screen.cgDirectDisplayID.map { String($0) } ?? "none"
-        return "\(displayID)|\(screen.maximumFramesPerSecond)|\(screen.backingScaleFactor)"
+        return screenSignature(displayID: displayID, maximumHz: panelMaxHz(for: view),
+                               minimumHz: variableMinimumHz(for: view), scale: screen.backingScaleFactor)
+    }
+
+    static func screenSignature(displayID: String, maximumHz: Double, minimumHz: Double?, scale: Double) -> String {
+        "\(displayID)|\(maximumHz)|\(minimumHz.map { String($0) } ?? "fixed")|\(scale)"
     }
 
     /// Force-rebuild the CADisplayLink - the present-path watchdog's recovery

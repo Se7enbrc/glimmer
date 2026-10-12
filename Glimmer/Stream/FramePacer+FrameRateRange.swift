@@ -55,14 +55,21 @@ extension FramePacer {
         var fallbackUntil = -Double.infinity
         private var movedSince: Double?
         private var candidateHz = Double.nan
+        private(set) var awaitingRestore = false
 
         init(appliedAt: Double = -.infinity, preferredHz: Double = .nan) {
             self.appliedAt = appliedAt
             self.preferredHz = preferredHz
         }
 
+        mutating func releaseRequest() {
+            self = RateHint(appliedAt: appliedAt, preferredHz: preferredHz)
+            awaitingRestore = true
+        }
+
         func rangeForRebind(configuredInterval: Double, panelMaxHz: Double,
                             variableMinimumHz: Double?) -> CAFrameRateRange {
+            guard !awaitingRestore else { return .default }
             // Rebinding after a gap must not adopt a transiently low content estimate.
             let heldInterval = preferredHz.isFinite ? 1 / preferredHz : configuredInterval
             return FramePacer.preferredRange(
@@ -88,25 +95,26 @@ extension FramePacer {
 
         mutating func needsUpdate(to range: CAFrameRateRange, current: CAFrameRateRange,
                                   now: Double, contentSince: Double? = -.infinity) -> Bool {
-            if range.maximum != current.maximum
-                || (range.minimum != current.minimum && range.preferred == current.preferred) {
+            if !awaitingRestore && (range.maximum != current.maximum
+                || (range.minimum != current.minimum && range.preferred == current.preferred)) {
                 movedSince = nil
                 return true
             }
             let preferred = Double(range.preferred ?? 0)
-            guard let contentSince, now.isFinite, preferredHz.isFinite,
-                  abs(preferred - preferredHz) > preferredHz * 0.1 else {
+            guard let contentSince, now.isFinite,
+                  awaitingRestore || (preferredHz.isFinite && abs(preferred - preferredHz) > preferredHz * 0.1) else {
                 movedSince = nil
                 return false
             }
-            // A different destination restarts the dwell; ordinary whole-Hz jitter does not.
+            // A different destination restarts the dwell; ordinary cadence jitter does not.
             if movedSince == nil || abs(preferred - candidateHz) > candidateHz * 0.1
-                || (preferred - preferredHz) * (candidateHz - preferredHz) <= 0 {
+                || (!awaitingRestore && (preferred - preferredHz) * (candidateHz - preferredHz) <= 0) {
                 movedSince = now
                 candidateHz = preferred
             }
             guard let movedSince, now - max(movedSince, contentSince) >= 2 else { return false }
             self.movedSince = nil
+            awaitingRestore = false
             return true
         }
     }
@@ -117,7 +125,12 @@ extension FramePacer {
         replayLinkInstalledBreadcrumbIfNeeded(link: link, view: view)
         let panelMax = Self.panelMaxHz(for: view)
         let panelMinimum = Self.variableMinimumHz(for: view)
-        let now = CACurrentMediaTime()
+        updatePreferredRange(link: link, panelMax: panelMax, panelMinimum: panelMinimum)
+    }
+
+    @MainActor
+    func updatePreferredRange(link: CADisplayLink, panelMax: Double, panelMinimum: Double?,
+                              now: Double = CACurrentMediaTime()) {
         lock.lock()
         let interval = presentationIntervalLocked()
         let measuredHz = tickDeficit.measuredTicksPerSecond
@@ -125,7 +138,7 @@ extension FramePacer {
         let contentSince = suppressed ? nil : rateHintSamples.eligibleSince(now: now, interval: interval)
         lock.unlock()
         guard !suppressed else {
-            rateHint = RateHint(appliedAt: rateHint.appliedAt, preferredHz: rateHint.preferredHz)
+            releasePreferredRange(to: link)
             return
         }
         let followsContent = panelMinimum != nil
@@ -135,8 +148,9 @@ extension FramePacer {
             forStreamIntervalSeconds: followsContent ? interval : fallbackInterval,
             panelMaxHz: panelMax, variableMinimumHz: followsContent ? panelMinimum : nil)
         if rateHint.needsUpdate(to: range, current: link.preferredFrameRateRange,
-                                now: now, contentSince: panelMinimum == nil ? -.infinity : contentSince) {
-            applyPreferredRange(range, to: link, variable: followsContent)
+                                now: now, contentSince: panelMinimum == nil && !rateHint.awaitingRestore
+                                    ? -.infinity : contentSince) {
+            applyPreferredRange(range, to: link, variable: followsContent, now: now)
         }
         lock.lock()
         let variable = variableRefreshEnabled
@@ -152,14 +166,57 @@ extension FramePacer {
 
     /// Only a callback hint is written. Display modes and the user's refresh setting remain owned by macOS.
     @MainActor
-    func applyPreferredRange(_ range: CAFrameRateRange, to link: CADisplayLink, variable: Bool) {
+    func applyPreferredRange(_ range: CAFrameRateRange, to link: CADisplayLink, variable: Bool,
+                             now: Double = CACurrentMediaTime()) {
         link.preferredFrameRateRange = range
-        rateHint.appliedAt = CACurrentMediaTime()
+        rateHint.appliedAt = now
         rateHint.preferredHz = Double(range.preferred ?? 0)
         lock.lock()
         tickDeficit.pinnedFloorHz = Double(range.minimum)
         variableRefreshEnabled = variable
         lock.unlock()
+    }
+
+    /// Clear the request on the suppression edge, even if the hidden link stops ticking.
+    @MainActor
+    func releasePreferredRangeIfSuppressed() {
+        lock.lock()
+        let suppressed = presentSuppressed
+        lock.unlock()
+        guard suppressed, let link = displayLink else { return }
+        releasePreferredRange(to: link)
+    }
+
+    @MainActor
+    private func releasePreferredRange(to link: CADisplayLink) {
+        let changed = !rateHint.awaitingRestore
+        rateHint.releaseRequest()
+        link.preferredFrameRateRange = .default
+        lock.lock()
+        tickDeficit.pinnedFloorHz = 0
+        variableRefreshEnabled = false
+        lock.unlock()
+        if changed { Diag.info("FramePacer rate hint released - presentation suppressed", "Stream.Pacer") }
+    }
+
+    @MainActor
+    func configurePreferredRange(link: CADisplayLink, panelMax: Double, panelMinimum: Double?) {
+        lock.lock()
+        let suppressed = presentSuppressed
+        lock.unlock()
+        if suppressed {
+            releasePreferredRange(to: link)
+            return
+        }
+        let range = rateHint.rangeForRebind(configuredInterval: configuredFrameIntervalSeconds,
+                                            panelMaxHz: panelMax, variableMinimumHz: panelMinimum)
+        // A hidden rebind or a move during resume must not bypass the fresh-content dwell.
+        if rateHint.awaitingRestore {
+            link.preferredFrameRateRange = .default
+        } else {
+            rateHint = RateHint()
+            applyPreferredRange(range, to: link, variable: panelMinimum != nil)
+        }
     }
 
     /// Install precedes the session file sink. Replay once per sink so the initial range is greppable.
@@ -180,9 +237,16 @@ extension FramePacer {
 
     @MainActor
     static func panelMaxHz(for view: NSView) -> Double {
-        let maxFps = view.window?.screen?.maximumFramesPerSecond
-            ?? NSScreen.main?.maximumFramesPerSecond ?? 60
-        return maxFps > 0 ? Double(maxFps) : 60.0
+        let screen = view.window?.screen ?? NSScreen.main
+        return panelMaxHz(minimumInterval: screen?.minimumRefreshInterval ?? 0,
+                          maximumFramesPerSecond: screen?.maximumFramesPerSecond ?? 0)
+    }
+
+    static func panelMaxHz(minimumInterval: Double, maximumFramesPerSecond: Int) -> Double {
+        if minimumInterval.isFinite, minimumInterval > 0, (1 / minimumInterval).isFinite {
+            return 1 / minimumInterval
+        }
+        return Double(max(0, maximumFramesPerSecond))
     }
 
     @MainActor
@@ -207,15 +271,15 @@ extension FramePacer {
         forStreamIntervalSeconds intervalSeconds: Double, panelMaxHz: Double,
         variableMinimumHz: Double? = nil
     ) -> CAFrameRateRange {
-        let panel = panelMaxHz.isFinite && panelMaxHz > 0 ? panelMaxHz : 60.0
-        let stream = 1 / clampFrameInterval(intervalSeconds)
+        guard panelMaxHz.isFinite, panelMaxHz > 0 else { return .default }
+        let panel = panelMaxHz
+        let stream = intervalSeconds.isFinite && intervalSeconds > 0 ? 1 / intervalSeconds : panel
         if let minimum = variableMinimumHz, minimum.isFinite, minimum > 0, minimum < panel {
             // Deep VRR excursions change panel brightness, especially on fast G-Sync-compatible displays.
-            // Stay in the top quarter of the range, with a 120 Hz floor where the panel supports it.
-            // Clamp to the panel maximum so slower displays still receive a valid hint.
-            let floor = min(panel, max(minimum, 120, panel * 0.75))
+            // Stay in the top quarter, clamped to this panel's reported range.
+            let floor = min(panel, max(minimum, panel * 0.75))
             return CAFrameRateRange(minimum: Float(floor), maximum: Float(panel),
-                                    preferred: Float(min(max(stream.rounded(), floor.rounded(.up)), panel)))
+                                    preferred: Float(min(max(stream, floor), panel)))
         }
         return CAFrameRateRange(minimum: Float(min(stream, panel)), maximum: Float(panel), preferred: Float(panel))
     }

@@ -7,7 +7,8 @@
 - Smoother motion when the PC can't hold your display's refresh rate. On a
   variable-refresh display, refresh changes settle before taking effect and stay
   in a high range to reduce brightness flicker. On a fixed display, repeated
-  frames are spaced evenly.
+  frames are spaced evenly. When you switch away, Glimmer leaves the display's
+  refresh rate to macOS.
 
 - Quieter, more consistent transitions across the launcher, stream and settings,
   including Reduce Motion.
