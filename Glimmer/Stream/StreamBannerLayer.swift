@@ -68,6 +68,8 @@ public final class StreamBannerLayer {
         bg.addSublayer(dot)
 
         let text = CATextLayer()
+        // Wording has its own transition; an implicit contents fade can outlive a hidden pill.
+        text.actions = StatsOverlayLayer.disabledActions
         text.contentsScale = bg.contentsScale
         text.isWrapped = false
         text.truncationMode = .end
@@ -128,7 +130,11 @@ public final class StreamBannerLayer {
             // un-hide a shown pill - and a real hide always lands.
             CATransaction.setCompletionBlock { [weak self] in
                 guard let self, !self.visible, self.showGeneration == generation else { return }
+                // Finish the fade without leaving an implicit order-out transition on the hidden pill.
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
                 self.layer.isHidden = true
+                CATransaction.commit()
             }
             layer.opacity = 0
         }

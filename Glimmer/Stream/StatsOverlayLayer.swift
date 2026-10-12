@@ -289,7 +289,11 @@ public final class StatsOverlayLayer {
 
     func finishHide(generation: Int) {
         guard visibilityGeneration == generation else { return }
+        // The opacity fade already finished; an implicit order-out transition would retain its snapshot.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         layer.isHidden = true
+        CATransaction.commit()
     }
 
     /// Row height plus the value and trace bands inside it. Core rows carry the large

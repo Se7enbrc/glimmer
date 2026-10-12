@@ -17,6 +17,50 @@ import SwiftUI
 @MainActor
 struct StreamWindowSlideTests {
 
+    @Test func steadyPresentationHasNoCompositionEffectsAfterTransitions() async throws {
+        let stream = StreamWindow()
+        defer { stream.resetCoverSlide() }
+        stream.statsOverlay.setVisible(true)
+        stream.leaveHintBanner.announce = { _ in }
+        stream.leaveHintBanner.setText("Stream started")
+        stream.leaveHintBanner.setVisible(true)
+        stream.slideCover(entering: true) {}
+        CATransaction.flush()
+        try await Task.sleep(for: .seconds(1))
+        stream.leaveHintBanner.setText("Pointer captured")
+        stream.statsOverlay.setVisible(false)
+        stream.leaveHintBanner.setVisible(false)
+        CATransaction.flush()
+        try await Task.sleep(for: .seconds(1))
+        let layer = stream.displayLayer
+        #expect(stream.displayView.layer === layer)
+        #expect(stream.window.isOpaque)
+        #expect(stream.window.alphaValue == 1)
+        #expect(layer.isOpaque)
+        #expect(layer.opacity == 1)
+        #expect(CATransform3DIsIdentity(layer.transform))
+        #expect(layer.animationKeys()?.isEmpty ?? true)
+        #expect(layer.mask == nil)
+        #expect(!layer.masksToBounds)
+        #expect(layer.cornerRadius == 0)
+        #expect(layer.shadowOpacity == 0)
+        #expect(layer.filters?.isEmpty ?? true)
+        #expect(layer.backgroundFilters?.isEmpty ?? true)
+        #expect(layer.compositingFilter == nil)
+        #expect(!layer.shouldRasterize)
+        let overlays = [stream.statsOverlay.layer, stream.reconnectBanner.layer, stream.networkBanner.layer,
+                        stream.leaveHintBanner.layer, stream.captureHintBanner.layer]
+        for (index, overlay) in overlays.enumerated() {
+            #expect(overlay.isHidden, "Overlay \(index), opacity \(overlay.opacity)")
+            expectNoAnimations(in: overlay)
+        }
+    }
+
+    private func expectNoAnimations(in layer: CALayer) {
+        #expect(layer.animationKeys()?.isEmpty ?? true, "\(type(of: layer)): \(layer.animationKeys() ?? [])")
+        for child in layer.sublayers ?? [] { expectNoAnimations(in: child) }
+    }
+
     @Test(arguments: [CoverSlideEvent.firstFrame, .away, .back, .close])
     func onlyTheBorderlessCoverSlides(event: CoverSlideEvent) {
         let still: CoverTransition = event == .firstFrame ? .fade : .snap
