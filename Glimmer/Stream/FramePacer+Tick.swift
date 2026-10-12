@@ -197,7 +197,7 @@ extension FramePacer {
         }
 
         // Re-apply checks touch the link and NSView, so hop to main, at most
-        // ~10 Hz: the floor re-pin it gates is ~0.5/s. The `.main` fallback can hop too.
+        // ~10 Hz. A preferred-rate change still requires a sustained two-second move.
         let sinceReapply = hostNow - Self.lastReapplyHopHostTime
         if !Self.lastReapplyHopHostTime.isFinite || sinceReapply >= Self.reapplyHopMinInterval {
             Self.lastReapplyHopHostTime = hostNow

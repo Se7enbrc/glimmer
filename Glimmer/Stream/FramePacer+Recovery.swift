@@ -135,12 +135,8 @@ extension FramePacer {
         // Only a callback hint changes; display modes and the user's refresh setting stay untouched.
         let panelMax = Self.panelMaxHz(for: view)
         let panelMinimum = Self.variableMinimumHz(for: view)
-        lock.lock()
-        let interval = presentationIntervalLocked()
-        lock.unlock()
-        let range = Self.preferredRange(
-            forStreamIntervalSeconds: panelMinimum != nil ? interval : configuredFrameIntervalSeconds,
-            panelMaxHz: panelMax, variableMinimumHz: panelMinimum)
+        let range = rateHint.rangeForRebind(configuredInterval: configuredFrameIntervalSeconds,
+                                            panelMaxHz: panelMax, variableMinimumHz: panelMinimum)
         rateHint = RateHint()
         applyPreferredRange(range, to: link, variable: panelMinimum != nil)
         // Add the link to the PRIVATE tick run loop (default) so the present
@@ -424,6 +420,7 @@ extension FramePacer {
             lock.unlock()
             return 0
         }
+        rateHintSamples = RateHintSamples()
         let discarded = queue.count
         queue.removeAll(keepingCapacity: true)
         resetCadenceBaseLocked()

@@ -178,6 +178,8 @@ final class FramePacer: @unchecked Sendable {
     var contentFrameIntervalSeconds: Double = .nan
     /// Guarded by `lock`; variable scanouts cannot be predicted from the previous tick's grid.
     var variableRefreshEnabled = false
+    /// Guarded by `lock`; stale or interrupted decode delivery cannot lower the refresh hint.
+    var rateHintSamples = RateHintSamples()
 
     /// Adaptive target-depth + reconciler-snapshot state (guarded by `lock`).
     /// The `AdaptiveDepthState` type - and the THREAD ISOLATION contract behind

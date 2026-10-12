@@ -648,12 +648,29 @@ measured column is from wired 4K240 AV1 sessions on a 240 Hz panel (2026-09-28,
 
 Variable refresh: `FramePacer+FrameRateRange.swift` reads the screen's minimum
 and maximum refresh intervals and current update granularity. A variable mode
-gets the supported minimum, panel maximum and a preferred rate from measured
-content. Only `CADisplayLink.preferredFrameRateRange` is written; Glimmer never
-selects a display mode or changes the user's refresh setting. Hints have a 2 Hz
-deadband and a half-second dwell. A sustained callback rate below 90% of
-content/preferred rate restores the full callback grid for five seconds before
-retrying. Fixed modes keep the full grid to avoid divisor throttling.
+gets a floor of
+`min(panel max, max(supported minimum, 120 Hz, 0.75 × panel max))`, the panel
+maximum and a preferred rate from measured content, rounded to whole Hz. That
+means floors of 180/120/120/60 Hz on 240/144/120/60 Hz panels. The preferred
+rate changes only after a move greater than 10% persists for at least two
+seconds. A materially different destination restarts that dwell. Decode gaps,
+bursts, PTS resets and hide/show restart observation; missing frames do not
+count as sustained slower content. A link rebuild preserves the held target
+within the new panel's limits.
+
+Only `CADisplayLink.preferredFrameRateRange` is written; Glimmer never selects a
+display mode or changes the user's refresh setting. A sustained callback rate
+below 90% of content/preferred rate requests the full callback grid for five
+seconds before retrying, through the same dwell. This fallback pins the floor at
+the panel maximum. Fixed modes keep the full grid to avoid divisor throttling.
+
+The owner's 2026.10.8-rc.4 Adaptive session (`2026-10-12T19:32:07Z`) reported
+brightness flicker on a G-Sync-compatible 240 Hz panel: 1,229 rate-hint rows,
+710 between 199 and 203 Hz, with a minimum preferred rate of 58.75 Hz and a 48
+Hz floor. The new hysteresis and high floor target those repeated refresh
+excursions. The regression trace has zero retargets per minute at a steady
+199–203 Hz, and one retarget after a sustained 240→190 Hz change has dwelled for
+two seconds. These are deterministic test results, not new panel measurements.
 
 Presentation follows a bounded mean of the last 64 PTS intervals rather than
 assuming every configured capture slot contains a frame. Each gap contributes at
@@ -681,11 +698,17 @@ After-change live validation is still required on the same AV1 Main10 HDR 4K,
 361 Mbps scene, first with the owner's Adaptive setting, then a user-selected
 fixed setting. Compare equal active spans (use decoded/rendered activity, not
 the old `ticks > 230` filter). Expect `refresh_avg_hz` and `pacer_ticks_per_s`
-to approach content rate under Adaptive, with fewer
-`present_stale_repeats_per_s`; `fps_rendered` and `pacer_releases_per_s` must
-continue tracking decoded content. The log's `FramePacer rate hint` records the
-requested range and fallback. macOS may quantize or ignore it; those fields
-measure callbacks, so confirm the actual panel behavior by eye as well.
+to stay near the held content target under Adaptive, bounded by the 180 Hz floor
+on the 240 Hz panel, with fewer `present_stale_repeats_per_s`; `fps_rendered`
+and `pacer_releases_per_s` must continue tracking decoded content. The log's
+`FramePacer rate hint` records the applied changes and fallback. Expect zero
+retargets per minute after settling in a steady scene, and one per sustained
+change greater than 10%, after at least two seconds. Stalls and hide/resume must
+not lower the target; floor/preferred must never fall below 180 Hz on this
+panel. Compare `gpu_power_w` and `package_power_w` over equal active spans.
+macOS may quantize or ignore hints; callback fields do not prove physical
+scanout, so confirm brightness stability and motion by eye as well. No
+after-change live capture has been made yet.
 
 On a fixed screen, repeats remain necessary. Inspect per-frame present spacing
 and moving edges for evenly distributed one/two-refresh holds. Check

@@ -26,6 +26,7 @@ extension FramePacer {
             lock.unlock()
             return
         }
+        rateHintSamples.observe(pts: ptsSeconds, now: CACurrentMediaTime(), interval: presentationIntervalLocked())
         let entry = makeEntryLocked(sampleBuffer, ptsSeconds: ptsSeconds)
 
         // Present directly until the rebuilt display link proves a healthy tick rate.
@@ -208,6 +209,7 @@ extension FramePacer {
         let wasSuppressed = presentSuppressed
         presentSuppressed = suppressed
         if wasSuppressed != suppressed {
+            rateHintSamples = RateHintSamples()
             let now = CFAbsoluteTimeGetCurrent()
             events = clearForSuppressionLocked(now: now)
             if !suppressed {

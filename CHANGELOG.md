@@ -5,8 +5,9 @@
 ### Features
 
 - Smoother motion when the PC can't hold your display's refresh rate. On a
-  variable-refresh display, the display follows the stream's real frame rate; on
-  a fixed one, repeated frames are spaced evenly.
+  variable-refresh display, refresh changes settle before taking effect and stay
+  in a high range to reduce brightness flicker. On a fixed display, repeated
+  frames are spaced evenly.
 
 - Quieter, more consistent transitions across the launcher, stream and settings,
   including Reduce Motion.
