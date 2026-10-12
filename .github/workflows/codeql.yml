@@ -65,7 +65,8 @@ jobs:
             if paths="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
                 --jq '.[] | .filename, (.previous_filename // empty)')" &&
                 [ "$(printf '%s\n' "$paths" | wc -l)" -lt 3000 ] &&
-                ! printf '%s\n' "$paths" | python3 scripts/codeql-swift-changed.py; then
+                decision="$(printf '%s\n' "$paths" | python3 scripts/codeql-swift-changed.py)" &&
+                [ "$decision" = skip ]; then
               scan=false
               echo "No Swift-relevant change; main scans this code when the pull request merges."
             fi
