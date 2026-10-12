@@ -53,20 +53,23 @@ struct RendererPerformanceSnapshot: Sendable {
 /// request is thread-safe; the retained identity prevents reuse during a request.
 struct RendererPerformanceSource: @unchecked Sendable {
     let identity: AnyObject
+    let presentation: RendererPresentationState
     let load: (@escaping @Sendable (RendererPerformanceValues?) -> Void) -> Void
     let reportTransition: @Sendable (RendererPathTransition) -> Void
 
-    init(identity: AnyObject,
+    init(identity: AnyObject, presentation: RendererPresentationState = .init(),
          reportTransition: @escaping @Sendable (RendererPathTransition) -> Void = { _ in },
          load: @escaping (@escaping @Sendable (RendererPerformanceValues?) -> Void) -> Void) {
         self.identity = identity
+        self.presentation = presentation
         self.load = load
         self.reportTransition = reportTransition
     }
 
-    init(_ renderer: AVSampleBufferVideoRenderer,
+    init(_ renderer: AVSampleBufferVideoRenderer, presentation: RendererPresentationState = .init(),
          reportTransition: @escaping @Sendable (RendererPathTransition) -> Void = { _ in }) {
         identity = renderer
+        self.presentation = presentation
         self.reportTransition = reportTransition
         load = { completion in
             renderer.loadVideoPerformanceMetrics { metrics in
@@ -144,14 +147,17 @@ final class RendererTelemetry: @unchecked Sendable {
 
     private func observe(_ source: RendererPerformanceSource?) {
         let identity = source.map { ObjectIdentifier($0.identity) }
-        guard identity != current.map({ ObjectIdentifier($0.identity) }) else { return }
-        let resets = latest.resets + (current == nil ? 0 : 1)
+        let replaced = identity != current.map { ObjectIdentifier($0.identity) }
+        let presentationChanged = current != nil && source?.presentation != current?.presentation
+        guard replaced || presentationChanged else { return }
+        let resumes = presentationChanged && source?.presentation.suppressed == false
+        let resets = latest.resets + (replaced && current != nil ? 1 : 0)
         generation &+= 1
         current = source
         baseline = nil
         completedAt = nil
         latest = RendererPerformanceSnapshot(resets: resets)
-        pathTracker.rebaseline()
+        pathTracker.rebaseline(reportResume: resumes)
     }
 
     private func complete(token: UInt64, values: RendererPerformanceValues?, now: CFTimeInterval) {
@@ -181,7 +187,8 @@ final class RendererTelemetry: @unchecked Sendable {
         baseline = (values, now)
         completedAt = now
         latest = result
-        if let delta = result.delta, let transition = pathTracker.observe(delta, now: now) {
+        if current?.presentation.suppressed == false,
+           let delta = result.delta, let transition = pathTracker.observe(delta, now: now) {
             current?.reportTransition(transition)
         }
     }

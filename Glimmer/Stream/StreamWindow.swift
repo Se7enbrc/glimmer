@@ -212,6 +212,9 @@ public final class StreamWindow {
 
     /// Bumped by every cover slide and reset; a superseded slide's completion bails.
     var coverSlideGeneration = 0
+    var scheduleCoverSettlement: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, settle in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: settle)
+    }
     var runSlideAnimation: @MainActor (@MainActor () -> Void, @escaping @MainActor () -> Void) -> Void =
         StreamWindow.runSlideAnimation
     var runFadeAnimation: @MainActor (NSWindow, CGFloat, @escaping @MainActor () -> Void) -> Void =

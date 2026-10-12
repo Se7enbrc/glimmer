@@ -49,9 +49,11 @@ extension StreamSession {
             refreshWindow: { [weak decoder] in decoder?.telemetryRefreshWindow() },
             displayProbe: { [weak decoder] in decoder?.telemetryDisplayProbe() },
             rendererProbe: { [weak decoder, weak window] in
-                guard let renderer = decoder?.sampleBufferRenderer else { return nil }
+                guard let decoder, let renderer = decoder.sampleBufferRenderer else { return nil }
                 let identity = ObjectIdentifier(renderer)
-                return RendererPerformanceSource(renderer) { [weak decoder, weak window] transition in
+                return RendererPerformanceSource(
+                    renderer, presentation: decoder.rendererPresentationState
+                ) { [weak decoder, weak window] transition in
                     Task { @MainActor in
                         guard let window, let decoder, !window.didClose,
                               ObjectIdentifier(window.displayLayer.sampleBufferRenderer) == identity else { return }

@@ -402,6 +402,8 @@ public final class VideoDecoder {
     /// against the setter's flush/drain/IDR work.
     let presentSuppressedLock = NSLock()
     nonisolated(unsafe) var _presentSuppressed = false
+    // Guarded by presentSuppressedLock; captures even an entire hide/return between telemetry ticks.
+    nonisolated(unsafe) var presentationGeneration: UInt64 = 0
     /// Lock-guarded snapshot of `_presentSuppressed` for the nonisolated decode /
     /// pacer paths. Read-only accessor; the write side is `setPresentSuppressed`,
     /// which also owns the transition-edge work (drain on enter, resync on exit).

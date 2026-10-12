@@ -44,48 +44,23 @@ extension VideoDecoder {
 
     // MARK: - Intentional non-presentation (backgrounded / occluded / minimized)
 
-    /// Flip the "presentation is intentionally suppressed" state and own the
-    /// transition-edge work on each edge. Called on the main actor from the
-    /// window's onBackgroundedChanged signal (key/occlusion/miniaturize):
-    ///
-    ///  * suppressed = true  (window orderOut'd / occluded / backgrounded):
-    ///    the present path will stop retiring frames (off-screen CADisplayLink
-    ///    stops firing, occluded renderer stops draining). We DON'T pause decode
-    ///    - the constraint is that background / second-monitor streaming stays in
-    ///    sync for an instant resume - so the FIFO would grow. We arm the pacer's
-    ///    suppressed mode (each subsequent submit drops-to-newest inline, counted
-    ///    as SUPPRESSED - not late - drops) and drain the existing backlog to the
-    ///    freshest frame, and from now on `decodeAssembledFrame` treats a backlog
-    ///    overflow as a BENIGN drop instead of a reference-break → no IDR/RFI
-    ///    spam. (The pacer's own trims never request a keyframe at all.)
-    ///
-    ///  * suppressed = false (window re-shown / re-focused / un-occluded):
-    ///    repaint cleanly instead of bursting out a stale backlog. The suppressed
-    ///    period left the pacer holding exactly the NEWEST frame - keep it, so
-    ///    the first tick after refocus presents the freshest pixels instantly -
-    ///    then flush the renderer and request EXACTLY ONE IDR for the whole
-    ///    refocus. This is the one intentional IDR per suppression episode.
-    ///
-    /// Idempotent: a same-value call is a no-op (we only do edge work on a real
-    /// transition), so duplicate key/occlusion notifications don't double-drain
-    /// or double-IDR.
+    /// Hidden frames collapse to the newest without loss escalation. Resume keeps that image and
+    /// requests one keyframe through the existing recovery path; duplicate visibility notifications
+    /// must not repeat either edge. Network-loss recovery remains independent of this gate.
     @MainActor
     func setPresentSuppressed(_ suppressed: Bool) {
         presentSuppressedLock.lock()
         let changed = _presentSuppressed != suppressed
-        if changed { _presentSuppressed = suppressed }
+        if changed {
+            _presentSuppressed = suppressed
+            presentationGeneration &+= 1
+        }
         presentSuppressedLock.unlock()
         guard changed else { return }
 
         if suppressed {
-            // ENTER suppression: arm the pacer's suppressed mode FIRST (a submit
-            // racing the edge then drops-to-newest instead of minting an overflow
-            // late-drop), then collapse the FIFO to the freshest frame so the
-            // backlog can't balloon while nothing presents. Quiet - NO IDR. The
-            // edge is mirrored into the Diag ring + the telemetry gauge: these
-            // transitions were os.Logger-only, leaving the suppressed phase
-            // invisible to the capture forensics (the "silent transition" that
-            // misled a whole analysis pass chasing a zero-render mystery).
+            // Arm the pacer before draining so racing submits count as suppressed, not late drops.
+            // Keep both the Diag breadcrumb and gauge: hidden playback must remain visible in captures.
             log.notice("Present suppressed (window backgrounded/occluded) - draining FIFO to newest, IDR escalation off")
             OSSignposter.render.emitEvent("PresentSuppressed", "state=on")
             Diag.notice(
@@ -100,13 +75,7 @@ extension VideoDecoder {
             // never observe a half-entered suppression edge.
             armDecodeGateTimer()
         } else {
-            // EXIT suppression: disarm the pacer's suppressed mode and KEEP the
-            // retained newest frame (collapse-only - a no-op at the suppressed
-            // rest depth of 1) so the first tick after refocus presents the
-            // freshest pixels instantly, then repaint from a clean keyframe.
-            // recoverPresentPath does flush + (rebuild-if-failed) + IDR, which is
-            // exactly the clean-repaint we want - and reuses the shipped
-            // self-heal path rather than forking a second one.
+            // Keep the freshest frame for the first visible tick, then reuse flush/rebuild/IDR recovery.
             log.notice("Present un-suppressed (window refocused) - newest frame retained, flush + single IDR resync")
             OSSignposter.render.emitEvent("PresentSuppressed", "state=off")
             Diag.notice(
@@ -116,32 +85,12 @@ extension VideoDecoder {
             statsCollector.setGapJudgingExcluded(false)
             framePacer?.setPresentSuppressed(false)
             framePacer?.dropToNewest(reason: "present_resync")
-            // Stand down stage 2 BEFORE the resync below: cancel a pending
-            // gate (rapid alt-tab - never engaged, never costs anything) and
-            // UNCONDITIONALLY lift an engaged gate. The post-gate IDR-only
-            // latch stays armed across the lift; the submit boundary resolves it.
+            // Lift the gate unconditionally; its IDR-only latch survives until the submit boundary.
             cancelDecodeGateTimer()
             let gateWasEngaged = liftDecodeGate()
-            // REFOCUS IDR DEDUPE (measured: idr_requested +2, two 'ENet IDR
-            // frame requested' ~21ms apart, two keyframes ~25ms apart - the
-            // gate-lift + depacketizer race). When the gate WAS
-            // engaged, the post-gate resync latch already owns the refocus
-            // IDR: the first post-gate AU either IS a keyframe (feeds, zero
-            // requests needed) or routes `.resyncToIdr` into the
-            // depacketizer's wait-for-IDR gate, which sends the one coalesced
-            // request AND holds non-IDR frames until it lands - so a second
-            // request from recoverPresentPath here only buys a redundant 4K
-            // keyframe. On a gated exit do just the cheap renderer flush (the
-            // same medicine the suppressed requires-flush observer uses) and
-            // delegate the single IDR to the resync; the full
-            // recoverPresentPath (flush + rebuild-if-failed + IDR) still runs
-            // when no gate engaged (rapid alt-tab - no resync latch armed, so
-            // this IS the one refocus IDR) or when the renderer hard-failed
-            // (a bare flush can't clear .failed; the rebuild needs its IDR).
-            // Loss safety: the resync request rides the depacketizer's
-            // existing wait+re-request machinery, and if the IDR never decodes
-            // the frame watchdog still trips on the normal post-gate envelope
-            // (secondsSinceDecodeGateLifted) - no new way to get stuck.
+            // A gated exit delegates its single IDR to the depacketizer's wait/re-request machinery:
+            // also requesting here produced two IDRs 21 ms apart. The frame watchdog still covers loss.
+            // A hard-failed renderer needs rebuild+IDR; a rapid ungated return needs the usual recovery.
             let rendererFailed =
                 displayLayer?.sampleBufferRenderer.status == .failed
             if gateWasEngaged && !rendererFailed {

@@ -54,6 +54,7 @@ struct VideoDecoderSuppressionTests {
         #expect(decoder.statsCollector.gapJudgingExcluded)
         #expect(decoder.decodeGateTimer != nil)
         #expect(backend.idrRequests == 0)
+        #expect(decoder.rendererPresentationState == .init(generation: 1, suppressed: true))
 
         decoder.setPresentSuppressed(false)
         decoder.setPresentSuppressed(false)
@@ -62,6 +63,7 @@ struct VideoDecoderSuppressionTests {
         #expect(!decoder.statsCollector.gapJudgingExcluded)
         #expect(decoder.decodeGateTimer == nil)
         #expect(backend.idrRequests == 1)
+        #expect(decoder.rendererPresentationState == .init(generation: 2, suppressed: false))
     }
 
     /// After a gated span the resync latch owns the refocus keyframe: no second request,

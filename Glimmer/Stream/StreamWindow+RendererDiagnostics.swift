@@ -19,7 +19,8 @@ extension StreamWindow {
         let hdrOutput = VideoColorDescription.hdrDisplayOutput(inputHDR: hdrInput, currentEDR: Double(currentEDR))
         let windowState = "level=\(window.level.rawValue) occlusion=\(window.occlusionState.rawValue) "
             + "visible=\(window.isVisible) key=\(window.isKeyWindow) alpha=\(window.alphaValue) "
-            + "fullscreen=\(rendererFullscreenMode)"
+            + "fullscreen=\(rendererFullscreenMode) opaque=\(window.isOpaque) "
+            + "revealing=\(presentationRevealInProgress) collection=\(window.collectionBehavior.rawValue)"
         // AppKit has no supported global cursor-visibility query. Record our counted hide ownership explicitly.
         let cursor = "cursorVisible=\(!didHideCursor) cursorSource=owned hideCount=\(cursorHideCount)"
         let overlays = rendererVisibleOverlays().joined(separator: ";")

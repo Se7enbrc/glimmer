@@ -60,11 +60,14 @@ extension StreamWindow {
         // Clear only while sliding, so the desktop shows beside the picture.
         window.isOpaque = false
         window.backgroundColor = .clear
-        runSlideAnimation({ layer.add(spring, forKey: Self.coverSlideKey) }, { [weak self] in
+        let settle: @MainActor () -> Void = { [weak self] in
             guard let self, closing || !self.didClose, self.coverSlideGeneration == generation else { return }
             if entering { self.resetCoverSlide() }
             completion()
-        })
+        }
+        runSlideAnimation({ layer.add(spring, forKey: Self.coverSlideKey) }, settle)
+        // An occluded layer can lose completion delivery. Never retain its transform and clear window on return.
+        if entering { scheduleCoverSettlement(spring.duration + 0.1, settle) }
     }
 
     /// Back to rest: identity, opaque, clickable. Cancels any slide in flight.
@@ -120,11 +123,15 @@ extension StreamWindow {
         presentationRevealInProgress = entering
         let generation = coverSlideGeneration
         window.ignoresMouseEvents = !entering || awaitingFirstFrameFadeIn
-        runFadeAnimation(window, entering ? 1 : 0) { [weak self] in
+        let settle: @MainActor () -> Void = { [weak self] in
             guard let self, !self.didClose, self.coverSlideGeneration == generation else { return }
+            self.coverSlideGeneration &+= 1
             self.presentationRevealInProgress = false
+            if entering { self.window.alphaValue = 1 }
             completion()
         }
+        runFadeAnimation(window, entering ? 1 : 0, settle)
+        if entering { scheduleCoverSettlement(Motion.short + 0.1, settle) }
     }
 
     static func runSlideAnimation(changes: @MainActor () -> Void, completion: @escaping @MainActor () -> Void) {

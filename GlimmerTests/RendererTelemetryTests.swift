@@ -20,6 +20,7 @@ struct RendererTelemetryTests {
             var loads = 0
             var callbacks: [@Sendable (RendererPerformanceValues?) -> Void] = []
             var transitions: [RendererPathTransition] = []
+            var presentation = RendererPresentationState()
         }
         let state = OSAllocatedUnfairLock(initialState: State())
 
@@ -29,7 +30,8 @@ struct RendererTelemetryTests {
                 return value.identity
             }
             guard let identity else { return nil }
-            return RendererPerformanceSource(identity: identity, reportTransition: { [self] transition in
+            return RendererPerformanceSource(identity: identity, presentation: state.withLock { $0.presentation },
+                                             reportTransition: { [self] transition in
                 state.withLock { $0.transitions.append(transition) }
             }, load: { [self] completion in
                 state.withLock { value in
@@ -48,6 +50,45 @@ struct RendererTelemetryTests {
     private func values(_ frames: UInt64, dropped: UInt64 = 0, optimized: UInt64 = 0,
                         delay: Double = 0) -> RendererPerformanceValues {
         RendererPerformanceValues(frames: frames, dropped: dropped, optimized: optimized, delaySeconds: delay)
+    }
+
+    @Test func resumedSamePathReportsAfterAFullIntervalAndHonorsThrottle() {
+        var tracker = RendererPathTracker()
+        #expect(tracker.observe(values(100, optimized: 100), now: 0) == nil)
+        #expect(tracker.observe(values(100), now: 1) != nil)
+        tracker.rebaseline(reportResume: true)
+        #expect(tracker.observe(values(100), now: 2) == nil)
+        tracker.rebaseline()
+        #expect(tracker.observe(values(0), now: 6) == nil)
+        let resumed = tracker.observe(values(100), now: 7)
+        #expect(resumed?.summary == "resume->composited frames=100 optimized=0 suppressed=0")
+        #expect(tracker.observe(values(100), now: 8) == nil)
+        tracker.rebaseline(reportResume: true)
+        #expect(tracker.observe(values(100, optimized: 100), now: 12)?.isResume == true)
+    }
+
+    @Test(arguments: [false, true])
+    func resumeDiscardsSpanningReplyAndReportsUnchangedPath(shortHide: Bool) {
+        let queue = DispatchQueue(label: "renderer-resume-test")
+        let probe = Probe()
+        let sampler = RendererTelemetry(queue: queue, probe: { probe.source() })
+        _ = queue.sync { sampler.sample() }
+        probe.complete(values(100))
+        _ = queue.sync { sampler.sample() }
+        if !shortHide {
+            probe.state.withLock { $0.presentation = .init(generation: 1, suppressed: true) }
+            _ = queue.sync { sampler.sample() }
+        }
+        probe.state.withLock { $0.presentation = .init(generation: 2, suppressed: false) }
+        probe.complete(values(200))
+        #expect(queue.sync { sampler.sample().cumulative } == nil)
+        probe.complete(values(300))
+        #expect(queue.sync { sampler.sample().status } == .baseline)
+        #expect(probe.state.withLock { $0.transitions.isEmpty })
+        probe.complete(values(400))
+        queue.sync {}
+        #expect(probe.state.withLock { $0.transitions.map(\.summary) }
+            == ["resume->composited frames=100 optimized=0 suppressed=0"])
     }
 
     @Test func pathTransitionsUseIntervalMajorityAndIgnoreEmptyOrInvalidSamples() {

@@ -11,6 +11,70 @@ import SwiftUI
 
 @MainActor
 struct StreamWindowSlideTests {
+    @Test func resumeWaitsForOpaqueSettlementEvenWhenAnimationCompletionIsLost() throws {
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        var deadlines: [@MainActor () -> Void] = []
+        stream.scheduleCoverSettlement = { _, settle in deadlines.append(settle) }
+        defer { stream.resetCoverSlide() }
+        var resumes = 0
+        stream.slideCover(entering: false) {}
+        animations.finish()
+        stream.slideCover(entering: true) { resumes += 1 }
+        #expect(StreamWindow.suppressesPresentation(isVisible: true, isMiniaturized: false,
+            occlusionVisible: true, revealing: stream.presentationRevealInProgress))
+        #expect(!stream.window.isOpaque)
+        let settle = try #require(deadlines.first)
+        settle()
+        #expect(resumes == 1)
+        #expect(stream.window.isOpaque)
+        #expect(stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) == nil)
+        #expect(!StreamWindow.suppressesPresentation(isVisible: true, isMiniaturized: false,
+            occlusionVisible: true, revealing: stream.presentationRevealInProgress))
+        animations.finish()
+        settle()
+        #expect(resumes == 1)
+    }
+
+    @Test func staleSettlementCannotUndoAnotherRetreat() throws {
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        var settle: (@MainActor () -> Void)?
+        stream.scheduleCoverSettlement = { _, completion in settle = completion }
+        defer { stream.resetCoverSlide() }
+        var returned = false
+        stream.slideCover(entering: true) { returned = true }
+        stream.slideCover(entering: false) {}
+        let staleSettlement = try #require(settle)
+        staleSettlement()
+        #expect(!returned)
+        #expect(!stream.window.isOpaque)
+        #expect(stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) != nil)
+    }
+
+    @Test func reducedMotionReturnAlsoSettlesWithoutACompletion() throws {
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        var settle: (@MainActor () -> Void)?
+        stream.scheduleCoverSettlement = { _, completion in settle = completion }
+        defer { stream.resetCoverSlide() }
+        stream.window.alphaValue = 0
+        stream.refreshPresentationVisibility()
+        #expect(stream.presentationSuppressed)
+        #expect(StreamWindow.suppressesPresentation(isVisible: true, isMiniaturized: false,
+            occlusionVisible: true, alpha: 0))
+        var returned = 0
+        stream.fadeCover(entering: true) { returned += 1 }
+        let deadline = try #require(settle)
+        deadline()
+        #expect(!stream.presentationRevealInProgress)
+        #expect(stream.window.alphaValue == 1)
+        animations.finish()
+        #expect(returned == 1)
+    }
 
     @Test func steadyPresentationHasNoCompositionEffectsAfterTransitions() async throws {
         let stream = StreamWindow()

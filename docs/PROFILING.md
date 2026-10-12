@@ -518,15 +518,75 @@ outstanding, and replies after teardown or renderer replacement are ignored.
 
 Completed intervals also detect renderer-path changes: optimized means more than
 half of the interval's frames used optimized compositing. The first nonempty
-interval establishes a baseline. Each subsequent flip can write a
-`Renderer path:` notice in `Stream.Window`, with at most one notice per five
-seconds; `suppressed` counts intervening flips since the last notice. The notice
-captures window, visible overlay, video-layer, HDR/EDR and display-ID state on
-the main actor after the metrics reply. `cursorVisible` is Glimmer's tracked
-hide state (`cursorSource=owned`), not an OS visibility query. Overlay roles are
-fixed names; arbitrary layer names, animation keys and text contents are never
-logged. This snapshot helps correlate changes but does not prove the
-compositor's cause.
+interval establishes a baseline. Every return from presentation suppression also
+reports `resume->optimized` or `resume->composited` after a full visible
+interval, even if the path did not change. Intervals spanning a visibility edge
+are discarded; a generation catches short hide/return cycles between exporter
+ticks. A resume report delayed by the five-second throttle stays pending. Each
+subsequent flip can write a `Renderer path:` notice in `Stream.Window`, with at
+most one notice per five seconds; `suppressed` counts intervening flips since
+the last notice. The notice captures window, visible overlay, video-layer,
+HDR/EDR and display-ID state on the main actor after the metrics reply.
+`cursorVisible` is Glimmer's tracked hide state (`cursorSource=owned`), not an
+OS visibility query. Overlay roles are fixed names; arbitrary layer names,
+animation keys and text contents are never logged. This snapshot helps correlate
+changes but does not prove the compositor's cause.
+
+### 2026.10.8 refocus investigation
+
+The October 12 capture starting at 17:43:49Z becomes composited with stats at
+17:44:10Z, hides at 17:44:40Z, resumes at 17:47:01Z, and stays composited
+through 17:50:44Z. Renderer counters never reset. There was no notice because
+the last observed path before hiding was already composited. That capture ran
+the stats child-window implementation, which is already reverted in this
+worktree.
+
+Compared with `d15d212`, the decoder's suppression, decode gate and IDR
+deduplication are unchanged. Both versions let visibility resume before the
+return slide settles; both rely on a transaction completion to remove the
+retained transform and restore window opacity. In .8, that completion also
+restores presentation options. The resume safeguard now waits for the opaque
+resting surface and has a generation-checked deadline if the completion is lost.
+Reduced Motion receives the same settlement guarantee, and alpha-zero windows
+count as suppressed. No display-layer rebuild, new IDR, display mode change or
+steady-state sampler is added.
+
+This fixes reproducible lifecycle gaps, but the old capture lacks the
+post-resume window/layer snapshot needed to prove the compositor's cause. The
+next live test must confirm optimized-frame deltas recover with stats hidden
+after a long hide, rapid switching, occlusion, and Reduce Motion. Compare
+HDR/EDR and GPU cost before and after refocus, with stats both shown and hidden.
+Inspect the new `opaque`, `revealing`, and `collection` fields beside the
+existing layer/cursor snapshot.
+
+The same capture has 124,542 valid audio timestamps and zero missing through
+17:50:44Z. The 342 samples and 95 ms p99 (101.596 ms maximum) are the first
+one-second window, not session totals. Later window maxima are at most 2.026 ms.
+The receiver measures every accepted-peer datagram before RTP/FEC filtering;
+`recvmsg` stamps and `mach_absolute_time` share Mach ticks, converted through
+`mach_timebase_info`. No measurement correction is indicated by this evidence.
+
+### Fixed-mode variable-refresh hint: public API gap
+
+No player hint is emitted without reliable evidence of variable-refresh support
+while the display is in a fixed mode. Apple's
+[Adaptive-Sync guidance](https://developer.apple.com/videos/play/wwdc2021/10147/)
+uses the NSScreen minimum/maximum intervals to recognize the current
+Adaptive-Sync mode. `displayUpdateGranularity` also describes the current mode.
+These do not document a reliable capability query for a fixed-mode external
+panel.
+
+[CGDisplayMode](https://developer.apple.com/documentation/coregraphics/cgdisplaymode)
+exposes a scalar refresh rate and I/O flags, not a supported refresh range. The
+public IOGraphics mode flags in the installed SDK provide no variable-refresh
+capability flag. Zero refresh rate is not evidence: Apple's
+[refresh-rate documentation](https://developer.apple.com/documentation/coregraphics/kcgdisplayrefreshrate)
+also allows zero for displays without conventional sweep timing. Inferring
+support from that value, a high maximum rate, display names or undocumented flag
+bits would produce guesses. The installed SDK is 27; the documented APIs are
+available on 26, but fixed-versus-Variable readings on the owner's panel and
+Xcode 26.6 remain unverified. No Settings row, one-time tip, preference, or
+display change is shipped.
 
 ### Comparing telemetry overhead
 

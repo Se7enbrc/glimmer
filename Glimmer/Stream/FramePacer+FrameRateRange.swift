@@ -6,6 +6,35 @@ import AppKit
 import QuartzCore
 
 extension FramePacer {
+    struct RateHintLog {
+        private var preferredHz: Double?
+        private var variable: Bool?
+        private var lastNotice = -Double.infinity
+        private var movedSince: Double?
+        private var direction = 0
+
+        init() {}
+
+        mutating func shouldLog(preferred: Double, variable: Bool, now: Double) -> Bool {
+            guard preferred.isFinite, now.isFinite else { return false }
+            let difference = preferred - (preferredHz ?? preferred)
+            let nextDirection = abs(difference) >= 5 ? (difference > 0 ? 1 : -1) : 0
+            if nextDirection != direction {
+                direction = nextDirection
+                movedSince = nextDirection == 0 ? nil : now
+            }
+            let heldMove = movedSince.map { now - $0 >= 2 } ?? false
+            guard self.variable != variable || heldMove
+                || (abs(difference) >= 2 && now - lastNotice >= 10) else { return false }
+            preferredHz = preferred
+            self.variable = variable
+            lastNotice = now
+            movedSince = nil
+            direction = 0
+            return true
+        }
+    }
+
     /// Hints are advisory. Retrying after a short fallback lets a recovering governor follow content again.
     struct RateHint {
         var appliedAt = -Double.infinity
@@ -53,11 +82,15 @@ extension FramePacer {
         let range = Self.preferredRange(
             forStreamIntervalSeconds: followsContent ? interval : configuredFrameIntervalSeconds,
             panelMaxHz: panelMax, variableMinimumHz: followsContent ? panelMinimum : nil)
-        guard rateHint.needsUpdate(to: range, current: link.preferredFrameRateRange, now: now) else { return }
-        applyPreferredRange(range, to: link, variable: followsContent)
+        if rateHint.needsUpdate(to: range, current: link.preferredFrameRateRange, now: now) {
+            applyPreferredRange(range, to: link, variable: followsContent)
+        }
+        let applied = link.preferredFrameRateRange
+        guard rateHintLog.shouldLog(preferred: Double(applied.preferred ?? 0),
+                                    variable: followsContent, now: now) else { return }
         Diag.info(
-            "FramePacer rate hint - floor=\(Double(range.minimum))Hz "
-            + "preferred=\(Double(range.preferred ?? 0))Hz max=\(Double(range.maximum))Hz "
+            "FramePacer rate hint - floor=\(Double(applied.minimum))Hz "
+            + "preferred=\(Double(applied.preferred ?? 0))Hz max=\(Double(applied.maximum))Hz "
             + "content=\(1 / interval)Hz variable=\(followsContent)", "Stream.Pacer")
     }
 

@@ -45,6 +45,10 @@
 
 ### Bug fixes
 
+- Returning to a full-screen stream waits for its transition to settle before
+  resuming video. A missed animation callback no longer leaves the window
+  transparent.
+
 - Idle controller mouse mode no longer keeps polling, and hidden stream windows
   skip stats-overlay updates. Audio avoids repeated device queries while sound
   is playing.

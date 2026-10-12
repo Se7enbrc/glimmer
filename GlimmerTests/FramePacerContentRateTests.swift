@@ -7,6 +7,30 @@ import Testing
 @testable import Glimmer
 
 struct FramePacerContentRateTests {
+    @Test func hintLogsIgnoreJitterAndReportOnlySustainedMoves() {
+        var log = FramePacer.RateHintLog()
+        #expect(log.shouldLog(preferred: 190, variable: true, now: 0) == true)
+        for index in 1..<100 {
+            #expect(log.shouldLog(preferred: index.isMultiple(of: 2) ? 192 : 188,
+                                   variable: true, now: Double(index) / 10) == false)
+        }
+        #expect(log.shouldLog(preferred: 193, variable: true, now: 10) == true)
+        #expect(log.shouldLog(preferred: 200, variable: true, now: 11) == false)
+        #expect(log.shouldLog(preferred: 201, variable: true, now: 12.9) == false)
+        #expect(log.shouldLog(preferred: 200, variable: true, now: 13) == true)
+        #expect(log.shouldLog(preferred: 206, variable: true, now: 14) == false)
+        #expect(log.shouldLog(preferred: 194, variable: true, now: 15) == false)
+        #expect(log.shouldLog(preferred: 200, variable: true, now: 16) == false)
+        #expect(log.shouldLog(preferred: 200, variable: true, now: 100) == false)
+    }
+
+    @Test func hintFallbackAndVariableModeChangesLogImmediately() {
+        var log = FramePacer.RateHintLog()
+        #expect(log.shouldLog(preferred: 190, variable: true, now: 0) == true)
+        #expect(log.shouldLog(preferred: 240, variable: false, now: 0.5) == true)
+        #expect(log.shouldLog(preferred: 240, variable: false, now: 1) == false)
+        #expect(log.shouldLog(preferred: 190, variable: true, now: 5.5) == true)
+    }
     @Test(arguments: [183.0, 190.0, 195.0, 300.0, 30.0])
     func variableRangeFollowsContentWithinPanelLimits(fps: Double) {
         let range = FramePacer.preferredRange(

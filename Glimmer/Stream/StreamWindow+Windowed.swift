@@ -204,17 +204,20 @@ extension StreamWindow {
     }
 
     func refreshPresentationVisibility() {
-        guard !didClose, !awaitingFirstFrameFadeIn, window.alphaValue > 0 else { return }
+        guard !didClose, !awaitingFirstFrameFadeIn else { return }
         let suppressed = Self.suppressesPresentation(isVisible: window.isVisible,
-            isMiniaturized: window.isMiniaturized, occlusionVisible: window.occlusionState.contains(.visible))
+            isMiniaturized: window.isMiniaturized, occlusionVisible: window.occlusionState.contains(.visible),
+            revealing: presentationRevealInProgress, alpha: window.alphaValue)
         guard presentationSuppressed != suppressed else { return }
         presentationSuppressed = suppressed
         onPresentationSuppressedChanged?(suppressed)
     }
 
     nonisolated static func suppressesPresentation(isVisible: Bool, isMiniaturized: Bool,
-                                                   occlusionVisible: Bool) -> Bool {
-        !isVisible || isMiniaturized || !occlusionVisible
+                                                   occlusionVisible: Bool, revealing: Bool = false,
+                                                   alpha: CGFloat = 1) -> Bool {
+        // Resume must flush and enqueue into the opaque resting surface, after cover motion ends.
+        !isVisible || isMiniaturized || !occlusionVisible || revealing || alpha <= 0
     }
 
     // MARK: - Path B Space exit → window (issue #84)

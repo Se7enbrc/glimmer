@@ -290,6 +290,7 @@ final class FramePacer: @unchecked Sendable {
 
     /// Main-actor hint history bounds updates and retries ignored hints without rebuilding the link.
     @MainActor var rateHint = RateHint()
+    @MainActor var rateHintLog = RateHintLog()
 
     /// Dedicated serial queue for the present path. `.userInteractive` because
     /// a missed release is a dropped frame the user sees. NEVER the main actor.
