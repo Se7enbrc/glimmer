@@ -213,14 +213,19 @@ allowed branch expands access to release secrets and requires maintainer
 approval.
 
 Before any candidate compilation, the workflow requires the existing hosted
-checks to be green. It then runs all pre-commit hooks with
-`GLIMMER_SECRET_SCAN_ALL_FILES=1` and `make verify`. App and helper compilation
-finish before Apple signing credentials are exposed. Signing reuses those
-outputs; it cannot compile. Completion records bind each phase to this run and
-SHA. Compiler warnings fail both Xcode and standalone helper builds. Pull
-requests receive no release secrets, and releases use no pull-request artifacts
-or restored caches. Promotion receives only the scoped publication token, with
-no Apple signing material or Sparkle private key.
+checks to be green. Three independent jobs check out the exact candidate SHA:
+all pre-commit hooks with `GLIMMER_SECRET_SCAN_ALL_FILES=1` plus `make check`,
+`make test`, and `make test-asan`. Each uses its own build directory, without a
+release environment or signing credentials, and reports its SHA and duration.
+The protected build job requires all three successful records for the same SHA,
+run and attempt. Rerun all jobs after a failure; records from an earlier attempt
+cannot authorize a build. App and helper compilation finish before Apple signing
+credentials are exposed. Signing reuses those outputs; it cannot compile.
+Completion records bind each phase to this run and SHA. Compiler warnings fail
+both Xcode and standalone helper builds. Pull requests receive no release
+secrets, and releases use no pull-request artifacts or restored caches.
+Promotion receives only the scoped publication token, with no Apple signing
+material or Sparkle private key.
 
 Store these nine values as **environment secrets**, not repository secrets:
 
@@ -306,10 +311,11 @@ Use the ZIP path to verify the update archive. Local `make release-publish`
 still prepares and publishes both assets, but does not create a hosted build
 attestation.
 
-All these steps share the same job and runner. The reviewed source, build tools
-and dependencies remain trusted throughout the run. Limiting each step's
-credentials and deleting temporary files reduces exposure; it does not provide
-process isolation from earlier steps on that runner.
+Compilation, signing, packaging and publication still share one protected job
+and runner; the three verification jobs run separately. The reviewed source,
+build tools and dependencies remain trusted throughout the run. Limiting each
+step's credentials and deleting temporary files reduces exposure; it does not
+provide process isolation from earlier steps on the protected runner.
 
 Cleanup traps cannot run after a forced process kill or runner failure. GitHub
 decommissions its hosted VM when the job completes, providing the final boundary

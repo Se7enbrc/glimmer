@@ -84,6 +84,46 @@ require_verified() {
     [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$EXPECTED_SHA" ] || die "this SHA has not passed verification in this run"
 }
 
+verify_part() {
+    local part="$1" target started=$SECONDS
+    check_source
+    [ "$OPERATION" = candidate ] || die "promotion never builds"
+    [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
+    [ -n "${GITHUB_OUTPUT:-}" ] || die "workflow output file missing"
+    case "$part" in
+        checks) target=check; GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files ;;
+        tests) target=test ;;
+        asan) target=test-asan ;;
+        *) die "unknown verification part" ;;
+    esac
+    make "$target" "DERIVED=$ROOT/build/verify-$part" TEST_SUITE=
+    check_source
+    printf 'record=%s %s %s %s\n' "$EXPECTED_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$part" \
+        >> "$GITHUB_OUTPUT"
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        printf 'Verification %s: `%s`, run %s, attempt %s, %ss\n' \
+            "$part" "$EXPECTED_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$((SECONDS - started))" \
+            >> "$GITHUB_STEP_SUMMARY"
+    fi
+}
+
+accept_verification() {
+    rm -f "$STAMP" "$BUILT" "$SIGNED" "$PACKAGED" "$ARTIFACTS"
+    check_source
+    [ "$OPERATION" = candidate ] || die "promotion never builds"
+    [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
+    local part result record name
+    for part in checks tests asan; do
+        name="$(printf '%s' "$part" | tr '[:lower:]' '[:upper:]')"
+        result="VERIFY_${name}_RESULT"
+        record="VERIFY_${name}_RECORD"
+        [ "${!result:-}" = success ] || die "$part verification did not succeed"
+        [ "${!record:-}" = "$EXPECTED_SHA $GITHUB_RUN_ID $GITHUB_RUN_ATTEMPT $part" ] ||
+            die "$part verification record differs from this SHA, run or attempt"
+    done
+    printf '%s\n' "$EXPECTED_SHA" > "$STAMP"
+}
+
 require_phase() {
     require_verified
     [ -f "$1" ] && [ "$(cat "$1")" = "$EXPECTED_SHA" ] || die "required release phase has not succeeded in this run"
@@ -174,16 +214,8 @@ case "${1:-}" in
         python3 scripts/release-checks.py "$EXPECTED_SHA"
         printf '%s\n' "$EXPECTED_SHA" > "$GREEN"
         ;;
-    verify)
-        check_source
-        [ "$OPERATION" = candidate ] || die "promotion never builds"
-        [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
-        rm -f "$STAMP" "$BUILT" "$SIGNED" "$PACKAGED" "$ARTIFACTS"
-        GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files
-        make verify
-        check_source
-        printf '%s\n' "$EXPECTED_SHA" > "$STAMP"
-        ;;
+    verify-checks|verify-tests|verify-asan) verify_part "${1#verify-}" ;;
+    verified) accept_verification ;;
     build)
         [ "$OPERATION" = candidate ] || die "promotion never builds"
         rm -f "$BUILT" "$SIGNED" "$PACKAGED" "$ARTIFACTS"
@@ -274,5 +306,6 @@ PY
         rm -rf "$PROMOTION" || result=$?
         exit "$result"
         ;;
-    *) die "usage: ci-release.sh check|checks|verify|build|sign|package|publish|prepare-promotion|promote|tap|cleanup" ;;
+    *) die "usage: ci-release.sh check|checks|verify-{checks,tests,asan}|verified|build|sign|package|publish" \
+        "|prepare-promotion|promote|tap|cleanup" ;;
 esac
