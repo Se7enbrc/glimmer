@@ -33,11 +33,174 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify-checks:
+    name: Hooks and checks
+    if: >-
+      github.repository == 'Se7enbrc/glimmer' && inputs.operation == 'candidate'
+      && github.ref == 'refs/heads/release-candidate'
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: read
+    outputs:
+      record: ${{ steps.verify.outputs.record }}
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      RELEASE_OPERATION: ${{ inputs.operation }}
+      RC_TAG: ${{ inputs.rc_tag }}
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require all checks green for the reviewed commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci-release.sh checks
+
+      - name: Prepare verification
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          for tool in swiftlint actionlint pre-commit; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              brew install "$tool"
+            fi
+          done
+          scripts/install-ci-scanner.sh
+          XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-release.xcconfig"
+          cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+          GCC_TREAT_WARNINGS_AS_ERRORS = YES
+          XCCONFIG
+          printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
+
+      - name: Verify without signing credentials
+        id: verify
+        run: scripts/ci-release.sh verify-checks
+
+  verify-tests:
+    name: Unit tests
+    if: >-
+      github.repository == 'Se7enbrc/glimmer' && inputs.operation == 'candidate'
+      && github.ref == 'refs/heads/release-candidate'
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: read
+    outputs:
+      record: ${{ steps.verify.outputs.record }}
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      RELEASE_OPERATION: ${{ inputs.operation }}
+      RC_TAG: ${{ inputs.rc_tag }}
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require all checks green for the reviewed commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci-release.sh checks
+
+      - name: Prepare verification
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-release.xcconfig"
+          cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+          GCC_TREAT_WARNINGS_AS_ERRORS = YES
+          XCCONFIG
+          printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
+
+      - name: Verify without signing credentials
+        id: verify
+        run: scripts/ci-release.sh verify-tests
+
+  verify-asan:
+    name: AddressSanitizer
+    if: >-
+      github.repository == 'Se7enbrc/glimmer' && inputs.operation == 'candidate'
+      && github.ref == 'refs/heads/release-candidate'
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: read
+    outputs:
+      record: ${{ steps.verify.outputs.record }}
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      RELEASE_OPERATION: ${{ inputs.operation }}
+      RC_TAG: ${{ inputs.rc_tag }}
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require all checks green for the reviewed commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci-release.sh checks
+
+      - name: Prepare verification
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-release.xcconfig"
+          cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+          GCC_TREAT_WARNINGS_AS_ERRORS = YES
+          XCCONFIG
+          printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
+
+      - name: Verify without signing credentials
+        id: verify
+        run: scripts/ci-release.sh verify-asan
+
   release:
-    if:
-      github.repository == 'Se7enbrc/glimmer' && ((inputs.operation ==
-      'candidate' && github.ref == 'refs/heads/release-candidate') ||
-      (inputs.operation == 'promote' && github.ref == 'refs/heads/main'))
+    needs: [verify-checks, verify-tests, verify-asan]
+    if: >-
+      !cancelled() && github.repository == 'Se7enbrc/glimmer' &&
+      ((inputs.operation == 'candidate' && github.ref ==
+      'refs/heads/release-candidate' && needs.verify-checks.result == 'success'
+      && needs.verify-tests.result == 'success' && needs.verify-asan.result ==
+      'success') || (inputs.operation == 'promote' && github.ref ==
+      'refs/heads/main'))
     environment: release
     runs-on: macos-26
     timeout-minutes: 90
@@ -83,16 +246,6 @@ jobs:
           test "$(uname -m)" = arm64
           xcodebuild -version
           xcrun --sdk macosx --show-sdk-version
-          if ! command -v swiftlint >/dev/null 2>&1; then
-            brew install swiftlint
-          fi
-          if ! command -v actionlint >/dev/null 2>&1; then
-            brew install actionlint
-          fi
-          scripts/install-ci-scanner.sh
-          if ! command -v pre-commit >/dev/null 2>&1; then
-            brew install pre-commit
-          fi
           XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-release.xcconfig"
           cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
           SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
@@ -100,9 +253,16 @@ jobs:
           XCCONFIG
           printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
 
-      - name: Verify without signing credentials
+      - name: Require every verification record
         if: inputs.operation == 'candidate'
-        run: scripts/ci-release.sh verify
+        env:
+          VERIFY_CHECKS_RESULT: ${{ needs.verify-checks.result }}
+          VERIFY_CHECKS_RECORD: ${{ needs.verify-checks.outputs.record }}
+          VERIFY_TESTS_RESULT: ${{ needs.verify-tests.result }}
+          VERIFY_TESTS_RECORD: ${{ needs.verify-tests.outputs.record }}
+          VERIFY_ASAN_RESULT: ${{ needs.verify-asan.result }}
+          VERIFY_ASAN_RECORD: ${{ needs.verify-asan.outputs.record }}
+        run: scripts/ci-release.sh verified
 
       - name: Build Release without signing credentials
         if: inputs.operation == 'candidate'

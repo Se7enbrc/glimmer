@@ -137,8 +137,20 @@ class HostedReleaseTests(unittest.TestCase):
 
     def verified(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
-        result = self.run_phase("verify")
+        for part in ("checks", "tests", "asan"):
+            output = Path(self.env["GITHUB_OUTPUT"])
+            output.write_text("")
+            result = self.run_phase(f"verify-{part}")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.env[f"VERIFY_{part.upper()}_RESULT"] = "success"
+            self.env[f"VERIFY_{part.upper()}_RECORD"] = output.read_text().removeprefix("record=").strip()
+        output.write_text("")
+        result = self.run_phase("verified")
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def verification_args(self, part):
+        target = {"checks": "check", "tests": "test", "asan": "test-asan"}[part]
+        return [target, f"DERIVED={self.root.resolve()}/build/verify-{part}", "TEST_SUITE="]
 
     def built(self):
         self.verified()
@@ -174,14 +186,58 @@ class HostedReleaseTests(unittest.TestCase):
 
     def test_failed_verify_cannot_authorize_signing(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
-        self.env["FIXTURE_FAIL"] = "make:verify"
-        self.assertNotEqual(self.run_phase("verify").returncode, 0)
+        self.env["FIXTURE_FAIL"] = "make:" + " ".join(self.verification_args("checks"))
+        self.assertNotEqual(self.run_phase("verify-checks").returncode, 0)
         self.env.pop("FIXTURE_FAIL")
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
         self.assertFalse(self.private.exists())
 
+    def test_each_verification_part_must_finish_before_emitting_a_record(self):
+        self.assertEqual(self.run_phase("checks").returncode, 0)
+        output = Path(self.env["GITHUB_OUTPUT"])
+        for part in ("checks", "tests", "asan"):
+            with self.subTest(part=part):
+                output.write_text("")
+                self.env["FIXTURE_FAIL"] = "make:" + " ".join(self.verification_args(part))
+                self.assertNotEqual(self.run_phase(f"verify-{part}").returncode, 0)
+                self.assertEqual(output.read_text(), "")
+                self.env.pop("FIXTURE_FAIL")
+                self.assertNotEqual(self.run_phase("verified").returncode, 0)
+                self.assertNotEqual(self.run_phase("build").returncode, 0)
+                self.assertNotEqual(self.run_phase("sign").returncode, 0)
+                self.assertFalse(self.private.exists())
+
+    def test_unsuccessful_or_mismatched_job_records_cannot_authorize_build_or_sign(self):
+        self.verified()
+        for part in ("checks", "tests", "asan"):
+            result_key = f"VERIFY_{part.upper()}_RESULT"
+            record_key = f"VERIFY_{part.upper()}_RECORD"
+            changes = [(result_key, state) for state in ("failure", "cancelled", "skipped", "", "pending")]
+            changes += [(record_key, record) for record in
+                        ("", f"{'b' * 40} 12 1 {part}", f"{SHA} 13 1 {part}",
+                         f"{SHA} 12 2 {part}", f"{SHA} 12 1 other")]
+            for key, value in changes:
+                with self.subTest(part=part, key=key, value=value):
+                    previous = self.env[key]
+                    self.env[key] = value
+                    self.assertNotEqual(self.run_phase("verified").returncode, 0)
+                    self.assertNotEqual(self.run_phase("build").returncode, 0)
+                    self.assertNotEqual(self.run_phase("sign").returncode, 0)
+                    self.assertFalse(self.private.exists())
+                    self.env[key] = previous
+        self.assertFalse(any(call["tool"] == "security" for call in self.calls()))
+
+    def test_verification_records_identify_each_isolated_job_and_report_duration(self):
+        self.env["GITHUB_STEP_SUMMARY"] = str(self.runner / "summary")
+        self.verified()
+        for part in ("checks", "tests", "asan"):
+            self.assertEqual(self.env[f"VERIFY_{part.upper()}_RECORD"], f"{SHA} 12 1 {part}")
+            self.assertIn(self.verification_args(part), [call["args"] for call in self.calls()])
+            self.assertIn(f"Verification {part}: `{SHA}`, run 12, attempt 1,",
+                          Path(self.env["GITHUB_STEP_SUMMARY"]).read_text())
+
     def test_checks_and_precreated_tag_are_required_before_any_compilation(self):
-        self.assertNotEqual(self.run_phase("verify").returncode, 0)
+        self.assertNotEqual(self.run_phase("verify-checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "security" or
                              (call["tool"] == "make" and "guard-clean-tree" not in call["args"])
                              for call in self.calls()))
@@ -190,14 +246,15 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertFalse(any(call["tool"] == "release-checks.py" for call in self.calls()))
         self.env["FIXTURE_FAIL"] = "release-checks.py:" + SHA
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
-        self.assertNotEqual(self.run_phase("verify").returncode, 0)
+        self.assertNotEqual(self.run_phase("verify-checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "security" or
                              (call["tool"] == "make" and "guard-clean-tree" not in call["args"])
                              for call in self.calls()))
 
     def test_promotion_never_builds_or_signs_and_tap_requires_successful_promotion(self):
         self.env.update(RELEASE_OPERATION="promote", GITHUB_REF="refs/heads/main")
-        for phase in ("verify", "build", "sign", "package", "publish", "tap"):
+        for phase in ("verify-checks", "verify-tests", "verify-asan", "verified",
+                      "build", "sign", "package", "publish", "tap"):
             with self.subTest(phase=phase):
                 self.assertNotEqual(self.run_phase(phase).returncode, 0)
         self.assertFalse(any(call["tool"] == "security" or
@@ -216,13 +273,14 @@ class HostedReleaseTests(unittest.TestCase):
     def test_failed_precommit_stops_before_verify_and_cannot_authorize_build(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
         self.env["FIXTURE_FAIL"] = "pre-commit:run --all-files"
-        self.assertNotEqual(self.run_phase("verify").returncode, 0)
+        self.assertNotEqual(self.run_phase("verify-checks").returncode, 0)
         self.env.pop("FIXTURE_FAIL")
         self.assertNotEqual(self.run_phase("build").returncode, 0)
         calls = self.calls()
         hook = next(call for call in calls if call["tool"] == "pre-commit")
         self.assertEqual(hook["scan_all_files"], "1")
-        self.assertFalse(any(call["tool"] == "make" and call["args"] == ["verify"] for call in calls))
+        self.assertFalse(any(call["tool"] == "make" and call["args"] == self.verification_args("checks")
+                             for call in calls))
         self.assertFalse(self.private.exists())
 
     def test_signing_failure_reaps_temporary_keychain_and_files(self):
@@ -269,7 +327,7 @@ class HostedReleaseTests(unittest.TestCase):
         calls = self.calls()
         hook_index = next(index for index, call in enumerate(calls) if call["tool"] == "pre-commit")
         verify_index = next(index for index, call in enumerate(calls)
-                            if call["tool"] == "make" and call["args"] == ["verify"])
+                            if call["tool"] == "make" and call["args"] == self.verification_args("checks"))
         self.assertLess(hook_index, verify_index)
         for phase in ("build", "sign", "package", "publish", "cleanup"):
             with self.subTest(phase=phase):
@@ -424,6 +482,38 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertFalse((self.runner / "glimmer-verified-12-1-signed").exists())
 
 class ReleaseWorkflowTests(unittest.TestCase):
+    def test_verification_jobs_are_independent_unsigned_and_bound_to_the_dispatch_sha(self):
+        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
+        for part in ("checks", "tests", "asan"):
+            with self.subTest(part=part):
+                start = workflow.index(f"  verify-{part}:\n")
+                next_job = workflow.find("\n  verify-", start + 1)
+                end = next_job if next_job != -1 else workflow.index("\n  release:", start)
+                job = workflow[start:end]
+                for required in ("ref: ${{ github.sha }}", "EXPECTED_SHA: ${{ inputs.expected_sha }}",
+                                 "record: ${{ steps.verify.outputs.record }}", "runs-on: macos-26",
+                                 "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer",
+                                 "SWIFT_TREAT_WARNINGS_AS_ERRORS = YES", "GCC_TREAT_WARNINGS_AS_ERRORS = YES"):
+                    self.assertIn(required, job)
+                for forbidden in ("needs:", "environment:", "secrets.", "id-token:", "attestations:"):
+                    self.assertNotIn(forbidden, job)
+                self.assertLess(job.index("scripts/ci-release.sh checks"), job.index(f"ci-release.sh verify-{part}"))
+
+    def test_protected_build_requires_every_job_and_passes_their_records_to_the_gate(self):
+        workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
+        job = workflow.split("\n  release:\n", 1)[1]
+        self.assertIn("needs: [verify-checks, verify-tests, verify-asan]", job)
+        condition = job.split("    if: >-\n", 1)[1].split("    environment:", 1)[0]
+        condition = " ".join(condition.split())
+        self.assertIn("!cancelled()", condition)
+        self.assertIn("(inputs.operation == 'promote' && github.ref == 'refs/heads/main')", condition)
+        for part in ("checks", "tests", "asan"):
+            self.assertIn(f"needs.verify-{part}.result == 'success'", condition)
+            self.assertIn(f"VERIFY_{part.upper()}_RESULT: ${{{{ needs.verify-{part}.result }}}}", job)
+            self.assertIn(f"VERIFY_{part.upper()}_RECORD: ${{{{ needs.verify-{part}.outputs.record }}}}", job)
+        self.assertLess(job.index("scripts/ci-release.sh verified"), job.index("scripts/ci-release.sh build"))
+        self.assertLess(job.index("scripts/ci-release.sh build"), job.index("scripts/ci-release.sh sign"))
+
     def test_promotion_validates_with_a_token_before_publishing_credentials(self):
         workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
         step = workflow.split("- name: Promote tested bytes to stable", 1)[1].split("- name:", 1)[0]
