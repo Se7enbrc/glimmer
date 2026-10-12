@@ -423,6 +423,77 @@ template asks for.
 `make enable-telem` / `make disable-telem` flip the same preference from the
 command line.
 
+### Kernel receive timing
+
+Video and audio enable the public `SO_TIMESTAMP_MONOTONIC` socket option.
+`SCM_TIMESTAMP_MONOTONIC` carries Mach absolute ticks, converted with the Mach
+timebase, not nanoseconds or wall time. The timestamp is taken in IP receive
+processing before socket queuing, not at the radio or NIC. See Apple's
+[`ip_savecontrol`](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/netinet/ip_input.c).
+Video's existing `recvmsg_x` record carries a separate ancillary buffer per
+packet; its unavailable/unsupported fallback uses public `recvmsg`, retaining
+timestamps. Audio uses `recvmsg`. No probe or network round trip is added.
+
+Each per-second NDJSON row includes the following for each prefix `video` and
+`audio`. Prometheus uses the same fields prefixed with `glimmer_`.
+
+| Suffix after `<stream>_rx_`              | Meaning in the capture window                        |
+| ---------------------------------------- | ---------------------------------------------------- |
+| `timestamp_samples`                      | Packets with a valid kernel timestamp                |
+| `timestamp_missing`                      | Packets with missing, truncated or future timestamps |
+| `read_delay_max_ms`, `read_delay_p99_ms` | Kernel arrival to receive syscall return             |
+| `kernel_gap_max_ms`, `kernel_gap_p99_ms` | Successive kernel arrival gaps                       |
+
+Windows reset on capture; an idle window has zero samples and omits delay/gap
+fields. Missing timestamps break the kernel-gap chain. Maxima are exact; p99 is
+a nearest-rank histogram upper bound capped at the exact maximum. The 64 fixed
+bins are 0.25 ms through 4 ms, 1 ms through 20 ms, 5 ms through 100 ms, then 25
+ms through 475 ms; the final bin reports the maximum. All packets in one batch
+share the syscall-return time, so processing earlier packets cannot inflate
+later packets' measured read delay. Peer filtering precedes observation. The
+existing app-read gap and RTT fields retain their meanings.
+
+An app-read gap over 50 ms produces at most one notice per socket every five
+seconds, including while telemetry export is off:
+
+```text
+Receive gap stream=video kind=late read read_ms=224 kernel_gap_ms=5 queued_ms=219 queued_count=32 reader=Glimmer.videoRecv tid=123 qos=33
+```
+
+`late read` means the current packet waited over 50 ms in the socket, or the
+kernel gap was at most 50 ms while the read gap exceeded it. `late arrival`
+means the kernel gap also exceeded 50 ms and this packet's queued delay did not.
+Both can contribute: inspect both numbers when they are large. `unavailable`
+means there is insufficient timestamp evidence; unknown values are -1.
+`queued_ms` is the current packet's age at syscall return. `queued_count`
+includes the unread remainder of the returned batch, including the current
+packet, plus `SO_NUMRCVPKT` sampled for this notice. It is a queue snapshot, not
+a reconstruction of the stall's total packets, and may include new or foreign
+arrivals. `reader` identifies the receive thread; `tid` and `qos` are the actual
+pthread ID and QoS class at observation.
+
+Large read delay identifies time after kernel delivery, including receive-loop
+work, queue scheduling and descheduling. Large kernel gaps with small read delay
+place the delay before socket delivery. They cannot distinguish the PC/network
+from Mac NIC/driver/IP-stack delays before timestamping. Compare both streams
+with RTT and the existing gap counters on the next real-PC capture.
+
+The hot path reuses ancillary storage and fixed-size histograms, reads the clock
+once per syscall and takes one short histogram lock per accepted packet. Queue
+counts, thread metadata and formatting occur only on a throttled notice. No
+per-packet heap allocation is added by timing collection.
+
+On 2026-10-12, an optimized Swift 6 loopback microbenchmark on macOS 27.0.1
+(Xcode 27.0) compared the original receive code with timestamp parsing and
+histogram observation: five paired runs, 200 warm-up iterations and 3,000
+measured iterations, with 32 queued 1,392-byte packets per video call or one
+packet per fallback call. Two runs gave median added costs of 14–21 ns per
+batched packet and 103–138 ns per single read; histogram/classification alone
+was 15 ns per packet over one million observations. These time receive syscalls
+and userspace collection, excluding ingress timestamp creation, send work,
+logging on a gap and scheduling before the call. They are overhead evidence, not
+real-stream pacing or RTT results; repeat the stream capture on macOS 26.
+
 ### Renderer performance fields
 
 The existing opt-in exporter samples AVFoundation's renderer metrics at its

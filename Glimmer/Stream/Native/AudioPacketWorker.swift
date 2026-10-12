@@ -46,6 +46,11 @@ final class AudioPacketWorker: @unchecked Sendable {
     /// Drop newest on overflow: retained packets stay ordered, and RTP/FEC sees the missing sequence.
     @discardableResult
     func enqueue(_ bytes: [UInt8], count size: Int, arrival: UInt64) -> Bool {
+        bytes.withUnsafeBytes { enqueue($0, count: size, arrival: arrival) }
+    }
+
+    @discardableResult
+    func enqueue(_ bytes: UnsafeRawBufferPointer, count size: Int, arrival: UInt64) -> Bool {
         condition.lock()
         defer { condition.unlock() }
         guard running, !stopping, size >= 0, size <= bytes.count,

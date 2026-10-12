@@ -1,26 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TelemetryExporter+Capture.swift
-//
-//  The 1Hz capture path for the opt-in telemetry exporter: the capture timer, the
-//  per-tick snapshot assembly from the live `TelemetrySource` + always-live
-//  `TelemetryCounters`, and the P1 receive-quality rate derivation. Split out of
-//  TelemetryExporter.swift so that file stays focused on the listener/timer/file
-//  lifecycle; see that file for the exporter, gate, and the gate/safety contract.
-//  The per-section fills `capture()` drives (audio / session-lifecycle / display /
-//  resource / auxiliary signals) live in TelemetryExporter+CaptureSections.swift,
-//  and the Extras sidecar + cross-tick rate baselines in
-//  TelemetryExporter+CaptureExtras.swift - pure moves so every file stays under
-//  the file-length budget.
-//
-//  EVERYTHING here runs on the exporter's serial `workQueue` (never a hot path):
-//  the capture timer is scheduled on it, and the snapshot reads either reuse the
-//  StatsCollector's existing lock (one read, no second hot-path lock) or read the
-//  always-live counters/gauges the engine batches into off the hot path. When the
-//  gate is off (default) this exporter is never built, so none of this runs.
-//
+// Capture runs only on the serial workQueue while opt-in export is enabled.
+// Snapshots reuse StatsCollector locking and counters batched off the hot path.
+// Section fills and cross-tick baselines live in CaptureSections and CaptureExtras.
 
 import Foundation
 
@@ -62,6 +45,8 @@ extension TelemetryExporter {
         fillCoreVideo(into: &snap, stats: stats)
         snap.rendererPerformance = rendererTelemetry?.sample()
 
+        snap.receiveVideo = ReceiveTimingTelemetry.video.takeSnapshot()
+        snap.receiveAudio = ReceiveTimingTelemetry.audio.takeSnapshot()
         fillNetwork(into: &snap, stats: stats, rtt: rtt, health: health)
 
         fillPacingAndDrops(into: &snap, pacing: pacing)

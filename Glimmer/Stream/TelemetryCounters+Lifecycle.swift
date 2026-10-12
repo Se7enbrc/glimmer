@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TelemetryCounters+Lifecycle.swift
-//
-//  The LIFECYCLE of the always-live counters: the singleton's unfair-lock setup and teardown, the
-//  reset at a session's first connect, and the narrower one a reconnect takes. TelemetryCounters.swift
-//  holds the storage and says which fields deliberately survive a reset.
-//
+// Session resets prevent stale gauges from leaking across connections.
+// TelemetryCounters.swift owns storage and documents which fields survive reconnects.
 
 import Foundation
 import os
@@ -65,6 +60,8 @@ extension TelemetryCounters {
     /// exporter start, so a warm host's one-shot latches can't serve a prior session's
     /// values. A Prometheus scrape across the boundary just sees a counter reset.
     func resetForNewSession() {
+        ReceiveTimingTelemetry.video.reset()
+        ReceiveTimingTelemetry.audio.reset()
         AudioPipelineTelemetry.shared.reset()
         for counter in [rfiTotal, idrRequestedTotal, backlogOverflowTotal,
                         presentStallTotal, frameLossTotal, unrecoverableFrameTotal,

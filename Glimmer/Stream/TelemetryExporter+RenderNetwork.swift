@@ -1,27 +1,31 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TelemetryExporter+RenderNetwork.swift
-//
-//  The PROMETHEUS render for the NETWORK metric families: transport health
-//  (jitter / RTT / FEC / ENet reliable-channel), the P1 receive-quality block
-//  (pre-FEC loss, reordering, goodput, inter-packet gaps), and the Wi-Fi radio
-//  gauges. Split from TelemetryExporter+Render.swift - pure move, same
-//  file-split idiom as the FramePacer split - to keep that file under the length
-//  budget. Each section appends to the SAME `PromBuilder` (declared there) so
-//  the body stays one document.
-//
+// Network metric families share one PromBuilder so transport health and radio gauges form one document.
 
 import Foundation
 
 extension TelemetryRenderer {
+
+    static func promReceiveTiming(_ builder: inout PromBuilder, _ snap: TelemetrySnapshot) {
+        let streams = [("video", snap.receiveVideo), ("audio", snap.receiveAudio)]
+        for (name, receive) in streams {
+            let prefix = "glimmer_\(name)_rx_"
+            builder.emit(prefix + "timestamp_samples", "Timestamped packets this window.", Double(receive.samples))
+            builder.emit(prefix + "timestamp_missing", "Packets without usable timestamps.", Double(receive.missing))
+            builder.emit(prefix + "read_delay_max_ms", "Maximum kernel to read delay this window.", receive.delayMaxMs)
+            builder.emit(prefix + "read_delay_p99_ms", "P99 kernel to read delay this window.", receive.delayP99Ms)
+            builder.emit(prefix + "kernel_gap_max_ms", "Maximum kernel arrival gap this window.", receive.gapMaxMs)
+            builder.emit(prefix + "kernel_gap_p99_ms", "P99 kernel arrival gap this window.", receive.gapP99Ms)
+        }
+    }
 
     // MARK: - Network families
 
     static func promNetwork(
         _ builder: inout PromBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
     ) {
+        promReceiveTiming(&builder, snap)
         builder.emit("glimmer_net_recv_jitter_ms", "RFC3550 smoothed receive jitter, ms.", snap.recvJitterMs)
         builder.emit("glimmer_net_fec_recovery_rate",
                      "Fraction of frames needing Reed-Solomon recovery this window.", snap.fecRecoveryRate)

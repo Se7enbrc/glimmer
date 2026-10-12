@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamWindow+Slide.swift
-//
-//  The borderless cover's horizontal slide, its stand-in for the swipe AppKit
-//  gives a full-screen Space: in from the right on the first frame and on
-//  return, out to the right before a switch away or the stream's end.
-//
+// Cover motion stays in the compositor; completion restores the opaque resting state.
 
 import AppKit
 import QuartzCore
@@ -66,16 +60,11 @@ extension StreamWindow {
         // Clear only while sliding, so the desktop shows beside the picture.
         window.isOpaque = false
         window.backgroundColor = .clear
-        CATransaction.begin()
-        CATransaction.setCompletionBlock { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, closing || !self.didClose, self.coverSlideGeneration == generation else { return }
-                if entering { self.resetCoverSlide() }
-                completion()
-            }
-        }
-        layer.add(spring, forKey: Self.coverSlideKey)
-        CATransaction.commit()
+        runSlideAnimation({ layer.add(spring, forKey: Self.coverSlideKey) }, { [weak self] in
+            guard let self, closing || !self.didClose, self.coverSlideGeneration == generation else { return }
+            if entering { self.resetCoverSlide() }
+            completion()
+        })
     }
 
     /// Back to rest: identity, opaque, clickable. Cancels any slide in flight.
@@ -131,16 +120,25 @@ extension StreamWindow {
         presentationRevealInProgress = entering
         let generation = coverSlideGeneration
         window.ignoresMouseEvents = !entering || awaitingFirstFrameFadeIn
+        runFadeAnimation(window, entering ? 1 : 0) { [weak self] in
+            guard let self, !self.didClose, self.coverSlideGeneration == generation else { return }
+            self.presentationRevealInProgress = false
+            completion()
+        }
+    }
+
+    static func runSlideAnimation(changes: @MainActor () -> Void, completion: @escaping @MainActor () -> Void) {
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
+        changes()
+        CATransaction.commit()
+    }
+
+    static func runFadeAnimation(window: NSWindow, alpha: CGFloat, completion: @escaping @MainActor () -> Void) {
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = Motion.short
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            window.animator().alphaValue = entering ? 1 : 0
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, !self.didClose, self.coverSlideGeneration == generation else { return }
-                self.presentationRevealInProgress = false
-                completion()
-            }
-        })
+            window.animator().alphaValue = alpha
+        }, completionHandler: { MainActor.assumeIsolated { completion() } })
     }
 }

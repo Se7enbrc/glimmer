@@ -1,16 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TelemetrySnapshot.swift
-//
-//  The value types the opt-in telemetry exporter assembles + renders: the
-//  per-second `TelemetrySnapshot` (every field a performance number - nothing
-//  that could carry a secret/host identity) and the `TelemetrySource` Sendable
-//  reader closures the session wires from the live engine. Split out of
-//  TelemetryExporter.swift to keep that unit focused on the listener/timer/file
-//  lifecycle; see that file for the exporter, gate, and the gate/safety contract.
-//
+// Snapshots contain performance values without PC identity or secrets.
+// Sendable reader closures connect the live engine to the opt-in exporter.
 
 import Foundation
 
@@ -351,6 +343,8 @@ struct TelemetrySnapshot: Sendable {
     // counters/gauges the audio receive + output path batches into OFF the hot
     // path; nil until audio is flowing. See the AudioSnapshot type below.
     var audio: AudioSnapshot?
+    var receiveVideo = ReceiveTimingTelemetry.Snapshot()
+    var receiveAudio = ReceiveTimingTelemetry.Snapshot()
     var audioPipeline: AudioPipelineTelemetry.Snapshot?
 
     // P2 SESSION-LIFECYCLE signals (all read off the always-live counters /

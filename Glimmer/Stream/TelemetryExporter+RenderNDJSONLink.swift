@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TelemetryExporter+RenderNDJSONLink.swift
-//
-//  The LINK section of the per-second NDJSON row: stream route, env-signal and
-//  keepalive state, the AWDL helper, kernel UDP drops, and the Wi-Fi radio.
-//  Split from TelemetryExporter+RenderNDJSON.swift to keep it under the length budget.
-//
+// Route and radio facts stay separate so a wired stream can still report the associated Wi-Fi radio.
 
 import Foundation
 
@@ -19,6 +13,15 @@ extension TelemetryRenderer {
     static func ndjsonLink(
         _ builder: inout NDJSONBuilder, _ snap: TelemetrySnapshot, _ extras: TelemetrySnapshot.Extras
     ) {
+        let streams = [("video", snap.receiveVideo), ("audio", snap.receiveAudio)]
+        for (name, receive) in streams {
+            builder.addCount("\(name)_rx_timestamp_samples", receive.samples)
+            builder.addCount("\(name)_rx_timestamp_missing", receive.missing)
+            builder.add("\(name)_rx_read_delay_max_ms", receive.delayMaxMs)
+            builder.add("\(name)_rx_read_delay_p99_ms", receive.delayP99Ms)
+            builder.add("\(name)_rx_kernel_gap_max_ms", receive.gapMaxMs)
+            builder.add("\(name)_rx_kernel_gap_p99_ms", receive.gapP99Ms)
+        }
         if let routeSnapshot = extras.streamRoute {
             builder.addString("stream_link", routeSnapshot.linkLabel)
             builder.addString("stream_if", routeSnapshot.interfaceName)
