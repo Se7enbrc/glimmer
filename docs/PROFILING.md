@@ -297,6 +297,16 @@ on Apple Silicon). If intervals are sparse, compare `audio_receive_gap` with
 `audio_queue_wait`: socket delivery and decode-worker scheduling can each cause
 gaps. Check the `Stream` log category for underrun and cushion lines.
 
+### Silent output
+
+`audio_output_silent_s` counts seconds of silent output while PCM is flowing.
+Known cause, fixed in 2026.10.8: MacBook speakers report a two-channel layout
+labelled `kAudioChannelLabel_Unknown`; copying it onto the final mixer rendered
+exact silence. The graph keeps its own stereo layout and leaves the physical map
+to the HAL. Apple's built-in speaker renderer also drops LFE at 44.1 and 48 kHz,
+so built-in speakers use a stereo downmix: centre and surrounds at -3 dB, LFE at
+-6 dB, with shared headroom.
+
 ### Audio under full CPU load
 
 Use the installed Release app on AC power, a fixed game scene and settings, and
