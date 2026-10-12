@@ -33,6 +33,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  tooling:
+    if: github.repository == 'Se7enbrc/glimmer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.pin.outputs.sha }}
+    steps:
+      - name: Pin main independently of the candidate build
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - id: pin
+        run: printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   verify-checks:
     name: Hooks and checks
     if: >-
@@ -192,69 +207,42 @@ jobs:
         id: verify
         run: scripts/ci-release.sh verify-asan
 
-  release:
+  build:
     needs: [verify-checks, verify-tests, verify-asan]
     if: >-
-      !cancelled() && github.repository == 'Se7enbrc/glimmer' &&
-      ((inputs.operation == 'candidate' && github.ref ==
-      'refs/heads/release-candidate' && needs.verify-checks.result == 'success'
-      && needs.verify-tests.result == 'success' && needs.verify-asan.result ==
-      'success') || (inputs.operation == 'promote' && github.ref ==
-      'refs/heads/main'))
-    environment: release
+      !cancelled() && inputs.operation == 'candidate' &&
+      needs.verify-checks.result == 'success' && needs.verify-tests.result ==
+      'success' && needs.verify-asan.result == 'success'
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 30
     permissions:
       contents: read
       actions: read
       security-events: read
-      attestations: write
-      id-token: write
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+      manifest: ${{ steps.bundle.outputs.manifest }}
+      attempt: ${{ steps.bundle.outputs.attempt }}
     env:
       EXPECTED_SHA: ${{ inputs.expected_sha }}
-      RELEASE_OPERATION: ${{ inputs.operation }}
+      RELEASE_OPERATION: candidate
       RC_TAG: ${{ inputs.rc_tag }}
-      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
-      HOMEBREW_NO_AUTO_UPDATE: "1"
-      ACTIONS_STEP_DEBUG:
-        ${{ secrets.ACTIONS_STEP_DEBUG || vars.ACTIONS_STEP_DEBUG }}
-      ACTIONS_RUNNER_DEBUG:
-        ${{ secrets.ACTIONS_RUNNER_DEBUG || vars.ACTIONS_RUNNER_DEBUG }}
-    defaults:
-      run:
-        shell: bash
     steps:
-      - name: Check out reviewed source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Check release source
-        run: scripts/ci-release.sh check
-
-      - name: Require all checks green for the reviewed commit
+      - name: Require hosted prerequisites
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks
-
-      - name: Prepare toolchain
-        if: inputs.operation == 'candidate'
-        run: |
-          test "$(uname -m)" = arm64
-          xcodebuild -version
-          xcrun --sdk macosx --show-sdk-version
-          XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-release.xcconfig"
-          cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
-          SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
-          GCC_TREAT_WARNINGS_AS_ERRORS = YES
-          XCCONFIG
-          printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
-
+      - name: Refuse rebuilding an existing candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release_publication.py unpublished build/dist
       - name: Require every verification record
-        if: inputs.operation == 'candidate'
         env:
           VERIFY_CHECKS_RESULT: ${{ needs.verify-checks.result }}
           VERIFY_CHECKS_RECORD: ${{ needs.verify-checks.outputs.record }}
@@ -263,13 +251,76 @@ jobs:
           VERIFY_ASAN_RESULT: ${{ needs.verify-asan.result }}
           VERIFY_ASAN_RECORD: ${{ needs.verify-asan.outputs.record }}
         run: scripts/ci-release.sh verified
+      - name: Build without release secrets
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-release.xcconfig"
+          printf 'SWIFT_TREAT_WARNINGS_AS_ERRORS = YES\nGCC_TREAT_WARNINGS_AS_ERRORS = YES\n' > "$XCODE_XCCONFIG_FILE"
+          export XCODE_XCCONFIG_FILE
+          scripts/ci-release.sh build
+      - name: Seal unsigned bundle
+        id: bundle
+        run: |
+          python3 scripts/release_artifact.py unsigned "$RUNNER_TEMP/unsigned" \
+            --app build/Build/Products/Release/Glimmer.app
+      - name: Persist unsigned bundle only
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name:
+            unsigned-${{ github.run_id }}-${{ github.run_attempt }}-${{
+            inputs.expected_sha }}
+          path: ${{ runner.temp }}/unsigned/*
+          if-no-files-found: error
+          retention-days: 30
 
-      - name: Build Release without signing credentials
-        if: inputs.operation == 'candidate'
-        run: scripts/ci-release.sh build
-
-      - name: Sign and notarize
-        if: inputs.operation == 'candidate'
+  sign:
+    needs: [build, tooling]
+    environment: release
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+      security-events: read
+      attestations: write
+      id-token: write
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+      manifest: ${{ steps.persist.outputs.manifest }}
+      attempt: ${{ steps.persist.outputs.attempt }}
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      RELEASE_OPERATION: candidate
+      RC_TAG: ${{ inputs.rc_tag }}
+      TRUSTED_TOOLING_SHA: ${{ needs.tooling.outputs.sha }}
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      ACTIONS_STEP_DEBUG:
+        ${{ secrets.ACTIONS_STEP_DEBUG || vars.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG:
+        ${{ secrets.ACTIONS_RUNNER_DEBUG || vars.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - name: Check out trusted main tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.tooling.outputs.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Recheck source and prerequisites
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci-release.sh checks
+      - name: Download and verify this run's unsigned bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UNSIGNED_MANIFEST: ${{ needs.build.outputs.manifest }}
+          UNSIGNED_ATTEMPT: ${{ needs.build.outputs.attempt }}
+          UNSIGNED_ARTIFACT: ${{ needs.build.outputs.artifact }}
+        run: |
+          python3 scripts/release_download.py unsigned "$UNSIGNED_ARTIFACT" "$UNSIGNED_ATTEMPT"
+          scripts/ci-release.sh import-unsigned
+      - name: Sign and notarize without compilation or bundle execution
         env:
           DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
@@ -281,14 +332,15 @@ jobs:
           HELPER_PROVISIONPROFILE_BASE64:
             ${{ secrets.HELPER_PROVISIONPROFILE_BASE64 }}
         run: scripts/ci-release.sh sign
-
-      - name: Package without signing credentials
-        if: inputs.operation == 'candidate'
+      - name: Package final bytes
         id: package
         run: scripts/ci-release.sh package
-
+      - name: Prepare update signature and publication metadata
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          python3 scripts/release_publication.py prepare build/dist --app build/Build/Products/Release/Glimmer.app
       - name: Attest final release assets
-        if: inputs.operation == 'candidate'
         id: provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -297,36 +349,116 @@ jobs:
             ${{ steps.package.outputs.zip-path }}
           push-to-registry: false
           create-storage-record: false
-
-      - name: Publish candidate and update RC channel
-        if: inputs.operation == 'candidate'
+      - name: Bind signed assets and provenance
+        id: persist
         env:
           RELEASE_ATTESTATION_ID: ${{ steps.provenance.outputs.attestation-id }}
           RELEASE_PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
-          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
-          RELEASE_CONTENTS_TOKEN: ${{ secrets.RELEASE_CONTENTS_TOKEN }}
-        run: scripts/ci-release.sh publish
-
-      - name: Verify candidate provenance and unchanged source
-        if: inputs.operation == 'promote'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/ci-release.sh prepare-promotion
-
-      - name: Promote tested bytes to stable
-        if: inputs.operation == 'promote'
-        env:
-          # Validation reads with the run token; publishing switches to the contents token.
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_CONTENTS_TOKEN: ${{ secrets.RELEASE_CONTENTS_TOKEN }}
-        run: scripts/ci-release.sh promote
-
-      - name: Update Homebrew
-        if: inputs.operation == 'promote'
-        env:
-          RELEASE_CONTENTS_TOKEN: ${{ secrets.RELEASE_CONTENTS_TOKEN }}
-        run: scripts/ci-release.sh tap
-
+        run: python3 scripts/release_publication.py persist build/dist
+      - name: Persist final bytes before publication
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name:
+            signed-${{ github.run_id }}-${{ github.run_attempt }}-${{
+            inputs.expected_sha }}
+          path: build/dist/*
+          if-no-files-found: error
+          retention-days: 30
       - name: Remove temporary credentials
         if: always()
         run: scripts/ci-release.sh cleanup
+
+  validate:
+    needs: [tooling, sign]
+    runs-on: macos-26
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      RC_TAG: ${{ inputs.rc_tag }}
+      SIGNED_MANIFEST: ${{ needs.sign.outputs.manifest }}
+      SIGNED_ATTEMPT: ${{ needs.sign.outputs.attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.tooling.outputs.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate final bundle without release credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED_ARTIFACT: ${{ needs.sign.outputs.artifact }}
+        run: |
+          python3 scripts/release_download.py signed "$SIGNED_ARTIFACT" "$SIGNED_ATTEMPT"
+          python3 scripts/release_publication.py validate "$RUNNER_TEMP/signed"
+
+  publication:
+    needs: [tooling, sign, validate]
+    if: >-
+      !cancelled() && github.repository == 'Se7enbrc/glimmer' &&
+      needs.tooling.result == 'success' && ((inputs.operation == 'candidate' &&
+      needs.validate.result == 'success') || (inputs.operation == 'promote' &&
+      github.ref == 'refs/heads/main'))
+    uses: ./.github/workflows/release-publication.yml
+    permissions:
+      contents: read
+      actions: read
+      security-events: read
+      attestations: read
+    with:
+      operation: ${{ inputs.operation }}
+      expected_sha: ${{ inputs.expected_sha }}
+      rc_tag: ${{ inputs.rc_tag }}
+      candidate_sha: ${{ inputs.candidate_sha }}
+      tooling: ${{ needs.tooling.outputs.sha }}
+      artifact: ${{ needs.sign.outputs.artifact }}
+      manifest: ${{ needs.sign.outputs.manifest }}
+      attempt: ${{ needs.sign.outputs.attempt }}
+
+  summary:
+    needs:
+      [
+        tooling,
+        verify-checks,
+        verify-tests,
+        verify-asan,
+        build,
+        sign,
+        validate,
+        publication,
+      ]
+    if: always() && github.repository == 'Se7enbrc/glimmer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      TRUSTED_TOOLING_SHA: ${{ needs.tooling.outputs.sha }}
+      RC_TAG: ${{ inputs.rc_tag }}
+      SIGNED_MANIFEST: ${{ needs.sign.outputs.manifest }}
+      SIGNED_ATTEMPT: ${{ needs.sign.outputs.attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Read persisted hashes when available
+        if: needs.sign.result == 'success'
+        continue-on-error: true
+        env:
+          SIGNED_ARTIFACT: ${{ needs.sign.outputs.artifact }}
+        run:
+          python3 scripts/release_download.py signed "$SIGNED_ARTIFACT"
+          "$SIGNED_ATTEMPT"
+      - name: Report phases and safe recovery
+        if: always()
+        run: python3 scripts/release_summary.py

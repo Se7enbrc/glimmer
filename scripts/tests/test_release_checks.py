@@ -9,6 +9,8 @@ import io
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
+import json
 import unittest
 from unittest.mock import patch
 
@@ -132,6 +134,24 @@ class RequiredChecksTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "open CodeQL alerts"):
                 CHECKS.check(SHA)
 
+    def test_success_records_exact_prerequisites_and_failure_records_nothing(self):
+        evidence = {"sha": SHA, "runs": [{"workflow": WORKFLOW, "id": 123, "attempt": 2}]}
+        with tempfile.TemporaryDirectory() as directory:
+            proof, summary = Path(directory) / "proof.json", Path(directory) / "summary.md"
+            env = {"RELEASE_CHECKS_FILE": str(proof), "GITHUB_STEP_SUMMARY": str(summary)}
+            with patch.dict(CHECKS.os.environ, env), patch.object(sys, "argv", ["x", SHA]), \
+                    patch.object(CHECKS, "check", return_value=evidence), contextlib.redirect_stdout(io.StringIO()):
+                CHECKS.main()
+            self.assertEqual(json.loads(proof.read_text()), evidence)
+            self.assertIn("actions/runs/123", summary.read_text())
+            self.assertIn("attempt 2", summary.read_text())
+            proof.unlink()
+            with patch.dict(CHECKS.os.environ, env), patch.object(sys, "argv", ["x", SHA]), \
+                    patch.object(CHECKS, "check", side_effect=ValueError("failed")), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                CHECKS.main()
+            self.assertFalse(proof.exists())
+
     def test_gh_failure_garbage_or_empty_answers_authorize_nothing(self):
         for result, message in ((subprocess.CompletedProcess([], 1, "", "x"), "lookup failed"),
                                 (subprocess.CompletedProcess([], 0, "not json", ""), "invalid data"),
@@ -196,7 +216,9 @@ class RequiredChecksTests(unittest.TestCase):
             CHECKS.main()
         self.assertEqual((caught.exception.code, err.getvalue()), (1, "ERR: red\n"))
         out = io.StringIO()
-        with patch.object(sys, "argv", ["x", SHA]), patch.object(CHECKS, "check") as check, \
+        with patch.object(sys, "argv", ["x", SHA]), \
+                patch.object(CHECKS, "check", return_value={"sha": SHA, "runs": []}) as check, \
+                patch.dict(CHECKS.os.environ, {"GITHUB_STEP_SUMMARY": "", "RELEASE_CHECKS_FILE": ""}), \
                 contextlib.redirect_stdout(out):
             CHECKS.main()
         check.assert_called_once_with(SHA)

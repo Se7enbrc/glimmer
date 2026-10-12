@@ -20,6 +20,7 @@ class SwiftScanScopeTests(unittest.TestCase):
                      "Glimmer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
                      "Glimmer/StreamLib.xcconfig", "Glimmer/Version.xcconfig", "Glimmer-Bridging-Header.h",
                      "Glimmer/Stream/CHelpers.h", "Makefile", "scripts/generate-build-info.sh",
+                     "scripts/release-bundle.mk",
                      "scripts/codeql-swiftc.sh", "scripts/codeql-coverage.py",
                      "scripts/codeql-swift-changed.py", ".github/workflows/codeql.yml"):
             with self.subTest(path=path):
