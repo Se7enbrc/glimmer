@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-// Text and traces stay inside the HDR video layer without a panel over the picture.
+// Text and traces use the same SDR ink whether attached to a layer or a child window.
 
 import AppKit
 import AVFoundation
@@ -20,6 +20,9 @@ public final class StatsOverlayLayer {
 
     weak var displayView: NSView?
     var videoSize: CGSize = .zero
+    var onLayout: ((CGRect) -> Void)?
+    var onVisibilityChanged: (() -> Void)?
+    private(set) var frameInDisplay: CGRect = .zero
     public var corner: StatsOverlayCorner = .topLeft {
         didSet {
             guard oldValue != corner, let host = layer.superlayer else { return }
@@ -61,8 +64,8 @@ public final class StatsOverlayLayer {
     /// The sampler uses decoded-picture coordinates, independent of letterboxing and HUD scaling.
     public var backdropSampleRect: CGRect {
         guard let host = layer.superlayer, videoSize.width > 0, videoSize.height > 0 else { return .zero }
-        let picture = AVMakeRect(aspectRatio: videoSize, insideRect: host.bounds)
-        let rect = layer.frame.intersection(picture)
+        let picture = AVMakeRect(aspectRatio: videoSize, insideRect: displayView?.bounds ?? host.bounds)
+        let rect = frameInDisplay.intersection(picture)
         guard !rect.isNull, picture.width > 0, picture.height > 0 else { return .zero }
         return CGRect(x: (rect.minX - picture.minX) / picture.width,
                       y: (picture.maxY - rect.maxY) / picture.height,
@@ -166,9 +169,11 @@ public final class StatsOverlayLayer {
             layoutRows(rows, in: contentSize)
             needsRowLayout = false
         }
-        let available = Self.availableRect(in: host.bounds, videoSize: videoSize,
-                                           safeArea: safeAreaInsets(in: host.bounds))
+        let bounds = displayView?.bounds ?? host.bounds
+        let available = Self.availableRect(in: bounds, videoSize: videoSize,
+                                           safeArea: safeAreaInsets(in: bounds))
         let frame = Self.panelFrame(size: contentSize, in: available, corner: corner)
+        frameInDisplay = frame
         let scale = frame.width / max(1, contentSize.width)
         let position = CGPoint(x: frame.midX, y: frame.midY)
         if layer.position != position { layer.position = position }
@@ -183,6 +188,7 @@ public final class StatsOverlayLayer {
                 sub.valueLayer.contentsScale = contentsScale
             }
         }
+        onLayout?(frame)
     }
 
     public func update(
@@ -285,6 +291,7 @@ public final class StatsOverlayLayer {
         }
         layer.add(fade, forKey: "visibility")
         CATransaction.commit()
+        onVisibilityChanged?()
     }
 
     func finishHide(generation: Int) {
@@ -294,6 +301,7 @@ public final class StatsOverlayLayer {
         CATransaction.setDisableActions(true)
         layer.isHidden = true
         CATransaction.commit()
+        onVisibilityChanged?()
     }
 
     /// Row height plus the value and trace bands inside it. Core rows carry the large

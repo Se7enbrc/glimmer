@@ -96,6 +96,7 @@ extension StreamWindow {
     public func close() {
         guard !didClose else { return }
         didClose = true
+        statsOverlayWindow.close()
         window.ignoresMouseEvents = true
         setCursorHidden(false)
         removeCloseObservers()

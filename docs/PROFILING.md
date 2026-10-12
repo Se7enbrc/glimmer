@@ -451,11 +451,32 @@ interval establishes a baseline. Each subsequent flip can write a
 `Renderer path:` notice in `Stream.Window`, with at most one notice per five
 seconds; `suppressed` counts intervening flips since the last notice. The notice
 captures window, visible overlay, video-layer, HDR/EDR and display-ID state on
-the main actor after the metrics reply. `cursorVisible` is Glimmer's tracked
-hide state (`cursorSource=owned`), not an OS visibility query. Overlay roles are
-fixed names; arbitrary layer names, animation keys and text contents are never
-logged. This snapshot helps correlate changes but does not prove the
-compositor's cause.
+the main actor after the metrics reply. `statsWindow` records the stats child's
+attachment, visibility, frame size in points and window level. `cursorVisible`
+is Glimmer's tracked hide state (`cursorSource=owned`), not an OS visibility
+query. Overlay roles are fixed names; arbitrary layer names, animation keys and
+text contents are never logged. This snapshot helps correlate changes but does
+not prove the compositor's cause.
+
+To check the stats child window, enable Performance telemetry before starting a
+stream on the target Mac. Let the same SDR or HDR scene settle, then keep stats
+off, on and off again for at least ten seconds each using the stats shortcut
+(Control-I by default). Compare `renderer_optimized_frames_delta` with
+`renderer_frames_delta` in ready samples of the session's telemetry file. A
+missing transition notice alone is not evidence of optimized compositing.
+
+Watch the corresponding transitions with:
+
+```sh
+log stream --level info --predicate 'subsystem == "io.ugfugl.Glimmer" AND eventMessage CONTAINS "Renderer path:"'
+```
+
+With stats shown, a transition snapshot should report
+`statsWindow={attached=true,visible=true,size=…,level=…}` with only the column's
+size, and no `video/…:stats` layer. Repeat in the borderless cover, a native
+full-screen Space, a normal window and Mini Player; move between displays,
+minimize and restore, hide and return, and stop streaming. Check placement, HDR
+ink, input/cursor ownership, Mission Control and the Window menu by eye.
 
 ### Comparing telemetry overhead
 

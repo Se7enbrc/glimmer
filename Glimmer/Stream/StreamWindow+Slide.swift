@@ -46,6 +46,7 @@ extension StreamWindow {
     /// server with the picture still live, where a screen-sized setFrame would
     /// re-lay out the window every step. The model transform is never touched.
     func slideCover(entering: Bool, closing: Bool = false, completion: @escaping @MainActor () -> Void) {
+        statsOverlayWindow.isSuspended = true
         let layer = displayLayer
         let width = window.frame.width
         let inFlight = layer.animation(forKey: Self.coverSlideKey) == nil ? nil
@@ -80,6 +81,7 @@ extension StreamWindow {
 
     /// Back to rest: identity, opaque, clickable. Cancels any slide in flight.
     func resetCoverSlide() {
+        statsOverlayWindow.isSuspended = false
         presentationRevealInProgress = false
         coverSlideGeneration &+= 1
         displayLayer.removeAnimation(forKey: Self.coverSlideKey)
