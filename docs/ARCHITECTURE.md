@@ -2,11 +2,11 @@
 
 Glimmer is a SwiftUI launcher plus a pure-Swift streaming engine, in one
 process. No external player, no linked C streaming library: Sunshine's streaming
-protocol is implemented in Swift under `Glimmer/Stream/Native/` (ported from
-`moonlight-common-c`, GPLv3; see [CREDITS.md](../CREDITS.md)). Crypto, TLS,
-audio decode and audio output use CryptoKit, CommonCrypto, Security,
-Network.framework and AudioToolbox directly from Swift. No bridging header or
-Objective-C exception boundary is needed.
+protocol is implemented in Swift under `Glimmer/Stream/Native/` and
+`GlimmerEngine/Protocol/` (ported from `moonlight-common-c`, GPLv3; see
+[CREDITS.md](../CREDITS.md)). Crypto, TLS, audio decode and audio output use
+CryptoKit, CommonCrypto, Security, Network.framework and AudioToolbox directly
+from Swift. No bridging header or Objective-C exception boundary is needed.
 
 Two helpers sit outside the stream path. The opt-in root LaunchDaemon under
 `helper/` parks the AirDrop radio (`awdl0`) for the duration of a stream. It is
@@ -127,6 +127,16 @@ Protocol constants live in a Swift mirror (`StreamProtocolConstants.swift`,
 `enum StreamProtocol`); nothing imports a `Limelight.h`.
 
 ## The native engine (`Glimmer/Stream/Native/`)
+
+`GlimmerEngine.framework` owns the slice 1 wire foundation: ENet layouts,
+Reed-Solomon and fixed audio FEC, input encoding, RTSP/SDP parsers, protocol
+constants, control crypto and their stream/Opus/controller values. The app keeps
+transport, audio shard pooling and diagnostic video decryption. The audio
+recovery byte loop stays in the framework beside its GF(256) arithmetic. Pure
+sequence comparison, Opus defaults, RTSP version and encrypted-video packet
+sizing live with the wire types so this dependency runs only from app to engine.
+No wire values, algorithms, launch requests or diagnostics changed during
+extraction.
 
 `NativeBackend` runs the whole bring-up on a dedicated connect thread:
 
@@ -738,10 +748,20 @@ details and the pinning lifecycle live in [SECURITY.md](SECURITY.md).
 
 ## Build pipeline
 
-There is no separate native library and no submodule: the entire streaming
-engine compiles as part of the app target. Apart from Sparkle, embedded for
-updates, Glimmer links no third-party library, so the shipped app needs nothing
-installed to run.
+The source-built dynamic `GlimmerEngine.framework` is an explicit dependency of
+the app and tests. The app embeds one copy in `Contents/Frameworks`; the CLI
+remains in that executable, and tests link the same framework without embedding
+another copy. The existing app test loader is unchanged. Remaining extraction
+slices still compile in the app target. Apart from Sparkle for updates, no
+third-party library or external installation is needed.
+
+The framework uses Swift 6 with complete concurrency checking and macOS 26, iOS
+26 and Simulator destinations. Wire helpers use package access through the
+shared `-package-name Glimmer`; existing public values remain public. Debug is
+testable. Release inherits optimization/dSYM settings and uses the shared
+stripping configuration. `sign-bundle.sh` signs the engine without entitlements
+before sealing the app; Sparkle retains its own entitlements. Strict lint, SPDX,
+coverage and CodeQL inventories include the engine.
 
 ### `Glimmer/StreamLib.xcconfig`
 
@@ -751,11 +771,11 @@ Enhanced Security's compiler protections. The core lines:
 
 ```text
 #include "Version.xcconfig"
-ARCHS                      = arm64
+ARCHS[sdk=macosx*]          = arm64
 ```
 
-`ARCHS = arm64` is pinned so the Release build stays Apple Silicon only, the
-platform Glimmer ships for. `Glimmer/Version.xcconfig` is the single source of
+Mac `ARCHS` is pinned so Release stays Apple Silicon only; Simulator builds keep
+their standard architectures. `Glimmer/Version.xcconfig` is the single source of
 truth for `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`; the version is not
 set in `project.pbxproj`.
 

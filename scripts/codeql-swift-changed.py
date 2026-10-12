@@ -10,7 +10,7 @@ import re
 import sys
 
 RELEVANT = re.compile(
-    r"^(Glimmer|helper|LoginHelper|Glimmer\.xcodeproj)/"
+    r"^(Glimmer|GlimmerEngine|helper|LoginHelper|Glimmer\.xcodeproj)/"
     r"|^Glimmer-Bridging-Header\.h$|\.(xcconfig|h)$"
     r"|^Makefile$|^scripts/(generate-build-info\.sh|codeql-swiftc\.sh|codeql-coverage\.py"
     r"|codeql-swift-changed\.py)$|^\.github/workflows/codeql\.yml$"

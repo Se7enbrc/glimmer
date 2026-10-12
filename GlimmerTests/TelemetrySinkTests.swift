@@ -6,6 +6,7 @@
 //  NDJSON file, event rows, bookmark and session report, plus the StreamSession start/stop wiring.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

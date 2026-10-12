@@ -13,6 +13,7 @@
 //  each unit focused; see that file for the shared stored state and wire facts.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension EnetControlChannel {

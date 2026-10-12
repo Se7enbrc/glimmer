@@ -14,6 +14,9 @@ SPEC.loader.exec_module(CHANGED)
 
 
 class SwiftScanScopeTests(unittest.TestCase):
+    def test_engine_only_changes_require_the_scan(self):
+        self.assertTrue(CHANGED.must_scan(["GlimmerEngine/Protocol/EnetWire.swift"]))
+
     def test_anything_the_traced_build_reads_needs_the_scan(self):
         for path in ("Glimmer/Stream/VideoDecoder.swift", "helper/main.swift", "LoginHelper/main.swift",
                      "Glimmer.xcodeproj/project.pbxproj",

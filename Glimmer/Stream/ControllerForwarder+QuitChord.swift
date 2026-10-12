@@ -14,6 +14,7 @@
 //  note in ControllerForwarder.swift's header.
 //
 
+import GlimmerEngine
 import GameController
 
 extension InputForwarder {

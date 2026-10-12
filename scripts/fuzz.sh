@@ -18,20 +18,31 @@ fi
 NATIVE=Glimmer/Stream/Native
 sources() {
     case "$1" in
-        rtsp) echo "$NATIVE/SdpCodec.swift Glimmer/Stream/StreamingBackend.swift Glimmer/Stream/StreamProtocolConstants.swift" ;;
-        video) echo "$NATIVE/RtpVideoQueue*.swift $NATIVE/VideoDepacketizer*.swift $NATIVE/ReedSolomon.swift" \
-            "Glimmer/Stream/StreamingBackend.swift Glimmer/Stream/StreamProtocolConstants.swift" ;;
-        audio) echo "$NATIVE/RtpAudioQueue*.swift $NATIVE/AudioFecDecoder.swift $NATIVE/ReedSolomon.swift" ;;
-        fec) echo "$NATIVE/AudioFecDecoder.swift $NATIVE/RtpAudioQueue*.swift $NATIVE/ReedSolomon.swift" ;;
+        rtsp|fec) ;;
+        video) echo "$NATIVE/RtpVideoQueue*.swift $NATIVE/VideoDepacketizer*.swift" \
+            "Glimmer/Stream/StreamingBackend.swift" ;;
+        audio) echo "$NATIVE/RtpAudioQueue*.swift $NATIVE/AudioFecDecoder+Recovery.swift" ;;
         opus) echo "Glimmer/Stream/OpusDecoder+Packet.swift" ;;
     esac
 }
 
 OUT=build/fuzz
+ENGINE=GlimmerEngine/Protocol
+mkdir -p "$OUT/engine"
+# Linux has no CryptoKit. Compile the parser/FEC slice as its own instrumented module;
+# the Mac ASan suites retain control crypto coverage.
+swiftc -swift-version 6 -strict-concurrency=complete -package-name Glimmer -O -g -parse-as-library \
+    -sanitize=fuzzer,address -whole-module-optimization -emit-object -emit-module \
+    -module-name GlimmerEngine -emit-module-path "$OUT/engine/GlimmerEngine.swiftmodule" \
+    "$ENGINE/EnetWire.swift" "$ENGINE/ReedSolomon.swift" "$ENGINE/AudioFecDecoder.swift" \
+    "$ENGINE/AudioFecDecoder+Recovery.swift" "$ENGINE/InputEncoder.swift" "$ENGINE/SdpCodec.swift" "$ENGINE/StreamProtocolConstants.swift" \
+    "$ENGINE/StreamingBackend+Values.swift" "$ENGINE/StreamCrypto+VideoPacketLayout.swift" \
+    -o "$OUT/engine/GlimmerEngine.o"
 for target in ${FUZZ_TARGETS:-rtsp video audio fec opus}; do
     mkdir -p "$OUT/$target/corpus"
     # shellcheck disable=SC2046 # the source lists are globs
-    swiftc -swift-version 6 -O -g -parse-as-library -sanitize=fuzzer,address -use-ld=lld \
+    swiftc -swift-version 6 -strict-concurrency=complete -package-name Glimmer -O -g -parse-as-library \
+        -sanitize=fuzzer,address -use-ld=lld -I "$OUT/engine" "$OUT/engine/GlimmerEngine.o" \
         fuzz/Shims.swift "fuzz/$target.swift" $(sources "$target") -o "$OUT/$target/fuzzer"
     seeds=()
     if [ -d "fuzz/corpus/$target" ]; then seeds=("fuzz/corpus/$target"); fi

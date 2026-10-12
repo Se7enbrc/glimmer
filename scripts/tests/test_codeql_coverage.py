@@ -17,19 +17,24 @@ from unittest.mock import Mock, patch
 SPEC = importlib.util.spec_from_file_location("codeql_coverage", Path(__file__).parents[1] / "codeql-coverage.py")
 COVERAGE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(COVERAGE)
-EXPECTED = {"Glimmer/GlimmerApp.swift", "LoginHelper/main.swift", "helper/main.swift"}
+EXPECTED = {"GlimmerEngine/Protocol/EnetWire.swift", "Glimmer/GlimmerApp.swift", "LoginHelper/main.swift", "helper/main.swift"}
 
 
 class CodeQLCoverageTests(unittest.TestCase):
     def test_complete_extraction_allows_dependencies_and_duplicate_paths(self):
         output = "\n".join(f'"{path}"' for path in sorted(EXPECTED))
         self.assertEqual(COVERAGE.validate_coverage(EXPECTED, output + '\n"build/dependency.swift"\n'
-                                                  '"helper/main.swift"\n'), 3)
+                                                  '"helper/main.swift"\n'), 4)
 
     def test_empty_or_helper_only_extraction_fails(self):
         for output in ("", '"helper/main.swift"\n'):
             with self.subTest(output=output), self.assertRaisesRegex(ValueError, "did not successfully extract"):
                 COVERAGE.validate_coverage(EXPECTED, output)
+
+    def test_missing_engine_extraction_fails(self):
+        output = "\n".join(path for path in EXPECTED if not path.startswith("GlimmerEngine/"))
+        with self.assertRaisesRegex(ValueError, "GlimmerEngine/Protocol/EnetWire.swift"):
+            COVERAGE.validate_coverage(EXPECTED, output)
 
     def test_one_missing_app_source_cannot_hide_behind_all_three_targets(self):
         output = "\n".join(EXPECTED)
@@ -63,7 +68,7 @@ class CodeQLCoverageTests(unittest.TestCase):
 
             with patch.object(COVERAGE, "tracked_sources", return_value=EXPECTED), \
                     patch.object(COVERAGE, "codeql_command", side_effect=command):
-                self.assertEqual(COVERAGE.check(root, database, root), 3)
+                self.assertEqual(COVERAGE.check(root, database, root), 4)
             self.assertIn("file.isSuccessfullyExtracted()", COVERAGE.QUERY)
             self.assertEqual([command[1:3] for command in commands],
                              [["pack", "install"], ["query", "run"], ["bqrs", "decode"]])
@@ -81,16 +86,16 @@ class CodeQLCoverageTests(unittest.TestCase):
             repo = Path(directory)
             env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True, env=env)
-            for name in ("Glimmer/A.swift", "Glimmer/note.md", "helper/main.swift", "Other/B.swift",
+            for name in ("GlimmerEngine/A.swift", "Glimmer/A.swift", "Glimmer/note.md", "helper/main.swift", "Other/B.swift",
                          "Glimmer/with space.swift"):
                 (repo / name).parent.mkdir(exist_ok=True)
                 (repo / name).write_text("x")
             (repo / "Glimmer/untracked.swift").write_text("x")
-            subprocess.run(["git", "add", "Glimmer/A.swift", "Glimmer/note.md", "helper/main.swift",
+            subprocess.run(["git", "add", "GlimmerEngine/A.swift", "Glimmer/A.swift", "Glimmer/note.md", "helper/main.swift",
                             "Other/B.swift", "Glimmer/with space.swift"], cwd=repo, check=True, env=env)
             with patch.dict(os.environ, env, clear=True):
                 self.assertEqual(COVERAGE.tracked_sources(repo),
-                                 {"Glimmer/A.swift", "helper/main.swift", "Glimmer/with space.swift"})
+                                 {"GlimmerEngine/A.swift", "Glimmer/A.swift", "helper/main.swift", "Glimmer/with space.swift"})
 
     def test_check_requires_a_finalized_database_and_an_initialized_distribution(self):
         with tempfile.TemporaryDirectory() as directory:

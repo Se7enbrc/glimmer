@@ -8,6 +8,7 @@
 //  sent back to the ping's source runs the real receive loop through to the sink.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -76,7 +77,7 @@ struct RtpReceiverLoopbackTests {
         let sink = OpusSink()
         let receiver = RtpAudioReceiver(
             host: .ipv4(.loopback), audioPort: peer.port, pingPayload: Self.pingPayload, audioPacketDuration: 5,
-            opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0, audioEncryption: false,
+            opusConfig: SdpScan.defaultOpusConfig, audioConfig: 0, audioEncryption: false,
             aesKey: EnetFixture.key, aesIvId: [UInt8](repeating: 0, count: 16), sink: sink)
         try receiver.start()
         defer { receiver.stop() }

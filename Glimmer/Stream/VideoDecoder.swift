@@ -39,7 +39,7 @@ public final class VideoDecoder {
         self.init(now: { DispatchTime.now().uptimeNanoseconds }, makeSession: makeSession)
     }
 
-    public convenience init(colorSpace: ColorSpace = .rec709, colorRange: ColorRange = .full) {
+    convenience init(colorSpace: ColorSpace = .rec709, colorRange: ColorRange = .full) {
         self.init(now: { DispatchTime.now().uptimeNanoseconds }, makeSession: VideoDecoder.createSession,
                   colorSpace: colorSpace, colorRange: colorRange)
     }

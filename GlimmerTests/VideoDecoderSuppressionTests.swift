@@ -8,6 +8,7 @@
 //  keyframe, plus the layer-stall observers that self-heal the present path.
 //
 
+import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import Foundation

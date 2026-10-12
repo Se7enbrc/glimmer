@@ -4,6 +4,7 @@
 // Window mode's grab and release as the forwarder walks them, and the diagnostic
 // event sampler. No key event reaches the diagnostic log.
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import Testing

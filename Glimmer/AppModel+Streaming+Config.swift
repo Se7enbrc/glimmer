@@ -13,6 +13,7 @@
 //  stays there and in AppModel+Streaming+Events.swift.
 //
 
+import GlimmerEngine
 import Foundation
 import os.log
 

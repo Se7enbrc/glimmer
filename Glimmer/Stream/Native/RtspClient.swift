@@ -27,6 +27,7 @@
 //  comes from each response header. Same TCP transport - only the payload is
 //  sealed/unsealed. Ported from RtspConnection.c sealRtspMessage/unsealRtspMessage.
 
+import GlimmerEngine
 import Foundation
 import Network
 import CryptoKit
@@ -51,15 +52,10 @@ struct RtspHandshakeResult {
     /// Same for SETUP-audio - the 16-byte ping the RtpAudioReceiver sends.
     var audioPingPayload: [UInt8] = []
     /// The Opus layout the decoder is built from, read from DESCRIBE's surround-params (`SdpScan.audioLayout`).
-    var opusConfig: OpusConfig = RtspHandshakeResult.defaultOpusConfig
+    var opusConfig: OpusConfig = SdpScan.defaultOpusConfig
     /// Whether ANNOUNCE asks for the high tier that `opusConfig` describes.
     var highQualityAudio = true
 
-    /// Stereo Opus layout: the handshake default and the base every
-    /// `SdpScan.audioLayout` result is built from.
-    static let defaultOpusConfig = OpusConfig(
-        sampleRate: 48000, channelCount: 2, streams: 1, coupledStreams: 1,
-        samplesPerFrame: 240, mapping: [0, 1])
     /// AudioPacketDuration in ms (5 default; SDP sends x-nv-aqos.packetDuration 5).
     var audioPacketDuration: Int = 5
     /// True iff we enabled AES-CBC audio (SS_ENC_AUDIO), which we do whenever
@@ -137,8 +133,6 @@ final class RtspClient: @unchecked Sendable {
     }
 
     static let controlStreamId = "streamid=control/13/0"
-    /// rtspClientVersion for app version 7, the one Sunshine reports (RtspConnection.c).
-    static let clientVersion = 14
     /// SDP responses are a few KiB; anything past this is a hostile or broken peer.
     static let maxResponseBytes = 256 * 1024
     /// Sunshine answers each message in milliseconds; moonlight waits 10 s. Without this a PC that accepts
@@ -178,7 +172,7 @@ final class RtspClient: @unchecked Sendable {
         var msg = RtspMessage(command: command, target: target)
         msg.headers.append(("CSeq", "\(currentSeqNumber)"))
         currentSeqNumber += 1
-        msg.headers.append(("X-GS-ClientVersion", "\(Self.clientVersion)"))
+        msg.headers.append(("X-GS-ClientVersion", "\(RtspMessage.clientVersion)"))
         // The C code adds Host on the !useEnet (TCP) path with value = urlAddr.
         msg.headers.append(("Host", urlAddr))
         return msg

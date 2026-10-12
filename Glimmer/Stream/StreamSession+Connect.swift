@@ -14,6 +14,7 @@
 //  orchestrating start() there and from StreamSession+Reconnect.swift.
 //
 
+import GlimmerEngine
 import Foundation
 import os
 
@@ -94,7 +95,7 @@ extension StreamSession {
         // inherited from the original connect.
         isRemotePathSession = resolvedRemoteness == .remote
         // One size for the SDP and the receiver, less the 32-byte header when video is encrypted
-        // (VideoDecryptor.packetSize). FEC rebuilds at each block's longest shard, capped at that
+        // (VideoPacketLayout.packetSize). FEC rebuilds at each block's longest shard, capped at that
         // size plus the RTP header, so a PC that sends shorter shards still recovers cleanly.
         let resolvedPacketSize = StreamPathMTU.advertisedPacketSize(
             configured: config.packetSize,

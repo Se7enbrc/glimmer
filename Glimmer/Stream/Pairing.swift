@@ -26,7 +26,7 @@ public actor PairingClient {
 
     // MARK: Init
 
-    public init(network: NetworkClient, server: ServerInfo) {
+    init(network: NetworkClient, server: ServerInfo) {
         self.network = network
         self.server = server
     }
@@ -35,7 +35,7 @@ public actor PairingClient {
 
     /// Walk the full PIN handshake. On success the returned `ServerInfo` has
     /// `pairStatus = .paired` and `serverCertPEM` holding the host's pinned certificate.
-    public func pair(pin: String) async throws -> ServerInfo {
+    func pair(pin: String) async throws -> ServerInfo {
         try await runPairingFlow(pin: pin)
     }
 

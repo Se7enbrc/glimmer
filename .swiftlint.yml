@@ -4,6 +4,7 @@
 
 included:
   - Glimmer
+  - GlimmerEngine
   - GlimmerTests
   - helper
   - LoginHelper

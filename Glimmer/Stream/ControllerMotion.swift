@@ -41,6 +41,7 @@
 //  back into the backend's connection latch.
 //
 
+import GlimmerEngine
 import Foundation
 import GameController
 

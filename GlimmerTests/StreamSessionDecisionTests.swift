@@ -8,6 +8,7 @@
 //  gate, the backend config mapping and the attempt guard, on a fake backend.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

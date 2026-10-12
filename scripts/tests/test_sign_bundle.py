@@ -67,13 +67,14 @@ class SignBundleTests(unittest.TestCase):
         login_entitlements.parent.mkdir()
         login_entitlements.write_bytes(plistlib.dumps({"fixture.login": True}))
         self.framework = self.app / "Contents/Frameworks/Sparkle.framework"
+        self.engine = self.app / "Contents/Frameworks/GlimmerEngine.framework"
         self.updater = self.framework / "Versions/B/Updater.app"
         self.updater_binary = self.updater / "Contents/MacOS/Updater"
         self.xpc = self.framework / "Versions/B/XPCServices/Downloader.xpc"
         self.autoupdate = self.framework / "Versions/B/Autoupdate"
         self.login = self.app / "Contents/Library/LoginItems/Glimmer Login Helper.app"
         self.dylib = self.app / "Contents/Frameworks/fixture.dylib"
-        for directory in (self.daemon / "Contents", self.xpc, self.login):
+        for directory in (self.daemon / "Contents", self.xpc, self.login, self.engine):
             directory.mkdir(parents=True)
         for file in (self.updater_binary, self.autoupdate, self.dylib):
             file.parent.mkdir(parents=True, exist_ok=True)
@@ -107,7 +108,7 @@ class SignBundleTests(unittest.TestCase):
         signatures = [call for call in calls if call["tool"] == "codesign" and "--verify" not in call["args"]]
         self.assertEqual([call["args"][-1] for call in signatures],
                          [str(path) for path in (self.updater_binary, self.updater, self.xpc,
-                                                self.autoupdate, self.framework, self.login,
+                                                self.autoupdate, self.framework, self.engine, self.login,
                                                 self.dylib, self.daemon, self.app)])
         for call in signatures:
             args = call["args"]
@@ -119,7 +120,9 @@ class SignBundleTests(unittest.TestCase):
         self.assertEqual(signatures[-1]["entitlements"]["fixture.role"], "app")
         self.assertEqual(signatures[-2]["entitlements"]["fixture.source"], "helper/Helper.entitlements")
         self.assertEqual(signatures[-1]["entitlements"]["fixture.source"], str(self.entitlements))
-        self.assertEqual(signatures[5]["entitlements"], {"fixture.login": True})
+        self.assertEqual(signatures[6]["entitlements"], {"fixture.login": True})
+        self.assertNotIn("entitlements", signatures[5])
+        self.assertNotIn("--preserve-metadata=entitlements,identifier", signatures[5]["args"])
         for call in signatures[:4]:
             self.assertIn("--preserve-metadata=entitlements,identifier", call["args"])
             self.assertNotIn("entitlements", call)

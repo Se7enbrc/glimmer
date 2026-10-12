@@ -28,6 +28,7 @@
 //  a frame can span up to 4 FEC blocks; only after the LAST block is the frame
 //  submitted.
 
+import GlimmerEngine
 import Foundation
 import Synchronization
 

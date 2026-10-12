@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  Types.swift
-//
-//  Public types for the streaming engine. These are the values that flow
-//  between the SwiftUI layer (host cards, settings) and the StreamSession
-//  actor underneath. The backend's stream-configuration value types are filled
-//  in from these on the way down to startConnection.
+// App configuration flows between the UI and StreamSession; the protocol's
+// stream-configuration values are filled from these at the backend boundary.
 
+import GlimmerEngine
 import Foundation
 import CoreAudio
 import CoreMedia
@@ -20,11 +16,11 @@ import os
 /// Configuration the caller provides when starting a stream. Mirrors the
 /// fields of moonlight-common-c's STREAM_CONFIGURATION but with idiomatic
 /// Swift types and only the knobs callers should set.
-public struct StreamConfig: Sendable {
-    public var width: Int
-    public var height: Int
-    public var fps: Int
-    public var bitrateKbps: Int
+struct StreamConfig: Sendable {
+    var width: Int
+    var height: Int
+    var fps: Int
+    var bitrateKbps: Int
     /// Video packet size on the wire (UDP payload, before FEC framing).
     /// moonlight-common-c documents the default as "use 1024 if unsure" but
     /// that's a conservative remote-streaming value - on a LAN where MTU is
@@ -41,25 +37,25 @@ public struct StreamConfig: Sendable {
     /// applies at SDP-build time rather than mutating this field. This stored
     /// value is the LAN default and is unchanged; only the advertised number is
     /// clamped, and only when remote.
-    public var packetSize: Int = 1392
+    var packetSize: Int = 1392
     /// The wired boost folded into `bitrateKbps` (1 = none), so the connect-time
     /// gate can withdraw it when the measured path says a Wi-Fi hop is present.
-    public var bitrateBoost: Double = 1
+    var bitrateBoost: Double = 1
     /// How `bitrateKbps` was chosen, for the telemetry config event only.
-    public var bitrateDecision: BitrateDecision?
-    public var remoteness: Remoteness = .auto
+    var bitrateDecision: BitrateDecision?
+    var remoteness: Remoteness = .auto
     /// Keep a surround bed available when outputs change during a stream.
     /// The Mac renders it for the active speakers or headphones.
-    public var audio: AudioConfig = .surround71
+    var audio: AudioConfig = .surround71
     /// Default to whatever VideoToolbox actually reports as hardware-decodable
     /// on this machine - see `VideoFormats.probedSupported`. Callers can
     /// override (tests pin a specific set; the picker UI may downgrade based
     /// on user preference) but the safe default is "advertise only what we
     /// can decode," so the host's RTSP codec negotiation never picks a
     /// format we'd have to reject in `handleSetup`.
-    public var videoFormats: VideoFormats = .probedSupported
-    public var colorSpace: ColorSpace = .rec709
-    public var colorRange: ColorRange = .full
+    var videoFormats: VideoFormats = .probedSupported
+    var colorSpace: ColorSpace = .rec709
+    var colorRange: ColorRange = .full
 
     /// When true, system-level keyboard combos that use the macOS Cmd key
     /// (⌘-Tab, ⌘-Space, ⌘-Q, ⌘-`, ⌘-H, ⌘-M, ...) are forwarded to the host as
@@ -77,27 +73,27 @@ public struct StreamConfig: Sendable {
     ///     doesn't carry a phantom Win-key modifier.
     /// The user's configured quit hotkey is still honoured (it's intercepted
     /// in Glimmer before the capture gate).
-    public var captureSysKeys: Bool = false
+    var captureSysKeys: Bool = false
 
     /// On notched MacBooks, whether the fullscreen stream window covers
     /// the entire panel (including the 37pt notch reserve zone) or stops
     /// at the safe-area boundary. Default true. See `StreamWindow.coversNotch`.
-    public var coversNotch: Bool = true
+    var coversNotch: Bool = true
 
     /// How the stream window presents: the fullscreen cover (default) or a
     /// normal titled window the user can drag and resize. Snapshotted at
     /// session start like `coversNotch`; see `StreamDisplayMode`.
-    public var displayMode: StreamDisplayMode = .fullScreen
+    var displayMode: StreamDisplayMode = .fullScreen
 
     /// Title for the Window-mode window ("Tower - Desktop"). Unused in full
     /// screen (a borderless cover has no title bar).
-    public var windowTitle: String = ""
+    var windowTitle: String = ""
 
     /// Moonlight's "play audio on host PC": the PC keeps its own sound and
     /// this Mac silences the stream (not the system volume).
-    public var playAudioOnHost: Bool = false
+    var playAudioOnHost: Bool = false
 
-    public init(width: Int, height: Int, fps: Int, bitrateKbps: Int) {
+    init(width: Int, height: Int, fps: Int, bitrateKbps: Int) {
         self.width = width
         self.height = height
         self.fps = fps
@@ -107,16 +103,16 @@ public struct StreamConfig: Sendable {
 
 /// The inputs of the launcher's bitrate ask: Settings › Quality › Bandwidth, the
 /// quality dial, the multipliers applied to it, and the Wi-Fi PHY rate that capped it.
-public struct BitrateDecision: Sendable {
-    public var mode: BitrateMode
-    public var dialKbps: Int
-    public var codecMultiplier: Double
-    public var boost: Double
+struct BitrateDecision: Sendable {
+    var mode: BitrateMode
+    var dialKbps: Int
+    var codecMultiplier: Double
+    var boost: Double
     /// The median Wi-Fi PHY rate the ask was capped against; nil off Wi-Fi.
-    public var radioGatePhyMbps: Double?
+    var radioGatePhyMbps: Double?
 }
 
-public enum Remoteness: Sendable {
+enum Remoteness: Sendable {
     case local, remote, auto
 
     var cValue: Int32 {
@@ -128,7 +124,7 @@ public enum Remoteness: Sendable {
     }
 }
 
-public enum AudioConfig: Sendable {
+enum AudioConfig: Sendable {
     case stereo
     case surround51
     case surround71
@@ -163,7 +159,7 @@ public enum AudioConfig: Sendable {
     /// QuickTime/Music conventions: "Stereo", "5.1 surround", "7.1
     /// surround" (lowercased "surround" follows HIG sentence-case for
     /// product-spec rows).
-    public var displayLabel: String {
+    var displayLabel: String {
         switch self {
         case .stereo:     return "Stereo"
         case .surround51: return "5.1 surround"
@@ -174,20 +170,19 @@ public enum AudioConfig: Sendable {
 
 /// Set of video formats the client supports. Sent to the host so it picks
 /// the highest format the encoder + decoder both speak.
-public struct VideoFormats: OptionSet, Sendable {
-    public let rawValue: Int32
-    public init(rawValue: Int32) { self.rawValue = rawValue }
+struct VideoFormats: OptionSet, Sendable {
+    let rawValue: Int32
 
-    public static let h264         = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H264)
-    public static let h264YUV444   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H264_HIGH8_444)
-    public static let hevc         = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265)
-    public static let hevcMain10   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_MAIN10)
-    public static let hevcRext8_444  = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_REXT8_444)
-    public static let hevcRext10_444 = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_REXT10_444)
-    public static let av1          = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_MAIN8)
-    public static let av1Main10    = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_MAIN10)
-    public static let av1High8_444   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_HIGH8_444)
-    public static let av1High10_444  = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_HIGH10_444)
+    static let h264         = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H264)
+    static let h264YUV444   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H264_HIGH8_444)
+    static let hevc         = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265)
+    static let hevcMain10   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_MAIN10)
+    static let hevcRext8_444  = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_REXT8_444)
+    static let hevcRext10_444 = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_REXT10_444)
+    static let av1          = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_MAIN8)
+    static let av1Main10    = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_MAIN10)
+    static let av1High8_444   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_HIGH8_444)
+    static let av1High10_444  = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_HIGH10_444)
 
     /// Build the client-supported codec mask from probed VideoToolbox
     /// capabilities, NOT from a hardcoded "we support everything" set.
@@ -203,7 +198,7 @@ public struct VideoFormats: OptionSet, Sendable {
     /// AV1 HW decode and fall back to {HEVC Main/Main10, H.264 High}. The
     /// probe is the source of truth - anything Apple ships in a future
     /// chip generation lights up automatically without a code change.
-    public static let probedSupported: VideoFormats = probeSupported()
+    static let probedSupported: VideoFormats = probeSupported()
 
     private static func probeSupported() -> VideoFormats {
         let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Capabilities")
@@ -281,7 +276,7 @@ public struct VideoFormats: OptionSet, Sendable {
     }
 }
 
-public extension VideoFormats {
+extension VideoFormats {
     /// All AV1 profile bits (Main8/Main10 + High 4:4:4 8/10-bit).
     static let anyAV1: VideoFormats = [.av1, .av1Main10, .av1High8_444, .av1High10_444]
     /// All HEVC profile bits (Main/Main10 + RExt 4:4:4 8/10-bit).
@@ -299,7 +294,7 @@ public extension VideoFormats {
     }
 }
 
-public enum ColorSpace: Sendable {
+enum ColorSpace: Sendable {
     case rec601, rec709, rec2020
     var cValue: Int32 {
         switch self {
@@ -310,7 +305,7 @@ public enum ColorSpace: Sendable {
     }
 }
 
-public enum ColorRange: Sendable {
+enum ColorRange: Sendable {
     case limited, full
     var cValue: Int32 {
         switch self {
@@ -324,23 +319,24 @@ public enum ColorRange: Sendable {
 
 /// Everything we need to know about the remote host to start a session.
 /// Populated by Network's /serverinfo call + cached pairing data.
-public struct ServerInfo: Sendable {
-    public var address: String                  // hostname or IP, no port
-    public var httpPort: Int = 47989
-    public var httpsPort: Int = 47984
+struct ServerInfo: Sendable {
+    var address: String                  // hostname or IP, no port
+    var httpPort: Int = 47989
+    var httpsPort: Int = 47984
     /// Host's cert (PEM), which is the TLS pin. Set only by the RSA-verified PIN
     /// handshake or from `PinnedCertStore` via `AppModel.nativeServerInfo`;
     /// /serverinfo never sets it (C2), so nil means not paired.
-    public var serverCertPEM: String?
-    public var uniqueId: String                 // GUID identifying this host
-    public var serverName: String               // friendly name from /serverinfo
-    public var pairStatus: PairStatus = .unpaired
-    public var appVersion: String?              // GFE/Sunshine version string
+    var serverCertPEM: String?
+    var uniqueId: String                 // GUID identifying this host
+    var serverName: String               // friendly name from /serverinfo
+    var pairStatus: PairStatus = .unpaired
+    var appVersion: String?              // GFE/Sunshine version string
     /// True only for NVIDIA GameStream, whose `<state>` holds "MJOLNIR" (moonlight-qt's test); Sunshine sends
     /// `GfeVersion` too, so that proves nothing. Pairing and stream start refuse such a PC.
-    public var isRealGFE: Bool = false
-    public var maxLumaPixelsHEVC: Int = 0       // HEVC capability hint
-    public var serverCodecSupport: VideoFormats = []  // server-supported formats (decoded into our VIDEO_FORMAT_* bitmask for our own use)
+    var isRealGFE: Bool = false
+    var maxLumaPixelsHEVC: Int = 0       // HEVC capability hint
+    // The PC's supported formats, decoded into our VIDEO_FORMAT_* bitmask.
+    var serverCodecSupport: VideoFormats = []
     /// Raw `ServerCodecModeSupport` integer from /serverinfo, in
     /// moonlight-common-c's SCM_* bit layout - completely different from our
     /// VIDEO_FORMAT_* layout (e.g. SCM_AV1_MAIN10 = 0x20000 vs
@@ -350,15 +346,15 @@ public struct ServerInfo: Sendable {
     /// both fields because `serverCodecSupport` is what our own UI / picker
     /// code thinks in, while `serverCodecModeRaw` is what the backend
     /// needs on the wire.
-    public var serverCodecModeRaw: Int = 0
-    public var isBusy = false
-    public var currentGameID: Int = 0           // 0 = host is idle; otherwise the app ID that's streaming
+    var serverCodecModeRaw: Int = 0
+    var isBusy = false
+    var currentGameID: Int = 0           // 0 = host is idle; otherwise the app ID that's streaming
     /// Host's primary-NIC MAC from /serverinfo's `<mac>`, as stock Moonlight uses for WoL.
     /// Only learnable while the host is ONLINE; some Sunshine NIC configs report a zeroed
     /// MAC, which `WakeOnLAN.normalizeMac` treats as absent (Wake on LAN fails closed on it).
-    public var macAddress: String?
+    var macAddress: String?
 
-    public init(address: String, uniqueId: String, serverName: String) {
+    init(address: String, uniqueId: String, serverName: String) {
         self.address = address
         self.uniqueId = uniqueId
         self.serverName = serverName
@@ -367,7 +363,7 @@ public struct ServerInfo: Sendable {
 
 // MARK: - Events emitted during a session
 
-public enum StreamEvent: Sendable {
+enum StreamEvent: Sendable {
     case stageStarting(name: String)
     case stageComplete(name: String)
     case stageFailed(name: String, errorCode: Int32)
@@ -415,13 +411,13 @@ public enum StreamEvent: Sendable {
     case log(String)
 }
 
-public enum ConnectionQuality: Sendable {
+enum ConnectionQuality: Sendable {
     case good, poor
 }
 
 // MARK: - Errors
 
-public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedError {
+enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedError {
     case binaryNotFound
     case hostUnreachable(String)
     case pairingFailed(String)
@@ -451,7 +447,7 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
     /// The PC runs NVIDIA GameStream, not Sunshine. Refused before anything is launched.
     case gameStreamHost
 
-    public var description: String {
+    var description: String {
         switch self {
         case .binaryNotFound: return "Streaming library not available."
         case .hostUnreachable(let detail): return "Couldn't reach the PC: \(detail)."
@@ -483,5 +479,5 @@ public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErro
     /// Routing `errorDescription` back to our `description` guarantees the
     /// human sentence shows up on every path, not just the ones that special-
     /// case StreamError before reading localizedDescription.
-    public var errorDescription: String? { description }
+    var errorDescription: String? { description }
 }

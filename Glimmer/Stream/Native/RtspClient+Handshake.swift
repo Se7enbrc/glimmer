@@ -13,6 +13,7 @@
 //  stored state and the encrypted-RTSP framing.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 
@@ -159,14 +160,13 @@ extension RtspClient {
     }
 
     static let ssEncControlV2: UInt32 = 0x01
-    static let ssEncVideo: UInt32 = 0x02
     static let ssEncAudio: UInt32 = 0x04
 
     /// getAttributesList: control-V2 and audio encryption whenever the PC supports them (upstream's
     /// default). Video only when the PC requests it (its mandatory mode): like upstream we don't
     /// opt in, since decrypting costs CPU on every video packet.
     static func computeEncryptionEnabled(supported: UInt32, requested: UInt32) -> UInt32 {
-        (supported & (ssEncControlV2 | ssEncAudio)) | (requested & ssEncVideo)
+        (supported & (ssEncControlV2 | ssEncAudio)) | (requested & VideoPacketLayout.ssEncVideo)
     }
 
     func codecName(_ format: Int32) -> String {

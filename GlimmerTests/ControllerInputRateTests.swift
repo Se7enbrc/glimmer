@@ -8,6 +8,7 @@
 //  one is held to the host rate) and the raw DualSense report-rate window.
 //
 
+import GlimmerEngine
 import Foundation
 import GameController
 import Testing

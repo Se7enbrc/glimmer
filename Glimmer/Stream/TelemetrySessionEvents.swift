@@ -40,6 +40,7 @@
 //  ordinal, or a fixed stage label - nothing that could carry a secret/host id.
 //
 
+import GlimmerEngine
 import Foundation
 import os
 

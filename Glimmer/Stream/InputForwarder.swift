@@ -97,6 +97,7 @@
 //     it `LiSendMultiControllerEvent` events appear to be silently dropped on
 //     newer Sunshine builds.
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
@@ -274,7 +275,7 @@ public final class InputForwarder {
 
     /// Set the backend the forwarder uses. Called by StreamSession right after
     /// `attach(to:)`.
-    public func setBackend(_ backend: StreamingBackend) {
+    func setBackend(_ backend: StreamingBackend) {
         self.backend = backend
     }
 

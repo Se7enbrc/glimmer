@@ -40,6 +40,7 @@
 //  forwarder (main) or the main-queue timer.
 //
 
+import GlimmerEngine
 import Foundation
 import GameController
 

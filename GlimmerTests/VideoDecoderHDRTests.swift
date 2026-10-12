@@ -7,6 +7,7 @@
 //  Which colorspace a decoded frame is tagged with, the HDR10 metadata blobs, and the layer's HDR mode.
 //
 
+import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import CoreVideo

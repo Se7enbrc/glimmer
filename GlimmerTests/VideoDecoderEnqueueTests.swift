@@ -8,6 +8,7 @@
 //  and what VideoToolbox's output callback does with success and failure.
 //
 
+import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import CoreVideo

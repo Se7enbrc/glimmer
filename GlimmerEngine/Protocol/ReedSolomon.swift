@@ -12,13 +12,13 @@ import Foundation
 
 /// GF(2^8) arithmetic tables (poly 0x11D), generated once and shared.
 /// This polynomial matches nanors/deps/obl/gf2_8_tables.h for wire compatibility.
-enum GF256 {
+package enum GF256 {
     /// log table: LOG[a] = discrete log of a (LOG[0] is unused/255 sentinel).
     static let log: [UInt8] = tables.log
     /// exp table, DOUBLED to length 512 so EXP[LOG[a]+LOG[b]] needs no modulo.
     static let exp: [UInt8] = tables.exp
     /// multiplicative inverse: INV[0]=0, INV[1]=1, INV[a]=a^(254).
-    static let inv: [UInt8] = tables.inv
+    package static let inv: [UInt8] = tables.inv
 
     private static let tables: (log: [UInt8], exp: [UInt8], inv: [UInt8]) = {
         var logT = [UInt8](repeating: 0, count: 256)
@@ -51,13 +51,14 @@ enum GF256 {
 
     /// GF(256) multiply.
     @inline(__always)
-    static func mul(_ a: UInt8, _ b: UInt8) -> UInt8 {
+    package static func mul(_ a: UInt8, _ b: UInt8) -> UInt8 {
         if a == 0 || b == 0 { return 0 }
         return exp[Int(log[Int(a)]) + Int(log[Int(b)])]
     }
 
     /// dst[i] ^= coefficient · src[i] over `count` bytes.
-    static func mulAdd(_ dst: UnsafeMutablePointer<UInt8>, _ src: UnsafePointer<UInt8>, count: Int, by coefficient: UInt8) {
+    static func mulAdd(_ dst: UnsafeMutablePointer<UInt8>, _ src: UnsafePointer<UInt8>,
+                       count: Int, by coefficient: UInt8) {
         let target = UnsafeMutableRawPointer(dst), source = UnsafeRawPointer(src)
         var offset = 0
         while count - offset >= 16 {
@@ -96,7 +97,7 @@ enum GF256 {
 
 /// Reed-Solomon erasure decoder over GF(256). One instance per (ds, ps); the
 /// Cauchy parity matrix is built at init.
-struct ReedSolomon {
+package struct ReedSolomon {
     let ds: Int          // data shards
     let ps: Int          // parity shards
     // Cauchy uses INV[(ps + i) ^ j]; using ds as the base can make it singular.
@@ -104,7 +105,7 @@ struct ReedSolomon {
 
     /// Mirrors reed_solomon_new / reed_solomon_new_static (rs.c:82-105).
     /// Returns nil for invalid geometry (matches the C NULL return).
-    init?(dataShards ds: Int, parityShards ps: Int) {
+    package init?(dataShards ds: Int, parityShards ps: Int) {
         guard ds > 0, ps > 0, ds + ps <= 255 else { return nil }
         self.ds = ds
         self.ps = ps
@@ -215,7 +216,7 @@ struct ReedSolomon {
     /// Rebuilds the erased data shards in place (rs.c:128). `shards` holds ds data then ps
     /// parity buffers of `bs` bytes, the block's shard length; `marks[i]` is true when shard
     /// `i` is missing. Returns false when fewer parity shards survive than there are gaps.
-    func decode(shards: inout [[UInt8]], marks: [Bool], bs: Int) -> Bool {
+    package func decode(shards: inout [[UInt8]], marks: [Bool], bs: Int) -> Bool {
         let totalShards = ds + ps
         guard shards.count >= totalShards, marks.count >= totalShards else { return false }
         // GF row ops below index 0..<bs on every shard; reject short shards / a

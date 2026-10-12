@@ -25,6 +25,7 @@
 //  under category "NativeConnection" trace each sub-stage so progress is
 //  watchable live.
 
+import GlimmerEngine
 import Foundation
 import Network
 import os
@@ -70,7 +71,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
     var audioSink: NativeAudioSink?
 
     /// Inject the audio sink (the AudioDecoder). Set-once before startConnection.
-    public func attachAudioSink(_ sink: NativeAudioSink) {
+    func attachAudioSink(_ sink: NativeAudioSink) {
         _ = adoptWhileConnecting { audioSink = sink }
     }
 
@@ -80,7 +81,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
     var videoSink: VideoSink?
 
     /// Inject the video sink (the VideoDecoder). Set-once before startConnection.
-    public func attachVideoSink(_ sink: VideoSink) {
+    func attachVideoSink(_ sink: VideoSink) {
         _ = adoptWhileConnecting { videoSink = sink }
     }
 
@@ -106,7 +107,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
 
     // MARK: - Lifecycle
 
-    public func startConnection(
+    func startConnection(
         server: BackendServerInfo,
         config: BackendStreamConfig
     ) throws {
@@ -127,7 +128,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
     /// StreamSession actor stays responsive while a hanging host is brought up. On
     /// cancellation we interrupt the in-flight connections; the bridge-thread
     /// completion then resumes the continuation exactly once.
-    public func startConnectionAsync(
+    func startConnectionAsync(
         server: BackendServerInfo,
         config: BackendStreamConfig
     ) async throws {

@@ -8,6 +8,7 @@
 //  stored state expose the results. One uses a loopback listener to read the ACKs.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Network
 import Testing

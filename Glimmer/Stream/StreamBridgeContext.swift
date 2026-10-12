@@ -57,7 +57,7 @@ public final class StreamBridgeContext: @unchecked Sendable {
     /// The session's event stream, yielded to straight from backend threads so events keep the order
     /// the backend fired them (a Task hop would not). Invariant: written once in start() before any
     /// pipeline runs, and never cleared; stop() finishes it instead.
-    nonisolated(unsafe) public var eventContinuation: AsyncStream<StreamEvent>.Continuation?
+    nonisolated(unsafe) var eventContinuation: AsyncStream<StreamEvent>.Continuation?
 
     /// Weak-static fallback for callbacks that don't take a context pointer
     /// (the decoder-renderer slots except setup, the audio-renderer slots

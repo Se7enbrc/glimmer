@@ -8,6 +8,7 @@
 //  the per-block rebuild latch and the recovery episode summary.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

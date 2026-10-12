@@ -10,6 +10,7 @@
 //  unit focused; see that file for the decoder's stored state.
 //
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreMedia

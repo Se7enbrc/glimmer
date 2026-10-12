@@ -3,6 +3,7 @@
 
 // Game mode preserves per-finger PC touch events; mouse mode uses the same snapshots as a trackpad.
 
+import GlimmerEngine
 import Foundation
 import GameController
 

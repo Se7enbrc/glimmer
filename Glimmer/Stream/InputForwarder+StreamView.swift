@@ -10,6 +10,7 @@
 //  keep each unit focused.
 //
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics

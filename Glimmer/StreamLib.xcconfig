@@ -3,9 +3,8 @@
 // `-xcconfig` flag supplies the version to the build.
 #include "Version.xcconfig"
 
-// Apple Silicon only, the platform Glimmer ships for: pinned because the Release build otherwise
-// defaults to ARCHS_STANDARD (universal), and the shared scheme carries no arch narrowing.
-ARCHS = arm64
+// Pin Mac builds to Apple Silicon; framework Simulator builds retain the SDK's standard architectures.
+ARCHS[sdk=macosx*] = arm64
 
 // Reproducible Release payload (docs/RELEASE.md): once the dSYM is written, strip the
 // stabs that record checkout paths. The symbol table stays, so crash logs still name
