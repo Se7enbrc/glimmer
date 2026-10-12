@@ -165,12 +165,7 @@ final class FramePacer: @unchecked Sendable {
     /// of recent hostPTS deltas. Seeded from the configured stream fps so the
     /// very first ticks have a sane cadence before PTS history accrues.
     var streamFrameIntervalSeconds: Double
-    /// The FIXED configured-fps interval (set once at init, never refined). The
-    /// present-callback FLOOR pins to THIS, not to the per-frame-refined
-    /// `streamFrameIntervalSeconds` (which jitters with measured PTS cadence) - so
-    /// the floor never re-pins on cadence wobble, which makes the display
-    /// renegotiate its refresh and drop a frame (the TestUFO frameskip gap). The
-    /// due gate still paces from the refined interval; only the floor is fixed.
+    /// Fixed-rate screens keep the configured callback floor to avoid divisor throttling.
     let configuredFrameIntervalSeconds: Double
     /// Last hostPTS we saw at submit, to compute the next delta.
     var lastSubmittedPTSSeconds: Double = .nan
@@ -179,6 +174,10 @@ final class FramePacer: @unchecked Sendable {
     var ptsDeltas: [Double] = []
     /// Sorted mirror used to read the cadence percentile without sorting under lock.
     var sortedPtsDeltas: [Double] = []
+    /// Bounded PTS mean follows sustained under-delivery without treating a drought as cadence.
+    var contentFrameIntervalSeconds: Double = .nan
+    /// Guarded by `lock`; variable scanouts cannot be predicted from the previous tick's grid.
+    var variableRefreshEnabled = false
 
     /// Adaptive target-depth + reconciler-snapshot state (guarded by `lock`).
     /// The `AdaptiveDepthState` type - and the THREAD ISOLATION contract behind
@@ -289,16 +288,8 @@ final class FramePacer: @unchecked Sendable {
     /// VideoDecoder and so the selector signature stays clean.
     @MainActor private var tickProxy: DisplayLinkProxy?
 
-    /// The Hz (floor) we last pinned `preferredFrameRateRange` to.
-    /// Pinned to the FIXED configured fps at install and held there; the
-    /// main-actor re-apply only touches it again if the panel max changes under
-    /// us (deadband `frameRateReapplyHysteresisHz`). `.nan` until first applied.
-    /// Module-internal (not private) so the re-apply helper in
-    /// FramePacer+FrameRateRange.swift can read/update it.
-    @MainActor var appliedFloorHz: Double = .nan
-
-    // `frameRateReapplyHysteresisHz` lives in FramePacer+FrameRateRange.swift
-    // with the re-apply helper that uses it.
+    /// Main-actor hint history bounds updates and retries ignored hints without rebuilding the link.
+    @MainActor var rateHint = RateHint()
 
     /// Dedicated serial queue for the present path. `.userInteractive` because
     /// a missed release is a dropped frame the user sees. NEVER the main actor.
@@ -378,11 +369,8 @@ final class FramePacer: @unchecked Sendable {
         tickDeficit.rateWindowStartHostTime = now
         tickDeficit.rateWindowStartTicks = liveness.tickCount
         tickDeficit.rateWindowStartReleases = liveness.releaseCount
-        // Warm re-enable cadence seed: a re-enabled pacer is freshly built
-        // from the CONFIGURED fps, but its predecessor had already refined the
-        // true content cadence - adopt it to warm-start the DUE GATE's pacing
-        // cadence. The present-callback floor is unaffected: it always pins the
-        // FIXED configured rate (configuredFrameIntervalSeconds), never this.
+        // Warm re-enable inherits measured cadence rather than the configured seed.
+        // Fixed screens keep their callback floor; variable screens may follow this cadence.
         adoptStashedRefinedCadenceLocked()
         lock.unlock()
 

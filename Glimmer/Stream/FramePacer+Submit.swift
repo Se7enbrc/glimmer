@@ -111,7 +111,7 @@ extension FramePacer {
     /// whether the cadence gate calls a frame submitted now due on its next scanout. If so,
     /// claim that scanout as the present time and return the vsync interval. Under `lock`.
     private func passthroughVsyncLocked() -> CFTimeInterval? {
-        guard !presentSuppressed, queue.isEmpty,
+        guard !presentSuppressed, !variableRefreshEnabled, queue.isEmpty,
               adaptiveDepth.adaptiveTargetDepth == FramePacer.targetDepth,
               !tickDeficit.deficitModeActive, !tickDeficit.floorAssistActive,
               lastPresentMediaTime.isFinite, liveness.lastTickTargetMediaTime.isFinite else { return nil }
@@ -124,7 +124,7 @@ extension FramePacer {
         let sinceLast = scanout - lastPresentMediaTime
         let remainder = cadenceRemainderLocked(vsyncInterval: vsync)
         guard sinceLast > 0, sinceLast <= 1.0,
-              sinceLast + remainder >= streamFrameIntervalSeconds - vsync * 0.5 else { return nil }
+              sinceLast + remainder >= presentationIntervalLocked() - vsync * 0.5 else { return nil }
         advanceCadenceLocked(to: scanout, vsyncInterval: vsync)
         if abs(scanout - liveness.staleCandidateTarget) < vsync * 0.5 { liveness.staleCandidateTarget = .nan }
         tickDeficit.tickScanoutMediaTime = scanout
@@ -167,6 +167,7 @@ extension FramePacer {
                 if ptsDeltas.count >= FramePacer.minCadenceRefineSamples {
                     streamFrameIntervalSeconds =
                         FramePacer.clampFrameInterval(skipRobustInterval(sortedPtsDeltas))
+                    contentFrameIntervalSeconds = Self.contentInterval(ptsDeltas, base: streamFrameIntervalSeconds)
                 }
             }
         }

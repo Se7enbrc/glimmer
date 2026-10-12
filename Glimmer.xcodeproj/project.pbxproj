@@ -339,6 +339,7 @@
 		D2C7A004 /* EnvSignalStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C7A003 /* EnvSignalStateMachineTests.swift */; };
 		D2C7A006 /* BackendGlueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C7A005 /* BackendGlueTests.swift */; };
 		D1A1B003 /* HUDBackdropLuminanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A1B004 /* HUDBackdropLuminanceTests.swift */; };
+		A6C20261012FACADE00000001 /* FramePacerContentRateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C20261012FACADE00000002 /* FramePacerContentRateTests.swift */; };
 		DEC0DE202609221200000001 /* FramePacerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221200000002 /* FramePacerTests.swift */; };
 		DEC0DE202609252400000001 /* FramePacerTickDeficitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609252400000002 /* FramePacerTickDeficitTests.swift */; };
 		D2B0000E /* AudioPrimeEdgeSafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2B0000D /* AudioPrimeEdgeSafetyTests.swift */; };
@@ -915,6 +916,7 @@
 		D2C7A003 /* EnvSignalStateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvSignalStateMachineTests.swift; sourceTree = "<group>"; };
 		D2C7A005 /* BackendGlueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendGlueTests.swift; sourceTree = "<group>"; };
 		D1A1B004 /* HUDBackdropLuminanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDBackdropLuminanceTests.swift; sourceTree = "<group>"; };
+		A6C20261012FACADE00000002 /* FramePacerContentRateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerContentRateTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609221200000002 /* FramePacerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609252400000002 /* FramePacerTickDeficitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePacerTickDeficitTests.swift; sourceTree = "<group>"; };
 		D2B0000D /* AudioPrimeEdgeSafetyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPrimeEdgeSafetyTests.swift; sourceTree = "<group>"; };
@@ -1537,6 +1539,7 @@
 				D2C7A003 /* EnvSignalStateMachineTests.swift */,
 				D2C7A005 /* BackendGlueTests.swift */,
 				D1A1B004 /* HUDBackdropLuminanceTests.swift */,
+				A6C20261012FACADE00000002 /* FramePacerContentRateTests.swift */,
 				DEC0DE202609221200000002 /* FramePacerTests.swift */,
 				DEC0DE202609252400000002 /* FramePacerTickDeficitTests.swift */,
 				D2B0000D /* AudioPrimeEdgeSafetyTests.swift */,
@@ -2192,6 +2195,7 @@
 				D2C7A004 /* EnvSignalStateMachineTests.swift in Sources */,
 				D2C7A006 /* BackendGlueTests.swift in Sources */,
 				D1A1B003 /* HUDBackdropLuminanceTests.swift in Sources */,
+				A6C20261012FACADE00000001 /* FramePacerContentRateTests.swift in Sources */,
 				DEC0DE202609221200000001 /* FramePacerTests.swift in Sources */,
 				DEC0DE202609252400000001 /* FramePacerTickDeficitTests.swift in Sources */,
 				D2B0000E /* AudioPrimeEdgeSafetyTests.swift in Sources */,

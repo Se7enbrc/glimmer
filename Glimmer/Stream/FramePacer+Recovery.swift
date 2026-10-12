@@ -130,41 +130,19 @@ extension FramePacer {
             self?.handleTick(link)
         }
         let link = view.displayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick(_:)))
-        // FORBID macOS from throttling the PRESENT CALLBACK below stream
-        // cadence on a static/AFK layer. Without a floor, macOS slows the
-        // CADisplayLink callback on a flat layer (NOT a ProMotion display
-        // ramp-down - the panel stayed 120Hz; it is the CALLBACK being
-        // throttled), so received frames pile in the pacer FIFO to the cap and
-        // late-drop (on a lossy wifi link: drops_presentation_late = 38% of all
-        // frames, fps_rendered→0 while decode tracked received). Pinning the link
-        // to the STREAM cadence keeps the present callback firing at least once
-        // per stream frame even on a static scene, so queued frames keep
-        // presenting and the pile-up can't form. The floor is ADVISORY - the
-        // battery/ProMotion governor demonstrably overrides it (measured on a
-        // battery + ProMotion panel) - which is why the tick-deficit
-        // degraded mode exists as the failsafe.
-        //
-        // We still read the realized cadence per tick from targetTimestamp, so a
-        // variable-refresh panel is handled correctly inside [minimum, maximum].
-        // CLAMP the floor to min(streamHz, panelMaxHz): on a sub-stream-fps panel
-        // (e.g. 60Hz external + 120fps stream) the panel physically cannot tick
-        // at streamHz, so requesting that floor is impossible and would be
-        // ignored / mis-honored - the floor must never exceed the panel max.
+        // Static-layer callback throttling once late-dropped 38% of frames; fixed screens retain
+        // the full grid. Variable screens follow content, with deficit recovery for ignored hints.
+        // Only a callback hint changes; display modes and the user's refresh setting stay untouched.
         let panelMax = Self.panelMaxHz(for: view)
-        let range = Self.preferredRange(
-            forStreamIntervalSeconds: self.configuredFrameIntervalSeconds,
-            panelMaxHz: panelMax)
-        link.preferredFrameRateRange = range
-        // Record the floor we just pinned so the per-tick re-apply only
-        // re-pins on a real cadence drift past the hysteresis, not on every tick.
-        // Re-seeded on every (re)bind / screen change because installLink is the
-        // single bind path, so a rebuild onto a different panel re-clamps cleanly.
-        self.appliedFloorHz = Double(range.minimum)
-        // Mirror the floor under the lock for the off-main floor-violation
-        // detector (the rate-window roll can't touch main-actor state).
+        let panelMinimum = Self.variableMinimumHz(for: view)
         lock.lock()
-        tickDeficit.pinnedFloorHz = Double(range.minimum)
+        let interval = presentationIntervalLocked()
         lock.unlock()
+        let range = Self.preferredRange(
+            forStreamIntervalSeconds: panelMinimum != nil ? interval : configuredFrameIntervalSeconds,
+            panelMaxHz: panelMax, variableMinimumHz: panelMinimum)
+        rateHint = RateHint()
+        applyPreferredRange(range, to: link, variable: panelMinimum != nil)
         // Add the link to the PRIVATE tick run loop (default) so the present
         // callback isn't starved when the main thread is busy - the governor
         // callback-gap that trimmed ~73% of clean-link frame drops. `.main` is

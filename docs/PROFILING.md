@@ -486,20 +486,56 @@ measured column is from wired 4K240 AV1 sessions on a 240 Hz panel (2026-09-28,
 | `pacer_submit_release_total`                                                                             | rows; scorecard `events`                               | frames released straight from submit at rest, skipping a tick; read beside `drops_backpressure` | a few % of frames                        |
 | `drops_presentation_late`                                                                                | rows                                                   | frames the pacer trimmed or overflowed (a standing-frame trim counts one)                       | 9 in 100 s                               |
 
-Variable refresh: the display link asks for `preferred = maximum = panel max`
-with the floor at the stream rate (`FramePacer+FrameRateRange.swift`). The
-question that setting shipped to answer, whether `preferred = floor` made macOS
-quantize callbacks to panel divisors (120 Hz and 80 Hz seconds on a 240 Hz
-panel), is settled: every wired 240 Hz session since (2026-09-28, 1.9 h;
-2026-09-29; 2026-10-02) shows `refresh_min_hz` at or above 237 and
-`pacer_ticks_per_s` at 239-241 while active, so the divisor grid is gone and the
-setting stays. What the recorded sessions cannot answer is whether a VRR panel
-should instead be asked to pace at the content rate (`preferred` = stream fps),
-so a 161 fps stream stops alternating one- and two-vsync holds on a 240 Hz grid:
-they are all fixed 240 Hz or 120 Hz ProMotion with the stream at or below
-refresh. Deciding it needs a session on a VRR panel with the stream below the
-panel max, judged on `refresh_avg_hz` tracking `fps_received` and
-`output_to_present` p99 staying under one vsync.
+Variable refresh: `FramePacer+FrameRateRange.swift` reads the screen's minimum
+and maximum refresh intervals and current update granularity. A variable mode
+gets the supported minimum, panel maximum and a preferred rate from measured
+content. Only `CADisplayLink.preferredFrameRateRange` is written; Glimmer never
+selects a display mode or changes the user's refresh setting. Hints have a 2 Hz
+deadband and a half-second dwell. A sustained callback rate below 90% of
+content/preferred rate restores the full callback grid for five seconds before
+retrying. Fixed modes keep the full grid to avoid divisor throttling.
+
+Presentation follows a bounded mean of the last 64 PTS intervals rather than
+assuming every configured capture slot contains a frame. Each gap contributes at
+most twice the existing lower-quartile estimate; the latter still protects loss
+recovery. A two-frame decode burst preserves fractional cadence within the
+existing trim slack. A larger backlog retains immediate catch-up. On variable
+scanouts, the tick owns presentation; submit cannot predict a future scanout
+from a fixed grid. No additional buffering target is introduced.
+
+Before-change evidence, filtering the supplied 2026-10-12 sessions to seconds
+with `pacer_ticks_per_s > 230` and `fps_decoded > 150`:
+
+| Session              | Seconds | Received fps | Rendered fps | Ticks/s | Stale repeats/s | O2P p50 / p95 / p99 (ms) |
+| -------------------- | ------: | -----------: | -----------: | ------: | --------------: | -----------------------: |
+| 2026.10.7, 12:55:09Z |     205 |       194.94 |       194.94 |  240.00 |           45.07 |    0.138 / 4.222 / 5.716 |
+| rc.2, 12:29:07Z      |     327 |       184.97 |       184.87 |  239.99 |           55.11 |    1.193 / 5.170 / 7.833 |
+| rc.3, 13:55:14Z      |      62 |       198.31 |       194.20 |  239.99 |           45.79 |   2.370 / 6.509 / 10.498 |
+
+O2P columns are means of exported percentile fields, not pooled frame
+percentiles. The rc.3 log confirms floor/preferred/maximum all at 240 Hz. These
+callback counts do not measure physical panel scanout or prove repeat bunching
+by themselves.
+
+After-change live validation is still required on the same AV1 Main10 HDR 4K,
+361 Mbps scene, first with the owner's Adaptive setting, then a user-selected
+fixed setting. Compare equal active spans (use decoded/rendered activity, not
+the old `ticks > 230` filter). Expect `refresh_avg_hz` and `pacer_ticks_per_s`
+to approach content rate under Adaptive, with fewer
+`present_stale_repeats_per_s`; `fps_rendered` and `pacer_releases_per_s` must
+continue tracking decoded content. The log's `FramePacer rate hint` records the
+requested range and fallback. macOS may quantize or ignore it; those fields
+measure callbacks, so confirm the actual panel behavior by eye as well.
+
+On a fixed screen, repeats remain necessary. Inspect per-frame present spacing
+and moving edges for evenly distributed one/two-refresh holds. Check
+`present_cadence_err_ms`, `pacing_depth`, `pacing_target_depth` and
+`lat_output_to_present_*_ms`: no standing extra frame, no added wait beyond one
+content frame. Compare deltas of `drops_presentation_late` and
+`drops_backpressure`, and verify no repeated assist/deficit transitions, flashes
+or blanking. Exercise variable/fixed screen moves, hide/resume, a quiet scene,
+fast motion and a delivery drought. A lower repeat count alone is not
+acceptance.
 
 ### “A movement or press I didn't make”
 

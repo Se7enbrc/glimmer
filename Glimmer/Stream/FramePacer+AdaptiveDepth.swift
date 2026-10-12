@@ -121,6 +121,17 @@ extension FramePacer {
         return values[idx]
     }
 
+    /// Smooth uneven capture spacing, but cap a missing-frame gap's influence on the next frame.
+    /// The lower quartile still protects recovery; a sustained slower cadence moves both estimates.
+    static func contentInterval(_ deltas: [Double], base: Double) -> Double {
+        guard !deltas.isEmpty else { return base }
+        return deltas.reduce(0) { $0 + min($1, base * 2) } / Double(deltas.count)
+    }
+
+    func presentationIntervalLocked() -> Double {
+        contentFrameIntervalSeconds.isFinite ? contentFrameIntervalSeconds : streamFrameIntervalSeconds
+    }
+
     static func insertCadenceDelta(_ delta: Double, into sorted: inout [Double]) {
         var lower = 0
         var upper = sorted.count

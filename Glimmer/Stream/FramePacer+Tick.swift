@@ -144,6 +144,9 @@ extension FramePacer {
         // the lock we already hold. Events (engage/disengage/NOTICE) are
         // emitted off-lock below.
         let deficitEvents = serviceTickDeficitLocked(now: hostNow)
+        // VRR targets describe the next scanout; nominal duration can remain at panel maximum.
+        let releaseInterval = Self.releaseInterval(
+            variable: variableRefreshEnabled, target: target, timestamp: timestamp, nominal: vsyncInterval)
         lock.unlock()
 
         // DIAGNOSTIC tick-miss classifier (metric-only, no behavior change). A
@@ -205,10 +208,10 @@ extension FramePacer {
 
         // A frame released now scans out on the next PANEL vsync, which can sit
         // before `target` when the link runs below the panel's rate.
-        let scanout = timestamp + vsyncInterval
+        let scanout = timestamp + releaseInterval
         pacingQueue.async { [weak self] in
             self?.releaseDueFrame(
-                targetTimestamp: target, vsyncInterval: vsyncInterval, tickScanout: scanout)
+                targetTimestamp: target, vsyncInterval: releaseInterval, tickScanout: scanout)
         }
     }
 

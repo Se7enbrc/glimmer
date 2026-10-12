@@ -1,92 +1,79 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
-
-//
-//  FramePacer+FrameRateRange.swift
-//
-//  The present-callback throttle floor. Split out of FramePacer.swift
-//  to keep that file under the length limit; these are the pure / view-reading
-//  static helpers that build the CADisplayLink `preferredFrameRateRange` so
-//  macOS cannot throttle the present callback below stream cadence on a static
-//  layer (the AFK pile-up + 38%-late-drop the pass closes). See `installLink`
-//  and `reapplyPreferredRangeIfNeeded` for the callers.
-//
 
 import AppKit
 import QuartzCore
 
 extension FramePacer {
-    /// Hz deadband below which the floor is treated as already at the requested
-    /// rate. The floor is pinned to the FIXED configured fps and held, so a
-    /// steady stream never re-pins; this mainly guards the rare panel-max change
-    /// (a display switch) from a needless `preferredFrameRateRange` rewrite.
-    static let frameRateReapplyHysteresisHz = 8.0
+    /// Hints are advisory. Retrying after a short fallback lets a recovering governor follow content again.
+    struct RateHint {
+        var appliedAt = -Double.infinity
+        var preferredHz = Double.nan
+        var shortSince = Double.nan
+        var fallbackUntil = -Double.infinity
 
-    /// Hold the present-callback floor at the REQUESTED stream refresh - the same
-    /// `min(streamHz, panelMax)` that `installLink` pins - re-pinning only if the
-    /// panel max changes under us (a display switch that didn't route through
-    /// installLink). Called from the main-actor `handleTick`; the steady-state path
-    /// is a single pure-math compare (no AppKit read), free on every tick.
-    ///
-    /// FIDELITY (does NOT track content cadence): the old behavior re-pinned the
-    /// floor toward the measured PTS-refined cadence, so wobbly content (Desktop at
-    /// ~150fps straddling the 144/165 panel modes) fired a re-pin every dwell
-    /// (~0.5/s) - and every `preferredFrameRateRange` write makes the display
-    /// renegotiate its refresh rate, which drops a frame (the photographed TestUFO
-    /// frameskip gap). The requested refresh is fixed per session, so this re-pins
-    /// once (matching install) then early-returns. `preferred`/`maximum` stay at the
-    /// panel max - the top end is never given up; only the anti-throttle FLOOR is
-    /// held at the requested rate.
+        mutating func followsContent(now: Double, measuredHz: Double, contentHz: Double) -> Bool {
+            guard now >= fallbackUntil else { return false }
+            guard now - appliedAt >= 0.5 else { return true }
+            if measuredHz.isFinite, measuredHz < min(preferredHz, contentHz) * 0.9 {
+                if !shortSince.isFinite { shortSince = now }
+                if now - shortSince >= 1 {
+                    fallbackUntil = now + 5
+                    shortSince = .nan
+                    return false
+                }
+            } else {
+                shortSince = .nan
+            }
+            return true
+        }
+
+        func needsUpdate(to range: CAFrameRateRange, current: CAFrameRateRange, now: Double) -> Bool {
+            guard range.minimum == current.minimum, range.maximum == current.maximum else { return true }
+            return now - appliedAt >= 0.5 && abs(Double(range.preferred ?? 0) - preferredHz) >= 2
+        }
+    }
+
     @MainActor
     func reapplyPreferredRangeIfNeeded() {
         guard let link = displayLink, let view = boundView else { return }
-        // Item-9 'link installed' replay - one optional load + identity compare
-        // per tick in the steady state; see the helper for the WHY.
         replayLinkInstalledBreadcrumbIfNeeded(link: link, view: view)
-        let streamHz = configuredFrameIntervalSeconds > 0
-            ? 1.0 / configuredFrameIntervalSeconds : 0
-        guard streamHz > 0 else { return }
-        // Cheap pure-math steady-state exit (no NSScreen read on the hot path):
-        // already pinned at the requested refresh. When the request exceeds the
-        // panel, appliedFloorHz settles at panelMax and we fall through to the
-        // rare NSScreen-read path below, which re-clamps and then no-ops.
-        if appliedFloorHz.isFinite,
-           abs(streamHz - appliedFloorHz) < Self.frameRateReapplyHysteresisHz {
-            return
-        }
         let panelMax = Self.panelMaxHz(for: view)
-        let targetFloorHz = min(streamHz, panelMax)
-        if appliedFloorHz.isFinite,
-           abs(targetFloorHz - appliedFloorHz) < Self.frameRateReapplyHysteresisHz {
-            return
-        }
-        let range = Self.preferredRange(
-            forStreamIntervalSeconds: configuredFrameIntervalSeconds, panelMaxHz: panelMax)
-        link.preferredFrameRateRange = range
-        appliedFloorHz = Double(range.minimum)
-        // Mirror under the lock for the off-main floor-violation detector
-        // (FramePacer+TickDeficit.swift) - same dual-write as installLink.
+        let panelMinimum = Self.variableMinimumHz(for: view)
+        let now = CACurrentMediaTime()
         lock.lock()
-        tickDeficit.pinnedFloorHz = Double(range.minimum)
+        let interval = presentationIntervalLocked()
+        let measuredHz = tickDeficit.measuredTicksPerSecond
+        let suppressed = presentSuppressed
         lock.unlock()
+        guard !suppressed else { return }
+        let followsContent = panelMinimum != nil
+            && rateHint.followsContent(now: now, measuredHz: measuredHz, contentHz: 1 / interval)
+        let range = Self.preferredRange(
+            forStreamIntervalSeconds: followsContent ? interval : configuredFrameIntervalSeconds,
+            panelMaxHz: panelMax, variableMinimumHz: followsContent ? panelMinimum : nil)
+        guard rateHint.needsUpdate(to: range, current: link.preferredFrameRateRange, now: now) else { return }
+        applyPreferredRange(range, to: link, variable: followsContent)
         Diag.info(
-            "FramePacer pinned present floor to requested \(Double(range.minimum))Hz "
-            + "(preferred/max \(Double(range.maximum))Hz, panelMax \(panelMax)Hz; "
-            + "content-tracking off for fidelity)",
-            "Stream.Pacer")
+            "FramePacer rate hint - floor=\(Double(range.minimum))Hz "
+            + "preferred=\(Double(range.preferred ?? 0))Hz max=\(Double(range.maximum))Hz "
+            + "content=\(1 / interval)Hz variable=\(followsContent)", "Stream.Pacer")
     }
 
-    /// One-shot 'link installed' replay into the per-session Diag FILE sink.
-    /// The real install breadcrumb (installLink, FramePacer+Recovery.swift)
-    /// fires when the stream window first shows - BEFORE StreamSession's
-    /// telemetry wiring installs `SessionLogFileSink` - so an affected
-    /// session's glimmer-*.log carried ZERO 'link installed' lines and the item-9
-    /// verification clause (the floor a session started from) was un-greppable
-    /// postmortem. Re-emit the LIVE link's range once per file-sink install
-    /// (keyed on the sink instance, so every session replays exactly once and
-    /// a telemetry-off session pays one nil load per tick and nothing else).
+    /// Only a callback hint is written. Display modes and the user's refresh setting remain owned by macOS.
+    @MainActor
+    func applyPreferredRange(_ range: CAFrameRateRange, to link: CADisplayLink, variable: Bool) {
+        link.preferredFrameRateRange = range
+        rateHint.appliedAt = CACurrentMediaTime()
+        rateHint.preferredHz = Double(range.preferred ?? 0)
+        lock.lock()
+        tickDeficit.pinnedFloorHz = Double(range.minimum)
+        variableRefreshEnabled = variable
+        lock.unlock()
+    }
+
+    /// Install precedes the session file sink. Replay once per sink so the initial range is greppable.
     @MainActor private static var lastReplayedLogSinkID: ObjectIdentifier?
     @MainActor
     private func replayLinkInstalledBreadcrumbIfNeeded(link: CADisplayLink, view: NSView) {
@@ -102,11 +89,6 @@ extension FramePacer {
             "Stream.Pacer")
     }
 
-    /// The panel's maximum refresh (Hz) for the screen `view` is currently on.
-    /// `NSScreen.maximumFramesPerSecond` is the panel max (120 on ProMotion /
-    /// a 4K240 HDR panel at 240, 60 on a stock external). Falls back to 60 when the
-    /// view has no window/screen yet (degenerate first bind) so the floor stays
-    /// sane. Main-actor: reads NSView/NSScreen.
     @MainActor
     static func panelMaxHz(for view: NSView) -> Double {
         let maxFps = view.window?.screen?.maximumFramesPerSecond
@@ -114,19 +96,40 @@ extension FramePacer {
         return maxFps > 0 ? Double(maxFps) : 60.0
     }
 
-    /// The link's frame-rate range: the floor pinned to min(streamHz, panelMax) so macOS cannot
-    /// throttle the present callback on a static layer; preferred and maximum at the panel max.
-    /// Asking for the full grid is settled by telemetry, see docs/PROFILING.md "Variable refresh".
+    @MainActor
+    static func variableMinimumHz(for view: NSView) -> Double? {
+        guard let screen = view.window?.screen ?? NSScreen.main else { return nil }
+        return variableMinimumHz(minimumInterval: screen.minimumRefreshInterval,
+                                 maximumInterval: screen.maximumRefreshInterval,
+                                 granularity: screen.displayUpdateGranularity)
+    }
+
+    /// A variable-capable panel can still be in a fixed mode. Its update granularity tells those apart.
+    static func variableMinimumHz(minimumInterval: Double, maximumInterval: Double,
+                                  granularity: Double) -> Double? {
+        guard minimumInterval.isFinite, maximumInterval.isFinite, granularity.isFinite,
+              minimumInterval > 0, maximumInterval > minimumInterval * 1.01,
+              granularity >= 0, granularity < minimumInterval * 0.99 else { return nil }
+        return 1 / maximumInterval
+    }
+
+    /// Fixed screens retain the full callback grid; variable screens may follow measured content.
     static func preferredRange(
-        forStreamIntervalSeconds intervalSeconds: Double, panelMaxHz: Double
+        forStreamIntervalSeconds intervalSeconds: Double, panelMaxHz: Double,
+        variableMinimumHz: Double? = nil
     ) -> CAFrameRateRange {
         let panel = panelMaxHz.isFinite && panelMaxHz > 0 ? panelMaxHz : 60.0
-        let rawStreamHz = intervalSeconds.isFinite && intervalSeconds > 0
-            ? 1.0 / intervalSeconds : 60.0
-        // Floor never exceeds the panel max (a 60Hz panel can't honor a 120Hz floor).
-        let floorHz = min(rawStreamHz, panel)
-        let maxHz = max(panel, floorHz)
-        return CAFrameRateRange(
-            minimum: Float(floorHz), maximum: Float(maxHz), preferred: Float(maxHz))
+        let stream = 1 / clampFrameInterval(intervalSeconds)
+        if let minimum = variableMinimumHz, minimum.isFinite, minimum > 0, minimum < panel {
+            return CAFrameRateRange(minimum: Float(minimum), maximum: Float(panel),
+                                    preferred: Float(min(max(stream, minimum), panel)))
+        }
+        return CAFrameRateRange(minimum: Float(min(stream, panel)), maximum: Float(panel), preferred: Float(panel))
+    }
+
+    static func releaseInterval(variable: Bool, target: Double, timestamp: Double, nominal: Double) -> Double {
+        let interval = target - timestamp
+        return variable && interval.isFinite && interval > 0 && interval <= maxRealizedTickDeltaSeconds
+            ? interval : nominal
     }
 }

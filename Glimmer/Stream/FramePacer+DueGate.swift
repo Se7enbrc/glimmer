@@ -170,7 +170,7 @@ extension FramePacer {
         assertLockHeld()
         guard adaptiveDepth.adaptiveTargetDepth == Self.targetDepth,
               vsyncInterval.isFinite, vsyncInterval > 0,
-              streamFrameIntervalSeconds > vsyncInterval else {
+              presentationIntervalLocked() > vsyncInterval else {
             cadenceRemainderSeconds = 0
             return 0
         }
@@ -185,7 +185,7 @@ extension FramePacer {
         assertLockHeld()
         let elapsed = timestamp - lastPresentMediaTime
         let remainder = cadenceRemainderLocked(vsyncInterval: vsyncInterval)
-        let interval = streamFrameIntervalSeconds
+        let interval = presentationIntervalLocked()
         if preservePhase, adaptiveDepth.adaptiveTargetDepth == Self.targetDepth,
            vsyncInterval.isFinite, vsyncInterval > 0, interval > vsyncInterval,
            elapsed > 0, elapsed <= interval + vsyncInterval {
@@ -214,13 +214,16 @@ extension FramePacer {
             return DueGateResult(toPresent: nil, heldForGrowth: false, forcedOverTarget: false)
         }
         let belowTarget = queue.count <= effectiveTarget
+        // A two-frame decode burst fits the existing trim slack; draining it early resets
+        // phase and bunches repeats. Only a real backlog may bypass cadence.
+        let cadenceBacklog = queue.count > effectiveTarget + 1
         let validElapsed = sinceLast.isFinite && sinceLast >= 0 && sinceLast <= 1
         let slack = vsyncInterval * 0.5
-        let interval = streamFrameIntervalSeconds
+        let interval = presentationIntervalLocked()
         let cadenceLocked = liveness.releaseCount > Self.startupGrowHoldReleases
         let growing = cadenceLocked && belowTarget && adaptiveDepth.adaptiveTargetDepth > Self.targetDepth
         let due: Bool
-        if !validElapsed || !belowTarget {
+        if !validElapsed || cadenceBacklog {
             due = true
         } else if growing {
             due = sinceLast >= interval
@@ -235,7 +238,7 @@ extension FramePacer {
         let forcedOverTarget = validElapsed && queue.count > effectiveTarget + 1
         let entry = queue.removeFirst()
         advanceCadenceLocked(to: targetTimestamp, vsyncInterval: vsyncInterval,
-                             preservePhase: validElapsed && belowTarget)
+                             preservePhase: validElapsed && !cadenceBacklog)
         return DueGateResult(toPresent: entry, heldForGrowth: false, forcedOverTarget: forcedOverTarget)
     }
 

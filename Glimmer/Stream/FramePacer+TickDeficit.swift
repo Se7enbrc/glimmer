@@ -188,8 +188,7 @@ extension FramePacer {
         // so it is the honest "what should arrive" bar - and it keeps
         // fps>refresh setups (ticks legitimately below stream rate) from ever
         // reading as a deficit. Falls back to stream Hz before the first tick.
-        let streamHz = streamFrameIntervalSeconds > 0
-            ? 1.0 / streamFrameIntervalSeconds : 60.0
+        let streamHz = 1.0 / presentationIntervalLocked()
         let nominalHz = refreshTelemetry.lastRefreshIntervalSeconds.isFinite && refreshTelemetry.lastRefreshIntervalSeconds > 0
             ? 1.0 / refreshTelemetry.lastRefreshIntervalSeconds : streamHz
         let expectedHz = min(streamHz, nominalHz)
