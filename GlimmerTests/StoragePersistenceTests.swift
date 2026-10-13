@@ -8,7 +8,7 @@
 //  cushion memory and the frame trace file, each on a scratch suite and temp directory.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -169,6 +169,19 @@ struct PinnedCertPersistenceTests {
         #expect(PinnedCertStore.load(forHostID: "AAA", defaults: store.defaults, base: store.directory) == "LEGACY")
         #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == nil)
         #expect(try String(contentsOf: pin(store, "AAA"), encoding: .utf8) == "LEGACY")
+    }
+
+    @Test func unavailableMacPathRetainsLegacyAuthenticationAndAllowsUnpair() throws {
+        let store = try IsolatedStore("pin-unavailable-path")
+        defer { store.remove() }
+        store.defaults.set("LEGACY", forKey: "glimmer.pinnedCert.AAA")
+        let unavailable: (URL?) throws -> URL = { _ in throw CocoaError(.fileReadNoPermission) }
+        #expect(PinnedCertStore.load(forHostID: "AAA", defaults: store.defaults,
+                                    base: store.directory, resolveBase: unavailable) == "LEGACY")
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == "LEGACY")
+        PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults,
+                               base: store.directory, resolveBase: unavailable)
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == nil)
     }
 
     @Test func deletingWipesBothStoresAndAHostIDCannotEscapeTheDirectory() throws {

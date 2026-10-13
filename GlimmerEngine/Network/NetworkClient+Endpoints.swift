@@ -1,19 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  NetworkClient+Endpoints.swift
-//
-//  The HTTPS REST surface NetworkClient exposes against a host (GameStream /
-//  Sunshine nvhttp): /serverinfo, /applist, /launch + /resume, /cancel, the
-//  low-level request plumbing, status checks and codec-mode decoding, plus the
-//  small request helpers. Split out of Network.swift to keep each unit focused;
-//  see that file for the actor's state, identity prep, and TLS wiring.
-//
-
-import GlimmerEngine
 import Foundation
 import Network
 import os.log
@@ -21,40 +9,19 @@ import os.log
 extension NetworkClient {
 
     // MARK: - Endpoint: /serverinfo
-    //
-    // Threat model (C2): once we've pinned a host cert we MUST NOT silently
-    // re-bind it on TLS failure. The original implementation fell back from
-    // HTTPS to plain HTTP on any TLS error and accepted whatever cert the
-    // host presented on the next handshake - which gave a same-LAN attacker
-    // a free MITM whenever they could induce one TLS connection to fail
-    // (TCP reset, ARP spoof, captive-portal injection, etc).
-    //
-    // The new contract:
-    //   - pinnedHostCert == nil:  HTTP fallback for unpaired discovery is
-    //                              still allowed (there's no TLS to validate
-    //                              yet). The pin gets set the moment the
-    //                              pairing handshake captures the host's
-    //                              real cert in Pairing.swift.
-    //   - pinnedHostCert != nil:  HTTPS only. Any TLS failure surfaces a
-    //                              loud `hostUnreachable` to the UI. No
-    //                              automatic re-pin. A user who legitimately
-    //                              rotated their host cert must unpair + re-
-    //                              pair explicitly - that's a deliberate
-    //                              friction, the alternative is "the on-path
-    //                              attacker rotates it for them".
 
-    func fetchServerInfo(requiredUniqueId: String? = nil,
-                         timeout: TimeInterval = NetworkClient.controlTimeout,
-                         diagnosePinnedFailure: Bool = true) async throws -> ServerInfo {
+    // A saved pin is never rebound by /serverinfo or a TLS failure. An unpaired HTTP probe
+    // is discovery only; only the completed PIN/RSA proof can authorize a new certificate.
+
+    public func fetchServerInfo(requiredUniqueId: String? = nil,
+                                timeout: TimeInterval = NetworkClient.controlTimeout,
+                                diagnosePinnedFailure: Bool = true) async throws -> ServerInfo {
         try await ensureIdentityLoaded()
 
         var xml: XMLNode
         var fetchedOverPaired = false   // implicit pair-proof: HTTPS succeeded
         if server.serverCertPEM != nil {
-            // Pinned. HTTPS only. Any TLS failure here is either a real
-            // outage or a possible MITM - we don't try to disambiguate,
-            // we just refuse and ask the user to re-pair if their host
-            // genuinely rotated. See StreamError message below.
+            // A saved pin requires HTTPS; failure never authorizes trusting a replacement certificate.
             do {
                 xml = try await rawRequest(path: "serverinfo",
                                            query: [:],
@@ -65,7 +32,10 @@ extension NetworkClient {
                 fetchedOverPaired = true
             } catch let err as StreamError {
                 if case .hostUnreachable(let detail) = err {
-                    log.error("HTTPS to pinned host failed (\(detail, privacy: .private)) - refusing HTTP fallback to preserve cert pin")
+                    log.error("""
+                        HTTPS to pinned host failed (\(detail, privacy: .private)) \
+                        - refusing HTTP fallback to preserve cert pin
+                        """)
                     // A different certificate proves 47984 answered, so the PC is up
                     // whatever the plain port says; don't let a blocked 47989 hide it.
                     if Self.isCertChange(detail) {
@@ -74,19 +44,8 @@ extension NetworkClient {
                     // Pairing has no saved identity to diagnose yet; preserve
                     // the pinned failure without another plain-HTTP request.
                     if requiredUniqueId != nil || !diagnosePinnedFailure { throw err }
-                    // Disambiguate before blaming the network: a READ-ONLY
-                    // plain-HTTP probe (the pin is NEVER rebound from it -
-                    // the C2 contract above stands). It answers exactly one
-                    // question - "is the box up at all?" - and NOTHING about
-                    // pairing: Sunshine computes <PairStatus> only for HTTPS
-                    // requests and reports 0 on plain HTTP unconditionally, so
-                    // the earlier "probe says PairStatus=0, therefore unpaired"
-                    // read turned EVERY HTTPS hiccup into a false "pair again"
-                    // (2026-09-02: a wedged Sunshine HTTPS listener - 47984
-                    // refusing connections while 47989 answered - was reported
-                    // as "re-pair", when no client-side action could help).
-                    // The HTTPS failure itself carries the diagnosis, so
-                    // classify THAT once the probe proves the host is up.
+                    // A read-only HTTP probe distinguishes an unavailable TLS listener from a network outage.
+                    // It never rebinds the pin or authorizes a launch; keep the existing diagnostic request budget.
                     if let probe = try? await rawRequest(path: "serverinfo",
                                                          query: [:],
                                                          extraQuery: nil,
@@ -100,13 +59,7 @@ extension NetworkClient {
                 throw err
             }
         } else {
-            // No pin yet - this is either a fresh /serverinfo discovery
-            // before pairing, or a fully unpaired flow (the user is about
-            // to type a PIN into the host UI). HTTP is acceptable here
-            // because there's nothing to pin yet; the real cert capture
-            // happens inside the pairing handshake (Pairing.swift, the
-            // `plaincert` field of the getservercert response) which then
-            // calls `setPinnedHostCert` on us to lock the pin in.
+            // Unpaired discovery may use HTTP, but its certificate is never a pin. Pairing must prove it.
             xml = try await rawRequest(path: "serverinfo",
                                        query: [:],
                                        extraQuery: nil,
@@ -165,22 +118,12 @@ extension NetworkClient {
         detail.contains("cert mismatch") || detail.contains("no certificate")
     }
 
-    /// Populate `server` from the /serverinfo XML, split out of
-    /// `fetchServerInfo`. Tag names are taken from GFE / Sunshine source;
-    /// Sunshine returns the same shape as GFE 3.x for compatibility, with one
-    /// or two extras. Each field falls through to its existing value when the
-    /// host omits the tag, so partial responses still hydrate cleanly.
+    /// Missing fields retain their old values, so a partial /serverinfo reply cannot erase known state.
     func hydrateServerInfo(from xml: XMLNode, fetchedOverPaired: Bool) {
         if let name = xml.string(forChild: "hostname"), !name.isEmpty {
             server.serverName = name
         }
-        // Host's stable GUID. GFE + Sunshine both emit it as `<uniqueid>` in
-        // the /serverinfo XML - it's the host-side equivalent of the client
-        // uniqueid (different value, same semantic). We pick it up here so
-        // downstream code (pinned-cert storage key, host-record key) can use
-        // a stable token instead of the network address. Falls through to
-        // whatever was already set if the host omits the field (some early
-        // Sunshine builds did) so a fresh-pair on hostname-only still works.
+        // Use the PC's stable uniqueid for both pin reads and writes, including migrated Moonlight records.
         if let hostUid = xml.string(forChild: "uniqueid"), !hostUid.isEmpty {
             server.uniqueId = hostUid
         }
@@ -225,7 +168,7 @@ extension NetworkClient {
 
     // MARK: - Endpoint: /applist
 
-    public func appList() async throws -> [HostApp] {
+    package func appList() async throws -> [HostApp] {
         let xml = try await rawRequest(path: "applist",
                                        query: [:],
                                        extraQuery: nil,
@@ -250,11 +193,11 @@ extension NetworkClient {
         }
     }
 
-    enum AssetError: Error { case missing }
+    package enum AssetError: Error { case missing }
 
     // moonlight-qt app/backend/nvhttp.cpp, NvHTTP::getBoxArt; Sunshine src/nvhttp.cpp, appasset.
     // Sunshine returns image bytes here, not the XML used by the other endpoints.
-    func appAsset(appID: Int) async throws -> Data {
+    package func appAsset(appID: Int) async throws -> Data {
         try await dataRequest(path: "appasset",
                               query: ["appid": String(appID), "AssetType": "2", "AssetIdx": "0"],
                               usePaired: true, timeout: Self.controlTimeout)
@@ -262,11 +205,11 @@ extension NetworkClient {
 
     // MARK: - Endpoints: /launch and /resume
 
-    func launch(appID: Int, config: StreamConfig) async throws -> LaunchResponse {
+    package func launch(appID: Int, config: StreamRequest) async throws -> LaunchResponse {
         try await runLaunchLike(verb: "launch", appID: appID, config: config)
     }
 
-    func resume(config: StreamConfig) async throws -> LaunchResponse {
+    package func resume(config: StreamRequest) async throws -> LaunchResponse {
         // /resume doesn't take an appid - the host knows what game is paused.
         try await runLaunchLike(verb: "resume", appID: nil, config: config)
     }
@@ -275,7 +218,7 @@ extension NetworkClient {
     /// query string and parse the same way.
     func runLaunchLike(verb: String,
                        appID: Int?,
-                       config: StreamConfig) async throws -> LaunchResponse {
+                       config: StreamRequest) async throws -> LaunchResponse {
 
         // The host wants the rikey (remote-input AES key) hex-encoded and the
         // rikeyid as a *signed* int derived from the first 4 bytes of the IV.
@@ -302,14 +245,8 @@ extension NetworkClient {
 
         let timeout = (verb == "launch") ? Self.launchTimeout : Self.resumeTimeout
 
-        // Log the query we're about to send (HDR negotiation diff vs
-        // moonlight-qt). SECURITY: rikey / rikeyid (per-session AES key
-        // and IV-derived id), uuid, and uniqueid are redacted at the
-        // `.public` privacy level so the unified log doesn't carry the
-        // session input encryption key. Even though rikey is single-use,
-        // logs persist; an attacker pulling logs from a compromised box
-        // could replay/decrypt captured input traffic from the matching
-        // session window. Drop them here, period.
+        // Never log input keys, IV-derived IDs or correlation tokens, even for a single-use session.
+        // Preserve the redacted query breadcrumb for HDR negotiation diagnostics.
         let fullQuery = Self.redactedQueryDump(query) + (extraTail ?? "")
         log.info("\(verb, privacy: .public) URL query (sensitive params redacted): \(fullQuery, privacy: .public)")
 
@@ -320,22 +257,15 @@ extension NetworkClient {
                                 timeout: timeout)
         try Self.verifyStatus(xml)
 
-        // Dump the launch response so we can see what HDR-related fields the
-        // host echoed back. Sunshine returns gcmkey, gcmkeyid, sessionUrl0
-        // etc. SECURITY: gcmkey + gcmkeyid are the AES key + key-id the host
-        // expects us to use on the control channel - never log their values.
-        // `Self.dumpXMLRedacted` swaps the body for `<redacted>` on a
-        // hard-coded set of sensitive tags. The remaining tag names + values
-        // are still useful for diagnosing the "HDR field went missing" case
-        // the original log shape existed to catch.
-        log.info("\(verb, privacy: .public) response XML (sensitive fields redacted): \(Self.dumpXMLRedacted(xml), privacy: .public)")
+        // Preserve response field names for HDR diagnostics, but redact keys, IDs and session addresses.
+        log.info("""
+            \(verb, privacy: .public) response XML (sensitive fields redacted): \
+            \(Self.dumpXMLRedacted(xml), privacy: .public)
+            """)
 
         guard let sessionURL = xml.string(forChild: "sessionUrl0"),
               !sessionURL.isEmpty else {
-            // Dump the response so we can see what field name the host actually
-            // returned (case mismatch? renamed field? error in disguise?).
-            // Use the redacted variant so we don't accidentally log gcmkey /
-            // gcmkeyid even when the response is otherwise broken.
+            // Keep the missing-field breadcrumb redacted even when the response is malformed.
             let dump = Self.dumpXMLRedacted(xml)
             log.error("Launch response missing sessionUrl0. Top-level children: \(dump, privacy: .public)")
             throw StreamError.launchFailed("Host did not return an RTSP session URL")
@@ -365,13 +295,16 @@ extension NetworkClient {
     /// The launch query as logged: sorted, with every `sensitiveQueryKeys` value replaced.
     static func redactedQueryDump(_ query: [String: String]) -> String {
         query.sorted(by: { $0.key < $1.key })
-            .map { Self.sensitiveQueryKeys.contains($0.key.lowercased()) ? "\($0.key)=<redacted>" : "\($0.key)=\($0.value)" }
+            .map {
+                Self.sensitiveQueryKeys.contains($0.key.lowercased()) ? "\($0.key)=<redacted>" : "\($0.key)=\($0.value)"
+            }
             .joined(separator: "&")
     }
 
     /// The keyed part of the /launch and /resume query (HDR rides separately,
     /// as an ordered tail). Static so the wire values are checkable offline.
-    static func launchQuery(config: StreamConfig, riKeyHex: String, riKeyID: Int32, appID: Int?) -> [String: String] {
+    package static func launchQuery(config: StreamRequest, riKeyHex: String,
+                                    riKeyID: Int32, appID: Int?) -> [String: String] {
         var query: [String: String] = [
             "mode": "\(config.width)x\(config.height)x\(config.fps)",
             "additionalStates": "1",
@@ -394,7 +327,7 @@ extension NetworkClient {
 
     // MARK: - Endpoint: /cancel
 
-    public func cancel() async throws {
+    package func cancel() async throws {
         let xml = try await rawRequest(path: "cancel",
                                        query: [:],
                                        extraQuery: nil,

@@ -8,7 +8,7 @@
 //  status the README documents, and the requests that reach the PC. Nothing leaves the process.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import os
 import Testing

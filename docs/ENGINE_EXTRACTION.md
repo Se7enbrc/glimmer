@@ -67,6 +67,113 @@ uncommitted scaffold uses a documented local-path override until that commit
 exists. Slice 1 links but cannot discover, pair or stream; the framework handoff
 and hardware performance gates remain open.
 
+## Slice 3 implementation and Public API
+
+Slice 3 moves `ControlTransport`, `Discovery`, `Identity` (+ Crypto/Loading),
+`Network` (+ Support), `NetworkClient` (+ Endpoints/Request), `PEM`, `Pairing`
+(+ Crypto), `Types+Cert` and the Wake on LAN packet/target logic into
+`GlimmerEngine/Network/`. The Mac and source-package consumers compile these
+same files. Request ordering, timeouts, TLS resumption policy, exact DER
+pinning, log categories/privacy and persisted keys are unchanged.
+
+The required cut points also move the shared `StreamAttempt` deadline helper,
+`PairingFailure` cases and bounded `HostReadiness` loop. Mac foreground polling,
+visibility/sleep handling, poll cadence, readiness wording and publication stay
+in `HostStatusPoller`. HTTP launch/resume consume the already-extracted
+`StreamRequest`; Mac overloads forward `StreamConfig.request`. There are no
+additional launch requests or per-frame cross-module calls.
+
+### Public API
+
+External packages need no `@testable` import or shared package identity for:
+
+- `HostDiscovery`: construct a browser, start its update stream, and stop all
+  browsing or just the matching run. `Discovered` exposes service ID, display
+  name, resolved address and port; `Update` exposes PCs and permission denial.
+  The shared Mac instance is package-only; an iOS shell creates its own
+  instance.
+- `IdentityManager(defaultsSuite:supportBase:protectedDataAvailable:)` and
+  `uniqueID()`: the shell must supply its defaults domain (nil explicitly means
+  standard defaults) and writable application-support base. Existing identity
+  filenames remain under `Glimmer/Identity` relative to that base. The
+  synchronous Sendable policy must reflect protected-data availability; false
+  throws `IdentityStorageError.unavailable` before cache access, migration or
+  generation. This policy is a required initializer argument. If a named
+  defaults suite cannot be opened, identity access throws
+  `IdentityStorageError.defaultsUnavailable` before storage or migration; it
+  never falls back to standard defaults. Identity PEM getters remain
+  package-only.
+- `ServerInfo`: construct the address, stable PC ID and name, set known ports
+  and the previously authenticated certificate, and read pairing/readiness
+  results. Codec negotiation fields remain package-only. `PairStatus`,
+  `StreamError` and `PairingFailure` let the shell interpret results without
+  string-matching private diagnostic details.
+- `NetworkClient(server:identity:deviceName:)`, `fetchServerInfo`,
+  `pinnedServerCertPEM`, `shutdown` and the shared `controlTimeout`: the device
+  name is supplied by the shell. A saved certificate requires pinned mutual TLS;
+  an unpaired HTTP discovery reply cannot install or replace a pin.
+- `PairingClient(network:server:)` and `pair(pin:expectedUniqueId:)`: return the
+  authenticated PC and certificate only after the five handshake requests and a
+  pinned `fetchServerInfo(requiredUniqueId:)` bind the certificate to that PC.
+  Missing or mismatched IDs reject pairing. Persist only the returned result.
+  The package-only `pair(pin:)` keeps the Mac's existing two-step flow and its
+  cancellation checks; the Mac still verifies the pinned identity before saving.
+- `HostReachability.measureRTT` and its `Outcome`, plus `HostReadiness`'s
+  predicate and bounded polling loop. The shell owns when to poll and cancel.
+- `CertFingerprint.sha256`, `WakeOnLAN.normalizeMac` and `magicPacket`:
+  certificate comparison and portable packet building. The shell sends packets.
+
+Everything else added by this slice is package or internal access. Raw HTTP,
+XML, crypto helpers, launch/resume, entropy seams and file migration helpers are
+not an external API. The existing public RTSP smoke-test API is unchanged.
+
+### iOS local-network requirements
+
+The consuming app's Info.plist must include `NSLocalNetworkUsageDescription` and
+`NSBonjourServices` entries for both `_nvstream._tcp` and `_nvstream-tcp._tcp`,
+matching the engine's browsers. Start discovery while the app is foregrounded
+and the person expects to find a PC: the first protected local-network operation
+can trigger the system permission prompt. The system remembers the decision;
+restarting discovery does not prompt again after a refusal. The shell owns the
+explanation and Settings guidance. See Apple's
+[local-network privacy requirements](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy).
+
+The engine reports Bonjour policy refusal through `HostDiscovery.Update.denied`;
+consume it separately from an empty PC list. It does not present permission UI
+or bypass the decision. An iOS shell owns its browser's lifetime and stops it
+when discovery is no longer needed.
+
+### Mac adapters and persistence
+
+`MacIdentity` owns the singleton, Application Support lookup, Moonlight suite
+selection and read-only adoption. `MacNetworkClient` supplies that identity, the
+Mac computer name and `StreamConfig` overloads. `MacPinnedCertStore` supplies
+existing defaults and paths. `MacWakeOnLAN` retains interface enumeration and
+Darwin UDP sending; shared engine networking uses Network.framework. No AppKit,
+IOKit, Keychain lookup or Mac home-directory lookup enters the engine.
+
+Identity and pin stores require explicit bases; protected-data refusal does not
+regenerate, overwrite, migrate or delete anything. The Mac adapter preserves its
+existing legacy-pin fallback on write failure. External shells persist the
+returned authenticated PEM with their PC record and restore it into
+`ServerInfo.serverCertPEM`; Mac records and `glimmer.pinnedCert.*` migration
+keys are unchanged. No new storage backend, keychain migration or iOS lifecycle
+policy is introduced.
+
+`PCCommunicationTests` belongs to both SwiftPM and the Mac test target. It
+covers unavailable identity/pin stores, protected-data recovery, failing path
+providers, denied/stale discovery runs, one-request unpaired polling and the
+magic-packet layout. Existing Mac crypto, handshake, persistence, HTTP,
+readiness and wake suites keep testing the same implementation through engine
+imports.
+
+Slice 4 still owns the live RTSP/ENet/RTP transport and native backend. Its open
+cuts remain receive/scheduling/route adapters, ordered connection events with
+stale-source rejection, HDR forwarding and backend controller methods. This
+slice does not make streaming available to the external iOS consumer. Hosted
+Xcode 26.6 verification and real-PC PIN/pin-rotation, discovery-denial, wake and
+poll timing checks remain owner gates; local Xcode 27 builds are not that proof.
+
 ## Ownership map
 
 Complete inventory: **245 Stream files, 4 Models files, all 63 root Swift files,

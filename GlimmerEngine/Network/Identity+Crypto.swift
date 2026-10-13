@@ -1,23 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  Identity+Crypto.swift
-//
-//  The client identity's unique ID, RSA key and self-signed certificate, made in memory with
-//  Security (never the keychain) and written as the PEM files Sunshine and moonlight-qt expect.
-//
-
-import GlimmerEngine
 import Foundation
 import os.log
 import Security
 
 extension IdentityManager {
 
-    func generateUniqueID() throws -> String {
+    package func generateUniqueID() throws -> String {
         try PairingClient.randomBytes(16).hex()
     }
 
@@ -26,7 +17,7 @@ extension IdentityManager {
     /// The certificate moonlight-qt makes: X.509 v3, serial 0, CN "NVIDIA GameStream Client" as
     /// subject and issuer, twenty years from now, SHA-256 with RSA-2048. The key is written as
     /// PKCS#8, the form OpenSSL wrote, so identities stay readable by older builds.
-    func generateKeyPairAndCert() throws -> (certPEM: String, keyPEM: String) {
+    package func generateKeyPairAndCert() throws -> (certPEM: String, keyPEM: String) {
         var error: Unmanaged<CFError>?
         let attributes: [CFString: Any] = [kSecAttrKeyType: kSecAttrKeyTypeRSA, kSecAttrKeySizeInBits: 2048]
         guard let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error),

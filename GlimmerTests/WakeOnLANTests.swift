@@ -9,7 +9,7 @@
 //  sent nothing reports, and when a PC that woke gets a notification instead.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import os
 import Testing

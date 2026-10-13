@@ -8,7 +8,7 @@
 //  chip's running wording, and the takeover dialog's title.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import SwiftUI
 import Testing

@@ -11,7 +11,7 @@
 //  scope stays on the pure tree copy and the pure suite read.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

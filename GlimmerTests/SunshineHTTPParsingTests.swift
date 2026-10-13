@@ -8,14 +8,14 @@
 //  query values, the request helpers, and what the diagnostic dumps redact before logging.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct SunshineHTTPParsingTests {
 
-    private static func xml(_ body: String) throws -> Glimmer.XMLNode {
+    private static func xml(_ body: String) throws -> GlimmerEngine.XMLNode {
         try XMLTreeBuilder.parse(data: Data(body.utf8))
     }
 

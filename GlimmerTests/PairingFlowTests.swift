@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  PairingFlowTests.swift
-//
-//  PairingClient's five rounds against a fake Sunshine that plays the PC's side with generated
-//  keys: the right PIN pairs and pins, a wrong PIN, a forged signature or a busy PC is refused.
-//
+// Exercise pairing against a fake PC so no stored identity or network is needed.
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import CryptoKit
 import Foundation
 import os
@@ -129,6 +124,35 @@ struct PairingFlowTests {
         #expect(requests.first?.query["clientcert"].flatMap { Data(hex: $0) } == Data(client.certPEM.utf8))
         #expect((requests.first?.timeout ?? 0) > NetworkClient.pairTimeout)
         #expect(requests.last?.credential.clientKeyPEM == client.keyPEM)
+    }
+
+    @Test(arguments: ["tower-id", "different-pc", ""])
+    func publicPairingBindsThePinToTheExpectedPC(uniqueID: String) async throws {
+        let hostIdentity = try await EphemeralCryptoIdentity.make(bits: 2048)
+        let client = try await EphemeralCryptoIdentity.make(bits: 2048)
+        let host = FakePairingHost(host: hostIdentity, pin: "4821")
+        let sunshine = FakeSunshine { request in
+            guard request.path == "/serverinfo" else { return try host.respond(request) }
+            #expect(request.tls && request.credential.pinnedCertPEM == hostIdentity.certPEM)
+            let id = uniqueID.isEmpty ? "" : "<uniqueid>\(uniqueID)</uniqueid>"
+            return FakeSunshine.xml("\(id)<hostname>Verified PC</hostname>")
+        }
+        let server = FakeSunshine.server()
+        let pairing = PairingClient(network: sunshine.client(server, identity: client), server: server)
+        if uniqueID == server.uniqueId {
+            let paired = try await pairing.pair(pin: "4821", expectedUniqueId: server.uniqueId)
+            #expect(paired.uniqueId == server.uniqueId && paired.serverName == "Verified PC")
+            #expect(paired.pairStatus == .paired && paired.serverCertPEM == hostIdentity.certPEM)
+        } else {
+            let error = await #expect(throws: StreamError.self) {
+                _ = try await pairing.pair(pin: "4821", expectedUniqueId: server.uniqueId)
+            }
+            guard case .pairingRejected = error else {
+                Issue.record("Expected a pairing identity rejection")
+                return
+            }
+        }
+        #expect(sunshine.paths == Array(repeating: "pair", count: 5) + ["serverinfo"])
     }
 
     @Test func aWrongPinIsRejectedBeforeOurSecretIsSentAndNothingIsPinned() async throws {

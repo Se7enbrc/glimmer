@@ -1,62 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  Network.swift
-//
-//  HTTPS/HTTP client for the GameStream/Sunshine control channel. Talks XML
-//  over port 47989 (unpaired, plain HTTP) and 47984 (paired, mutual TLS with
-//  the client cert + key from IdentityManager). Every endpoint returns XML
-//  shaped like:
-//
-//      <root status_code="200">
-//          <appversion>7.1.450.0</appversion>
-//          ...
-//      </root>
-//
-//  so we parse it into a tiny in-memory tree (`XMLNode`) and pick values out
-//  by tag name. There's no schema; the host returns whatever it feels like and
-//  callers are expected to know what they asked for.
-//
-//  Ported from moonlight-qt's app/backend/nvhttp.{h,cpp} (GPLv3; see CREDITS.md).
-//  The big differences from the C++ side:
-//
-//    * ControlTransport (mutual TLS on Network.framework) instead of
-//      QNetworkAccessManager - the client cert and host-cert pin never touch
-//      URLSession or the keychain.
-//    * NOT trust-on-first-use: the first /serverinfo call goes over plain HTTP
-//      and the next HTTPS handshake exposes the host cert, but we do NOT pin it
-//      there. The pin is bound only AFTER the PIN/RSA pairing handshake has
-//      authenticated the host (see the SECURITY (C2) notes in
-//      NetworkClient+Endpoints.swift and Pairing.swift); from then on we refuse
-//      HTTPS to anything not presenting *exactly* that cert. No PKI validation,
-//      on purpose (every GameStream/Sunshine host is self-signed).
-//    * XMLParser-driven tree builder instead of QXmlStreamReader's pull API.
-//
-//  This file is concurrency-strict. `NetworkClient` is an actor, so all its
-//  state is isolated; the transport's blocking IO runs off-actor and bridges
-//  back via continuations.
-//
-
-import GlimmerEngine
 import Foundation
 import Network
 import os.log
 
 // MARK: - Host reachability (cheap TCP probe)
 
-/// Lightweight reachability probe for the readiness chip on the main window.
-/// Distinct from `NetworkClient.fetchServerInfo()` - we don't want to drive a
-/// full HTTP/TLS roundtrip just to colour a pill. A bare TCP connect to the
-/// host's HTTP port (47989) is enough to tell "host is awake & answering on
-/// the network" and gives us a useful RTT proxy as a side effect.
-///
-/// The measurement is the wall-clock time between `connection.start()` and
-/// the connection transitioning to `.ready`. On a LAN this is dominated by
-/// the TCP handshake - one round trip - so it's a serviceable RTT for the
-/// "12 ms" subtitle on the chip. We don't claim ICMP-level precision.
+// MARK: - Host reachability
+
+/// A bounded TCP-only probe keeps readiness polling cheap and never performs an HTTP/TLS exchange.
 public enum HostReachability {
     public enum Outcome: Sendable, Equatable {
         case reachable(rttMs: Int)
@@ -79,10 +33,7 @@ public enum HostReachability {
               let nwPort = NWEndpoint.Port(rawValue: rawPort) else {
             return .unreachable
         }
-        // Tighter TCP knobs so a dead host folds to .unreachable in seconds
-        // rather than the kernel's default ~75s SYN retry budget. We don't
-        // need fancy features (no fast-open, no keep-alive) - this connection
-        // exists for one handshake and dies.
+        // Bound a dead PC probe instead of waiting for the kernel's long SYN retry budget.
         let tcp = NWProtocolTCP.Options()
         tcp.connectionTimeout = max(1, timeoutMs / 1000)
         tcp.noDelay = true
@@ -96,10 +47,7 @@ public enum HostReachability {
         )
         let start = DispatchTime.now()
 
-        // Wrap the state-update callback in a continuation so the caller gets a
-        // clean async result. `Once` guards against the (rare) case where
-        // multiple terminal states fire - e.g. `.failed` after `.cancelled` -
-        // which would otherwise resume the continuation twice and trap.
+        // Multiple terminal callbacks can race; resume the continuation exactly once.
         let outcome: Outcome = await withCheckedContinuation { cont in
             let once = OnceResumer(cont: cont)
             conn.stateUpdateHandler = { state in
@@ -140,9 +88,8 @@ public enum HostReachability {
         return outcome
     }
 
-    /// Single-shot continuation guard. NWConnection happily fires multiple
-    /// terminal states in quick succession (e.g. `.cancelled` after we cancel
-    /// from `.ready`); resuming a `CheckedContinuation` twice traps.
+    /// The lock protects fired; the immutable continuation is resumed exactly once even when
+    /// Network.framework delivers multiple terminal callbacks from different queues.
     final class OnceResumer: @unchecked Sendable {
         private let cont: CheckedContinuation<Outcome, Never>
         private var fired = false
@@ -165,13 +112,13 @@ public enum HostReachability {
 
 /// One entry from /applist. The host returns a flat list of these - Desktop,
 /// Steam Big Picture, and one per game it knows about.
-public struct HostApp: Sendable, Identifiable {
-    public let id: Int
-    public let name: String
-    public let hdrCapable: Bool
-    public let hidden: Bool
+package struct HostApp: Sendable, Identifiable {
+    package let id: Int
+    package let name: String
+    package let hdrCapable: Bool
+    package let hidden: Bool
 
-    public init(id: Int, name: String, hdrCapable: Bool, hidden: Bool) {
+    package init(id: Int, name: String, hdrCapable: Bool, hidden: Bool) {
         self.id = id
         self.name = name
         self.hdrCapable = hdrCapable
@@ -182,12 +129,12 @@ public struct HostApp: Sendable, Identifiable {
 /// Result of /launch or /resume. The host returns an RTSP URL we then hand to
 /// the native backend to start the actual video/audio/input streams, plus the
 /// GCM key + key-ID it expects on the control channel.
-public struct LaunchResponse: Sendable {
-    public let sessionURL: String
-    public let gcmKey: Data
-    public let gcmKeyId: Data
+package struct LaunchResponse: Sendable {
+    package let sessionURL: String
+    package let gcmKey: Data
+    package let gcmKeyId: Data
 
-    public init(sessionURL: String, gcmKey: Data, gcmKeyId: Data) {
+    package init(sessionURL: String, gcmKey: Data, gcmKeyId: Data) {
         self.sessionURL = sessionURL
         self.gcmKey = gcmKey
         self.gcmKeyId = gcmKeyId
@@ -196,20 +143,19 @@ public struct LaunchResponse: Sendable {
 
 // MARK: - XMLNode
 
-/// Minimal XML tree node. We deliberately don't model namespaces, CDATA, or
-/// processing instructions - the GameStream protocol uses none of them. The
-/// shape is exactly what callers need: a name, optional text content, a flat
-/// attribute dictionary, and ordered children.
-public struct XMLNode: Sendable {
-    public let name: String
-    public var text: String
-    public var attributes: [String: String]
-    public var children: [XMLNode]
+// MARK: - XMLNode
 
-    public init(name: String,
-                text: String = "",
-                attributes: [String: String] = [:],
-                children: [XMLNode] = []) {
+/// Preserve ordered children and attributes without adding a general XML dependency.
+package struct XMLNode: Sendable {
+    package let name: String
+    package var text: String
+    package var attributes: [String: String]
+    package var children: [XMLNode]
+
+    package init(name: String,
+                 text: String = "",
+                 attributes: [String: String] = [:],
+                 children: [XMLNode] = []) {
         self.name = name
         self.text = text
         self.attributes = attributes
@@ -220,7 +166,7 @@ public struct XMLNode: Sendable {
 
     /// First descendant with the given tag name (depth-first, pre-order).
     /// Matches `self` if its own name equals `tag`.
-    public func firstChild(named tag: String) -> XMLNode? {
+    package func firstChild(named tag: String) -> XMLNode? {
         if name == tag { return self }
         for child in children {
             if let hit = child.firstChild(named: tag) { return hit }
@@ -229,7 +175,7 @@ public struct XMLNode: Sendable {
     }
 
     /// All descendants with the given tag name (depth-first).
-    public func descendants(named tag: String) -> [XMLNode] {
+    package func descendants(named tag: String) -> [XMLNode] {
         var out: [XMLNode] = []
         collectDescendants(named: tag, into: &out)
         return out
@@ -242,20 +188,17 @@ public struct XMLNode: Sendable {
         }
     }
 
-    /// Trimmed text content of the first descendant matching `tag`, or nil if
-    /// missing. Recurses depth-first because GameStream/Sunshine wrap their
-    /// data inside a `<root>` element, and most callers want the data, not
-    /// the root container.
-    public func string(forChild tag: String) -> String? {
+    /// Descend through Sunshine's root wrapper so callers can read the actual field.
+    package func string(forChild tag: String) -> String? {
         firstChild(named: tag)?
             .text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    public func int(forChild tag: String) -> Int? {
+    package func int(forChild tag: String) -> Int? {
         string(forChild: tag).flatMap(Int.init)
     }
 
-    public func bool(forChild tag: String) -> Bool? {
+    package func bool(forChild tag: String) -> Bool? {
         // GameStream uses "1"/"0" rather than "true"/"false".
         guard let text = string(forChild: tag) else { return nil }
         return text == "1"
@@ -268,9 +211,9 @@ public actor NetworkClient {
 
     // MARK: State
 
-    /// The host we're talking to. Mutated as we learn things - the HTTPS port
-    /// can come from /serverinfo, and the server cert is pinned on first
-    /// successful HTTPS handshake.
+    // MARK: State
+
+    /// Learn ports from /serverinfo, but accept a certificate only after the pairing proof.
     var server: ServerInfo
 
     /// Client cert + key (PEM), snapshotted from IdentityManager on first use; ControlTransport
@@ -279,35 +222,39 @@ public actor NetworkClient {
     var clientKeyPEM: String?
 
     /// The 32-hex client uniqueid generated by IdentityManager, sent on every request.
-    var clientUniqueID: String?
+    package var clientUniqueID: String?
     var requestDeadline: Date?
 
-    func setRequestDeadline(_ deadline: Date?) { requestDeadline = deadline }
+    package func setRequestDeadline(_ deadline: Date?) { requestDeadline = deadline }
 
     let log = Logger(subsystem: "io.ugfugl.Glimmer",
                              category: "Stream.Network")
 
     /// The client credential and uniqueid requests carry; tests pass a generated one.
-    typealias Identity = @Sendable () async throws -> (certPEM: String, keyPEM: String, uniqueID: String)
+    package typealias Identity = @Sendable () async throws -> (certPEM: String, keyPEM: String, uniqueID: String)
 
-    static let installIdentity: Identity = {
-        let im = IdentityManager.shared
-        return (try await im.clientCertPEM(), try await im.clientKeyPEM(), try await im.uniqueID())
-    }
-
+    let deviceName: @Sendable () -> String
     let transport: ControlTransport.Get
     let identity: Identity
 
     // MARK: Init
 
-    init(server: ServerInfo, transport: @escaping ControlTransport.Get = ControlTransport.get,
-         identity: @escaping Identity = NetworkClient.installIdentity) {
+    package init(server: ServerInfo, deviceName: @escaping @Sendable () -> String,
+                 transport: @escaping ControlTransport.Get = ControlTransport.get,
+                 identity: @escaping Identity) {
         self.server = server
+        self.deviceName = deviceName
         self.transport = transport
         self.identity = identity
         // The host-cert pin (if any) rides on `server.serverCertPEM` already;
         // ControlTransport reads it per request. Nothing else to set up - the
         // control channel is connectionless from this object's point of view.
+    }
+
+    public init(server: ServerInfo, identity: IdentityManager, deviceName: String) {
+        self.init(server: server, deviceName: { deviceName }, identity: {
+            (try await identity.clientCertPEM(), try await identity.clientKeyPEM(), try await identity.uniqueID())
+        })
     }
 
     /// No-op: the control channel is per-request (ControlTransport opens and
@@ -317,7 +264,7 @@ public actor NetworkClient {
 
     /// Pairing calls this after the PIN and signature proof. Reject unsupported keys before
     /// replacing a pin; subsequent TLS connections must present this exact certificate.
-    public func setPinnedHostCert(pem: String) throws {
+    package func setPinnedHostCert(pem: String) throws {
         _ = try PEM.certificateKey(pem, context: "PC certificate")
         server.serverCertPEM = pem
         log.info("Host cert pinned (length \(pem.count, privacy: .public) bytes)")
@@ -330,9 +277,8 @@ public actor NetworkClient {
     }
 
     // MARK: Identity prep
-    //
-    // Snapshot the client cert + key (PEM) out of the IdentityManager actor
-    // before any HTTPS call.
+
+    // Snapshot the client cert + key (PEM) before HTTPS so the transport needs no actor hop.
 
     func ensureIdentityLoaded() async throws {
         if clientCertPEM != nil { return }
@@ -356,25 +302,10 @@ public actor NetworkClient {
         return entries.joined(separator: " ")
     }
 
-    // MARK: - Redaction helpers (logged-output sanitization)
-    //
-    // The launch / resume URL query carries session crypto material that
-    // must never reach unified log:
-    //
-    //   - rikey      : per-session AES-128 key for the remote-input channel.
-    //   - rikeyid    : signed-int derived from the first 4 bytes of the IV.
-    //   - gcmkey     : AES key for the control-channel GCM transport
-    //                  (Sunshine only echoes it on the launch response).
-    //   - gcmkeyid   : matching key-id.
-    //   - uuid       : per-request nonce (16 random bytes hex). Not load-
-    //                  bearing for crypto on its own, but combined with
-    //                  the request URL it's a session-correlation token.
-    //   - uniqueid   : the well-known shared client identifier; not secret
-    //                  per se, but redacting it keeps logs consistent
-    //                  across builds.
-    //
-    // These names are matched case-insensitively against query parameter
-    // names AND XML tag names (the host echoes some of them back).
+    // MARK: - Redaction helpers
+
+    // Match sensitive names case-insensitively in both request queries and echoed XML tags.
+    // Keys, key IDs, nonces, client IDs and session addresses must never reach public logs.
 
     /// Lowercased query/tag names whose values `runLaunchLike`'s query dump and
     /// `dumpXMLRedacted` redact. `sessionurl0` is the PC's rtsp://address:port,
@@ -383,11 +314,7 @@ public actor NetworkClient {
         "rikey", "rikeyid", "gcmkey", "gcmkeyid", "uuid", "uniqueid", "sessionurl0"
     ]
 
-    /// Same shape as `dumpXML`, but every child whose tag name matches
-    /// `sensitiveQueryKeys` has its body replaced with `<redacted>` so
-    /// gcmkey / gcmkeyid (echoed by Sunshine on /launch /resume) never
-    /// reach the log. We still preserve the tag name itself - that's
-    /// the data point we actually need for the "field renamed?" diff.
+    /// Retain field names for diagnostics while redacting sensitive echoed values.
     static func dumpXMLRedacted(_ node: XMLNode) -> String {
         var entries: [String] = []
         func walk(_ node: XMLNode) {

@@ -1,18 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  Pairing+Crypto.swift
-//
-//  Crypto + encoding helpers for the pairing flow (random bytes, AES-128-ECB,
-//  digests, X509 signature extraction, RSA verify/sign, XML helpers) plus the
-//  lowercase hex encoding and the resolved "open items" notes. Split out of
-//  Pairing.swift to keep each unit focused; see that file for the pairing flow.
-//
-
-import GlimmerEngine
 import CommonCrypto
 import CryptoKit
 import Foundation
@@ -27,7 +16,7 @@ extension PairingClient {
 
     // MARK: Random
 
-    static func randomBytes(_ count: Int) throws -> Data {
+    package static func randomBytes(_ count: Int) throws -> Data {
         var bytes = [UInt8](repeating: 0, count: count)
         guard SecRandomCopyBytes(kSecRandomDefault, count, &bytes) == errSecSuccess else {
             throw StreamError.crypto("SecRandomCopyBytes failed")
@@ -36,15 +25,15 @@ extension PairingClient {
     }
 
     // MARK: AES-128-ECB (no padding)
-    //
-    // Sunshine requires raw ECB for pairing challenges and hashes, with block-aligned inputs.
-    // Signature and challenge checks are separate from this cipher; see SECURITY.md for its limits.
 
-    static func aesEcbEncrypt(_ plaintext: Data, key: Data) throws -> Data {
+    // Sunshine requires raw ECB for pairing challenges and hashes, with block-aligned
+    // inputs. Signature and challenge checks are separate from this cipher; see SECURITY.md for its limits.
+
+    package static func aesEcbEncrypt(_ plaintext: Data, key: Data) throws -> Data {
         try aesEcb(plaintext, key: key, encrypt: true)
     }
 
-    static func aesEcbDecrypt(_ ciphertext: Data, key: Data) throws -> Data {
+    package static func aesEcbDecrypt(_ ciphertext: Data, key: Data) throws -> Data {
         try aesEcb(ciphertext, key: key, encrypt: false)
     }
 
@@ -77,16 +66,16 @@ extension PairingClient {
     // MARK: Digest
 
     /// SHA-256, the only pairing hash Sunshine uses.
-    static func digest(_ data: Data) -> Data {
+    package static func digest(_ data: Data) -> Data {
         Data(SHA256.hash(data: data))
     }
 
     // MARK: Certificate signature
-    //
-    // The "cert signature" hashed into the challenge response is the bytes already on the cert,
-    // not a recomputed signature, so both sides read the same value from the same PEM.
 
-    static func signatureFromPemCert(_ pem: String) throws -> Data {
+    // The "cert signature" hashed into the challenge response is the bytes already on the
+    // cert, not a recomputed signature, so both sides read the same value from the same PEM.
+
+    package static func signatureFromPemCert(_ pem: String) throws -> Data {
         // Security vets the certificate before the DER walk reads its signature.
         guard PEM.certificate(pem) != nil, let der = PEM.der(pem),
               let signature = DER.certificateParts(der)?.signature else {
@@ -97,7 +86,7 @@ extension PairingClient {
 
     // MARK: RSA verify (host signature over serverSecret)
 
-    static func verifySignature(
+    package static func verifySignature(
         data: Data,
         signature: Data,
         serverCertPEM: String
@@ -110,7 +99,7 @@ extension PairingClient {
 
     // MARK: RSA sign (our signature over our clientSecret)
 
-    static func signMessage(_ message: Data, privateKeyPEM: String) throws -> Data {
+    package static func signMessage(_ message: Data, privateKeyPEM: String) throws -> Data {
         guard let key = PEM.privateKey(privateKeyPEM) else {
             throw StreamError.crypto("could not read the client key")
         }
@@ -124,14 +113,10 @@ extension PairingClient {
     }
 
     // MARK: XML helpers
-    //
-    // NetworkClient hands us a parsed XMLNode tree. The host's pair responses
-    // are shaped like:
-    //   <root status_code="200"><paired>1</paired><plaincert>...</plaincert></root>
-    // We pull the status_code attribute off <root> and read child text by
-    // tag name.
 
-    static func verifyResponseStatus(_ xml: XMLNode) throws {
+    // Sunshine wraps paired/plaincert fields in a root carrying the status_code attribute.
+
+    package static func verifyResponseStatus(_ xml: XMLNode) throws {
         guard let root = xml.firstChild(named: "root") else {
             throw StreamError.pairingFailed("response missing <root> element")
         }
@@ -154,7 +139,7 @@ extension PairingClient {
         throw StreamError.pairingFailed("host returned status \(code) \(message)")
     }
 
-    static func xmlString(_ xml: XMLNode, tag: String) -> String? {
+    package static func xmlString(_ xml: XMLNode, tag: String) -> String? {
         // The root node wraps everything; XMLNode.string(forChild:) only looks
         // one level down, so we hop through <root> first.
         guard let root = xml.firstChild(named: "root") else { return nil }
@@ -165,14 +150,8 @@ extension PairingClient {
 // MARK: - Hex encoding
 
 extension Data {
-    /// Lowercase hex string. We deliberately match moonlight-qt's wire format
-    /// (`QByteArray::toHex()` → lowercase). GFE / Sunshine appear to accept
-    /// either case in practice, but moonlight-qt has been the reference
-    /// implementation for ~a decade - any divergence is a latent risk on some
-    /// GFE 3.x build we haven't tested against. The performance cost is
-    /// identical; the readability of packet captures is exactly the same. If
-    /// we ever need uppercase for a specific endpoint we can add a flag.
-    func hex() -> String {
+    /// Match moonlight-qt's lowercase wire hex; two digits preserve leading zeros.
+    package func hex() -> String {
         // Reserve exact capacity - saves the dynamic-resize cost on a hot path
         // (cert blobs are ~1KB which means ~2KB of hex).
         var out = String()
@@ -185,7 +164,7 @@ extension Data {
 
     /// Lenient hex decode. Accepts mixed case and ignores embedded whitespace
     /// - GFE sometimes pretty-prints with newlines inside <plaincert>.
-    init?(hex: String) {
+    package init?(hex: String) {
         let cleaned = hex.unicodeScalars.filter { !CharacterSet.whitespacesAndNewlines.contains($0) }
         guard cleaned.count % 2 == 0 else { return nil }
 
@@ -212,32 +191,6 @@ extension Data {
     }
 }
 
-// MARK: - Open items
-//
-// All four `verify-with-host` items from earlier sweeps have been
-// resolved or downgraded based on a line-by-line read of moonlight-qt's
-// `app/backend/nvpairingmanager.cpp`:
-//
-// 1. CHALLENGE RESPONSE LAYOUT - moonlight-qt's `decrypt(challengeresponse)`
-//    treats the entire decrypted blob as `hashLen || 16-byte challenge ||
-//    server-cert-sig` (the sig is whatever the cert's ASN.1 BIT STRING is
-//    long, typically 256/384 bytes for RSA-2048/3072). It does NOT assume
-//    the ciphertext is block-aligned; OpenSSL's EVP_DecryptUpdate handles
-//    that. Our `aesEcbDecrypt` rejects non-aligned input, which is correct
-//    because every observed response IS aligned, but the protocol does not
-//    formally require it. → kept as-is; surface a clear error if it ever
-//    happens, then revisit.
-//
-// 2. HEX CASE - moonlight-qt uses `QByteArray::toHex()` which is lowercase.
-//    We now match this exactly (see `Data.hex()` below). GFE / Sunshine
-//    both accept either case in observed packet captures, but lowercase
-//    eliminates a latent divergence.
-//
-// 3. UNIQUEID / UUID - `NetworkClient.rawRequest` injects `uniqueid` (this
-//    install's id for Sunshine, moonlight-qt's shared constant for GFE) and a
-//    fresh `uuid=` nonce per request. Pairing only passes its own keys.
-//
-// 4. URL-ENCODING - URLComponents percent-encodes hex query values, which
-//    is harmless because hex chars are unreserved. Sunshine cert blobs
-//    push us toward ~3KB URLs; moonlight-qt uses GET for the same payload
-//    so we are within established tolerances. No action.
+// SHA-256 challenges are 32-byte hashes plus 16-byte secrets; raw AES uses no padding.
+// Certificate signatures are the X.509 BIT STRING payload; client secrets use RSA/SHA-256.
+// Sunshine uses SHA-256, while obsolete SHA-1 GameStream versions are refused before pairing.

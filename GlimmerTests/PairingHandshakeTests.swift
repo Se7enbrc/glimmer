@@ -8,7 +8,7 @@
 //  certificate pin and fingerprint checks, the wire hex, and the small pairing and poller helpers.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import CoreWLAN
 import CryptoKit
 import Foundation

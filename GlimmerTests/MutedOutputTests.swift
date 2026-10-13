@@ -8,6 +8,7 @@
 //  system volume an older build zeroed.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  Pairing.swift
-//
-//  PIN pairing with a GameStream host, ported from moonlight-qt's nvpairingmanager (GPLv3; see CREDITS.md):
-//  four plain-HTTP rounds of raw AES-128-ECB (PIN-keyed, 16-byte blocks, no padding) and RSA signatures over
-//  our client cert, then an HTTPS pairchallenge. Wire hex is lowercase; one wrong byte and the host rejects us.
-//
+// Four HTTP rounds prove the PIN and RSA identity before the final pinned HTTPS challenge.
 
-import GlimmerEngine
 import CryptoKit
 import Foundation
 import os
@@ -27,16 +19,24 @@ public actor PairingClient {
 
     // MARK: Init
 
-    init(network: NetworkClient, server: ServerInfo) {
+    public init(network: NetworkClient, server: ServerInfo) {
         self.network = network
         self.server = server
     }
 
     // MARK: Public API
 
-    /// Walk the full PIN handshake. On success the returned `ServerInfo` has
-    /// `pairStatus = .paired` and `serverCertPEM` holding the host's pinned certificate.
-    func pair(pin: String) async throws -> ServerInfo {
+    /// Bind the proven certificate to the expected PC before the shell can save it.
+    public func pair(pin: String, expectedUniqueId: String) async throws -> ServerInfo {
+        _ = try await runPairingFlow(pin: pin)
+        let verified = try await network.fetchServerInfo(requiredUniqueId: expectedUniqueId)
+        try Task.checkCancellation()
+        return verified
+    }
+
+    /// The Mac shell checks cancellation between the handshake and its pinned identity request.
+    /// It must verify /serverinfo before persisting this provisional result.
+    package func pair(pin: String) async throws -> ServerInfo {
         try await runPairingFlow(pin: pin)
     }
 
@@ -46,12 +46,7 @@ public actor PairingClient {
 
     private func runPairingFlow(pin: String) async throws -> ServerInfo {
 
-        // Wrap the whole flow in an Instruments interval so a stuck pair
-        // shows exactly where it stopped. Per-step events below mark every
-        // handshake round so the timeline reads as: PairingFlow opens →
-        // getservercert → clientchallenge → serverchallengeresp →
-        // pairingsecret → clientpairingsecret → pairchallenge → PairingFlow
-        // closes.
+        // Keep the interval and per-round events so Instruments identifies a stalled pairing step.
         let pairingSignpostID = OSSignposter.pairing.makeSignpostID()
         let pairingIntervalState = OSSignposter.pairing.beginInterval(
             "PairingFlow",
@@ -69,14 +64,7 @@ public actor PairingClient {
                 "outcome=\(pairingOutcome, privacy: .public)")
         }
 
-        // ---------------------------------------------------------------
-        // Step 1: getservercert
-        //
-        // We send a fresh 16-byte salt + our PEM cert (hex-encoded). The host
-        // replies with paired=1 + plaincert=<host cert hex>. From this point
-        // on we treat that cert as the host's identity - it's pinned for all
-        // subsequent TLS verification until pairing finishes (or fails).
-        // ---------------------------------------------------------------
+        // Send salt and the client cert. The returned PC cert is only a proposal until the PIN/RSA proof.
         let salt = try Self.randomBytes(16)
         let identity = try await network.identity()
         let clientCertPEM = identity.certPEM
@@ -88,26 +76,13 @@ public actor PairingClient {
             signpostID: pairingSignpostID
         )
 
-        // ---------------------------------------------------------------
-        // Step 2: derive the AES key from the salt + PIN.
-        //
-        // Identity owns the SHA-256(salt || pin)[0..16] computation - keeping
-        // it there means both sides of the codebase (us + the discovery flow,
-        // if it ever needs to verify) hash the PIN identically.
-        // ---------------------------------------------------------------
-        let aesKey = await IdentityManager.shared.aesKey(forPIN: pin, salt: salt)
+        // Both peers derive the same PIN-keyed AES key through the shared identity helper.
+        let aesKey = IdentityManager.aesKey(forPIN: pin, salt: salt)
         guard aesKey.count == 16 else {
             throw StreamError.crypto("derived AES key is not 16 bytes")
         }
 
-        // ---------------------------------------------------------------
-        // Step 3: clientchallenge
-        //
-        // Send a random 16-byte block, AES-ECB-encrypted with the PIN-derived
-        // key. The host will decrypt it, prove it can do so by including the
-        // result in its own challenge response, and send back its own random
-        // bytes alongside a hash of (our challenge || its cert sig).
-        // ---------------------------------------------------------------
+        // A random AES-encrypted challenge lets the PC prove knowledge of the PIN-derived key.
         let randomChallenge = try Self.randomBytes(16)
         let encryptedClientChallenge = try Self.aesEcbEncrypt(randomChallenge, key: aesKey)
 
@@ -140,22 +115,8 @@ public actor PairingClient {
             failureMessage: "serverchallengeresp: host rejected our hash"
         )
 
-        // ---------------------------------------------------------------
-        // Step 5: pairingsecret
-        //
-        // Host sends back its random 16-byte serverSecret followed by an RSA
-        // signature over (serverSecret || serverCert) using its private key.
-        // We:
-        //   a) RSA-verify the sig against the host cert's public key - this
-        //      is the MITM check.
-        //   b) Recompute hash(ourClientChallenge || hostCertSig || serverSecret)
-        //      and compare to `serverResponseHash` from step 4. Mismatch
-        //      means the host computed it with a different PIN-derived AES
-        //      key, i.e. the user typed the wrong PIN.
-        // ---------------------------------------------------------------
-        // Step 5 verification: (a) RSA-verify the host's signature over a value
-        // we picked (MITM check) and (b) confirm the user typed the right PIN.
-        // Both failures collapse to `.pairingRejected` - see the helper.
+        // Verify the PC signature and hash(our challenge || PC cert signature || serverSecret).
+        // Both failures report pairingRejected so an attacker cannot distinguish a PIN from a signature failure.
         try verifyHostProof(
             serverChallengeRespXml: serverChallengeRespXml,
             randomChallenge: randomChallenge,
@@ -262,11 +223,8 @@ public actor PairingClient {
         return (Data(serverResponseHash), Data(hostServerChallenge))
     }
 
-    /// One handshake round of the pairing flow: emit the per-step signpost
-    /// event, fire the one-shot `pair` GET, verify the HTTP status, and assert
-    /// the host returned `paired=1`. Returns the parsed XML so the caller can
-    /// pull round-specific fields. `devicename`/`updateState` are added here so
-    /// callers only specify the round's distinguishing query keys.
+    /// Each round keeps its signpost and checks HTTP status plus paired=1. Shared device fields
+    /// keep every round tied to the same client identity.
     private func pairRound(
         stepLabel: StaticString,
         signpostID: OSSignpostID,
@@ -279,7 +237,7 @@ public actor PairingClient {
             "PairingStep",
             id: signpostID,
             "step=\(stepLabel)")
-        var fullQuery = ["devicename": NetworkClient.pairingDeviceName, "updateState": "1"]
+        var fullQuery = ["devicename": network.deviceName(), "updateState": "1"]
         for (key, value) in query { fullQuery[key] = value }
         let response = try await network.request(
             path: "pair",
@@ -294,14 +252,8 @@ public actor PairingClient {
         return response
     }
 
-    /// Steps 6 + 7 of the pair flow, split out of `runPairingFlow`.
-    ///
-    /// Step 6 (clientpairingsecret): send our clientSecret plus an RSA signature
-    /// over it using our private key; the host verifies with the public key it
-    /// already has (from our cert in step 1). Step 7 (HTTPS pairchallenge): the
-    /// final liveness check over TLS - by now the host has our cert in its
-    /// allowlist; this call confirms it. A TLS failure here means we never got
-    /// fully added on the host side. Both rounds throw on a non-`paired=1` reply.
+    /// Sign the client secret, then confirm paired=1 over pinned mutual TLS.
+    /// A TLS failure means the PC has not accepted this identity; do not persist the pin.
     private func completeClientPairing(
         clientSecret: Data,
         clientKeyPEM: String,
@@ -351,17 +303,8 @@ public actor PairingClient {
         return try Self.aesEcbEncrypt(Self.digest(challengeRespPayload), key: aesKey)
     }
 
-    /// Step 5 host-proof verification, split out of `runPairingFlow`.
-    ///
-    /// (a) MITM check.
-    /// SECURITY: collapse MITM-detection and wrong-PIN errors
-    /// into a single externally-visible `.pairingRejected`. The
-    /// attacker shouldn't get to learn whether their attempt failed
-    /// because the PIN was wrong (offline-brute-force the PIN) or
-    /// because their cert didn't sign the secret (give up + switch
-    /// tactics). Both fail at the same "pairing rejected" boundary.
-    /// The actual cause is still logged at `.private` privacy for
-    /// local debugging.
+    /// Collapse wrong-PIN and signature failures to pairingRejected to avoid an oracle.
+    /// Preserve the distinction only in private diagnostics.
     private func verifyHostProof(
         serverChallengeRespXml: XMLNode,
         randomChallenge: Data,
@@ -404,10 +347,7 @@ public actor PairingClient {
         let expectedResponseHash = Self.digest(expectedResponse)
 
         guard expectedResponseHash == Data(serverResponseHash) else {
-            // Wrong PIN - same external surface as the MITM branch so an
-            // attacker can't distinguish "you typed the wrong digit" from
-            // "your cert didn't sign right." Internal log carries the
-            // distinction at `.private`.
+            // Match signature-failure wording to avoid an oracle; the private log retains the cause.
             log.error(
                 """
                 Pairing rejected (response-hash mismatch - \
