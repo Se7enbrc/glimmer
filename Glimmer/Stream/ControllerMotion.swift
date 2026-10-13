@@ -324,24 +324,3 @@ struct MotionRateGate: Equatable, Sendable {
         return true
     }
 }
-
-// MARK: - NativeBackend motion uplink
-
-extension NativeBackend {
-    /// = LiSendControllerMotionEvent (InputStream.c). Hands the sample to the
-    /// InputBatcher's latest-wins merge on the pad's sensor channel -
-    /// moonlight's currentGamepadSensorState batching, where a superseded
-    /// sample is replaced, never queued. Gated on the same Sunshine feature
-    /// flag as controller touch: LiSendControllerMotionEvent checks
-    /// LI_FF_CONTROLLER_TOUCH_EVENTS for BOTH (InputStream.c). Lives here,
-    /// not NativeBackend+Input.swift, so the motion uplink reads end-to-end
-    /// in this file.
-    public func sendControllerMotion(num: UInt8, motionType: UInt8,
-                                     x: Float, y: Float, z: Float) -> Int32 {
-        guard let batcher = readyBatcher() else { return Self.inputNotReady }
-        guard withState({ featureFlags }) & Self.ffControllerTouchEvents != 0 else {
-            return StreamProtocol.LI_ERR_UNSUPPORTED
-        }
-        return batcher.updateMotion(num: num, motionType: motionType, x: x, y: y, z: z)
-    }
-}

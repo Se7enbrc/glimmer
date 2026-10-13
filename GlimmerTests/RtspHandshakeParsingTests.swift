@@ -8,14 +8,15 @@
 //  the session token, the ping payload and the negotiated codec, plus the malformed replies refused.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct RtspHandshakeParsingTests {
 
-    private static func client(formats: Int32 = StreamProtocol.VIDEO_FORMAT_H264, serverCodecMode: Int32 = 0) -> RtspClient {
+    private static func client(formats: Int32 = StreamProtocol.VIDEO_FORMAT_H264, serverCodecMode: Int32 = 0,
+                               decoderCapabilities: Int32 = 0) -> RtspClient {
         let key = [UInt8](repeating: 7, count: 16)
         let config = BackendStreamConfig(
             width: 1920, height: 1080, fps: 60, bitrate: 20_000, packetSize: 1392,
@@ -25,7 +26,7 @@ struct RtspHandshakeParsingTests {
         return RtspClient(
             host: "192.0.2.10", rtspPort: 48010, rtspTargetUrl: "rtsp://192.0.2.10:48010",
             urlAddr: "192.0.2.10", urlSafeAddr: "192.0.2.10", addrFamilyToken: "IPv4",
-            config: config, serverCodecModeRaw: serverCodecMode)
+            config: config, serverCodecModeRaw: serverCodecMode, decoderRfiCapabilities: decoderCapabilities)
     }
 
     private static func reply(_ headers: String, payload: String = "") throws -> RtspMessage {
@@ -37,6 +38,18 @@ struct RtspHandshakeParsingTests {
             audioPort: 0, videoPort: 0, controlPort: 0, controlConnectData: 0, sessionId: "",
             negotiatedVideoFormat: 0, encryptionFeaturesSupported: 0, encryptionFeaturesEnabled: 0,
             referenceFrameInvalidationSupported: false)
+    }
+
+    @Test(arguments: [Int32(0), StreamProtocol.CAPABILITY_REFERENCE_FRAME_INVALIDATION_HEVC])
+    func announceUsesTheSuppliedSinkCapabilities(capabilities: Int32) throws {
+        let rtsp = Self.client(formats: StreamProtocol.VIDEO_FORMAT_H265, decoderCapabilities: capabilities)
+        var result = Self.emptyResult()
+        result.negotiatedVideoFormat = StreamProtocol.VIDEO_FORMAT_H265
+        result.referenceFrameInvalidationSupported = true
+        let payload = try #require(rtsp.makeAnnounce(result).payload)
+        let sdp = try #require(String(data: payload, encoding: .utf8))
+        let frames = capabilities == 0 ? 1 : 0
+        #expect(sdp.contains("a=x-nv-video[0].maxNumReferenceFrames:\(frames) \r\n"))
     }
 
     // MARK: - SETUP

@@ -55,6 +55,17 @@ public final class StreamBridgeContext: @unchecked Sendable {
     nonisolated(unsafe) public weak var audioDecoder: AudioDecoder?
     nonisolated(unsafe) public weak var inputForwarder: InputForwarder?
 
+    private let sourceLock = NSLock()
+    private var eventSource: ObjectIdentifier?
+
+    func setEventSource(_ backend: NativeBackend) {
+        sourceLock.withLock { eventSource = ObjectIdentifier(backend) }
+    }
+
+    func acceptsEvent(from backend: NativeBackend?) -> Bool {
+        sourceLock.withLock { eventSource == nil || backend.map(ObjectIdentifier.init) == eventSource }
+    }
+
     /// The session's event stream, yielded to straight from backend threads so events keep the order
     /// the backend fired them (a Task hop would not). Invariant: written once in start() before any
     /// pipeline runs, and never cleared; stop() finishes it instead.

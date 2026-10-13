@@ -80,15 +80,15 @@ package struct BackendStreamConfig: Sendable {
 
 /// Opus multistream configuration. Mirrors OPUS_MULTISTREAM_CONFIGURATION
 /// (AudioDecoder.swift:80-100).
-package struct OpusConfig: Sendable {
-    package var sampleRate: Int32
-    package var channelCount: Int32
-    package var streams: Int32
-    package var coupledStreams: Int32
-    package var samplesPerFrame: Int32
-    package var mapping: [UInt8]
+public struct OpusConfig: Sendable {
+    public var sampleRate: Int32
+    public var channelCount: Int32
+    public var streams: Int32
+    public var coupledStreams: Int32
+    public var samplesPerFrame: Int32
+    public var mapping: [UInt8]
 
-    package init(
+    public init(
         sampleRate: Int32, channelCount: Int32, streams: Int32,
         coupledStreams: Int32, samplesPerFrame: Int32, mapping: [UInt8]
     ) {

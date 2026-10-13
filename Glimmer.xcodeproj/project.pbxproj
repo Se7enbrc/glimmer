@@ -539,7 +539,7 @@
 		E2610121000000000000000C /* StreamingBackend+Values.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2610121000000000000000B /* StreamingBackend+Values.swift */; };
 		E2610121000000000000000E /* StreamCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2610121000000000000000D /* StreamCrypto.swift */; };
 		E26101210000000000000010 /* StreamCrypto+VideoPacketLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2610121000000000000000F /* StreamCrypto+VideoPacketLayout.swift */; };
-		E26101210000000000000012 /* AudioFecDecoder+Recovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26101210000000000000011 /* AudioFecDecoder+Recovery.swift */; };
+		E26101210000000000000012 /* AudioFecDecoder+Queue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26101210000000000000011 /* AudioFecDecoder+Queue.swift */; };
 		E26101210000000000000013 /* GlimmerEngine.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; };
 		E26101210000000000000014 /* GlimmerEngine.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; };
 		E26101210000000000000015 /* GlimmerEngine.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -578,6 +578,16 @@
 		FC37441810C646A98BBD76F1 /* HostReadiness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 793410BE9BD84BC6AD3D5068 /* HostReadiness.swift */; };
 		529ACE474BBC48E3AE9C99A7 /* PairingFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC6544C038B448B9A4B9670 /* PairingFailure.swift */; };
 		9A621DC44DF54B10B3656B77 /* PCCommunicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B655C0313DBB4627B46D06FB /* PCCommunicationTests.swift */; };
+		A743B57A270B4BA0AA47418A /* NativeConnectionEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D0EDAC65B5435CB48C2792 /* NativeConnectionEvents.swift */; };
+		B61D339480D440B28088209F /* MacTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5D3A145DE64486EB0AE27CD /* MacTransport.swift */; };
+		2071D28352D048BE92F11CB3 /* NativeBackend+Controllers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28DF57FD4090415197DA4D62 /* NativeBackend+Controllers.swift */; };
+		89E25C9AB13643D4A7954A68 /* TransportPlatform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 419FA8FE03CF47A98E94E5AE /* TransportPlatform.swift */; };
+		BC54AA6CBD524543A7570914 /* MacStreamPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591B5BF62E754AD385A5B7B0 /* MacStreamPath.swift */; };
+		5CA017F8EF684C539EA37B48 /* AudioDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2C144110624A7D9114B2CC /* AudioDiagnostics.swift */; };
+		711D8559CDA84D78860B40AA /* TransportRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0354F751394D79B38E651F /* TransportRoute.swift */; };
+		30B7CD9DC9494B06922E5F6D /* StreamConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6AA113EA45C4F71B26EA9CD /* StreamConnection.swift */; };
+		C1E5E4ADAF3B4061BAE07257 /* StreamConnection+Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1D5E59D3694D12BE5D85F5 /* StreamConnection+Configuration.swift */; };
+		075A848ED8264C2A8F6168B7 /* TransportBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3171EF6FC17440C0AA2CEF96 /* TransportBoundaryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -640,8 +650,8 @@
 		A11020261012000300000000 /* AudioHALOutput+Silence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioHALOutput+Silence.swift"; sourceTree = "<group>"; };
 		D81200000000000000000008 /* ReceiveTimingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReceiveTimingTests.swift"; sourceTree = "<group>"; };
 		D81200000000000000000006 /* ReceiveTimingTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/ReceiveTimingTelemetry.swift"; sourceTree = SOURCE_ROOT; };
-		D81200000000000000000002 /* ReceiveTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/ReceiveTiming.swift"; sourceTree = "<group>"; };
-		D81200000000000000000000 /* SocketTimestamp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/SocketTimestamp.swift"; sourceTree = "<group>"; };
+		D81200000000000000000002 /* ReceiveTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/ReceiveTiming.swift; sourceTree = "<group>"; };
+		D81200000000000000000000 /* SocketTimestamp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/SocketTimestamp.swift; sourceTree = "<group>"; };
 		CE2026100800000000000002 /* AudioHALDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioHALDeviceTests.swift; sourceTree = "<group>"; };
 		CE2026100800000000000001 /* InputMonitoringFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputMonitoringFlowTests.swift; sourceTree = "<group>"; };
 		CE2026100800000000000000 /* LauncherControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LauncherControllerTests.swift; sourceTree = "<group>"; };
@@ -743,12 +753,12 @@
 		AB00000019 /* StreamWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamWindow.swift; sourceTree = "<group>"; };
 		AB00000021 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/Signposts.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD202606090000000000F1 /* ControllerHaptics.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControllerHaptics.swift; path = Stream/ControllerHaptics.swift; sourceTree = "<group>"; };
-		ABCD20260609000000000101 /* RtpAudioReceiver+Socket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Socket.swift"; sourceTree = "<group>"; };
-		ABCD20260609000000000201 /* RtpAudioReceiver+Ping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Ping.swift"; sourceTree = "<group>"; };
-		ABCD20260609000000000301 /* RtpAudioReceiver+StartupGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+StartupGate.swift"; sourceTree = "<group>"; };
-		ABCD20260609000000000401 /* RtpAudioReceiver+Decrypt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Decrypt.swift"; sourceTree = "<group>"; };
-		ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Events.swift"; sourceTree = "<group>"; };
-		ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioQueue+Fec.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000101 /* RtpAudioReceiver+Socket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+Socket.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000201 /* RtpAudioReceiver+Ping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+Ping.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000301 /* RtpAudioReceiver+StartupGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+StartupGate.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000401 /* RtpAudioReceiver+Decrypt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+Decrypt.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+Events.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioQueue+Fec.swift"; sourceTree = "<group>"; };
 		ABCD20260609000000000701 /* AudioDecoder+Meter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Meter.swift"; sourceTree = "<group>"; };
 		AC2026083000000000000001 /* AudioDecoder+Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Engine.swift"; sourceTree = "<group>"; };
 		AC2026083000000000000003 /* AudioDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Decode.swift"; sourceTree = "<group>"; };
@@ -791,39 +801,39 @@
 		CFAE5FA4BA5A94E9668B7089 /* QualityCalculator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QualityCalculator.swift; sourceTree = "<group>"; };
 		D1000001 /* StreamingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Protocol/StreamingBackend.swift"; sourceTree = SOURCE_ROOT; };
 		D1000003 /* StreamProtocolConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamProtocolConstants.swift; sourceTree = "<group>"; };
-		D1000007 /* NativeBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/NativeBackend.swift; sourceTree = "<group>"; };
+		D1000007 /* NativeBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session/NativeBackend.swift; sourceTree = "<group>"; };
 		D100000F /* StreamCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Protocol/StreamCrypto+VideoDecryptor.swift"; sourceTree = SOURCE_ROOT; };
 		D1000011 /* SdpCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SdpCodec.swift; sourceTree = "<group>"; };
-		D1000013 /* RtspClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtspClient.swift; sourceTree = "<group>"; };
-		D1000015 /* EnetControlChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/EnetControlChannel.swift; sourceTree = "<group>"; };
+		D1000013 /* RtspClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/RtspClient.swift; sourceTree = "<group>"; };
+		D1000015 /* EnetControlChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/EnetControlChannel.swift; sourceTree = "<group>"; };
 		D1000017 /* EnetWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnetWire.swift; sourceTree = "<group>"; };
 		D100001F /* ReedSolomon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReedSolomon.swift; sourceTree = "<group>"; };
-		D1000021 /* VideoDepacketizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoDepacketizer.swift; sourceTree = "<group>"; };
-		D1000023 /* RtpVideoQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpVideoQueue.swift; sourceTree = "<group>"; };
-		D1000025 /* VideoRtpReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/VideoRtpReceiver.swift; sourceTree = "<group>"; };
-		D2C0000D /* DatagramBatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/DatagramBatch.swift; sourceTree = "<group>"; };
-		DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/VideoRtpReceiver+Recovery.swift"; sourceTree = "<group>"; };
-		D1000027 /* UdpPinger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/UdpPinger.swift; sourceTree = "<group>"; };
+		D1000021 /* VideoDepacketizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/VideoDepacketizer.swift; sourceTree = "<group>"; };
+		D1000023 /* RtpVideoQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/RtpVideoQueue.swift; sourceTree = "<group>"; };
+		D1000025 /* VideoRtpReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/VideoRtpReceiver.swift; sourceTree = "<group>"; };
+		D2C0000D /* DatagramBatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/DatagramBatch.swift; sourceTree = "<group>"; };
+		DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/VideoRtpReceiver+Recovery.swift"; sourceTree = "<group>"; };
+		D1000027 /* UdpPinger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/UdpPinger.swift; sourceTree = "<group>"; };
 		D1B00005 /* StreamSession+Downshift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Downshift.swift"; sourceTree = "<group>"; };
 		D1B00003 /* BitrateDownshiftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/BitrateDownshiftController.swift; sourceTree = "<group>"; };
-		D1B00001 /* StreamPathMTU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/StreamPathMTU.swift; sourceTree = "<group>"; };
+		D1B00001 /* StreamPathMTU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/StreamPathMTU.swift; sourceTree = "<group>"; };
 		D1000029 /* InputEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputEncoder.swift; sourceTree = "<group>"; };
 		D1000031 /* AudioFecDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFecDecoder.swift; sourceTree = "<group>"; };
-		D1000033 /* RtpAudioQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpAudioQueue.swift; sourceTree = "<group>"; };
-		D1000035 /* RtpAudioReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/RtpAudioReceiver.swift; sourceTree = "<group>"; };
-		D1000037 /* InputBatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/InputBatcher.swift; sourceTree = "<group>"; };
-		D1000039 /* EnetControlChannel+Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/EnetControlChannel+Handshake.swift"; sourceTree = "<group>"; };
-		D100003B /* EnetControlChannel+ControlLoop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/EnetControlChannel+ControlLoop.swift"; sourceTree = "<group>"; };
-		D100003D /* EnetControlChannel+Inbound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/EnetControlChannel+Inbound.swift"; sourceTree = "<group>"; };
-		D100003F /* EnetControlChannel+Send.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/EnetControlChannel+Send.swift"; sourceTree = "<group>"; };
-		D1000041 /* NativeBackend+Pipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NativeBackend+Pipeline.swift"; sourceTree = "<group>"; };
-		D1000043 /* NativeBackend+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NativeBackend+Helpers.swift"; sourceTree = "<group>"; };
-		D1000045 /* NativeBackend+Input.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NativeBackend+Input.swift"; sourceTree = "<group>"; };
+		D1000033 /* RtpAudioQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/RtpAudioQueue.swift; sourceTree = "<group>"; };
+		D1000035 /* RtpAudioReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/RtpAudioReceiver.swift; sourceTree = "<group>"; };
+		D1000037 /* InputBatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/InputBatcher.swift; sourceTree = "<group>"; };
+		D1000039 /* EnetControlChannel+Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/EnetControlChannel+Handshake.swift"; sourceTree = "<group>"; };
+		D100003B /* EnetControlChannel+ControlLoop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/EnetControlChannel+ControlLoop.swift"; sourceTree = "<group>"; };
+		D100003D /* EnetControlChannel+Inbound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/EnetControlChannel+Inbound.swift"; sourceTree = "<group>"; };
+		D100003F /* EnetControlChannel+Send.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/EnetControlChannel+Send.swift"; sourceTree = "<group>"; };
+		D1000041 /* NativeBackend+Pipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Session/NativeBackend+Pipeline.swift"; sourceTree = "<group>"; };
+		D1000043 /* NativeBackend+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Session/NativeBackend+Helpers.swift"; sourceTree = "<group>"; };
+		D1000045 /* NativeBackend+Input.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Session/NativeBackend+Input.swift"; sourceTree = "<group>"; };
 		D1000047 /* StreamSession+Watchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Watchdog.swift"; sourceTree = "<group>"; };
 		D1000049 /* StreamSession+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Lifecycle.swift"; sourceTree = "<group>"; };
 		D100004B /* StreamSession+Callbacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Callbacks.swift"; sourceTree = "<group>"; };
 		D100004D /* StreamBridgeContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamBridgeContext.swift; sourceTree = "<group>"; };
-		D100004F /* RtspClient+Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtspClient+Handshake.swift"; sourceTree = "<group>"; };
+		D100004F /* RtspClient+Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtspClient+Handshake.swift"; sourceTree = "<group>"; };
 		D1000051 /* Pairing+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Pairing+Crypto.swift"; sourceTree = SOURCE_ROOT; };
 		D1000053 /* Types+Cert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Types+Cert.swift"; sourceTree = SOURCE_ROOT; };
 		D1000055 /* Types+Stats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+Stats.swift"; sourceTree = "<group>"; };
@@ -869,10 +879,10 @@
 		D1000079 /* VideoDecoder+Sink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Sink.swift"; sourceTree = "<group>"; };
 		D6D80A7200000000000000A1 /* VideoDecoder+Pacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Pacing.swift"; sourceTree = "<group>"; };
 		D6D80A7200000000000000B1 /* VideoDecoder+Backlog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Backlog.swift"; sourceTree = "<group>"; };
-		D6D80A7200000000000000C1 /* VideoDepacketizer+FrameHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/VideoDepacketizer+FrameHeader.swift"; sourceTree = "<group>"; };
-		D6D80A7200000000000000D1 /* VideoDepacketizer+AnnexB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/VideoDepacketizer+AnnexB.swift"; sourceTree = "<group>"; };
-		D6D80A7200000000000000E1 /* RtpAudioReceiver+Receive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Receive.swift"; sourceTree = "<group>"; };
-		D6D80A7200000000000000F1 /* EnetControlChannel+ControlMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/EnetControlChannel+ControlMessages.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000C1 /* VideoDepacketizer+FrameHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/VideoDepacketizer+FrameHeader.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000D1 /* VideoDepacketizer+AnnexB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/VideoDepacketizer+AnnexB.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000E1 /* RtpAudioReceiver+Receive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+Receive.swift"; sourceTree = "<group>"; };
+		D6D80A7200000000000000F1 /* EnetControlChannel+ControlMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/EnetControlChannel+ControlMessages.swift"; sourceTree = "<group>"; };
 		D100007B /* FramePacer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/FramePacer.swift; sourceTree = "<group>"; };
 		D1000080 /* TelemetryExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter.swift"; sourceTree = SOURCE_ROOT; };
 		D1000082 /* TelemetryExporter+Render.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+Render.swift"; sourceTree = SOURCE_ROOT; };
@@ -892,8 +902,8 @@
 		DEC0DE202609221800000001 /* TelemetryExporter+RenderNDJSONLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderNDJSONLink.swift"; sourceTree = SOURCE_ROOT; };
 		D10000CC /* TelemetryFrameTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryFrameTrace.swift"; sourceTree = SOURCE_ROOT; };
 		D10000CE /* TelemetryExporter+Capture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+Capture.swift"; sourceTree = SOURCE_ROOT; };
-		D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+ReceiveQuality.swift"; sourceTree = "<group>"; };
-		D10000E9 /* RtpVideoQueue+ReorderStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+ReorderStats.swift"; sourceTree = "<group>"; };
+		D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpVideoQueue+ReceiveQuality.swift"; sourceTree = "<group>"; };
+		D10000E9 /* RtpVideoQueue+ReorderStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpVideoQueue+ReorderStats.swift"; sourceTree = "<group>"; };
 		D10000E0 /* DisplayTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/DisplayTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		D10000E2 /* VideoDecoder+DecodeTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+DecodeTelemetry.swift"; sourceTree = "<group>"; };
 		D10000F0 /* TelemetrySessionEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetrySessionEvents.swift"; sourceTree = SOURCE_ROOT; };
@@ -903,7 +913,7 @@
 		DA2026100900000000000012 /* RendererTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/RendererTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		DA2026101200000000000022 /* RendererTelemetry+Compositing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/RendererTelemetry+Compositing.swift"; sourceTree = "<group>"; };
 		D1000202 /* IOReportSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/IOReportSampler.swift"; sourceTree = SOURCE_ROOT; };
-		D1000AE0 /* RtpAudioReceiver+Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpAudioReceiver+Telemetry.swift"; sourceTree = "<group>"; };
+		D1000AE0 /* RtpAudioReceiver+Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+Telemetry.swift"; sourceTree = "<group>"; };
 		D1000B02 /* FramePacer+FrameRateRange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+FrameRateRange.swift"; sourceTree = "<group>"; };
 		D1000B04 /* StreamSession+PresentTrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+PresentTrip.swift"; sourceTree = "<group>"; };
 		D1000B12 /* FramePacer+Tick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+Tick.swift"; sourceTree = "<group>"; };
@@ -967,8 +977,8 @@
 		DEC0DE2026092000000000C2 /* AppModel+MenuBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MenuBar.swift"; sourceTree = "<group>"; };
 		DEC0DE84000000000000000C /* TerminationGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminationGate.swift; sourceTree = "<group>"; };
 		D1000C12 /* StreamWindow+Views.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Views.swift"; sourceTree = "<group>"; };
-		D1000D10 /* RtpVideoQueue+AddPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+AddPacket.swift"; sourceTree = "<group>"; };
-		D1000D20 /* RtpVideoQueue+Reconstruct.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtpVideoQueue+Reconstruct.swift"; sourceTree = "<group>"; };
+		D1000D10 /* RtpVideoQueue+AddPacket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpVideoQueue+AddPacket.swift"; sourceTree = "<group>"; };
+		D1000D20 /* RtpVideoQueue+Reconstruct.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpVideoQueue+Reconstruct.swift"; sourceTree = "<group>"; };
 		D1000F11 /* TelemetryLatency+Trace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryLatency+Trace.swift"; sourceTree = SOURCE_ROOT; };
 		D1000FA1 /* TelemetryLatency+Composites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryLatency+Composites.swift"; sourceTree = SOURCE_ROOT; };
 		D1000FB0 /* StreamSession+Reconnect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Reconnect.swift"; sourceTree = "<group>"; };
@@ -1154,7 +1164,7 @@
 		AC2026101100000000000004B /* ContentView+Covers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Covers.swift"; sourceTree = "<group>"; };
 		AC2026101100000000000005B /* LauncherExperienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherExperienceTests.swift"; sourceTree = "<group>"; };
 		AC202610120000000000000B /* PairSheet+Launcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairSheet+Launcher.swift"; sourceTree = "<group>"; };
-		611B7394B5164EC483247793 /* InputSendThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Native/InputSendThread.swift; sourceTree = "<group>"; };
+		611B7394B5164EC483247793 /* InputSendThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/InputSendThread.swift; sourceTree = "<group>"; };
 		D0452DBFB07341D19F5B3F44 /* InputLatency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/InputLatency.swift"; sourceTree = SOURCE_ROOT; };
 		4E5DA9A384944F01B901C609 /* TelemetryExporter+RenderInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderInput.swift"; sourceTree = SOURCE_ROOT; };
 		EFCC9963C7874789A8E1E9F8 /* InputCore+Controller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputCore+Controller.swift"; sourceTree = "<group>"; };
@@ -1162,18 +1172,18 @@
 		D5ABE36C60744D8495D5DED8 /* InputCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputCore.swift"; sourceTree = "<group>"; };
 		26243A8C57F546E1AED2C764 /* HIDGamepadCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDGamepadCapture.swift"; sourceTree = "<group>"; };
 		BC7DB456C0634F42AB147FDB /* HIDInputThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/HIDGamepad/HIDInputThread.swift"; sourceTree = "<group>"; };
-		CA0F483AD1784C568B813A61 /* InputCallbackProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/InputCallbackProbe.swift"; sourceTree = "<group>"; };
+		CA0F483AD1784C568B813A61 /* InputCallbackProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/InputCallbackProbe.swift; sourceTree = "<group>"; };
 		21C273D96FC84878A5D36D98 /* InputCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputCoreTests.swift; sourceTree = "<group>"; };
 		532168BB71F64A82A6D9820D /* InputLatencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputLatencyTests.swift; sourceTree = "<group>"; };
 		A0D10A110000000000000001 /* AudioPipelineTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/AudioPipelineTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		A0D10A110000000000000003 /* TelemetryExporter+AudioPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+AudioPipeline.swift"; sourceTree = SOURCE_ROOT; };
-		A0D10A110000000000000005 /* AudioPacketWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/AudioPacketWorker.swift"; sourceTree = "<group>"; };
+		A0D10A110000000000000005 /* AudioPacketWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/AudioPacketWorker.swift; sourceTree = "<group>"; };
 		A0D10A110000000000000007 /* AudioDecoder+Worker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Worker.swift"; sourceTree = "<group>"; };
 		A0D10A110000000000000009 /* AudioWorkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioWorkerTests.swift; sourceTree = "<group>"; };
 		E2610121000000000000000B /* StreamingBackend+Values.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamingBackend+Values.swift"; sourceTree = "<group>"; };
 		E2610121000000000000000D /* StreamCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamCrypto.swift"; sourceTree = "<group>"; };
 		E2610121000000000000000F /* StreamCrypto+VideoPacketLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamCrypto+VideoPacketLayout.swift"; sourceTree = "<group>"; };
-		E26101210000000000000011 /* AudioFecDecoder+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/AudioFecDecoder+Recovery.swift"; sourceTree = "<group>"; };
+		E26101210000000000000011 /* AudioFecDecoder+Queue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/AudioFecDecoder+Queue.swift"; sourceTree = "<group>"; };
 		E26101210000000000000001 /* GlimmerEngine.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = GlimmerEngine.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E26101220000000000000001 /* AudioFecDecoder+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioFecDecoder+Recovery.swift"; sourceTree = "<group>"; };
 		E26101300000000000000002 /* EnginePackageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../EnginePackageTests/EnginePackageTests.swift; sourceTree = "<group>"; };
@@ -1210,6 +1220,16 @@
 		793410BE9BD84BC6AD3D5068 /* HostReadiness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/HostReadiness.swift"; sourceTree = SOURCE_ROOT; };
 		BBC6544C038B448B9A4B9670 /* PairingFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/PairingFailure.swift"; sourceTree = SOURCE_ROOT; };
 		B655C0313DBB4627B46D06FB /* PCCommunicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/PCCommunicationTests.swift"; sourceTree = SOURCE_ROOT; };
+		04D0EDAC65B5435CB48C2792 /* NativeConnectionEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineAdapters/NativeConnectionEvents.swift; sourceTree = "<group>"; };
+		E5D3A145DE64486EB0AE27CD /* MacTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineAdapters/MacTransport.swift; sourceTree = "<group>"; };
+		28DF57FD4090415197DA4D62 /* NativeBackend+Controllers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Session/NativeBackend+Controllers.swift"; sourceTree = "<group>"; };
+		419FA8FE03CF47A98E94E5AE /* TransportPlatform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session/TransportPlatform.swift; sourceTree = "<group>"; };
+		591B5BF62E754AD385A5B7B0 /* MacStreamPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacStreamPath.swift"; sourceTree = SOURCE_ROOT; };
+		EE2C144110624A7D9114B2CC /* AudioDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/AudioDiagnostics.swift"; sourceTree = SOURCE_ROOT; };
+		FA0354F751394D79B38E651F /* TransportRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/TransportRoute.swift"; sourceTree = SOURCE_ROOT; };
+		A6AA113EA45C4F71B26EA9CD /* StreamConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamConnection.swift"; sourceTree = SOURCE_ROOT; };
+		8D1D5E59D3694D12BE5D85F5 /* StreamConnection+Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamConnection+Configuration.swift"; sourceTree = SOURCE_ROOT; };
+		3171EF6FC17440C0AA2CEF96 /* TransportBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/TransportBoundaryTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1303,6 +1323,9 @@
 		A10000031 /* Glimmer */ = {
 			isa = PBXGroup;
 			children = (
+				591B5BF62E754AD385A5B7B0 /* MacStreamPath.swift */,
+				E5D3A145DE64486EB0AE27CD /* MacTransport.swift */,
+				04D0EDAC65B5435CB48C2792 /* NativeConnectionEvents.swift */,
 				990DE890C0DE453CBD8D7A20 /* MacWakeOnLAN.swift */,
 				9CEE0A8D942C4BFFBA6899B6 /* MacNetworkClient.swift */,
 				4E7516E542014BFFB5622218 /* MacPinnedCertStore.swift */,
@@ -1429,7 +1452,6 @@
 				D2000096 /* AppModel+Defaults.swift */,
 				D1000057 /* Types+StatsSnapshot.swift */,
 				D1000055 /* Types+Stats.swift */,
-				D100004F /* RtspClient+Handshake.swift */,
 				D100004D /* StreamBridgeContext.swift */,
 				D100004B /* StreamSession+Callbacks.swift */,
 				D1000049 /* StreamSession+Lifecycle.swift */,
@@ -1451,60 +1473,19 @@
 				D10000E2 /* VideoDecoder+DecodeTelemetry.swift */,
 				D10000C4 /* BuildInfo.generated.swift */,
 				D1000084 /* StreamSession+Telemetry.swift */,
-				D1000045 /* NativeBackend+Input.swift */,
-				D1000043 /* NativeBackend+Helpers.swift */,
-				D1000041 /* NativeBackend+Pipeline.swift */,
-				D100003F /* EnetControlChannel+Send.swift */,
-				D100003D /* EnetControlChannel+Inbound.swift */,
-				D100003B /* EnetControlChannel+ControlLoop.swift */,
-				D1000039 /* EnetControlChannel+Handshake.swift */,
-				D1000007 /* NativeBackend.swift */,
-				E26101210000000000000011 /* AudioFecDecoder+Recovery.swift */,
-				D1000013 /* RtspClient.swift */,
-				D1000015 /* EnetControlChannel.swift */,
-				D1000021 /* VideoDepacketizer.swift */,
-				D6D80A7200000000000000C1 /* VideoDepacketizer+FrameHeader.swift */,
-				D6D80A7200000000000000D1 /* VideoDepacketizer+AnnexB.swift */,
-				D6D80A7200000000000000E1 /* RtpAudioReceiver+Receive.swift */,
-				D6D80A7200000000000000F1 /* EnetControlChannel+ControlMessages.swift */,
-				D1000023 /* RtpVideoQueue.swift */,
-				D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */,
-				D10000E9 /* RtpVideoQueue+ReorderStats.swift */,
-				D1000D10 /* RtpVideoQueue+AddPacket.swift */,
-				D1000D20 /* RtpVideoQueue+Reconstruct.swift */,
-				D1000025 /* VideoRtpReceiver.swift */,
-				D81200000000000000000000 /* SocketTimestamp.swift */,
-				D81200000000000000000002 /* ReceiveTiming.swift */,
-				D2C0000D /* DatagramBatch.swift */,
-				DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */,
-				D1000027 /* UdpPinger.swift */,
 				D1B00005 /* StreamSession+Downshift.swift */,
 				D1B00003 /* BitrateDownshiftController.swift */,
-				D1B00001 /* StreamPathMTU.swift */,
-				611B7394B5164EC483247793 /* InputSendThread.swift */,
 				EFCC9963C7874789A8E1E9F8 /* InputCore+Controller.swift */,
 				FB65E5B3DCD24CBE8815F406 /* InputForwarder+Core.swift */,
 				D5ABE36C60744D8495D5DED8 /* InputCore.swift */,
 				26243A8C57F546E1AED2C764 /* HIDGamepadCapture.swift */,
 				BC7DB456C0634F42AB147FDB /* HIDInputThread.swift */,
-				CA0F483AD1784C568B813A61 /* InputCallbackProbe.swift */,
-				D1000037 /* InputBatcher.swift */,
-				D1000033 /* RtpAudioQueue.swift */,
-				ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */,
-				D1000035 /* RtpAudioReceiver.swift */,
-				D1000AE0 /* RtpAudioReceiver+Telemetry.swift */,
-				ABCD20260609000000000101 /* RtpAudioReceiver+Socket.swift */,
-				ABCD20260609000000000201 /* RtpAudioReceiver+Ping.swift */,
-				ABCD20260609000000000301 /* RtpAudioReceiver+StartupGate.swift */,
-				ABCD20260609000000000401 /* RtpAudioReceiver+Decrypt.swift */,
-				ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */,
 				AB00000003 /* StreamSession.swift */,
 				AB00000013 /* VideoDecoder.swift */,
 				AB00000015 /* AudioDecoder.swift */,
 				ABCD20260609000000000701 /* AudioDecoder+Meter.swift */,
 				ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */,
 				AC2026083000000000000001 /* AudioDecoder+Engine.swift */,
-				A0D10A110000000000000005 /* AudioPacketWorker.swift */,
 				A0D10A110000000000000007 /* AudioDecoder+Worker.swift */,
 				AC2026083000000000000003 /* AudioDecoder+Decode.swift */,
 				A0D102202610091545000003 /* AudioDecoder+Spatial.swift */,
@@ -1589,6 +1570,7 @@
 		D2000016 /* GlimmerTests */ = {
 			isa = PBXGroup;
 			children = (
+				3171EF6FC17440C0AA2CEF96 /* TransportBoundaryTests.swift */,
 				B655C0313DBB4627B46D06FB /* PCCommunicationTests.swift */,
 				7E2D9DE57D16436AA178E464 /* EngineDiagnosticsBoundaryTests.swift */,
 				DEC0DE202609253700000002 /* AWDLHelperTests.swift */,
@@ -1795,6 +1777,54 @@
 		E26101210000000000000009 /* GlimmerEngine */ = {
 			isa = PBXGroup;
 			children = (
+				8D1D5E59D3694D12BE5D85F5 /* StreamConnection+Configuration.swift */,
+				A6AA113EA45C4F71B26EA9CD /* StreamConnection.swift */,
+				FA0354F751394D79B38E651F /* TransportRoute.swift */,
+				EE2C144110624A7D9114B2CC /* AudioDiagnostics.swift */,
+				28DF57FD4090415197DA4D62 /* NativeBackend+Controllers.swift */,
+				419FA8FE03CF47A98E94E5AE /* TransportPlatform.swift */,
+				D1000007 /* NativeBackend.swift */,
+				D1000041 /* NativeBackend+Pipeline.swift */,
+				D1000045 /* NativeBackend+Input.swift */,
+				D1000043 /* NativeBackend+Helpers.swift */,
+				D1000025 /* VideoRtpReceiver.swift */,
+				DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */,
+				D1000021 /* VideoDepacketizer.swift */,
+				D6D80A7200000000000000C1 /* VideoDepacketizer+FrameHeader.swift */,
+				D6D80A7200000000000000D1 /* VideoDepacketizer+AnnexB.swift */,
+				D1000027 /* UdpPinger.swift */,
+				D1B00001 /* StreamPathMTU.swift */,
+				D81200000000000000000000 /* SocketTimestamp.swift */,
+				D1000013 /* RtspClient.swift */,
+				D100004F /* RtspClient+Handshake.swift */,
+				D1000023 /* RtpVideoQueue.swift */,
+				D10000E9 /* RtpVideoQueue+ReorderStats.swift */,
+				D1000D20 /* RtpVideoQueue+Reconstruct.swift */,
+				D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */,
+				D1000D10 /* RtpVideoQueue+AddPacket.swift */,
+				D1000035 /* RtpAudioReceiver.swift */,
+				D1000AE0 /* RtpAudioReceiver+Telemetry.swift */,
+				ABCD20260609000000000301 /* RtpAudioReceiver+StartupGate.swift */,
+				ABCD20260609000000000101 /* RtpAudioReceiver+Socket.swift */,
+				D6D80A7200000000000000E1 /* RtpAudioReceiver+Receive.swift */,
+				ABCD20260609000000000201 /* RtpAudioReceiver+Ping.swift */,
+				ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */,
+				ABCD20260609000000000401 /* RtpAudioReceiver+Decrypt.swift */,
+				D1000033 /* RtpAudioQueue.swift */,
+				ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */,
+				D81200000000000000000002 /* ReceiveTiming.swift */,
+				611B7394B5164EC483247793 /* InputSendThread.swift */,
+				CA0F483AD1784C568B813A61 /* InputCallbackProbe.swift */,
+				D1000037 /* InputBatcher.swift */,
+				D1000015 /* EnetControlChannel.swift */,
+				D100003F /* EnetControlChannel+Send.swift */,
+				D100003D /* EnetControlChannel+Inbound.swift */,
+				D1000039 /* EnetControlChannel+Handshake.swift */,
+				D6D80A7200000000000000F1 /* EnetControlChannel+ControlMessages.swift */,
+				D100003B /* EnetControlChannel+ControlLoop.swift */,
+				D2C0000D /* DatagramBatch.swift */,
+				A0D10A110000000000000005 /* AudioPacketWorker.swift */,
+				E26101210000000000000011 /* AudioFecDecoder+Queue.swift */,
 				BBC6544C038B448B9A4B9670 /* PairingFailure.swift */,
 				793410BE9BD84BC6AD3D5068 /* HostReadiness.swift */,
 				CD2B9C9CD58C42E7B06E58D5 /* StreamAttempt.swift */,
@@ -2054,13 +2084,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BC54AA6CBD524543A7570914 /* MacStreamPath.swift in Sources */,
+				B61D339480D440B28088209F /* MacTransport.swift in Sources */,
+				A743B57A270B4BA0AA47418A /* NativeConnectionEvents.swift in Sources */,
 				B36CB9B75DB44717A66AAEBB /* MacWakeOnLAN.swift in Sources */,
 				3800023C8F9F4060A0F49462 /* MacNetworkClient.swift in Sources */,
 				B668F11F22C74753B70E8937 /* MacPinnedCertStore.swift in Sources */,
 				CC4AA62839124AC6AAE6C233 /* MacIdentity.swift in Sources */,
 				33202E100F154B6AA3704FDB /* MacTelemetryCapture.swift in Sources */,
 				4B4DB077B2A34F90ADABA597 /* ProcessMetrics.swift in Sources */,
-				E26101210000000000000012 /* AudioFecDecoder+Recovery.swift in Sources */,
 				A10000001 /* GlimmerApp.swift in Sources */,
 				A1009001 /* UpdaterController.swift in Sources */,
 				A10000002 /* ContentView.swift in Sources */,
@@ -2128,10 +2160,6 @@
 				D100007A /* VideoDecoder+Sink.swift in Sources */,
 				D6D80A7200000000000000A2 /* VideoDecoder+Pacing.swift in Sources */,
 				D6D80A7200000000000000B2 /* VideoDecoder+Backlog.swift in Sources */,
-				D6D80A7200000000000000C2 /* VideoDepacketizer+FrameHeader.swift in Sources */,
-				D6D80A7200000000000000D2 /* VideoDepacketizer+AnnexB.swift in Sources */,
-				D6D80A7200000000000000E2 /* RtpAudioReceiver+Receive.swift in Sources */,
-				D6D80A7200000000000000F2 /* EnetControlChannel+ControlMessages.swift in Sources */,
 				D1000078 /* VideoDecoder+Session.swift in Sources */,
 				D10000B1 /* VideoDecoder+Suppression.swift in Sources */,
 				D1000076 /* VideoDecoder+Decode.swift in Sources */,
@@ -2183,7 +2211,6 @@
 				D2000097 /* AppModel+Defaults.swift in Sources */,
 				D1000058 /* Types+StatsSnapshot.swift in Sources */,
 				D1000056 /* Types+Stats.swift in Sources */,
-				D1000050 /* RtspClient+Handshake.swift in Sources */,
 				D100004E /* StreamBridgeContext.swift in Sources */,
 				D100004C /* StreamSession+Callbacks.swift in Sources */,
 				D100004A /* StreamSession+Lifecycle.swift in Sources */,
@@ -2205,55 +2232,19 @@
 				D10000E3 /* VideoDecoder+DecodeTelemetry.swift in Sources */,
 				D10000C5 /* BuildInfo.generated.swift in Sources */,
 				D1000085 /* StreamSession+Telemetry.swift in Sources */,
-				D1000046 /* NativeBackend+Input.swift in Sources */,
-				D1000044 /* NativeBackend+Helpers.swift in Sources */,
-				D1000042 /* NativeBackend+Pipeline.swift in Sources */,
-				D1000040 /* EnetControlChannel+Send.swift in Sources */,
-				D100003E /* EnetControlChannel+Inbound.swift in Sources */,
-				D100003C /* EnetControlChannel+ControlLoop.swift in Sources */,
-				D100003A /* EnetControlChannel+Handshake.swift in Sources */,
-				D1000008 /* NativeBackend.swift in Sources */,
-				D1000014 /* RtspClient.swift in Sources */,
-				D1000016 /* EnetControlChannel.swift in Sources */,
-				D1000022 /* VideoDepacketizer.swift in Sources */,
-				D1000024 /* RtpVideoQueue.swift in Sources */,
-				D10000D1 /* RtpVideoQueue+ReceiveQuality.swift in Sources */,
-				D10000EA /* RtpVideoQueue+ReorderStats.swift in Sources */,
-				D1000D11 /* RtpVideoQueue+AddPacket.swift in Sources */,
-				D1000D21 /* RtpVideoQueue+Reconstruct.swift in Sources */,
-				D1000026 /* VideoRtpReceiver.swift in Sources */,
-				D81200000000000000000001 /* SocketTimestamp.swift in Sources */,
-				D81200000000000000000003 /* ReceiveTiming.swift in Sources */,
-				D2C0000E /* DatagramBatch.swift in Sources */,
-				DEC0DE202609221900000008 /* VideoRtpReceiver+Recovery.swift in Sources */,
-				D1000028 /* UdpPinger.swift in Sources */,
 				D1B00006 /* StreamSession+Downshift.swift in Sources */,
 				D1B00004 /* BitrateDownshiftController.swift in Sources */,
-				D1B00002 /* StreamPathMTU.swift in Sources */,
-				A9A473543FD740449620F954 /* InputSendThread.swift in Sources */,
 				FD400C6BE16340179C394914 /* InputCore+Controller.swift in Sources */,
 				BDFBB23C586F4324AC8E344A /* InputForwarder+Core.swift in Sources */,
 				2D5DACB9DE6A4A96A604950F /* InputCore.swift in Sources */,
 				5B42984DADB44F10995572B9 /* HIDGamepadCapture.swift in Sources */,
 				EE13E673ECB2440B86BF720D /* HIDInputThread.swift in Sources */,
-				089034CA08D544209EC065CE /* InputCallbackProbe.swift in Sources */,
-				D1000038 /* InputBatcher.swift in Sources */,
-				D1000034 /* RtpAudioQueue.swift in Sources */,
-				ABCD20260609000000000602 /* RtpAudioQueue+Fec.swift in Sources */,
-				D1000036 /* RtpAudioReceiver.swift in Sources */,
-				D1000AE1 /* RtpAudioReceiver+Telemetry.swift in Sources */,
-				ABCD20260609000000000102 /* RtpAudioReceiver+Socket.swift in Sources */,
-				ABCD20260609000000000202 /* RtpAudioReceiver+Ping.swift in Sources */,
-				ABCD20260609000000000302 /* RtpAudioReceiver+StartupGate.swift in Sources */,
-				ABCD20260609000000000402 /* RtpAudioReceiver+Decrypt.swift in Sources */,
-				ABCD20260609000000000502 /* RtpAudioReceiver+Events.swift in Sources */,
 				AB00000004 /* StreamSession.swift in Sources */,
 				AB00000014 /* VideoDecoder.swift in Sources */,
 				AB00000016 /* AudioDecoder.swift in Sources */,
 				ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */,
 				ABCD20260610000000000802 /* AudioDecoder+CushionMemory.swift in Sources */,
 				AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */,
-				A0D10A110000000000000006 /* AudioPacketWorker.swift in Sources */,
 				A0D10A110000000000000008 /* AudioDecoder+Worker.swift in Sources */,
 				AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */,
 				A0D102202610091545000004 /* AudioDecoder+Spatial.swift in Sources */,
@@ -2326,6 +2317,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				075A848ED8264C2A8F6168B7 /* TransportBoundaryTests.swift in Sources */,
 				9A621DC44DF54B10B3656B77 /* PCCommunicationTests.swift in Sources */,
 				1E1F825D58AE41FBA9EA5C17 /* EngineDiagnosticsBoundaryTests.swift in Sources */,
 				DEC0DE202609253700000001 /* AWDLHelperTests.swift in Sources */,
@@ -2532,6 +2524,54 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C1E5E4ADAF3B4061BAE07257 /* StreamConnection+Configuration.swift in Sources */,
+				30B7CD9DC9494B06922E5F6D /* StreamConnection.swift in Sources */,
+				711D8559CDA84D78860B40AA /* TransportRoute.swift in Sources */,
+				5CA017F8EF684C539EA37B48 /* AudioDiagnostics.swift in Sources */,
+				D1000008 /* NativeBackend.swift in Sources */,
+				D1000042 /* NativeBackend+Pipeline.swift in Sources */,
+				D1000046 /* NativeBackend+Input.swift in Sources */,
+				D1000044 /* NativeBackend+Helpers.swift in Sources */,
+				D1000026 /* VideoRtpReceiver.swift in Sources */,
+				DEC0DE202609221900000008 /* VideoRtpReceiver+Recovery.swift in Sources */,
+				D1000022 /* VideoDepacketizer.swift in Sources */,
+				D6D80A7200000000000000C2 /* VideoDepacketizer+FrameHeader.swift in Sources */,
+				D6D80A7200000000000000D2 /* VideoDepacketizer+AnnexB.swift in Sources */,
+				D1000028 /* UdpPinger.swift in Sources */,
+				D1B00002 /* StreamPathMTU.swift in Sources */,
+				D81200000000000000000001 /* SocketTimestamp.swift in Sources */,
+				D1000014 /* RtspClient.swift in Sources */,
+				D1000050 /* RtspClient+Handshake.swift in Sources */,
+				D1000024 /* RtpVideoQueue.swift in Sources */,
+				D10000EA /* RtpVideoQueue+ReorderStats.swift in Sources */,
+				D1000D21 /* RtpVideoQueue+Reconstruct.swift in Sources */,
+				D10000D1 /* RtpVideoQueue+ReceiveQuality.swift in Sources */,
+				D1000D11 /* RtpVideoQueue+AddPacket.swift in Sources */,
+				D1000036 /* RtpAudioReceiver.swift in Sources */,
+				D1000AE1 /* RtpAudioReceiver+Telemetry.swift in Sources */,
+				ABCD20260609000000000302 /* RtpAudioReceiver+StartupGate.swift in Sources */,
+				ABCD20260609000000000102 /* RtpAudioReceiver+Socket.swift in Sources */,
+				D6D80A7200000000000000E2 /* RtpAudioReceiver+Receive.swift in Sources */,
+				ABCD20260609000000000202 /* RtpAudioReceiver+Ping.swift in Sources */,
+				ABCD20260609000000000502 /* RtpAudioReceiver+Events.swift in Sources */,
+				ABCD20260609000000000402 /* RtpAudioReceiver+Decrypt.swift in Sources */,
+				D1000034 /* RtpAudioQueue.swift in Sources */,
+				ABCD20260609000000000602 /* RtpAudioQueue+Fec.swift in Sources */,
+				D81200000000000000000003 /* ReceiveTiming.swift in Sources */,
+				A9A473543FD740449620F954 /* InputSendThread.swift in Sources */,
+				089034CA08D544209EC065CE /* InputCallbackProbe.swift in Sources */,
+				D1000038 /* InputBatcher.swift in Sources */,
+				D1000016 /* EnetControlChannel.swift in Sources */,
+				D1000040 /* EnetControlChannel+Send.swift in Sources */,
+				D100003E /* EnetControlChannel+Inbound.swift in Sources */,
+				D100003A /* EnetControlChannel+Handshake.swift in Sources */,
+				D6D80A7200000000000000F2 /* EnetControlChannel+ControlMessages.swift in Sources */,
+				D100003C /* EnetControlChannel+ControlLoop.swift in Sources */,
+				D2C0000E /* DatagramBatch.swift in Sources */,
+				A0D10A110000000000000006 /* AudioPacketWorker.swift in Sources */,
+				E26101210000000000000012 /* AudioFecDecoder+Queue.swift in Sources */,
+				89E25C9AB13643D4A7954A68 /* TransportPlatform.swift in Sources */,
+				2071D28352D048BE92F11CB3 /* NativeBackend+Controllers.swift in Sources */,
 				529ACE474BBC48E3AE9C99A7 /* PairingFailure.swift in Sources */,
 				FC37441810C646A98BBD76F1 /* HostReadiness.swift in Sources */,
 				0D807DAE4E8E417A8FA49D70 /* StreamAttempt.swift in Sources */,

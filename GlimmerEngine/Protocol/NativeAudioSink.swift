@@ -5,7 +5,7 @@ import Foundation
 
 /// Receives post-FEC, decrypted Opus bytes and explicit loss concealment requests.
 /// AudioDecoder owns decode and HAL playout; the backend sink lacks an explicit concealment entry point.
-package protocol NativeAudioSink: AnyObject, Sendable {
+public protocol NativeAudioSink: AnyObject, Sendable {
     /// Configure the opus decoder + audio engine. Returns 0 on success.
     /// `opus` is the negotiated multistream config; `audioConfig` is the
     /// GFE/Sunshine channel-layout code.
@@ -28,6 +28,6 @@ package protocol NativeAudioSink: AnyObject, Sendable {
 }
 
 extension NativeAudioSink {
-    package func notePacketFlowResumed(afterGapMs: Double) {}
-    package func noteArrivalGap(nanos: UInt64) {}
+    public func notePacketFlowResumed(afterGapMs: Double) {}
+    public func noteArrivalGap(nanos: UInt64) {}
 }

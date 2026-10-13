@@ -9,7 +9,7 @@
 //  protocol's default async connect.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -99,5 +99,33 @@ struct BackendGlueTests {
         #expect(started.rtspSessionUrl == "rtsp://192.0.2.1:48010")
         #expect(started.serverCodecModeRaw == 0x0101)
         #expect(backend.enetHealth() == nil)
+    }
+}
+
+extension BackendGlueTests {
+    @Test func obsoleteBackendCannotPublishHdrOrAudioIntoReplacement() async {
+        let session = StreamSession(backend: InputRecordingBackend())
+        let decoder = VideoDecoder()
+        let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
+                                         audioDecoder: AudioDecoder(), inputForwarder: InputForwarder())
+        let old = NativeBackend()
+        let replacement = NativeBackend()
+        let events = NativeConnectionEvents(bridge: bridge, backend: old)
+        let (stream, continuation) = AsyncStream.makeStream(of: StreamEvent.self)
+        bridge.eventContinuation = continuation
+        bridge.setEventSource(old)
+        events.setHdrMode(true)
+        bridge.setEventSource(replacement)
+        events.setHdrMode(false)
+        events.audioFailed("stale audio")
+        events.connectionStarted()
+        continuation.finish()
+        var count = 0
+        for await _ in stream { count += 1 }
+        #expect(count == 1)
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(!decoder.hdrEnabled)
     }
 }

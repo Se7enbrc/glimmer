@@ -41,7 +41,7 @@ package enum Remoteness: Sendable {
     }
 }
 
-package enum AudioConfig: Sendable {
+public enum AudioConfig: Sendable {
     case stereo
     case surround51
     case surround71
@@ -87,26 +87,26 @@ package enum AudioConfig: Sendable {
 
 /// Set of video formats the client supports. Sent to the host so it picks
 /// the highest format the encoder + decoder both speak.
-package struct VideoFormats: OptionSet, Sendable {
+public struct VideoFormats: OptionSet, Sendable {
 
-    package init(
+    public init(
         rawValue: Int32
     ) {
         self.rawValue = rawValue
     }
 
-    package let rawValue: Int32
+    public let rawValue: Int32
 
-    package static let h264         = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H264)
-    package static let h264YUV444   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H264_HIGH8_444)
-    package static let hevc         = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265)
-    package static let hevcMain10   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_MAIN10)
-    package static let hevcRext8_444  = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_REXT8_444)
-    package static let hevcRext10_444 = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_REXT10_444)
-    package static let av1          = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_MAIN8)
-    package static let av1Main10    = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_MAIN10)
-    package static let av1High8_444   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_HIGH8_444)
-    package static let av1High10_444  = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_HIGH10_444)
+    public static let h264         = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H264)
+    public static let h264YUV444   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H264_HIGH8_444)
+    public static let hevc         = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265)
+    public static let hevcMain10   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_MAIN10)
+    public static let hevcRext8_444  = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_REXT8_444)
+    public static let hevcRext10_444 = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_H265_REXT10_444)
+    public static let av1          = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_MAIN8)
+    public static let av1Main10    = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_MAIN10)
+    public static let av1High8_444   = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_HIGH8_444)
+    public static let av1High10_444  = VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_AV1_HIGH10_444)
 }
 
 extension VideoFormats {

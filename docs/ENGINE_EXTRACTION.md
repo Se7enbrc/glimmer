@@ -167,12 +167,95 @@ magic-packet layout. Existing Mac crypto, handshake, persistence, HTTP,
 readiness and wake suites keep testing the same implementation through engine
 imports.
 
-Slice 4 still owns the live RTSP/ENet/RTP transport and native backend. Its open
-cuts remain receive/scheduling/route adapters, ordered connection events with
-stale-source rejection, HDR forwarding and backend controller methods. This
-slice does not make streaming available to the external iOS consumer. Hosted
-Xcode 26.6 verification and real-PC PIN/pin-rotation, discovery-denial, wake and
-poll timing checks remain owner gates; local Xcode 27 builds are not that proof.
+After slice 3, live transport and session startup remained unavailable to the
+external consumer. Slice 4 below closes those transport cuts. Hosted Xcode 26.6
+verification and real-PC PIN/pin-rotation, discovery-denial, wake and poll
+timing checks remain owner gates; local Xcode 27 builds are not that proof.
+
+## Slice 4 implementation and Public API
+
+The remaining `Glimmer/Stream/Native/` files now live in
+`GlimmerEngine/Network/`: RTSP/handshake, all ENet features, UDP pings,
+video/audio receive, timestamps, batch storage, reorder/FEC/depacketization,
+input batching/sender and the shared route gate/RTT sampler. The queue-specific
+`AudioFecDecoder+Recovery` extension becomes `AudioFecDecoder+Queue` to avoid
+colliding with the existing engine recovery kernel. `NativeBackend` and its
+Pipeline/Helpers/Input/Controllers features live in `GlimmerEngine/Session/`.
+Battery and motion uplink methods moved out of the Mac controller files.
+`AudioDiagnostics` moved from AudioDecoder+Worker to shared diagnostics,
+retaining its queue label, QoS and deferred formatting.
+
+### Public API
+
+`StreamConnection` is a Sendable actor for one transport attempt. Construct it
+with a `VideoSink`, an optional `NativeAudioSink`, and a Sendable event
+callback. Call `connect(network:appID:configuration:)` with a previously paired
+and polled `NetworkClient`. The client's cached authenticated PC record supplies
+codec and session information. The same app resumes; another app uses the
+existing launch request. There is no additional discovery, polling, readiness or
+launch request. An invalid configuration or unpaired client fails before
+credential loading.
+
+`StreamConnection.Configuration` accepts dimensions, fps, bitrate, hardware
+supported `VideoFormats`, `AudioConfig`, remote-path classification and optional
+observed MTU. It preserves the shared remote packet-size clamp. The shell owns
+route observation and quality selection; this API does not duplicate the Mac
+session's pre-launch RTT sampling or recovery policy. Sinks receive the existing
+`DecodeUnit`/`DecodeBuffer` and `OpusConfig` values. Return 0 for video success,
+-1 to request an IDR; borrowed Opus bytes are valid only during the sink call.
+Media decoding and presentation remain consumer responsibilities until slices
+5–7. Backend resources, locks, wire packets and controller uplinks remain
+internal or package-only.
+
+Callbacks carry the immutable connection `id` and a `StreamConnection.Event`:
+stage start/complete/failure, connected/terminated, connection quality, HDR
+mode, and nonfatal audio failure. Calls are synchronous on the originating
+engine thread; enqueue them in received order, avoid blocking, and reject IDs
+belonging to an earlier connection. `stop()` is idempotent, stops local
+transport and joins media workers; it does not send PC quit. Cancelling connect
+interrupts the live handshake. A stopped/used connection cannot be restarted.
+The Mac's existing StreamSession still owns its original cancel/reconnect
+policy.
+
+### Mac adapters and hot paths
+
+`NativeConnectionEvents` stays app-side, injected before connect. Its existing
+actor-event task chain and main-queue HDR/controller hops remain in place.
+`StreamBridgeContext` records the originating backend identity under a lock;
+late HDR/audio/state callbacks cannot update a replacement, including an HDR
+operation already queued to main. Decoder recovery capabilities now come from
+the supplied video sink at RTSP setup, and gate-lift diagnostics use a defaulted
+sink method instead of a concrete decoder cast.
+
+`MacTransport` supplies the existing `dlsym("recvmsg_x")` C function pointer and
+unchanged audio/input realtime policies. `TransportPlatform` captures those
+hooks once per connection; workers invoke scheduling once at thread startup. iOS
+uses user-interactive QoS and public `recvmsg`, with no private batching or Mach
+realtime policy symbols. Both receive paths retain ancillary timestamps, peer
+checks and preallocated storage. Missing timestamps remain missing.
+
+`MacStreamPath` retains interface/MTU observation and bounded TCP RTT syscalls.
+The shared sampler accepts its measurement function; its existing launch wait
+and sample limits are unchanged. `TransportRoute` holds the existing route label
+under a lock inside the engine, so audio reorder never calls the app per packet.
+Ping cadence/lifecycle hooks and counters retain the Mac environment
+controller's policy; the standalone transport conservatively keeps the existing
+fast cadence.
+
+The receive, reorder, FEC and depacketization loops compile together in the
+engine. `scripts/fuzz.sh` builds those same queue sources beside the wire/FEC
+kernels in its instrumented Linux module; all five drivers import that module.
+The Mac ASan suites still exercise the complete transport. No timers, queue
+bounds, thread names, log categories, privacy annotations or telemetry field
+names changed. Release undefined-symbol inspection and build/test evidence are
+recorded in the slice handoff; hardware performance acceptance remains the
+paired-run gate below.
+
+Slice 5 must supply the audio output/route adapter while retaining the shared
+packet worker's join-before-cleanup contract and nonfatal audio reporting.
+Physical-PC checks still cover encrypted launch/resume, HDR changes, controller
+feedback, ten reconnect/stop cycles and paired receive/CPU/power telemetry.
+Local Xcode 27 compilation does not replace hosted Xcode 26.6 verification.
 
 ## Ownership map
 

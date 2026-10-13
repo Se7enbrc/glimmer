@@ -8,7 +8,7 @@
 //  a PC-sent terminate means the PC ended the session rather than dropped it.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

@@ -8,7 +8,7 @@
 //  reconnect ask). The syscall probe runs only against loopback here.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Network
 import Testing
@@ -424,12 +424,12 @@ struct StreamPathMTUTests {
     @Test func reconnectBurstTakesEverySampleOnALan() async throws {
         let port = try #require(LoopbackPort(listening: true))
         let portNumber = port.port
-        let probe = try await onTestThread { StreamPathMTU.probe(host: "127.0.0.1", rttPort: portNumber) }
+        let probe = try await onTestThread { MacStreamPath.probe(host: "127.0.0.1", rttPort: portNumber) }
         #expect(probe.rtt?.count == 3)
     }
 
     @Test func loopbackProbeResolvesLoAndItsMtu() {
-        let probe = StreamPathMTU.probe(host: "127.0.0.1")
+        let probe = MacStreamPath.probe(host: "127.0.0.1")
         #expect(probe.interfaceName == "lo0")
         #expect((probe.mtu ?? 0) >= StreamPathMTU.standardEthernetMTU)
         #expect(!probe.isTunnel && probe.rtt == nil)
@@ -438,7 +438,7 @@ struct StreamPathMTUTests {
     @Test func fullWindowReleasesLaunchWithoutWaitingOutTheCap() async throws {
         try await Task(priority: .high) {
             let port = try #require(LoopbackPort(listening: true))
-            let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 200)
+            let sampler = MacStreamPath.makeSampler(host: "127.0.0.1", port: port.port, maxAttempts: 200)
             let start = ContinuousClock.now
             await sampler.awaitPreLaunchWindow(maxWaitMs: 10_000)
             #expect(ContinuousClock.now - start < .seconds(5))
@@ -473,7 +473,7 @@ struct StreamPathMTUTests {
         }
         defer { accepted.cancelAll(); listener.cancel() }
 
-        let sampler = RttSampler(host: "127.0.0.1", port: port)
+        let sampler = MacStreamPath.makeSampler(host: "127.0.0.1", port: port)
         await sampler.awaitPreLaunchWindow(maxWaitMs: 10_000)
         sampler.markLaunch()
         // Let accepts for completed pre-launch handshakes reach the listener.
@@ -489,7 +489,7 @@ struct StreamPathMTUTests {
     @Test func unreachablePortWaitsOnlyToTheCap() async throws {
         try await withTaskExecutorPreference(TestTaskExecutor()) {
             let port = try #require(LoopbackPort(listening: false))
-            let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 200)
+            let sampler = MacStreamPath.makeSampler(host: "127.0.0.1", port: port.port, maxAttempts: 200)
             let start = ContinuousClock.now
             await sampler.awaitPreLaunchWindow(maxWaitMs: 150)
             let waited = ContinuousClock.now - start
@@ -503,7 +503,7 @@ struct StreamPathMTUTests {
     @Test func refusedPortStopsAfterItsAttempts() async throws {
         try await Task(priority: .high) {
             let port = try #require(LoopbackPort(listening: false))
-            let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 2)
+            let sampler = MacStreamPath.makeSampler(host: "127.0.0.1", port: port.port, maxAttempts: 2)
             let start = ContinuousClock.now
             await sampler.awaitPreLaunchWindow(maxWaitMs: 60_000)
             #expect(ContinuousClock.now - start < .seconds(5))
@@ -514,7 +514,7 @@ struct StreamPathMTUTests {
     @Test func harvestReleasesAWaitingLaunch() async throws {
         try await Task(priority: .high) {
             let port = try #require(LoopbackPort(listening: false))
-            let sampler = RttSampler(host: "127.0.0.1", port: port.port, maxAttempts: 200)
+            let sampler = MacStreamPath.makeSampler(host: "127.0.0.1", port: port.port, maxAttempts: 200)
             let waiting = Task { await sampler.awaitPreLaunchWindow(maxWaitMs: 60_000) }
             try await Task.sleep(for: .milliseconds(50))
             let start = ContinuousClock.now
@@ -528,7 +528,7 @@ struct StreamPathMTUTests {
     /// loop; otherwise a failed connect keeps probing the PC.
     @Test func harvestStopsTheSampler() async throws {
         let port = try #require(LoopbackPort(listening: true))
-        let sampler = RttSampler(host: "127.0.0.1", port: port.port)
+        let sampler = MacStreamPath.makeSampler(host: "127.0.0.1", port: port.port)
         await sampler.awaitPreLaunchWindow(maxWaitMs: 10_000)
         let first = sampler.harvest()?.count ?? 0
         try await Task.sleep(for: .milliseconds(200))

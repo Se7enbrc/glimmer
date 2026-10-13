@@ -101,7 +101,7 @@ extension StreamSession {
         // Sample latency from the click, on a host that is still idle. The gate
         // bands on the samples taken before /launch: once the game starts and
         // the display switches, handshakes read 3-7x the path's true RTT.
-        let rttSampler = RttSampler(host: server.address, port: UInt16(server.httpsPort))
+        let rttSampler = MacStreamPath.makeSampler(host: server.address, port: UInt16(server.httpsPort))
         // A throw below must still stop its loop, or it keeps probing the PC.
         defer { _ = rttSampler.harvest() }
         let serverInfo = try await fetchAndVerifyServerInfo(network: network, pcName: server.serverName)

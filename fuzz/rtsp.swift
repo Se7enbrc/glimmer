@@ -8,7 +8,7 @@
 //
 
 import Foundation
-import GlimmerEngine
+@testable import GlimmerEngine
 
 @_cdecl("LLVMFuzzerTestOneInput")
 public func fuzzRtsp(_ data: UnsafePointer<UInt8>, _ size: Int) -> CInt {

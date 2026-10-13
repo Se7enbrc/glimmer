@@ -1,0 +1,252 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+
+//
+//  RtpAudioQueue+Fec.swift
+//
+//  The FEC machinery half of the audio FEC-block reassembly state machine,
+//  split from RtpAudioQueue.swift - pure move, same idiom as the RtpVideoQueue
+//  and FramePacer splits - to keep each file under the SwiftLint
+//  length limit. Ports the block lookup/creation path (getFecBlockForRtpPacket:
+//  key synthesis from data packets, AUDIO_FEC_HEADER parsing/validation from
+//  parity packets, the layout-mismatch streak escape hatch) and the Reed-Solomon
+//  recovery step (completeFecBlock).
+//
+//  These run on the SAME single receive thread as the queue/reorder core in
+//  RtpAudioQueue.swift - the split is purely textual (a Swift extension can
+//  only reach non-private members, which is why the queue's touched state is
+//  `internal` rather than `private`; see the visibility note atop
+//  RtpAudioQueue.swift). No isolation, ordering, locking, or behavioral
+//  contract changes.
+//
+
+import Foundation
+
+extension RtpAudioQueue {
+    // MARK: - Block lookup / creation (getFecBlockForRtpPacket, :195-397)
+
+    /// The FEC-header fields that key a block - either synthesized from an audio
+    /// data packet or parsed from an explicit AUDIO_FEC_HEADER.
+    private struct FecBlockKey {
+        let payloadType: UInt8
+        let baseSeqNum: UInt16
+        let baseTs: UInt32
+        let ssrc: UInt32
+        let blockSize: Int
+    }
+
+    /// Synthesize the FEC-block key from an audio data packet (:214-238).
+    private func audioFecBlockKey(packet: [UInt8], rtp: RtpHeader) -> FecBlockKey? {
+        if packet.count < Self.fixedRtpHeaderSize {
+            stats.packetCountInvalid += 1
+            return nil
+        }
+        stats.packetCountAudio += 1
+
+        // Track out-of-sequence data to tune FEC give-up timing (:214-230).
+        if !synchronizing && Self.isBefore16(rtp.sequenceNumber, oldestRtpBaseSequenceNumber) {
+            lastOosSequenceNumber = rtp.sequenceNumber
+            stats.packetCountOOS += 1
+            if !receivedOosData {
+                receivedOosData = true
+            }
+        } else if receivedOosData && Self.isBefore16(oldestRtpBaseSequenceNumber, lastOosSequenceNumber) {
+            receivedOosData = false
+        }
+
+        // Synthesize the FEC-header fields from the data packet (:232-238).
+        let baseSeqNum = (rtp.sequenceNumber / UInt16(Self.dataShards)) * UInt16(Self.dataShards)
+        let offset = UInt32(rtp.sequenceNumber &- baseSeqNum) * UInt32(audioPacketDuration)
+        return FecBlockKey(
+            payloadType: rtp.packetType,
+            baseSeqNum: baseSeqNum,
+            baseTs: rtp.timestamp &- offset,
+            ssrc: rtp.ssrc,
+            blockSize: packet.count - Self.fixedRtpHeaderSize)
+    }
+
+    /// Parse the FEC-block key from an explicit AUDIO_FEC_HEADER (:252-278).
+    private func parsedFecBlockKey(packet: [UInt8]) -> FecBlockKey? {
+        if packet.count < Self.fixedRtpHeaderSize + Self.audioFecHeaderSize {
+            stats.packetCountFecInvalid += 1
+            return nil
+        }
+        stats.packetCountFec += 1
+
+        // Parse + byteswap the AUDIO_FEC_HEADER (BE→host, :252-256).
+        let off = Self.fixedRtpHeaderSize
+        let fecShardIndex = packet[off]
+        let payloadType = packet[off + 1]
+        let baseSeqNum = UInt16(packet[off + 2]) << 8 | UInt16(packet[off + 3])
+        let baseTs = UInt32(packet[off + 4]) << 24 | UInt32(packet[off + 5]) << 16
+            | UInt32(packet[off + 6]) << 8 | UInt32(packet[off + 7])
+        // ssrc occupies the next 4 bytes (off+8 ..< off+12).
+        let ssrc = UInt32(packet[off + 8]) << 24 | UInt32(packet[off + 9]) << 16
+            | UInt32(packet[off + 10]) << 8 | UInt32(packet[off + 11])
+
+        // Validate the FEC shard index to prevent OOB (:258-265).
+        if fecShardIndex >= UInt8(Self.fecShards) {
+            stats.packetCountFecInvalid += 1
+            return nil
+        }
+
+        // FEC blocks start on a dataShards boundary (:267-278). One stray packet
+        // costs only itself; only a streak marks the PC's layout incompatible.
+        if baseSeqNum % UInt16(Self.dataShards) != 0 {
+            stats.packetCountFecInvalid += 1
+            noteLayoutMismatch("parity base seq \(baseSeqNum) is not \(Self.dataShards)-aligned")
+            return nil
+        }
+
+        return FecBlockKey(
+            payloadType: payloadType,
+            baseSeqNum: baseSeqNum,
+            baseTs: baseTs,
+            ssrc: ssrc,
+            blockSize: packet.count - Self.fixedRtpHeaderSize - Self.audioFecHeaderSize)
+    }
+
+    /// `internal`: called by `addPacket` in RtpAudioQueue.swift.
+    func getFecBlock(packet: [UInt8], rtp: RtpHeader) -> FecBlock? {
+        let key: FecBlockKey?
+        if rtp.packetType == Self.payloadTypeAudio {
+            key = audioFecBlockKey(packet: packet, rtp: rtp)
+        } else if rtp.packetType == Self.payloadTypeFec {
+            key = parsedFecBlockKey(packet: packet)
+        } else {
+            return nil
+        }
+        guard let key else { return nil }
+        let fecBlockPayloadType = key.payloadType
+        let fecBlockBaseSeqNum = key.baseSeqNum
+        let fecBlockBaseTs = key.baseTs
+        let fecBlockSsrc = key.ssrc
+        let blockSize = key.blockSize
+
+        // Start on the next whole block once, including when that boundary wraps to zero.
+        if !hasSequenceBaseline {
+            guard rtp.packetType == Self.payloadTypeAudio else { return nil }
+            hasSequenceBaseline = true
+            let next = fecBlockBaseSeqNum &+ UInt16(Self.dataShards)
+            nextRtpSequenceNumber = next
+            oldestRtpBaseSequenceNumber = next
+            return nil
+        }
+
+        // Drop packets from already-completed blocks (:297-300).
+        if Self.isBefore16(fecBlockBaseSeqNum, oldestRtpBaseSequenceNumber) {
+            return nil
+        }
+        guard acceptsSequence(rtp: rtp, baseSequence: fecBlockBaseSeqNum) else { return nil }
+
+        // Find an existing block (sorted by baseSeq), or the insertion point.
+        var insertAt = blocks.count
+        for (i, existing) in blocks.enumerated() {
+            if existing.fecHeader.baseSequenceNumber == fecBlockBaseSeqNum {
+                // Block size must match to safely copy shards (:311-321). The C
+                // disables FEC on the first mismatch; here only a streak does.
+                if existing.blockSize != blockSize {
+                    stats.packetCountFecInvalid += 1
+                    TelemetryCounters.shared.audioFecMismatchTotal.increment()
+                    noteLayoutMismatch("a \(existing.blockSize)B block got a \(blockSize)B shard "
+                        + "(base seq \(fecBlockBaseSeqNum))")
+                    return nil
+                }
+                // Sizes agree: evidence of a compatible layout, so the streak starts over.
+                layoutMismatchStreak = 0
+                // Don't return a completed block (:324).
+                return existing.fullyReassembled ? nil : existing
+            } else if Self.isBefore16(fecBlockBaseSeqNum, existing.fecHeader.baseSequenceNumber) {
+                insertAt = i
+                break
+            }
+        }
+
+        // At the cap, play the head out with concealment for its gaps, so a stalled
+        // head or a far-ahead stream can't grow the queue without bound.
+        if blocks.count >= Self.maxQueuedBlocks, let head = blocks.first {
+            head.allowDiscontinuity = true
+        }
+
+        guard blockSize > 0, blockSize <= Self.maxPacketSize,
+              let block = freeBlocks.popLast() else { return nil }
+        for index in block.marks.indices { block.marks[index] = 1 }
+        block.dataShardsReceived = 0
+        block.fecShardsReceived = 0
+        block.nextDataPacketIndex = 0
+        block.allowDiscontinuity = false
+        block.fullyReassembled = false
+        block.queueTimeUs = UInt64(DispatchTime.now().uptimeNanoseconds / 1000)
+        block.blockSize = blockSize
+        block.fecHeader.payloadType = fecBlockPayloadType
+        block.fecHeader.baseSequenceNumber = fecBlockBaseSeqNum
+        block.fecHeader.baseTimestamp = fecBlockBaseTs
+        block.fecHeader.ssrc = fecBlockSsrc
+        blocks.insert(block, at: insertAt)
+        return block
+    }
+
+    /// A jump beyond the reorder capacity needs two consecutive data packets.
+    /// Parity cannot confirm a restart; ordinary traffic cancels a stray candidate.
+    private func acceptsSequence(rtp: RtpHeader, baseSequence: UInt16) -> Bool {
+        let distance = baseSequence &- oldestRtpBaseSequenceNumber
+        if distance <= UInt16(Self.maxQueuedBlocks * Self.dataShards) {
+            if rtp.packetType == Self.payloadTypeAudio { pendingSequenceRestart = nil }
+            return true
+        }
+        guard rtp.packetType == Self.payloadTypeAudio else { return false }
+        guard pendingSequenceRestart == rtp.sequenceNumber else {
+            pendingSequenceRestart = rtp.sequenceNumber &+ 1
+            return false
+        }
+        pendingSequenceRestart = nil
+        freeBlocks.append(contentsOf: blocks)
+        blocks.removeAll(keepingCapacity: true)
+        nextRtpSequenceNumber = baseSequence
+        oldestRtpBaseSequenceNumber = baseSequence
+        receivedOosData = false
+        return true
+    }
+
+    /// Counts a packet dropped for a FEC layout disagreement. Only `layoutMismatchStreakLimit` in a row,
+    /// with no size-agreeing contact between them, turn audio FEC off for the session.
+    private func noteLayoutMismatch(_ detail: String) {
+        if !loggedLayoutMismatch {
+            loggedLayoutMismatch = true
+            AudioDiagnostics.warn("NativeAudio FEC layout mismatch: \(detail); dropping that packet (logged once; "
+                + "size mismatches count in audio_fec_mismatch_total)", Self.cat)
+        }
+        layoutMismatchStreak += 1
+        guard layoutMismatchStreak >= Self.layoutMismatchStreakLimit else { return }
+        incompatibleServer = true
+        let streak = layoutMismatchStreak
+        AudioDiagnostics.notice("NativeAudio FEC DISABLED for this session: \(streak) FEC layout "
+            + "mismatches in a row (last: \(detail)). Audio continues without FEC: data passes "
+            + "straight through, parity is dropped, lost packets fall to PLC.", Self.cat)
+    }
+
+    // MARK: - Reed-Solomon recovery (completeFecBlock, :399-505)
+
+    /// `internal`: called by `addPacket` in RtpAudioQueue.swift.
+    func completeFecBlock(_ block: FecBlock) -> Bool {
+        // Need at least dataShards of the 6 shards to do anything (:407).
+        if block.dataShardsReceived + block.fecShardsReceived < Self.dataShards {
+            return false
+        }
+
+        // If all data shards present, no recovery needed (:416).
+        if block.dataShardsReceived == Self.dataShards {
+            return true
+        }
+
+        guard fec.recover(block) else { return false }
+        for index in 0..<Self.dataShards { block.marks[index] = 0 }
+
+        if block.dataShardsReceived != Self.dataShards {
+            stats.packetCountFecRecovered += UInt32(Self.dataShards - block.dataShardsReceived)
+        }
+        return true
+    }
+}

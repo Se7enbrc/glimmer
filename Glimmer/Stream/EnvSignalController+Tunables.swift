@@ -18,6 +18,7 @@
 //  any thread.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension EnvSignalController {
@@ -150,11 +151,11 @@ extension EnvSignalController {
     /// Send-due slop: the ping threads wake on the fast quantum and gate the
     /// send on elapsed-since-last-ping; without a few ms of slop a 74.9ms
     /// wake against a 75ms interval would skip to 150ms cadence.
-    static let pingDueSlopSeconds = 0.005
+    static let pingDueSlopSeconds = UdpPinger.pingDueSlopSeconds
 
     /// Nanoseconds after which a ping is due for `interval` (slop applied).
     /// Shared by both receive-loop ping threads so the due math can't drift.
     static func dueNanos(for interval: TimeInterval) -> UInt64 {
-        UInt64(max(0, interval - pingDueSlopSeconds) * 1_000_000_000)
+        UdpPinger.dueNanos(for: interval)
     }
 }

@@ -9,7 +9,7 @@
 //  what a PC that replaces the selection gets.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import AppKit
 import Foundation
 import Testing

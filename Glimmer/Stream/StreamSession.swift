@@ -406,9 +406,9 @@ public actor StreamSession {
     /// Every watchdog, metric and backoff reads time here, so tests can script it.
     let clock: SessionClock
 
-    init(backend: StreamingBackend = NativeBackend(),
+    init(backend: StreamingBackend = MacTransport.makeBackend(),
          makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) },
-         makeBackend: @escaping @Sendable () -> StreamingBackend = { NativeBackend() },
+         makeBackend: @escaping @Sendable () -> StreamingBackend = { MacTransport.makeBackend() },
          clock: SessionClock = SessionClock()) {
         self.backend = backend
         self.makeNetwork = makeNetwork

@@ -63,9 +63,9 @@ package struct BackendServerInfo: Sendable {
 }
 
 /// One PLENTRY-equivalent buffer in a DecodeUnit's chain.
-package struct DecodeBuffer: Sendable {
+public struct DecodeBuffer: Sendable {
 
-    package init(
+    public init(
         kind: Kind,
         data: Data
     ) {
@@ -73,18 +73,18 @@ package struct DecodeBuffer: Sendable {
         self.data = data
     }
 
-    package enum Kind: Sendable {
+    public enum Kind: Sendable {
         case picData, sps, pps, vps
     }
-    package var kind: Kind
-    package var data: Data
+    public var kind: Kind
+    public var data: Data
 }
 
 /// A video access unit. The native backend produces these and hands them to
 /// VideoDecoder.
-package struct DecodeUnit: Sendable {
+public struct DecodeUnit: Sendable {
 
-    package init(
+    public init(
         frameNumber: Int32,
         frameType: Int32,
         fullLength: Int32,
@@ -110,17 +110,17 @@ package struct DecodeUnit: Sendable {
         self.buffers = buffers
     }
 
-    package var frameNumber: Int32
-    package var frameType: Int32
-    package var fullLength: Int32
-    package var frameHostProcessingLatency: UInt16
-    package var receiveTimeUs: UInt64
-    package var enqueueTimeUs: UInt64
-    package var presentationTimeUs: UInt64
-    package var rtpTimestamp: UInt32
-    package var hdrActive: Bool
-    package var colorspace: Int32
-    package var buffers: [DecodeBuffer]
+    public var frameNumber: Int32
+    public var frameType: Int32
+    public var fullLength: Int32
+    public var frameHostProcessingLatency: UInt16
+    public var receiveTimeUs: UInt64
+    public var enqueueTimeUs: UInt64
+    public var presentationTimeUs: UInt64
+    public var rtpTimestamp: UInt32
+    public var hdrActive: Bool
+    public var colorspace: Int32
+    public var buffers: [DecodeBuffer]
 }
 
 /// Flattened HDR10 static metadata. Primaries normalized to 50000, luminance
@@ -179,6 +179,9 @@ package struct HdrMetadata: Sendable, Equatable {
 /// the remaining controller-feedback slot (logMessage) is NULL today and given
 /// a no-op default below.
 package protocol ConnectionEvents: AnyObject, Sendable {
+    func controllersActivated()
+    func controllersDeactivated()
+    func audioFailed(_ detail: String)
     func stageStarting(_ name: String)
     func stageComplete(_ name: String)
     func stageFailed(_ name: String, code: Int32)
@@ -239,6 +242,9 @@ package protocol ConnectionEvents: AnyObject, Sendable {
 }
 
 extension ConnectionEvents {
+    package func controllersActivated() {}
+    package func controllersDeactivated() {}
+    package func audioFailed(_ detail: String) {}
     /// No-op defaults for the controller-feedback requirements: silence is
     /// correct for a conformer with no actuator/sampler behind it.
     package func rumble(controller: UInt16, lowFreq: UInt16, highFreq: UInt16) {}
@@ -259,7 +265,8 @@ extension ConnectionEvents {
 }
 
 /// = DECODER_RENDERER_CALLBACKS (VideoDecoder.swift:409-419).
-package protocol VideoSink: AnyObject, Sendable {
+public protocol VideoSink: AnyObject, Sendable {
+    func secondsSinceDecodeGateLifted() -> Double
     /// Delivered first. Returns 0 on success, -1 to abort.
     func setup(videoFormat: Int32, width: Int32, height: Int32, redrawRate: Int32) -> Int32
     func start()
@@ -411,4 +418,8 @@ extension StreamingBackend {
             interruptConnection()
         }
     }
+}
+
+extension VideoSink {
+    public func secondsSinceDecodeGateLifted() -> Double { .infinity }
 }
