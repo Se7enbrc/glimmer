@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
 import AudioToolbox
 import Foundation
 import Synchronization
@@ -78,6 +77,8 @@ func observeAudioOutput(_ context: UnsafeMutableRawPointer,
 }
 
 struct AudioOutputSilence {
+    init() {}
+
     var lastObservation: UInt64 = 0
     var seconds: Double = 0
     private var wasSilent = false
@@ -96,7 +97,7 @@ struct AudioOutputSilence {
     }
 }
 
-extension AudioHALOutput {
+extension AudioOutput {
     func observeOutputSilence(now: UInt64 = DispatchTime.now().uptimeNanoseconds,
                               telemetry: AudioPipelineTelemetry = .shared,
                               log: (String) -> Void = { Diag.error("\($0)", "Stream.Audio") }) {
@@ -107,12 +108,8 @@ extension AudioHALOutput {
         outputSilence.observe(result: result, elapsed: elapsed, log: log)
         outputSilence.lastObservation = now
         telemetry.noteOutputSilence(seconds: outputSilence.seconds)
-        if result == .failed, let mixer = units.last {
-            var status: OSStatus = noErr
-            var size = UInt32(MemoryLayout<OSStatus>.size)
-            let read = AudioUnitGetProperty(mixer, kAudioUnitProperty_LastRenderError, kAudioUnitScope_Global,
-                                            0, &status, &size)
-            log("audio output render failed (OSStatus \(read == noErr ? status : read))")
+        if result == .failed {
+            log("audio output render failed (OSStatus \(lastRenderError()))")
         }
         queue.pointee.outputProbe.requested.store(true, ordering: .releasing)
     }

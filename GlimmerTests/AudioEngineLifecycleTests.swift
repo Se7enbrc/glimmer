@@ -46,7 +46,7 @@ struct AudioEngineLifecycleTests {
     @Test func muteTogglesOnlyStreamSamples() {
         let decoder = AudioDecoder()
         decoder.setOutputMuted(true)
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         decoder.applyOutputMute()
         #expect(decoder.halOutput?.queue.pointee.muted.load(ordering: .relaxed) == true)
         decoder.setOutputMuted(false)
@@ -58,7 +58,7 @@ struct AudioEngineLifecycleTests {
         let decoder = AudioDecoder()
         defer { decoder.shutdown() }
         decoder.engineRunning = true
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         decoder.startOutput = { _ in kAudioUnitErr_Uninitialized }
         #expect(!decoder.ensureEngineAtPrimeEdge(now: DispatchTime.now().uptimeNanoseconds))
         #expect(!decoder.engineRunning)
@@ -72,7 +72,7 @@ struct AudioEngineLifecycleTests {
         decoder.engineRunning = true
         decoder.primed = true
         decoder.framesScheduled = 480
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         decoder.startOutput = { audio in
             #expect(!audio.primed)
             #expect(audio.framesPlayed == audio.framesScheduled)
@@ -173,7 +173,7 @@ struct AudioEngineLifecycleTests {
     @Test func teardownInvalidatesRetriesBeforeReleasingTheGraph() throws {
         let decoder = AudioDecoder()
         decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         weak let released = decoder.halOutput
         let generation = decoder.engineRestartGeneration
         decoder.startOutput = { _ in Issue.record("A stopped session must not restart"); return noErr }
@@ -182,13 +182,12 @@ struct AudioEngineLifecycleTests {
         #expect(released == nil)
         #expect(decoder.meterShutdown)
         #expect(!decoder.engineRunning)
-        #expect(decoder.deviceListeners.isEmpty)
     }
 
     @Test func failedStartReplacementDiscardsQueuedPCMWithoutCushionGrowth() throws {
         let decoder = AudioDecoder()
         defer { decoder.shutdown() }
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         decoder.framesScheduled = 1_440
         decoder.framesPlayed = 240
         decoder.playoutTargetMs = 60

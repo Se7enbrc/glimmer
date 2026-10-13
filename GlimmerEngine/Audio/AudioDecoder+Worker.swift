@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
 import AVFoundation
 import Foundation
 
@@ -181,6 +180,8 @@ final class AudioPCMBufferPool: @unchecked Sendable {
 
 // Render progress proves HAL is running; query the device only when that evidence stops.
 struct AudioRenderProgress {
+    init() {}
+
     private var lastFrames: Int64?
 
     mutating func needsRunningCheck(frames: Int64?) -> Bool {

@@ -348,7 +348,8 @@ struct CushionMemoryPersistenceTests {
     @Test func aSeedWithNoMemoryStartsColdFromTheBase() throws {
         let store = try IsolatedStore("cushion-seed")
         defer { store.remove() }
-        let seed = AudioDecoder.loadCushionSeed(defaults: store.defaults)
+        let seed = AudioDecoder.loadCushionSeed(
+            environment: AudioEnvironment(host: "den", link: "unknown", jitterMs: 0), defaults: store.defaults)
         #expect(!seed.fromMemory)
         #expect(seed.floorMs == 0)
         #expect(seed.targetMs >= AudioDecoder.playoutCushionBaseMs)

@@ -49,3 +49,26 @@ extension EnginePackageTests {
         _ = copied
     }
 }
+
+struct PublicAudioBoundaryTests {
+    @Test func explicitOutputAdapterConnectsTheSharedAudioSink() {
+        let platform = AudioPlatform(makeOutput: { format in
+            AudioOutput(storage: AudioRenderStorage(channels: Int(format.channelCount)),
+                sampleRate: format.sampleRate, channels: format.channelCount, latencyMs: 0,
+                start: { 0 }, isRunning: { true }, setRate: { _ in 0 }, lastRenderError: { 0 })
+        }, sampleRoute: { AudioRoute(label: "test output", uid: nil) },
+        installRouteListener: { _, _, _ in }, removeRouteListener: { _ in },
+        installDeviceListeners: { _, _ in }, removeDeviceListeners: {},
+        captureVolume: { { AudioOutputVolume(volume: nil, muted: nil, routeChanged: false) } },
+        environment: { AudioEnvironment(host: "unknown", link: "unknown", jitterMs: 0) })
+        let decoder = AudioDecoder(platform: platform)
+        let sink: any NativeAudioSink = decoder
+        let opus = OpusConfig(sampleRate: 48_000, channelCount: 2, streams: 1,
+                              coupledStreams: 1, samplesPerFrame: 240, mapping: [0, 1])
+        #expect(sink.initialize(audioConfig: 0x000302CA, opus: opus) == 0)
+        decoder.setOutputMuted(true)
+        sink.decodeAndPlayPLC()
+        decoder.shutdown()
+        decoder.shutdown()
+    }
+}

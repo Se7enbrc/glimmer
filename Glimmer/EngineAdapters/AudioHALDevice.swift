@@ -122,16 +122,11 @@ struct AudioHALDevice {
     }
 
     static func layout(channels: UInt32) -> AudioChannelLayoutTag {
-        switch channels {
-        case 1: return kAudioChannelLayoutTag_Mono
-        case 6: return kAudioChannelLayoutTag_AudioUnit_5_1
-        case 8: return kAudioChannelLayoutTag_AudioUnit_7_1
-        default: return kAudioChannelLayoutTag_Stereo
-        }
+        AudioDecoder.channelLayout(channels: channels)
     }
 }
 
-extension AudioDecoder {
+extension MacAudio {
     func installDeviceListeners(
         defaultDevice: () -> AudioDeviceID? = {
             try? AudioHALDevice.read(AudioObjectID(kAudioObjectSystemObject),
@@ -170,10 +165,11 @@ extension AudioDecoder {
         _ object: AudioObjectID, address: AudioObjectPropertyAddress,
         add: (AudioObjectID, AudioObjectPropertyAddress, @escaping @Sendable () -> Void) -> (key: Int, status: OSStatus)
     ) {
-        let result = add(object, address) { [weak self] in
-            guard let self else { return }
+        let queue = routeListenerQueue
+        let changed = configurationChanged
+        let result = add(object, address) {
             let changedAt = DispatchTime.now().uptimeNanoseconds
-            self.routeListenerQueue.async { self.handleEngineConfigurationChange(changedAt: changedAt) }
+            queue.async { changed?(changedAt) }
         }
         if result.status == noErr {
             deviceListeners.append((object, address, result.key))

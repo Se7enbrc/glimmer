@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import AVFAudio
 import AudioToolbox
 import CoreAudio
@@ -133,8 +133,7 @@ struct AudioHALDeviceTests {
     }
 
     @Test func deviceListenersKeepExactAddressesAndKeysAndRemoveBeforeReplacing() {
-        let decoder = AudioDecoder()
-        defer { decoder.shutdown() }
+        let decoder = MacAudio()
         var added: [(AudioObjectID, AudioObjectPropertyAddress, Int)] = []
         var removed: [Int] = []
         decoder.installDeviceListeners(defaultDevice: { 42 }, streams: { device in
@@ -168,33 +167,8 @@ struct AudioHALDeviceTests {
         #expect(decoder.deviceListeners.isEmpty)
     }
 
-    @Test func listenerCallbackRebuildsTheGraphOnTheOwnedQueue() throws {
-        let decoder = AudioDecoder()
-        defer { decoder.shutdown() }
-        decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
-        decoder.framesScheduled = 960
-        decoder.framesPlayed = 240
-        decoder.primed = true
-        decoder.startOutput = { _ in noErr }
-        var callback: (@Sendable () -> Void)?
-        decoder.installDeviceListeners(defaultDevice: { 42 }, streams: { _ in [] }, add: { _, _, handler in
-            callback = handler
-            return (1, noErr)
-        })
-        decoder.removeDeviceListeners { _, _, _ in noErr }
-        let notify = try #require(callback)
-        notify()
-        decoder.routeListenerQueue.sync {
-            #expect(decoder.engineRunning)
-            #expect(!decoder.primed)
-            #expect(decoder.framesPlayed == 960)
-            #expect(decoder.deviceRecoveryStarted > 0)
-        }
-    }
-
     @Test func listenerFailuresAreLoggedAndNeverRetainedAsInstalled() {
-        let decoder = AudioDecoder()
-        defer { decoder.shutdown() }
+        let decoder = MacAudio()
         let before = LogStore.shared.snapshot().last?.id ?? 0
         var attempt = 0
         decoder.installDeviceListeners(defaultDevice: { 42 }, streams: { _ in nil }, add: { _, _, _ in

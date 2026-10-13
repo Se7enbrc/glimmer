@@ -259,6 +259,77 @@ Physical-PC checks still cover encrypted launch/resume, HDR changes, controller
 feedback, ten reconnect/stop cycles and paired receive/CPU/power telemetry.
 Local Xcode 27 compilation does not replace hosted Xcode 26.6 verification.
 
+## Slice 5 implementation and Public API
+
+`GlimmerEngine/Audio/` now owns `AudioDecoder` and its decode, admission,
+playout, cushion memory, resampler, route recovery and diagnostics features, all
+three Opus decoder files, the PCM ring and output-silence probes.
+`Glimmer/EngineAdapters/` owns `MacAudio`, HAL device/output construction,
+spatial routing, property listeners and device-volume reads. `StreamSession`
+keeps its existing decoder construction through the Mac convenience initializer.
+
+### Output adapter contract
+
+Construct the public `AudioDecoder(platform:)` with explicit `AudioPlatform`
+hooks, then supply it as the existing `NativeAudioSink` to `StreamConnection`.
+The platform supplies an output factory, route identity, route/device listener
+installation and removal, optional-volume observations and `AudioEnvironment`
+evidence (PC identity, link class and measured jitter). There is no default
+output, implicit platform selection or second decoder. Mac constants needed by
+telemetry stay package-only; decoder state and PCM ring internals stay internal.
+
+An output factory receives the negotiated planar float `AVAudioFormat`. It
+creates `AudioRenderStorage` with the source channel count, installs its
+`renderCallback` on the existing varispeed input, and installs `renderObserver`
+with `context` on the final output mixer. Both callbacks execute inside the
+engine. Return `AudioOutput` with actual output rate/channels/latency and hooks
+for start, running-state checks, varispeed and last-render-error reads. Factory
+failures can throw `AudioOutput.Failure(status:)`; start failures return
+OSStatus. The shared recovery ladder remains armed while receive/decode
+continues.
+
+The output's closures retain a separate graph owner and its storage. The
+long-lived platform adapter keeps only a weak graph reference: retaining the
+graph independently would prevent decoder shutdown from disposing it. During
+teardown call `storage.dispose(using:)` to stop and dispose every unit before
+releasing the storage. A failed disposal permanently retains its raw callback
+memory, even if a later disposal reports success. The adapter must never free or
+repurpose callback context itself. Graph/listener hooks are serialized by the
+decoder; route, environment and volume probes must be thread safe. Deliver
+listener notifications asynchronously on the supplied queue, never inline during
+a hook. Queued callbacks carry the decoder generation and cannot restart a
+stopped or replacement session. Backend stop still joins the packet worker
+before cleanup.
+
+An iOS adapter should configure/activate `AVAudioSession` in the app, build its
+public RemoteIO output using this storage, and report actual route values after
+activation. Route changes, interruptions and media-services reset feed the same
+shared recovery boundary. Start with stereo and retain AUVarispeed so shared
+drift correction has the same meaning. This slice supplies and verifies the
+public contract; it does not implement an iOS output graph or prove device
+audio.
+
+### Hot paths and verification
+
+Opus decode, PCM enqueue/observe and pull/render-notify callbacks compile
+together in the engine. Output hooks are used for graph operations, rate updates
+and health/error checks off the render thread. The existing 10 ms monitor and
+roughly 4 Hz rate-update cadence remain unchanged. No additional timer,
+per-packet adapter callback, render allocation, lock or runtime metadata lookup
+is added. Cushion thresholds, persisted keys, privacy, log wording and telemetry
+names are preserved. The Mac supplies its existing route/jitter evidence off the
+packet thread during seeding and bounded link resolution.
+
+Boundary tests cover output failure and recovery, callbacks after shutdown or
+reinitialization, shutdown during a blocked route rebuild, listener callback
+identity, and disposal-failure storage retention. A public-only consumer test
+constructs the shared sink from explicit hooks. The package is also compiled
+from a separate Swift package identity to check public access. Existing audio,
+spatial impulse, channel-layout, lifecycle, persistence and fuzz tests remain
+part of the gate. Physical routes, audible equivalence, idle/load/recovery
+telemetry and iPhone RemoteIO playback still need owner testing; local builds do
+not establish those results.
+
 ## Ownership map
 
 Complete inventory: **245 Stream files, 4 Models files, all 63 root Swift files,

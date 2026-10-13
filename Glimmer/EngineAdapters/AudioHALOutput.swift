@@ -8,7 +8,7 @@ import CoreAudio
 
 // Lifecycle is serialized by AudioDecoder's graph gate; the callback receives only the raw queue pointer.
 final class AudioHALOutput {
-    struct Failure: Error { let status: OSStatus; var property: AudioUnitPropertyID = 0 }
+    typealias Failure = AudioOutput.Failure
     private(set) var units: [AudioUnit] = []
     private(set) var output: AudioUnit?
     private(set) var speed: AudioUnit?
@@ -27,21 +27,35 @@ final class AudioHALOutput {
     private(set) var channels: UInt32 = 0
     private(set) var latencyMs: Double = 0
     var spatial = false
-    var outputSilence = AudioOutputSilence()
-    let queue: UnsafeMutablePointer<AudioPCMQueue>
+    let storage: AudioRenderStorage
 
     init(channels: Int, capacity: Int = 48_000) {
-        queue = .allocate(capacity: 1)
-        queue.initialize(to: AudioPCMQueue(capacity: capacity, channels: channels))
+        storage = AudioRenderStorage(channels: channels, capacity: capacity)
     }
 
     deinit {
-        guard stop() else {
-            Diag.error("audio unit disposal failed; retaining callback storage", "Stream.Audio")
-            return
+        storage.dispose {
+            guard stop() else {
+                Diag.error("audio unit disposal failed; retaining callback storage", "Stream.Audio")
+                return false
+            }
+            return true
         }
-        queue.deinitialize(count: 1)
-        queue.deallocate()
+    }
+
+    var sharedOutput: AudioOutput {
+        AudioOutput(storage: storage, sampleRate: sampleRate, channels: channels, latencyMs: latencyMs,
+                    spatial: spatial, start: { self.start() }, isRunning: { self.isRunning },
+                    setRate: { self.setRate($0) }, lastRenderError: { self.lastRenderError() })
+    }
+
+    private func lastRenderError() -> OSStatus {
+        guard let mixer = units.last else { return kAudioUnitErr_Uninitialized }
+        var status: OSStatus = noErr
+        var size = UInt32(MemoryLayout<OSStatus>.size)
+        let read = AudioUnitGetProperty(mixer, kAudioUnitProperty_LastRenderError, kAudioUnitScope_Global,
+                                        0, &status, &size)
+        return read == noErr ? status : read
     }
 
     func configure(format: AVAudioFormat, route: AudioOutputRoute,
@@ -49,8 +63,7 @@ final class AudioHALOutput {
                    connectHardware: Bool = true) throws {
         guard stop() else { throw Failure(status: kAudioUnitErr_CannotDoInCurrentContext) }
         spatial = false
-        outputSilence = AudioOutputSilence()
-        queue.pointee.outputProbe.reset()
+        storage.resetProbe()
         do {
             let hardware = try hardware()
             device = hardware.id
@@ -68,7 +81,7 @@ final class AudioHALOutput {
             output = hal
             let resampler = try makeUnit(type: kAudioUnitType_FormatConverter, subtype: kAudioUnitSubType_Varispeed)
             speed = resampler
-            var callback = AURenderCallbackStruct(inputProc: renderAudioPCM, inputProcRefCon: queue)
+            var callback = storage.renderCallback
             try check(AudioUnitSetProperty(resampler, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input,
                                            0, &callback, UInt32(MemoryLayout<AURenderCallbackStruct>.size)))
             try setFormat(resampler, scope: kAudioUnitScope_Input, rate: format.sampleRate,
@@ -91,7 +104,7 @@ final class AudioHALOutput {
             try check(AudioUnitSetParameter(mixer, kMultiChannelMixerParam_Volume, kAudioUnitScope_Input, 0, 1, 0))
             try check(AudioUnitSetParameter(mixer, kMultiChannelMixerParam_Volume, kAudioUnitScope_Output, 0, 1, 0))
             try configureBuiltInDownmix(mixer, format: format, route: route)
-            try check(AudioUnitAddRenderNotify(mixer, observeAudioOutput, queue))
+            try check(AudioUnitAddRenderNotify(mixer, storage.renderObserver, storage.context))
             if let hal {
                 try setFormat(hal, scope: kAudioUnitScope_Input, rate: sampleRate, channels: channels, layout: nil)
                 if channels == 2 { try configureStereoMap(hal) }
@@ -128,7 +141,7 @@ final class AudioHALOutput {
     func stop(stopOutput: (AudioUnit) -> OSStatus = AudioOutputUnitStop,
               uninitialize: (AudioUnit) -> OSStatus = AudioUnitUninitialize,
               dispose: (AudioUnit) -> OSStatus = AudioComponentInstanceDispose) -> Bool {
-        queue.pointee.enabled.store(false, ordering: .releasing)
+        storage.disable()
         if let output { reportTeardownStatus(stopOutput(output)) }
         // HAL must stop before downstream readers are disposed. A failed dispose keeps its callback storage alive.
         let order = [output].compactMap({ $0 }) + units.reversed().filter({ $0 != output })

@@ -36,7 +36,7 @@ swiftc -swift-version 6 -strict-concurrency=complete -package-name Glimmer -O -g
 for target in ${FUZZ_TARGETS:-rtsp video audio fec opus}; do
     mkdir -p "$OUT/$target/corpus"
     extra=()
-    if [ "$target" = opus ]; then extra=(Glimmer/Stream/OpusDecoder+Packet.swift); fi
+    if [ "$target" = opus ]; then extra=(GlimmerEngine/Audio/OpusDecoder+Packet.swift); fi
     swiftc -swift-version 6 -strict-concurrency=complete -package-name Glimmer -O -g -parse-as-library \
         -sanitize=fuzzer,address -use-ld=lld -I "$OUT/engine" "$OUT/engine/GlimmerEngine.o" \
         "fuzz/$target.swift" "${extra[@]}" -o "$OUT/$target/fuzzer"

@@ -67,7 +67,7 @@ Top-level pieces:
 | `IdentityManager`     | `actor` (Mac adapter owns singleton)                     | `GlimmerEngine/Network/Identity.swift`                             |
 | `VideoDecoder`        | `@MainActor final class`                                 | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)                 |
 | `FramePacer`          | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/FramePacer.swift` (+ extensions)                   |
-| `AudioDecoder`        | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/AudioDecoder.swift`                                |
+| `AudioDecoder`        | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Audio/AudioDecoder.swift`                           |
 | `InputForwarder`      | `@MainActor final class`                                 | `Glimmer/Stream/InputForwarder.swift`                              |
 | `ControllerForwarder` | `@MainActor` lifecycle; capture uses locked `InputCore`  | `Glimmer/Stream/ControllerForwarder.swift`                         |
 | `HIDGamepadManager`   | `@MainActor final class` (singleton)                     | `Glimmer/Stream/HIDGamepad/`                                       |

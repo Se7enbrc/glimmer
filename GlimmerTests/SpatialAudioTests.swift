@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import AVFoundation
 import AudioToolbox
 import CoreAudio
@@ -282,26 +282,28 @@ struct SpatialAudioTests {
         graph.queue.pointee.outputProbe.finish(buffer.mutableAudioBufferList, frames: 512,
                                               failed: false, isSilence: true)
         #expect(graph.queue.pointee.outputProbe.result.load(ordering: .acquiring) == 2)
-        graph.outputSilence.seconds = 4
+        let previous = graph.sharedOutput
+        previous.outputSilence.seconds = 4
         try graph.configure(format: format, route: .init(),
                             hardware: { AudioHALDevice(id: 0, rate: 48_000, latencyMs: 0) }, connectHardware: false)
         #expect(graph.queue.pointee.outputProbe.result.load(ordering: .acquiring) == 0)
-        #expect(graph.outputSilence.seconds == 0)
+        #expect(graph.sharedOutput.outputSilence.seconds == 0)
     }
 
     @Test func silenceObservationIsSampledAndLogsOnceUntilRecovery() {
         let graph = AudioHALOutput(channels: 2)
+        let shared = graph.sharedOutput
         let telemetry = AudioPipelineTelemetry()
         var messages: [String] = []
         for second: UInt64 in 1...4 {
             graph.queue.pointee.outputProbe.result.store(2, ordering: .releasing)
-            graph.observeOutputSilence(now: second * 1_000_000_000, telemetry: telemetry, log: { messages.append($0) })
-            graph.observeOutputSilence(now: second * 1_000_000_000 + 10_000_000,
+            shared.observeOutputSilence(now: second * 1_000_000_000, telemetry: telemetry, log: { messages.append($0) })
+            shared.observeOutputSilence(now: second * 1_000_000_000 + 10_000_000,
                                        telemetry: telemetry, log: { messages.append($0) })
         }
         #expect(messages.count == 1)
         #expect(telemetry.takeSnapshot().window.outputSilentSeconds == 3)
-        graph.observeOutputSilence(now: 5_000_000_000, telemetry: telemetry, log: { messages.append($0) })
+        shared.observeOutputSilence(now: 5_000_000_000, telemetry: telemetry, log: { messages.append($0) })
         #expect(telemetry.takeSnapshot().window.outputSilentSeconds == 0)
         #expect(messages.count == 1)
         var observer = AudioOutputSilence()
