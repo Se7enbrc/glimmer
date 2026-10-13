@@ -163,6 +163,43 @@ class RetryablePublicationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 publication.release_data(TAG)
 
+    def test_new_draft_listing_lag_retries_without_recreating(self):
+        lookup = publication.release_data
+        reads = 0
+
+        def lagged(tag):
+            nonlocal reads
+            reads += 1
+            return None if reads <= 3 else lookup(tag)
+
+        with patch.object(publication, 'release_data', side_effect=lagged), \
+                patch.object(publication.time, 'sleep') as sleep:
+            publication.publish(self.assets)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [0.25, 0.5])
+        self.assertEqual(sum(call[:3] == ['gh', 'release', 'create'] for call in self.calls), 1)
+        self.assertFalse(self.data['draft'])
+
+    def test_missing_created_draft_reports_visibility_not_stability(self):
+        with patch.object(publication, 'release_data', return_value=None), \
+                patch.object(publication.time, 'sleep') as sleep:
+            with self.assertRaisesRegex(ValueError, 'not visible.*retry publication'):
+                publication.publish(self.assets)
+        self.assertEqual(sleep.call_count, 3)
+        self.assertFalse(any(call[:3] == ['gh', 'release', 'upload'] for call in self.calls))
+
+    def test_genuine_stable_release_requires_promotion_recovery_without_writes(self):
+        self.data = {'id': 1, 'tag_name': TAG, 'draft': False, 'prerelease': False, 'assets': []}
+        with self.assertRaisesRegex(ValueError, 'already stable; use promotion recovery'):
+            publication.publish(self.assets)
+        self.assertFalse(any(call[:2] == ['gh', 'release'] for call in self.calls))
+
+    def test_lookup_service_failure_is_not_retried_as_visibility_lag(self):
+        with patch.object(publication, 'release_data', side_effect=ValueError('service failure')), \
+                patch.object(publication.time, 'sleep') as sleep:
+            with self.assertRaisesRegex(ValueError, 'service failure'):
+                publication.await_release(TAG)
+        sleep.assert_not_called()
+
 
 class PublicationPreparationTests(unittest.TestCase):
     def setUp(self):
