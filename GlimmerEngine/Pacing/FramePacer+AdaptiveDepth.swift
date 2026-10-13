@@ -28,11 +28,11 @@ extension FramePacer {
     }
 
     /// Pull the published headroom level into `adaptiveDepth.reconciledTargetDepth`. Takes
-    /// EnvSignalController's lock, so it MUST run off the pacer lock (never nest the two); an
+    /// the shared headroom store's lock, so it MUST run off the pacer lock (never nest the two); an
     /// unchanged generation costs one locked compare.
     func refreshReconciledTarget() {
         assertLockNotHeld()
-        let decision = EnvSignalController.shared.decision
+        let decision = PacerHeadroom.shared.decision
         lock.lock()
         if decision.generation != adaptiveDepth.reconciledDecisionGeneration {
             adaptiveDepth.reconciledDecisionGeneration = decision.generation

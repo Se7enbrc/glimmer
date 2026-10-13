@@ -30,29 +30,41 @@ extension FramePacer {
     /// converge on the latest state instead of double-arming.
     func reconcileDeficitTimer() {
         lock.lock()
-        let want = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive) && running
+        let want = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive) && running && displayBound
         let interval = streamFrameIntervalSeconds
+        let generation = bindingGeneration
         lock.unlock()
+        if let timer = tickDeficit.deficitTimer, tickDeficit.deficitTimerGeneration != generation {
+            timer.cancel()
+            tickDeficit.deficitTimer = nil
+            tickDeficit.deficitTimerGeneration = nil
+        }
         if want, tickDeficit.deficitTimer == nil {
             let timer = DispatchSource.makeTimerSource(queue: pacingQueue)
             timer.schedule(
                 deadline: .now() + interval, repeating: interval,
                 leeway: .milliseconds(1))
-            timer.setEventHandler { [weak self] in self?.deficitTimerFired() }
+            timer.setEventHandler { [weak self] in self?.deficitTimerFired(generation: generation) }
+            tickDeficit.deficitTimerGeneration = generation
             tickDeficit.deficitTimer = timer
             timer.resume()
         } else if !want, let timer = tickDeficit.deficitTimer {
             timer.cancel()
             tickDeficit.deficitTimer = nil
+            tickDeficit.deficitTimerGeneration = nil
         }
     }
 
     /// One off-tick beat through the normal release pipeline (trim, backoff, due gate) on
     /// `CACurrentMediaTime()`, the link's own timebase, then a governor repaint if nothing flowed.
     /// A beat before the panel vsync a tick's frame scans out on skips its release.
-    func deficitTimerFired() {
+    func deficitTimerFired(generation expectedGeneration: UInt64? = nil) {
         let mediaNow = CACurrentMediaTime()
         lock.lock()
+        guard expectedGeneration == nil || expectedGeneration == bindingGeneration else {
+            lock.unlock(); return
+        }
+        let generation = bindingGeneration
         let active = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive)
             && running && !presentSuppressed
         let interval = streamFrameIntervalSeconds
@@ -61,14 +73,16 @@ extension FramePacer {
         lock.unlock()
         guard active else { return }
         if !tickOwnsVsync {
-            releaseDueFrame(targetTimestamp: mediaNow, vsyncInterval: interval, tickScanout: .nan)
+            releaseDueFrame(targetTimestamp: mediaNow, vsyncInterval: interval, tickScanout: .nan,
+                            generation: generation)
         }
-        maybeRepaintForGovernor(interval: interval)
+        maybeRepaintForGovernor(interval: interval, generation: generation)
         // Keep the rate window rolling from here too: with ticks FULLY stopped
         // and the watchdog mid-teardown there may be no other caller, and the
         // disengage verdict must never depend on the thing that failed.
         let now = CFAbsoluteTimeGetCurrent()
         lock.lock()
+        guard bindingGeneration == generation, running else { lock.unlock(); return }
         let events = serviceTickDeficitLocked(now: now)
         lock.unlock()
         handleTickDeficitEvents(events)
@@ -89,10 +103,11 @@ extension FramePacer {
     /// intervals without a REAL release (a real release is itself a commit),
     /// rate-limited to stream cadence, and never counted as a rendered frame -
     /// the renders==received verification contract stays honest.
-    func maybeRepaintForGovernor(interval: Double) {
+    func maybeRepaintForGovernor(interval: Double, generation: UInt64? = nil) {
         let now = CFAbsoluteTimeGetCurrent()
         var repaint: CMSampleBuffer?
         lock.lock()
+        guard running, generation == nil || generation == bindingGeneration else { lock.unlock(); return }
         let sinceRelease = liveness.lastReleaseHostTime.isFinite
             ? now - liveness.lastReleaseHostTime : .infinity
         let sinceRepaint = tickDeficit.lastRepaintHostTime.isFinite

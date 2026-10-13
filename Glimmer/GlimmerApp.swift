@@ -84,11 +84,11 @@ struct GlimmerApp: App {
             // Fire the present tick on a private high-QoS run loop (not .main)
             // so a busy main thread can't starve the CADisplayLink callback.
             // Flip false for an instant fallback to the main-runloop tick.
-            FramePacer.tickOffMainDefaultsKey: true,
+            MacPacer.tickOffMainDefaultsKey: true,
             // Give that tick thread Mach time-constraint (real-time) scheduling
             // so the CPU can't preempt it under load. Flip false to fall back to
             // plain userInteractive (the pre-realtime behavior) without a rebuild.
-            PacerTickThread.realtimeDefaultsKey: true,
+            MacPacer.realtimeDefaultsKey: true,
             // AppModel's own bare-bool reads. All OFF today - the Mac keeps its
             // volume during a stream, raw HID stays behind its explicit opt-in
             // (it needs Input Monitoring), the auto-offer hasn't been answered,

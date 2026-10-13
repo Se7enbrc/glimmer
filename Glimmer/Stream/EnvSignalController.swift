@@ -65,7 +65,7 @@ import Foundation
 /// session's 2 s tick; read by the RTP ping loops and the pacer. `@unchecked Sendable`:
 /// cross-thread fields are lock-guarded, evidence state is `feedQueue`-confined.
 final class EnvSignalController: @unchecked Sendable {
-    static let shared = EnvSignalController(transportRoute: .shared)
+    static let shared = EnvSignalController(transportRoute: .shared, pacerHeadroom: .shared)
     // Module-internal (not private) so the transition breadcrumb in
     // EnvSignalController+Evidence.swift logs under the same category.
     static let cat = "EnvSignal"
@@ -85,7 +85,10 @@ final class EnvSignalController: @unchecked Sendable {
 
     let transportRoute: TransportRoute
 
-    init(transportRoute: TransportRoute = TransportRoute()) {
+    let pacerHeadroom: PacerHeadroom
+
+    init(transportRoute: TransportRoute = TransportRoute(), pacerHeadroom: PacerHeadroom = PacerHeadroom()) {
+        self.pacerHeadroom = pacerHeadroom
         self.transportRoute = transportRoute
     }
 
