@@ -20,7 +20,7 @@ sources() {
     case "$1" in
         rtsp|fec) ;;
         video) echo "$NATIVE/RtpVideoQueue*.swift $NATIVE/VideoDepacketizer*.swift" \
-            "Glimmer/Stream/StreamingBackend.swift" ;;
+            "GlimmerEngine/Protocol/StreamingBackend.swift" ;;
         audio) echo "$NATIVE/RtpAudioQueue*.swift $NATIVE/AudioFecDecoder+Recovery.swift" ;;
         opus) echo "Glimmer/Stream/OpusDecoder+Packet.swift" ;;
     esac
