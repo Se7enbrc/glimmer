@@ -426,6 +426,18 @@ jobs:
       needs.validate.result == 'success') || (inputs.operation == 'promote' &&
       github.ref == 'refs/heads/main'))
     uses: ./.github/workflows/release-publication.yml
+    # Environment secrets resolve empty in a called workflow unless the caller
+    # passes them; pass only what publication uses, by name.
+    secrets:
+      GLIMMER_RELEASE_APP_CLIENT_ID:
+        ${{ secrets.GLIMMER_RELEASE_APP_CLIENT_ID }}
+      GLIMMER_RELEASE_APP_PRIVATE_KEY:
+        ${{ secrets.GLIMMER_RELEASE_APP_PRIVATE_KEY }}
+      GLIMMER_RC_APP_CLIENT_ID: ${{ secrets.GLIMMER_RC_APP_CLIENT_ID }}
+      GLIMMER_RC_APP_PRIVATE_KEY: ${{ secrets.GLIMMER_RC_APP_PRIVATE_KEY }}
+      RELEASE_CONTENTS_TOKEN: ${{ secrets.RELEASE_CONTENTS_TOKEN }}
+      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
     permissions:
       contents: read
       actions: read

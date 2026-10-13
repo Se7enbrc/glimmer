@@ -13,6 +13,21 @@ import unittest
 
 
 class ReleaseWorkflowTests(unittest.TestCase):
+    def test_publication_receives_every_secret_it_reads(self):
+        # A called workflow sees an environment secret only if the caller passes it.
+        root = Path(__file__).resolve().parents[2] / ".github/workflows"
+        called = (root / "release-publication.yml").read_text()
+        caller = (root / "release.yml").read_text()
+        used = set(re.findall(r"secrets\.([A-Z_]+)", called))
+        declared = set(re.findall(r"^      ([A-Z_]+):\n        required: false$", called, re.M))
+        call = re.split(r"\n  [a-z][a-z_-]*:\n", caller.split("uses: ./.github/workflows/release-publication.yml", 1)[1])[0]
+        passed = set(re.findall(r"^      ([A-Z_]+):\s+\$\{\{ secrets\.([A-Z_]+) \}\}$", call, re.M))
+        self.assertTrue(used)
+        self.assertEqual(used, declared)
+        self.assertEqual({name for name, _ in passed}, used)
+        self.assertTrue(all(name == source for name, source in passed))
+        self.assertNotIn("secrets: inherit", caller)
+
     def test_verification_jobs_are_independent_unsigned_and_bound_to_the_dispatch_sha(self):
         workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
         for part in ("checks", "tests", "asan"):
