@@ -37,10 +37,6 @@ on:
         required: false
       RELEASE_CONTENTS_TOKEN:
         required: false
-      ACTIONS_STEP_DEBUG:
-        required: false
-      ACTIONS_RUNNER_DEBUG:
-        required: false
 
 permissions:
   contents: read
@@ -63,10 +59,8 @@ jobs:
       TRUSTED_TOOLING_SHA: ${{ inputs.tooling }}
       SIGNED_MANIFEST: ${{ inputs.manifest }}
       SIGNED_ATTEMPT: ${{ inputs.attempt }}
-      ACTIONS_STEP_DEBUG:
-        ${{ secrets.ACTIONS_STEP_DEBUG || vars.ACTIONS_STEP_DEBUG }}
-      ACTIONS_RUNNER_DEBUG:
-        ${{ secrets.ACTIONS_RUNNER_DEBUG || vars.ACTIONS_RUNNER_DEBUG }}
+      ACTIONS_STEP_DEBUG: ${{ vars.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ vars.ACTIONS_RUNNER_DEBUG }}
     steps:
       - name: Check out trusted main tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -191,10 +185,8 @@ jobs:
       RC_TAG: ${{ inputs.rc_tag }}
       CANDIDATE_SHA: ${{ inputs.candidate_sha }}
       TRUSTED_TOOLING_SHA: ${{ inputs.tooling }}
-      ACTIONS_STEP_DEBUG:
-        ${{ secrets.ACTIONS_STEP_DEBUG || vars.ACTIONS_STEP_DEBUG }}
-      ACTIONS_RUNNER_DEBUG:
-        ${{ secrets.ACTIONS_RUNNER_DEBUG || vars.ACTIONS_RUNNER_DEBUG }}
+      ACTIONS_STEP_DEBUG: ${{ vars.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG: ${{ vars.ACTIONS_RUNNER_DEBUG }}
     steps:
       - name: Check out trusted main tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
