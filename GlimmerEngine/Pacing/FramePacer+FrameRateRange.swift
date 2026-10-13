@@ -2,8 +2,6 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-import GlimmerEngine
-import AppKit
 import QuartzCore
 
 extension FramePacer {
@@ -122,10 +120,11 @@ extension FramePacer {
 
     @MainActor
     func reapplyPreferredRangeIfNeeded() {
-        guard let link = displayLink, let view = boundView else { return }
-        replayLinkInstalledBreadcrumbIfNeeded(link: link, view: view)
-        let panelMax = Self.panelMaxHz(for: view)
-        let panelMinimum = Self.variableMinimumHz(for: view)
+        guard let link = displayLink, let display = boundDisplay else { return }
+        let screen = display.screen()
+        replayLinkInstalledBreadcrumbIfNeeded(link: link, panelMax: screen.maximumHz)
+        let panelMax = screen.maximumHz
+        let panelMinimum = screen.minimumHz
         updatePreferredRange(link: link, panelMax: panelMax, panelMinimum: panelMinimum)
     }
 
@@ -223,7 +222,7 @@ extension FramePacer {
     /// Install precedes the session file sink. Replay once per sink so the initial range is greppable.
     @MainActor private static var lastReplayedLogSinkID: ObjectIdentifier?
     @MainActor
-    private func replayLinkInstalledBreadcrumbIfNeeded(link: CADisplayLink, view: NSView) {
+    private func replayLinkInstalledBreadcrumbIfNeeded(link: CADisplayLink, panelMax: Double) {
         guard let sink = SessionLogFileSink.shared else { return }
         let sinkID = ObjectIdentifier(sink)
         guard Self.lastReplayedLogSinkID != sinkID else { return }
@@ -232,35 +231,20 @@ extension FramePacer {
         Diag.info(
             "FramePacer link installed - floor=\(Double(range.minimum))Hz "
             + "preferred=\(Double(range.preferred ?? 0))Hz max=\(Double(range.maximum))Hz "
-            + "(panelMax=\(Self.panelMaxHz(for: view))Hz) [replayed at session-log start]",
+            + "(panelMax=\(panelMax)Hz) [replayed at session-log start]",
             "Stream.Pacer")
     }
 
-    @MainActor
-    static func panelMaxHz(for view: NSView) -> Double {
-        let screen = view.window?.screen ?? NSScreen.main
-        return panelMaxHz(minimumInterval: screen?.minimumRefreshInterval ?? 0,
-                          maximumFramesPerSecond: screen?.maximumFramesPerSecond ?? 0)
-    }
-
-    static func panelMaxHz(minimumInterval: Double, maximumFramesPerSecond: Int) -> Double {
+    package static func panelMaxHz(minimumInterval: Double, maximumFramesPerSecond: Int) -> Double {
         if minimumInterval.isFinite, minimumInterval > 0, (1 / minimumInterval).isFinite {
             return 1 / minimumInterval
         }
         return Double(max(0, maximumFramesPerSecond))
     }
 
-    @MainActor
-    static func variableMinimumHz(for view: NSView) -> Double? {
-        guard let screen = view.window?.screen ?? NSScreen.main else { return nil }
-        return variableMinimumHz(minimumInterval: screen.minimumRefreshInterval,
-                                 maximumInterval: screen.maximumRefreshInterval,
-                                 granularity: screen.displayUpdateGranularity)
-    }
-
     /// A variable-capable panel can still be in a fixed mode. Its update granularity tells those apart.
-    static func variableMinimumHz(minimumInterval: Double, maximumInterval: Double,
-                                  granularity: Double) -> Double? {
+    package static func variableMinimumHz(minimumInterval: Double, maximumInterval: Double,
+                                          granularity: Double) -> Double? {
         guard minimumInterval.isFinite, maximumInterval.isFinite, granularity.isFinite,
               minimumInterval > 0, maximumInterval > minimumInterval * 1.01,
               granularity >= 0, granularity < minimumInterval * 0.99 else { return nil }

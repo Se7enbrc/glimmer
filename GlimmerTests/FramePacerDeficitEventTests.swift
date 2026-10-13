@@ -8,7 +8,7 @@
 //  floor-assist lifecycle, the warm re-enable cadence stash, depth steps and the link range.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import AppKit
 import CoreMedia
 import Foundation
@@ -218,7 +218,7 @@ struct FramePacerDeficitEventTests {
         let screen = NSScreen.main
         let expected = FramePacer.panelMaxHz(minimumInterval: screen?.minimumRefreshInterval ?? 0,
                                              maximumFramesPerSecond: screen?.maximumFramesPerSecond ?? 0)
-        #expect(FramePacer.panelMaxHz(for: NSView()) == expected)
+        #expect(MacPacer.panelMaxHz(for: NSView()) == expected)
     }
 
     private func label(_ event: FramePacer.TickDeficitEvent) -> String {

@@ -55,11 +55,11 @@ verify; some `Logger(` calls put the category on the next line):
 | `Stream.NativeBackend` | `Glimmer/Stream/NativeBackend.swift`                                              |
 | `Stream.Network`       | `Glimmer/Stream/Network.swift`                                                    |
 | `Stream.Network.TLS`   | `Glimmer/Stream/ControlTransport.swift`                                           |
-| `Stream.Pacer`         | `Glimmer/Stream/FramePacer.swift`                                                 |
+| `Stream.Pacer`         | `GlimmerEngine/Pacing/FramePacer.swift`                                           |
 | `Stream.Pairing`       | `Glimmer/Stream/Pairing.swift`                                                    |
 | `Stream.Session`       | `Glimmer/Stream/StreamSession.swift`                                              |
 | `Stream.Telemetry`     | `TelemetryExporter`, `TelemetryFrameTrace`, `IOReportSampler`, `DisplayTelemetry` |
-| `Stream.VideoDecoder`  | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)                                |
+| `Stream.VideoDecoder`  | `GlimmerEngine/Video/VideoDecoder.swift` (+ extensions)                           |
 | `Stream.Window`        | `Glimmer/Stream/StreamWindow.swift`                                               |
 
 Lines written through `Diag` (the in-app log) are mirrored under their own short

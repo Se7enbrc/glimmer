@@ -168,7 +168,7 @@ extension NetworkClient {
 
     // MARK: - Endpoint: /applist
 
-    package func appList() async throws -> [HostApp] {
+    public func appList() async throws -> [HostApp] {
         let xml = try await rawRequest(path: "applist",
                                        query: [:],
                                        extraQuery: nil,

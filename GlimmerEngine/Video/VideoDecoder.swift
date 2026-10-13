@@ -5,8 +5,6 @@
 // Lifecycle and shared state live here; decode, pacing and HDR details live in extensions.
 // See docs/ARCHITECTURE.md for the pipeline and the display-layer choice.
 
-import GlimmerEngine
-import AppKit
 import AVFoundation
 import CoreMedia
 import CoreVideo
@@ -40,7 +38,7 @@ public final class VideoDecoder {
         self.init(now: { DispatchTime.now().uptimeNanoseconds }, makeSession: makeSession)
     }
 
-    convenience init(colorSpace: ColorSpace = .rec709, colorRange: ColorRange = .full) {
+    package convenience init(colorSpace: ColorSpace = .rec709, colorRange: ColorRange = .full) {
         self.init(now: { DispatchTime.now().uptimeNanoseconds }, makeSession: VideoDecoder.createSession,
                   colorSpace: colorSpace, colorRange: colorRange)
     }
@@ -108,7 +106,7 @@ public final class VideoDecoder {
     /// UserDefaults. Rationale: a user who flips stats on with the hotkey
     /// to chase a hitch shouldn't see the overlay still up the next time
     /// they start a stream a week later.
-    public var statsOverlayEnabled: Bool = false {
+    package var statsOverlayEnabled: Bool = false {
         didSet {
             guard oldValue != statsOverlayEnabled else { return }
             log.info("Stats overlay \(self.statsOverlayEnabled ? "ON" : "OFF")")
@@ -124,7 +122,7 @@ public final class VideoDecoder {
     /// Fired on the main actor whenever `statsOverlayEnabled` flips. The
     /// session uses this to show/hide the overlay layer instantly without
     /// having to poll the decoder.
-    public var onStatsOverlayEnabledChanged: ((Bool) -> Void)?
+    package var onStatsOverlayEnabledChanged: ((Bool) -> Void)?
 
     /// HUD backdrop sampling state: set on the main actor, sampled on the present path.
     nonisolated let backdropBox = OSAllocatedUnfairLock(initialState: HUDBackdropState())
@@ -144,7 +142,7 @@ public final class VideoDecoder {
     var activeAudioConfigLabel: String?
     /// Per-frame stats counters, recorded from the receive thread, the decode queue, VT's output
     /// thread and the main actor. `@unchecked Sendable` over an internal `os_unfair_lock`.
-    nonisolated let statsCollector = StatsCollector()
+    package nonisolated let statsCollector = StatsCollector()
 
     // The streaming engine: set at stream start and re-pointed by setBackend on a
     // silent reconnect while the decode queue (IDR) / main actor (HDR refresh) read
@@ -161,15 +159,16 @@ public final class VideoDecoder {
     // the pacer. Enqueue is thread-safe but the reference write is not, so an NSLock (the layer is not
     // Sendable) guards load and store; hot sites snapshot into a local.
     let displayLayerLock = NSLock()
+    nonisolated(unsafe) var displayAttachmentGeneration: UInt64 = 0 // Guarded by displayLayerLock.
     nonisolated(unsafe) var _displayLayer: AVSampleBufferDisplayLayer?
     // The layer's renderer, captured with the layer: it is safe off-main, but
     // the layer property that vends it is main-actor only.
     nonisolated(unsafe) var _sampleBufferRenderer: AVSampleBufferVideoRenderer?
-    nonisolated var displayLayer: AVSampleBufferDisplayLayer? {
+    package nonisolated var displayLayer: AVSampleBufferDisplayLayer? {
         displayLayerLock.lock(); defer { displayLayerLock.unlock() }
         return _displayLayer
     }
-    nonisolated var sampleBufferRenderer: AVSampleBufferVideoRenderer? {
+    package nonisolated var sampleBufferRenderer: AVSampleBufferVideoRenderer? {
         displayLayerLock.lock(); defer { displayLayerLock.unlock() }
         return _sampleBufferRenderer
     }
@@ -177,8 +176,14 @@ public final class VideoDecoder {
     func setDisplayLayer(_ layer: AVSampleBufferDisplayLayer?) {
         let renderer = layer?.sampleBufferRenderer
         displayLayerLock.lock(); defer { displayLayerLock.unlock() }
+        displayAttachmentGeneration &+= 1
         _displayLayer = layer
         _sampleBufferRenderer = renderer
+    }
+
+    nonisolated var attachmentGeneration: UInt64 {
+        displayLayerLock.lock(); defer { displayLayerLock.unlock() }
+        return displayAttachmentGeneration
     }
 
     nonisolated let makeSession: SessionFactory
@@ -208,10 +213,10 @@ public final class VideoDecoder {
     }
 
     // Stream parameters from setup().
-    nonisolated(unsafe) var streamWidth: Int32 = 0
-    nonisolated(unsafe) var streamHeight: Int32 = 0
-    nonisolated(unsafe) var streamVideoFormat: Int32 = 0
-    nonisolated(unsafe) var streamFps: Int32 = 0
+    package nonisolated(unsafe) var streamWidth: Int32 = 0
+    package nonisolated(unsafe) var streamHeight: Int32 = 0
+    package nonisolated(unsafe) var streamVideoFormat: Int32 = 0
+    package nonisolated(unsafe) var streamFps: Int32 = 0
 
     // Cached parameter sets so we can rebuild format descriptions if the
     // server cycles SPS/PPS mid-stream (it does after a network blip + IDR).
@@ -308,21 +313,12 @@ public final class VideoDecoder {
     // touch the decode/enqueue path outside that window.
     nonisolated(unsafe) var isStreaming = false
 
-    /// Fires exactly once per session when VT produces its first decoded
-    /// pixel buffer. The session owner uses this to flip the stream window
-    /// from invisible (alphaValue 0) to a smooth fade-in - without it the
-    /// borderless covering window paints a black/letterboxed rectangle
-    /// over the desktop during the multi-hundred-ms C-handshake gap before
-    /// the first frame lands, which reads as a hard visual snap.
-    ///
-    /// Read from the nonisolated VT output callback, set from MainActor
-    /// (StreamSession wiring). The `nonisolated(unsafe)` annotation is
-    /// the same single-writer / read-on-decode-queue discipline used
-    /// across this file's other VT-callback-touched closures and flags.
-    /// The body is hopped onto MainActor before fire, so the closure
-    /// itself doesn't need to be Sendable.
-    nonisolated(unsafe) public var onFirstDecodedFrame: (() -> Void)?
+    /// Fires on main after the first decoded image and the existing compositor cushion.
+    /// Set before connect; final teardown releases the shell callback.
+    public var onFirstDecodedFrame: (() -> Void)?
     nonisolated(unsafe) var didFireFirstDecodedFrame = false
+    // A live layer replacement must preserve the connection's pending first-frame notification.
+    nonisolated let firstFrameLifecycleGeneration = Atomic<UInt64>(0)
 
     // VT output owns this cache; teardown clears it only after draining every callback.
     nonisolated(unsafe) var lastColorSpace: CGColorSpace?
@@ -362,7 +358,8 @@ public final class VideoDecoder {
     /// into the actor-isolated StreamWindow. Weak so it can't keep the stream
     /// view alive past teardown. MainActor-touched only (start/re-enable both run
     /// there); `@MainActor` keeps it off the nonisolated decode path.
-    @MainActor weak var pacingDrivingView: NSView?
+    @MainActor var pacingDisplay: PacerDisplay?
+    package var displayInfo: @MainActor () -> VideoDisplayInfo? = { nil }
 
     /// Rebuild the AVSampleBufferDisplayLayer and re-point the decoder at the
     /// fresh one. Wired by StreamSession to `StreamWindow.rebuildDisplayLayer()`
@@ -372,7 +369,7 @@ public final class VideoDecoder {
     /// out is a fresh layer. Returns the new layer (nil if the window is gone).
     /// MainActor-only; nil until wiring, so a pre-wire recovery degrades to a
     /// flush-only attempt rather than crashing.
-    @MainActor var rebuildDisplayLayerHook: (() -> AVSampleBufferDisplayLayer?)?
+    @MainActor public var rebuildDisplayLayerHook: (() -> AVSampleBufferDisplayLayer?)?
 
     // EDR metadata cached after a successful LiGetHdrMetadata() pull.
     // The Data blobs are in the exact GBR-order big-endian byte layout that
@@ -413,7 +410,7 @@ public final class VideoDecoder {
     /// Lock-guarded snapshot of `_presentSuppressed` for the nonisolated decode /
     /// pacer paths. Read-only accessor; the write side is `setPresentSuppressed`,
     /// which also owns the transition-edge work (drain on enter, resync on exit).
-    nonisolated var presentSuppressed: Bool {
+    package nonisolated var presentSuppressed: Bool {
         presentSuppressedLock.lock(); defer { presentSuppressedLock.unlock() }
         return _presentSuppressed
     }

@@ -22,23 +22,9 @@
 //  Split out of FramePacer.swift to keep that file under the length limit.
 //
 
-import GlimmerEngine
-import Darwin
 import Foundation
 import QuartzCore
 import os
-
-extension FramePacer {
-    /// UserDefaults key gating whether the CADisplayLink callback fires on the
-    /// private high-QoS run loop (`true`, the default) instead of `.main`. The
-    /// default-true is registered in GlimmerApp; the bool read below sees it.
-    /// Flip to false for an instant fallback to the main-runloop tick (the
-    /// historical path) without a rebuild.
-    static let tickOffMainDefaultsKey = "pacerTickOffMain"
-    static var tickOffMain: Bool {
-        UserDefaults.standard.bool(forKey: tickOffMainDefaultsKey)
-    }
-}
 
 /// Owns the private run loop the CADisplayLink callback fires on when the tick
 /// is moved off the main run loop. One per FramePacer, created lazily on the
@@ -52,11 +38,11 @@ extension FramePacer {
 /// `CFRunLoopStop` is documented thread-safe to call from another thread.
 final class PacerTickThread: @unchecked Sendable {
 
-    /// UserDefaults key gating Mach time-constraint (real-time) scheduling on the
-    /// tick thread (`true`, the default; registered in GlimmerApp). False leaves
-    /// the thread at plain userInteractive - an instant fallback if RT ever
-    /// misbehaves, no rebuild needed.
-    static let realtimeDefaultsKey = "pacerTickRealtime"
+    private let prepareThread: @Sendable () -> Void
+
+    init(prepareThread: @escaping @Sendable () -> Void = {}) {
+        self.prepareThread = prepareThread
+    }
 
     private var thread: Thread?
     /// The thread's own RunLoop object (the canonical one for that thread),
@@ -126,21 +112,7 @@ final class PacerTickThread: @unchecked Sendable {
             self.loopRunning = true
             self.lock.unlock()
             self.ready.signal()
-            // Real-time scheduling: the run loop is now servicing sources, so
-            // apply the Mach time-constraint policy from INSIDE the thread (once)
-            // before it blocks. Best-effort - on failure it continues at
-            // userInteractive (the pre-realtime path). Gated on the flag.
-            // Breadcrumb the flag's ACTUAL value at the tick thread every session,
-            // so the field tells us why RT never applies (gauge=0, no apply log).
-            Diag.notice("pacer tick realtime flag = "
-                + "\(UserDefaults.standard.bool(forKey: Self.realtimeDefaultsKey)) "
-                + "(key=\(Self.realtimeDefaultsKey))", "Stream.Pacer")
-            if UserDefaults.standard.bool(forKey: Self.realtimeDefaultsKey) {
-                Self.applyRealtimeScheduling()
-            } else {
-                // Flag off: the thread stays userInteractive, so the RT gauge is 0.
-                TelemetryCounters.shared.setPacerTickRealtime(false)
-            }
+            self.prepareThread()
             // A stop() during bring-up may have fired CFRunLoopStop before the loop
             // ran (lost) - re-check under the lock and skip the run so the thread
             // can't block forever on a missed stop.
@@ -217,61 +189,6 @@ final class PacerTickThread: @unchecked Sendable {
         let r = exitSignal.wait(timeout: .now() + .milliseconds(50))
         assert(r == .success, "pacer tick thread did not exit")
         #endif
-    }
-
-    /// Pin the calling thread (the tick thread) to Mach THREAD_TIME_CONSTRAINT
-    /// scheduling - the same real-time class CoreAudio's IO render thread uses so
-    /// it can't be preempted under load. There is no QoS class above
-    /// userInteractive; this is the only mechanism that reserves the thread a
-    /// guaranteed slot per cadence, which is what kills the descheduled tick miss.
-    /// MUST be called from inside the thread body (uses `mach_thread_self()`).
-    /// Best-effort: a failed `thread_policy_set` is logged and ignored - the
-    /// thread keeps running at userInteractive.
-    private static func applyRealtimeScheduling() {
-        var timebase = mach_timebase_info_data_t()
-        guard mach_timebase_info(&timebase) == KERN_SUCCESS, timebase.numer != 0 else {
-            Diag.warn("pacer tick thread: mach_timebase_info failed; staying userInteractive", "Stream.Pacer")
-            TelemetryCounters.shared.setPacerTickRealtime(false)
-            return
-        }
-        // ns -> mach abs-time units. Conservative cadence: a ~4.0ms period covers
-        // up to 240Hz so the thread gets a reserved slot often enough for any
-        // panel (120/240Hz) without knowing the refresh yet; it simply skips
-        // slots it doesn't need. computation is handleTick's tiny timing-capture
-        // budget (it dispatches the real present off-thread). constraint = period:
-        // the callback must land within the vsync. Non-preemptible - the window is
-        // small enough to always complete once started.
-        func toAbs(_ ns: UInt64) -> UInt32 {
-            UInt32(ns * UInt64(timebase.denom) / UInt64(timebase.numer))
-        }
-        var policy = thread_time_constraint_policy_data_t(
-            period: toAbs(4_000_000),       // 4.0ms - covers up to 240Hz
-            computation: toAbs(1_000_000),  // 1.0ms - tick uses ~0.2ms; headroom
-                                            // so a heavier tick can't overrun and
-                                            // get demoted (it's a ceiling, not spin)
-            constraint: toAbs(4_000_000),   // 4.0ms - finish within the vsync
-            preemptible: 0)                 // non-preemptible (tiny window)
-        // THREAD_TIME_CONSTRAINT_POLICY_COUNT is a C sizeof macro the Swift
-        // overlay doesn't expose; derive the integer_t-word count from the struct.
-        let count = mach_msg_type_number_t(
-            MemoryLayout<thread_time_constraint_policy_data_t>.stride / MemoryLayout<integer_t>.stride)
-        // mach_thread_self() returns a +1 send right; balance it so each tick-thread
-        // spawn doesn't leak a thread-port reference.
-        let machThread = mach_thread_self()
-        defer { mach_port_deallocate(mach_task_self_, machThread) }
-        let kr = withUnsafeMutablePointer(to: &policy) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                thread_policy_set(machThread, thread_policy_flavor_t(THREAD_TIME_CONSTRAINT_POLICY),
-                                  $0, count)
-            }
-        }
-        // Record the outcome as the queryable RT gauge (1 = RT priority, 0 = not).
-        TelemetryCounters.shared.setPacerTickRealtime(kr == KERN_SUCCESS)
-        if kr == KERN_SUCCESS {
-            Diag.notice("pacer tick thread: realtime scheduling applied", "Stream.Pacer")
-        } else {
-            Diag.warn("pacer tick thread: thread_policy_set failed (kr=\(kr)); staying userInteractive", "Stream.Pacer")
-        }
     }
 
     deinit { stop() }

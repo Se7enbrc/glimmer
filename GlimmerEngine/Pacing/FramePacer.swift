@@ -96,8 +96,6 @@
 //  Pacing model ported from moonlight-qt's pacer.cpp (GPLv3); see CREDITS.md.
 //
 
-import GlimmerEngine
-import AppKit
 import AVFoundation
 import CoreMedia
 import QuartzCore
@@ -109,7 +107,7 @@ import os
 /// `@unchecked Sendable` over an internal `OSAllocatedUnfairLock` - the decode queue
 /// (`submit`), the main run loop (the link tick), and the main actor
 /// (lifecycle) all touch it, mirroring `StatsCollector`'s contract.
-final class FramePacer: @unchecked Sendable {
+package final class FramePacer: @unchecked Sendable {
 
     // Module-internal (not private) so the floor re-apply in
     // FramePacer+FrameRateRange.swift can log through the same category.
@@ -142,10 +140,9 @@ final class FramePacer: @unchecked Sendable {
 
     let lock = OSAllocatedUnfairLock()
 
-    /// DEBUG-only lock-discipline assertions (compiled out in release). The never-nest
-    /// invariant is load-bearing: `refreshReconciledTarget` takes EnvSignalController's
-    /// lock so it MUST run OFF this one. Traps at the boundary on the first violation
-    /// rather than surfacing as a rare deadlock far away.
+    /// DEBUG-only assertions catch nested locking before it becomes a deadlock.
+    /// `refreshReconciledTarget` takes the shared headroom store's lock, so it must
+    /// run outside the pacer lock.
     @inline(__always) func assertLockHeld() {
         #if DEBUG
         lock.precondition(.owner)
@@ -182,11 +179,9 @@ final class FramePacer: @unchecked Sendable {
     /// Guarded by `lock`; stale or interrupted decode delivery cannot lower the refresh hint.
     var rateHintSamples = RateHintSamples()
 
-    /// Adaptive target-depth + reconciler-snapshot state (guarded by `lock`).
-    /// The `AdaptiveDepthState` type - and the THREAD ISOLATION contract behind
-    /// its reconciler fields (never hold the pacer lock and EnvSignalController's
-    /// at once) - lives in FramePacer+State.swift with the other lock-guarded
-    /// state groups; the grow/decay math is in FramePacer+AdaptiveDepth.swift.
+    /// Guarded by `lock`; never nest it with the shared headroom store's lock.
+    /// The state lives in FramePacer+State.swift; grow/decay math lives in
+    /// FramePacer+AdaptiveDepth.swift.
     var adaptiveDepth = AdaptiveDepthState()
 
     /// Actual display-clock time of the last claimed scanout, or NaN before release.
@@ -276,7 +271,9 @@ final class FramePacer: @unchecked Sendable {
     /// FramePacer+FrameRateRange.swift can re-pin `preferredFrameRateRange`.
     @MainActor var displayLink: CADisplayLink?
     /// The view we bound the link to, kept so a screen change can rebind.
-    @MainActor weak var boundView: NSView?
+    var displayBound = false // Guarded by lock; detached displays cannot arm an assist timer.
+    var bindingGeneration: UInt64 = 0 // Guarded by lock; invalidates detached tick and release work.
+    @MainActor var boundDisplay: PacerDisplay?
     /// Identity, refresh capabilities and backing scale distinguish a real move from housekeeping.
     /// Unconditional ProMotion rebinds once reset cadence 785 times in a 12-minute run.
     /// An unchanged notification must remain a no-op, including while realized refresh varies.
@@ -347,7 +344,7 @@ final class FramePacer: @unchecked Sendable {
     /// `willPresent` closure, so the pacer needs no renderer reference of its
     /// own. Idempotent - a second start with the same view rebinds the link.
     @MainActor
-    func start(drivingView view: NSView) {
+    func start(display: PacerDisplay) {
         lock.lock()
         running = true
         // Seed the present-side liveness clocks to "now" so the watchdog gives
@@ -377,8 +374,8 @@ final class FramePacer: @unchecked Sendable {
         // Invalidate any prior link (idempotent re-start) before binding fresh.
         displayLink?.invalidate()
         displayLink = nil
-        boundView = view
-        installLink(on: view)
+        boundDisplay = display
+        installLink(on: display)
         log.info("FramePacer started - streamInterval=\(self.streamFrameIntervalSeconds * 1000, privacy: .public)ms")
     }
 
@@ -399,6 +396,8 @@ final class FramePacer: @unchecked Sendable {
         stashRefinedCadenceForWarmReenable()
         lock.lock()
         running = false
+        displayBound = false
+        bindingGeneration &+= 1
         queue.removeAll(keepingCapacity: false)
         // Reset liveness so a future restart starts clean (the watchdog reads
         // these; a stale "never ticked" must not survive a restart).
@@ -442,7 +441,7 @@ final class FramePacer: @unchecked Sendable {
         displayLink?.invalidate()
         displayLink = nil
         tickProxy = nil
-        boundView = nil
+        boundDisplay = nil
         // Stop the private tick run loop so the thread exits on full teardown.
         // invalidate() above already detached the link from it. The rebind paths
         // (screenDidChange / rebuildLink) deliberately KEEP the thread alive -

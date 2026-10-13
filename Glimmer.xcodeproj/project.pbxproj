@@ -249,7 +249,7 @@
 		D10000F5 /* TelemetryExporter+RenderP2.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F4 /* TelemetryExporter+RenderP2.swift */; };
 		D1000201 /* ResourceTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000200 /* ResourceTelemetry.swift */; };
 		DA2026100900000000000011 /* RendererTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000012 /* RendererTelemetry.swift */; };
-		DA2026101200000000000021 /* RendererTelemetry+Compositing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026101200000000000022 /* RendererTelemetry+Compositing.swift */; };
+		DA2026101200000000000021 /* VideoDecoder+Compositing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026101200000000000022 /* VideoDecoder+Compositing.swift */; };
 		D1000203 /* IOReportSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000202 /* IOReportSampler.swift */; };
 		D1000AE1 /* RtpAudioReceiver+Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000AE0 /* RtpAudioReceiver+Telemetry.swift */; };
 		D1000B01 /* FramePacer+FrameRateRange.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000B02 /* FramePacer+FrameRateRange.swift */; };
@@ -595,6 +595,14 @@
 		A0372D03DBEB4262B7FF69EE /* MacAudio+Route.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17D04551236A443AB79E831A /* MacAudio+Route.swift */; };
 		6A14ADB734FA4B94A2EB077B /* MacAudio+Volume.swift in Sources */ = {isa = PBXBuildFile; fileRef = F03657CACA484081AF063576 /* MacAudio+Volume.swift */; };
 		F8AA1A0DA38B488F9BFD757E /* AudioBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0993F1C446DD4B81ADA982E8 /* AudioBoundaryTests.swift */; };
+		4BA763841E2041498625A9FA /* PacerDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3C6F2E0FA5143AD8B0FEBBC /* PacerDisplay.swift */; };
+		83AE3E9560534ECABBFDEB61 /* PacerHeadroom.swift in Sources */ = {isa = PBXBuildFile; fileRef = E52B8650938A4A8BAF9A1DC3 /* PacerHeadroom.swift */; };
+		F6060F2D8A344984BE325AD3 /* VideoDisplayInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8420609218434F8C9CA284FF /* VideoDisplayInfo.swift */; };
+		DEFFB6845D834CCBA6C17C4E /* MacPacer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F15A76CAEF4CD69C97766B /* MacPacer.swift */; };
+		0562FEA53DB94033B5BB9517 /* MacPacer+Scheduling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B10E5AA259431E831B1642 /* MacPacer+Scheduling.swift */; };
+		58AC76F8B11844F88B0B2AE6 /* MacVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1624DEF1307A40A2BDE08B88 /* MacVideo.swift */; };
+		79FDF04D6D49401AAD6D3BA8 /* VideoBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A512D68504B40DAB2ABB377 /* VideoBoundaryTests.swift */; };
+		DCD36887F3DD421C92D438D9 /* VideoAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833CEB3A00B446F4AE896999 /* VideoAPITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -670,8 +678,8 @@
 		CA2026101100000000000006 /* SettingsInput+NintendoLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsInput+NintendoLayout.swift"; sourceTree = "<group>"; };
 		CA2026101100000000000004 /* ControllerButtonLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerButtonLayout.swift"; sourceTree = "<group>"; };
 		CA2026101100000000000002 /* ControllerForwarder+Mouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+Mouse.swift"; sourceTree = "<group>"; };
-		2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Color.swift"; sourceTree = "<group>"; };
-		D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+ColorProbe.swift"; sourceTree = "<group>"; };
+		2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Color.swift"; sourceTree = SOURCE_ROOT; };
+		D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+ColorProbe.swift"; sourceTree = SOURCE_ROOT; };
 		DEC0DE202610110A00000002 /* StreamInputView+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "StreamInputView+Text.swift"; path = "Stream/StreamInputView+Text.swift"; sourceTree = "<group>"; };
 		A11020261011000200000000 /* AudioPCMQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPCMQueueTests.swift; sourceTree = "<group>"; };
 		A11020261011000000000002 /* AudioHALDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/AudioHALDevice.swift"; sourceTree = SOURCE_ROOT; };
@@ -754,7 +762,7 @@
 		AB00000007 /* Network.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Network.swift"; sourceTree = SOURCE_ROOT; };
 		AB00000009 /* Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Pairing.swift"; sourceTree = SOURCE_ROOT; };
 		AB00000011 /* Discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Discovery.swift"; sourceTree = SOURCE_ROOT; };
-		AB00000013 /* VideoDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/VideoDecoder.swift; sourceTree = "<group>"; };
+		AB00000013 /* VideoDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder.swift"; sourceTree = SOURCE_ROOT; };
 		AB00000015 /* AudioDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder.swift"; sourceTree = SOURCE_ROOT; };
 		AB00000017 /* InputForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/InputForwarder.swift; sourceTree = "<group>"; };
 		AB00000019 /* StreamWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamWindow.swift; sourceTree = "<group>"; };
@@ -799,11 +807,11 @@
 		B1755AEB5F01C33DF87D6FCE /* ControllerForwarder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControllerForwarder.swift; path = Stream/ControllerForwarder.swift; sourceTree = "<group>"; };
 		C426DA508131A2723B2CF131 /* StreamInputView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StreamInputView.swift; path = Stream/StreamInputView.swift; sourceTree = "<group>"; };
 		CC00000001 /* StatsCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/StatsCollector.swift"; sourceTree = SOURCE_ROOT; };
-		CC00000003 /* VideoDecoder+HDR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+HDR.swift"; sourceTree = "<group>"; };
+		CC00000003 /* VideoDecoder+HDR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+HDR.swift"; sourceTree = SOURCE_ROOT; };
 		DEC0DE2026091900000000E7 /* PairingAttempt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairingAttempt.swift"; sourceTree = "<group>"; };
 		DEC0DE2026091900000000E5 /* StreamSession+Attempt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Attempt.swift"; sourceTree = "<group>"; };
-		DEC0DE2026091900000000E3 /* VideoDecoder+HDRMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+HDRMetadata.swift"; sourceTree = "<group>"; };
-		CC00000005 /* VideoDecoder+Bitstream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Bitstream.swift"; sourceTree = "<group>"; };
+		DEC0DE2026091900000000E3 /* VideoDecoder+HDRMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+HDRMetadata.swift"; sourceTree = SOURCE_ROOT; };
+		CC00000005 /* VideoDecoder+Bitstream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Bitstream.swift"; sourceTree = SOURCE_ROOT; };
 		CC0000000A /* StatsCollector+Record.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/StatsCollector+Record.swift"; sourceTree = SOURCE_ROOT; };
 		CFAE5FA4BA5A94E9668B7089 /* QualityCalculator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QualityCalculator.swift; sourceTree = "<group>"; };
 		D1000001 /* StreamingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Protocol/StreamingBackend.swift"; sourceTree = SOURCE_ROOT; };
@@ -879,24 +887,24 @@
 		D100006D /* StreamWindow+Show.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Show.swift"; sourceTree = "<group>"; };
 		D100006F /* StatsOverlayLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StatsOverlayLayer.swift; sourceTree = "<group>"; };
 		D1000E50 /* StreamBannerLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamBannerLayer.swift; sourceTree = "<group>"; };
-		D1000071 /* VideoDecoder+AV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+AV1.swift"; sourceTree = "<group>"; };
-		D1000073 /* VideoDecoder+API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+API.swift"; sourceTree = "<group>"; };
-		D1000075 /* VideoDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Decode.swift"; sourceTree = "<group>"; };
-		D1000077 /* VideoDecoder+Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Session.swift"; sourceTree = "<group>"; };
-		D1000079 /* VideoDecoder+Sink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Sink.swift"; sourceTree = "<group>"; };
-		D6D80A7200000000000000A1 /* VideoDecoder+Pacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Pacing.swift"; sourceTree = "<group>"; };
-		D6D80A7200000000000000B1 /* VideoDecoder+Backlog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Backlog.swift"; sourceTree = "<group>"; };
+		D1000071 /* VideoDecoder+AV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+AV1.swift"; sourceTree = SOURCE_ROOT; };
+		D1000073 /* VideoDecoder+API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+API.swift"; sourceTree = SOURCE_ROOT; };
+		D1000075 /* VideoDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Decode.swift"; sourceTree = SOURCE_ROOT; };
+		D1000077 /* VideoDecoder+Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Session.swift"; sourceTree = SOURCE_ROOT; };
+		D1000079 /* VideoDecoder+Sink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Sink.swift"; sourceTree = SOURCE_ROOT; };
+		D6D80A7200000000000000A1 /* VideoDecoder+Pacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Pacing.swift"; sourceTree = SOURCE_ROOT; };
+		D6D80A7200000000000000B1 /* VideoDecoder+Backlog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Backlog.swift"; sourceTree = SOURCE_ROOT; };
 		D6D80A7200000000000000C1 /* VideoDepacketizer+FrameHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/VideoDepacketizer+FrameHeader.swift"; sourceTree = "<group>"; };
 		D6D80A7200000000000000D1 /* VideoDepacketizer+AnnexB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/VideoDepacketizer+AnnexB.swift"; sourceTree = "<group>"; };
 		D6D80A7200000000000000E1 /* RtpAudioReceiver+Receive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+Receive.swift"; sourceTree = "<group>"; };
 		D6D80A7200000000000000F1 /* EnetControlChannel+ControlMessages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/EnetControlChannel+ControlMessages.swift"; sourceTree = "<group>"; };
-		D100007B /* FramePacer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/FramePacer.swift; sourceTree = "<group>"; };
+		D100007B /* FramePacer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer.swift"; sourceTree = SOURCE_ROOT; };
 		D1000080 /* TelemetryExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter.swift"; sourceTree = SOURCE_ROOT; };
 		D1000082 /* TelemetryExporter+Render.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+Render.swift"; sourceTree = SOURCE_ROOT; };
 		D1000084 /* StreamSession+Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Telemetry.swift"; sourceTree = "<group>"; };
 		D1000086 /* TelemetryLatency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryLatency.swift"; sourceTree = SOURCE_ROOT; };
 		D10000A2 /* StreamSession+PresentMetric.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+PresentMetric.swift"; sourceTree = "<group>"; };
-		D10000B2 /* VideoDecoder+Suppression.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Suppression.swift"; sourceTree = "<group>"; };
+		D10000B2 /* VideoDecoder+Suppression.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Suppression.swift"; sourceTree = SOURCE_ROOT; };
 		D10000C0 /* TelemetryCounters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryCounters.swift"; sourceTree = SOURCE_ROOT; };
 		D10000C2 /* WiFiTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/WiFiTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		DEC0DE2026092000000000CA /* StreamHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamHistory.swift"; sourceTree = "<group>"; };
@@ -912,29 +920,29 @@
 		D10000D0 /* RtpVideoQueue+ReceiveQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpVideoQueue+ReceiveQuality.swift"; sourceTree = "<group>"; };
 		D10000E9 /* RtpVideoQueue+ReorderStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpVideoQueue+ReorderStats.swift"; sourceTree = "<group>"; };
 		D10000E0 /* DisplayTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/DisplayTelemetry.swift"; sourceTree = SOURCE_ROOT; };
-		D10000E2 /* VideoDecoder+DecodeTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+DecodeTelemetry.swift"; sourceTree = "<group>"; };
+		D10000E2 /* VideoDecoder+DecodeTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+DecodeTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		D10000F0 /* TelemetrySessionEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetrySessionEvents.swift"; sourceTree = SOURCE_ROOT; };
 		D10000F2 /* TelemetryLatencySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryLatencySnapshot.swift"; sourceTree = SOURCE_ROOT; };
 		D10000F4 /* TelemetryExporter+RenderP2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderP2.swift"; sourceTree = SOURCE_ROOT; };
 		D1000200 /* ResourceTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/ResourceTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		DA2026100900000000000012 /* RendererTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/RendererTelemetry.swift"; sourceTree = SOURCE_ROOT; };
-		DA2026101200000000000022 /* RendererTelemetry+Compositing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/RendererTelemetry+Compositing.swift"; sourceTree = "<group>"; };
+		DA2026101200000000000022 /* VideoDecoder+Compositing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Compositing.swift"; sourceTree = SOURCE_ROOT; };
 		D1000202 /* IOReportSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/IOReportSampler.swift"; sourceTree = SOURCE_ROOT; };
 		D1000AE0 /* RtpAudioReceiver+Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+Telemetry.swift"; sourceTree = "<group>"; };
-		D1000B02 /* FramePacer+FrameRateRange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+FrameRateRange.swift"; sourceTree = "<group>"; };
+		D1000B02 /* FramePacer+FrameRateRange.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+FrameRateRange.swift"; sourceTree = SOURCE_ROOT; };
 		D1000B04 /* StreamSession+PresentTrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+PresentTrip.swift"; sourceTree = "<group>"; };
-		D1000B12 /* FramePacer+Tick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+Tick.swift"; sourceTree = "<group>"; };
-		D1000B22 /* FramePacer+DueGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+DueGate.swift"; sourceTree = "<group>"; };
-		D1000B32 /* FramePacer+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+Recovery.swift"; sourceTree = "<group>"; };
-		D1000B42 /* FramePacer+AdaptiveDepth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+AdaptiveDepth.swift"; sourceTree = "<group>"; };
-		D1000B52 /* FramePacer+Submit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+Submit.swift"; sourceTree = "<group>"; };
-		D1000B62 /* FramePacer+Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+Constants.swift"; sourceTree = "<group>"; };
+		D1000B12 /* FramePacer+Tick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+Tick.swift"; sourceTree = SOURCE_ROOT; };
+		D1000B22 /* FramePacer+DueGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+DueGate.swift"; sourceTree = SOURCE_ROOT; };
+		D1000B32 /* FramePacer+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+Recovery.swift"; sourceTree = SOURCE_ROOT; };
+		D1000B42 /* FramePacer+AdaptiveDepth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+AdaptiveDepth.swift"; sourceTree = SOURCE_ROOT; };
+		D1000B52 /* FramePacer+Submit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+Submit.swift"; sourceTree = SOURCE_ROOT; };
+		D1000B62 /* FramePacer+Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+Constants.swift"; sourceTree = SOURCE_ROOT; };
 		D1000B72 /* StreamSession+Start.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Start.swift"; sourceTree = "<group>"; };
 		D1000B74 /* StreamSession+StartSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+StartSetup.swift"; sourceTree = "<group>"; };
-		D1000BD2 /* FramePacer+TickDeficit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+TickDeficit.swift"; sourceTree = "<group>"; };
-		D6D80A720000000000000002 /* FramePacer+TickDeficitEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+TickDeficitEvents.swift"; sourceTree = "<group>"; };
-		D6D80A720000000000000004 /* FramePacer+DeficitTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+DeficitTimer.swift"; sourceTree = "<group>"; };
-		D6D80A720000000000000006 /* FramePacer+State.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+State.swift"; sourceTree = "<group>"; };
+		D1000BD2 /* FramePacer+TickDeficit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+TickDeficit.swift"; sourceTree = SOURCE_ROOT; };
+		D6D80A720000000000000002 /* FramePacer+TickDeficitEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+TickDeficitEvents.swift"; sourceTree = SOURCE_ROOT; };
+		D6D80A720000000000000004 /* FramePacer+DeficitTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+DeficitTimer.swift"; sourceTree = SOURCE_ROOT; };
+		D6D80A720000000000000006 /* FramePacer+State.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+State.swift"; sourceTree = SOURCE_ROOT; };
 		D6D80A720000000000000008 /* StreamSession+Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Connect.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+StatsOverlayTimer.swift"; sourceTree = "<group>"; };
 		D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+FrameWatchdog.swift"; sourceTree = "<group>"; };
@@ -952,9 +960,9 @@
 		D6D80A720000000000000028 /* TelemetryExporter+Sinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+Sinks.swift"; sourceTree = SOURCE_ROOT; };
 		D6D80A720000000000000030 /* TelemetryLatencyHistograms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryLatencyHistograms.swift"; sourceTree = SOURCE_ROOT; };
 		D6D80A720000000000000032 /* TelemetrySessionAggregate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetrySessionAggregate.swift"; sourceTree = SOURCE_ROOT; };
-		D1000BE1 /* FramePacer+TickThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/FramePacer+TickThread.swift"; sourceTree = "<group>"; };
-		D1000BD4 /* VideoDecoder+GovernorRepaint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+GovernorRepaint.swift"; sourceTree = "<group>"; };
-		D1A1B002 /* VideoDecoder+Backdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+Backdrop.swift"; sourceTree = "<group>"; };
+		D1000BE1 /* FramePacer+TickThread.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/FramePacer+TickThread.swift"; sourceTree = SOURCE_ROOT; };
+		D1000BD4 /* VideoDecoder+GovernorRepaint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+GovernorRepaint.swift"; sourceTree = SOURCE_ROOT; };
+		D1A1B002 /* VideoDecoder+Backdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Backdrop.swift"; sourceTree = SOURCE_ROOT; };
 		D1000C02 /* StreamWindow+Cursor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Cursor.swift"; sourceTree = "<group>"; };
 		DEC0DE840000000000000002 /* StreamDisplayMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayMode.swift; sourceTree = "<group>"; };
 		DEC0DE2026092000000000DC /* BitrateMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/BitrateMode.swift"; sourceTree = SOURCE_ROOT; };
@@ -1244,6 +1252,14 @@
 		17D04551236A443AB79E831A /* MacAudio+Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacAudio+Route.swift"; sourceTree = SOURCE_ROOT; };
 		F03657CACA484081AF063576 /* MacAudio+Volume.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacAudio+Volume.swift"; sourceTree = SOURCE_ROOT; };
 		0993F1C446DD4B81ADA982E8 /* AudioBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioBoundaryTests.swift; sourceTree = "<group>"; };
+		C3C6F2E0FA5143AD8B0FEBBC /* PacerDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/PacerDisplay.swift"; sourceTree = SOURCE_ROOT; };
+		E52B8650938A4A8BAF9A1DC3 /* PacerHeadroom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Pacing/PacerHeadroom.swift"; sourceTree = SOURCE_ROOT; };
+		8420609218434F8C9CA284FF /* VideoDisplayInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDisplayInfo.swift"; sourceTree = SOURCE_ROOT; };
+		36F15A76CAEF4CD69C97766B /* MacPacer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacPacer.swift"; sourceTree = SOURCE_ROOT; };
+		19B10E5AA259431E831B1642 /* MacPacer+Scheduling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacPacer+Scheduling.swift"; sourceTree = SOURCE_ROOT; };
+		1624DEF1307A40A2BDE08B88 /* MacVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacVideo.swift"; sourceTree = SOURCE_ROOT; };
+		3A512D68504B40DAB2ABB377 /* VideoBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/VideoBoundaryTests.swift"; sourceTree = SOURCE_ROOT; };
+		833CEB3A00B446F4AE896999 /* VideoAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/VideoAPITests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1337,6 +1353,9 @@
 		A10000031 /* Glimmer */ = {
 			isa = PBXGroup;
 			children = (
+				1624DEF1307A40A2BDE08B88 /* MacVideo.swift */,
+				19B10E5AA259431E831B1642 /* MacPacer+Scheduling.swift */,
+				36F15A76CAEF4CD69C97766B /* MacPacer.swift */,
 				F03657CACA484081AF063576 /* MacAudio+Volume.swift */,
 				17D04551236A443AB79E831A /* MacAudio+Route.swift */,
 				36AF37C15C8748C488C2F0E6 /* MacAudio.swift */,
@@ -1391,17 +1410,6 @@
 				A10000015 /* Info.plist */,
 				A10000016 /* Glimmer.entitlements */,
 				AB00000001 /* Types.swift */,
-				D100007B /* FramePacer.swift */,
-				D1000B02 /* FramePacer+FrameRateRange.swift */,
-				D1000B12 /* FramePacer+Tick.swift */,
-				D1000B22 /* FramePacer+DueGate.swift */,
-				D1000B32 /* FramePacer+Recovery.swift */,
-				D1000B42 /* FramePacer+AdaptiveDepth.swift */,
-				D1000B52 /* FramePacer+Submit.swift */,
-				D1000BD2 /* FramePacer+TickDeficit.swift */,
-				D6D80A720000000000000002 /* FramePacer+TickDeficitEvents.swift */,
-				D6D80A720000000000000004 /* FramePacer+DeficitTimer.swift */,
-				D6D80A720000000000000006 /* FramePacer+State.swift */,
 				D6D80A720000000000000008 /* StreamSession+Connect.swift */,
 				D6D80A720000000000000010 /* StreamSession+StatsOverlayTimer.swift */,
 				D6D80A720000000000000012 /* StreamSession+FrameWatchdog.swift */,
@@ -1414,18 +1422,6 @@
 				D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */,
 				D6D80A720000000000000018 /* EnvSignalController+Tunables.swift */,
 				D6D80A720000000000000020 /* EnvSignalController+Evidence.swift */,
-				D1000BE1 /* FramePacer+TickThread.swift */,
-				D1000B62 /* FramePacer+Constants.swift */,
-				D1000079 /* VideoDecoder+Sink.swift */,
-				D6D80A7200000000000000A1 /* VideoDecoder+Pacing.swift */,
-				D6D80A7200000000000000B1 /* VideoDecoder+Backlog.swift */,
-				D1000077 /* VideoDecoder+Session.swift */,
-				D10000B2 /* VideoDecoder+Suppression.swift */,
-				D1000075 /* VideoDecoder+Decode.swift */,
-				D1000073 /* VideoDecoder+API.swift */,
-				D1000BD4 /* VideoDecoder+GovernorRepaint.swift */,
-				D1A1B002 /* VideoDecoder+Backdrop.swift */,
-				D1000071 /* VideoDecoder+AV1.swift */,
 				D100006F /* StatsOverlayLayer.swift */,
 				D1000E50 /* StreamBannerLayer.swift */,
 				D100006D /* StreamWindow+Show.swift */,
@@ -1485,9 +1481,7 @@
 				DEC0DE2026092000000000B2 /* WiFiRoamWatch.swift */,
 				ABCD20260610000000005F01 /* EnvSignalController.swift */,
 				D1000200 /* ResourceTelemetry.swift */,
-				DA2026101200000000000022 /* RendererTelemetry+Compositing.swift */,
 				D1000202 /* IOReportSampler.swift */,
-				D10000E2 /* VideoDecoder+DecodeTelemetry.swift */,
 				D10000C4 /* BuildInfo.generated.swift */,
 				D1000084 /* StreamSession+Telemetry.swift */,
 				D1B00005 /* StreamSession+Downshift.swift */,
@@ -1498,7 +1492,6 @@
 				26243A8C57F546E1AED2C764 /* HIDGamepadCapture.swift */,
 				BC7DB456C0634F42AB147FDB /* HIDInputThread.swift */,
 				AB00000003 /* StreamSession.swift */,
-				AB00000013 /* VideoDecoder.swift */,
 				A0D102202610091545000003 /* AudioDecoder+Spatial.swift */,
 				A11020261011000000000002 /* AudioHALDevice.swift */,
 				A11020261011000000000001 /* AudioHALOutput.swift */,
@@ -1511,13 +1504,8 @@
 				AC202608300000000000000F /* ControllerForwarder+Touchpad.swift */,
 				AB00000017 /* InputForwarder.swift */,
 				AB00000019 /* StreamWindow.swift */,
-				D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */,
-				2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */,
-				CC00000003 /* VideoDecoder+HDR.swift */,
 				DEC0DE2026091900000000E7 /* PairingAttempt.swift */,
 				DEC0DE2026091900000000E5 /* StreamSession+Attempt.swift */,
-				DEC0DE2026091900000000E3 /* VideoDecoder+HDRMetadata.swift */,
-				CC00000005 /* VideoDecoder+Bitstream.swift */,
 				8DDA470B0B4FA74B04B8C203 /* Models */,
 				1A6B7F5AA2DBCDB1B8D9A413 /* HostsStore.swift */,
 				CFAE5FA4BA5A94E9668B7089 /* QualityCalculator.swift */,
@@ -1573,6 +1561,8 @@
 		D2000016 /* GlimmerTests */ = {
 			isa = PBXGroup;
 			children = (
+				833CEB3A00B446F4AE896999 /* VideoAPITests.swift */,
+				3A512D68504B40DAB2ABB377 /* VideoBoundaryTests.swift */,
 				0993F1C446DD4B81ADA982E8 /* AudioBoundaryTests.swift */,
 				3171EF6FC17440C0AA2CEF96 /* TransportBoundaryTests.swift */,
 				B655C0313DBB4627B46D06FB /* PCCommunicationTests.swift */,
@@ -1781,6 +1771,40 @@
 		E26101210000000000000009 /* GlimmerEngine */ = {
 			isa = PBXGroup;
 			children = (
+				8420609218434F8C9CA284FF /* VideoDisplayInfo.swift */,
+				E52B8650938A4A8BAF9A1DC3 /* PacerHeadroom.swift */,
+				C3C6F2E0FA5143AD8B0FEBBC /* PacerDisplay.swift */,
+				D1000075 /* VideoDecoder+Decode.swift */,
+				D10000E2 /* VideoDecoder+DecodeTelemetry.swift */,
+				D6D80A7200000000000000A1 /* VideoDecoder+Pacing.swift */,
+				D1000079 /* VideoDecoder+Sink.swift */,
+				2DEDE610E2DE472DAA7C84C0 /* VideoDecoder+Color.swift */,
+				DA2026101200000000000022 /* VideoDecoder+Compositing.swift */,
+				D1000BD4 /* VideoDecoder+GovernorRepaint.swift */,
+				DEC0DE2026091900000000E3 /* VideoDecoder+HDRMetadata.swift */,
+				D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */,
+				D6D80A7200000000000000B1 /* VideoDecoder+Backlog.swift */,
+				CC00000003 /* VideoDecoder+HDR.swift */,
+				D10000B2 /* VideoDecoder+Suppression.swift */,
+				AB00000013 /* VideoDecoder.swift */,
+				D1000073 /* VideoDecoder+API.swift */,
+				D1000071 /* VideoDecoder+AV1.swift */,
+				D1000077 /* VideoDecoder+Session.swift */,
+				D1A1B002 /* VideoDecoder+Backdrop.swift */,
+				CC00000005 /* VideoDecoder+Bitstream.swift */,
+				D6D80A720000000000000006 /* FramePacer+State.swift */,
+				D1000B32 /* FramePacer+Recovery.swift */,
+				D1000B12 /* FramePacer+Tick.swift */,
+				D1000B62 /* FramePacer+Constants.swift */,
+				D1000B02 /* FramePacer+FrameRateRange.swift */,
+				D100007B /* FramePacer.swift */,
+				D6D80A720000000000000002 /* FramePacer+TickDeficitEvents.swift */,
+				D1000BE1 /* FramePacer+TickThread.swift */,
+				D1000B52 /* FramePacer+Submit.swift */,
+				D1000BD2 /* FramePacer+TickDeficit.swift */,
+				D6D80A720000000000000004 /* FramePacer+DeficitTimer.swift */,
+				D1000B22 /* FramePacer+DueGate.swift */,
+				D1000B42 /* FramePacer+AdaptiveDepth.swift */,
 				9D99B64526FF4CC68B955AFC /* AudioDecoder+Platform.swift */,
 				6677976E59724E768BEE81EA /* AudioPlatform.swift */,
 				53C58B68FCD74B9D8B70CCBB /* AudioOutput.swift */,
@@ -2105,6 +2129,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				58AC76F8B11844F88B0B2AE6 /* MacVideo.swift in Sources */,
+				0562FEA53DB94033B5BB9517 /* MacPacer+Scheduling.swift in Sources */,
+				DEFFB6845D834CCBA6C17C4E /* MacPacer.swift in Sources */,
 				6A14ADB734FA4B94A2EB077B /* MacAudio+Volume.swift in Sources */,
 				A0372D03DBEB4262B7FF69EE /* MacAudio+Route.swift in Sources */,
 				A036F06303524D068C3854AF /* MacAudio.swift in Sources */,
@@ -2156,17 +2183,6 @@
 				D20000A3 /* DualSenseHID+Decode.swift in Sources */,
 				A10000003 /* AppModel.swift in Sources */,
 				AB00000002 /* Types.swift in Sources */,
-				D100007C /* FramePacer.swift in Sources */,
-				D1000B01 /* FramePacer+FrameRateRange.swift in Sources */,
-				D1000B11 /* FramePacer+Tick.swift in Sources */,
-				D1000B21 /* FramePacer+DueGate.swift in Sources */,
-				D1000B31 /* FramePacer+Recovery.swift in Sources */,
-				D1000B41 /* FramePacer+AdaptiveDepth.swift in Sources */,
-				D1000B51 /* FramePacer+Submit.swift in Sources */,
-				D1000BD1 /* FramePacer+TickDeficit.swift in Sources */,
-				D6D80A720000000000000001 /* FramePacer+TickDeficitEvents.swift in Sources */,
-				D6D80A720000000000000003 /* FramePacer+DeficitTimer.swift in Sources */,
-				D6D80A720000000000000005 /* FramePacer+State.swift in Sources */,
 				D6D80A720000000000000007 /* StreamSession+Connect.swift in Sources */,
 				D6D80A720000000000000009 /* StreamSession+StatsOverlayTimer.swift in Sources */,
 				D6D80A720000000000000011 /* StreamSession+FrameWatchdog.swift in Sources */,
@@ -2179,18 +2195,6 @@
 				D7D80A720000000000000015 /* StatsOverlayLayer+Traces.swift in Sources */,
 				D6D80A720000000000000017 /* EnvSignalController+Tunables.swift in Sources */,
 				D6D80A720000000000000019 /* EnvSignalController+Evidence.swift in Sources */,
-				D1000BE0 /* FramePacer+TickThread.swift in Sources */,
-				D1000B61 /* FramePacer+Constants.swift in Sources */,
-				D100007A /* VideoDecoder+Sink.swift in Sources */,
-				D6D80A7200000000000000A2 /* VideoDecoder+Pacing.swift in Sources */,
-				D6D80A7200000000000000B2 /* VideoDecoder+Backlog.swift in Sources */,
-				D1000078 /* VideoDecoder+Session.swift in Sources */,
-				D10000B1 /* VideoDecoder+Suppression.swift in Sources */,
-				D1000076 /* VideoDecoder+Decode.swift in Sources */,
-				D1000074 /* VideoDecoder+API.swift in Sources */,
-				D1000BD3 /* VideoDecoder+GovernorRepaint.swift in Sources */,
-				D1A1B001 /* VideoDecoder+Backdrop.swift in Sources */,
-				D1000072 /* VideoDecoder+AV1.swift in Sources */,
 				D1000070 /* StatsOverlayLayer.swift in Sources */,
 				D1000E51 /* StreamBannerLayer.swift in Sources */,
 				D100006E /* StreamWindow+Show.swift in Sources */,
@@ -2251,9 +2255,7 @@
 				DEC0DE2026092000000000B1 /* WiFiRoamWatch.swift in Sources */,
 				ABCD20260610000000005F02 /* EnvSignalController.swift in Sources */,
 				D1000201 /* ResourceTelemetry.swift in Sources */,
-				DA2026101200000000000021 /* RendererTelemetry+Compositing.swift in Sources */,
 				D1000203 /* IOReportSampler.swift in Sources */,
-				D10000E3 /* VideoDecoder+DecodeTelemetry.swift in Sources */,
 				D10000C5 /* BuildInfo.generated.swift in Sources */,
 				D1000085 /* StreamSession+Telemetry.swift in Sources */,
 				D1B00006 /* StreamSession+Downshift.swift in Sources */,
@@ -2264,7 +2266,6 @@
 				5B42984DADB44F10995572B9 /* HIDGamepadCapture.swift in Sources */,
 				EE13E673ECB2440B86BF720D /* HIDInputThread.swift in Sources */,
 				AB00000004 /* StreamSession.swift in Sources */,
-				AB00000014 /* VideoDecoder.swift in Sources */,
 				A0D102202610091545000004 /* AudioDecoder+Spatial.swift in Sources */,
 				A11020261011000100000002 /* AudioHALDevice.swift in Sources */,
 				A11020261011000100000001 /* AudioHALOutput.swift in Sources */,
@@ -2277,13 +2278,8 @@
 				AC2026083000000000000010 /* ControllerForwarder+Touchpad.swift in Sources */,
 				AB00000018 /* InputForwarder.swift in Sources */,
 				AB00000020 /* StreamWindow.swift in Sources */,
-				06C9C49668CE4796823B104C /* VideoDecoder+ColorProbe.swift in Sources */,
-				2CFEE7336CB443DD9C058E88 /* VideoDecoder+Color.swift in Sources */,
-				CC00000004 /* VideoDecoder+HDR.swift in Sources */,
 				DEC0DE2026091900000000E8 /* PairingAttempt.swift in Sources */,
 				DEC0DE2026091900000000E6 /* StreamSession+Attempt.swift in Sources */,
-				DEC0DE2026091900000000E4 /* VideoDecoder+HDRMetadata.swift in Sources */,
-				CC00000006 /* VideoDecoder+Bitstream.swift in Sources */,
 				BBF95775D96E9853A40ADED0 /* Host.swift in Sources */,
 				82EEF25A701FD81C0CDC8240 /* HostsStore.swift in Sources */,
 				BC8B3FD0322A256049C1CAF8 /* QualityCalculator.swift in Sources */,
@@ -2327,6 +2323,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DCD36887F3DD421C92D438D9 /* VideoAPITests.swift in Sources */,
+				79FDF04D6D49401AAD6D3BA8 /* VideoBoundaryTests.swift in Sources */,
 				F8AA1A0DA38B488F9BFD757E /* AudioBoundaryTests.swift in Sources */,
 				075A848ED8264C2A8F6168B7 /* TransportBoundaryTests.swift in Sources */,
 				9A621DC44DF54B10B3656B77 /* PCCommunicationTests.swift in Sources */,
@@ -2535,6 +2533,40 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F6060F2D8A344984BE325AD3 /* VideoDisplayInfo.swift in Sources */,
+				83AE3E9560534ECABBFDEB61 /* PacerHeadroom.swift in Sources */,
+				4BA763841E2041498625A9FA /* PacerDisplay.swift in Sources */,
+				D1000076 /* VideoDecoder+Decode.swift in Sources */,
+				D10000E3 /* VideoDecoder+DecodeTelemetry.swift in Sources */,
+				D6D80A7200000000000000A2 /* VideoDecoder+Pacing.swift in Sources */,
+				D100007A /* VideoDecoder+Sink.swift in Sources */,
+				2CFEE7336CB443DD9C058E88 /* VideoDecoder+Color.swift in Sources */,
+				DA2026101200000000000021 /* VideoDecoder+Compositing.swift in Sources */,
+				D1000BD3 /* VideoDecoder+GovernorRepaint.swift in Sources */,
+				DEC0DE2026091900000000E4 /* VideoDecoder+HDRMetadata.swift in Sources */,
+				06C9C49668CE4796823B104C /* VideoDecoder+ColorProbe.swift in Sources */,
+				D6D80A7200000000000000B2 /* VideoDecoder+Backlog.swift in Sources */,
+				CC00000004 /* VideoDecoder+HDR.swift in Sources */,
+				D10000B1 /* VideoDecoder+Suppression.swift in Sources */,
+				AB00000014 /* VideoDecoder.swift in Sources */,
+				D1000074 /* VideoDecoder+API.swift in Sources */,
+				D1000072 /* VideoDecoder+AV1.swift in Sources */,
+				D1000078 /* VideoDecoder+Session.swift in Sources */,
+				D1A1B001 /* VideoDecoder+Backdrop.swift in Sources */,
+				CC00000006 /* VideoDecoder+Bitstream.swift in Sources */,
+				D6D80A720000000000000005 /* FramePacer+State.swift in Sources */,
+				D1000B31 /* FramePacer+Recovery.swift in Sources */,
+				D1000B11 /* FramePacer+Tick.swift in Sources */,
+				D1000B61 /* FramePacer+Constants.swift in Sources */,
+				D1000B01 /* FramePacer+FrameRateRange.swift in Sources */,
+				D100007C /* FramePacer.swift in Sources */,
+				D6D80A720000000000000001 /* FramePacer+TickDeficitEvents.swift in Sources */,
+				D1000BE0 /* FramePacer+TickThread.swift in Sources */,
+				D1000B51 /* FramePacer+Submit.swift in Sources */,
+				D1000BD1 /* FramePacer+TickDeficit.swift in Sources */,
+				D6D80A720000000000000003 /* FramePacer+DeficitTimer.swift in Sources */,
+				D1000B21 /* FramePacer+DueGate.swift in Sources */,
+				D1000B41 /* FramePacer+AdaptiveDepth.swift in Sources */,
 				7A867512BBBE41EA83AD4430 /* AudioDecoder+Platform.swift in Sources */,
 				2D838C7252754D10B78E02A7 /* AudioPlatform.swift in Sources */,
 				CC943FE2F8E4496DAB8BF2A2 /* AudioOutput.swift in Sources */,

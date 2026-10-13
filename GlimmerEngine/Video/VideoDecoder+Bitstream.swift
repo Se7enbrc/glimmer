@@ -3,7 +3,6 @@
 
 // Build compressed format descriptions and samples separately from decoder lifecycle state.
 
-import GlimmerEngine
 import CoreMedia
 import Darwin
 import Foundation

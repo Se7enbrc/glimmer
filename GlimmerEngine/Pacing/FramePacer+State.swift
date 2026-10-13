@@ -30,9 +30,9 @@ extension FramePacer {
 
     // MARK: - Adaptive jitter buffer + reconciler-target state
     //
-    // THREAD ISOLATION: `refreshReconciledTarget()` pulls EnvSignalController's published
+    // THREAD ISOLATION: `refreshReconciledTarget()` pulls the shared store's published
     // headroom level into `reconciledTargetDepth` OUTSIDE the pacer lock (never hold both);
-    // the grow/decay math under the pacer lock reads only that field, never the controller.
+    // the grow/decay math under the pacer lock reads only that field, never the store.
 
     /// Adaptive target-depth + reconciler-snapshot state (guarded by `lock`).
     struct AdaptiveDepthState {
@@ -241,6 +241,7 @@ extension FramePacer {
         var pinnedFloorHz: Double = .nan
         /// The off-tick release timer. Created/cancelled ONLY on `pacingQueue`
         /// (see `reconcileDeficitTimer`), so it needs no lock of its own.
+        var deficitTimerGeneration: UInt64?
         var deficitTimer: DispatchSourceTimer?
     }
 }

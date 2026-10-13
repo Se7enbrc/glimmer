@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
-import AppKit
 import CoreMedia
 import CoreVideo
 
@@ -54,9 +52,11 @@ extension VideoDecoder {
     nonisolated func finishColorProbe(_ probe: ColorProbe?, pixelBuffer: CVPixelBuffer) -> Task<Void, Never>? {
         guard let probe else { return nil }
         let final = colorAttachmentSummary(pixelBuffer)
+        let generation = attachmentGeneration
         return Task { @MainActor [weak self] in
-            self?.configureLayerColorspace()
-            self?.logColorProbe(probe, final: final)
+            guard let self, self.attachmentGeneration == generation else { return }
+            self.configureLayerColorspace()
+            self.logColorProbe(probe, final: final)
         }
     }
 
@@ -75,10 +75,8 @@ extension VideoDecoder {
     }
 
     private func displayHeadroom() -> (current: Double, potential: Double) {
-        let view = displayLayer?.delegate as? NSView
-        let screen = view?.window?.screen ?? NSScreen.main
-        return (Double(screen?.maximumExtendedDynamicRangeColorComponentValue ?? 1),
-                Double(screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1))
+        let display = displayInfo()
+        return (display?.currentHeadroom ?? 1, display?.potentialHeadroom ?? 1)
     }
 
     private func logDisplayTransition(after seconds: Int, headroom: (current: Double, potential: Double)?) {

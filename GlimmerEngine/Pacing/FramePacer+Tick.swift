@@ -13,8 +13,6 @@
 //  `installLink` (the bind site) and `releaseDueFrame` (the dispatched release).
 //
 
-import GlimmerEngine
-import AppKit
 import CoreMedia
 import QuartzCore
 import os
@@ -64,14 +62,15 @@ extension FramePacer {
     /// service) or tick-thread-confined (`lastTickTargetTimestamp`); the one
     /// main-only access (`reapplyPreferredRangeIfNeeded`, which reads the NSView)
     /// is hopped to the main actor below. Nothing here runs on the main actor.
-    func handleTick(_ link: CADisplayLink) {
-        handleTick(target: link.targetTimestamp, duration: link.duration, timestamp: link.timestamp)
+    func handleTick(_ link: CADisplayLink, generation: UInt64) {
+        handleTick(target: link.targetTimestamp, duration: link.duration, timestamp: link.timestamp, generation: generation)
     }
 
     /// The tick on the link's three timing values, so tests can script a tick sequence.
     /// `target` is when this tick's frame scans out, `duration` the nominal vsync interval,
     /// `timestamp` the just-passed vsync the callback fired for.
-    func handleTick(target: CFTimeInterval, duration: CFTimeInterval, timestamp: CFTimeInterval) {
+    func handleTick(target: CFTimeInterval, duration: CFTimeInterval, timestamp: CFTimeInterval,
+                    generation expectedGeneration: UInt64? = nil) {
         // `duration` is reliably > 0 on a running link; the 1/60 fallback only
         // guards a degenerate first tick. We deliberately use a constant here
         // (not the shared cadence estimate) so this pre-lock read touches no
@@ -100,12 +99,16 @@ extension FramePacer {
         // the old one's - that timebase is discontinuous across rebuilds), and
         // is suspension-sized after a backgrounded window - the bounds below
         // exclude all three.
-        let realizedInterval = target - Self.lastTickTargetTimestamp
-        Self.lastTickTargetTimestamp = target
         var emitRefreshChange = false
         var changedFromHz = 0.0
         var changedToHz = 0.0
         lock.lock()
+        guard running, expectedGeneration == nil || expectedGeneration == bindingGeneration else {
+            lock.unlock(); return
+        }
+        let generation = bindingGeneration
+        let realizedInterval = target - Self.lastTickTargetTimestamp
+        Self.lastTickTargetTimestamp = target
         let hostNow = CFAbsoluteTimeGetCurrent()
         liveness.lastTickHostTime = hostNow
         liveness.lastTickTargetMediaTime = target
@@ -203,7 +206,8 @@ extension FramePacer {
         if !Self.lastReapplyHopHostTime.isFinite || sinceReapply >= Self.reapplyHopMinInterval {
             Self.lastReapplyHopHostTime = hostNow
             DispatchQueue.main.async { [weak self] in
-                self?.reapplyPreferredRangeIfNeeded()
+                guard let self, self.isCurrentBinding(generation) else { return }
+                self.reapplyPreferredRangeIfNeeded()
             }
         }
 
@@ -212,8 +216,13 @@ extension FramePacer {
         let scanout = timestamp + releaseInterval
         pacingQueue.async { [weak self] in
             self?.releaseDueFrame(
-                targetTimestamp: target, vsyncInterval: releaseInterval, tickScanout: scanout)
+                targetTimestamp: target, vsyncInterval: releaseInterval, tickScanout: scanout, generation: generation)
         }
+    }
+
+    func isCurrentBinding(_ generation: UInt64) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return running && bindingGeneration == generation
     }
 
     /// Min seconds between main-actor re-apply hops; timestamp is tick-thread confined.

@@ -9,7 +9,6 @@
 //  Sendable note. Split out of VideoDecoder.swift to keep each unit focused.
 //
 
-import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import Foundation
@@ -46,7 +45,7 @@ extension VideoDecoder: VideoSink {
     /// reference-frame-invalidation recovery (maxNumReferenceFrames=0) for the
     /// negotiated codec, instead of forcing a full IDR on every loss. We
     /// advertise HEVC + AV1 RFI (not AVC) - H.264 recovery stays full-IDR.
-    nonisolated public static let rfiCapabilities: Int32 =
+    nonisolated package static let rfiCapabilities: Int32 =
         StreamProtocol.CAPABILITY_REFERENCE_FRAME_INVALIDATION_HEVC
             | StreamProtocol.CAPABILITY_REFERENCE_FRAME_INVALIDATION_AV1
 

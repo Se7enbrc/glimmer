@@ -212,6 +212,7 @@ extension EnvSignalController {
         headroomLevelValue = desiredLevel
         smoothedJitterMsValue = reconcileSmoothedJitterMs
         if changed { decisionGeneration &+= 1 }
+        pacerHeadroom.publish(level: headroomLevelValue, generation: decisionGeneration)
         lock.unlock()
     }
 
@@ -237,6 +238,7 @@ extension EnvSignalController {
         headroomLevelValue = 0
         smoothedJitterMsValue = 0
         if changed { decisionGeneration &+= 1 }
+        pacerHeadroom.publish(level: headroomLevelValue, generation: decisionGeneration)
         lock.unlock()
     }
 
@@ -393,6 +395,7 @@ extension EnvSignalController {
         headroomLevelValue = 0
         smoothedJitterMsValue = 0
         decisionGeneration = 0
+        pacerHeadroom.publish(level: 0, generation: 0)
         lock.unlock()
         probe?.stop()
     }

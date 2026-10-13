@@ -27,6 +27,7 @@
 //  how deep the buffer rides or on late-drop count.
 //
 
+import GlimmerEngine
 import Foundation
 import os
 

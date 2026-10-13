@@ -5,6 +5,7 @@
 //  StreamSession+PresentMetric.swift
 //
 
+import GlimmerEngine
 import Foundation
 import os
 

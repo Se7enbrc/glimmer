@@ -40,7 +40,42 @@ public enum CertFingerprint {
 
 // Every read, write and deletion uses the PC's /serverinfo uniqueid. Mixing a hostname with
 // a migrated UUID loses the pin and breaks authentication across restarts.
-package enum PinnedCertStore {
+public enum PinnedCertStore {
+    /// The shell supplies its storage and availability policy. An unreadable pin must never look unpaired.
+    public static func load(forHostID hostID: String, defaults: UserDefaults, base: URL,
+                            protectedDataAvailable: () -> Bool) throws -> String? {
+        guard protectedDataAvailable() else { throw IdentityStorageError.unavailable }
+        do {
+            let data = try Data(contentsOf: fileURL(for: hostID, base: base))
+            guard let pem = String(data: data, encoding: .utf8), !pem.isEmpty else {
+                throw StreamError.crypto("The saved PC certificate is unreadable")
+            }
+            return pem
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return try loadAvailable(forHostID: hostID, defaults: defaults, base: base,
+                                     protectedDataAvailable: protectedDataAvailable)
+        }
+    }
+
+    /// Store only the certificate returned by authenticated pairing, under the verified PC identity.
+    public static func store(pem: String, forHostID hostID: String, defaults: UserDefaults, base: URL,
+                             protectedDataAvailable: () -> Bool) throws {
+        try storeAvailable(pem: pem, forHostID: hostID, defaults: defaults, base: base,
+                           protectedDataAvailable: protectedDataAvailable)
+    }
+
+    /// Report deletion failures so the shell cannot claim a PC was forgotten while its pin survives.
+    public static func delete(forHostID hostID: String, defaults: UserDefaults, base: URL,
+                              protectedDataAvailable: () -> Bool) throws {
+        guard protectedDataAvailable() else { throw IdentityStorageError.unavailable }
+        do {
+            try FileManager.default.removeItem(at: fileURL(for: hostID, base: base))
+        } catch let error as CocoaError where error.code == .fileNoSuchFile {
+            // Removing an already absent pin is idempotent.
+        }
+        defaults.removeObject(forKey: legacyDefaultsKey(for: hostID))
+    }
+
     /// Legacy UserDefaults key, kept only for the read-side migration
     /// (`load(forHostID:)`) which lifts the value out then deletes it.
     /// Nothing writes here anymore - see the file-backed store below.

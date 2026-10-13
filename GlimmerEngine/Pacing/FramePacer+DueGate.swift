@@ -15,7 +15,6 @@
 //  dispatcher) and `decayTargetLocked` (the adaptive trim target).
 //
 
-import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import os
@@ -250,7 +249,8 @@ extension FramePacer {
     /// frame per tick (one present per vsync), after trimming sustained lag.
     /// `tickScanout` is the panel vsync a tick's release lands on (NaN off-tick).
     func releaseDueFrame(
-        targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval, tickScanout: CFTimeInterval
+        targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval, tickScanout: CFTimeInterval,
+        generation: UInt64? = nil
     ) {
         var toPresent: Entry?
         var trimmed: [CMSampleBuffer] = []
@@ -269,7 +269,8 @@ extension FramePacer {
         // Bailing keeps the priming span from polluting the depth samples and
         // stale-repeat counter while real frames are demonstrably flowing. A tick already queued when
         // the window hid presents nothing and keeps the newest frame for the resume.
-        guard running, !tickDeficit.warmingUp, !presentSuppressed else {
+        guard running, generation == nil || generation == bindingGeneration,
+              !tickDeficit.warmingUp, !presentSuppressed else {
             lock.unlock()
             return
         }

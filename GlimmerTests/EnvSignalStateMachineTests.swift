@@ -135,6 +135,8 @@ struct EnvSignalStateMachineTests {
         close(controller, jitterMs: 400)
         #expect(controller.decision.headroomLevel == EnvSignalController.maxHeadroomLevel)
         #expect(controller.decision.generation > generation)
+        #expect(controller.pacerHeadroom.decision.generation == controller.decision.generation)
+        #expect(controller.pacerHeadroom.decision.headroomLevel == controller.decision.headroomLevel)
     }
 
     @Test func wiredRouteForcesClearAndRestAtOnce() {

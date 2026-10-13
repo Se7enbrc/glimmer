@@ -10,13 +10,13 @@ import CoreVideo
 import Foundation
 
 /// Cross-thread backdrop state, behind `VideoDecoder.backdropBox`.
-struct HUDBackdropState {
-    var rect: CGRect = .zero
-    var overlayEnabled = false
-    var lastSampleNanos: UInt64 = 0
-    var luminance: Double?
-    var pixelFormat: OSType?
-    var transfer: String?
+package struct HUDBackdropState {
+    package var rect: CGRect = .zero
+    package var overlayEnabled = false
+    package var lastSampleNanos: UInt64 = 0
+    package var luminance: Double?
+    package var pixelFormat: OSType?
+    package var transfer: String?
 }
 
 /// A read-only view of a decoded frame's luma plane.
@@ -39,7 +39,7 @@ extension VideoDecoder {
     nonisolated static let backdropGridRows = 8
 
     /// Normalized rect (origin top-left of the picture) to sample; `.zero` turns sampling off.
-    var hudBackdropRect: CGRect {
+    package var hudBackdropRect: CGRect {
         get { backdropBox.withLock { $0.rect } }
         set {
             backdropBox.withLock {
@@ -52,9 +52,9 @@ extension VideoDecoder {
     }
 
     /// Latest mean relative luminance (0...1) inside `hudBackdropRect`, nil before a sample.
-    var hudBackdropLuminance: Double? { backdropBox.withLock { $0.luminance } }
+    package var hudBackdropLuminance: Double? { backdropBox.withLock { $0.luminance } }
 
-    var hudBackdropState: HUDBackdropState { backdropBox.withLock { $0 } }
+    package var hudBackdropState: HUDBackdropState { backdropBox.withLock { $0 } }
 
     nonisolated static func backdropSampleDue(now: UInt64, last: UInt64) -> Bool {
         last == 0 || now &- last >= backdropSampleIntervalNanos

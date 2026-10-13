@@ -112,13 +112,13 @@ public enum HostReachability {
 
 /// One entry from /applist. The host returns a flat list of these - Desktop,
 /// Steam Big Picture, and one per game it knows about.
-package struct HostApp: Sendable, Identifiable {
-    package let id: Int
-    package let name: String
-    package let hdrCapable: Bool
-    package let hidden: Bool
+public struct HostApp: Sendable, Identifiable {
+    public let id: Int
+    public let name: String
+    public let hdrCapable: Bool
+    public let hidden: Bool
 
-    package init(id: Int, name: String, hdrCapable: Bool, hidden: Bool) {
+    public init(id: Int, name: String, hdrCapable: Bool, hidden: Bool) {
         self.id = id
         self.name = name
         self.hdrCapable = hdrCapable

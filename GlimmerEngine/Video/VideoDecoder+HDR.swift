@@ -3,7 +3,6 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-import AppKit
 import AVFoundation
 import CoreGraphics
 import CoreMedia
@@ -16,7 +15,7 @@ extension VideoDecoder {
     // MARK: - Display-layer configuration
 
     // Source tags determine dynamic range; macOS maps HDR input to the destination display.
-    func configureLayerColorspace(headroom: (@MainActor () -> (current: Double, potential: Double))? = nil) {
+    package func configureLayerColorspace(headroom: (@MainActor () -> (current: Double, potential: Double))? = nil) {
         guard let layer = displayLayer else { return }
         let active = resolvedColor.withLock { $0?.isHDR ?? false }
         layer.preferredDynamicRange = active ? .high : .standard
@@ -30,7 +29,7 @@ extension VideoDecoder {
     // MARK: - HDR metadata
 
     /// CoreVideo expects the HDR10 SEI byte layout: big-endian MDCV in GBR order and CLL in nits.
-    func refreshHDRMetadataFromHost() {
+    package func refreshHDRMetadataFromHost() {
         // Pull the flattened HDR10 static metadata through the backend (was the
         // gl_get_hdr_metadata C shim around LiGetHdrMetadata). HdrMetadata is
         // the Limelight-free value type with the exact same fields/units.
@@ -103,7 +102,7 @@ extension VideoDecoder {
 
     /// FourCC encoder for diagnostic logging. e.g. `'x420'` for video-range
     /// 10-bit 4:2:0 biplanar. Prints non-printable bytes as hex escapes.
-    nonisolated func fourCCString(from code: OSType) -> String {
+    package nonisolated func fourCCString(from code: OSType) -> String {
         let bytes: [UInt8] = [
             UInt8((code >> 24) & 0xFF),
             UInt8((code >> 16) & 0xFF),

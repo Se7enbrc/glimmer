@@ -12,6 +12,7 @@
 import AppKit
 import QuartzCore
 import Testing
+@testable import GlimmerEngine
 @testable import Glimmer
 
 @MainActor

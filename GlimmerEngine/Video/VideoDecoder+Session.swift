@@ -12,8 +12,6 @@
 //  stored state.
 //
 
-import GlimmerEngine
-import AppKit
 import AVFoundation
 import CoreMedia
 import CoreVideo
@@ -245,13 +243,20 @@ extension VideoDecoder {
                 // P2 CONNECT-HANDSHAKE: stamp the first decoded-frame instant (the
                 // close of the "established → pixels" leg). See DecodeTelemetry.
                 VideoDecoder.noteFirstDecodedFrameTelemetry()
-                if let cb = decoder.onFirstDecodedFrame {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        MainActor.assumeIsolated { cb() }
-                    }
-                }
+                decoder.scheduleFirstDecodedFrame()
             }
         }
+
+    nonisolated func scheduleFirstDecodedFrame() {
+        let generation = firstFrameLifecycleGeneration.load(ordering: .acquiring)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.isStreaming,
+                      self.firstFrameLifecycleGeneration.load(ordering: .acquiring) == generation else { return }
+                self.onFirstDecodedFrame?()
+            }
+        }
+    }
 
     /// Runs on VT's output thread for each decoded pixel buffer: tags it, wraps it in a CMSampleBuffer
     /// stamped with the PC's capture-clock `hostPTS` for pacing and telemetry, then hands it to

@@ -5,7 +5,6 @@
 
 // The decode-queue submit path shares the queue lock with the display-link drain.
 
-import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import QuartzCore
@@ -41,12 +40,13 @@ extension FramePacer {
         // At rest a due frame waited for the next tick plus a queue hop: up to a vsync of
         // output_to_present for nothing. The gate still spaces presents one interval apart.
         if let vsync = passthroughVsyncLocked() {
+            let generation = bindingGeneration
             lock.unlock()
             TelemetryCounters.shared.pacerSubmitReleaseTotal.increment()
             // Present on the tick's own queue: from this decoder thread it could reach the layer
             // ahead of an older frame a late tick has already dequeued.
             let handoff = SubmitRelease(entry: entry)
-            pacingQueue.async { [weak self] in self?.presentSubmitRelease(handoff.entry, vsyncInterval: vsync) }
+            pacingQueue.async { [weak self] in self?.presentSubmitRelease(handoff.entry, vsyncInterval: vsync, generation: generation) }
             return
         }
 
@@ -91,9 +91,9 @@ extension FramePacer {
     }
 
     /// A queued handoff may outlive stop or hide. Hidden streams keep only their newest frame.
-    private func presentSubmitRelease(_ entry: Entry, vsyncInterval: CFTimeInterval) {
+    private func presentSubmitRelease(_ entry: Entry, vsyncInterval: CFTimeInterval, generation: UInt64) {
         lock.lock()
-        guard running else { lock.unlock(); return }
+        guard running, bindingGeneration == generation else { lock.unlock(); return }
         if presentSuppressed {
             if queue.isEmpty { liveness.queueNonEmptySince = CFAbsoluteTimeGetCurrent() }
             Self.insert(entry, into: &queue)

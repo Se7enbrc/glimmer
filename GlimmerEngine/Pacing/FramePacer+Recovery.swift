@@ -16,51 +16,49 @@
 //  `RefreshWindowSnapshot`) are declared here with the methods that build them.
 //
 
-import GlimmerEngine
-import AppKit
 import AVFoundation
 import CoreMedia
 import QuartzCore
 import os
 
 extension FramePacer {
-    typealias LivenessSnapshot = PacerLivenessSnapshot
-    typealias RefreshWindowSnapshot = PacerRefreshWindowSnapshot
+    package typealias LivenessSnapshot = PacerLivenessSnapshot
+    package typealias RefreshWindowSnapshot = PacerRefreshWindowSnapshot
 
     /// Match the present watchdog's freeze window even when refusals leave the queue empty.
-    static let rendererRefusalWindowSeconds: Double = 0.25
+    package static let rendererRefusalWindowSeconds: Double = 0.25
 
     // MARK: - Snapshot types
 
     // MARK: - Link bind (the single path start / screen-change / rebuild use)
 
     @MainActor
-    func installLink(on view: NSView) {
-        // `NSView.displayLink(target:selector:)` (macOS 14+) creates a link
-        // tied to the display the view is currently on and tracks it as the
-        // view moves between screens - exactly the binding moonlight-qt builds
-        // by hand with CVDisplayLinkCreateWithCGDisplay against the window's
-        // NSScreen. We add it (in the common modes) to the private tick run loop
-        // by default - the off-main path that un-starves the callback - or to
-        // `.main` when the flag is off; either keeps it firing across UI beats.
-        // Reset the cadence base BEFORE the new link starts ticking, so the
-        // first tick on the new (possibly discontinuous) timebase re-seeds
-        // `lastPresentMediaTime` from this link's clock instead of comparing
-        // against a stale value from the old link - the negative-`sinceLast`
-        // wedge that hard-froze the stream. See `resetCadenceBaseLocked`.
+    func installLink(on display: PacerDisplay) {
+        // Reset before binding because a new display can use a discontinuous timebase.
         lock.lock()
         resetCadenceBaseLocked()
+        bindingGeneration &+= 1
+        displayBound = false
+        let generation = bindingGeneration
         lock.unlock()
 
         let proxy = DisplayLinkProxy { [weak self] link in
-            self?.handleTick(link)
+            self?.handleTick(link, generation: generation)
         }
-        let link = view.displayLink(target: proxy, selector: #selector(DisplayLinkProxy.tick(_:)))
+        boundScreenSignature = nil
+        guard let link = display.makeLink(proxy, #selector(DisplayLinkProxy.tick(_:))) else {
+            pacingQueue.async { [weak self] in self?.reconcileDeficitTimer() }
+            return
+        }
+        lock.lock()
+        displayBound = true
+        lock.unlock()
         // Static-layer callback throttling once late-dropped 38% of frames; fixed screens retain
         // the full grid. Variable screens follow content, with deficit recovery for ignored hints.
         // Only a callback hint changes; display modes and the user's refresh setting stay untouched.
-        let panelMax = Self.panelMaxHz(for: view)
-        let panelMinimum = Self.variableMinimumHz(for: view)
+        let screen = display.screen()
+        let panelMax = screen.maximumHz
+        let panelMinimum = screen.minimumHz
         configurePreferredRange(link: link, panelMax: panelMax, panelMinimum: panelMinimum)
         let range = link.preferredFrameRateRange
         // Add the link to the PRIVATE tick run loop (default) so the present
@@ -71,8 +69,8 @@ extension FramePacer {
         // reconnect / screen change re-adds to it without spawning a second one.
         // The watchdog's tick-deficit/linkDead net (livenessSnapshot, a Timer)
         // still fires off-main, so even a non-firing off-main link self-heals.
-        if Self.tickOffMain {
-            let tickThread = pacerTickThread ?? PacerTickThread()
+        if display.tickOffMain() {
+            let tickThread = pacerTickThread ?? PacerTickThread(prepareThread: display.prepareTickThread)
             pacerTickThread = tickThread
             // Only route onto the tick thread once its loop is CONFIRMED running;
             // otherwise add(_:) could block the main actor on an unstarted loop.
@@ -87,9 +85,10 @@ extension FramePacer {
         }
         self.setTickProxy(proxy)
         self.displayLink = link
+        pacingQueue.async { [weak self] in self?.reconcileDeficitTimer() }
         // Seed the bound-screen signature so `screenDidChange` can distinguish
         // a REAL move/mode change from ProMotion VRR-housekeeping notifications.
-        self.boundScreenSignature = Self.screenSignature(for: view)
+        self.boundScreenSignature = Self.screenSignature(for: screen)
         // Diag/LogStore breadcrumb (postmortem-visible, unlike the os_log-only
         // lines, which never reach the glimmer-*.log file sink): every link
         // (re)bind - session start, screen change, watchdog rebuild - lands in
@@ -115,26 +114,25 @@ extension FramePacer {
             lock.lock(); defer { lock.unlock() }
             return running
         }()
-        guard isRunning, let view = boundView else { return }
+        guard isRunning, let display = boundDisplay else { return }
         // ProMotion housekeeping once caused 785 rebinds in 12 minutes, resetting cadence each time.
         // Rebind only for identity, scale or capability changes; a fixed/variable switch is material.
         // The watchdog still rebuilds unconditionally when an unchanged link silently stops.
-        let signature = Self.screenSignature(for: view)
-        guard signature != boundScreenSignature else { return }
+        let signature = Self.screenSignature(for: display.screen())
+        guard displayLink == nil || signature != boundScreenSignature else { return }
         log.info("FramePacer rebinding display link after screen change")
         Diag.info("FramePacer rebinding display link after screen change", "Stream.Pacer")
         displayLink?.invalidate()
         displayLink = nil
-        installLink(on: view)
+        installLink(on: display)
     }
 
     /// Capabilities, not realized callback rates, distinguish mode changes from VRR housekeeping.
     @MainActor
-    static func screenSignature(for view: NSView) -> String {
-        guard let screen = view.window?.screen else { return "none" }
-        let displayID = screen.cgDirectDisplayID.map { String($0) } ?? "none"
-        return screenSignature(displayID: displayID, maximumHz: panelMaxHz(for: view),
-                               minimumHz: variableMinimumHz(for: view), scale: screen.backingScaleFactor)
+    static func screenSignature(for screen: PacerScreen) -> String {
+        guard screen.identity != "none" else { return "none" }
+        return screenSignature(displayID: screen.identity, maximumHz: screen.maximumHz,
+                               minimumHz: screen.minimumHz, scale: screen.scale)
     }
 
     static func screenSignature(displayID: String, maximumHz: Double, minimumHz: Double?, scale: Double) -> String {
@@ -153,13 +151,13 @@ extension FramePacer {
             lock.lock(); defer { lock.unlock() }
             return running
         }()
-        guard isRunning, let view = boundView else { return }
+        guard isRunning, let display = boundDisplay else { return }
         log.warning("FramePacer self-heal: rebuilding display link (\(reason, privacy: .public))")
         Diag.notice("FramePacer self-heal: rebuilding display link (\(reason))", "Stream.Pacer")
         OSSignposter.render.emitEvent("PacerLinkRebuild", "reason=\(reason, privacy: .public)")
         displayLink?.invalidate()
         displayLink = nil
-        installLink(on: view)
+        installLink(on: display)
     }
 
     // MARK: - Present-side liveness API (watchdog + instrumentation)
@@ -252,14 +250,17 @@ extension FramePacer {
     /// cannot race a deficit beat's renderer enqueue. Keep the freshest frame
     /// visible while the link rebuilds.
     func drainHeadDirectly(reason: String) {
-        pacingQueue.async { [weak self] in self?.drainHeadDirectlyOnQueue(reason: reason) }
+        lock.lock()
+        let generation = bindingGeneration
+        lock.unlock()
+        pacingQueue.async { [weak self] in self?.drainHeadDirectlyOnQueue(reason: reason, generation: generation) }
     }
 
-    private func drainHeadDirectlyOnQueue(reason: String) {
+    private func drainHeadDirectlyOnQueue(reason: String, generation: UInt64) {
         var freshest: Entry?
         var stale: [CMSampleBuffer] = []
         lock.lock()
-        guard running, !queue.isEmpty else {
+        guard running, bindingGeneration == generation, !queue.isEmpty else {
             lock.unlock()
             return
         }

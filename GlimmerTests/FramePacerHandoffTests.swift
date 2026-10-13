@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import CoreVideo
@@ -14,7 +14,7 @@ import Testing
 @MainActor
 struct FramePacerHandoffTests {
     enum Interruption: CaseIterable {
-        case stop, hide, hideThenNewerFrame
+        case stop, restart, hide, hideThenNewerFrame
     }
 
     @Test(arguments: Interruption.allCases)
@@ -43,6 +43,9 @@ struct FramePacerHandoffTests {
         switch interruption {
         case .stop:
             pacer.stop()
+        case .restart:
+            pacer.stop()
+            pacer.running = true
         case .hide:
             pacer.setPresentSuppressed(true)
         case .hideThenNewerFrame:
@@ -55,7 +58,7 @@ struct FramePacerHandoffTests {
 
         #expect(presents.withLock { $0 } == 0)
         #expect(pacer.liveness.releaseCount == 0)
-        if interruption == .stop {
+        if interruption == .stop || interruption == .restart {
             #expect(pacer.queue.isEmpty)
         } else {
             #expect(pacer.queue.count == 1)
