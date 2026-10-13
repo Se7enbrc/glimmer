@@ -26,9 +26,10 @@ and offline private-key scans.
 ## Engine dependency
 
 The shared project pins `Se7enbrc/glimmer` to the exact commit
-`e6988d070649fb2313f88f8e572bbb4838252347`, including the public connection API
-and shared transport. The package lock records the same revision. Update the pin
-to a full commit SHA, never a branch or tag, and never copy engine source here.
+`7891fac58264b211830a0e630e6e4bdb7cc55599`, including the public connection API,
+shared transport and audio output adapter contract. The package lock records the
+same revision. Update the pin to a full commit SHA, never a branch or tag, and
+never copy engine source here.
 
 For development against a local engine checkout:
 
@@ -49,7 +50,10 @@ When updating the engine dependency, update the revision in
 Then run the default commands without `ENGINE_PATH`, including CI. A successful
 local override does not prove remote resolution. The public connection tests
 exercise cancellation and teardown without opening a connection to the PC; they
-do not prove media playback or complete the framework handoff.
+do not prove media playback or complete the framework handoff. The iOS
+[AudioToolbox adapter](docs/AUDIO.md) supplies real output units and session
+lifecycle handling through that public contract; it is not yet attached to a
+streaming UI.
 
 ## Physical devices
 

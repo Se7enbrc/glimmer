@@ -27,6 +27,14 @@
 		9CF0EED6A547E97737DEE09A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 166CD0D8C2DE20211142D277 /* Foundation.framework */; };
 		AC23DF2162C30AAAA9878E27 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 45D50F4C90AB68CB5149E594 /* SwiftUI.framework */; };
 		D24F000A4BCC4C65C8508D0A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FAD2215B8AB2557B667379E3 /* Assets.xcassets */; };
+		670FF5C58DCCB38D0C0F55D6 /* IOSAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = D46ADEF81D9B207FD34CBB22 /* IOSAudio.swift */; };
+		D91A9AB0427148045EC87AC8 /* IOSAudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BD79C5F6323A43283399334 /* IOSAudioSession.swift */; };
+		3F860A0B0CF3D204A85B1905 /* IOSAudioSession+Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00048335526E571C8D00BEB /* IOSAudioSession+Notifications.swift */; };
+		8A57E19FAEB7FAD612489EEC /* IOSAudioOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D0443C4EE9DE4BECB00D8B /* IOSAudioOutput.swift */; };
+		542D884924A5B2C317194CD5 /* IOSAudioOutput+Properties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A9450697D192F522AF5030 /* IOSAudioOutput+Properties.swift */; };
+		1A26CF1176BA5F2D37E40F0A /* IOSAudioFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */; };
+		5357DD73479F12579699A792 /* IOSAudioSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */; };
+		FAA9B2DAAD28F9FC05CD2E80 /* IOSAudioOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,6 +69,14 @@
 		DBDB247C151A5B0F3BCE13B6 /* App.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
 		EDC8777C55611710BADD7484 /* EngineLink.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineLink.swift; sourceTree = "<group>"; };
 		FAD2215B8AB2557B667379E3 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D46ADEF81D9B207FD34CBB22 /* IOSAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudio.swift"; sourceTree = "<group>"; };
+		5BD79C5F6323A43283399334 /* IOSAudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioSession.swift"; sourceTree = "<group>"; };
+		B00048335526E571C8D00BEB /* IOSAudioSession+Notifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioSession+Notifications.swift"; sourceTree = "<group>"; };
+		C6D0443C4EE9DE4BECB00D8B /* IOSAudioOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioOutput.swift"; sourceTree = "<group>"; };
+		67A9450697D192F522AF5030 /* IOSAudioOutput+Properties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioOutput+Properties.swift"; sourceTree = "<group>"; };
+		22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioFixtures.swift"; sourceTree = "<group>"; };
+		8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioSessionTests.swift"; sourceTree = "<group>"; };
+		EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioOutputTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -134,6 +150,9 @@
 			isa = PBXGroup;
 			children = (
 				9F5102EDB7AD2531AE0663B1 /* ControllerMonitorTests.swift */,
+				EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */,
+				8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */,
+				22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */,
 				C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */,
 				3A9BB54585E6899D7FA846EC /* StreamPreviewTests.swift */,
 			);
@@ -153,6 +172,11 @@
 			isa = PBXGroup;
 			children = (
 				36171098F2FC6D807B7809E9 /* ControllerMonitor.swift */,
+				67A9450697D192F522AF5030 /* IOSAudioOutput+Properties.swift */,
+				C6D0443C4EE9DE4BECB00D8B /* IOSAudioOutput.swift */,
+				B00048335526E571C8D00BEB /* IOSAudioSession+Notifications.swift */,
+				5BD79C5F6323A43283399334 /* IOSAudioSession.swift */,
+				D46ADEF81D9B207FD34CBB22 /* IOSAudio.swift */,
 				EDC8777C55611710BADD7484 /* EngineLink.swift */,
 				CB5FA496B339386824307D80 /* GlimmerApp.swift */,
 				C27E8A6F7449606A4E16DB8B /* LauncherView.swift */,
@@ -266,6 +290,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				99827218F70ECA345A8EED25 /* ControllerMonitorTests.swift in Sources */,
+				FAA9B2DAAD28F9FC05CD2E80 /* IOSAudioOutputTests.swift in Sources */,
+				5357DD73479F12579699A792 /* IOSAudioSessionTests.swift in Sources */,
+				1A26CF1176BA5F2D37E40F0A /* IOSAudioFixtures.swift in Sources */,
 				2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */,
 				448039B562D4A381F641CF03 /* StreamPreviewTests.swift in Sources */,
 			);
@@ -276,6 +303,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				56379B99BE31A1E9E8BAC42F /* ControllerMonitor.swift in Sources */,
+				542D884924A5B2C317194CD5 /* IOSAudioOutput+Properties.swift in Sources */,
+				8A57E19FAEB7FAD612489EEC /* IOSAudioOutput.swift in Sources */,
+				3F860A0B0CF3D204A85B1905 /* IOSAudioSession+Notifications.swift in Sources */,
+				D91A9AB0427148045EC87AC8 /* IOSAudioSession.swift in Sources */,
+				670FF5C58DCCB38D0C0F55D6 /* IOSAudio.swift in Sources */,
 				348684B76496EAF753290EF6 /* EngineLink.swift in Sources */,
 				352C1011524E806B983A697E /* GlimmerApp.swift in Sources */,
 				10896918E526BAFB88FC984F /* LauncherView.swift in Sources */,
@@ -520,7 +552,7 @@
 			repositoryURL = "https://github.com/Se7enbrc/glimmer.git";
 			requirement = {
 				kind = revision;
-				revision = e6988d070649fb2313f88f8e572bbb4838252347;
+				revision = 7891fac58264b211830a0e630e6e4bdb7cc55599;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
