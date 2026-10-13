@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from release_artifact import digest, identity, seal, verify
 from release_validation import validate_bundle, validate_distribution
 
@@ -132,6 +133,17 @@ def upload_missing(data, paths, tag):
         command(['gh', 'release', 'upload', tag, str(path), '-R', REPO], 'asset upload failed; retry publication')
 
 
+def await_release(tag):
+    # GitHub's list endpoint can lag a successful draft creation or publication.
+    for delay in (0, 0.25, 0.5, 1):
+        if delay:
+            time.sleep(delay)
+        data = release_data(tag)
+        if data is not None:
+            return data
+    raise ValueError('candidate not visible in release listing yet; retry publication')
+
+
 def publish(root):
     receipt, proof = load(root)
     tag, sha = os.environ['RC_TAG'], os.environ['EXPECTED_SHA']
@@ -143,15 +155,15 @@ def publish(root):
     if data is None:
         command(['gh', 'release', 'create', tag, '-R', REPO, '--draft', '--prerelease', '--latest=false',
                  '--verify-tag', '--title', title, '--notes-file', str(root / 'notes.md')], 'cannot create candidate')
-        data = release_data(tag)
-    if not data or not data.get('prerelease'):
+        data = await_release(tag)
+    if not data.get('prerelease'):
         raise ValueError('candidate is already stable; use promotion recovery')
     paths = [root / name for name in proof['hashes'] if name.endswith(('.dmg', '.zip', '.intoto.jsonl'))]
     upload_missing(data, paths, tag)
     if data.get('draft'):
         command(['gh', 'release', 'edit', tag, '-R', REPO, '--draft=false', '--prerelease', '--latest=false'],
                 'cannot publish candidate; retry publication')
-    if release_data(tag).get('draft'):
+    if await_release(tag).get('draft'):
         raise ValueError('candidate is still a draft')
     # Record visibility before the feed mutation so a late failure has an honest recovery message.
     Path(os.environ['RUNNER_TEMP'], 'glimmer-publication-state').write_text('candidate published; feed pending')
