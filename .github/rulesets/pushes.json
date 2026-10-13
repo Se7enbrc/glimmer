@@ -1,0 +1,42 @@
+{
+  "name": "Maintainer pushes, everyone else forks",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "exclude": ["refs/heads/dependabot/**/*", "refs/heads/main"],
+      "include": ["~ALL"]
+    }
+  },
+  "rules": [
+    {
+      "type": "creation"
+    },
+    {
+      "type": "update"
+    },
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    }
+  ],
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "always"
+    },
+    {
+      "actor_id": 5265084,
+      "actor_type": "Integration",
+      "bypass_mode": "always"
+    },
+    {
+      "actor_id": 5292108,
+      "actor_type": "Integration",
+      "bypass_mode": "always"
+    }
+  ]
+}

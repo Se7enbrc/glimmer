@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+# See https://pre-commit.com for usage.
+# Install hooks once:  pre-commit install
+# Run on all files:    pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^third_party/
+      - id: end-of-file-fixer
+        exclude: ^third_party/
+      - id: check-yaml
+        args: ["--allow-multiple-documents"]
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: check-json
+      - id: check-toml
+      - id: check-case-conflict
+      - id: mixed-line-ending
+      - id: fix-byte-order-marker
+
+  # YAML linting.
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args:
+          [
+            --format,
+            parsable,
+            "-d",
+            "{extends: default, rules: {line-length: disable, document-start:
+            disable}}",
+          ]
+        exclude: ^third_party/
+
+  # Markdown linting.
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.41.0
+    hooks:
+      - id: markdownlint
+        args: ["--fix", "--disable", "MD013", "MD029", "MD036", "MD041"]
+        exclude: ^third_party/
+
+  # Prettier - yaml/markdown/json formatting.
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        types_or: [yaml, markdown, json]
+        args: ["--prose-wrap=always"]
+        exclude: ^third_party/
+
+  # Local scans check staged changes; CI also checks tracked files and its commit range.
+  # Both scanners withhold findings from public logs.
+  - repo: local
+    hooks:
+      - id: trufflehog
+        name: TruffleHog
+        description: Scan for verified credentials without printing findings.
+        entry: bash scripts/check-secrets.sh verified
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: private-keys
+        name: Private keys (offline)
+        description: Reject private keys without external verification.
+        entry: bash scripts/check-private-keys.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+  # Autocorrect before strict lint; the hook refuses rewritten changes so they can be reviewed.
+  - repo: local
+    hooks:
+      - id: swiftlint
+        name: SwiftLint
+        description: SwiftLint --fix then strict lint (zero warnings).
+        # Compare the Swift diff before and after fixing, including already-dirty files.
+        entry:
+          bash -c 'set -e; ROOT=$(git rev-parse --show-toplevel);
+          CFG="$ROOT/.swiftlint.yml"; BEFORE=$(git -C "$ROOT" diff -- "*.swift"
+          "*.swiftinterface" | shasum -a 256); swiftlint --fix --quiet --config
+          "$CFG"; AFTER=$(git -C "$ROOT" diff -- "*.swift" "*.swiftinterface" |
+          shasum -a 256); if [ "$BEFORE" != "$AFTER" ]; then echo "swiftlint
+          --fix rewrote files. Review the diff and re-add them:" >&2; git -C
+          "$ROOT" diff --stat -- "*.swift" >&2 || true; exit 1; fi; swiftlint
+          lint --strict --quiet --config "$CFG"'
+        language: system
+        types: [swift]
+        pass_filenames: false
+        require_serial: true
+        stages: [pre-commit]
