@@ -26,6 +26,21 @@ on:
         type: string
       attempt:
         type: string
+    secrets:
+      GLIMMER_RELEASE_APP_CLIENT_ID:
+        required: false
+      GLIMMER_RELEASE_APP_PRIVATE_KEY:
+        required: false
+      GLIMMER_RC_APP_CLIENT_ID:
+        required: false
+      GLIMMER_RC_APP_PRIVATE_KEY:
+        required: false
+      RELEASE_CONTENTS_TOKEN:
+        required: false
+      ACTIONS_STEP_DEBUG:
+        required: false
+      ACTIONS_RUNNER_DEBUG:
+        required: false
 
 permissions:
   contents: read
