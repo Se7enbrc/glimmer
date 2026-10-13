@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import Foundation
+import os
+import Testing
 @testable import Glimmer
 
 extension DispatchSemaphore {
@@ -174,5 +176,60 @@ func threadParks(_ thread: thread_act_t, within duration: Duration) async -> Boo
         // Check again after a late wake before giving up.
         if ContinuousClock.now >= deadline { return false }
         try? await Task.sleep(for: .milliseconds(1))
+    }
+}
+
+// Manual deadlines still execute on the sender, preserving its merge-state isolation.
+final class InputBatcherScheduler: Sendable {
+    let clock = ScriptedClock()
+    private struct Pending: Sendable {
+        let deadline: DispatchTime
+        let sender: InputSendThread
+        let action: @Sendable () -> Void
+    }
+    private let pending = OSAllocatedUnfairLock<Pending?>(initialState: nil)
+
+    var deadline: DispatchTime? { pending.withLock { $0?.deadline } }
+
+    func makeBatcher(enet: EnetControlChannel,
+                     tracker: @escaping @Sendable () -> FrameTimingTracker? = { nil },
+                     backpressure: @escaping @Sendable (EnetControlChannel) -> Bool = {
+                         $0.sendBacklogged || $0.reliableBacklogged
+                     }) -> InputBatcher {
+        InputBatcher(enet: enet, now: { [clock] in DispatchTime(uptimeNanoseconds: clock.nanos) },
+                     tracker: tracker, backpressure: backpressure, scheduleFlush: { [self] sender, time, action in
+            pending.withLock { $0 = Pending(deadline: time, sender: sender, action: action) }
+        })
+    }
+
+    func fire() throws {
+        let next = pending.withLock { value in
+            defer { value = nil }
+            return value
+        }
+        let tick = try #require(next)
+        #expect(tick.deadline.uptimeNanoseconds >= clock.nanos)
+        clock.advance(.nanoseconds(Int64(tick.deadline.uptimeNanoseconds - clock.nanos)))
+        tick.sender.sync { tick.action(); return 0 }
+    }
+}
+
+// A request handshake proves the task reached its delay before the test resumes it.
+@MainActor
+final class TestDelay {
+    let requests = AsyncStream<Duration>.makeStream()
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func sleep(_ duration: Duration) async throws {
+        await withCheckedContinuation {
+            continuation = $0
+            requests.continuation.yield(duration)
+        }
+        try Task.checkCancellation()
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
     }
 }

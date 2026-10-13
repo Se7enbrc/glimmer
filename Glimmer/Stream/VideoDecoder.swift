@@ -49,6 +49,10 @@ public final class VideoDecoder {
     nonisolated let resolvedColor = OSAllocatedUnfairLock<VideoColorDescription?>(initialState: nil)
     nonisolated let pixelFormatRanges = OSAllocatedUnfairLock(initialState: [OSType: String]())
     var colorDisplayProbeTask: Task<Void, Never>?
+    var colorProbeSleep: @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    var colorProbeLog: @MainActor (DiagMessage, Bool) -> Void = { message, warning in
+        if warning { Diag.warn(message, "Stream") } else { Diag.notice(message, "Stream") }
+    }
     nonisolated let colorProbeState = OSAllocatedUnfairLock<ColorProbeKey?>(initialState: nil)
 
     /// Safety-net teardown for the VTDecompressionSession. Normally

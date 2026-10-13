@@ -39,7 +39,7 @@ final class InputBatcher: @unchecked Sendable {
     /// The one-shot flush is armed only while state is dirty, so an idle stream costs no
     /// wakeups; deadlines stay 1 ms apart, as the old repeating tick's did.
     private var flushArmed = false
-    private var flushDeadline = DispatchTime.now()
+    private var flushDeadline: DispatchTime
     private var backpressureSince: DispatchTime?
 
     // MARK: Merge state (only ever touched on `queue`)
@@ -112,14 +112,20 @@ final class InputBatcher: @unchecked Sendable {
     private let now: @Sendable () -> DispatchTime
     private let tracker: @Sendable () -> FrameTimingTracker?
     private let backpressure: @Sendable (EnetControlChannel) -> Bool
+    // The scheduler must deliver callbacks on the owned sender thread.
+    private let scheduleFlush: @Sendable (InputSendThread, DispatchTime, @escaping @Sendable () -> Void) -> Void
 
     init(enet: EnetControlChannel, now: @escaping @Sendable () -> DispatchTime = { .now() },
          tracker: @escaping @Sendable () -> FrameTimingTracker? = { FrameTimingTracker.shared },
-         backpressure: @escaping @Sendable (EnetControlChannel) -> Bool = { $0.inputBacklogged }) {
+         backpressure: @escaping @Sendable (EnetControlChannel) -> Bool = { $0.inputBacklogged },
+         scheduleFlush: @escaping @Sendable (InputSendThread, DispatchTime, @escaping @Sendable () -> Void) -> Void
+            = { $0.schedule(deadline: $1, action: $2) }) {
         self.enet = enet
         self.now = now
         self.tracker = tracker
         self.backpressure = backpressure
+        self.scheduleFlush = scheduleFlush
+        self.flushDeadline = now()
         Diag.notice("input batcher started (1ms merge/flush)", Self.logCategory)
     }
 
@@ -357,8 +363,8 @@ final class InputBatcher: @unchecked Sendable {
     private func armFlush() {
         guard !flushArmed else { return }
         flushArmed = true
-        flushDeadline = max(flushDeadline + Self.batchInterval, .now())
-        queue.schedule(deadline: flushDeadline) { [weak self] in self?.flushTimerFired() }
+        flushDeadline = max(flushDeadline + Self.batchInterval, now())
+        scheduleFlush(queue, flushDeadline) { [weak self] in self?.flushTimerFired() }
     }
 
     /// Re-arms while state is still dirty, as when backpressure held it back.
