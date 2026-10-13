@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamSession+StatsOverlayTimer.swift
-//
-//  The 4 Hz stats-overlay timer; its body is `StatsOverlayRefresh.tick`, a function
-//  of the decoder, overlay and pill, so tests drive one tick at a time.
-//
+// The 4 Hz stats-overlay timer has a directly testable tick, independent of the run loop.
 
 import Foundation
 import AppKit
@@ -76,6 +71,7 @@ final class StatsOverlayRefresh {
     let hitch: PerceivedHitchBox
     private let gateAudit: LinkGateAuditBox
     private let history = StreamHistoryFeed()
+    private var backdropDiagnostic = ""
 
     init(now: @escaping @MainActor () -> CFTimeInterval = CACurrentMediaTime) {
         hitch = PerceivedHitchBox(now: now)
@@ -96,7 +92,11 @@ final class StatsOverlayRefresh {
                      rttMs: rtt?.rttMs)
         // Perceived present hitching, not env_state (link contention anti-correlates with felt stutter).
         banner.setSustained(hitch.perceivedHitch(snap: snap), text: "Stream stuttering")
-        guard visible, dec.statsOverlayEnabled else { return }
+        guard visible, dec.statsOverlayEnabled else {
+            dec.hudBackdropRect = .zero
+            if !backdropDiagnostic.isEmpty { logBackdropChanges(dec: dec, overlay: overlay) }
+            return
+        }
         // The decoder's live backend survives a silent reconnect; nil renders "-".
         if let rttInfo = rtt {
             snap.rttMs = rttInfo.rttMs
@@ -119,6 +119,19 @@ final class StatsOverlayRefresh {
         // The decoder samples the picture under the column for the HUD's ink.
         dec.hudBackdropRect = overlay.backdropSampleRect
         if let luminance = dec.hudBackdropLuminance { overlay.updateBackdropLuminance(luminance) }
+        logBackdropChanges(dec: dec, overlay: overlay)
+    }
+
+    private func logBackdropChanges(dec: VideoDecoder, overlay: StatsOverlayLayer) {
+        let state = dec.hudBackdropState
+        let format = state.pixelFormat.map { dec.fourCCString(from: $0) } ?? "none"
+        let transfer = state.transfer ?? "none"
+        let status = state.luminance == nil ? "waiting" : (overlay.usesDarkInk ? "dark ink" : "light ink")
+        let diagnostic = "rect=\(state.rect) format=\(format) transfer=\(transfer) state=\(status)"
+        guard diagnostic != backdropDiagnostic else { return }
+        backdropDiagnostic = diagnostic
+        let luminance = state.luminance.map { String(format: "%.3f", $0) } ?? "none"
+        Diag.info("HUD backdrop: \(diagnostic) luminance=\(luminance)", "Stream")
     }
 }
 

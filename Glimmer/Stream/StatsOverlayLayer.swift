@@ -19,7 +19,11 @@ public final class StatsOverlayLayer {
     static let coreKinds: [StatsRow.Kind] = [.renderFps, .latency, .bitrate]
 
     weak var displayView: NSView?
-    var videoSize: CGSize = .zero
+    var videoSize: CGSize = .zero {
+        didSet {
+            if oldValue != videoSize, let host = layer.superlayer { layoutInHost(host) }
+        }
+    }
     public var corner: StatsOverlayCorner = .topLeft {
         didSet {
             guard oldValue != corner, let host = layer.superlayer else { return }
@@ -71,7 +75,9 @@ public final class StatsOverlayLayer {
 
     nonisolated public static func shouldUseDarkInk(luminance: Double, currentlyDark: Bool) -> Bool {
         guard luminance.isFinite, (0...1).contains(luminance) else { return currentlyDark }
-        return currentlyDark ? luminance >= 0.48 : luminance > 0.62
+        // Compare perceived brightness, not linear light: diffuse HDR scenes must also turn the ink dark.
+        let brightness = pow(luminance, 1 / 2.4)
+        return currentlyDark ? brightness >= 0.48 : brightness > 0.62
     }
 
     public func updateBackdropLuminance(_ value: Double) {

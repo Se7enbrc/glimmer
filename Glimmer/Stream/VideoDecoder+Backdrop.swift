@@ -15,6 +15,8 @@ struct HUDBackdropState {
     var overlayEnabled = false
     var lastSampleNanos: UInt64 = 0
     var luminance: Double?
+    var pixelFormat: OSType?
+    var transfer: String?
 }
 
 /// A read-only view of a decoded frame's luma plane.
@@ -27,6 +29,7 @@ struct LumaPlane {
     let bitDepth: Int
     let fullRange: Bool
     let isPQ: Bool
+    var isHLG = false
 }
 
 extension VideoDecoder {
@@ -40,14 +43,18 @@ extension VideoDecoder {
         get { backdropBox.withLock { $0.rect } }
         set {
             backdropBox.withLock {
+                guard $0.rect != newValue else { return }
                 $0.rect = newValue
-                if newValue.isEmpty { $0.luminance = nil }
+                $0.luminance = nil
+                $0.lastSampleNanos = 0
             }
         }
     }
 
     /// Latest mean relative luminance (0...1) inside `hudBackdropRect`, nil before a sample.
     var hudBackdropLuminance: Double? { backdropBox.withLock { $0.luminance } }
+
+    var hudBackdropState: HUDBackdropState { backdropBox.withLock { $0 } }
 
     nonisolated static func backdropSampleDue(now: UInt64, last: UInt64) -> Bool {
         last == 0 || now &- last >= backdropSampleIntervalNanos
@@ -62,15 +69,23 @@ extension VideoDecoder {
             state.lastSampleNanos = now
             return state.rect
         }
-        guard let rect = claimed,
-              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
-              let luminance = Self.backdropLuminance(of: pixelBuffer, in: rect) else { return }
-        backdropBox.withLock { $0.luminance = luminance }
+        guard let rect = claimed, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        let luminance = Self.backdropLuminance(of: pixelBuffer, in: rect)
+        let transfer = CVBufferCopyAttachment(pixelBuffer, kCVImageBufferTransferFunctionKey, nil) as? String
+        let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        backdropBox.withLock {
+            // A layout change or hide must not publish a reading from the old region.
+            guard $0.overlayEnabled, $0.rect == rect else { return }
+            $0.luminance = luminance
+            $0.pixelFormat = format
+            $0.transfer = transfer
+        }
     }
 
     nonisolated static func backdropLuminance(of pixelBuffer: CVPixelBuffer, in rect: CGRect) -> Double? {
         let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
-        guard CVPixelBufferGetPlaneCount(pixelBuffer) >= 2,
+        guard eightBitFormats.contains(format) || tenBitFormats.contains(format),
+              CVPixelBufferGetPlaneCount(pixelBuffer) >= 2,
               CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly) == kCVReturnSuccess else { return nil }
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else { return nil }
@@ -82,9 +97,15 @@ extension VideoDecoder {
             height: CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
             bitDepth: tenBitFormats.contains(format) ? 10 : 8,
             fullRange: fullRangeFormats.contains(format),
-            isPQ: (transfer as? String) == (kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ as String))
+            isPQ: (transfer as? String) == (kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ as String),
+            isHLG: (transfer as? String) == (kCVImageBufferTransferFunction_ITU_R_2100_HLG as String))
         return meanLuminance(of: plane, in: rect)
     }
+
+    private nonisolated static let eightBitFormats: Set<OSType> = [
+        kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+        kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange, kCVPixelFormatType_444YpCbCr8BiPlanarFullRange
+    ]
 
     private nonisolated static let tenBitFormats: Set<OSType> = [
         kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange, kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
@@ -122,13 +143,18 @@ extension VideoDecoder {
         return Int(plane.base.load(fromByteOffset: row + x, as: UInt8.self))
     }
 
-    /// SDR uses a 2.4 display gamma. PQ maps to nits over 203-nit reference white, so anything
-    /// brighter reads as 1; non-constant-luminance Y' only approximates true luminance.
+    /// HDR uses BT.2100 reference rendering relative to 203-nit diffuse white.
+    /// Non-constant-luminance Y' approximates luminance; macOS owns final display tone mapping.
     private nonisolated static func relativeLuminance(code: Int, plane: LumaPlane) -> Double {
         let scale = Double(1 << (plane.bitDepth - 8))
         let (black, range) = plane.fullRange
             ? (0.0, Double((1 << plane.bitDepth) - 1)) : (16 * scale, 219 * scale)
         let signal = min(max((Double(code) - black) / range, 0), 1)
+        if plane.isHLG {
+            let scene = signal <= 0.5 ? signal * signal / 3
+                : (exp((signal - 0.55991073) / 0.17883277) + 0.28466892) / 12
+            return min(1_000 * pow(scene, 1.2) / 203, 1)
+        }
         guard plane.isPQ else { return pow(signal, 2.4) }
         let root = pow(signal, 1 / 78.84375)
         let nits = 10_000 * pow(max(root - 0.8359375, 0) / (18.8515625 - 18.6875 * root), 1 / 0.1593017578125)

@@ -113,7 +113,8 @@ public final class VideoDecoder {
             log.info("Stats overlay \(self.statsOverlayEnabled ? "ON" : "OFF")")
             backdropBox.withLock { [enabled = statsOverlayEnabled] in
                 $0.overlayEnabled = enabled
-                if !enabled { $0.luminance = nil }
+                $0.luminance = nil
+                $0.lastSampleNanos = 0
             }
             onStatsOverlayEnabledChanged?(statsOverlayEnabled)
         }
