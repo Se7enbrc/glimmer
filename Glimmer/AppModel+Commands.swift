@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AppModel+Commands.swift
-//
-//  The running app's side of `glimmer stream` and `glimmer quit`: requests
-//  arrive over distributed notifications and go through the launcher's own
-//  entry points. Also quitting a PC's running app without streaming into it.
-//
+// Automation requests share the launcher entry points and the running session.
 
 import AppKit
 import Foundation
@@ -61,6 +55,7 @@ enum CommandChannel {
         static let id = "id"
         static let verb = "verb"
         static let host = "host"
+        static let pc = "pc"
         static let app = "app"
         static let takeover = "takeover"
         static let event = "event"
@@ -83,6 +78,7 @@ enum CommandChannel {
         case rejected(String)
         case ready
         case stop
+        case stopStreaming(String?)
         case wake(Host)
         case status
         case notMine
@@ -104,7 +100,9 @@ enum CommandChannel {
         guard let id = info[Key.id] else { return nil }
         // Status is read-only and polled often; don't retain every sample's request ID.
         if info[Key.verb] == "status" { return .status }
-        guard let hostID = info[Key.host], handled.insert(id).inserted else { return nil }
+        guard handled.insert(id).inserted else { return nil }
+        if info[Key.verb] == "stop" { return .stopStreaming(info[Key.pc]) }
+        guard let hostID = info[Key.host] else { return nil }
         switch info[Key.verb] {
         case "check":
             return streamingFrom == nil ? .ready : .rejected(alreadyStreaming)
@@ -170,6 +168,14 @@ extension AppModel {
             replyToCommand(id, CommandChannel.Event.accepted)
         case .stop:
             stopForCommand(id)
+        case .stopStreaming(let pc):
+            Task {
+                let result = await stopActiveStream(matching: pc, source: fromURL ? "a URL" : "the command line")
+                if fromURL, result != .stopped {
+                    Diag.notice("Ignored a stop URL without a matching active stream", "Commands")
+                }
+                replyToCommand(id, result.rawValue)
+            }
         case .wake(let host):
             Task {
                 await CLITerminal.$write.withValue({ _, _ in }, operation: {
@@ -353,5 +359,18 @@ extension AppModel {
     static func quitFailureMessage(for error: Error, hostName: String) -> String {
         if case .launchFailed(let detail) = error as? StreamError { return detail }
         return connectFailure(for: error, hostName: hostName).message
+    }
+
+    /// Match the session's PC, even when the launcher has selected a different one.
+    func stopActiveStream(matching pc: String? = nil, source: String) async -> CommandStopResult {
+        guard nativeSession != nil, !menuStopInProgress else { return .noActiveStream }
+        if let pc {
+            guard let active = lastLaunchAttempt?.host, GlimmerCLI.matchHost(pc, in: [active]) != nil else {
+                return .pcMismatch
+            }
+        }
+        guard let stop = stopStreamFromMenu(source: source) else { return .noActiveStream }
+        await stop.value
+        return .stopped
     }
 }

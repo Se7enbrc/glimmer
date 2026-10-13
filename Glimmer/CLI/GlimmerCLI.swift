@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  GlimmerCLI.swift
-//
-//  `glimmer <verb> ...`: moonlight-style commands run by the app binary itself,
-//  headless, through the app's own model. Text goes to stdout and stderr, the
-//  result to the exit code. Verbs live in GlimmerCLI+*.swift.
-//
+// The app binary also runs headless verbs through the same model and command channel.
 
 import AppKit
 import Foundation
@@ -16,7 +10,7 @@ import Foundation
 enum GlimmerCLI {
 
     enum Verb: String, Sendable {
-        case pair, list, status, stream, quit, wake, help
+        case pair, list, status, stream, stop, quit, wake, help
     }
 
     /// Exit codes shared by every verb.
@@ -26,6 +20,7 @@ enum GlimmerCLI {
         static let usage: Int32 = 2
         static let unreachable: Int32 = 3
         static let notPaired: Int32 = 4
+        static let noActiveStream: Int32 = 5
     }
 
     struct Command: Equatable, Sendable {
@@ -42,13 +37,14 @@ enum GlimmerCLI {
     nonisolated private static let allowedFlags: [Verb: Set<String>] = [
         .list: ["--csv", "--json"],
         .status: ["--json"],
+        .stop: ["--json"],
         .stream: ["--force", "--wait", "--exit-after-first-frame", "--json"],
         .wake: ["--wait"]
     ]
 
     nonisolated private static let arity: [Verb: ClosedRange<Int>] = [
         .status: 0...0, .pair: 1...1, .list: 0...1, .stream: 1...2,
-        .quit: 1...1, .wake: 1...1, .help: 0...1
+        .stop: 0...1, .quit: 1...1, .wake: 1...1, .help: 0...1
     ]
 
     nonisolated static let usage = """
@@ -64,12 +60,14 @@ enum GlimmerCLI {
             --wait                       Return when the stream ends
             --exit-after-first-frame     Return when the first frame arrives
             --json                       Print connect timings as one JSON line
+          stop [<pc>] [--json]           Stop this Mac's stream and quit its app on the PC
           quit <pc>                      Quit the app running on a PC
           wake <pc> [--wait]             Send Wake on LAN, and wait for the PC to answer
           help                           Show this help
 
         <pc> is a paired PC's name or address. Run glimmer with no command to open the app.
-        Exit status: 0 success, 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired.
+        Exit status: 0 success, 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired,
+                     5 no active stream.
         """
 
     /// Run as `glimmer` (the cask's link), it's always the CLI; otherwise a bare
@@ -140,6 +138,7 @@ enum GlimmerCLI {
             return Exit.ok
         }
         if command.verb == .status { return await status(command) }
+        if command.verb == .stop { return await stop(command) }
         // The app's launch order minus the UI. AppModel reads the screen, which
         // registers this process with the window server as Glimmer, so first
         // keep it out of the Dock and Cmd-Tab.
@@ -157,7 +156,7 @@ enum GlimmerCLI {
         case .stream: return await stream(command, model: model)
         case .quit: return await quit(command, model: model)
         case .wake: return await wake(command, model: model)
-        case .status, .help: return Exit.ok
+        case .status, .stop, .help: return Exit.ok
         }
     }
 

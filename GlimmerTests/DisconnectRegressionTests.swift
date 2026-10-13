@@ -20,8 +20,9 @@ struct DisconnectRegressionTests {
                 == (backgrounded ? .hiddenStream : .ready))
     }
 
-    @Test func disconnectOnlyCommandsAreNoLongerAccepted() {
-        #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["stop", "Tower"]) }
+    @Test func stopDoesNotOfferADisconnectOnlyMode() throws {
+        #expect(try GlimmerCLI.parse(["stop", "Tower"]) == .init(verb: .stop, arguments: ["Tower"]))
+        #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["stop", "Tower", "--disconnect"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["quit", "Tower", "--force"]) }
     }
 }

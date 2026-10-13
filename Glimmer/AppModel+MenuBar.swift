@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AppModel+MenuBar.swift
-//
-//  What the menu bar reads and the few actions only it needs: icon state, the
-//  first row, the selected PC as the launcher reads it, the pads, Connection
-//  Details (refreshed while the menu is open), stop, overlay, pairing, takeover.
-//
+// The menu bar reads launcher state and shares its actions with automation.
 
 import AppKit
 import Foundation
@@ -54,11 +48,12 @@ extension AppModel {
     }
 
     /// Ends the stream at once; the row reads "Stopping…" until cleanup lands.
-    func stopStreamFromMenu(source: String = "the menu bar") {
-        guard let session = nativeSession, !menuStopInProgress else { return }
+    @discardableResult
+    func stopStreamFromMenu(source: String = "the menu bar") -> Task<Void, Never>? {
+        guard let session = nativeSession, !menuStopInProgress else { return nil }
         menuStopInProgress = true
         Diag.notice("Stop Streaming from \(source)", "Stream")
-        Task { await session.stop() }
+        return Task { await session.stop() }
     }
 
     func toggleStatsOverlayFromMenu() {

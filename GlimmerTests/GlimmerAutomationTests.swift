@@ -32,7 +32,7 @@ struct GlimmerAutomationTests {
     }
 
     @Test(arguments: [
-        "glimmer://pair?pc=Den", "glimmer://stop?pc=Den", "glimmer://unknown?pc=Den", "https://stream?pc=Den",
+        "glimmer://pair?pc=Den", "glimmer://unknown?pc=Den", "https://stream?pc=Den",
         "glimmer://stream", "glimmer://stream?pc=", "glimmer://stream?pc=%20",
         "glimmer://stream?pc", "glimmer://stream?pc=Den&pc=Other", "glimmer://stream?pc=Den&app=",
         "glimmer://stream?pc=Den&app=A&app=B", "glimmer://stream?pc=Den&force=1",

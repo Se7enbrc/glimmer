@@ -447,6 +447,7 @@
 		DEC0DE2026101000000A11 /* ModelTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101000000A12 /* ModelTypesTests.swift */; };
 		DEC0DE2026101000000A21 /* AppModelDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101000000A22 /* AppModelDecisionTests.swift */; };
 		DEC0DE2026101000000A31 /* GlimmerCLIContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026101000000A32 /* GlimmerCLIContractTests.swift */; };
+		DEC0DE20261013B000000002 /* GlimmerStopTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261013A000000002 /* GlimmerStopTests.swift */; };
 		DEC0DE20261011B000000003 /* GlimmerAutomationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261011A000000003 /* GlimmerAutomationTests.swift */; };
 		DEC0DE202609253500000002 /* HostRouteMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609253500000001 /* HostRouteMonitorTests.swift */; };
 		DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */; };
@@ -498,6 +499,7 @@
 		DEC0DE202609220100000006 /* GlimmerCLI+List.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000005 /* GlimmerCLI+List.swift */; };
 		DEC0DE20261011B000000002 /* AppModel+CommandURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261011A000000002 /* AppModel+CommandURL.swift */; };
 		DEC0DE20261011B000000001 /* GlimmerCLI+JSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261011A000000001 /* GlimmerCLI+JSON.swift */; };
+		DEC0DE20261013B000000001 /* GlimmerCLI+Stop.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261013A000000001 /* GlimmerCLI+Stop.swift */; };
 		DEC0DE20261011B000000000 /* GlimmerCLI+URL.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261011A000000000 /* GlimmerCLI+URL.swift */; };
 		DEC0DE202609220100000008 /* GlimmerCLI+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000007 /* GlimmerCLI+Commands.swift */; };
 		DEC0DE202609220100000010 /* GlimmerCLI+Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220100000009 /* GlimmerCLI+Stream.swift */; };
@@ -811,6 +813,7 @@
 		DEC0DE202609220100000005 /* GlimmerCLI+List.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI/GlimmerCLI+List.swift"; sourceTree = "<group>"; };
 		DEC0DE20261011A000000002 /* AppModel+CommandURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+CommandURL.swift"; sourceTree = "<group>"; };
 		DEC0DE20261011A000000001 /* GlimmerCLI+JSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI/GlimmerCLI+JSON.swift"; sourceTree = "<group>"; };
+		DEC0DE20261013A000000001 /* GlimmerCLI+Stop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI/GlimmerCLI+Stop.swift"; sourceTree = "<group>"; };
 		DEC0DE20261011A000000000 /* GlimmerCLI+URL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI/GlimmerCLI+URL.swift"; sourceTree = "<group>"; };
 		DEC0DE202609220100000007 /* GlimmerCLI+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI/GlimmerCLI+Commands.swift"; sourceTree = "<group>"; };
 		DEC0DE202609220100000009 /* GlimmerCLI+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI/GlimmerCLI+Stream.swift"; sourceTree = "<group>"; };
@@ -1063,6 +1066,7 @@
 		DEC0DE2026101000000A12 /* ModelTypesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ModelTypesTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026101000000A22 /* AppModelDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModelDecisionTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026101000000A32 /* GlimmerCLIContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerCLIContractTests.swift"; sourceTree = "<group>"; };
+		DEC0DE20261013A000000002 /* GlimmerStopTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerStopTests.swift"; sourceTree = "<group>"; };
 		DEC0DE20261011A000000003 /* GlimmerAutomationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerAutomationTests.swift"; sourceTree = "<group>"; };
 		DEC0DE202609253500000001 /* HostRouteMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostRouteMonitorTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollQuantizerTests.swift"; sourceTree = "<group>"; };
@@ -1544,6 +1548,7 @@
 				DEC0DE202609220100000005 /* GlimmerCLI+List.swift */,
 				DEC0DE20261011A000000002 /* AppModel+CommandURL.swift */,
 				DEC0DE20261011A000000001 /* GlimmerCLI+JSON.swift */,
+				DEC0DE20261013A000000001 /* GlimmerCLI+Stop.swift */,
 				DEC0DE20261011A000000000 /* GlimmerCLI+URL.swift */,
 				DEC0DE202609220100000007 /* GlimmerCLI+Commands.swift */,
 				DEC0DE202609220100000009 /* GlimmerCLI+Stream.swift */,
@@ -1709,6 +1714,7 @@
 				DEC0DE2026101000000A12 /* ModelTypesTests.swift */,
 				DEC0DE2026101000000A22 /* AppModelDecisionTests.swift */,
 				DEC0DE2026101000000A32 /* GlimmerCLIContractTests.swift */,
+				DEC0DE20261013A000000002 /* GlimmerStopTests.swift */,
 				DEC0DE20261011A000000003 /* GlimmerAutomationTests.swift */,
 				DEC0DE202609253500000001 /* HostRouteMonitorTests.swift */,
 				DEC0DE2026092000000000E0 /* ScrollQuantizerTests.swift */,
@@ -2256,6 +2262,7 @@
 				DEC0DE202609220100000006 /* GlimmerCLI+List.swift in Sources */,
 				DEC0DE20261011B000000002 /* AppModel+CommandURL.swift in Sources */,
 				DEC0DE20261011B000000001 /* GlimmerCLI+JSON.swift in Sources */,
+				DEC0DE20261013B000000001 /* GlimmerCLI+Stop.swift in Sources */,
 				DEC0DE20261011B000000000 /* GlimmerCLI+URL.swift in Sources */,
 				DEC0DE202609220100000008 /* GlimmerCLI+Commands.swift in Sources */,
 				DEC0DE202609220100000010 /* GlimmerCLI+Stream.swift in Sources */,
@@ -2411,6 +2418,7 @@
 				DEC0DE2026101000000A11 /* ModelTypesTests.swift in Sources */,
 				DEC0DE2026101000000A21 /* AppModelDecisionTests.swift in Sources */,
 				DEC0DE2026101000000A31 /* GlimmerCLIContractTests.swift in Sources */,
+				DEC0DE20261013B000000002 /* GlimmerStopTests.swift in Sources */,
 				DEC0DE20261011B000000003 /* GlimmerAutomationTests.swift in Sources */,
 				DEC0DE202609253500000002 /* HostRouteMonitorTests.swift in Sources */,
 				DEC0DE2026092000000000DF /* ScrollQuantizerTests.swift in Sources */,

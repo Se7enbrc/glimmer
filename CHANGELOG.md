@@ -4,6 +4,9 @@
 
 ### Features
 
+- Stop the current stream and quit its game on the PC from a `glimmer://stop`
+  link, `glimmer stop` or the Stop Streaming shortcut.
+
 - Smoother motion when the PC can't hold your display's refresh rate. On a
   variable-refresh display, refresh changes settle before taking effect and stay
   in a high range to reduce brightness flicker. On a fixed display, repeated
