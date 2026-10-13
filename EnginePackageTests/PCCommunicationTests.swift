@@ -161,6 +161,93 @@ struct PCCommunicationTests {
         }
     }
 
+    @Test func publicPinStorageRequiresAvailabilityAndKeepsSavedPin() throws {
+        let store = try Store()
+        defer { store.remove() }
+        try PinnedCertStore.store(pem: "saved-pin", forHostID: "pc", defaults: store.defaults,
+                                  base: store.root, protectedDataAvailable: { true })
+        #expect(throws: IdentityStorageError.self) {
+            try PinnedCertStore.load(forHostID: "pc", defaults: store.defaults,
+                                     base: store.root, protectedDataAvailable: { false })
+        }
+        #expect(throws: IdentityStorageError.self) {
+            try PinnedCertStore.store(pem: "replacement", forHostID: "pc", defaults: store.defaults,
+                                      base: store.root, protectedDataAvailable: { false })
+        }
+        #expect(throws: IdentityStorageError.self) {
+            try PinnedCertStore.delete(forHostID: "pc", defaults: store.defaults,
+                                       base: store.root, protectedDataAvailable: { false })
+        }
+        #expect(try PinnedCertStore.load(forHostID: "pc", defaults: store.defaults,
+                                        base: store.root, protectedDataAvailable: { true }) == "saved-pin")
+    }
+
+    @Test func publicPinStorageDistinguishesMissingFromUnreadable() throws {
+        let store = try Store()
+        defer { store.remove() }
+        #expect(try PinnedCertStore.load(forHostID: "pc", defaults: store.defaults,
+                                        base: store.root, protectedDataAvailable: { true }) == nil)
+        try PinnedCertStore.store(pem: "saved-pin", forHostID: "pc", defaults: store.defaults,
+                                  base: store.root, protectedDataAvailable: { true })
+        let pin = store.root.appendingPathComponent("Glimmer/PinnedHosts/pc.pem")
+        try Data([0xFF]).write(to: pin)
+        store.defaults.set("legacy-pin", forKey: "glimmer.pinnedCert.pc")
+        #expect(throws: StreamError.self) {
+            try PinnedCertStore.load(forHostID: "pc", defaults: store.defaults,
+                                     base: store.root, protectedDataAvailable: { true })
+        }
+        #expect(try Data(contentsOf: pin) == Data([0xFF]))
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.pc") == "legacy-pin")
+    }
+
+    @Test func publicPinStorageReportsReadFailureWithoutReplacingIt() throws {
+        let store = try Store()
+        defer { store.remove() }
+        let pin = store.root.appendingPathComponent("Glimmer/PinnedHosts/pc.pem", isDirectory: true)
+        try FileManager.default.createDirectory(at: pin, withIntermediateDirectories: true)
+        store.defaults.set("legacy-pin", forKey: "glimmer.pinnedCert.pc")
+        #expect(throws: (any Error).self) {
+            try PinnedCertStore.load(forHostID: "pc", defaults: store.defaults,
+                                     base: store.root, protectedDataAvailable: { true })
+        }
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.pc") == "legacy-pin")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: pin.path).isEmpty)
+    }
+
+    @Test func publicPinStorageReportsDeletionFailureAndKeepsLegacyPin() throws {
+        let store = try Store()
+        defer { store.remove() }
+        try PinnedCertStore.store(pem: "saved-pin", forHostID: "pc", defaults: store.defaults,
+                                  base: store.root, protectedDataAvailable: { true })
+        store.defaults.set("legacy-pin", forKey: "glimmer.pinnedCert.pc")
+        let directory = store.root.appendingPathComponent("Glimmer/PinnedHosts", isDirectory: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
+        #expect(throws: (any Error).self) {
+            try PinnedCertStore.delete(forHostID: "pc", defaults: store.defaults,
+                                       base: store.root, protectedDataAvailable: { true })
+        }
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.pc") == "legacy-pin")
+        #expect(try PinnedCertStore.load(forHostID: "pc", defaults: store.defaults,
+                                        base: store.root, protectedDataAvailable: { true }) == "saved-pin")
+    }
+
+    @Test func publicPinStorageMigratesAndDeletesBothStores() throws {
+        let store = try Store()
+        defer { store.remove() }
+        store.defaults.set("legacy-pin", forKey: "glimmer.pinnedCert.pc")
+        #expect(try PinnedCertStore.load(forHostID: "pc", defaults: store.defaults,
+                                        base: store.root, protectedDataAvailable: { true }) == "legacy-pin")
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.pc") == nil)
+        store.defaults.set("stale-pin", forKey: "glimmer.pinnedCert.pc")
+        try PinnedCertStore.delete(forHostID: "pc", defaults: store.defaults,
+                                   base: store.root, protectedDataAvailable: { true })
+        try PinnedCertStore.delete(forHostID: "pc", defaults: store.defaults,
+                                   base: store.root, protectedDataAvailable: { true })
+        #expect(try PinnedCertStore.load(forHostID: "pc", defaults: store.defaults,
+                                        base: store.root, protectedDataAvailable: { true }) == nil)
+    }
+
     private struct Store {
         let suite: String
         let defaults: UserDefaults
