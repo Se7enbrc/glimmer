@@ -78,8 +78,10 @@ final class TelemetryCaptureTests {
         return TelemetryExporter(source: source(), serverName: Self.pcName, outputDirectory: dir, counters: counters)
     }
 
-    private func capture(_ exporter: TelemetryExporter) throws -> (TelemetrySnapshot, TelemetrySnapshot.Extras) {
-        exporter.workQueue.sync { exporter.capture() }
+    private func capture(
+        _ exporter: TelemetryExporter, now: DispatchTime = .now()
+    ) throws -> (TelemetrySnapshot, TelemetrySnapshot.Extras) {
+        exporter.workQueue.sync { exporter.capture(now: now) }
         return try #require(exporter.workQueue.sync { exporter.latestSample })
     }
 
@@ -150,13 +152,13 @@ final class TelemetryCaptureTests {
         #expect(audio.packetsTotal == 50 && audio.lossRate == nil)
     }
 
-    @Test func secondTickDerivesRatesFromTheDeltas() async throws {
+    @Test func secondTickDerivesRatesFromTheDeltas() throws {
         let counters = TelemetryCounters()
         counters.videoPacketsTotal.increment(by: 1000)
         counters.audioPacketsTotal.increment(by: 50)
         let exporter = exporter(in: dir, counters: counters)
-        _ = try capture(exporter)
-        try await Task.sleep(for: .milliseconds(80))
+        let start = exporter.connectInstant
+        _ = try capture(exporter, now: start)
         counters.videoPacketsTotal.increment(by: 900)
         counters.videoPacketsLostPreFecTotal.increment(by: 100)
         counters.videoPacketsOutOfOrderTotal.increment(by: 45)
@@ -167,12 +169,12 @@ final class TelemetryCaptureTests {
         counters.audioPacketsLostTotal.increment(by: 5)
         counters.audioFecRecoveredTotal.increment(by: 3)
         counters.corruptionHeuristicTotal.increment(by: 4)
-        let (snap, _) = try capture(exporter)
+        let (snap, _) = try capture(exporter, now: start + .milliseconds(80))
         #expect(snap.preFecLossRate == 100.0 / 1000.0)
         #expect(snap.outOfOrderRate == 45.0 / 900.0)
         #expect(snap.duplicateRate == 9.0 / 900.0)
         #expect(snap.fecRecoveryRate == 5.0 / 50.0)
-        #expect((snap.corruptionPerSecond ?? 0) > 0)
+        #expect(snap.corruptionPerSecond == 50)
         let audio = try #require(snap.audio)
         #expect(audio.packetsTotal == 145)
         #expect(audio.lossRate == 5.0 / 100.0)

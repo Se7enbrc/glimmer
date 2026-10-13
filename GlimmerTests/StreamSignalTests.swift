@@ -80,14 +80,19 @@ struct StreamSignalTests {
     // MARK: Linger hint
 
     /// A pill that stays up earns the way out; a fresh show starts without it.
-    @Test func aStuckPillSaysHowToLeave() async {
+    @Test func aStuckPillSaysHowToLeave() throws {
         let (pill, _, _) = banner()
-        pill.lingerDelay = 0
+        var callbacks: [@MainActor () -> Void] = []
+        pill.scheduleLingerDelay = { delay, action in
+            #expect(delay == 5)
+            callbacks.append(action)
+        }
         pill.lingerHint = { "Press ⌃⌥Q to stop streaming" }
         pill.setText("Reconnecting…")
         pill.setVisible(true)
         #expect(pill.displayedText == "Reconnecting…")
-        try? await Task.sleep(for: .milliseconds(50))
+        let linger = try #require(callbacks.first)
+        linger()
         #expect(pill.displayedText == "Reconnecting… · Press ⌃⌥Q to stop streaming")
 
         pill.setText("Waiting for video…")
@@ -95,28 +100,35 @@ struct StreamSignalTests {
 
         pill.setVisible(false)
         pill.setVisible(true)
+        linger()
         #expect(pill.displayedText == "Waiting for video…")
     }
 
     /// A pill hidden before its linger delay never grows the hint.
-    @Test func aHiddenPillDoesNotLinger() async {
+    @Test func aHiddenPillDoesNotLinger() throws {
         let (pill, _, _) = banner()
-        pill.lingerDelay = 0.02
+        var callback: (@MainActor () -> Void)?
+        pill.scheduleLingerDelay = { delay, action in
+            #expect(delay == 5)
+            callback = action
+        }
         pill.lingerHint = { "Press ⌃⌥Q to stop streaming" }
         pill.setText("Reconnecting…")
         pill.setVisible(true)
         pill.setVisible(false)
-        try? await Task.sleep(for: .milliseconds(80))
+        let linger = try #require(callback)
+        linger()
         #expect(pill.displayedText == "Reconnecting…")
     }
 
     /// Pills without a hint (the network pill) never change their text.
-    @Test func aPillWithoutAHintNeverGrows() async {
+    @Test func aPillWithoutAHintNeverGrows() {
         let (pill, _, _) = banner()
-        pill.lingerDelay = 0
+        var scheduled = false
+        pill.scheduleLingerDelay = { _, _ in scheduled = true }
         pill.setText("Stream stuttering")
         pill.setVisible(true)
-        try? await Task.sleep(for: .milliseconds(50))
+        #expect(!scheduled)
         #expect(pill.displayedText == "Stream stuttering")
     }
 

@@ -135,16 +135,15 @@ struct TimedLatencyTests {
 
     /// Merged motion held back by a stalled reliable channel ages until an edge event drains it.
     @Test func heldMotionReportsItsQueueAgeWhenAnEdgeDrainsIt() throws {
-        // Every read is 7 ms after the last: the stamp, then the drain's two reads.
-        let clock = ScriptedClock(step: .milliseconds(7))
+        let scheduler = InputBatcherScheduler()
         let tracker = FrameTimingTracker(sessionId: "t", counters: TelemetryCounters())
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
                                          crypto: try ControlCrypto(rikey: EnetFixture.key))
         EnetFixture.connect(channel)
         channel.reliableBackloggedFlag.store(true, ordering: .relaxed)
-        let batcher = InputBatcher(enet: channel, now: { DispatchTime(uptimeNanoseconds: clock.now()) },
-                                   tracker: { tracker })
+        let batcher = scheduler.makeBatcher(enet: channel, tracker: { tracker })
         _ = batcher.accumulateMouseMove(dx: 5, dy: 0)
+        scheduler.clock.advance(.milliseconds(14))
         _ = batcher.passThrough(
             InputEncoder.mouseButton(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: 1),
             channel: Enet.ctrlChannelMouse)

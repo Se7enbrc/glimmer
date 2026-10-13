@@ -44,6 +44,9 @@ public final class StreamBannerLayer {
     /// stream says how to leave it. Nil for pills that never linger.
     var lingerHint: (@MainActor () -> String)?
     var lingerDelay: TimeInterval = 5
+    var scheduleLingerDelay: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, action in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: action)
+    }
     /// VoiceOver can't focus a CALayer, so shown and changed text is announced.
     var announce: @MainActor (String) -> Void = { AccessibilityNotification.Announcement($0).post() }
 
@@ -181,7 +184,7 @@ public final class StreamBannerLayer {
     private func scheduleLinger() {
         guard lingerHint != nil else { return }
         let generation = showGeneration
-        DispatchQueue.main.asyncAfter(deadline: .now() + lingerDelay) { [weak self] in
+        scheduleLingerDelay(lingerDelay) { [weak self] in
             guard let self, self.visible, self.showGeneration == generation else { return }
             self.lingered = true
             self.render()

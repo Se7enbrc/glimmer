@@ -31,13 +31,21 @@ struct StreamWindowFirstFrameTests {
         #expect(!stream.awaitingFirstFrameFadeIn)
     }
 
-    @Test func aDroppedSpaceSettlementCannotStrandTheFirstPicture() async throws {
+    @Test func aDroppedSpaceSettlementCannotStrandTheFirstPicture() throws {
         let stream = StreamWindow()
+        var settle: (@MainActor () -> Void)?
+        stream.scheduleCoverSettlement = { delay, action in
+            #expect(delay == 1.5)
+            settle = action
+        }
         stream.coversNotch = false
         stream.awaitingFirstFrameFadeIn = true
         stream.streamDelegate.closeState.transition = .entering
         stream.fadeInOnFirstFrame()
-        try await Task.sleep(for: .milliseconds(1_600))
+        #expect(stream.pendingFirstFrameReveal)
+        #expect(stream.awaitingFirstFrameFadeIn)
+        let fallback = try #require(settle)
+        fallback()
         #expect(!stream.pendingFirstFrameReveal)
         #expect(!stream.awaitingFirstFrameFadeIn)
     }

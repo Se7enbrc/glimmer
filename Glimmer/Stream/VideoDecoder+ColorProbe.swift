@@ -50,10 +50,11 @@ extension VideoDecoder {
             + "local=\(String(describing: local))"
     }
 
-    nonisolated func finishColorProbe(_ probe: ColorProbe?, pixelBuffer: CVPixelBuffer) {
-        guard let probe else { return }
+    @discardableResult
+    nonisolated func finishColorProbe(_ probe: ColorProbe?, pixelBuffer: CVPixelBuffer) -> Task<Void, Never>? {
+        guard let probe else { return nil }
         let final = colorAttachmentSummary(pixelBuffer)
-        Task { @MainActor [weak self] in
+        return Task { @MainActor [weak self] in
             self?.configureLayerColorspace()
             self?.logColorProbe(probe, final: final)
         }
@@ -63,9 +64,10 @@ extension VideoDecoder {
         colorDisplayProbeTask?.cancel()
         logDisplayTransition(after: 0, headroom: headroom?())
         guard isHDRActive else { return }
+        let sleep = colorProbeSleep
         colorDisplayProbeTask = Task { @MainActor [weak self] in
             for seconds in [1, 3, 5] {
-                do { try await Task.sleep(for: .seconds(seconds == 1 ? 1 : 2)) } catch { return }
+                do { try await sleep(.seconds(seconds == 1 ? 1 : 2)) } catch { return }
                 guard let self, self.isHDRActive else { return }
                 self.logDisplayTransition(after: seconds, headroom: headroom?())
             }
@@ -82,12 +84,12 @@ extension VideoDecoder {
     private func logDisplayTransition(after seconds: Int, headroom: (current: Double, potential: Double)?) {
         let values = headroom ?? displayHeadroom()
         let outputHDR = VideoColorDescription.hdrDisplayOutput(inputHDR: isHDRActive, currentEDR: values.current)
-        Diag.notice("Colour display transition: after=\(seconds)s currentEDR=\(values.current) "
+        colorProbeLog("Colour display transition: after=\(seconds)s currentEDR=\(values.current) "
             + "potentialEDR=\(values.potential) hdrInput=\(isHDRActive) hdrOutput=\(outputHDR) "
-            + "preferredDynamicRange=\(displayLayer?.preferredDynamicRange.rawValue ?? "absent")", "Stream")
+            + "preferredDynamicRange=\(displayLayer?.preferredDynamicRange.rawValue ?? "absent")", false)
         if seconds == 5 && isHDRActive && !outputHDR {
-            Diag.warn("HDR input has no EDR headroom: currentEDR=\(values.current) "
-                + "potentialEDR=\(values.potential)", "Stream")
+            colorProbeLog("HDR input has no EDR headroom: currentEDR=\(values.current) "
+                + "potentialEDR=\(values.potential)", true)
         }
     }
 
@@ -98,17 +100,17 @@ extension VideoDecoder {
         let format = String(probe.videoFormat, radix: 16)
         let codec = Self.codecLabel(for: probe.videoFormat)
         let pixelFormat = fourCCString(from: probe.state.pixelFormat)
-        Diag.notice("Colour probe: requestedCSC=\(csc) colorSpace=\(requestedColorSpace.cValue) "
+        colorProbeLog("Colour probe: requestedCSC=\(csc) colorSpace=\(requestedColorSpace.cValue) "
             + "colorRange=\(requestedColorRange.cValue) codec=\(codec) videoFormat=0x\(format) bitDepth=\(depth) "
             + "controlHDR=\(probe.state.controlHDR) pixelFormat=\(pixelFormat) "
-            + "resolved=\(probe.state.resolved.summary)", "Stream")
-        Diag.notice("Colour probe raw format: \(probe.rawFormat)", "Stream")
-        Diag.notice("Colour probe raw attachments: \(probe.rawAttachments)", "Stream")
-        Diag.notice("Colour probe final attachments: \(final)", "Stream")
+            + "resolved=\(probe.state.resolved.summary)", false)
+        colorProbeLog("Colour probe raw format: \(probe.rawFormat)", false)
+        colorProbeLog("Colour probe raw attachments: \(probe.rawAttachments)", false)
+        colorProbeLog("Colour probe final attachments: \(final)", false)
         let outputHDR = VideoColorDescription.hdrDisplayOutput(
             inputHDR: probe.state.resolved.isHDR, currentEDR: Double(current))
-        Diag.notice("Colour probe display: currentEDR=\(current) potentialEDR=\(potential) "
+        colorProbeLog("Colour probe display: currentEDR=\(current) potentialEDR=\(potential) "
             + "hdrInput=\(probe.state.resolved.isHDR) hdrOutput=\(outputHDR) "
-            + "preferredDynamicRange=\(displayLayer?.preferredDynamicRange.rawValue ?? "absent")", "Stream")
+            + "preferredDynamicRange=\(displayLayer?.preferredDynamicRange.rawValue ?? "absent")", false)
     }
 }

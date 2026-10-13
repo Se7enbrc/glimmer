@@ -439,6 +439,10 @@ struct VideoDecoderColorTransitionTests {
     @Test(arguments: [false, true])
     func displayReprobesStopAtSDROrTeardown(teardown: Bool) async throws {
         let decoder = VideoDecoder()
+        let delay = TestDelay()
+        decoder.colorProbeSleep = delay.sleep
+        decoder.colorProbeLog = { _, _ in }
+        var requests = delay.requests.stream.makeAsyncIterator()
         decoder.attach(to: AVSampleBufferDisplayLayer())
         defer { decoder.teardown() }
         let buffer = try makeTaggedPixelBuffer(primaries: bt2020, transfer: pq)
@@ -446,18 +450,25 @@ struct VideoDecoderColorTransitionTests {
         decoder.resolvedColor.withLock { $0 = color }
         var probes = 0
         decoder.configureLayerColorspace(headroom: { probes += 1; return (1, 4) })
+        let task = try #require(decoder.colorDisplayProbeTask)
+        #expect(await requests.next() == .seconds(1))
         if teardown {
             decoder.teardown()
         } else {
             decoder.resolvedColor.withLock { $0 = nil }
             decoder.configureLayerColorspace()
         }
-        try await Task.sleep(for: .milliseconds(1_100))
+        delay.resume()
+        await task.value
+        #expect(task.isCancelled)
         #expect(probes == 1)
     }
 
     @Test func probeAppliesDynamicRangeBeforeLogging() async throws {
         let decoder = VideoDecoder()
+        decoder.colorProbeSleep = { _ in throw CancellationError() }
+        var rows: [String] = []
+        decoder.colorProbeLog = { message, _ in rows.append(message.text) }
         let layer = AVSampleBufferDisplayLayer()
         decoder.attach(to: layer)
         layer.preferredDynamicRange = .standard
@@ -466,30 +477,42 @@ struct VideoDecoderColorTransitionTests {
         let color = decoder.resolveColorDescription(for: buffer, controlHDR: false)
         decoder.resolvedColor.withLock { $0 = color }
         let probe = try #require(decoder.beginColorProbe(buffer, color: color, controlHDR: false))
-        decoder.finishColorProbe(probe, pixelBuffer: buffer)
-        try await Task.sleep(for: .milliseconds(100))
-        let row = try #require(LogStore.shared.snapshot().last { $0.message.hasPrefix("Colour probe display:") })
-        #expect(row.message.contains("preferredDynamicRange=high"))
+        let task = try #require(decoder.finishColorProbe(probe, pixelBuffer: buffer))
+        await task.value
+        let row = try #require(rows.last { $0.hasPrefix("Colour probe display:") })
+        #expect(row.contains("preferredDynamicRange=high"))
         #expect(layer.preferredDynamicRange == .high)
     }
 
     @Test func hdrTransitionReprobesDisplayHeadroom() async throws {
         let decoder = VideoDecoder()
+        let delay = TestDelay()
+        decoder.colorProbeSleep = delay.sleep
+        var rows: [String] = []
+        var warnings: [String] = []
+        decoder.colorProbeLog = { message, warning in
+            if warning { warnings.append(message.text) } else { rows.append(message.text) }
+        }
+        var requests = delay.requests.stream.makeAsyncIterator()
         decoder.attach(to: AVSampleBufferDisplayLayer())
         defer { decoder.teardown() }
         let buffer = try makeTaggedPixelBuffer(primaries: bt2020, transfer: pq)
         let color = decoder.resolveColorDescription(for: buffer, controlHDR: false)
         decoder.resolvedColor.withLock { $0 = color }
         decoder.configureLayerColorspace(headroom: { (1, 4) })
-        try await Task.sleep(for: .milliseconds(5_200))
-        let rows = LogStore.shared.snapshot().filter { $0.message.hasPrefix("Colour display transition:") }
-        #expect(LogStore.shared.snapshot().contains {
-            $0.message.contains("HDR input has no EDR headroom") && $0.message.contains("potentialEDR=4.0")
-        })
-        for seconds in [0, 1, 3, 5] {
-            #expect(rows.contains { $0.message.contains("after=\(seconds)s")
-                && $0.message.contains("potentialEDR=") && $0.message.contains("hdrInput=true") })
+        let task = try #require(decoder.colorDisplayProbeTask)
+        for (index, seconds) in [1, 2, 2].enumerated() {
+            #expect(await requests.next() == .seconds(seconds))
+            #expect(rows.count == index + 1)
+            #expect(warnings.isEmpty)
+            delay.resume()
         }
+        await task.value
+        #expect(warnings == ["HDR input has no EDR headroom: currentEDR=1.0 potentialEDR=4.0"])
+        #expect(rows == [0, 1, 3, 5].map {
+            "Colour display transition: after=\($0)s currentEDR=1.0 potentialEDR=4.0 "
+                + "hdrInput=true hdrOutput=false preferredDynamicRange=high"
+        })
     }
 
     @Test func inputHDRSurvivesMovementWhileOutputTracksCurrentEDR() {

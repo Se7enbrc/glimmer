@@ -6,11 +6,11 @@
 import GlimmerEngine
 import CryptoKit
 import Foundation
-import os
 import Testing
 @testable import Glimmer
 
 struct InputBatcherTests {
+    private let scheduler = InputBatcherScheduler()
     private static let key = Array(0..<16).map { UInt8($0) }
 
     private static func makeChannel(backlogged: Bool = true) throws -> EnetControlChannel {
@@ -21,25 +21,28 @@ struct InputBatcherTests {
         return channel
     }
 
-    @Test func backpressureCannotHoldMotionIndefinitely() async throws {
+    @Test func backpressureCannotHoldMotionIndefinitely() throws {
         let channel = try Self.makeChannel()
-        let clock = OSAllocatedUnfairLock(initialState: UInt64(1))
         let probes = AtomicCounter()
-        let batcher = InputBatcher(enet: channel,
-            now: { DispatchTime(uptimeNanoseconds: clock.withLock { $0 }) },
+        let batcher = scheduler.makeBatcher(enet: channel,
             backpressure: { _ in probes.increment(); return true })
         defer { batcher.stop() }
         #expect(batcher.accumulateMouseMove(dx: 5, dy: -2) == 0)
-        for _ in 0..<100 where probes.value < 2 { try await Task.sleep(for: .milliseconds(1)) }
-        try #require(probes.value >= 2)
+        try scheduler.fire()
+        try scheduler.fire()
+        #expect(probes.value == 2)
         #expect(channel.withState { channel.sentReliable.isEmpty })
         for _ in 0..<EnetControlChannel.maxInFlightSends { channel.inFlightSends.increment() }
-        clock.withLock { $0 += 10_000_000 }
+        for _ in 0..<10 { try scheduler.fire() }
         let before = probes.value
-        for _ in 0..<100 where probes.value < before + 2 { try await Task.sleep(for: .milliseconds(1)) }
+        try scheduler.fire()
+        try scheduler.fire()
+        #expect(probes.value == before + 2)
         #expect(channel.withState { channel.sentReliable.isEmpty })
         for _ in 0..<EnetControlChannel.maxInFlightSends { channel.inFlightSends.decrement() }
-        #expect(try await Self.waitForMotion(channel, dx: 5, dy: -2))
+        try scheduler.fire()
+        let moved = try Self.motion(in: Self.sentPayloads(channel))
+        #expect(moved.dx == 5 && moved.dy == -2)
     }
 
     /// The InputEncoder bytes inside each sealed SEND_RELIABLE command, in wire order.
@@ -62,18 +65,9 @@ struct InputBatcherTests {
         }
     }
 
-    private static func waitForMotion(_ channel: EnetControlChannel, dx: Int, dy: Int) async throws -> Bool {
-        for _ in 0..<500 {
-            let moved = try motion(in: sentPayloads(channel))
-            if moved.dx == dx, moved.dy == dy { return true }
-            try await Task.sleep(for: .milliseconds(4))
-        }
-        return false
-    }
-
     @Test func clickFollowsPendingPositionDuringBackpressure() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         _ = batcher.setAbsMouse(x: 100, y: 100, refW: 1920, refH: 1080)
         _ = batcher.passThrough(
             InputEncoder.mouseButton(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: 1),
@@ -88,7 +82,7 @@ struct InputBatcherTests {
 
     @Test func relativeMotionFollowsPendingPositionDuringBackpressure() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         _ = batcher.setAbsMouse(x: 100, y: 100, refW: 1920, refH: 1080)
         _ = batcher.accumulateMouseMove(dx: 5, dy: 0)
         batcher.stop()
@@ -98,7 +92,7 @@ struct InputBatcherTests {
 
     @Test func absolutePositionFollowsPendingMotionDuringBackpressure() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         _ = batcher.accumulateMouseMove(dx: 5, dy: 0)
         _ = batcher.setAbsMouse(x: 100, y: 100, refW: 1920, refH: 1080)
         batcher.stop()
@@ -106,45 +100,56 @@ struct InputBatcherTests {
         #expect(channel.withState { channel.sentReliable.count } == 1)
     }
 
-    @Test func timerSendsEveryMoveAndRearmsAfterIdle() async throws {
+    @Test func timerSendsEveryMoveAndRearmsAfterIdle() throws {
         let channel = try Self.makeChannel(backlogged: false)
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         defer { batcher.stop() }
         for _ in 0..<50 { _ = batcher.accumulateMouseMove(dx: 3, dy: -1) }
-        #expect(try await Self.waitForMotion(channel, dx: 150, dy: -50))
+        #expect(scheduler.deadline?.uptimeNanoseconds == scheduler.clock.nanos + 1_000_000)
+        #expect(try Self.sentPayloads(channel).isEmpty)
+        try scheduler.fire()
+        #expect(try Self.sentPayloads(channel) == [InputEncoder.mouseMove(dx: 150, dy: -50)])
+        #expect(scheduler.deadline == nil)
 
-        try await Task.sleep(for: .milliseconds(20))
+        scheduler.clock.advance(.milliseconds(20))
         for _ in 0..<10 { _ = batcher.accumulateMouseMove(dx: 3, dy: -1) }
-        #expect(try await Self.waitForMotion(channel, dx: 180, dy: -60))
-    }
-
-    private static func waitForPayload(_ channel: EnetControlChannel, _ expected: [UInt8]) async throws -> Bool {
-        for _ in 0..<500 {
-            if try sentPayloads(channel).contains(expected) { return true }
-            try await Task.sleep(for: .milliseconds(4))
-        }
-        return false
+        #expect(scheduler.deadline?.uptimeNanoseconds == scheduler.clock.nanos)
+        try scheduler.fire()
+        #expect(try Self.sentPayloads(channel) == [
+            InputEncoder.mouseMove(dx: 150, dy: -50), InputEncoder.mouseMove(dx: 30, dy: -10)
+        ])
+        #expect(scheduler.deadline == nil)
     }
 
     /// A pad's held stick reaches the wire on the timer, and a press after it carries the same axes.
-    @Test func controllerStateReachesTheWire() async throws {
+    @Test func controllerStateReachesTheWire() throws {
         let channel = try Self.makeChannel(backlogged: false)
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         defer { batcher.stop() }
+        let initial = GamepadAnalog(leftTrigger: 0, rightTrigger: 40, leftStickX: 0, leftStickY: 0,
+                                    rightStickX: 0, rightStickY: 0)
+        _ = batcher.updateController(num: 0, mask: 1, buttons: 0, analog: initial)
+        #expect(scheduler.deadline == nil)
         let held = GamepadAnalog(leftTrigger: 0, rightTrigger: 40, leftStickX: 12_000, leftStickY: -3_000,
                                  rightStickX: 0, rightStickY: 0)
         _ = batcher.updateController(num: 0, mask: 1, buttons: 0, analog: held)
-        #expect(try await Self.waitForPayload(
-            channel, InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: held)))
-        try await Task.sleep(for: .milliseconds(20))
+        try scheduler.fire()
+        #expect(try Self.sentPayloads(channel) == [
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: initial),
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: held)
+        ])
+        scheduler.clock.advance(.milliseconds(20))
         _ = batcher.updateController(num: 0, mask: 1, buttons: 0x1000, analog: held)
-        #expect(try await Self.waitForPayload(
-            channel, InputEncoder.multiController(num: 0, mask: 1, buttons: 0x1000, analog: held)))
+        #expect(try Self.sentPayloads(channel) == [
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: initial),
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0, analog: held),
+            InputEncoder.multiController(num: 0, mask: 1, buttons: 0x1000, analog: held)
+        ])
     }
 
     @Test func clickFollowsEveryEarlierMove() throws {
         let channel = try Self.makeChannel(backlogged: false)
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         for _ in 0..<40 { _ = batcher.accumulateMouseMove(dx: 2, dy: 1) }
         _ = batcher.passThrough(
             InputEncoder.mouseButton(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: 1),
@@ -166,7 +171,7 @@ struct InputBatcherTests {
                 return try crypto.seal(type: type, payload: payload, seq: seq)
             })
         EnetFixture.connect(channel)
-        let batcher = InputBatcher(enet: channel, backpressure: { _ in true })
+        let batcher = scheduler.makeBatcher(enet: channel, backpressure: { _ in true })
         defer { batcher.stop() }
         let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 100,
                                    leftStickY: 0, rightStickX: 0, rightStickY: 0)
@@ -179,7 +184,7 @@ struct InputBatcherTests {
 
     @Test func textEncodingOnTheSenderPreservesPacketAndEdgeOrder() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { _ in true })
+        let batcher = scheduler.makeBatcher(enet: channel, backpressure: { _ in true })
         defer { batcher.stop() }
         let text = String(repeating: "é", count: 40)
         #expect(batcher.passThroughText(text) == 0)
@@ -193,8 +198,9 @@ struct InputBatcherTests {
 
     /// Merged state left behind by `fill`, then the edge that drained it.
     private static func drained(_ fill: (InputBatcher) -> Void) throws -> [[UInt8]] {
+        let scheduler = InputBatcherScheduler()
         let channel = try makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         fill(batcher)
         _ = batcher.passThrough(click, channel: Enet.ctrlChannelMouse)
         batcher.stop()
@@ -243,7 +249,7 @@ struct InputBatcherTests {
     /// Sensor samples ride unreliable, except the gyro null that stops sensors.
     @Test func onlyTheGyroNullRidesReliable() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         let gyro = UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO)
         let accel = UInt8(StreamProtocol.LI_MOTION_TYPE_ACCEL)
         #expect(batcher.updateMotion(num: 0, motionType: 3, x: 1, y: 1, z: 1) == InputBatcherResult.sendFailed)
@@ -262,7 +268,7 @@ struct InputBatcherTests {
 
     @Test func pairsAndReportsKeepTheirOrderBehindMergedMotion() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         let report = InputEncoder.scroll(120)
         _ = batcher.accumulateMouseMove(dx: 5, dy: 0)
         _ = batcher.passThroughReport(report, channel: Enet.ctrlChannelMouse)
@@ -274,7 +280,7 @@ struct InputBatcherTests {
 
     @Test func aStoppedBatcherRefusesEverything() throws {
         let channel = try Self.makeChannel(backlogged: false)
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         batcher.stop()
         let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0, leftStickY: 0,
                                    rightStickX: 0, rightStickY: 0)
@@ -299,7 +305,7 @@ struct InputBatcherTests {
     }
     @Test func reliableEdgesReportFailureInsteadOfQueueSuccess() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         #expect(batcher.passThrough([UInt8](repeating: 0, count: Int(Enet.defaultMTU)), channel: 2) == -1)
         channel.close()
         #expect(batcher.passThrough(Self.click, channel: 3) == -1)
@@ -315,7 +321,7 @@ struct InputBatcherTests {
                           leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0)
         }
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { _ in true })
+        let batcher = scheduler.makeBatcher(enet: channel, backpressure: { _ in true })
         defer { batcher.stop() }
         for value: UInt8 in [1, 30, 80] {
             #expect(batcher.updateController(num: 0, mask: 1, buttons: 0, analog: analog(value)) == 0)
@@ -331,7 +337,7 @@ struct InputBatcherTests {
 
     @Test func controllerNeutralAndKeyboardUpSurviveImmediateStop() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0, leftStickY: 0,
                                   rightStickX: 0, rightStickY: 0)
         let release = InputEncoder.keyboard(keyCode: VKScanCode(vk: 0x57).wireCode,
@@ -348,7 +354,7 @@ struct InputBatcherTests {
 
     @Test func failedControllerDownCannotResurrectAtStop() throws {
         let channel = try Self.makeChannel()
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         channel.interrupt()
         let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0, leftStickY: 0,
                                   rightStickX: 0, rightStickY: 0)
@@ -360,7 +366,7 @@ struct InputBatcherTests {
     @Test func inputWithoutALiveConnectionCannotReportAcceptance() throws {
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
                                          crypto: try ControlCrypto(rikey: Self.key))
-        let batcher = InputBatcher(enet: channel, backpressure: { $0.sendBacklogged || $0.reliableBacklogged })
+        let batcher = scheduler.makeBatcher(enet: channel)
         #expect(batcher.passThrough(Self.click, channel: 3) == InputBatcherResult.sendFailed)
         batcher.stop()
         #expect(channel.sentReliable.isEmpty)
