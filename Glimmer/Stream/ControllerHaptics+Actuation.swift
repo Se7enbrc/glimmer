@@ -11,6 +11,7 @@
 //  the actuator's serial `queue` (see the core file's THREADING note).
 //
 
+import GlimmerEngine
 import CoreHaptics
 import Foundation
 import GameController

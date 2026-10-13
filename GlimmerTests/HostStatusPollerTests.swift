@@ -8,6 +8,7 @@
 //  deciding Ready, the running app, Trust needed, or a forgiving Ready on a failed reply.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

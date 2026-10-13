@@ -9,6 +9,7 @@
 //  every rule has a unit test.
 //
 
+import GlimmerEngine
 import Foundation
 
 enum MenuBarIconState: Equatable {

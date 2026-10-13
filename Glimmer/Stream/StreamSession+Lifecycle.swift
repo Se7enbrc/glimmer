@@ -3,6 +3,7 @@
 
 // Session teardown and launch recovery share the actor's ownership and callback lifetime.
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import os

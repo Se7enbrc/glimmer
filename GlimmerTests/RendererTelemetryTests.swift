@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import Foundation
@@ -194,7 +195,8 @@ struct RendererTelemetryTests {
             presentationLateDrops: { 0 }, presentationGaps: { 0 }, estimatedRtt: { nil },
             enetHealth: { nil }, pacingLiveness: { nil }, inFlightDecodeBacklog: { 0 },
             refreshWindow: { nil }, displayProbe: { nil }, rendererProbe: { probe.source() })
-        let exporter = TelemetryExporter.makeIfEnabled(source: source, serverName: "test", enabled: false)
+        let exporter = TelemetryExporter.makeIfEnabled(source: source, serverName: "test",
+                                                       outputDirectory: .temporaryDirectory, enabled: false)
         #expect(exporter == nil)
         #expect(probe.state.withLock { $0.probes } == 0)
         #expect(probe.state.withLock { $0.loads } == 0)

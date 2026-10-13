@@ -8,6 +8,7 @@
 //  floor-assist lifecycle, the warm re-enable cadence stash, depth steps and the link range.
 //
 
+import GlimmerEngine
 import AppKit
 import CoreMedia
 import Foundation

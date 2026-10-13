@@ -32,6 +32,7 @@
 //   (which drains the receive threads), making it impossible for a backend
 //   thread to dereference a freed Swift object.
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import os

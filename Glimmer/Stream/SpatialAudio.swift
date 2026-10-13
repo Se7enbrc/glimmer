@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import AudioToolbox
+import GlimmerEngine
 import CoreAudio
 import IOKit.audio
 

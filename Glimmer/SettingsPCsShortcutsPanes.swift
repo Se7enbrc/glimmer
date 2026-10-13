@@ -9,6 +9,7 @@
 //  The shortcut and chord recorders live in SettingsShortcutRecorders.swift.
 //
 
+import GlimmerEngine
 import SwiftUI
 
 // MARK: - PCs

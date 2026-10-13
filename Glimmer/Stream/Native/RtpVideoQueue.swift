@@ -44,7 +44,7 @@ final class RtpVideoQueue {
     static let cat = "NativeVideo"
 
     // Wire constants.
-    static let FIXED_RTP_HEADER_SIZE = 12
+    static let FIXED_RTP_HEADER_SIZE = VideoPacketLayout.fixedRtpHeaderSize
     static let MAX_RTP_HEADER_SIZE = 16
     static let FLAG_EXTENSION: UInt8 = 0x10
     static let FLAG_SOF: UInt8 = 0x4

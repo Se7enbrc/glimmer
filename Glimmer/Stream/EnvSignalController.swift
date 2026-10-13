@@ -58,6 +58,7 @@
 //  that cross threads (state, stream link, freshness, decision) sit behind one lock.
 //
 
+import GlimmerEngine
 import Foundation
 
 /// Process-global env-signal state machine + the conditional-keepalive dial. Fed by every

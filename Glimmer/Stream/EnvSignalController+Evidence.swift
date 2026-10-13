@@ -18,6 +18,7 @@
 //  under the controller's `lock`, and the reconciler never calls into its consumers holding it.
 //
 
+import GlimmerEngine
 import Foundation
 import Synchronization
 

@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
+import GlimmerEngine
 import AppKit
 import QuartzCore
 

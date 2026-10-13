@@ -9,6 +9,7 @@
 //  that keep a recording from clashing with another shortcut or with the Mac.
 //
 
+import GlimmerEngine
 import Accessibility
 import AppKit
 import Combine

@@ -66,7 +66,8 @@ extension StreamSession {
         ownsHostSession = false
         isStreaming = true
         // Capture launch and teardown even when Cancel prevents the backend handshake.
-        SessionLogFileSink.startIfEnabled(enabled: TelemetryGate.isEnabled)
+        SessionLogFileSink.startIfEnabled(
+            enabled: TelemetryGate.isEnabled, directory: MacTelemetryCapture.logsDirectory)
 
         // Capture the inputs a SILENT RECONNECT needs to rebuild the connection
         // in place (see StreamSession+Reconnect.swift): the original server (for

@@ -23,6 +23,7 @@
 //      the anchor was overwritten by a newer gap.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension RtpVideoQueue {

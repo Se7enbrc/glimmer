@@ -42,7 +42,7 @@ verify; some `Logger(` calls put the category on the next line):
 | `AppModel`             | `Glimmer/AppModel.swift`                                                          |
 | `AWDLHelper`           | `Glimmer/AWDLHelperManager.swift`                                                 |
 | `ContainerMigration`   | `Glimmer/ContainerMigration.swift`                                                |
-| `Diag.FileSink`        | `Glimmer/LogStore.swift`                                                          |
+| `Diag.FileSink`        | `GlimmerEngine/Diagnostics/LogStore.swift`                                        |
 | `DualSenseHID`         | `Glimmer/Stream/DualSenseHID.swift`                                               |
 | `HostsStore`           | `Glimmer/HostsStore.swift`                                                        |
 | `MacSystemStats`       | `Glimmer/MacSystemStats.swift`                                                    |
@@ -71,7 +71,7 @@ subsystem, `io.ugfugl.glimmer.helper` (lowercase `g`), with categories `main`
 and `AWDL`.
 
 OSSignpost categories are a separate axis on the same subsystem (see
-`Glimmer/Stream/Signposts.swift`):
+`GlimmerEngine/Diagnostics/Signposts.swift`):
 
 | Signpost category | Path                                                          |
 | ----------------- | ------------------------------------------------------------- |
@@ -974,7 +974,8 @@ whole command.
 
 ## Adding new signposts
 
-Shared `OSSignposter` instances live in `Glimmer/Stream/Signposts.swift`.
+Shared `OSSignposter` instances live in
+`GlimmerEngine/Diagnostics/Signposts.swift`.
 
 Interval:
 

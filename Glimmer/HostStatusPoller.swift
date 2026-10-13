@@ -3,6 +3,7 @@
 
 // Readiness polling holds recent answers through transient network and stream teardown blips.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import Observation

@@ -12,6 +12,7 @@
 //  HDR. Testable without an AppModel, an NSScreen, or a window.
 //
 
+import GlimmerEngine
 import Foundation
 
 /// How the stream is presented on this Mac. Snapshotted into `StreamConfig`
@@ -73,19 +74,3 @@ public enum StreamDisplayMode: String, CaseIterable, Identifiable, Sendable {
 /// preset's fields and the init-time heal of persisted values. 640x480 is the
 /// smallest mode a host will encode; 8K / 240 Hz are Moonlight's upstream
 /// ceilings. One home so the sites can't drift.
-enum StreamSizeBounds {
-    static let width = 640...7680
-    static let height = 480...4320
-    static let fps = 30...240
-
-    static func clampWidth(_ value: Int) -> Int { min(max(value, width.lowerBound), width.upperBound) }
-    static func clampHeight(_ value: Int) -> Int { min(max(value, height.lowerBound), height.upperBound) }
-    static func clampFPS(_ value: Int) -> Int { min(max(value, fps.lowerBound), fps.upperBound) }
-
-    /// What a Settings field may hand the model: the digits of `text` as a
-    /// number, only once they sit inside `range`. Nil for a half-typed value.
-    static func acceptedValue(from text: String, in range: ClosedRange<Int>) -> Int? {
-        guard let value = Int(text.filter(\.isNumber)), range.contains(value) else { return nil }
-        return value
-    }
-}

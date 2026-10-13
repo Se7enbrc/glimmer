@@ -3,6 +3,7 @@
 
 // The menu bar reads launcher state and shares its actions with automation.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import GameController

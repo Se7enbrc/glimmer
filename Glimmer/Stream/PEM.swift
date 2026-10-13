@@ -8,6 +8,7 @@
 //  DER that takes: bounds-checked reads, and the few encoders a self-signed certificate needs.
 //
 
+import GlimmerEngine
 import Foundation
 import Security
 

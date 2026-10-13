@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 #if canImport(Sparkle)
+import GlimmerEngine
 import Sparkle
 import SwiftUI
 

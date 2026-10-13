@@ -71,7 +71,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
     var audioSink: NativeAudioSink?
 
     /// Inject the audio sink (the AudioDecoder). Set-once before startConnection.
-    func attachAudioSink(_ sink: NativeAudioSink) {
+    package func attachAudioSink(_ sink: NativeAudioSink) {
         _ = adoptWhileConnecting { audioSink = sink }
     }
 
@@ -81,7 +81,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
     var videoSink: VideoSink?
 
     /// Inject the video sink (the VideoDecoder). Set-once before startConnection.
-    func attachVideoSink(_ sink: VideoSink) {
+    package func attachVideoSink(_ sink: VideoSink) {
         _ = adoptWhileConnecting { videoSink = sink }
     }
 
@@ -107,7 +107,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
 
     // MARK: - Lifecycle
 
-    func startConnection(
+    package func startConnection(
         server: BackendServerInfo,
         config: BackendStreamConfig
     ) throws {
@@ -128,7 +128,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
     /// StreamSession actor stays responsive while a hanging host is brought up. On
     /// cancellation we interrupt the in-flight connections; the bridge-thread
     /// completion then resumes the continuation exactly once.
-    func startConnectionAsync(
+    package func startConnectionAsync(
         server: BackendServerInfo,
         config: BackendStreamConfig
     ) async throws {
@@ -225,7 +225,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         }
     }
 
-    public func stopConnection() {
+    package func stopConnection() {
         Diag.info("native backend: stopConnection", Self.logCategory)
         stateLock.lock()
         interrupted = true
@@ -255,7 +255,7 @@ public final class NativeBackend: StreamingBackend, @unchecked Sendable {
         sink?.cleanup()
     }
 
-    public func interruptConnection() {
+    package func interruptConnection() {
         Diag.info("native backend: interruptConnection", Self.logCategory)
         stateLock.lock()
         interrupted = true

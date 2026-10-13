@@ -15,6 +15,7 @@
 //  deterministic offline.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import Testing

@@ -35,6 +35,7 @@
 // boundary, not a Glimmer-specific defence.
 //
 
+import GlimmerEngine
 import Foundation
 import os.log
 import Security

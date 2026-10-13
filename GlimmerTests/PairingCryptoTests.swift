@@ -9,6 +9,7 @@
 //  committed.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 import CryptoKit

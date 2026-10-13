@@ -6,6 +6,7 @@
 //  The 1 Hz capture driven by a scripted source and private counters, into a temp directory.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -70,7 +71,8 @@ final class TelemetryCaptureTests {
             pacingLiveness: { pacing }, inFlightDecodeBacklog: { 4 },
             refreshWindow: { FramePacer.RefreshWindowSnapshot(minHz: 59.5, avgHz: 60, maxHz: 120, changed: true) },
             displayProbe: { nil }, displayMode: "window",
-            stream: StreamTelemetryConfig(width: 2560, height: 1440, fps: 120, codec: "HEVC", bitrate: nil))
+            stream: StreamTelemetryConfig(width: 2560, height: 1440, fps: 120, codec: "HEVC", bitrate: nil),
+            capture: MacTelemetryCapture.make())
     }
 
     private func exporter(in dir: URL, counters: TelemetryCounters = TelemetryCounters()) -> TelemetryExporter {
@@ -88,9 +90,10 @@ final class TelemetryCaptureTests {
     // MARK: - Seam
 
     @Test func gatedConstructionKeepsProductionDirectoryAndCounters() throws {
-        let made = TelemetryExporter.makeIfEnabled(source: source(), serverName: Self.pcName, enabled: true)
+        let made = TelemetryExporter.makeIfEnabled(source: source(), serverName: Self.pcName,
+                                                   outputDirectory: MacTelemetryCapture.logsDirectory, enabled: true)
         let exporter = try #require(made)
-        #expect(exporter.outputDirectory == TelemetryExporter.logsDirectory)
+        #expect(exporter.outputDirectory == MacTelemetryCapture.logsDirectory)
         #expect(exporter.counters === TelemetryCounters.shared)
         #expect(exporter.latestSample == nil)
         #expect(exporter.ndjsonURL == nil)
@@ -270,14 +273,14 @@ final class TelemetryCaptureTests {
         #expect(exporter.sessionId.count == 16 && exporter.sessionId.allSatisfy(\.isHexDigit))
         let sample = try #require(try ndjsonRows(exporter).last)
         #expect(sample["host"] as? String == pseudonym)
-        #expect(sample["client"] as? String == TelemetryRenderer.clientLabel)
+        #expect(sample["client"] as? String == MacTelemetryCapture.clientLabel)
 
         let reportName = try #require(try FileManager.default.contentsOfDirectory(atPath: dir.path)
             .first { $0.hasPrefix("telemetry-session-") })
         let report = try TelemetryRenderFixtures.row(
             String(contentsOf: dir.appendingPathComponent(reportName), encoding: .utf8))
         #expect(report["host"] as? String == pseudonym)
-        #expect(report["client"] as? String == TelemetryRenderer.clientLabel)
+        #expect(report["client"] as? String == MacTelemetryCapture.clientLabel)
 
         var macName = ProcessInfo.processInfo.hostName
         if macName.hasSuffix(".local") { macName.removeLast(".local".count) }

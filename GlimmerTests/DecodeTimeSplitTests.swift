@@ -8,6 +8,7 @@
 //  how the Decode time row shows it, and how the config event names the decode mode.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 import os

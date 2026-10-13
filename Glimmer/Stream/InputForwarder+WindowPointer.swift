@@ -4,6 +4,7 @@
 // Free pointers map onto the picture; relative capture shares its existing
 // association, linear scaling and cursor-ownership paths in every presentation.
 
+import GlimmerEngine
 import AppKit
 
 extension InputForwarder {

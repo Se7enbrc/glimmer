@@ -18,6 +18,7 @@
 //  StreamSession+PresentTrip.swift.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import os

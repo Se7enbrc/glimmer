@@ -16,6 +16,7 @@
 //  compatible: a Mac App Store target must drop this file and its call sites.
 //
 
+import GlimmerEngine
 import Foundation
 import IOKit.hid
 import os.log

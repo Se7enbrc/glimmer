@@ -18,6 +18,7 @@
 //  Nothing here changes streaming behaviour; it's all observation/opt-in.
 //
 
+import GlimmerEngine
 import AppKit
 import SwiftUI
 
@@ -142,11 +143,11 @@ struct DiagnosticsPane: View {
     /// Show the path with a leading `~` instead of the absolute home so it reads
     /// cleanly and matches how the doc comments refer to it.
     private var abbreviatedLogPath: String {
-        (TelemetryExporter.logsDirectory.path as NSString).abbreviatingWithTildeInPath
+        (MacTelemetryCapture.logsDirectory.path as NSString).abbreviatingWithTildeInPath
     }
 
     private func revealLogDir() {
-        let dir = TelemetryExporter.logsDirectory
+        let dir = MacTelemetryCapture.logsDirectory
         // Create it if it doesn't exist yet (telemetry may never have run) so
         // the reveal lands somewhere instead of silently no-opping.
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

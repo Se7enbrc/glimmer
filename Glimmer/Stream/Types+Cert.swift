@@ -8,6 +8,7 @@
 //  (+ PairStatus). Split out of Types.swift to keep each unit focused.
 //
 
+import GlimmerEngine
 import Foundation
 import CommonCrypto
 import CryptoKit
@@ -222,9 +223,4 @@ public enum PinnedCertStore {
                 "PinnedCertStore: refused to keep \(url.lastPathComponent) with mode \(modeOctal) (expected 600)")
         }
     }
-}
-
-public enum PairStatus: Sendable, Equatable {
-    case paired
-    case unpaired
 }

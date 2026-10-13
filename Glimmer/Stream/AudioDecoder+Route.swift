@@ -15,6 +15,7 @@
 //  locking rationale.
 //
 
+import GlimmerEngine
 import AVFoundation
 import AudioToolbox
 import CoreAudio

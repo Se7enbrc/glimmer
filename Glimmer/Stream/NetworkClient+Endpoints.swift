@@ -13,6 +13,7 @@
 //  see that file for the actor's state, identity prep, and TLS wiring.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import os.log

@@ -9,6 +9,7 @@
 //  VideoRtpReceiver.swift to keep it under the length budget.
 //
 
+import GlimmerEngine
 import Foundation
 
 /// One RFI loss episode: the first loss the depacketizer reports to the frame that

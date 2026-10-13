@@ -18,6 +18,7 @@
 //    * HostStatusPoller.swift - periodic readiness-chip polling Task
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox

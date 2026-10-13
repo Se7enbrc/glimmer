@@ -138,7 +138,7 @@ struct AudioPacketSplice {
 // Lets RtpAudioReceiver feed the AudioDecoder: `initialize` runs the shared decoder/engine setup, and both
 // `decodeAndPlay` (a packet) and `decodeAndPlayPLC` (the queue's `.lostPlaceholder`) run `decodeCore`.
 extension AudioDecoder: NativeAudioSink {
-    func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 {
+    package func initialize(audioConfig: Int32, opus: OpusConfig) -> Int32 {
         let chCount = AudioConfig.channelCount(packed: audioConfig)
         // `opus` is the layout the PC encodes with (SdpScan.audioLayout). Opus reads
         // one mapping entry per channel, so a short mapping must never reach it.
@@ -155,16 +155,16 @@ extension AudioDecoder: NativeAudioSink {
             mapping: opus.mapping)
     }
 
-    func decodeAndPlay(_ opus: UnsafeRawBufferPointer) {
+    package func decodeAndPlay(_ opus: UnsafeRawBufferPointer) {
         guard !opus.isEmpty else { decodeAndPlayPLC(); return }
         decodeCore(opus)
     }
 
-    func decodeAndPlayPLC() {
+    package func decodeAndPlayPLC() {
         decodeCore(nil)
     }
 
-    func cleanup() {
+    package func cleanup() {
         shutdown()
     }
 }

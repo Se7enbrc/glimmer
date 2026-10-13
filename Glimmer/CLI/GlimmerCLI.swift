@@ -3,6 +3,7 @@
 
 // The app binary also runs headless verbs through the same model and command channel.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 

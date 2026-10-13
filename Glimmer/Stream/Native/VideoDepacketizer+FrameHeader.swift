@@ -13,6 +13,7 @@
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension VideoDepacketizer {

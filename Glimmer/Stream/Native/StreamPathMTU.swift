@@ -38,6 +38,7 @@
 //  reduced-MTU path changes, and only ever downward.
 //
 
+import GlimmerEngine
 import Darwin
 import Foundation
 import Network
@@ -76,33 +77,6 @@ struct StreamPathProbe: Sendable {
 /// A latency distribution measured before ANNOUNCE. The gate bands on `steadyMs`
 /// (p25): three quarters of the samples sit at or above it, so a burst of bad
 /// samples (post-wake, a busy host, Wi-Fi tail) cannot cap a path by itself.
-struct RttStats: Sendable, Equatable {
-    var minMs: Double
-    var steadyMs: Double
-    var p50Ms: Double
-    var p95Ms: Double
-    var count: Int
-
-    /// Nil for an empty sample set - absent knowledge stays absent.
-    init?(samples: [Double]) {
-        guard !samples.isEmpty else { return nil }
-        let sorted = samples.sorted()
-        func percentile(_ quantile: Double) -> Double {
-            let idx = Int((Double(sorted.count - 1) * quantile).rounded())
-            return sorted[max(0, min(sorted.count - 1, idx))]
-        }
-        minMs = sorted[0]
-        steadyMs = percentile(0.25)
-        p50Ms = percentile(0.50)
-        p95Ms = percentile(0.95)
-        count = sorted.count
-    }
-
-    /// How much worse the tail is than the floor. >2x on a path whose floor is
-    /// already high is the bufferbloat signature.
-    var tailRatio: Double { minMs > 0 ? p95Ms / minMs : 1 }
-}
-
 /// Samples RTT on a background queue from the Play click until the SDP is built.
 /// Samples taken before `/launch` are the ones that count: once the host starts
 /// the game and switches displays, handshakes read 3-7x the path's true RTT.
@@ -263,18 +237,6 @@ struct RouteAsk: Sendable, Equatable {
 /// blind spot. The gate now silently changes picture quality, so leaving its
 /// decision unrecorded in the durable artifact is not acceptable: it cost an
 /// hour of "did it even fire?" the first time.
-struct LinkGateDecision: Sendable {
-    var interfaceName: String?
-    var mtu: Int?
-    var isTunnel: Bool
-    var rtt: RttStats?
-    /// Whether `rtt` is the pre-launch window (true) or every sample (false).
-    var rttPreLaunch: Bool = false
-    var configuredBitrateKbps: Int
-    var askedBitrateKbps: Int
-    var packetSize: Int
-}
-
 enum StreamPathMTU {
 
     // MARK: - Gate decision latch (see LinkGateDecision)

@@ -8,6 +8,7 @@
 //  CAUTION/DISTRESS ladder and its quiet step-down, the wired reset and the cadence dial.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

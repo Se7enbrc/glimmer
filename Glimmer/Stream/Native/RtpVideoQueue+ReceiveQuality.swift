@@ -4,6 +4,7 @@
 // Receive-thread quality accounting uses fixed storage: no allocation or clock
 // read on the steady path. Only rare gaps and excessive reorder pay locked telemetry.
 
+import GlimmerEngine
 import Foundation
 
 extension RtpVideoQueue {

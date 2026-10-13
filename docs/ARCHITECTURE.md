@@ -54,27 +54,27 @@ running (`isStreaming` guard).
 
 Top-level pieces:
 
-| Layer                 | Type                                                     | Lives where                                             |
-| --------------------- | -------------------------------------------------------- | ------------------------------------------------------- |
-| SwiftUI views         | views + observable state                                 | `Glimmer/ContentView.swift`, `SettingsView.swift`       |
-| `AppModel`            | `@MainActor` `@Observable`                               | `Glimmer/AppModel.swift` (+ extensions)                 |
-| `StreamSession`       | `actor`                                                  | `Glimmer/Stream/StreamSession.swift` (+ extensions)     |
-| `StreamingBackend`    | protocol (the engine boundary)                           | `Glimmer/Stream/StreamingBackend.swift`                 |
-| `NativeBackend`       | `final class`, sole backend conformer                    | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/` |
-| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/StreamBridgeContext.swift`              |
-| `NetworkClient`       | `actor` over `ControlTransport` (Network.framework mTLS) | `Glimmer/Stream/Network.swift`                          |
-| `PairingClient`       | `actor`                                                  | `Glimmer/Stream/Pairing.swift`                          |
-| `IdentityManager`     | `actor` (singleton)                                      | `Glimmer/Stream/Identity.swift`                         |
-| `VideoDecoder`        | `@MainActor final class`                                 | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)      |
-| `FramePacer`          | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/FramePacer.swift` (+ extensions)        |
-| `AudioDecoder`        | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/AudioDecoder.swift`                     |
-| `InputForwarder`      | `@MainActor final class`                                 | `Glimmer/Stream/InputForwarder.swift`                   |
-| `ControllerForwarder` | `@MainActor` lifecycle; capture uses locked `InputCore`  | `Glimmer/Stream/ControllerForwarder.swift`              |
-| `HIDGamepadManager`   | `@MainActor final class` (singleton)                     | `Glimmer/Stream/HIDGamepad/`                            |
-| `DualSenseHID`        | `final class`, `@unchecked Sendable` (singleton)         | `Glimmer/Stream/DualSenseHID.swift` (+ extensions)      |
-| `StreamWindow`        | `@MainActor final class`                                 | `Glimmer/Stream/StreamWindow.swift`                     |
-| `StatsCollector`      | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/StatsCollector.swift`                   |
-| Telemetry (opt-in)    | exporter + counters                                      | `Glimmer/Stream/TelemetryExporter.swift` (+ extensions) |
+| Layer                 | Type                                                     | Lives where                                                        |
+| --------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
+| SwiftUI views         | views + observable state                                 | `Glimmer/ContentView.swift`, `SettingsView.swift`                  |
+| `AppModel`            | `@MainActor` `@Observable`                               | `Glimmer/AppModel.swift` (+ extensions)                            |
+| `StreamSession`       | `actor`                                                  | `Glimmer/Stream/StreamSession.swift` (+ extensions)                |
+| `StreamingBackend`    | protocol (the engine boundary)                           | `Glimmer/Stream/StreamingBackend.swift`                            |
+| `NativeBackend`       | `final class`, sole backend conformer                    | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/`            |
+| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/StreamBridgeContext.swift`                         |
+| `NetworkClient`       | `actor` over `ControlTransport` (Network.framework mTLS) | `Glimmer/Stream/Network.swift`                                     |
+| `PairingClient`       | `actor`                                                  | `Glimmer/Stream/Pairing.swift`                                     |
+| `IdentityManager`     | `actor` (singleton)                                      | `Glimmer/Stream/Identity.swift`                                    |
+| `VideoDecoder`        | `@MainActor final class`                                 | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)                 |
+| `FramePacer`          | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/FramePacer.swift` (+ extensions)                   |
+| `AudioDecoder`        | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/AudioDecoder.swift`                                |
+| `InputForwarder`      | `@MainActor final class`                                 | `Glimmer/Stream/InputForwarder.swift`                              |
+| `ControllerForwarder` | `@MainActor` lifecycle; capture uses locked `InputCore`  | `Glimmer/Stream/ControllerForwarder.swift`                         |
+| `HIDGamepadManager`   | `@MainActor final class` (singleton)                     | `Glimmer/Stream/HIDGamepad/`                                       |
+| `DualSenseHID`        | `final class`, `@unchecked Sendable` (singleton)         | `Glimmer/Stream/DualSenseHID.swift` (+ extensions)                 |
+| `StreamWindow`        | `@MainActor final class`                                 | `Glimmer/Stream/StreamWindow.swift`                                |
+| `StatsCollector`      | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Diagnostics/StatsCollector.swift`                   |
+| Telemetry (opt-in)    | exporter + counters                                      | `GlimmerEngine/Diagnostics/TelemetryExporter.swift` (+ extensions) |
 
 > The control and HTTP path runs over `ControlTransport`
 > (`ControlTransport.swift`): mutual TLS on Network.framework, deliberately

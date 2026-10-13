@@ -4,6 +4,7 @@
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
 package enum VideoPacketLayout {
+    package static let fixedRtpHeaderSize = 12
     /// sizeof(ENC_VIDEO_HEADER): iv[12], frameNumber (u32 LE), tag[16].
     package static let headerSize = 32
     package static let ssEncVideo: UInt32 = 0x02

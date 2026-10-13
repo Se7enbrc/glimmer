@@ -5,6 +5,7 @@
 
 // The decode-queue submit path shares the queue lock with the display-link drain.
 
+import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import QuartzCore

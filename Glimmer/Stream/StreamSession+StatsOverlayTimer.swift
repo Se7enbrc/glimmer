@@ -3,6 +3,7 @@
 
 // The 4 Hz stats-overlay timer has a directly testable tick, independent of the run loop.
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import os

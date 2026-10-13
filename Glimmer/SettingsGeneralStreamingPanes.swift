@@ -3,6 +3,7 @@
 
 // General and Quality panes; login-item registration lives in the LoginItem extension.
 
+import GlimmerEngine
 import AppKit
 import os
 import ServiceManagement

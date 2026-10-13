@@ -12,6 +12,7 @@
 //  link was moved to the most demanding preset in the app, permanently.
 //
 
+import GlimmerEngine
 import Testing
 @testable import Glimmer
 

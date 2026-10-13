@@ -13,7 +13,8 @@ import Testing
 struct InputLatencyTests {
     @Test func mouseModeRetainsEveryStickCaptureUntilOnePollConsumesIt() throws {
         let prior = FrameTimingTracker.shared
-        FrameTimingTracker.installForTesting(FrameTimingTracker(sessionId: "mouse-mode"))
+        FrameTimingTracker.installForTesting(FrameTimingTracker(
+            sessionId: "mouse-mode", traceDirectory: .temporaryDirectory))
         defer { InputTimingContext.end(); FrameTimingTracker.installForTesting(prior) }
         let core = InputCore()
         let samples = OSAllocatedUnfairLock(initialState: [InputEventTiming]())
@@ -41,7 +42,8 @@ struct InputLatencyTests {
 
     @Test func rejectedRawMouseCaptureCannotAgeIntoTheNextPoll() {
         let prior = FrameTimingTracker.shared
-        FrameTimingTracker.installForTesting(FrameTimingTracker(sessionId: "stale-mouse-mode"))
+        FrameTimingTracker.installForTesting(FrameTimingTracker(
+            sessionId: "stale-mouse-mode", traceDirectory: .temporaryDirectory))
         defer { InputTimingContext.end(); FrameTimingTracker.installForTesting(prior) }
         let core = InputCore()
         let token = UUID()
@@ -143,7 +145,7 @@ struct InputLatencyTests {
     }
 
     @Test func coalescedEventsKeepIndividualTimesAndReconciliationCannotConsumeThem() throws {
-        let tracker = FrameTimingTracker(sessionId: "input-test")
+        let tracker = FrameTimingTracker(sessionId: "input-test", traceDirectory: .temporaryDirectory)
         let prior = FrameTimingTracker.shared
         FrameTimingTracker.installForTesting(tracker)
         defer { InputTimingContext.end(); FrameTimingTracker.installForTesting(prior) }
@@ -160,7 +162,7 @@ struct InputLatencyTests {
     }
 
     @Test func submissionAndCompletionRemainDistinctObservations() throws {
-        let tracker = FrameTimingTracker(sessionId: "input-test")
+        let tracker = FrameTimingTracker(sessionId: "input-test", traceDirectory: .temporaryDirectory)
         let start = DispatchTime.now().uptimeNanoseconds
         var sample = InputEventTiming(source: .controller, timestamp: Double(start - 10_000_000) / 1e9,
                                       handler: start - 5_000_000)
@@ -175,7 +177,7 @@ struct InputLatencyTests {
         #expect(rows.allSatisfy { $0.histogram.observationCount == 1 })
     }
     @Test @MainActor func physicalReleasesKeepTimingThroughReconciliation() throws {
-        let tracker = FrameTimingTracker(sessionId: "release-timing")
+        let tracker = FrameTimingTracker(sessionId: "release-timing", traceDirectory: .temporaryDirectory)
         let prior = FrameTimingTracker.shared
         FrameTimingTracker.installForTesting(tracker)
         defer { InputTimingContext.end(); FrameTimingTracker.installForTesting(prior) }

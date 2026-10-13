@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import Foundation
 
 /// Explicit keys and nulls keep automation independent of UI wording and saved-model changes.

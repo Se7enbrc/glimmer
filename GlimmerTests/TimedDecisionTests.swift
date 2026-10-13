@@ -8,7 +8,7 @@
 //  age and idle edges, the decode gate, present recovery, display and audio windows, the quit dwell.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import AVFoundation
 import Foundation
 import os
@@ -65,7 +65,8 @@ struct TimedLatencyTests {
         let clock = ScriptedClock()
         let counters = TelemetryCounters()
         counters.setRttMs(10)
-        let tracker = FrameTimingTracker(sessionId: "t", now: clock.now, counters: counters)
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory,
+                                         now: clock.now, counters: counters)
         func present(_ rtp: UInt32) {
             let received = clock.nanos
             tracker.recordAssembled(rtpTimestamp: rtp, frameIndex: Int32(rtp), receiveNanos: received,
@@ -103,7 +104,8 @@ struct TimedLatencyTests {
     @Test func oneInputFeedsOneInputToPhoton() {
         let clock = ScriptedClock()
         let counters = TelemetryCounters()
-        let tracker = FrameTimingTracker(sessionId: "t", now: clock.now, counters: counters)
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory,
+                                         now: clock.now, counters: counters)
         func present(_ rtp: UInt32) {
             tracker.recordAssembled(rtpTimestamp: rtp, frameIndex: Int32(rtp), receiveNanos: clock.nanos,
                                     assembleNanos: clock.nanos)
@@ -136,7 +138,8 @@ struct TimedLatencyTests {
     /// Merged motion held back by a stalled reliable channel ages until an edge event drains it.
     @Test func heldMotionReportsItsQueueAgeWhenAnEdgeDrainsIt() throws {
         let scheduler = InputBatcherScheduler()
-        let tracker = FrameTimingTracker(sessionId: "t", counters: TelemetryCounters())
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory,
+                                         counters: TelemetryCounters())
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
                                          crypto: try ControlCrypto(rikey: EnetFixture.key))
         EnetFixture.connect(channel)

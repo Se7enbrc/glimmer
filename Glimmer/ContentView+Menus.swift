@@ -9,6 +9,7 @@
 //  visible menu button. The menu bar item's panel lives in MenuBarPanel.swift.
 //
 
+import GlimmerEngine
 import AppKit
 import SwiftUI
 

@@ -15,6 +15,7 @@
 //  exporter's own background queue never reaches into actor-isolated state.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension StreamSession {
@@ -25,7 +26,8 @@ extension StreamSession {
     func startTelemetryExporter(
         decoder: VideoDecoder, serverName: String, enabled: Bool = TelemetryGate.isEnabled,
         make: (TelemetrySource, String) -> TelemetryExporter? = {
-            TelemetryExporter.makeIfEnabled(source: $0, serverName: $1)
+            TelemetryExporter.makeIfEnabled(
+                source: $0, serverName: $1, outputDirectory: MacTelemetryCapture.logsDirectory)
         }
     ) {
         guard enabled else { return }
@@ -68,7 +70,8 @@ extension StreamSession {
             stream: StreamTelemetryConfig(
                 width: Int(decoder.streamWidth), height: Int(decoder.streamHeight),
                 fps: Int(decoder.streamFps), codec: VideoDecoder.codecLabel(for: decoder.streamVideoFormat),
-                bitrate: reconnectConfig?.bitrateDecision))
+                bitrate: reconnectConfig?.bitrateDecision),
+            capture: MacTelemetryCapture.make())
 
         guard let exporter = make(source, serverName) else {
             // Gate off - the default. Nothing allocated, nothing started.

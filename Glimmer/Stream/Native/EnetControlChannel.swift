@@ -542,14 +542,3 @@ final class EnetControlChannel: @unchecked Sendable {
         fireTeardownOnce()
     }
 }
-
-/// A small thread-safe integer counter for in-flight send backpressure. NSLock is
-/// sufficient (the few inc/dec/read sites are not in a tight inner loop), and it
-/// matches the codebase's existing ManagedAtomicFlag style.
-final class AtomicCounter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var total = 0
-    var value: Int { lock.lock(); defer { lock.unlock() }; return total }
-    func increment() { lock.lock(); total += 1; lock.unlock() }
-    func decrement() { lock.lock(); if total > 0 { total -= 1 }; lock.unlock() }
-}

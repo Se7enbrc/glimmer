@@ -3,6 +3,7 @@
 
 // Keep argument parsing, exit codes and help consistent for scripts.
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

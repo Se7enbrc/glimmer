@@ -7,6 +7,7 @@
 //  The overlay timer's tick and the paced present watchdog's episode steps, called directly.
 //
 
+import GlimmerEngine
 import AppKit
 import QuartzCore
 import Testing

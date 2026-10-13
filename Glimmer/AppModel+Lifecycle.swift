@@ -7,6 +7,7 @@
 //  App-delegate attach, launch bootstrap, the live host-refresh loop, custom-bitrate auto-tracking, and shutdown. Split out of AppModel.swift to keep each unit focused.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox
@@ -56,7 +57,7 @@ extension AppModel {
         // the new daemon without the user re-toggling anything.
         AWDLHelperManager.shared.reconcileAfterUpdate()
         // Age out old Logs/Glimmer files off the main thread, diagnostics on or off.
-        TelemetryExporter.sweepLogsAtLaunch()
+        TelemetryExporter.sweepLogsAtLaunch(directory: MacTelemetryCapture.logsDirectory)
         log.info("Glimmer stream engine: Swift-native")
         // Seed the Custom fields from the display when Custom is ALREADY the
         // live preset and has no values on record (a preset restored from

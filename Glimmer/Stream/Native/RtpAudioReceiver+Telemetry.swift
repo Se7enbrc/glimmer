@@ -25,6 +25,7 @@
 //  carry a secret, key, or host identity.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension RtpAudioReceiver {

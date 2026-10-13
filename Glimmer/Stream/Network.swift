@@ -40,6 +40,7 @@
 //  back via continuations.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import os.log

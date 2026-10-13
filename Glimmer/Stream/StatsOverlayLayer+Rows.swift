@@ -3,6 +3,7 @@
 
 // Reused text layers keep the HUD's refresh independent of video presentation.
 
+import GlimmerEngine
 import AppKit
 import QuartzCore
 

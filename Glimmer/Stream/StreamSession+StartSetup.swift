@@ -14,6 +14,7 @@
 //  identical to the prior inline form.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import GameController

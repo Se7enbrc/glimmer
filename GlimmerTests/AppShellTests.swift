@@ -8,6 +8,7 @@
 //  entry, and how it answers `glimmer stream` and `glimmer quit`.
 //
 
+import GlimmerEngine
 import AppKit
 import Testing
 @testable import Glimmer

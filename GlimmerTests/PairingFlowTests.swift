@@ -8,6 +8,7 @@
 //  keys: the right PIN pairs and pins, a wrong PIN, a forged signature or a busy PC is refused.
 //
 
+import GlimmerEngine
 import CryptoKit
 import Foundation
 import os

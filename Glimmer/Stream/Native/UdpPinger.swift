@@ -12,6 +12,7 @@
 //  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import Darwin

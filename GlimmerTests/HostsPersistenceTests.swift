@@ -9,6 +9,7 @@
 //  touches the developer's real preferences or Application Support.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

@@ -21,18 +21,19 @@ you're changing before you change it. Before UI work, read
 it's for). [docs/PROFILING.md](docs/PROFILING.md) gets the telemetry an engine
 change needs, and [docs/SECURITY.md](docs/SECURITY.md) covers the root helper.
 
-| Path                         | What lives there                                                                             |
-| ---------------------------- | -------------------------------------------------------------------------------------------- |
-| `Glimmer/`                   | The app: SwiftUI and AppKit UI, `AppModel+*`, menu bar, settings, logging (`LogStore.swift`) |
-| `Glimmer/Stream/`            | The stream around the protocol: decode, display, audio playout, input, pairing, telemetry    |
-| `Glimmer/Stream/Native/`     | Sunshine's protocol: RTSP, the ENet control channel, RTP video and audio, FEC                |
-| `Glimmer/Stream/HIDGamepad/` | Raw-HID game controllers and the generated controller database                               |
-| `Glimmer/CLI/`               | The `glimmer` command line, in the app binary                                                |
-| `Glimmer/Models/`            | The PC record and a few settings types                                                       |
-| `helper/`                    | The opt-in root daemon that parks AirDrop's radio during a stream                            |
-| `LoginHelper/`               | The login item                                                                               |
-| `GlimmerTests/`              | Hostless unit tests                                                                          |
-| `scripts/`                   | Build, signing and release tooling the Makefile calls                                        |
+| Path                         | What lives there                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `Glimmer/`                   | The app: SwiftUI and AppKit UI, `AppModel+*`, menu bar, settings                          |
+| `GlimmerEngine/Diagnostics/` | Shared logging (`LogStore.swift`), signposts, statistics and telemetry                    |
+| `Glimmer/Stream/`            | The stream around the protocol: decode, display, audio playout, input, pairing, telemetry |
+| `Glimmer/Stream/Native/`     | Sunshine's protocol: RTSP, the ENet control channel, RTP video and audio, FEC             |
+| `Glimmer/Stream/HIDGamepad/` | Raw-HID game controllers and the generated controller database                            |
+| `Glimmer/CLI/`               | The `glimmer` command line, in the app binary                                             |
+| `Glimmer/Models/`            | The PC record and a few settings types                                                    |
+| `helper/`                    | The opt-in root daemon that parks AirDrop's radio during a stream                         |
+| `LoginHelper/`               | The login item                                                                            |
+| `GlimmerTests/`              | Hostless unit tests                                                                       |
+| `scripts/`                   | Build, signing and release tooling the Makefile calls                                     |
 
 ## Protect the bar
 

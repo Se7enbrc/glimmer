@@ -11,6 +11,7 @@
 //  each unit focused; see VideoDecoder.swift for the counter and its lock.
 //
 
+import GlimmerEngine
 import Foundation
 import VideoToolbox
 import os

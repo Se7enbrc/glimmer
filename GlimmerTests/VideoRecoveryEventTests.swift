@@ -31,7 +31,7 @@ struct VideoRecoveryEventTests {
     }
 
     @Test func rfiRecoveryLeavesExplicitIdrRequestForTheIdr() {
-        let tracker = FrameTimingTracker(sessionId: "test")
+        let tracker = FrameTimingTracker(sessionId: "test", traceDirectory: .temporaryDirectory)
         FrameTimingTracker.installForTesting(tracker)
         TelemetryCounters.shared.p2.reset()
         defer {

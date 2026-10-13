@@ -12,6 +12,7 @@
 //  Pairing.swift to keep each unit focused; see that file for the pairing flow.
 //
 
+import GlimmerEngine
 import CommonCrypto
 import CryptoKit
 import Foundation

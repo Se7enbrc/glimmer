@@ -3,6 +3,7 @@
 
 // Automation requests share the launcher entry points and the running session.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import Observation

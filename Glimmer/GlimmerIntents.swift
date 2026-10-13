@@ -8,6 +8,7 @@
 //  app. Each one runs the launcher's own entry points, not a copy of them.
 //
 
+import GlimmerEngine
 import AppIntents
 import Foundation
 import Observation

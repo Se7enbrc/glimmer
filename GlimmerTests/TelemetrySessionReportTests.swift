@@ -8,6 +8,7 @@
 //  latency sections, event counters, handshake and lifecycle legs, and the worst windows.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
