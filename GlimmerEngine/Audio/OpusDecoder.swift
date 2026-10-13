@@ -4,7 +4,6 @@
 // Sunshine surround packets contain separately framed mono/stereo Opus streams.
 // AudioToolbox decodes each stream; the negotiated mapping restores PC channel order.
 
-import GlimmerEngine
 import Foundation
 
 /// One session's Opus decoder. AudioDecoder holds its state lock throughout decoding and teardown.

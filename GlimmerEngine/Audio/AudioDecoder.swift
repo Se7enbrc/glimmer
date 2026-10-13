@@ -5,10 +5,8 @@
 // since extensions can't hold it; the machinery lives in the AudioDecoder+*.swift
 // siblings by topic: engine, decode, meter, prime, route, cushion memory, resampler.
 
-import GlimmerEngine
 import Foundation
 import AVFoundation
-import CoreAudio
 import os
 public final class AudioDecoder: @unchecked Sendable {
     // The opus + Core Audio CORE state. Non-private (default internal): the
@@ -42,15 +40,10 @@ public final class AudioDecoder: @unchecked Sendable {
     /// Retains the first skipped block until its join is smoothed, under `stateLock`.
     var packetSplice = AudioPacketSplice()
     // Graph objects are accessed only while decode admission or the graph gate is held.
-    var halOutput: AudioHALOutput?
-    var outputRoute = AudioOutputRoute() {
-        didSet {
-            if oldValue != outputRoute { outputRoute.logRoute() }
-        }
-    }
+    let platform: AudioPlatform
+    var halOutput: AudioOutput?
     var outputGraphNeedsReconnect = false
     var inputFormat: AVAudioFormat?
-    var deviceListeners: [(AudioObjectID, AudioObjectPropertyAddress, Int)] = []
     var observedRingFrames: UInt64 = 0
     var observedRingSilence: UInt64 = 0
     var observedRingUnderruns: UInt64 = 0
@@ -170,11 +163,11 @@ public final class AudioDecoder: @unchecked Sendable {
     /// Base playout cushion (ms) pre-rolled before playback starts. ≈6 packets at
     /// 5ms; inaudible for non-critical audio yet >> the worst per-event slip and
     /// ~60× the ~0.5ms/5s drift budget at ~100ppm.
-    static let playoutCushionBaseMs: Double = 30
+    package static let playoutCushionBaseMs: Double = 30
     /// Step (ms) the cushion grows by on each measured under-run - one extra packet-
     /// pair of headroom per real drain, so the cushion converges on what THIS link
     /// needs rather than guessing.
-    static let playoutCushionStepMs: Double = 10
+    package static let playoutCushionStepMs: Double = 10
     /// Adaptive-cushion cap (ms) for the WIRED link + the STATIC-context base
     /// (telemetry). The steady-state backlog is TRIMMED back to this, so it is the
     /// worst-case STANDING audio latency; 150ms covers a wired NIC's gaps with
@@ -335,7 +328,6 @@ public final class AudioDecoder: @unchecked Sendable {
     var underrunNoticesSuppressed: UInt64 = 0
     /// The default-output-device listener's HALListener key and the queue its handler runs on. Key guarded by
     /// `stateLock`; the handler touches only meter state and Diag.
-    var routeListenerKey: Int?
     let routeListenerQueue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.route", qos: .userInteractive)
     /// Coalesced opt-in snapshots; guarded by stateLock and invalidated with engineRestartGeneration.
     var outputDiagnosticRequests = AudioOutputDiagnosticRequests()
@@ -367,7 +359,7 @@ public final class AudioDecoder: @unchecked Sendable {
     /// directly countable alongside `audio_underrun_total`.
     var rePrimeCount: UInt64 = 0
 
-    public init() {}
+    public init(platform: AudioPlatform) { self.platform = platform }
 
     // Lifecycle canary: every session's decoder should log this after it ends.
     deinit {

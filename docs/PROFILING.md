@@ -46,7 +46,7 @@ verify; some `Logger(` calls put the category on the next line):
 | `DualSenseHID`         | `Glimmer/Stream/DualSenseHID.swift`                                               |
 | `HostsStore`           | `Glimmer/HostsStore.swift`                                                        |
 | `MacSystemStats`       | `Glimmer/MacSystemStats.swift`                                                    |
-| `Stream.Audio`         | `Glimmer/Stream/AudioDecoder.swift`                                               |
+| `Stream.Audio`         | `GlimmerEngine/Audio/AudioDecoder.swift`                                          |
 | `Stream.Capabilities`  | `Glimmer/Stream/Types.swift` (the VT codec probe)                                 |
 | `Stream.Discovery`     | `Glimmer/Stream/Discovery.swift`                                                  |
 | `Stream.Identity`      | `Glimmer/Stream/Identity.swift`                                                   |

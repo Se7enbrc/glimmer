@@ -3,7 +3,6 @@
 
 // Decode, conceal and schedule audio packets. Engine lifecycle lives in AudioDecoder+Engine.swift.
 
-import GlimmerEngine
 import AVFoundation
 import Foundation
 import os
@@ -111,6 +110,8 @@ extension AudioDecoder {
 /// Overlap the first millisecond of skipped audio with the next scheduled block.
 /// This preserves the old boundary without adding samples or changing steady playback.
 struct AudioPacketSplice {
+    init() {}
+
     private var skipped: AVAudioPCMBuffer?
     var hasPendingJoin: Bool { skipped != nil }
 

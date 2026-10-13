@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
 import AVFoundation
 import AudioToolbox
 import Foundation
@@ -11,15 +10,14 @@ extension AudioDecoder {
                          streams strms: Int32, coupledStreams coupled: Int32,
                          samplesPerFrame spf: Int, mapping map: [UInt8]) -> Int32 {
         AudioDiagnostics.queue.sync {}
-        let sampledRoute = AudioOutputRoute.current()
         beginGraphChange()
         defer { endGraphChange() }
+        removeAudioRouteListener()
         removeDeviceListeners()
         halOutput = nil
         decoder = nil
         inputFormat = nil
         deviceRecoveryStarted = 0
-        outputRoute = sampledRoute ?? AudioOutputRoute()
         resetPacketSplice()
         engineRestartGeneration &+= 1
         outputDiagnosticRequests = AudioOutputDiagnosticRequests()
@@ -55,11 +53,11 @@ extension AudioDecoder {
     private func preparePlayoutForSession(sampleRate: Int32) -> AudioRoute {
         // Load memory before the meter lock so cold pre-roll starts at the PC's
         // learned depth instead of paying for startup underruns again.
-        let seed = Self.loadCushionSeed()
+        let seed = Self.loadCushionSeed(environment: platform.environment())
         // Per-host+device skew seed: start the resampler's integral at the persisted
         // offset between the PC's clock and THIS output device's clock, so the
         // session begins pre-corrected instead of re-drifting into underruns.
-        let route = Self.sampleAudioRoute()
+        let route = platform.sampleRoute()
         let skewKey = Self.resamplerSkewKey(host: seed.host, deviceUID: route.uid)
         let skewSeedPpm = Self.loadResamplerSkewSeed(key: skewKey)
         if skewSeedPpm != 0 {
@@ -75,11 +73,20 @@ extension AudioDecoder {
         return route
     }
 
+    package static func channelLayout(channels: UInt32) -> AudioChannelLayoutTag {
+        switch channels {
+        case 1: return kAudioChannelLayoutTag_Mono
+        case 6: return kAudioChannelLayoutTag_AudioUnit_5_1
+        case 8: return kAudioChannelLayoutTag_AudioUnit_7_1
+        default: return kAudioChannelLayoutTag_Stereo
+        }
+    }
+
     private func prepareInputFormat(sampleRate: Int32) -> AVAudioFormat? {
         // Sunshine's 5.1 order matches Apple's layout. In 7.1, rear and side
         // pairs swap places; reorder output without changing the opus mapping.
         outputReorder = channelCount == 8 ? [0, 1, 2, 3, 6, 7, 4, 5] : nil
-        guard let layout = AVAudioChannelLayout(layoutTag: AudioHALDevice.layout(channels: UInt32(channelCount))) else {
+        guard let layout = AVAudioChannelLayout(layoutTag: Self.channelLayout(channels: UInt32(channelCount))) else {
             log.error("AVAudioChannelLayout init failed")
             return nil
         }
@@ -154,10 +161,8 @@ extension AudioDecoder {
             guard let inputFormat else { return "audio graph has no input format" }
             do {
                 if halOutput == nil || outputGraphNeedsReconnect {
-                    outputRoute = AudioOutputRoute.current() ?? outputRoute
                     installDeviceListeners()
-                    let output = AudioHALOutput(channels: channelCount)
-                    try output.configure(format: inputFormat, route: outputRoute)
+                    let output = try platform.makeOutput(inputFormat)
                     halOutput = output
                     observedRingFrames = 0
                     observedRingSilence = 0
@@ -169,7 +174,7 @@ extension AudioDecoder {
                         + "render-to-output \(output.latencyMs)ms", "Stream.Audio")
                 }
                 status = halOutput?.start() ?? kAudioUnitErr_Uninitialized
-            } catch let failure as AudioHALOutput.Failure {
+            } catch let failure as AudioOutput.Failure {
                 status = failure.status
             } catch {
                 return error.localizedDescription
@@ -305,13 +310,13 @@ extension AudioDecoder {
     }
 
     func handleEngineConfigurationChange(changedAt: UInt64 = DispatchTime.now().uptimeNanoseconds,
+                                         generation: UInt64? = nil,
                                          beforeGraphChange: @Sendable () -> Void = {}) {
-        let sampled = AudioOutputRoute.current()
         beginGraphChange()
         defer { endGraphChange() }
-        guard !isShutdown, inputFormat != nil else { return }
+        guard !isShutdown, inputFormat != nil,
+              generation == nil || generation == engineRestartGeneration else { return }
         beforeGraphChange()
-        outputRoute = sampled ?? outputRoute
         rebuildOutput(startedAt: changedAt)
         Diag.notice("audio engine config change handled (running \(engineRunning))", "Stream.Audio")
         queueOutputDiagnosticLocked()

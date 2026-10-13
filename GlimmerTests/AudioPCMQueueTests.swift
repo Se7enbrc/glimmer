@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import AVFAudio
 import AudioToolbox
 import Foundation
@@ -115,7 +115,7 @@ struct AudioPCMQueueTests {
         let input = try buffer(frames: 240)
         let data = try #require(input.floatChannelData)
         for channel in 0..<2 { data[channel].update(repeating: 0.5, count: 240) }
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         let graph = try #require(decoder.halOutput)
         #expect(!decoder.meterRegisterScheduleOrOverrun(frames: 240))
         decoder.enqueuePCM(input, isSilence: false, completion: {})
@@ -133,7 +133,7 @@ struct AudioPCMQueueTests {
     @Test func underrunPublicationSurvivesAnAlreadyReadMinimumWindow() {
         let decoder = AudioDecoder()
         defer { decoder.shutdown() }
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         let telemetry = AudioPipelineTelemetry()
         decoder.halOutput?.queue.pointee.underruns.store(1, ordering: .releasing)
         decoder.observeRenderClock(telemetry: telemetry)
@@ -144,7 +144,7 @@ struct AudioPCMQueueTests {
     func renderTroughSurvivesWritesBeforeObservation(windowExpired: Bool) throws {
         let decoder = AudioDecoder()
         defer { decoder.shutdown() }
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         let graph = try #require(decoder.halOutput)
         let input = try buffer(frames: 2_400)
         let data = try #require(input.floatChannelData)

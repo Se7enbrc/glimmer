@@ -48,7 +48,6 @@
 //  carries the measured fault and the jittery-link argument.
 //
 
-import GlimmerEngine
 import Foundation
 
 extension AudioDecoder {
@@ -116,8 +115,7 @@ extension AudioDecoder {
     /// (pre-roll before the reconciler has data) returns `base` via the `jitter > 0`
     /// guard. The result is clamped to `cap` so it can never seed past the over-run
     /// envelope. Callers only reach this on the no-memory path (memory still wins).
-    static func jitterAwareColdSeedMs(base: Double, cap: Double) -> Double {
-        let jitter = EnvSignalController.shared.decision.smoothedJitterMs
+    static func jitterAwareColdSeedMs(base: Double, cap: Double, jitter: Double) -> Double {
         guard jitter.isFinite, jitter > 0 else { return base }
         let biased = (coldSeedJitterK * jitter).rounded(.up) + coldSeedRttVarMarginMs
         return min(max(base, biased), cap)
@@ -162,7 +160,7 @@ extension AudioDecoder {
     /// Slack (ms) the OVER-RUN ceiling sits ABOVE the active cushion cap, so a max-deepened
     /// cushion can PRE-ROLL and absorb its post-gap catch-up clump without tripping the backstop.
     /// The runtime ceiling (`effectiveOverrunCeilingMs`): wired 190ms, Wi-Fi 240ms, tunnel 340ms.
-    static let bufferOverrunCeilingSlackMs: Double = 40
+    package static let bufferOverrunCeilingSlackMs: Double = 40
 
     /// LINK-AWARE cushion cap (ms) for a resolved stream-link class. A wired NIC's
     /// delivery-gap envelope fits the 150ms wired cap; a wifi/tunnel link's is
@@ -252,9 +250,9 @@ extension AudioDecoder {
     /// (deep-by-default fails toward a few ms of extra audio latency that the
     /// trim walks off in ~1s once the link resolves shallow - the alternative,
     /// shallow-by-default, fails toward audible blips).
-    static func loadCushionSeed(defaults: UserDefaults = .standard) -> CushionSeed {
-        let host = StreamRouteProbe.currentLatchedHost ?? "unknown"
-        let link = EnvSignalController.shared.streamLink
+    static func loadCushionSeed(environment: AudioEnvironment, defaults: UserDefaults = .standard) -> CushionSeed {
+        let host = environment.host
+        let link = environment.link
         let key = cushionMemoryKey(host: host, link: link)
         // The |unknown bucket is BORROW-ONLY: a legacy `host|unknown` record
         // (written by pre-resolve sessions) direct-hitting here seeded 40ms
@@ -290,7 +288,8 @@ extension AudioDecoder {
         // link resolve (resolveCushionLink) ~1-2s later, where jitter is meaningful.
         return CushionSeed(key: key, host: host, link: link,
                            targetMs: jitterAwareColdSeedMs(
-                               base: playoutCushionBaseMs, cap: cushionMaxMs(forLink: link)),
+                               base: playoutCushionBaseMs, cap: cushionMaxMs(forLink: link),
+                               jitter: environment.jitterMs),
                            floorMs: 0, fromMemory: false)
     }
 
@@ -424,7 +423,7 @@ extension AudioDecoder {
             // Set the link-aware cap from whatever the route reads NOW so a
             // late/never resolve can't freeze at the tunnel-300 default (only
             // ever equals-or-lowers the cap; pure field write under the lock).
-            let resolvedLink = EnvSignalController.shared.streamLink
+            let resolvedLink = platform.environment().link
             effectiveCushionMaxMs = Self.cushionMaxMs(forLink: resolvedLink)
             effectiveOverrunCeilingMs = effectiveCushionMaxMs + Self.bufferOverrunCeilingSlackMs
             cushionLinkClass = resolvedLink
@@ -434,7 +433,7 @@ extension AudioDecoder {
         }
         let host = cushionHostLabel
         audioMeterLock.unlock()
-        let link = EnvSignalController.shared.streamLink
+        let link = platform.environment().link
         guard link != "unknown" else { return }
         // UserDefaults read OUTSIDE the meter lock (CFPrefs can block on IPC;
         // the tiny-lock discipline stands even on this one-shot path).
@@ -445,8 +444,8 @@ extension AudioDecoder {
         // discipline this file keeps). By now (~1-2s in) the reconciler HAS jitter,
         // unlike at the init seed, so this is where the cold seed actually bites.
         // Clean link → base (do-no-harm).
-        let coldSeedMs = Self.jitterAwareColdSeedMs(
-            base: Self.playoutCushionBaseMs, cap: Self.cushionMaxMs(forLink: link))
+        let coldSeedMs = Self.jitterAwareColdSeedMs(base: Self.playoutCushionBaseMs,
+            cap: Self.cushionMaxMs(forLink: link), jitter: platform.environment().jitterMs)
 
         audioMeterLock.lock()
         // Re-check after the lock gap: the decode and completion threads both
@@ -546,7 +545,7 @@ extension AudioDecoder {
                 Diag.notice(
                     "audio cushion cold-seed (jitter-aware): \(Int(target.rounded()))ms from "
                     + "smoothed jitter "
-                    + "\(String(format: "%.1f", EnvSignalController.shared.decision.smoothedJitterMs))ms "
+                    + "\(String(format: "%.1f", platform.environment().jitterMs))ms "
                     + "(base \(Int(Self.playoutCushionBaseMs))ms, cap \(Int(cap))ms) - link \(link)",
                     "Audio")
             }

@@ -17,7 +17,6 @@
 //  in AudioDecoder.swift for the locking + design rationale.
 //
 
-import GlimmerEngine
 import AVFoundation
 import Foundation
 

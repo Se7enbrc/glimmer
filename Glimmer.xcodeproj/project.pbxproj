@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A11020261012000300000001 /* AudioHALOutput+Silence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11020261012000300000000 /* AudioHALOutput+Silence.swift */; };
+		A11020261012000300000001 /* AudioOutput+Silence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11020261012000300000000 /* AudioOutput+Silence.swift */; };
 		D81200000000000000000009 /* ReceiveTimingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000008 /* ReceiveTimingTests.swift */; };
 		D81200000000000000000007 /* ReceiveTimingTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000006 /* ReceiveTimingTelemetry.swift */; };
 		D81200000000000000000003 /* ReceiveTiming.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000002 /* ReceiveTiming.swift */; };
@@ -588,6 +588,13 @@
 		30B7CD9DC9494B06922E5F6D /* StreamConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6AA113EA45C4F71B26EA9CD /* StreamConnection.swift */; };
 		C1E5E4ADAF3B4061BAE07257 /* StreamConnection+Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D1D5E59D3694D12BE5D85F5 /* StreamConnection+Configuration.swift */; };
 		075A848ED8264C2A8F6168B7 /* TransportBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3171EF6FC17440C0AA2CEF96 /* TransportBoundaryTests.swift */; };
+		CC943FE2F8E4496DAB8BF2A2 /* AudioOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C58B68FCD74B9D8B70CCBB /* AudioOutput.swift */; };
+		2D838C7252754D10B78E02A7 /* AudioPlatform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6677976E59724E768BEE81EA /* AudioPlatform.swift */; };
+		7A867512BBBE41EA83AD4430 /* AudioDecoder+Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D99B64526FF4CC68B955AFC /* AudioDecoder+Platform.swift */; };
+		A036F06303524D068C3854AF /* MacAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36AF37C15C8748C488C2F0E6 /* MacAudio.swift */; };
+		A0372D03DBEB4262B7FF69EE /* MacAudio+Route.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17D04551236A443AB79E831A /* MacAudio+Route.swift */; };
+		6A14ADB734FA4B94A2EB077B /* MacAudio+Volume.swift in Sources */ = {isa = PBXBuildFile; fileRef = F03657CACA484081AF063576 /* MacAudio+Volume.swift */; };
+		F8AA1A0DA38B488F9BFD757E /* AudioBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0993F1C446DD4B81ADA982E8 /* AudioBoundaryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -647,7 +654,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		A11020261012000300000000 /* AudioHALOutput+Silence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioHALOutput+Silence.swift"; sourceTree = "<group>"; };
+		A11020261012000300000000 /* AudioOutput+Silence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioOutput+Silence.swift"; sourceTree = SOURCE_ROOT; };
 		D81200000000000000000008 /* ReceiveTimingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReceiveTimingTests.swift"; sourceTree = "<group>"; };
 		D81200000000000000000006 /* ReceiveTimingTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/ReceiveTimingTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		D81200000000000000000002 /* ReceiveTiming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/ReceiveTiming.swift; sourceTree = "<group>"; };
@@ -667,9 +674,9 @@
 		D0B9A46457B147E8A75D94BD /* VideoDecoder+ColorProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/VideoDecoder+ColorProbe.swift"; sourceTree = "<group>"; };
 		DEC0DE202610110A00000002 /* StreamInputView+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "StreamInputView+Text.swift"; path = "Stream/StreamInputView+Text.swift"; sourceTree = "<group>"; };
 		A11020261011000200000000 /* AudioPCMQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPCMQueueTests.swift; sourceTree = "<group>"; };
-		A11020261011000000000002 /* AudioHALDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioHALDevice.swift"; sourceTree = "<group>"; };
-		A11020261011000000000001 /* AudioHALOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioHALOutput.swift"; sourceTree = "<group>"; };
-		A11020261011000000000000 /* AudioPCMQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioPCMQueue.swift"; sourceTree = "<group>"; };
+		A11020261011000000000002 /* AudioHALDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/AudioHALDevice.swift"; sourceTree = SOURCE_ROOT; };
+		A11020261011000000000001 /* AudioHALOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/AudioHALOutput.swift"; sourceTree = SOURCE_ROOT; };
+		A11020261011000000000000 /* AudioPCMQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioPCMQueue.swift"; sourceTree = SOURCE_ROOT; };
 		DA2026100900000000000022 /* AWDLProcess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLProcess.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000004 /* AWDLHelperManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWDLHelperManagerTests.swift; sourceTree = "<group>"; };
 		DEC0DE202609258300000002 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../helper/Protocol.swift; sourceTree = "<group>"; };
@@ -748,7 +755,7 @@
 		AB00000009 /* Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Pairing.swift"; sourceTree = SOURCE_ROOT; };
 		AB00000011 /* Discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Discovery.swift"; sourceTree = SOURCE_ROOT; };
 		AB00000013 /* VideoDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/VideoDecoder.swift; sourceTree = "<group>"; };
-		AB00000015 /* AudioDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/AudioDecoder.swift; sourceTree = "<group>"; };
+		AB00000015 /* AudioDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder.swift"; sourceTree = SOURCE_ROOT; };
 		AB00000017 /* InputForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/InputForwarder.swift; sourceTree = "<group>"; };
 		AB00000019 /* StreamWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamWindow.swift; sourceTree = "<group>"; };
 		AB00000021 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/Signposts.swift"; sourceTree = SOURCE_ROOT; };
@@ -759,17 +766,17 @@
 		ABCD20260609000000000401 /* RtpAudioReceiver+Decrypt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+Decrypt.swift"; sourceTree = "<group>"; };
 		ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioReceiver+Events.swift"; sourceTree = "<group>"; };
 		ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioQueue+Fec.swift"; sourceTree = "<group>"; };
-		ABCD20260609000000000701 /* AudioDecoder+Meter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Meter.swift"; sourceTree = "<group>"; };
-		AC2026083000000000000001 /* AudioDecoder+Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Engine.swift"; sourceTree = "<group>"; };
-		AC2026083000000000000003 /* AudioDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Decode.swift"; sourceTree = "<group>"; };
-		A0D102202610091545000003 /* AudioDecoder+Spatial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Spatial.swift"; sourceTree = "<group>"; };
-		A0D102202610091545000001 /* SpatialAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/SpatialAudio.swift"; sourceTree = "<group>"; };
-		D2C00007 /* OpusDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/OpusDecoder.swift; sourceTree = "<group>"; };
-		EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/OpusDecoder+Packet.swift"; sourceTree = "<group>"; };
-		EE6572F168D7406289351043 /* OpusDecoder+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/OpusDecoder+Stream.swift"; sourceTree = "<group>"; };
-		AC2026083000000000000005 /* AudioDecoder+Prime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Prime.swift"; sourceTree = "<group>"; };
-		AC2026083000000000000007 /* AudioDecoder+Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Route.swift"; sourceTree = "<group>"; };
-		AC2026083000000000000009 /* AudioDecoder+Resampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Resampler.swift"; sourceTree = "<group>"; };
+		ABCD20260609000000000701 /* AudioDecoder+Meter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Meter.swift"; sourceTree = SOURCE_ROOT; };
+		AC2026083000000000000001 /* AudioDecoder+Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Engine.swift"; sourceTree = SOURCE_ROOT; };
+		AC2026083000000000000003 /* AudioDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Decode.swift"; sourceTree = SOURCE_ROOT; };
+		A0D102202610091545000003 /* AudioDecoder+Spatial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/AudioDecoder+Spatial.swift"; sourceTree = SOURCE_ROOT; };
+		A0D102202610091545000001 /* SpatialAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/SpatialAudio.swift"; sourceTree = SOURCE_ROOT; };
+		D2C00007 /* OpusDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/OpusDecoder.swift"; sourceTree = SOURCE_ROOT; };
+		EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/OpusDecoder+Packet.swift"; sourceTree = SOURCE_ROOT; };
+		EE6572F168D7406289351043 /* OpusDecoder+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/OpusDecoder+Stream.swift"; sourceTree = SOURCE_ROOT; };
+		AC2026083000000000000005 /* AudioDecoder+Prime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Prime.swift"; sourceTree = SOURCE_ROOT; };
+		AC2026083000000000000007 /* AudioDecoder+Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Route.swift"; sourceTree = SOURCE_ROOT; };
+		AC2026083000000000000009 /* AudioDecoder+Resampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Resampler.swift"; sourceTree = SOURCE_ROOT; };
 		AC202608300000000000000B /* InputForwarder+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+Lifecycle.swift"; sourceTree = "<group>"; };
 		AC202608300000000000000D /* ControllerForwarder+StatePush.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+StatePush.swift"; sourceTree = "<group>"; };
 		AC202608300000000000000F /* ControllerForwarder+Touchpad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/ControllerForwarder+Touchpad.swift"; sourceTree = "<group>"; };
@@ -785,7 +792,7 @@
 		ABCD20260609000000001601 /* TelemetryExporter+CaptureExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+CaptureExtras.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000001701 /* ControllerMotion.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControllerMotion.swift; path = Stream/ControllerMotion.swift; sourceTree = "<group>"; };
 		ABCD20260609000000001801 /* ControllerBattery.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControllerBattery.swift; path = Stream/ControllerBattery.swift; sourceTree = "<group>"; };
-		ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+CushionMemory.swift"; sourceTree = "<group>"; };
+		ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+CushionMemory.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260610000000004D01 /* ControllerHaptics+Actuation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ControllerHaptics+Actuation.swift"; path = "Stream/ControllerHaptics+Actuation.swift"; sourceTree = "<group>"; };
 		ABCD20260610000000004D03 /* ControllerForwarder+QuitChord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ControllerForwarder+QuitChord.swift"; path = "Stream/ControllerForwarder+QuitChord.swift"; sourceTree = "<group>"; };
 		ABCD20260610000000005F01 /* EnvSignalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/EnvSignalController.swift; sourceTree = "<group>"; };
@@ -1178,7 +1185,7 @@
 		A0D10A110000000000000001 /* AudioPipelineTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/AudioPipelineTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		A0D10A110000000000000003 /* TelemetryExporter+AudioPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+AudioPipeline.swift"; sourceTree = SOURCE_ROOT; };
 		A0D10A110000000000000005 /* AudioPacketWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/AudioPacketWorker.swift; sourceTree = "<group>"; };
-		A0D10A110000000000000007 /* AudioDecoder+Worker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/AudioDecoder+Worker.swift"; sourceTree = "<group>"; };
+		A0D10A110000000000000007 /* AudioDecoder+Worker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Worker.swift"; sourceTree = SOURCE_ROOT; };
 		A0D10A110000000000000009 /* AudioWorkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioWorkerTests.swift; sourceTree = "<group>"; };
 		E2610121000000000000000B /* StreamingBackend+Values.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamingBackend+Values.swift"; sourceTree = "<group>"; };
 		E2610121000000000000000D /* StreamCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamCrypto.swift"; sourceTree = "<group>"; };
@@ -1230,6 +1237,13 @@
 		A6AA113EA45C4F71B26EA9CD /* StreamConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamConnection.swift"; sourceTree = SOURCE_ROOT; };
 		8D1D5E59D3694D12BE5D85F5 /* StreamConnection+Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamConnection+Configuration.swift"; sourceTree = SOURCE_ROOT; };
 		3171EF6FC17440C0AA2CEF96 /* TransportBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/TransportBoundaryTests.swift"; sourceTree = SOURCE_ROOT; };
+		53C58B68FCD74B9D8B70CCBB /* AudioOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioOutput.swift"; sourceTree = SOURCE_ROOT; };
+		6677976E59724E768BEE81EA /* AudioPlatform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioPlatform.swift"; sourceTree = SOURCE_ROOT; };
+		9D99B64526FF4CC68B955AFC /* AudioDecoder+Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Platform.swift"; sourceTree = SOURCE_ROOT; };
+		36AF37C15C8748C488C2F0E6 /* MacAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacAudio.swift"; sourceTree = SOURCE_ROOT; };
+		17D04551236A443AB79E831A /* MacAudio+Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacAudio+Route.swift"; sourceTree = SOURCE_ROOT; };
+		F03657CACA484081AF063576 /* MacAudio+Volume.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacAudio+Volume.swift"; sourceTree = SOURCE_ROOT; };
+		0993F1C446DD4B81ADA982E8 /* AudioBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioBoundaryTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1323,6 +1337,9 @@
 		A10000031 /* Glimmer */ = {
 			isa = PBXGroup;
 			children = (
+				F03657CACA484081AF063576 /* MacAudio+Volume.swift */,
+				17D04551236A443AB79E831A /* MacAudio+Route.swift */,
+				36AF37C15C8748C488C2F0E6 /* MacAudio.swift */,
 				591B5BF62E754AD385A5B7B0 /* MacStreamPath.swift */,
 				E5D3A145DE64486EB0AE27CD /* MacTransport.swift */,
 				04D0EDAC65B5435CB48C2792 /* NativeConnectionEvents.swift */,
@@ -1482,24 +1499,10 @@
 				BC7DB456C0634F42AB147FDB /* HIDInputThread.swift */,
 				AB00000003 /* StreamSession.swift */,
 				AB00000013 /* VideoDecoder.swift */,
-				AB00000015 /* AudioDecoder.swift */,
-				ABCD20260609000000000701 /* AudioDecoder+Meter.swift */,
-				ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */,
-				AC2026083000000000000001 /* AudioDecoder+Engine.swift */,
-				A0D10A110000000000000007 /* AudioDecoder+Worker.swift */,
-				AC2026083000000000000003 /* AudioDecoder+Decode.swift */,
 				A0D102202610091545000003 /* AudioDecoder+Spatial.swift */,
 				A11020261011000000000002 /* AudioHALDevice.swift */,
-				A11020261012000300000000 /* AudioHALOutput+Silence.swift */,
 				A11020261011000000000001 /* AudioHALOutput.swift */,
-				A11020261011000000000000 /* AudioPCMQueue.swift */,
 				A0D102202610091545000001 /* SpatialAudio.swift */,
-				D2C00007 /* OpusDecoder.swift */,
-				EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */,
-				EE6572F168D7406289351043 /* OpusDecoder+Stream.swift */,
-				AC2026083000000000000005 /* AudioDecoder+Prime.swift */,
-				AC2026083000000000000007 /* AudioDecoder+Route.swift */,
-				AC2026083000000000000009 /* AudioDecoder+Resampler.swift */,
 				AC202608300000000000000B /* InputForwarder+Lifecycle.swift */,
 				AC202608300000000000000D /* ControllerForwarder+StatePush.swift */,
 				CA2026101100000000000004 /* ControllerButtonLayout.swift */,
@@ -1570,6 +1573,7 @@
 		D2000016 /* GlimmerTests */ = {
 			isa = PBXGroup;
 			children = (
+				0993F1C446DD4B81ADA982E8 /* AudioBoundaryTests.swift */,
 				3171EF6FC17440C0AA2CEF96 /* TransportBoundaryTests.swift */,
 				B655C0313DBB4627B46D06FB /* PCCommunicationTests.swift */,
 				7E2D9DE57D16436AA178E464 /* EngineDiagnosticsBoundaryTests.swift */,
@@ -1777,6 +1781,23 @@
 		E26101210000000000000009 /* GlimmerEngine */ = {
 			isa = PBXGroup;
 			children = (
+				9D99B64526FF4CC68B955AFC /* AudioDecoder+Platform.swift */,
+				6677976E59724E768BEE81EA /* AudioPlatform.swift */,
+				53C58B68FCD74B9D8B70CCBB /* AudioOutput.swift */,
+				AC2026083000000000000007 /* AudioDecoder+Route.swift */,
+				ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */,
+				ABCD20260609000000000701 /* AudioDecoder+Meter.swift */,
+				AC2026083000000000000001 /* AudioDecoder+Engine.swift */,
+				D2C00007 /* OpusDecoder.swift */,
+				A11020261012000300000000 /* AudioOutput+Silence.swift */,
+				EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */,
+				A11020261011000000000000 /* AudioPCMQueue.swift */,
+				AC2026083000000000000005 /* AudioDecoder+Prime.swift */,
+				EE6572F168D7406289351043 /* OpusDecoder+Stream.swift */,
+				AB00000015 /* AudioDecoder.swift */,
+				A0D10A110000000000000007 /* AudioDecoder+Worker.swift */,
+				AC2026083000000000000003 /* AudioDecoder+Decode.swift */,
+				AC2026083000000000000009 /* AudioDecoder+Resampler.swift */,
 				8D1D5E59D3694D12BE5D85F5 /* StreamConnection+Configuration.swift */,
 				A6AA113EA45C4F71B26EA9CD /* StreamConnection.swift */,
 				FA0354F751394D79B38E651F /* TransportRoute.swift */,
@@ -2084,6 +2105,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6A14ADB734FA4B94A2EB077B /* MacAudio+Volume.swift in Sources */,
+				A0372D03DBEB4262B7FF69EE /* MacAudio+Route.swift in Sources */,
+				A036F06303524D068C3854AF /* MacAudio.swift in Sources */,
 				BC54AA6CBD524543A7570914 /* MacStreamPath.swift in Sources */,
 				B61D339480D440B28088209F /* MacTransport.swift in Sources */,
 				A743B57A270B4BA0AA47418A /* NativeConnectionEvents.swift in Sources */,
@@ -2241,24 +2265,10 @@
 				EE13E673ECB2440B86BF720D /* HIDInputThread.swift in Sources */,
 				AB00000004 /* StreamSession.swift in Sources */,
 				AB00000014 /* VideoDecoder.swift in Sources */,
-				AB00000016 /* AudioDecoder.swift in Sources */,
-				ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */,
-				ABCD20260610000000000802 /* AudioDecoder+CushionMemory.swift in Sources */,
-				AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */,
-				A0D10A110000000000000008 /* AudioDecoder+Worker.swift in Sources */,
-				AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */,
 				A0D102202610091545000004 /* AudioDecoder+Spatial.swift in Sources */,
 				A11020261011000100000002 /* AudioHALDevice.swift in Sources */,
-				A11020261012000300000001 /* AudioHALOutput+Silence.swift in Sources */,
 				A11020261011000100000001 /* AudioHALOutput.swift in Sources */,
-				A11020261011000100000000 /* AudioPCMQueue.swift in Sources */,
 				A0D102202610091545000002 /* SpatialAudio.swift in Sources */,
-				D2C00008 /* OpusDecoder.swift in Sources */,
-				EE6572F168D7406289351042 /* OpusDecoder+Packet.swift in Sources */,
-				EE6572F168D7406289351044 /* OpusDecoder+Stream.swift in Sources */,
-				AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */,
-				AC2026083000000000000008 /* AudioDecoder+Route.swift in Sources */,
-				AC202608300000000000000A /* AudioDecoder+Resampler.swift in Sources */,
 				AC202608300000000000000C /* InputForwarder+Lifecycle.swift in Sources */,
 				AC202608300000000000000E /* ControllerForwarder+StatePush.swift in Sources */,
 				CA2026101100000000000003 /* ControllerButtonLayout.swift in Sources */,
@@ -2317,6 +2327,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F8AA1A0DA38B488F9BFD757E /* AudioBoundaryTests.swift in Sources */,
 				075A848ED8264C2A8F6168B7 /* TransportBoundaryTests.swift in Sources */,
 				9A621DC44DF54B10B3656B77 /* PCCommunicationTests.swift in Sources */,
 				1E1F825D58AE41FBA9EA5C17 /* EngineDiagnosticsBoundaryTests.swift in Sources */,
@@ -2524,6 +2535,23 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7A867512BBBE41EA83AD4430 /* AudioDecoder+Platform.swift in Sources */,
+				2D838C7252754D10B78E02A7 /* AudioPlatform.swift in Sources */,
+				CC943FE2F8E4496DAB8BF2A2 /* AudioOutput.swift in Sources */,
+				AC2026083000000000000008 /* AudioDecoder+Route.swift in Sources */,
+				ABCD20260610000000000802 /* AudioDecoder+CushionMemory.swift in Sources */,
+				ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */,
+				AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */,
+				D2C00008 /* OpusDecoder.swift in Sources */,
+				A11020261012000300000001 /* AudioOutput+Silence.swift in Sources */,
+				EE6572F168D7406289351042 /* OpusDecoder+Packet.swift in Sources */,
+				A11020261011000100000000 /* AudioPCMQueue.swift in Sources */,
+				AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */,
+				EE6572F168D7406289351044 /* OpusDecoder+Stream.swift in Sources */,
+				AB00000016 /* AudioDecoder.swift in Sources */,
+				A0D10A110000000000000008 /* AudioDecoder+Worker.swift in Sources */,
+				AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */,
+				AC202608300000000000000A /* AudioDecoder+Resampler.swift in Sources */,
 				C1E5E4ADAF3B4061BAE07257 /* StreamConnection+Configuration.swift in Sources */,
 				30B7CD9DC9494B06922E5F6D /* StreamConnection.swift in Sources */,
 				711D8559CDA84D78860B40AA /* TransportRoute.swift in Sources */,

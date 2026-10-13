@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import AVFoundation
+@testable import GlimmerEngine
 import Testing
 @testable import Glimmer
 

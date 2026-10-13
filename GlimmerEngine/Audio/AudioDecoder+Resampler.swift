@@ -9,7 +9,6 @@
 //  lives on the class; AudioDecoder.swift documents the locking.
 //
 
-import GlimmerEngine
 import AVFoundation
 import Foundation
 
@@ -19,6 +18,8 @@ extension AudioDecoder {
     /// Reuse the cushion's existing time and drift budgets; absolute session offset
     /// cannot distinguish a corrected clock from a playback stall.
     struct ResamplerDriftWindow {
+        init() {}
+
         private var startNanos: UInt64?
         private var lastObservationNanos: UInt64?
         private var startMs = 0.0

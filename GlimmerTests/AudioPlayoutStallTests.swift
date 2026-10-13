@@ -19,7 +19,7 @@
 //  mint under-run evidence.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
