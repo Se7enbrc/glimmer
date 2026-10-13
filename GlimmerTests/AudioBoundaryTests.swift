@@ -9,6 +9,20 @@ import Foundation
 import Testing
 
 struct AudioBoundaryTests {
+    @Test func sharedOutputRetainsTheMacAdapterUntilItsLastOwnerReleasesIt() throws {
+        var adapter: AudioHALOutput? = AudioHALOutput(channels: 2)
+        weak let observedAdapter = adapter
+        let storage = try #require(adapter?.storage)
+        var output = adapter?.sharedOutput
+        storage.queue.pointee.enabled.store(true, ordering: .releasing)
+        adapter = nil
+        #expect(observedAdapter != nil)
+        #expect(output?.queue == storage.queue)
+        output = nil
+        #expect(observedAdapter == nil)
+        #expect(Bool(!storage.queue.pointee.enabled.load(ordering: .acquiring)))
+    }
+
     @Test func failedDisposalPermanentlyRetainsTheCallbackStorage() throws {
         var storage: AudioRenderStorage? = AudioRenderStorage(channels: 2)
         let queue = try #require(storage?.queue)
@@ -90,6 +104,8 @@ struct AudioBoundaryTests {
         #expect(decoder.halOutput == nil)
         #expect(decoder.meterShutdown && !decoder.engineRunning)
         #expect(fixture.routeRemoved > 0 && fixture.devicesRemoved > 0)
+        #expect(fixture.starts == 2)
+        #expect(fixture.disposals == 2)
     }
 
     @Test func deviceListenerDeliversTheCapturedGenerationOnTheOwnedQueue() throws {
@@ -122,6 +138,7 @@ struct AudioBoundaryTests {
         private var startCount = 0
         private var removedRoutes = 0
         private var removedDevices = 0
+        private var disposalCount = 0
         private var change: (@Sendable (UInt64) -> Void)?
         private var route: (@Sendable (UInt64) -> Void)?
         var failure: OSStatus? {
@@ -131,15 +148,18 @@ struct AudioBoundaryTests {
         var starts: Int { lock.withLock { startCount } }
         var routeRemoved: Int { lock.withLock { removedRoutes } }
         var devicesRemoved: Int { lock.withLock { removedDevices } }
+        var disposals: Int { lock.withLock { disposalCount } }
         var deviceChanged: (@Sendable (UInt64) -> Void)? { lock.withLock { change } }
         var routeChanged: (@Sendable (UInt64) -> Void)? { lock.withLock { route } }
 
         func platform() -> AudioPlatform {
             AudioPlatform(makeOutput: { format in
                 if let failure = self.failure { throw AudioOutput.Failure(status: failure) }
-                let storage = AudioRenderStorage(channels: Int(format.channelCount))
-                return AudioOutput(storage: storage, sampleRate: format.sampleRate,
-                    channels: format.channelCount, latencyMs: 0, start: { self.lock.withLock { self.startCount += 1 }; return noErr },
+                let adapter = OutputAdapter(channels: Int(format.channelCount),
+                    started: { self.lock.withLock { self.startCount += 1 } },
+                    disposed: { self.lock.withLock { self.disposalCount += 1 } })
+                return AudioOutput(storage: adapter.storage, sampleRate: format.sampleRate,
+                    channels: format.channelCount, latencyMs: 0, start: { adapter.start(); return noErr },
                     isRunning: { true }, setRate: { _ in noErr }, lastRenderError: { noErr })
             }, sampleRoute: { AudioRoute(label: "test", uid: nil) },
             installRouteListener: { _, _, changed in self.lock.withLock { self.route = changed } },
@@ -148,6 +168,24 @@ struct AudioBoundaryTests {
             removeDeviceListeners: { self.lock.withLock { self.removedDevices += 1 } },
             captureVolume: { { AudioOutputVolume(volume: nil, muted: nil, routeChanged: false) } },
             environment: { AudioEnvironment(host: "unknown", link: "unknown", jitterMs: 0) })
+        }
+    }
+
+    private final class OutputAdapter {
+        let storage: AudioRenderStorage
+        private let started: () -> Void
+        private let disposed: () -> Void
+
+        init(channels: Int, started: @escaping () -> Void, disposed: @escaping () -> Void) {
+            storage = AudioRenderStorage(channels: channels)
+            self.started = started
+            self.disposed = disposed
+        }
+
+        func start() { started() }
+
+        deinit {
+            storage.dispose { disposed(); return true }
         }
     }
 }

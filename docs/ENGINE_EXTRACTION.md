@@ -288,15 +288,18 @@ failures can throw `AudioOutput.Failure(status:)`; start failures return
 OSStatus. The shared recovery ladder remains armed while receive/decode
 continues.
 
-The adapter's closures retain its graph and storage. During teardown call
-`storage.dispose(using:)` to stop and dispose every unit before releasing the
-storage. A failed disposal permanently retains its raw callback memory, even if
-a later disposal reports success. The adapter must never free or repurpose
-callback context itself. Graph/listener hooks are serialized by the decoder;
-route, environment and volume probes must be thread safe. Deliver listener
-notifications asynchronously on the supplied queue, never inline during a hook.
-Queued callbacks carry the decoder generation and cannot restart a stopped or
-replacement session. Backend stop still joins the packet worker before cleanup.
+The output's closures retain a separate graph owner and its storage. The
+long-lived platform adapter keeps only a weak graph reference: retaining the
+graph independently would prevent decoder shutdown from disposing it. During
+teardown call `storage.dispose(using:)` to stop and dispose every unit before
+releasing the storage. A failed disposal permanently retains its raw callback
+memory, even if a later disposal reports success. The adapter must never free or
+repurpose callback context itself. Graph/listener hooks are serialized by the
+decoder; route, environment and volume probes must be thread safe. Deliver
+listener notifications asynchronously on the supplied queue, never inline during
+a hook. Queued callbacks carry the decoder generation and cannot restart a
+stopped or replacement session. Backend stop still joins the packet worker
+before cleanup.
 
 An iOS adapter should configure/activate `AVAudioSession` in the app, build its
 public RemoteIO output using this storage, and report actual route values after
