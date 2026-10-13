@@ -436,8 +436,6 @@ jobs:
       GLIMMER_RC_APP_CLIENT_ID: ${{ secrets.GLIMMER_RC_APP_CLIENT_ID }}
       GLIMMER_RC_APP_PRIVATE_KEY: ${{ secrets.GLIMMER_RC_APP_PRIVATE_KEY }}
       RELEASE_CONTENTS_TOKEN: ${{ secrets.RELEASE_CONTENTS_TOKEN }}
-      ACTIONS_STEP_DEBUG: ${{ secrets.ACTIONS_STEP_DEBUG }}
-      ACTIONS_RUNNER_DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
     permissions:
       contents: read
       actions: read
