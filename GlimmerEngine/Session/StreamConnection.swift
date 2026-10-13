@@ -9,6 +9,7 @@ public actor StreamConnection {
     private let backend: NativeBackend
     private var started = false
     private var stopped = false
+    private var launchTask: Task<LaunchResponse, Error>?
 
     public enum Event: Sendable, Equatable {
         case stageStarting(String)
@@ -41,20 +42,38 @@ public actor StreamConnection {
 
     /// Uses the paired client's cached PC record, then performs one launch or resume and the live handshake.
     public func connect(network: NetworkClient, appID: Int, configuration: Configuration) async throws {
-        guard !started else { throw Failure.alreadyStarted }
+        try await connect(network: network, appID: appID, configuration: configuration,
+                          readServer: { await $0.server })
+    }
+
+    func connect(network: NetworkClient, appID: Int, configuration: Configuration,
+                 readServer: @Sendable (NetworkClient) async -> ServerInfo) async throws {
         guard !stopped else { throw CancellationError() }
+        guard !started else { throw Failure.alreadyStarted }
         guard appID > 0 else { throw Failure.invalidConfiguration }
         try configuration.validate()
-        let server = await network.server
-        guard server.serverCertPEM != nil, server.pairStatus == .paired else { throw Failure.pairingRequired }
-        guard !server.isRealGFE else { throw StreamError.gameStreamHost }
+        // Reserve this attempt before crossing actors; stop and another connect can run at every await.
         started = true
         do {
+            let server = await readServer(network)
+            guard !stopped else { throw CancellationError() }
+            guard server.serverCertPEM != nil, server.pairStatus == .paired else { throw Failure.pairingRequired }
+            guard !server.isRealGFE else { throw StreamError.gameStreamHost }
             try Task.checkCancellation()
             let request = configuration.request
-            let launch = server.currentGameID == appID
-                ? try await network.resume(config: request)
-                : try await network.launch(appID: appID, config: request)
+            let pending = Task {
+                try Task.checkCancellation()
+                return server.currentGameID == appID
+                    ? try await network.resume(config: request)
+                    : try await network.launch(appID: appID, config: request)
+            }
+            launchTask = pending
+            defer { launchTask = nil }
+            let launch = try await withTaskCancellationHandler {
+                try await pending.value
+            } onCancel: {
+                pending.cancel()
+            }
             guard !stopped else { throw CancellationError() }
             try Task.checkCancellation()
             let config = try configuration.backendConfig(launch: launch)
@@ -73,6 +92,7 @@ public actor StreamConnection {
     /// Stops local transport and joins media workers. It does not quit the game on the PC.
     public func stop() {
         stopped = true
+        launchTask?.cancel()
         backend.stopConnection()
     }
 }

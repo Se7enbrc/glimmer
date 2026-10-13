@@ -99,6 +99,96 @@ struct TransportBoundaryTests {
         }
     }
 
+    @Test func connectReservesAttemptBeforeReadingNetworkActor() async {
+        let (entered, entry) = AsyncStream<Void>.makeStream()
+        let (release, continuation) = AsyncStream<Void>.makeStream()
+        let network = rejectingNetwork()
+        let connection = StreamConnection(video: Sink()) { _, _ in }
+        let config = connectionConfiguration()
+        let first = Task<Void, Never> {
+            _ = await #expect(throws: StreamConnection.Failure.pairingRequired) {
+                try await connection.connect(network: network, appID: 1, configuration: config) { network in
+                    entry.yield(())
+                    for await _ in release { break }
+                    return await network.server
+                }
+            }
+        }
+        for await _ in entered { break }
+        await #expect(throws: StreamConnection.Failure.alreadyStarted) {
+            try await connection.connect(network: network, appID: 1, configuration: config)
+        }
+        continuation.yield(())
+        await first.value
+        await connection.stop()
+    }
+
+    @Test func stopDuringNetworkSnapshotPreventsLaunch() async {
+        let (entered, entry) = AsyncStream<Void>.makeStream()
+        let (release, continuation) = AsyncStream<Void>.makeStream()
+        let network = rejectingNetwork(paired: true)
+        let connection = StreamConnection(video: Sink()) { _, _ in }
+        let config = connectionConfiguration()
+        let first = Task<Void, Never> {
+            _ = await #expect(throws: CancellationError.self) {
+                try await connection.connect(network: network, appID: 1, configuration: config) { network in
+                    entry.yield(())
+                    for await _ in release { break }
+                    return await network.server
+                }
+            }
+        }
+        for await _ in entered { break }
+        await connection.stop()
+        continuation.yield(())
+        await first.value
+    }
+
+    @Test func stopCancelsLaunchWaitingForIdentity() async {
+        let (entered, entry) = AsyncStream<Void>.makeStream()
+        let (release, continuation) = AsyncStream<Void>.makeStream()
+        var server = ServerInfo(address: "127.0.0.1", uniqueId: "test", serverName: "Test PC")
+        server.serverCertPEM = "test pin, never used by a transport"
+        server.pairStatus = .paired
+        let network = NetworkClient(server: server, deviceName: { "Test" }, transport: { _, _, _, _, _, _, _ in
+            Issue.record("A stopped connection must not send its pending launch")
+            throw IdentityStorageError.unavailable
+        }, identity: {
+            entry.yield(())
+            for await _ in release { break }
+            return ("test certificate", "test key", "test identity")
+        })
+        let connection = StreamConnection(video: Sink()) { _, _ in }
+        let config = connectionConfiguration()
+        let first = Task<Void, Never> {
+            _ = await #expect(throws: CancellationError.self) {
+                try await connection.connect(network: network, appID: 1, configuration: config)
+            }
+        }
+        for await _ in entered { break }
+        await connection.stop()
+        continuation.yield(())
+        await first.value
+    }
+
+    private func rejectingNetwork(paired: Bool = false) -> NetworkClient {
+        var server = ServerInfo(address: "127.0.0.1", uniqueId: "test", serverName: "Test PC")
+        if paired {
+            server.serverCertPEM = "test pin, never used by a transport"
+            server.pairStatus = .paired
+        }
+        return NetworkClient(server: server,
+                      deviceName: { "Test" }, identity: {
+            Issue.record("Rejected connections must not load credentials or contact the PC")
+            throw IdentityStorageError.unavailable
+        })
+    }
+
+    private func connectionConfiguration() -> StreamConnection.Configuration {
+        StreamConnection.Configuration(width: 1920, height: 1080, fps: 60,
+                                       bitrateKbps: 20_000, videoFormats: [.h264])
+    }
+
     @Test func workerConfiguresItsOwnedThreadOnce() {
         let configured = DispatchSemaphore(value: 0)
         let worker = AudioPacketWorker(configureThread: {

@@ -212,10 +212,12 @@ stage start/complete/failure, connected/terminated, connection quality, HDR
 mode, and nonfatal audio failure. Calls are synchronous on the originating
 engine thread; enqueue them in received order, avoid blocking, and reject IDs
 belonging to an earlier connection. `stop()` is idempotent, stops local
-transport and joins media workers; it does not send PC quit. Cancelling connect
-interrupts the live handshake. A stopped/used connection cannot be restarted.
-The Mac's existing StreamSession still owns its original cancel/reconnect
-policy.
+transport, cancels a pending launch/resume and joins media workers; it does not
+send PC quit. Cancelling connect cancels the launch/resume or interrupts the
+live handshake. The attempt is reserved before reading the network actor, so a
+second connect cannot launch concurrently and stop during that read prevents
+launch. A stopped/used connection cannot be restarted. The Mac's existing
+StreamSession still owns its original cancel/reconnect policy.
 
 ### Mac adapters and hot paths
 
