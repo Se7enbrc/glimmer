@@ -1,0 +1,14 @@
+{
+  "originHash" : "aafe6b1ff095d241e54369c482c8421d37567b665d16f410443812c7882c0706",
+  "pins" : [
+    {
+      "identity" : "glimmer",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Se7enbrc/glimmer.git",
+      "state" : {
+        "revision" : "e6988d070649fb2313f88f8e572bbb4838252347"
+      }
+    }
+  ],
+  "version" : 3
+}

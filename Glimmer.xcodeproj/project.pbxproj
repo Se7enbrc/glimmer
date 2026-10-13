@@ -520,7 +520,7 @@
 			repositoryURL = "https://github.com/Se7enbrc/glimmer.git";
 			requirement = {
 				kind = revision;
-				revision = 29b17cc703a2eab3c81fd662fe25c151b35f64b5;
+				revision = e6988d070649fb2313f88f8e572bbb4838252347;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

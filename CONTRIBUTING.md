@@ -23,18 +23,18 @@ build-tool checks. Read full build logs: zero warnings is required.
 `pre-commit install` is an owner setup step; hooks include verified credential
 and offline private-key scans.
 
-## Engine dependency and first publication
+## Engine dependency
 
 The shared project pins `Se7enbrc/glimmer` to the exact commit
-`29b17cc703a2eab3c81fd662fe25c151b35f64b5`, the first with `Package.swift`.
-Update the pin to a full commit SHA, never a branch or tag, and never copy
-engine source here.
+`e6988d070649fb2313f88f8e572bbb4838252347`, including the public connection API
+and shared transport. The package lock records the same revision. Update the pin
+to a full commit SHA, never a branch or tag, and never copy engine source here.
 
-For development against the uncommitted package:
+For development against a local engine checkout:
 
 ```sh
-make app ENGINE_PATH=../wt-spm
-make test ENGINE_PATH=../wt-spm
+make app ENGINE_PATH=/absolute/path/to/glimmer
+make test ENGINE_PATH=/absolute/path/to/glimmer
 ```
 
 Use an absolute path for any other engine checkout. This creates an ignored
@@ -43,12 +43,13 @@ source files and shared scheme. Open that project for local Xcode work. The
 tracked project and its exact revision stay unchanged. Do not open both projects
 at once.
 
-After publishing the engine package, update the revision in
+When updating the engine dependency, update the revision in
 `Glimmer.xcodeproj/project.pbxproj`, resolve in Xcode, and check in Xcode’s
 `Glimmer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.
 Then run the default commands without `ENGINE_PATH`, including CI. A successful
-local override does not prove remote resolution. This is the first-publication
-blocker, not a complete framework handoff.
+local override does not prove remote resolution. The public connection tests
+exercise cancellation and teardown without opening a connection to the PC; they
+do not prove media playback or complete the framework handoff.
 
 ## Physical devices
 
@@ -82,9 +83,8 @@ It does not advertise complete controller navigation yet.
 
 ## Repository protection
 
-`.github/rulesets/` mirrors Glimmer’s three live rulesets as importable JSON.
-Only the required checks differ: `iOS`, `Analyze (swift)` and
-`Analyze (actions)`. No rules have been applied. Before importing, review the
-copied integration bypass IDs for this repository, enable private vulnerability
-reporting, and confirm that the required checks have run. Keep the
-signed-history and squash-only policy.
+`.github/rulesets/` records this repository’s three active rulesets as
+importable JSON. Required checks are `iOS`, `Analyze (swift)` and
+`Analyze (actions)`. The maintainer-pushes ruleset permits only the repository
+admin bypass; it has no integration bypass. Keep the signed-history and
+squash-only policy. Editing these files does not change live GitHub settings.
