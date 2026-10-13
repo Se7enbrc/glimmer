@@ -42,7 +42,11 @@ public final class AudioDecoder: @unchecked Sendable {
     var packetSplice = AudioPacketSplice()
     // Graph objects are accessed only while decode admission or the graph gate is held.
     var halOutput: AudioHALOutput?
-    var outputRoute = AudioOutputRoute()
+    var outputRoute = AudioOutputRoute() {
+        didSet {
+            if oldValue != outputRoute { outputRoute.logRoute() }
+        }
+    }
     var outputGraphNeedsReconnect = false
     var inputFormat: AVAudioFormat?
     var deviceListeners: [(AudioObjectID, AudioObjectPropertyAddress, Int)] = []

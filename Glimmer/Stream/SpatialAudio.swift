@@ -3,6 +3,7 @@
 
 import AudioToolbox
 import CoreAudio
+import IOKit.audio
 
 struct AudioOutputRoute: Equatable, Sendable {
     enum Kind: Sendable {
@@ -11,6 +12,18 @@ struct AudioOutputRoute: Equatable, Sendable {
 
     var channels = 2
     var kind: Kind = .other
+    var device: AudioDeviceID = 0
+    var transport: UInt32?
+    var terminals: [UInt32] = []
+    var dataSource: UInt32?
+
+    func logRoute() {
+        let transport = transport.map { String($0, radix: 16) } ?? "unknown"
+        let terminals = terminals.map { String($0, radix: 16) }.joined(separator: ",")
+        let source = dataSource.map { String($0, radix: 16) } ?? "unknown"
+        Diag.info("Audio route: transport=0x\(transport) terminals=[\(terminals)] "
+            + "dataSource=0x\(source) channels=\(channels) kind=\(String(describing: kind))", "Stream.Audio")
+    }
 
     func spatialOutput(sourceChannels: Int) -> AUSpatialMixerOutputType? {
         guard sourceChannels > 2, channels == 2 else { return nil }
@@ -23,10 +36,17 @@ struct AudioOutputRoute: Equatable, Sendable {
         }
     }
 
-    static func classify(transport: UInt32?, terminals: [UInt32]) -> Kind {
-        if terminals.contains(kAudioStreamTerminalTypeHeadphones) { return .headphones }
-        if transport == kAudioDeviceTransportTypeBuiltIn,
-           terminals.contains(kAudioStreamTerminalTypeSpeaker) { return .builtInSpeakers }
+    static func classify(transport: UInt32?, terminals: [UInt32], dataSource: UInt32? = nil) -> Kind {
+        // Apple Silicon HAL streams can expose IOAudio's numeric terminal types instead of FourCCs.
+        if terminals.contains(kAudioStreamTerminalTypeHeadphones) || terminals.contains(UInt32(OUTPUT_HEADPHONES)) {
+            return .headphones
+        }
+        guard transport == kAudioDeviceTransportTypeBuiltIn else { return .other }
+        if dataSource == UInt32(kIOAudioSelectorControlSelectionValueHeadphones) { return .headphones }
+        if terminals.contains(kAudioStreamTerminalTypeSpeaker) || terminals.contains(UInt32(OUTPUT_SPEAKER))
+            || dataSource == UInt32(kIOAudioSelectorControlSelectionValueInternalSpeaker) {
+            return .builtInSpeakers
+        }
         return .other
     }
 
@@ -40,7 +60,11 @@ struct AudioOutputRoute: Equatable, Sendable {
         let channels = streams.reduce(0) { $0 + channelCount($1) }
         let terminals = streams.compactMap { uintProperty($0, selector: kAudioStreamPropertyTerminalType) }
         let transport = uintProperty(device, selector: kAudioDevicePropertyTransportType)
-        return Self(channels: channels > 0 ? channels : 2, kind: classify(transport: transport, terminals: terminals))
+        let source = uintProperty(device, selector: kAudioDevicePropertyDataSource,
+                                  scope: kAudioDevicePropertyScopeOutput)
+        return Self(channels: channels > 0 ? channels : 2,
+                    kind: classify(transport: transport, terminals: terminals, dataSource: source),
+                    device: device, transport: transport, terminals: terminals, dataSource: source)
     }
 
     static func outputStreams(device: AudioDeviceID) -> [AudioStreamID]? {
@@ -68,8 +92,11 @@ struct AudioOutputRoute: Equatable, Sendable {
         return Int(format.mChannelsPerFrame)
     }
 
-    private static func uintProperty(_ object: AudioObjectID, selector: AudioObjectPropertySelector) -> UInt32? {
-        var address = AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal,
+    private static func uintProperty(
+        _ object: AudioObjectID, selector: AudioObjectPropertySelector,
+        scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal
+    ) -> UInt32? {
+        var address = AudioObjectPropertyAddress(mSelector: selector, mScope: scope,
                                                   mElement: kAudioObjectPropertyElementMain)
         var value: UInt32 = 0
         var bytes = UInt32(MemoryLayout<UInt32>.size)

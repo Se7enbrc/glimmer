@@ -42,6 +42,25 @@ struct SpatialAudioTests {
         }
     }
 
+    @Test func macBookProHALValuesSelectBuiltInDownmix() {
+        // M4 Pro: Built-in transport, IOAudio OUTPUT_SPEAKER, internal-speaker data source.
+        let kind = AudioOutputRoute.classify(transport: 0x626C746E, terminals: [0x0301], dataSource: 0x6973706B)
+        #expect(kind == .builtInSpeakers)
+        #expect(AudioOutputRoute(kind: kind).spatialOutput(sourceChannels: 8) == nil)
+        #expect(AudioOutputRoute.classify(transport: 0x626C746E, terminals: [0x0301]) == .builtInSpeakers)
+        #expect(AudioOutputRoute.classify(transport: 0x626C746E, terminals: [],
+                                          dataSource: 0x6973706B) == .builtInSpeakers)
+        for transport in [kAudioDeviceTransportTypeUSB, kAudioDeviceTransportTypeBluetooth] {
+            #expect(AudioOutputRoute.classify(transport: transport, terminals: [0x0301]) == .other)
+            #expect(AudioOutputRoute.classify(transport: transport, terminals: [0x0302]) == .headphones)
+        }
+        #expect(AudioOutputRoute.classify(transport: 0x626C746E, terminals: [0x0301, 0x0302],
+                                          dataSource: 0x6973706B) == .headphones)
+        #expect(AudioOutputRoute.classify(transport: 0x626C746E, terminals: [0x0301],
+                                          dataSource: 0x6864706E) == .headphones)
+        #expect(AudioOutputRoute.classify(transport: 0x626C746E, terminals: []) == .other)
+    }
+
     @Test(arguments: [2, 6, 8])
     func nativeOutputsPreserveChannelIdentity(channels: Int) throws {
         let route = AudioOutputRoute(channels: channels)
