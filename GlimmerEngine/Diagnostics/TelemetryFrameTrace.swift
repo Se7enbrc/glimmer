@@ -29,7 +29,7 @@ import os
 ///
 /// `@unchecked Sendable`: the buffer is lock-guarded; the file handle + timer are
 /// confined to `flushQueue`.
-@usableFromInline package final class FrameTraceWriter: @unchecked Sendable {
+package final class FrameTraceWriter: @unchecked Sendable {
 
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Telemetry")
 
@@ -47,10 +47,10 @@ import os
     /// SIZE-CAPPED ROLLOVER (C2): past `maxFileBytes` a fresh `-<n>` segment opens; a session keeps
     /// its first (connect, first IDR, pacer lock-in) plus the newest `maxTraceFiles - 1` (≈384MB).
     /// The next connect's byte sweep trims this session last, oldest `-<n>` first.
-    @usableFromInline package static let defaultMaxFileBytes: UInt64 = 96 * 1024 * 1024
+    package static let defaultMaxFileBytes: UInt64 = 96 * 1024 * 1024
     private let maxFileBytes: UInt64
     private let directory: URL
-    @usableFromInline package static let maxTraceFiles = 4
+    package static let maxTraceFiles = 4
 
     private let flushQueue = DispatchQueue(label: "io.ugfugl.Glimmer.telemetry.frames", qos: .utility)
     private var fileHandle: FileHandle?
@@ -71,8 +71,7 @@ import os
     private var pending: [String] = []
     private var droppedOverflow = false
 
-    @usableFromInline
-    package init(directory: URL = TelemetryExporter.logsDirectory, maxFileBytes: UInt64 = defaultMaxFileBytes) {
+    package init(directory: URL, maxFileBytes: UInt64 = defaultMaxFileBytes) {
         self.directory = directory
         self.maxFileBytes = maxFileBytes
         bufferLock.initialize(to: os_unfair_lock_s())
@@ -81,7 +80,7 @@ import os
 
     /// Open the trace file + arm the flush timer. Mirrors the exporter's NDJSON
     /// path: `~/Library/Logs/Glimmer/telemetry-frames-<ISO8601>.ndjson`.
-    @usableFromInline package func start(isoStamp: String) {
+    package func start(isoStamp: String) {
         flushQueue.async { [weak self] in
             guard let self else { return }
             let timer = DispatchSource.makeTimerSource(queue: self.flushQueue)
@@ -130,7 +129,7 @@ import os
 
     /// Trim this session's segments (oldest-first) to `maxTraceFiles`, keeping
     /// the first and the newest. Returns the segments to delete.
-    @usableFromInline package static func trimSegments(_ segments: inout [URL]) -> [URL] {
+    package static func trimSegments(_ segments: inout [URL]) -> [URL] {
         var stale: [URL] = []
         while segments.count > maxTraceFiles { stale.append(segments.remove(at: 1)) }
         return stale
@@ -146,7 +145,7 @@ import os
 
     /// Stop the timer, flush whatever is pending, close the file. Synchronous so
     /// teardown is deterministic.
-    @usableFromInline package func stop() {
+    package func stop() {
         flushQueue.sync { [weak self] in
             guard let self else { return }
             self.flushTimer?.cancel()
@@ -159,7 +158,7 @@ import os
 
     /// Hot-path-side append: push one pre-rendered NDJSON line into the buffer
     /// under a short lock. No I/O here. Bounded - drops oldest on overflow.
-    @usableFromInline package func append(_ line: String) {
+    package func append(_ line: String) {
         os_unfair_lock_lock(bufferLock)
         pending.append(line)
         if pending.count > Self.maxPendingLines {

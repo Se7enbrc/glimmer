@@ -265,7 +265,7 @@ extension TelemetryExporter {
         // correlation labels for governor tick-throttle (the ~106-ticks-on-
         // 120fps chug): if on_battery predicts it reliably, padding can be
         // pre-armed at session start instead of waiting for the measured sag.
-        snap.onBattery = snap.resource.map { $0.onBattery ?? false }
+        snap.onBattery = snap.resource?.onBattery ?? false
         snap.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
 
         // Build attribution (signal 5a): the compile-time git SHA + build date.

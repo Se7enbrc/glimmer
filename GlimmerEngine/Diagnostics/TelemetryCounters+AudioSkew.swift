@@ -55,108 +55,108 @@ import os
 /// Self-locked (the `AudioTtfContext` idiom); the per-write cost is one clock
 /// read + an unfair lock + two stores at ≤240Hz video / 200Hz audio - the same
 /// always-live budget as the audio meter's per-packet accounting.
-@usableFromInline package final class AudioVideoSkewStore: @unchecked Sendable {
-    @usableFromInline package static let shared = AudioVideoSkewStore()
+package final class AudioVideoSkewStore: @unchecked Sendable {
+    package static let shared = AudioVideoSkewStore()
 
     /// Freshness horizon (ns) per side: a side not written within this window
     /// (suppressed presents, drained audio, teardown) drops the anchor pair and
     /// the derive reports absent (absent ≠ 0) until both sides flow again.
-    @usableFromInline package static let freshnessNanos: UInt64 = 2_000_000_000
+    package static let freshnessNanos: UInt64 = 2_000_000_000
     /// Sanity bound (ms) on a derived skew: beyond this the anchors are judged
     /// inconsistent (host RTP discontinuity) and the pair re-latches. 600ms
     /// clears the deepest cushion (300ms) + a real lip-sync excursion with margin
     /// but rejects the railed values a stale anchor produces - the old 1800ms was
     /// loose enough to pass a −1517ms artifact into the percentile buckets.
-    @usableFromInline package static let sanityBoundMs: Double = 600
+    package static let sanityBoundMs: Double = 600
     /// A pair anchor latches only from notes this fresh (audio packets land every
     /// 5 ms, presents every few ms), so a stalled side can't set the epoch.
-    @usableFromInline package static let anchorFreshnessNanos: UInt64 = 100_000_000
+    package static let anchorFreshnessNanos: UInt64 = 100_000_000
     /// Signed bucket bounds (ms) for the session percentiles: fine across the
     /// 0...150ms cushion range (the ~125ms ITU threshold bracketed), ending at the
     /// ±600ms sanity bound so no accepted av_skew lands past them.
-    @usableFromInline package static let bucketBoundsMs: [Double] = [
+    package static let bucketBoundsMs: [Double] = [
         -500, -400, -250, -125, -90, -60, -40, -25, -10, 0,
         10, 25, 40, 60, 75, 90, 110, 125, 150, 200, 300, 400, 500, 600
     ]
     /// Video RTP is a 90kHz capture clock (RTP standard for video).
-    @usableFromInline package static let videoRtpTicksPerMs = 90.0
+    package static let videoRtpTicksPerMs = 90.0
     /// The two known audio RTP clock families: Sunshine's packet-duration
     /// MILLISECOND clock (1 tick/ms - the live host, the default) and a true
     /// 48kHz sample clock (48 ticks/ms - what the RTP header would suggest and
     /// what the old conversion wrongly assumed). The measured-rate snap picks
     /// between them; see the AUDIO CLOCK UNITS doc on the type.
-    @usableFromInline package static let audioTicksPerMsCandidates: [Double] = [1.0, 48.0]
+    package static let audioTicksPerMsCandidates: [Double] = [1.0, 48.0]
     /// Minimum audio-flow span before the measured advance rate is trusted to
     /// snap the clock family. At ~200 packets/s, 2s ≈ 400 packets; arrival
     /// clumping on a jittery link distorts a 2s window by a few percent - the
     /// candidate families are 4800% apart, so a mis-snap would take a clumping
     /// pathology no real link produces.
-    @usableFromInline package static let audioRateCalibrationNanos: UInt64 = 2_000_000_000
+    package static let audioRateCalibrationNanos: UInt64 = 2_000_000_000
     /// Outlier-guard jump threshold (ms): a 1Hz sample more than this from the
     /// running EWMA is rejected once (then re-seeds, so a sustained step is
     /// accepted on the next tick). Generous - real skew moves slowly (cushion
     /// ramps tens of ms/s), so only a one-tick artifact clears it.
-    @usableFromInline package static let outlierJumpMs: Double = 250
+    package static let outlierJumpMs: Double = 250
 
-    @usableFromInline internal let lock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var videoLastRtp: UInt32 = 0
-    @usableFromInline internal var videoNoteNanos: UInt64 = 0
-    @usableFromInline internal var audioLastRtp: UInt32 = 0
-    @usableFromInline internal var audioNoteNanos: UInt64 = 0
-    @usableFromInline internal var videoAnchorRtp: UInt32 = 0
-    @usableFromInline internal var audioAnchorRtp: UInt32 = 0
-    @usableFromInline internal var anchored = false
-    @usableFromInline internal var everAnchored = false
-    @usableFromInline internal var rebases: UInt64 = 0
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    private var videoLastRtp: UInt32 = 0
+    private var videoNoteNanos: UInt64 = 0
+    private var audioLastRtp: UInt32 = 0
+    private var audioNoteNanos: UInt64 = 0
+    private var videoAnchorRtp: UInt32 = 0
+    private var audioAnchorRtp: UInt32 = 0
+    private var anchored = false
+    private var everAnchored = false
+    private var rebases: UInt64 = 0
     // Audio clock-family calibration: anchor of the first audio note (the
     // measured-rate baseline) + the resolved ticks/ms. Nominal 1.0 (the live
     // host's ms clock) until the first derive ≥2s of audio flow snaps it to
     // the nearest candidate family - once, then latched for the session.
-    @usableFromInline internal var audioRateAnchorRtp: UInt32 = 0
-    @usableFromInline internal var audioRateAnchorNanos: UInt64 = 0
-    @usableFromInline internal var audioTicksPerMs = 1.0
-    @usableFromInline internal var audioRateResolved = false
+    private var audioRateAnchorRtp: UInt32 = 0
+    private var audioRateAnchorNanos: UInt64 = 0
+    private var audioTicksPerMs = 1.0
+    private var audioRateResolved = false
     // Two-window snap latch: the family must agree across two consecutive windows
     // before latching, so one arrival-clumping window can't flip the clock. The
     // first window re-baselines the rate anchor for the second. nil = no candidate.
-    @usableFromInline internal var audioRatePendingFamily: Double?
+    private var audioRatePendingFamily: Double?
     /// Latest RESIDENT corrector-inserted silence (ms) in the audio buffer, pushed
     /// by `publishAudioState`. Subtracted from the buffer-fill term in `deriveSkewMs`
     /// so the playhead reflects real media, not inserted silence (see the type doc
     /// + `AudioDecoder.pendingSilenceFrames`). 0 until audio flows / no inserts.
-    @usableFromInline internal var residentSilenceMs: Double = 0
+    private var residentSilenceMs: Double = 0
     /// Cushion-subtracted true clock skew (ms) from the most recent successful
     /// derive; nil when that derive produced no value (dark/stale/re-anchor/bound).
-    @usableFromInline internal var lastTrueClockSkewMs: Double?
+    private var lastTrueClockSkewMs: Double?
     /// Frames the depacketizer's recovery gate has dropped (source + last read):
     /// a count that moved since the last derive means video is recovering.
-    @usableFromInline internal let videoRecoveryDrops: @Sendable () -> UInt64
-    @usableFromInline internal var lastRecoveryDrops: UInt64 = 0
+    private let videoRecoveryDrops: @Sendable () -> UInt64
+    private var lastRecoveryDrops: UInt64 = 0
     // Session accumulator (scorecard percentiles): bucket counts + exact
     // min/max/sum. Reset per session via `resetForNewSession`.
-    @usableFromInline internal var bucketCounts = [UInt64](repeating: 0, count: bucketBoundsMs.count)
-    @usableFromInline internal var sampleCount: UInt64 = 0
-    @usableFromInline internal var sampleSum: Double = 0
-    @usableFromInline internal var sampleMin: Double = .infinity
-    @usableFromInline internal var sampleMax: Double = -.infinity
+    private var bucketCounts = [UInt64](repeating: 0, count: bucketBoundsMs.count)
+    private var sampleCount: UInt64 = 0
+    private var sampleSum: Double = 0
+    private var sampleMin: Double = .infinity
+    private var sampleMax: Double = -.infinity
     // Parallel accumulator for the cushion-SUBTRACTED true clock skew - the real
     // A/V sync signal (av_skew_ms is dominated by the cushion). Same bucket set
     // and feeder cadence (the NDJSON tick); summarized alongside av_skew.
-    @usableFromInline internal var clockBucketCounts = [UInt64](repeating: 0, count: bucketBoundsMs.count)
-    @usableFromInline internal var clockSampleCount: UInt64 = 0
-    @usableFromInline internal var clockSampleSum: Double = 0
-    @usableFromInline internal var clockSampleMin: Double = .infinity
-    @usableFromInline internal var clockSampleMax: Double = -.infinity
+    private var clockBucketCounts = [UInt64](repeating: 0, count: bucketBoundsMs.count)
+    private var clockSampleCount: UInt64 = 0
+    private var clockSampleSum: Double = 0
+    private var clockSampleMin: Double = .infinity
+    private var clockSampleMax: Double = -.infinity
     // Outlier guard: an EWMA of accepted av_skew samples + whether one has been
     // seeded. A single 1Hz sample that jumps more than `outlierJumpMs` from the
     // running estimate is rejected ONCE (not bucketed) - it re-seeds the
     // estimate, so a SUSTAINED step passes on the very next tick. Catches a lone
     // in-bound artifact (a −1517ms reading inside a loose bound) without dropping
     // legitimate sustained skew.
-    @usableFromInline internal var skewEwmaMs: Double = 0
-    @usableFromInline internal var skewEwmaSeeded = false
+    private var skewEwmaMs: Double = 0
+    private var skewEwmaSeeded = false
 
-    @inlinable package init(videoRecoveryDrops: @escaping @Sendable () -> UInt64 = {
+    package init(videoRecoveryDrops: @escaping @Sendable () -> UInt64 = {
         TelemetryCounters.shared.recoveryWaitDropTotal.value
     }) {
         self.videoRecoveryDrops = videoRecoveryDrops
@@ -168,7 +168,7 @@ import os
     /// renderer. Called from the present site (gate-on path only - the
     /// `FrameTimingTracker.shared` nil-check upstream keeps telemetry-off
     /// sessions zero-cost). 0 = untracked frame, ignored.
-    @inlinable package func noteVideoPresented(rtp: UInt32, now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
+    package func noteVideoPresented(rtp: UInt32, now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
         guard rtp != 0 else { return }
         os_unfair_lock_lock(lock)
         videoLastRtp = rtp
@@ -181,7 +181,7 @@ import os
     /// The first note also anchors the clock-family calibration baseline (one
     /// extra branch on the hot path; the calibration itself runs on the 1Hz
     /// cold derive, never here).
-    @inlinable package func noteAudioScheduled(rtp: UInt32, now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
+    package func noteAudioScheduled(rtp: UInt32, now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
         os_unfair_lock_lock(lock)
         // RATE-ANCHOR FRESHNESS (stale-anchor audit, 2026-08-12): a pre-resolve
         // audio stall spanning the calibration window inflates elapsed-ms while
@@ -208,7 +208,7 @@ import os
     /// Push the latest resident corrector-inserted silence (ms). Called from
     /// `publishAudioState` at the schedule + completion cadence; one lock + one
     /// store - the same always-live budget as the audio meter's per-packet work.
-    @inlinable package func setResidentSilenceMs(_ ms: Double) {
+    package func setResidentSilenceMs(_ ms: Double) {
         os_unfair_lock_lock(lock)
         residentSilenceMs = ms > 0 ? ms : 0
         os_unfair_lock_unlock(lock)
@@ -217,7 +217,7 @@ import os
     /// Re-anchors after the first latch are counted so a mid-session
     /// re-baseline (suppression window, RTP discontinuity) is visible next to
     /// the skew series it steps.
-    @inlinable package var rebaseTotal: UInt64 {
+    package var rebaseTotal: UInt64 {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return rebases
     }
@@ -227,7 +227,7 @@ import os
     /// tick. `accumulate` feeds the session percentile accumulator - set it
     /// from exactly ONE caller cadence (the NDJSON tick) so the scorecard
     /// can't double-count; other readers (Prometheus) derive without feeding.
-    @inlinable package func deriveSkewMs(
+    package func deriveSkewMs(
         bufferFillMs: Double?, accumulate: Bool, now: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) -> Double? {
         guard let fillMs = bufferFillMs else { return nil }
@@ -302,7 +302,7 @@ import os
     /// The cushion-SUBTRACTED true clock skew (ms, + = audio clock behind video)
     /// from the most recent `deriveSkewMs` this tick, or nil if that derive made
     /// no value (dark/stale/re-anchor/bound). Read right after it; no side effects.
-    @inlinable package func lastTrueClockSkew() -> Double? {
+    package func lastTrueClockSkew() -> Double? {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return lastTrueClockSkewMs
     }
@@ -317,7 +317,7 @@ import os
     /// (bounded recovery, never a permanent give-up). A zero/garbage measured
     /// rate (audio stalled across the whole window) declines to latch and
     /// simply retries on the next derive.
-    @inlinable internal func resolveAudioClockFamilyLocked(now: UInt64) {
+    private func resolveAudioClockFamilyLocked(now: UInt64) {
         guard !audioRateResolved, audioRateAnchorNanos != 0,
               now &- audioRateAnchorNanos >= Self.audioRateCalibrationNanos else { return }
         let elapsedMs = Double(now &- audioRateAnchorNanos) / 1_000_000.0
@@ -344,7 +344,7 @@ import os
     /// the sample is rejected as a lone artifact - the EWMA still re-seeds to it,
     /// so a SUSTAINED step is accepted on the next tick.
     @discardableResult
-    @inlinable internal func observeLocked(_ skewMs: Double) -> Bool {
+    private func observeLocked(_ skewMs: Double) -> Bool {
         if skewEwmaSeeded, abs(skewMs - skewEwmaMs) > Self.outlierJumpMs {
             skewEwmaMs = skewMs // re-seed so a real step isn't rejected twice
             return false
@@ -362,7 +362,7 @@ import os
     /// Feed one 1Hz CUSHION-FREE clock-skew sample into its accumulator. Lock
     /// already held; mirrors `observeLocked` so the true-sync percentiles use
     /// the same bucket/overflow discipline as av_skew.
-    @inlinable internal func observeClockLocked(_ skewMs: Double) {
+    private func observeClockLocked(_ skewMs: Double) {
         clockSampleCount &+= 1
         clockSampleSum += skewMs
         if skewMs < clockSampleMin { clockSampleMin = skewMs }
@@ -372,16 +372,16 @@ import os
 
     /// The bucket a sample lands in; the top one also takes anything past it,
     /// which the sanity bound already rules out.
-    @inlinable internal static func bucketIndex(_ skewMs: Double) -> Int {
+    private static func bucketIndex(_ skewMs: Double) -> Int {
         bucketBoundsMs.firstIndex { skewMs <= $0 } ?? bucketBoundsMs.count - 1
     }
 
     /// Session percentile summary for the scorecard (nil before any sample).
     /// p50/p95/p99 are interpolated within the fixed buckets (the NDJSON
     /// histogram-estimator discipline), min/max/avg exact.
-    @usableFromInline package struct Summary {
+    package struct Summary {
 
-        @inlinable package init(
+        package init(
             samples: UInt64,
             minMs: Double,
             maxMs: Double,
@@ -401,16 +401,16 @@ import os
             self.rebases = rebases
         }
 
-        @usableFromInline package let samples: UInt64
-        @usableFromInline package let minMs: Double
-        @usableFromInline package let maxMs: Double
-        @usableFromInline package let avgMs: Double
-        @usableFromInline package let p50Ms: Double
-        @usableFromInline package let p95Ms: Double
-        @usableFromInline package let p99Ms: Double
-        @usableFromInline package let rebases: UInt64
+        package let samples: UInt64
+        package let minMs: Double
+        package let maxMs: Double
+        package let avgMs: Double
+        package let p50Ms: Double
+        package let p95Ms: Double
+        package let p99Ms: Double
+        package let rebases: UInt64
     }
-    @inlinable package func sessionSummary() -> Summary? {
+    package func sessionSummary() -> Summary? {
         os_unfair_lock_lock(lock)
         defer { os_unfair_lock_unlock(lock) }
         guard sampleCount > 0 else { return nil }
@@ -428,7 +428,7 @@ import os
     /// sync signal (av_skew is dominated by the cushion). Same shape/discipline
     /// as `sessionSummary`; nil before any sample. `rebases` is shared (one pair
     /// epoch feeds both accumulators).
-    @inlinable package func clockSkewSessionSummary() -> Summary? {
+    package func clockSkewSessionSummary() -> Summary? {
         os_unfair_lock_lock(lock)
         defer { os_unfair_lock_unlock(lock) }
         guard clockSampleCount > 0 else { return nil }
@@ -445,7 +445,7 @@ import os
     /// Bucket-interpolated quantile, clamped to the exact min/max. Each bucket
     /// spans its real extent (the lowest from the exact min, the highest to the
     /// exact max), so a tail quantile no longer pins to the max.
-    @inlinable package static func quantile(
+    package static func quantile(
         _ quantile: Double,
         buckets: [UInt64],
         minMs: Double,
@@ -472,7 +472,7 @@ import os
     /// Reset the accumulator + anchors for a fresh session. Called from the
     /// audio decoder's session init (the one per-session edge both halves
     /// share); the scorecard reads at stop, before the next session's init.
-    @inlinable package func resetForNewSession() {
+    package func resetForNewSession() {
         os_unfair_lock_lock(lock)
         anchored = false
         everAnchored = false

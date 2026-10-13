@@ -5,23 +5,23 @@ import Foundation
 import os
 
 /// Independent locks keep receive, decode and render observations out of each other's critical sections.
-@usableFromInline package final class AudioPipelineTelemetry: Sendable {
+package final class AudioPipelineTelemetry: Sendable {
 
-    @inlinable package init() {}
+    package init() {}
 
-    @usableFromInline package static let shared = AudioPipelineTelemetry()
-    @usableFromInline package let receiveGap = LatencyHistograms.Stage()
-    @usableFromInline package let decodeSchedule = LatencyHistograms.Stage()
-    @usableFromInline package let stateLockWait = LatencyHistograms.Stage()
-    @usableFromInline package let queueWait = LatencyHistograms.Stage()
-    @usableFromInline package let queueOverflow = TelemetryCounters.Counter()
-    @usableFromInline package let poolExhausted = TelemetryCounters.Counter()
-    @usableFromInline package let reconfigurationDrops = TelemetryCounters.Counter()
-    @usableFromInline internal let window = OSAllocatedUnfairLock(initialState: Window())
+    package static let shared = AudioPipelineTelemetry()
+    package let receiveGap = LatencyHistograms.Stage()
+    package let decodeSchedule = LatencyHistograms.Stage()
+    package let stateLockWait = LatencyHistograms.Stage()
+    package let queueWait = LatencyHistograms.Stage()
+    package let queueOverflow = TelemetryCounters.Counter()
+    package let poolExhausted = TelemetryCounters.Counter()
+    package let reconfigurationDrops = TelemetryCounters.Counter()
+    private let window = OSAllocatedUnfairLock(initialState: Window())
 
-    @usableFromInline package struct Window: Sendable {
+    package struct Window: Sendable {
 
-        @inlinable package init(
+        package init(
             minimumRenderCushionMs: Double? = nil,
             renderUnderruns: UInt64 = 0,
             nearMisses: UInt64 = 0,
@@ -39,18 +39,18 @@ import os
             self.deviceRecoveryMs = deviceRecoveryMs
         }
 
-        @usableFromInline package var minimumRenderCushionMs: Double?
-        @usableFromInline package var renderUnderruns: UInt64 = 0
-        @usableFromInline package var nearMisses: UInt64 = 0
-        @usableFromInline package var realtime = false
-        @usableFromInline package var outputSilentSeconds: Double = 0
-        @usableFromInline package var outputLatencyMs: Double?
-        @usableFromInline package var deviceRecoveryMs: Double?
+        package var minimumRenderCushionMs: Double?
+        package var renderUnderruns: UInt64 = 0
+        package var nearMisses: UInt64 = 0
+        package var realtime = false
+        package var outputSilentSeconds: Double = 0
+        package var outputLatencyMs: Double?
+        package var deviceRecoveryMs: Double?
     }
 
-    @usableFromInline package struct Snapshot: Sendable {
+    package struct Snapshot: Sendable {
 
-        @inlinable package init(
+        package init(
             receiveGap: LatencyHistogramSnapshot.Stage,
             decodeSchedule: LatencyHistogramSnapshot.Stage,
             stateLockWait: LatencyHistogramSnapshot.Stage,
@@ -70,17 +70,17 @@ import os
             self.reconfigurationDrops = reconfigurationDrops
         }
 
-        @usableFromInline package var receiveGap: LatencyHistogramSnapshot.Stage
-        @usableFromInline package var decodeSchedule: LatencyHistogramSnapshot.Stage
-        @usableFromInline package var stateLockWait: LatencyHistogramSnapshot.Stage
-        @usableFromInline package var queueWait: LatencyHistogramSnapshot.Stage
-        @usableFromInline package var window: Window
-        @usableFromInline package var queueOverflow: UInt64
-        @usableFromInline package var poolExhausted: UInt64
-        @usableFromInline package var reconfigurationDrops: UInt64
+        package var receiveGap: LatencyHistogramSnapshot.Stage
+        package var decodeSchedule: LatencyHistogramSnapshot.Stage
+        package var stateLockWait: LatencyHistogramSnapshot.Stage
+        package var queueWait: LatencyHistogramSnapshot.Stage
+        package var window: Window
+        package var queueOverflow: UInt64
+        package var poolExhausted: UInt64
+        package var reconfigurationDrops: UInt64
     }
 
-    @inlinable package func noteRender(cushionMs: Double, underrun: Bool) {
+    package func noteRender(cushionMs: Double, underrun: Bool) {
         guard cushionMs.isFinite else { return }
         window.withLock {
             $0.minimumRenderCushionMs = min($0.minimumRenderCushionMs ?? cushionMs, cushionMs)
@@ -88,19 +88,19 @@ import os
         }
     }
 
-    @inlinable package func noteOutput(latencyMs: Double, recoveryMs: Double? = nil) {
+    package func noteOutput(latencyMs: Double, recoveryMs: Double? = nil) {
         window.withLock {
             $0.outputLatencyMs = latencyMs
             if let recoveryMs { $0.deviceRecoveryMs = recoveryMs }
         }
     }
 
-    @inlinable package func noteOutputSilence(seconds: Double) { window.withLock { $0.outputSilentSeconds = seconds } }
+    package func noteOutputSilence(seconds: Double) { window.withLock { $0.outputSilentSeconds = seconds } }
 
-    @inlinable package func noteNearMiss() { window.withLock { $0.nearMisses &+= 1 } }
-    @inlinable package func setRealtime(_ enabled: Bool) { window.withLock { $0.realtime = enabled } }
+    package func noteNearMiss() { window.withLock { $0.nearMisses &+= 1 } }
+    package func setRealtime(_ enabled: Bool) { window.withLock { $0.realtime = enabled } }
 
-    @inlinable package func takeSnapshot() -> Snapshot {
+    package func takeSnapshot() -> Snapshot {
         let captured = window.withLock { value in
             let captured = value
             value.minimumRenderCushionMs = nil
@@ -113,7 +113,7 @@ import os
                         reconfigurationDrops: reconfigurationDrops.value)
     }
 
-    @inlinable package func reset() {
+    package func reset() {
         receiveGap.reset(); decodeSchedule.reset(); stateLockWait.reset(); queueWait.reset()
         queueOverflow.reset(); poolExhausted.reset(); reconfigurationDrops.reset()
         window.withLock { $0 = Window() }

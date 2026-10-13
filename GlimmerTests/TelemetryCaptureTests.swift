@@ -6,7 +6,7 @@
 //  The 1 Hz capture driven by a scripted source and private counters, into a temp directory.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -90,7 +90,8 @@ final class TelemetryCaptureTests {
     // MARK: - Seam
 
     @Test func gatedConstructionKeepsProductionDirectoryAndCounters() throws {
-        let made = TelemetryExporter.makeIfEnabled(source: source(), serverName: Self.pcName, enabled: true)
+        let made = TelemetryExporter.makeIfEnabled(source: source(), serverName: Self.pcName,
+                                                   outputDirectory: MacTelemetryCapture.logsDirectory, enabled: true)
         let exporter = try #require(made)
         #expect(exporter.outputDirectory == MacTelemetryCapture.logsDirectory)
         #expect(exporter.counters === TelemetryCounters.shared)

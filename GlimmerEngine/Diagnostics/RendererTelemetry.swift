@@ -7,27 +7,27 @@ import AVFoundation
 import Foundation
 import QuartzCore
 
-@usableFromInline package struct RendererPerformanceValues: Sendable, Equatable {
-    @usableFromInline package var frames: UInt64
-    @usableFromInline package var dropped: UInt64
-    @usableFromInline package var optimized: UInt64
-    @usableFromInline package var delaySeconds: Double
+package struct RendererPerformanceValues: Sendable, Equatable {
+    package var frames: UInt64
+    package var dropped: UInt64
+    package var optimized: UInt64
+    package var delaySeconds: Double
 
-    @usableFromInline package func delta(since previous: Self) -> Self? {
+    package func delta(since previous: Self) -> Self? {
         guard frames >= previous.frames, dropped >= previous.dropped,
               optimized >= previous.optimized, delaySeconds >= previous.delaySeconds else { return nil }
         return Self(frames: frames - previous.frames, dropped: dropped - previous.dropped,
                     optimized: optimized - previous.optimized, delaySeconds: delaySeconds - previous.delaySeconds)
     }
 
-    @usableFromInline package init(frames: UInt64, dropped: UInt64, optimized: UInt64, delaySeconds: Double) {
+    package init(frames: UInt64, dropped: UInt64, optimized: UInt64, delaySeconds: Double) {
         self.frames = frames
         self.dropped = dropped
         self.optimized = optimized
         self.delaySeconds = delaySeconds
     }
 
-    @usableFromInline package init?(_ metrics: AVVideoPerformanceMetrics) {
+    package init?(_ metrics: AVVideoPerformanceMetrics) {
         guard metrics.totalNumberOfFrames >= 0, metrics.numberOfDroppedFrames >= 0,
               metrics.numberOfFramesDisplayedUsingOptimizedCompositing >= 0 else { return nil }
         self.init(frames: UInt64(metrics.totalNumberOfFrames), dropped: UInt64(metrics.numberOfDroppedFrames),
@@ -36,9 +36,9 @@ import QuartzCore
     }
 }
 
-@usableFromInline package struct RendererPerformanceSnapshot: Sendable {
+package struct RendererPerformanceSnapshot: Sendable {
 
-    @usableFromInline package init(
+    package init(
         status: Status = .unavailable,
         cumulative: RendererPerformanceValues? = nil,
         delta: RendererPerformanceValues? = nil,
@@ -54,27 +54,27 @@ import QuartzCore
         self.resets = resets
     }
 
-    @usableFromInline package enum Status: String, Sendable {
+    package enum Status: String, Sendable {
         case unavailable, pending, baseline, ready
     }
 
-    @usableFromInline package var status: Status = .unavailable
-    @usableFromInline package var cumulative: RendererPerformanceValues?
-    @usableFromInline package var delta: RendererPerformanceValues?
-    @usableFromInline package var intervalSeconds: Double?
-    @usableFromInline package var ageSeconds: Double?
-    @usableFromInline package var resets: UInt64 = 0
+    package var status: Status = .unavailable
+    package var cumulative: RendererPerformanceValues?
+    package var delta: RendererPerformanceValues?
+    package var intervalSeconds: Double?
+    package var ageSeconds: Double?
+    package var resets: UInt64 = 0
 }
 
 /// Immutable references used only on the exporter queue. AVFoundation's metrics
 /// request is thread-safe; the retained identity prevents reuse during a request.
-@usableFromInline package struct RendererPerformanceSource: @unchecked Sendable {
-    @usableFromInline package let identity: AnyObject
-    @usableFromInline package let presentation: RendererPresentationState
-    @usableFromInline package let load: (@escaping @Sendable (RendererPerformanceValues?) -> Void) -> Void
-    @usableFromInline package let reportTransition: @Sendable (RendererPathTransition) -> Void
+package struct RendererPerformanceSource: @unchecked Sendable {
+    package let identity: AnyObject
+    package let presentation: RendererPresentationState
+    package let load: (@escaping @Sendable (RendererPerformanceValues?) -> Void) -> Void
+    package let reportTransition: @Sendable (RendererPathTransition) -> Void
 
-    @usableFromInline package init(
+    package init(
         identity: AnyObject, presentation: RendererPresentationState = .init(),
         reportTransition: @escaping @Sendable (RendererPathTransition) -> Void = { _ in },
         load: @escaping (@escaping @Sendable (RendererPerformanceValues?) -> Void) -> Void
@@ -85,7 +85,6 @@ import QuartzCore
         self.reportTransition = reportTransition
     }
 
-    @usableFromInline
     package init(_ renderer: AVSampleBufferVideoRenderer, presentation: RendererPresentationState = .init(),
                  reportTransition: @escaping @Sendable (RendererPathTransition) -> Void = { _ in }) {
         identity = renderer
@@ -101,7 +100,7 @@ import QuartzCore
 
 /// All mutable state is confined to the exporter's queue. Completions hop there;
 /// no timer or per-frame hook exists, and stop invalidates any outstanding reply.
-@usableFromInline package final class RendererTelemetry: @unchecked Sendable {
+package final class RendererTelemetry: @unchecked Sendable {
     private struct Request {
         let token: UInt64
         let generation: UInt64
@@ -120,14 +119,14 @@ import QuartzCore
     private var completedAt: CFTimeInterval?
     private var pathTracker = RendererPathTracker()
 
-    @usableFromInline package init(queue: DispatchQueue, probe: @escaping @Sendable () -> RendererPerformanceSource?) {
+    package init(queue: DispatchQueue, probe: @escaping @Sendable () -> RendererPerformanceSource?) {
         self.queue = queue
         self.probe = probe
     }
 
     /// Return the last completed result and start at most one request per exporter tick.
     /// A slow request remains the sole outstanding request even after a layer swap.
-    @usableFromInline package func sample(now: CFTimeInterval = CACurrentMediaTime()) -> RendererPerformanceSnapshot {
+    package func sample(now: CFTimeInterval = CACurrentMediaTime()) -> RendererPerformanceSnapshot {
         dispatchPrecondition(condition: .onQueue(queue))
         guard !stopped else { return RendererPerformanceSnapshot() }
         observe(probe())
@@ -153,7 +152,7 @@ import QuartzCore
         return result
     }
 
-    @usableFromInline package func stop() {
+    package func stop() {
         dispatchPrecondition(condition: .onQueue(queue))
         stopped = true
         generation &+= 1

@@ -12,7 +12,7 @@ extension OSSignposter {
     /// Decode path: submit-into-VT → output callback fire. One interval per
     /// frame, with the bitstream byte count as the begin message and the
     /// outcome (ok / dropped / abandoned) as the end message.
-    @usableFromInline package static let decode = OSSignposter(
+    package static let decode = OSSignposter(
         subsystem: "io.ugfugl.Glimmer",
         category: "Stream.Decode")
 
@@ -20,26 +20,26 @@ extension OSSignposter {
     /// One interval per successfully-decoded frame. Emits a `RendererFailed`
     /// event when the AVSampleBufferDisplayLayer latches FAILED and we have
     /// to flush + request an IDR.
-    @usableFromInline package static let render = OSSignposter(
+    package static let render = OSSignposter(
         subsystem: "io.ugfugl.Glimmer",
         category: "Stream.Render")
 
     /// Network path: startConnection → first connectionStarted callback,
     /// plus per-stage stageStarting/stageComplete/stageFailed events. These
     /// are the native backend's connection lifecycle markers.
-    @usableFromInline package static let network = OSSignposter(
+    package static let network = OSSignposter(
         subsystem: "io.ugfugl.Glimmer",
         category: "Stream.Network")
 
     /// Pairing path: full runPairingFlow as one interval, with one event per
     /// HTTP round so a stuck handshake shows the exact step that hung.
-    @usableFromInline package static let pairing = OSSignposter(
+    package static let pairing = OSSignposter(
         subsystem: "io.ugfugl.Glimmer",
         category: "Stream.Pairing")
 
     /// Audio path: Opus decode + scheduleBuffer. One
     /// interval per network-delivered audio packet.
-    @usableFromInline package static let audio = OSSignposter(
+    package static let audio = OSSignposter(
         subsystem: "io.ugfugl.Glimmer",
         category: "Stream.Audio")
 }

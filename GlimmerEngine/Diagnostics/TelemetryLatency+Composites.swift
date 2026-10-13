@@ -22,7 +22,7 @@ extension FrameTimingTracker {
     /// presented frame). `~RTT/2` is the one-way transit estimate from the current
     /// smoothed ENet RTT; 0 RTT means "not yet known" and the transit leg is
     /// omitted rather than counted as 0.
-    @inlinable package func computeGlassToGlass(hostEncodeMs: Double, pipelineMs: Double?) -> Double? {
+    package func computeGlassToGlass(hostEncodeMs: Double, pipelineMs: Double?) -> Double? {
         var total = 0.0
         var haveAny = false
         if hostEncodeMs > 0 { total += hostEncodeMs; haveAny = true }
@@ -35,8 +35,8 @@ extension FrameTimingTracker {
     /// Input-to-photon (signal 2), an ESTIMATE recorded once per fresh input stamp
     /// (`noteInputEvent`), so an idle stream's static frames can't re-count an old
     /// input. The host doesn't mark which frame reflects an input.
-    @inlinable package func computeInputToPhoton(presentNanos: UInt64, glassToGlassMs: Double?,
-                                                 hostFrameIntervalMs: Double) -> Double? {
+    package func computeInputToPhoton(presentNanos: UInt64, glassToGlassMs: Double?,
+                                      hostFrameIntervalMs: Double) -> Double? {
         guard let lastInputNanos = counters.lastInputNanos else { return nil }
         guard presentNanos > lastInputNanos else { return nil }
         // Consume-once gate on the lock this present path already takes for
@@ -55,8 +55,8 @@ extension FrameTimingTracker {
     /// The input round trip: client legs (deliver + queue→wire), uplink ~RTT/2, the
     /// average wait for the host's next frame (half an interval), then that frame's
     /// glass-to-glass (which carries the downlink). Unknown legs (0) add nothing.
-    @inlinable package static func composeInputToPhoton(glassToGlassMs: Double, clientLegsMs: Double,
-                                                        rttMs: Double, hostFrameIntervalMs: Double) -> Double {
+    package static func composeInputToPhoton(glassToGlassMs: Double, clientLegsMs: Double,
+                                             rttMs: Double, hostFrameIntervalMs: Double) -> Double {
         glassToGlassMs + max(clientLegsMs, 0) + max(rttMs, 0) / 2 + max(hostFrameIntervalMs, 0) / 2
     }
 }

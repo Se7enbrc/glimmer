@@ -3,9 +3,9 @@
 
 import Foundation
 
-@usableFromInline package struct RendererPresentationState: Sendable, Equatable {
+package struct RendererPresentationState: Sendable, Equatable {
 
-    @usableFromInline package init(
+    package init(
         generation: UInt64 = 0,
         suppressed: Bool = false
     ) {
@@ -13,13 +13,13 @@ import Foundation
         self.suppressed = suppressed
     }
 
-    @usableFromInline package var generation: UInt64 = 0
-    @usableFromInline package var suppressed = false
+    package var generation: UInt64 = 0
+    package var suppressed = false
 }
 
-@usableFromInline package struct RendererPathTransition: Sendable, Equatable {
+package struct RendererPathTransition: Sendable, Equatable {
 
-    @usableFromInline package init(
+    package init(
         fromOptimized: Bool,
         toOptimized: Bool,
         frames: UInt64,
@@ -35,35 +35,34 @@ import Foundation
         self.isResume = isResume
     }
 
-    @usableFromInline package let fromOptimized: Bool
-    @usableFromInline package let toOptimized: Bool
-    @usableFromInline package let frames: UInt64
-    @usableFromInline package let optimized: UInt64
-    @usableFromInline package let suppressed: UInt64
-    @usableFromInline package var isResume = false
+    package let fromOptimized: Bool
+    package let toOptimized: Bool
+    package let frames: UInt64
+    package let optimized: UInt64
+    package let suppressed: UInt64
+    package var isResume = false
 
-    @usableFromInline package var summary: String {
+    package var summary: String {
         let from = isResume ? "resume" : (fromOptimized ? "optimized" : "composited")
         let to = toOptimized ? "optimized" : "composited"
         return "\(from)->\(to) frames=\(frames) optimized=\(optimized) suppressed=\(suppressed)"
     }
 }
 
-@usableFromInline package struct RendererPathTracker {
+package struct RendererPathTracker {
 
-    @usableFromInline package init() {}
+    package init() {}
 
     private var optimized: Bool?
     private var lastNotice: TimeInterval?
     private var suppressed: UInt64 = 0
     private var resumePending = false
 
-    @usableFromInline package mutating func rebaseline(reportResume: Bool = false) {
+    package mutating func rebaseline(reportResume: Bool = false) {
         optimized = nil
         resumePending = resumePending || reportResume
     }
 
-    @usableFromInline
     package mutating func observe(_ delta: RendererPerformanceValues, now: TimeInterval) -> RendererPathTransition? {
         guard delta.frames > 0, delta.optimized <= delta.frames, now.isFinite else { return nil }
         let next = delta.optimized > delta.frames / 2

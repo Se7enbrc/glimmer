@@ -25,26 +25,26 @@ extension TelemetryCounters {
     /// One monotonic counter. os_unfair_lock-guarded UInt64 - matches the codebase's
     /// existing AtomicCounter style; the few inc/read sites are not a tight inner
     /// loop (per loss event / per frame, never per packet on the hot path).
-    @usableFromInline package final class Counter: @unchecked Sendable {
-        @usableFromInline internal let lock = os_unfair_lock_t.allocate(capacity: 1)
-        @usableFromInline internal var total: UInt64 = 0
-        @inlinable package init() { lock.initialize(to: os_unfair_lock_s()) }
+    package final class Counter: @unchecked Sendable {
+        private let lock = os_unfair_lock_t.allocate(capacity: 1)
+        private var total: UInt64 = 0
+        package init() { lock.initialize(to: os_unfair_lock_s()) }
         deinit { lock.deallocate() }
-        @inlinable package func increment(by amount: UInt64 = 1) {
+        package func increment(by amount: UInt64 = 1) {
             os_unfair_lock_lock(lock); total &+= amount; os_unfair_lock_unlock(lock)
         }
-        @inlinable package var value: UInt64 {
+        package var value: UInt64 {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             return total
         }
-        @inlinable package func reset() { os_unfair_lock_lock(lock); total = 0; os_unfair_lock_unlock(lock) }
+        package func reset() { os_unfair_lock_lock(lock); total = 0; os_unfair_lock_unlock(lock) }
     }
 
     /// Gap (seconds) of input silence after which the next event is an idle→active
     /// edge. 2s comfortably exceeds normal inter-event spacing during active play
     /// (sub-100ms) yet is short enough to catch a genuine "stepped away, came
     /// back" resume - the exact motivating bug.
-    @usableFromInline package static let idleGapSeconds: Double = 2.0
+    package static let idleGapSeconds: Double = 2.0
 
     /// Live inter-packet-gap distribution (microseconds) for the microburst
     /// detector. Written once per ~2s receive-metrics window by the RTP path
@@ -55,9 +55,9 @@ extension TelemetryCounters {
     /// the 2s window writer. p95 is an approximation (a 16-bucket log-spaced
     /// histogram, see the writer) - exact enough to spot a microburst, far cheaper
     /// than a per-packet reservoir on the receive path.
-    @usableFromInline package struct PacketGapSnapshot: Sendable {
+    package struct PacketGapSnapshot: Sendable {
 
-        @inlinable package init(
+        package init(
             p50Us: Double,
             p95Us: Double,
             maxUs: Double
@@ -67,9 +67,9 @@ extension TelemetryCounters {
             self.maxUs = maxUs
         }
 
-        @usableFromInline package var p50Us: Double
-        @usableFromInline package var p95Us: Double
-        @usableFromInline package var maxUs: Double
+        package var p50Us: Double
+        package var p95Us: Double
+        package var maxUs: Double
     }
 
     /// Live AUDIO playout STATE (signal: AUDIO - the other stream). What the audio
@@ -81,9 +81,9 @@ extension TelemetryCounters {
     /// plain value struct behind an unfair lock: last-writer-wins is correct for a
     /// 1Hz-sampled state gauge, and the lock keeps the multi-field read tear-free.
     /// nil before the first decoded audio packet.
-    @usableFromInline package struct AudioState: Sendable {
+    package struct AudioState: Sendable {
 
-        @inlinable package init(
+        package init(
             bufferFillMs: Double,
             playoutTargetMs: Double? = nil,
             audioClockDriftMs: Double? = nil,
@@ -104,7 +104,7 @@ extension TelemetryCounters {
         }
 
         /// Ring fill in milliseconds: a climb is latency creep, a fall toward zero warns of an underrun.
-        @usableFromInline package var bufferFillMs: Double
+        package var bufferFillMs: Double
         /// ADAPTIVE PLAYOUT TARGET (ms): the cushion the playout path is
         /// currently steering `bufferFillMs` toward. Fill vs target is the
         /// cushion judge (base 30 / cap 150 / ceiling 190): a fill hugging a
@@ -113,7 +113,7 @@ extension TelemetryCounters {
         /// disguised-permanent-give-up failure mode), target ratcheting up
         /// under gaps then decaying toward base = designed behavior. nil until
         /// the playout path stamps it (AudioDecoder publishes alongside fill).
-        @usableFromInline package var playoutTargetMs: Double?
+        package var playoutTargetMs: Double?
         /// AUDIO CLOCK DRIFT (ms): the audio playout clock's slip vs WALL CLOCK,
         /// signed and net of the steady buffer cushion. This is audio-clock-vs-
         /// wall-clock drift - NOT a true cross-stream A/V delta (it never compares
@@ -123,31 +123,31 @@ extension TelemetryCounters {
         /// Computed as (wall-elapsed − media-played − buffer-cushion) since playout
         /// start, so a steady cushion reads ~0 and only a genuine clock-domain
         /// slip trends over time. nil until audio has begun playing.
-        @usableFromInline package var audioClockDriftMs: Double?
+        package var audioClockDriftMs: Double?
         /// Windowed MINIMUM buffer fill (ms) since the exporter last read it - the
         /// trough of the scheduled-ahead backlog. The 1Hz `bufferFillMs` gauge is
         /// last-writer-wins and can miss the instantaneous low that precedes an
         /// under-run; this min is the field that PROVES the buffer is (or is no
         /// longer) draining toward 0. RESET-ON-READ by the exporter. nil when no
         /// trough was sampled this window.
-        @usableFromInline package var bufferFillMinMs: Double?
+        package var bufferFillMinMs: Double?
         /// RE-PRIME count this session (monotonic): pre-roll RE-ARM edges - the
         /// state machine dropping back to un-primed after a full drain. NOT a
         /// count of paused wall-time pre-rolls: the node keeps playing across a
         /// re-arm and the cushion rebuilds via the post-gap catch-up clump (see
         /// AudioDecoder). Directly countable alongside under-runs.
-        @usableFromInline package var rePrimeTotal: UInt64
+        package var rePrimeTotal: UInt64
         /// RESAMPLER applied rate offset (ppm): the drift-tracking resampler's live
         /// `varispeed.rate − 1` in parts-per-million. 0 when disengaged (pre-roll /
         /// re-prime / drain); when converged it sits at the steady host↔Mac clock
         /// offset (~tens of ppm) - the direct view of the resampler holding the fill
         /// it's steering (vs the av_skew that bounces with video-side timing).
-        @usableFromInline package var resamplerPpm: Double = 0
+        package var resamplerPpm: Double = 0
         /// Lifecycle mirror, read under the meter lock. Zero while packets arrive exposes dead playout.
         /// Nil before the engine first starts.
-        @usableFromInline package var engineRunning: Bool?
+        package var engineRunning: Bool?
         /// The cushion cap (ms) for the resolved link (wired 150 / Wi-Fi 200 /
         /// tunnel 300): the ceiling the target grows to, and the dead-air gap bound.
-        @usableFromInline package var cushionMaxMs: Double?
+        package var cushionMaxMs: Double?
     }
 }

@@ -29,12 +29,12 @@ extension TelemetryCounters {
     /// Publish the live AUDIO playout state (buffer fill + A/V sync drift). Called
     /// off the hot path - the audio decode path stamps it under the lock it already
     /// holds for the decode (no extra lock on the audio path).
-    @inlinable package func setAudioState(_ state: AudioState) {
+    package func setAudioState(_ state: AudioState) {
         os_unfair_lock_lock(audioStateLock); audioStateValue = state; os_unfair_lock_unlock(audioStateLock)
     }
     /// Latest AUDIO playout state, or nil before the first decoded audio packet.
     /// Read by the exporter on its 1Hz queue (never the hot path).
-    @inlinable package var audioState: AudioState? {
+    package var audioState: AudioState? {
         os_unfair_lock_lock(audioStateLock); defer { os_unfair_lock_unlock(audioStateLock) }
         return audioStateValue
     }
@@ -43,7 +43,7 @@ extension TelemetryCounters {
     /// from the audio playout completion path (under the audio meter lock there,
     /// not this one - these are independent locks, no nesting). One compare + a
     /// conditional store; far below the 5ms audio budget.
-    @inlinable package func noteAudioBufferFill(ms: Double) {
+    package func noteAudioBufferFill(ms: Double) {
         os_unfair_lock_lock(audioStateLock)
         if ms < audioBufferFillMinMsValue { audioBufferFillMinMsValue = ms }
         os_unfair_lock_unlock(audioStateLock)
@@ -51,7 +51,7 @@ extension TelemetryCounters {
     /// Take + RESET the windowed MIN buffer-fill (ms). Read once per tick by the
     /// exporter on its 1Hz queue (never the hot path); resetting on read makes each
     /// tick's min cover only that window's troughs. nil when no sample this window.
-    @inlinable package func takeAudioBufferFillMinMs() -> Double? {
+    package func takeAudioBufferFillMinMs() -> Double? {
         os_unfair_lock_lock(audioStateLock)
         let value = audioBufferFillMinMsValue
         audioBufferFillMinMsValue = .infinity
@@ -62,7 +62,7 @@ extension TelemetryCounters {
     /// Anchor the audio cold-start clock at STREAM START. Called once when the
     /// audio receiver opens its socket; idempotent (a second call before the first
     /// packet is harmless, and after is ignored so the anchor stays the true start).
-    @inlinable package func anchorAudioStreamStart() {
+    package func anchorAudioStreamStart() {
         let now = DispatchTime.now().uptimeNanoseconds
         os_unfair_lock_lock(audioFirstPacketLock)
         if audioStreamStartNanosValue == 0 { audioStreamStartNanosValue = now }
@@ -88,7 +88,7 @@ extension TelemetryCounters {
     /// gauge makes that delay visible, it cannot shrink it. The audio-socket-
     /// open epoch is kept only as a fallback when the connect anchor is somehow
     /// unset.
-    @inlinable package func recordAudioFirstPacket() {
+    package func recordAudioFirstPacket() {
         let now = DispatchTime.now().uptimeNanoseconds
         let connectStart = p2.connectStart
         os_unfair_lock_lock(audioFirstPacketLock)
@@ -102,7 +102,7 @@ extension TelemetryCounters {
     }
     /// Time-to-first-decoded-audio (ms), or nil if not yet measured. Read by the
     /// exporter on its 1Hz queue (never the hot path).
-    @inlinable package var audioFirstPacketMs: Double? {
+    package var audioFirstPacketMs: Double? {
         os_unfair_lock_lock(audioFirstPacketLock); defer { os_unfair_lock_unlock(audioFirstPacketLock) }
         return audioFirstPacketMsValue != 0 ? audioFirstPacketMsValue : nil
     }
@@ -113,16 +113,16 @@ extension TelemetryCounters {
 /// The longest gap between audio datagrams each 1 Hz tick, counting one still
 /// open at the tick, so a blackout reads as it grows rather than only once it
 /// ends. The receive thread notes every arrival; the exporter takes the max.
-@usableFromInline package final class AudioArrivalGaps: Sendable {
+package final class AudioArrivalGaps: Sendable {
 
-    @inlinable package init() {}
+    package init() {}
 
-    @usableFromInline internal let state = OSAllocatedUnfairLock(
+    internal let state = OSAllocatedUnfairLock(
         initialState: (lastNanos: UInt64(0), maxGapNanos: UInt64(0)))
 
     /// `gapNanos` is the receiver's own gap; nil on a receiver's first datagram, whose
     /// gap (across an in-place reconnect) is measured from the session's last one here.
-    @inlinable package func noteArrival(at now: UInt64, gapNanos: UInt64?) {
+    package func noteArrival(at now: UInt64, gapNanos: UInt64?) {
         state.withLock {
             let gap = gapNanos ?? ($0.lastNanos != 0 && now > $0.lastNanos ? now - $0.lastNanos : 0)
             $0.maxGapNanos = max($0.maxGapNanos, gap)
@@ -131,7 +131,7 @@ extension TelemetryCounters {
     }
 
     /// Take (and reset) this tick's longest gap in ms; nil before any audio arrived.
-    @inlinable package func takeMaxMs(now: UInt64) -> Double? {
+    package func takeMaxMs(now: UInt64) -> Double? {
         state.withLock {
             guard $0.lastNanos != 0 else { return nil }
             let open = now > $0.lastNanos ? now - $0.lastNanos : 0
@@ -141,7 +141,7 @@ extension TelemetryCounters {
         }
     }
 
-    @inlinable package func reset() { state.withLock { $0 = (0, 0) } }
+    package func reset() { state.withLock { $0 = (0, 0) } }
 }
 
 // MARK: - Audio-TTF context (warm/cold classification + host-idle covariate)
@@ -165,17 +165,17 @@ extension TelemetryCounters {
 ///
 /// Self-locked like `P2State` so the rare TTF-latch / teardown writes stay off
 /// every other counter's lock.
-@usableFromInline package final class AudioTtfContext: @unchecked Sendable {
+package final class AudioTtfContext: @unchecked Sendable {
     /// Classification threshold (ms) on the ping→first-RTP span: ~2s cleanly
     /// splits the measured bimodal data (warm 284-984ms vs cold 4.6-40.2s
     /// across 12 sessions). Source sites classify against THIS constant so the
     /// event row and the scorecard can never disagree on the split.
-    @usableFromInline package static let warmPingToRtpThresholdMs: Double = 2000
+    package static let warmPingToRtpThresholdMs: Double = 2000
 
     /// One session's latched TTF classification, written once at the TTF event.
-    @usableFromInline package struct Record: Sendable {
+    package struct Record: Sendable {
 
-        @inlinable package init(
+        package init(
             ttfClass: String,
             pingToRtpMs: Double? = nil,
             hostIdleSeconds: Double? = nil,
@@ -189,29 +189,29 @@ extension TelemetryCounters {
 
         /// "warm" | "cold", keyed on ping_to_rtp_ms vs the threshold above
         /// (nil ping span → "cold": no RTP answer inside any warm window).
-        @usableFromInline package var ttfClass: String
+        package var ttfClass: String
         /// The host-side bring-up span the class was keyed on, when measured.
-        @usableFromInline package var pingToRtpMs: Double?
+        package var pingToRtpMs: Double?
         /// Seconds since this client's previous session ended (see the
         /// approximation note on the type). nil when underivable.
-        @usableFromInline package var hostIdleSeconds: Double?
+        package var hostIdleSeconds: Double?
         /// The startup-pacing verdict ("burst" | "paced") carried alongside so
         /// the scorecard tells the whole startup story on one line.
-        @usableFromInline package var startup: String?
+        package var startup: String?
     }
 
-    @usableFromInline internal let lock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var record: Record?
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    private var record: Record?
     /// Wall-clock stamp (`timeIntervalSinceReferenceDate`) of the previous
     /// stream's end; 0 = no stream has ended this process run.
-    @usableFromInline internal var lastStreamEndReference: Double = 0
+    private var lastStreamEndReference: Double = 0
     /// Idle gap captured at connect; nil when no prior end can be measured.
-    @usableFromInline internal var idleAtStartSeconds: Double?
-    @inlinable package init() { lock.initialize(to: os_unfair_lock_s()) }
+    private var idleAtStartSeconds: Double?
+    package init() { lock.initialize(to: os_unfair_lock_s()) }
     deinit { lock.deallocate() }
 
     /// Stamp the stream-end instant. The next connect snapshots its idle gap.
-    @inlinable package func markStreamEnd(now: Double = Date().timeIntervalSinceReferenceDate) {
+    package func markStreamEnd(now: Double = Date().timeIntervalSinceReferenceDate) {
         os_unfair_lock_lock(lock)
         lastStreamEndReference = now
         os_unfair_lock_unlock(lock)
@@ -221,8 +221,8 @@ extension TelemetryCounters {
     /// Returns the record emitted by telemetry and retained for the scorecard.
     /// Called once per session from the audio receive path.
     @discardableResult
-    @inlinable package func latchClassifying(pingToRtpMs: Double?, startup: String?,
-                                             now: Double = Date().timeIntervalSinceReferenceDate) -> Record {
+    package func latchClassifying(pingToRtpMs: Double?, startup: String?,
+                                  now: Double = Date().timeIntervalSinceReferenceDate) -> Record {
         os_unfair_lock_lock(lock)
         defer { os_unfair_lock_unlock(lock) }
         if let existing = record { return existing }
@@ -237,13 +237,13 @@ extension TelemetryCounters {
 
     /// This session's latched record, or nil before the TTF event. Read by the
     /// scorecard at stop.
-    @inlinable package var latched: Record? {
+    package var latched: Record? {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return record
     }
 
     /// Clear the record and snapshot the previous-session idle gap at connect.
-    @inlinable package func resetForNewSession(now: Double = Date().timeIntervalSinceReferenceDate) {
+    package func resetForNewSession(now: Double = Date().timeIntervalSinceReferenceDate) {
         os_unfair_lock_lock(lock)
         record = nil
         idleAtStartSeconds = lastStreamEndReference > 0 && now > lastStreamEndReference
@@ -260,14 +260,14 @@ extension TelemetryCounters {
 /// the LIVE learned loss floor (1Hz `audio_cushion_floor_ms` field). Stored
 /// here - not on `AudioState` - so the exporter reads it without touching the
 /// snapshot structs; written only on the rare seed/learn/decay edges.
-@usableFromInline package final class AudioCushionTelemetry: @unchecked Sendable {
-    @usableFromInline package static let shared = AudioCushionTelemetry()
+package final class AudioCushionTelemetry: @unchecked Sendable {
+    package static let shared = AudioCushionTelemetry()
 
     /// One session's seed record, latched at audio-decoder init (last writer
     /// wins - one audio init per session IS the session edge).
-    @usableFromInline package struct Seed: Sendable {
+    package struct Seed: Sendable {
 
-        @inlinable package init(
+        package init(
             link: String,
             targetMs: Double,
             floorMs: Double,
@@ -279,37 +279,37 @@ extension TelemetryCounters {
             self.fromMemory = fromMemory
         }
 
-        @usableFromInline package let link: String
-        @usableFromInline package let targetMs: Double
-        @usableFromInline package let floorMs: Double
-        @usableFromInline package let fromMemory: Bool
+        package let link: String
+        package let targetMs: Double
+        package let floorMs: Double
+        package let fromMemory: Bool
     }
 
-    @usableFromInline internal let lock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var seedValue: Seed?
-    @usableFromInline internal var floorMsValue: Double = 0
-    @usableFromInline internal var seedMsValue: Double = 0
-    @inlinable package init() { lock.initialize(to: os_unfair_lock_s()) }
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    private var seedValue: Seed?
+    private var floorMsValue: Double = 0
+    private var seedMsValue: Double = 0
+    package init() { lock.initialize(to: os_unfair_lock_s()) }
     deinit { lock.deallocate() }
 
-    @inlinable package func latchSeed(_ seed: Seed) {
+    package func latchSeed(_ seed: Seed) {
         os_unfair_lock_lock(lock)
         seedValue = seed
         floorMsValue = seed.floorMs
         seedMsValue = seed.targetMs
         os_unfair_lock_unlock(lock)
     }
-    @inlinable package var seed: Seed? {
+    package var seed: Seed? {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return seedValue
     }
 
     /// The live learned loss floor (0 = unlearned). Updated on learn/decay/
     /// link-resolve edges only.
-    @inlinable package func setFloorMs(_ value: Double) {
+    package func setFloorMs(_ value: Double) {
         os_unfair_lock_lock(lock); floorMsValue = value; os_unfair_lock_unlock(lock)
     }
-    @inlinable package var floorMs: Double {
+    package var floorMs: Double {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return floorMsValue
     }
@@ -318,10 +318,10 @@ extension TelemetryCounters {
     /// ratchet runs. Set at init (latchSeed, from the per-host/default seed) and
     /// updated when the one-shot link resolve applies a jitter-aware cold seed on
     /// a fresh (no-memory) link. A clean/wired link reads the 30ms base.
-    @inlinable package func setSeedMs(_ value: Double) {
+    package func setSeedMs(_ value: Double) {
         os_unfair_lock_lock(lock); seedMsValue = value; os_unfair_lock_unlock(lock)
     }
-    @inlinable package var seedMs: Double {
+    package var seedMs: Double {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return seedMsValue
     }

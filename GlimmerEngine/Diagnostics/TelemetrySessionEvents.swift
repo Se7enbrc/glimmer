@@ -51,7 +51,7 @@ import os
 /// error code, a watchdog teardown (frame/present stall), or unknown. The exporter
 /// emits BOTH the ordinal (a gauge, for thresholding) and the label (in an info
 /// gauge / NDJSON string).
-@usableFromInline package enum DisconnectReason: Int, Sendable {
+package enum DisconnectReason: Int, Sendable {
     /// No terminate observed yet this session (the live default).
     case none = 0
     /// User asked to stop (quit hotkey / window close / app quit).
@@ -77,7 +77,7 @@ import os
     /// specific cause.
     case systemSleep = 7
 
-    @inlinable package var label: String {
+    package var label: String {
         switch self {
         case .none: return "none"
         case .userStopped: return "user_stopped"
@@ -99,18 +99,18 @@ import os
 /// is DELIBERATELY kept out of `resetForNewSession`, so it survives the <1ms
 /// exporter teardown that races the 1s scrape - the next session re-serves it.
 /// `@unchecked Sendable`: each `Counter` is self-locked.
-@usableFromInline package final class DisconnectReasonCounters: @unchecked Sendable {
+package final class DisconnectReasonCounters: @unchecked Sendable {
 
-    @inlinable package init() {}
+    package init() {}
 
-    @usableFromInline internal let counters: [DisconnectReason: TelemetryCounters.Counter] = [
+    private let counters: [DisconnectReason: TelemetryCounters.Counter] = [
         .userStopped: .init(), .hostClosedClean: .init(), .hostError: .init(),
         .watchdogStall: .init(), .connectFailed: .init(), .consumerDropped: .init(),
         .systemSleep: .init()
     ]
-    @inlinable package func increment(_ reason: DisconnectReason) { counters[reason]?.increment() }
+    package func increment(_ reason: DisconnectReason) { counters[reason]?.increment() }
     /// Snapshot of (label, total) for every non-zero-defined reason, for the export.
-    @inlinable package func snapshot() -> [(label: String, total: UInt64)] {
+    package func snapshot() -> [(label: String, total: UInt64)] {
         counters.map { ($0.key.label, $0.value.value) }
     }
 }
@@ -127,31 +127,31 @@ import os
 /// precedes). Standalone + self-locked (the `AudioCushionTelemetry` idiom), read
 /// by the exporter without touching the snapshot structs. First writer wins per
 /// edge; `resetForNewSession` clears it.
-@usableFromInline package final class ConnectTimingTelemetry: @unchecked Sendable {
-    @usableFromInline package static let shared = ConnectTimingTelemetry()
+package final class ConnectTimingTelemetry: @unchecked Sendable {
+    package static let shared = ConnectTimingTelemetry()
 
-    @usableFromInline internal let lock = os_unfair_lock_t.allocate(capacity: 1)
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
     /// Wall-clock reference of the user's click; 0 = no click anchored.
-    @usableFromInline internal var clickReference: Double = 0
+    private var clickReference: Double = 0
     /// Wall-clock reference of connect-start (for the launch-path leg); 0 = unset.
-    @usableFromInline internal var connectStartReference: Double = 0
-    @usableFromInline internal var clickToFirstFrameMsValue: Double = 0
-    @usableFromInline internal var launchPathMsValue: Double = 0
+    private var connectStartReference: Double = 0
+    private var clickToFirstFrameMsValue: Double = 0
+    private var launchPathMsValue: Double = 0
     // Launch-path SUB-LEGS (ms), stamped at the real call sites in
     // launchWithBusyRecovery so the opaque launch_path_ms is attributable.
-    @usableFromInline internal var serverinfoMsValue: Double = 0
-    @usableFromInline internal var cancelMsValue: Double = 0
-    @usableFromInline internal var launchBusyWaitMsValue: Double = 0
-    @usableFromInline internal var launchBusyPollCountValue: Double = 0
-    @usableFromInline internal var launchMsValue: Double = 0
-    @usableFromInline internal var buildMsValue: Double = 0
-    @inlinable package init() { lock.initialize(to: os_unfair_lock_s()) }
+    private var serverinfoMsValue: Double = 0
+    private var cancelMsValue: Double = 0
+    private var launchBusyWaitMsValue: Double = 0
+    private var launchBusyPollCountValue: Double = 0
+    private var launchMsValue: Double = 0
+    private var buildMsValue: Double = 0
+    package init() { lock.initialize(to: os_unfair_lock_s()) }
     deinit { lock.deallocate() }
 
     /// Anchor the click instant. Called from `AppModel.stream()` at the
     /// user's launch click - before the connect Task spins up. First write wins
     /// per session (reset clears it).
-    @inlinable package func anchorClick() {
+    package func anchorClick() {
         let now = Date().timeIntervalSinceReferenceDate
         os_unfair_lock_lock(lock)
         if clickReference == 0 { clickReference = now }
@@ -159,7 +159,7 @@ import os
     }
     /// Mark connect-start to isolate the launch cost (click → connectStart).
     /// First write wins; no-op if the click was never anchored.
-    @inlinable package func markConnectStart() {
+    package func markConnectStart() {
         let now = Date().timeIntervalSinceReferenceDate
         os_unfair_lock_lock(lock)
         if clickReference > 0, connectStartReference == 0, now >= clickReference {
@@ -170,7 +170,7 @@ import os
     }
     /// Resolve click → first decoded frame. Called at the `.firstFrame` edge;
     /// first write wins, no-op without a click anchor.
-    @inlinable package func markFirstFrame() {
+    package func markFirstFrame() {
         let now = Date().timeIntervalSinceReferenceDate
         os_unfair_lock_lock(lock)
         if clickReference > 0, clickToFirstFrameMsValue == 0, now >= clickReference {
@@ -181,9 +181,9 @@ import os
     /// Record a launch sub-leg duration (ms). First non-zero write wins per leg
     /// (the launch flow runs each leg once); off any hot path. `busyPollCount` is
     /// the waitForHostIdle poll count for `launch_busy_wait_ms`.
-    @inlinable package func recordLaunchLeg(serverinfoMs: Double? = nil, cancelMs: Double? = nil,
-                                            launchBusyWaitMs: Double? = nil, busyPollCount: Int? = nil,
-                                            launchMs: Double? = nil, buildMs: Double? = nil) {
+    package func recordLaunchLeg(serverinfoMs: Double? = nil, cancelMs: Double? = nil,
+                                 launchBusyWaitMs: Double? = nil, busyPollCount: Int? = nil,
+                                 launchMs: Double? = nil, buildMs: Double? = nil) {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         if let ms = serverinfoMs, serverinfoMsValue == 0 { serverinfoMsValue = ms }
         if let ms = cancelMs, cancelMsValue == 0 { cancelMsValue = ms }
@@ -194,7 +194,7 @@ import os
     }
     /// Apply the stamped launch sub-legs onto a HandshakeBreakdown (each nil until
     /// its call site stamped it). Keeps the multi-value read in one lock take.
-    @inlinable package func applyLaunchLegs(to out: inout HandshakeBreakdown) {
+    package func applyLaunchLegs(to out: inout HandshakeBreakdown) {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         out.launchServerinfoMs = serverinfoMsValue != 0 ? serverinfoMsValue : nil
         out.launchCancelMs = cancelMsValue != 0 ? cancelMsValue : nil
@@ -204,16 +204,16 @@ import os
         out.buildMs = buildMsValue != 0 ? buildMsValue : nil
     }
     /// Click → first decoded frame (ms), or nil if not yet resolved.
-    @inlinable package var clickToFirstFrameMs: Double? {
+    package var clickToFirstFrameMs: Double? {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return clickToFirstFrameMsValue != 0 ? clickToFirstFrameMsValue : nil
     }
     /// Launch path: click → connect-start (ms), or nil if not yet measured.
-    @inlinable package var launchPathMs: Double? {
+    package var launchPathMs: Double? {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         return launchPathMsValue != 0 ? launchPathMsValue : nil
     }
-    @inlinable package func resetForNewSession() {
+    package func resetForNewSession() {
         os_unfair_lock_lock(lock)
         clickReference = 0; connectStartReference = 0
         clickToFirstFrameMsValue = 0; launchPathMsValue = 0
@@ -232,12 +232,12 @@ import os
 /// the delta is the pre-hop main-thread leg. Last-writer-wins per slot is correct
 /// (GC delivers serially per slot on main); a take that finds no stamp is a no-op.
 /// Self-locked standalone (the `ConnectTimingTelemetry` idiom). NO behavior change.
-@usableFromInline package final class InputDeliverStamp: @unchecked Sendable {
-    @usableFromInline package static let shared = InputDeliverStamp()
-    @usableFromInline internal static let maxSlots = 16  // matches Enet.maxGamepads
-    @usableFromInline internal let lock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var stamps = [UInt64](repeating: 0, count: maxSlots)
-    @inlinable package init() { lock.initialize(to: os_unfair_lock_s()) }
+package final class InputDeliverStamp: @unchecked Sendable {
+    package static let shared = InputDeliverStamp()
+    private static let maxSlots = 16  // matches Enet.maxGamepads
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    private var stamps = [UInt64](repeating: 0, count: maxSlots)
+    package init() { lock.initialize(to: os_unfair_lock_s()) }
     deinit { lock.deallocate() }
 
     /// Stamp the handler-entry instant for `slot` (monotonic ns). First write wins
@@ -265,9 +265,9 @@ import os
 /// - a stage that never fired (a path that aborts early) is simply absent rather
 /// than guessed. Assembled on the exporter queue from the always-live
 /// `HandshakeTimeline`; never the hot path.
-@usableFromInline package struct HandshakeBreakdown: Sendable {
+package struct HandshakeBreakdown: Sendable {
 
-    @inlinable package init(
+    package init(
         rtspMs: Double? = nil,
         controlSetupMs: Double? = nil,
         enetConnectMs: Double? = nil,
@@ -300,42 +300,42 @@ import os
     }
 
     /// RTSP/SDP handshake duration (name-resolution start → RTSP-handshake done).
-    @usableFromInline package var rtspMs: Double?
+    package var rtspMs: Double?
     /// Control-channel setup: RTSP done → ENet connect start, where the control
     /// crypto and V2 negotiation run. Not pairing, which happened long before.
-    @usableFromInline package var controlSetupMs: Double?
+    package var controlSetupMs: Double?
     /// ENet control-channel connect (ENET_CONNECT → START_A → START_B ACKed).
-    @usableFromInline package var enetConnectMs: Double?
+    package var enetConnectMs: Double?
     /// Time from connection-established to the FIRST decoded video frame - the
     /// "black screen until pixels" leg the user actually feels.
-    @usableFromInline package var firstFrameMs: Double?
+    package var firstFrameMs: Double?
     /// Total: connect start → first decoded video frame (the whole cold open).
-    @usableFromInline package var totalMs: Double?
+    package var totalMs: Double?
     /// TRUE click-to-pixels: the user's launch click → first decoded frame, which
     /// includes the serverinfo + launch + busy-poll legs `totalMs` excludes (it
     /// anchors at connect-start). From `ConnectTimingTelemetry`.
-    @usableFromInline package var clickToFirstFrameMs: Double?
+    package var clickToFirstFrameMs: Double?
     /// Launch path: click → connect-start, isolating the pre-connect launch cost.
-    @usableFromInline package var launchPathMs: Double?
+    package var launchPathMs: Double?
     /// Launch-path SUB-LEGS attributing launchPathMs: /serverinfo, /cancel, the
     /// waitForHostIdle busy-poll (+ its poll count), /launch, and the MainActor
     /// subsystem/window build. Each nil until its call site stamps it.
-    @usableFromInline package var launchServerinfoMs: Double?
-    @usableFromInline package var launchCancelMs: Double?
-    @usableFromInline package var launchBusyWaitMs: Double?
-    @usableFromInline package var launchBusyPollCount: Double?
-    @usableFromInline package var launchMs: Double?
-    @usableFromInline package var buildMs: Double?
+    package var launchServerinfoMs: Double?
+    package var launchCancelMs: Double?
+    package var launchBusyWaitMs: Double?
+    package var launchBusyPollCount: Double?
+    package var launchMs: Double?
+    package var buildMs: Double?
     /// True once the first decoded frame landed (so the exporter emits the
     /// one-shot breakdown exactly once, not every tick).
-    @usableFromInline package var complete: Bool = false
+    package var complete: Bool = false
 }
 
 /// What a session's FIRST connect measured, kept when an in-place reconnect
 /// re-anchors the timeline so the receipt reports that connect, not a blend.
-@usableFromInline package struct FirstConnect: Sendable {
+package struct FirstConnect: Sendable {
 
-    @inlinable package init(
+    package init(
         handshake: HandshakeBreakdown,
         audioTtfMs: Double? = nil,
         audioTtf: AudioTtfContext.Record? = nil
@@ -345,9 +345,9 @@ import os
         self.audioTtf = audioTtf
     }
 
-    @usableFromInline package var handshake: HandshakeBreakdown
-    @usableFromInline package var audioTtfMs: Double?
-    @usableFromInline package var audioTtf: AudioTtfContext.Record?
+    package var handshake: HandshakeBreakdown
+    package var audioTtfMs: Double?
+    package var audioTtf: AudioTtfContext.Record?
 }
 
 // MARK: - IDR/RFI round-trip snapshot
@@ -357,9 +357,9 @@ import os
 /// most-recent measured round-trip (ms). The full distribution rides the latency
 /// histogram (`idrRoundTrip` in `LatencyHistograms`); this carries the live gauge
 /// + counts for a glanceable scrape. Assembled on the exporter queue.
-@usableFromInline package struct IdrRoundTripSnapshot: Sendable {
+package struct IdrRoundTripSnapshot: Sendable {
 
-    @inlinable package init(
+    package init(
         requestsTotal: UInt64 = 0,
         matchedTotal: UInt64 = 0,
         lastRoundTripMs: Double? = nil
@@ -371,11 +371,11 @@ import os
 
     /// EXPLICIT IDR requests sent that started a round-trip measurement
     /// (monotonic; RFIs ride rfi_total and don't arm).
-    @usableFromInline package var requestsTotal: UInt64 = 0
+    package var requestsTotal: UInt64 = 0
     /// Requests that were matched to an arriving IDR/recovery frame (monotonic).
-    @usableFromInline package var matchedTotal: UInt64 = 0
+    package var matchedTotal: UInt64 = 0
     /// Most recent measured request→IDR round-trip (ms), nil if none yet.
-    @usableFromInline package var lastRoundTripMs: Double?
+    package var lastRoundTripMs: Double?
 }
 
 // MARK: - TelemetryCounters: P2 session-lifecycle state
@@ -392,30 +392,30 @@ extension TelemetryCounters {
     /// Shared by the P2 lifecycle/recovery sites so they all stamp on the same
     /// monotonic clock the latency tracker uses. A single function so the clock
     /// choice is one edit.
-    @inlinable package static func monotonicNowNanos() -> UInt64 { DispatchTime.now().uptimeNanoseconds }
+    package static func monotonicNowNanos() -> UInt64 { DispatchTime.now().uptimeNanoseconds }
 
     /// All P2 session-lifecycle state behind one lock. `@unchecked Sendable`: the
     /// single `os_unfair_lock` guards every field; last-writer-wins is correct for
     /// 1Hz-sampled gauges, and the rare lifecycle/recovery writers never contend.
-    @usableFromInline package final class P2State: @unchecked Sendable {
-        @usableFromInline internal let lock = os_unfair_lock_t.allocate(capacity: 1)
-        @inlinable package init() { lock.initialize(to: os_unfair_lock_s()) }
+    package final class P2State: @unchecked Sendable {
+        private let lock = os_unfair_lock_t.allocate(capacity: 1)
+        package init() { lock.initialize(to: os_unfair_lock_s()) }
         deinit { lock.deallocate() }
 
         // ---- Handshake timeline (monotonic stage instants, ns) ----
-        @usableFromInline internal var connectStartNanos: UInt64 = 0
-        @usableFromInline internal var rtspStartNanos: UInt64 = 0
-        @usableFromInline internal var rtspDoneNanos: UInt64 = 0
-        @usableFromInline internal var enetStartNanos: UInt64 = 0
-        @usableFromInline internal var establishedNanos: UInt64 = 0
-        @usableFromInline internal var firstFrameNanos: UInt64 = 0
+        private var connectStartNanos: UInt64 = 0
+        private var rtspStartNanos: UInt64 = 0
+        private var rtspDoneNanos: UInt64 = 0
+        private var enetStartNanos: UInt64 = 0
+        private var establishedNanos: UInt64 = 0
+        private var firstFrameNanos: UInt64 = 0
 
         // ---- Disconnect reason (latched at the terminate edge) ----
-        @usableFromInline internal var disconnectReasonValue: DisconnectReason = .none
+        private var disconnectReasonValue: DisconnectReason = .none
         /// One-shot guard: the process-global per-reason counter is bumped at
         /// most once per session, at genuine teardown - not at the per-terminate
         /// latch (a recoverable blip latches a reason but must not be counted).
-        @usableFromInline internal var globalReasonCounted = false
+        private var globalReasonCounted = false
 
         // ---- IDR/RFI round-trip ----
         /// Monotonic instant of the most recent IDR/RFI request we sent that is
@@ -423,12 +423,12 @@ extension TelemetryCounters {
         /// Single outstanding request is sufficient: requests coalesce to ≤1 per
         /// loss event on the send side, so a newer request simply replaces the
         /// timer (we measure to the next IDR either way).
-        @usableFromInline internal var idrRequestPendingNanos: UInt64 = 0
-        @usableFromInline internal var idrLastRoundTripMs: Double = 0
+        private var idrRequestPendingNanos: UInt64 = 0
+        private var idrLastRoundTripMs: Double = 0
         /// Set at the first in-place reconnect; nil while the first connect is live.
-        @usableFromInline internal var firstConnectValue: FirstConnect?
+        private var firstConnectValue: FirstConnect?
 
-        @inlinable package func anchorConnectStart(_ now: UInt64) {
+        package func anchorConnectStart(_ now: UInt64) {
             os_unfair_lock_lock(lock)
             if connectStartNanos == 0 { connectStartNanos = now }
             os_unfair_lock_unlock(lock)
@@ -438,39 +438,39 @@ extension TelemetryCounters {
         /// edge (and preserved across the exporter's own `resetForNewSession`), so
         /// per-session cold-start metrics (e.g. time-to-first-audio) measure from
         /// the real session start rather than a later, resettable epoch.
-        @inlinable package var connectStart: UInt64 {
+        package var connectStart: UInt64 {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             return connectStartNanos
         }
-        @inlinable package func markRtspStart(_ now: UInt64) {
+        package func markRtspStart(_ now: UInt64) {
             os_unfair_lock_lock(lock); if rtspStartNanos == 0 { rtspStartNanos = now }; os_unfair_lock_unlock(lock)
         }
-        @inlinable package func markRtspDone(_ now: UInt64) {
+        package func markRtspDone(_ now: UInt64) {
             os_unfair_lock_lock(lock); if rtspDoneNanos == 0 { rtspDoneNanos = now }; os_unfair_lock_unlock(lock)
         }
-        @inlinable package func markEnetStart(_ now: UInt64) {
+        package func markEnetStart(_ now: UInt64) {
             os_unfair_lock_lock(lock); if enetStartNanos == 0 { enetStartNanos = now }; os_unfair_lock_unlock(lock)
         }
         /// Anchor the handshake's `establishedNanos` leg (first edge only). The
         /// reconnect signal is NOT derived here - reconnectInPlace re-anchors the
         /// timeline before the fresh edge, so it's counted at the recovery site instead.
-        @inlinable package func markEstablished() {
+        package func markEstablished() {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             if establishedNanos == 0 { establishedNanos = TelemetryCounters.monotonicNowNanos() }
         }
-        @inlinable package func markFirstFrame(_ now: UInt64) {
+        package func markFirstFrame(_ now: UInt64) {
             os_unfair_lock_lock(lock); if firstFrameNanos == 0 { firstFrameNanos = now }; os_unfair_lock_unlock(lock)
         }
 
         /// Assemble the CURRENT connect's breakdown from whatever stages have fired.
         /// Each leg is emitted only when both its endpoints exist (so an aborted-early
         /// connect omits the legs it never reached rather than reporting 0).
-        @inlinable package func handshakeBreakdown() -> HandshakeBreakdown {
+        package func handshakeBreakdown() -> HandshakeBreakdown {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             return breakdownLocked()
         }
 
-        @inlinable internal func breakdownLocked() -> HandshakeBreakdown {
+        private func breakdownLocked() -> HandshakeBreakdown {
             var out = HandshakeBreakdown()
             out.rtspMs = msBetween(rtspStartNanos, rtspDoneNanos)
             out.controlSetupMs = msBetween(rtspDoneNanos, enetStartNanos)
@@ -490,7 +490,7 @@ extension TelemetryCounters {
 
         /// In-place reconnect: keep the first connect's breakdown and audio TTF
         /// (a later attempt keeps that stash), then start this connect's timeline.
-        @inlinable package func anchorReconnect(_ now: UInt64, audioTtfMs: Double?, audioTtf: AudioTtfContext.Record?) {
+        package func anchorReconnect(_ now: UInt64, audioTtfMs: Double?, audioTtf: AudioTtfContext.Record?) {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             let first = firstConnectValue
                 ?? FirstConnect(handshake: breakdownLocked(), audioTtfMs: audioTtfMs, audioTtf: audioTtf)
@@ -500,7 +500,7 @@ extension TelemetryCounters {
         }
 
         /// The session's first connect, or nil when no in-place reconnect happened.
-        @inlinable package var firstConnect: FirstConnect? {
+        package var firstConnect: FirstConnect? {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             return firstConnectValue
         }
@@ -510,7 +510,7 @@ extension TelemetryCounters {
         /// latches here but is silently recovered, so counting it would inflate
         /// the "why sessions ended" tally. Returns true iff this call won.
         @discardableResult
-        @inlinable package func setDisconnectReason(_ reason: DisconnectReason) -> Bool {
+        package func setDisconnectReason(_ reason: DisconnectReason) -> Bool {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             guard disconnectReasonValue == .none, reason != .none else { return false }
             disconnectReasonValue = reason
@@ -519,25 +519,25 @@ extension TelemetryCounters {
 
         /// At GENUINE teardown, return the latched reason for the process-global
         /// counter exactly once per session (nil if no reason, or already counted).
-        @inlinable package func countGlobalReasonOnce() -> DisconnectReason? {
+        package func countGlobalReasonOnce() -> DisconnectReason? {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             guard !globalReasonCounted, disconnectReasonValue != .none else { return nil }
             globalReasonCounted = true
             return disconnectReasonValue
         }
-        @inlinable package var disconnectReason: DisconnectReason {
+        package var disconnectReason: DisconnectReason {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             return disconnectReasonValue
         }
 
         /// Stamp the instant an IDR/RFI request went out (replacing any pending).
-        @inlinable package func stampIdrRequest(_ now: UInt64) {
+        package func stampIdrRequest(_ now: UInt64) {
             os_unfair_lock_lock(lock); idrRequestPendingNanos = now; os_unfair_lock_unlock(lock)
         }
         /// Resolve the pending IDR request against an arriving IDR/recovery frame.
         /// Returns the round-trip (ms) if a request was outstanding, else nil (an
         /// unsolicited IDR - the host's own keyframe cadence - isn't a round-trip).
-        @inlinable package func resolveIdrArrival(_ now: UInt64) -> Double? {
+        package func resolveIdrArrival(_ now: UInt64) -> Double? {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             let pending = idrRequestPendingNanos
             guard pending != 0, now >= pending else { return nil }
@@ -546,19 +546,19 @@ extension TelemetryCounters {
             idrLastRoundTripMs = ms
             return ms
         }
-        @inlinable package var lastIdrRoundTripMs: Double? {
+        package var lastIdrRoundTripMs: Double? {
             os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
             return idrLastRoundTripMs != 0 ? idrLastRoundTripMs : nil
         }
 
-        @inlinable package func reset() {
+        package func reset() {
             os_unfair_lock_lock(lock)
             resetLocked()
             firstConnectValue = nil
             os_unfair_lock_unlock(lock)
         }
 
-        @inlinable internal func resetLocked() {
+        private func resetLocked() {
             connectStartNanos = 0; rtspStartNanos = 0; rtspDoneNanos = 0
             enetStartNanos = 0; establishedNanos = 0; firstFrameNanos = 0
             disconnectReasonValue = .none; globalReasonCounted = false
@@ -567,7 +567,7 @@ extension TelemetryCounters {
 
         /// Delta (ms) between two monotonic ns stamps, or nil if either is unset
         /// (0) or the delta is negative. Same discipline as the latency tracker.
-        @inlinable internal func msBetween(_ start: UInt64, _ end: UInt64) -> Double? {
+        private func msBetween(_ start: UInt64, _ end: UInt64) -> Double? {
             guard start != 0, end != 0, end >= start else { return nil }
             return Double(end &- start) / 1_000_000.0
         }

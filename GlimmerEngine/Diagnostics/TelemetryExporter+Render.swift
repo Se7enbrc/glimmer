@@ -14,7 +14,7 @@ import Foundation
 
 // MARK: - Renderer
 
-@usableFromInline package enum TelemetryRenderer {
+package enum TelemetryRenderer {
 
     /// This Mac's `client` label: its LocalHostName as a pseudonym, so files people
     /// attach to issues tell Macs apart without naming them. Resolved once.

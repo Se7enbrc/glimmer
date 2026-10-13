@@ -3,17 +3,17 @@
 
 import os
 
-@usableFromInline package final class ReceiveTimingTelemetry: Sendable {
+package final class ReceiveTimingTelemetry: Sendable {
 
-    @inlinable package init() {}
+    package init() {}
 
-    @usableFromInline package static let video = ReceiveTimingTelemetry()
-    @usableFromInline package static let audio = ReceiveTimingTelemetry()
-    @usableFromInline internal let state = OSAllocatedUnfairLock(initialState: Window())
+    package static let video = ReceiveTimingTelemetry()
+    package static let audio = ReceiveTimingTelemetry()
+    private let state = OSAllocatedUnfairLock(initialState: Window())
 
-    @usableFromInline package struct Distribution: Sendable {
+    package struct Distribution: Sendable {
 
-        @inlinable package init(
+        package init(
             sampleCount: UInt64 = 0,
             maximum: Double = 0
         ) {
@@ -21,9 +21,9 @@ import os
             self.maximum = maximum
         }
 
-        @usableFromInline package var buckets = SIMD64<UInt32>(repeating: 0)
-        @usableFromInline package var sampleCount: UInt64 = 0
-        @usableFromInline package var maximum: Double = 0
+        package var buckets = SIMD64<UInt32>(repeating: 0)
+        package var sampleCount: UInt64 = 0
+        package var maximum: Double = 0
 
         @inlinable package mutating func observe(_ milliseconds: Double) {
             let index: Int
@@ -38,7 +38,7 @@ import os
             maximum = max(maximum, milliseconds)
         }
 
-        @inlinable package var p99: Double? {
+        package var p99: Double? {
             guard sampleCount > 0 else { return nil }
             let target = sampleCount - sampleCount / 100
             var cumulative: UInt64 = 0
@@ -58,9 +58,9 @@ import os
         }
     }
 
-    @usableFromInline package struct Window: Sendable {
+    package struct Window: Sendable {
 
-        @inlinable package init(
+        package init(
             delay: Distribution = Distribution(),
             gap: Distribution = Distribution(),
             missing: UInt64 = 0
@@ -70,14 +70,14 @@ import os
             self.missing = missing
         }
 
-        @usableFromInline package var delay = Distribution()
-        @usableFromInline package var gap = Distribution()
-        @usableFromInline package var missing: UInt64 = 0
+        package var delay = Distribution()
+        package var gap = Distribution()
+        package var missing: UInt64 = 0
     }
 
-    @usableFromInline package struct Snapshot: Sendable {
+    package struct Snapshot: Sendable {
 
-        @inlinable package init(
+        package init(
             samples: UInt64 = 0,
             missing: UInt64 = 0,
             delayMaxMs: Double? = nil,
@@ -93,12 +93,12 @@ import os
             self.gapP99Ms = gapP99Ms
         }
 
-        @usableFromInline package var samples: UInt64 = 0
-        @usableFromInline package var missing: UInt64 = 0
-        @usableFromInline package var delayMaxMs: Double?
-        @usableFromInline package var delayP99Ms: Double?
-        @usableFromInline package var gapMaxMs: Double?
-        @usableFromInline package var gapP99Ms: Double?
+        package var samples: UInt64 = 0
+        package var missing: UInt64 = 0
+        package var delayMaxMs: Double?
+        package var delayP99Ms: Double?
+        package var gapMaxMs: Double?
+        package var gapP99Ms: Double?
     }
 
     @inlinable package func observe(delayMs: Double?, gapMs: Double?) {
@@ -108,7 +108,7 @@ import os
         }
     }
 
-    @inlinable package func takeSnapshot() -> Snapshot {
+    package func takeSnapshot() -> Snapshot {
         state.withLock {
             let result = Snapshot(samples: $0.delay.sampleCount, missing: $0.missing,
                                   delayMaxMs: $0.delay.sampleCount > 0 ? $0.delay.maximum : nil,
@@ -120,5 +120,5 @@ import os
         }
     }
 
-    @inlinable package func reset() { state.withLock { $0 = Window() } }
+    package func reset() { state.withLock { $0 = Window() } }
 }

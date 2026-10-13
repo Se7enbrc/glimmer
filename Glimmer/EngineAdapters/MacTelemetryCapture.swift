@@ -15,7 +15,6 @@ enum MacTelemetryCapture {
         let wifi = WiFiTelemetry()
         let ioReport = IOReportSampler.shared
         var capture = TelemetryCapture()
-        capture.outputDirectory = logsDirectory
         var config = TelemetryConfiguration()
         config.buildCommit = BuildInfo.commit
         config.buildDate = BuildInfo.date

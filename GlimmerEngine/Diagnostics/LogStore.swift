@@ -14,7 +14,7 @@ import os
 import Synchronization
 
 extension Array where Element == String {
-    @usableFromInline package mutating func trimOldestOverflow(maxCount: Int) {
+    package mutating func trimOldestOverflow(maxCount: Int) {
         guard count > maxCount else { return }
         removeFirst(count - maxCount / 2)
     }
@@ -22,16 +22,16 @@ extension Array where Element == String {
 
 /// Severity for the in-app troubleshooting log. Ordered so the viewer's level
 /// filter can do `entry.level >= threshold`.
-@usableFromInline package enum LogLevel: Int, Comparable, Sendable, CaseIterable {
+package enum LogLevel: Int, Comparable, Sendable, CaseIterable {
     case debug = 0
     case info
     case notice
     case warning
     case error
 
-    @usableFromInline package static func < (lhs: LogLevel, rhs: LogLevel) -> Bool { lhs.rawValue < rhs.rawValue }
+    package static func < (lhs: LogLevel, rhs: LogLevel) -> Bool { lhs.rawValue < rhs.rawValue }
 
-    @usableFromInline package var label: String {
+    package var label: String {
         switch self {
         case .debug: return "Debug"
         case .info: return "Info"
@@ -43,9 +43,9 @@ extension Array where Element == String {
 }
 
 /// One entry in the troubleshooting log.
-@usableFromInline package struct LogEntry: Identifiable, Sendable {
+package struct LogEntry: Identifiable, Sendable {
 
-    @usableFromInline package init(
+    package init(
         id: UInt64,
         date: Date,
         level: LogLevel,
@@ -61,13 +61,13 @@ extension Array where Element == String {
         self.redactedMessage = redactedMessage
     }
 
-    @usableFromInline package let id: UInt64
-    @usableFromInline package let date: Date
-    @usableFromInline package let level: LogLevel
-    @usableFromInline package let category: String
-    @usableFromInline package let message: String
+    package let id: UInt64
+    package let date: Date
+    package let level: LogLevel
+    package let category: String
+    package let message: String
     /// The message with private values as "<private>"; nil when nothing in it was private.
-    @usableFromInline package let redactedMessage: String?
+    package let redactedMessage: String?
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -75,22 +75,21 @@ extension Array where Element == String {
         return formatter
     }()
 
-    @usableFromInline package var timeString: String { Self.timeFormatter.string(from: date) }
+    package var timeString: String { Self.timeFormatter.string(from: date) }
 
     /// Plain one-line form, full detail.
-    @usableFromInline
     package var plain: String { "\(timeString)  \(level.label.uppercased())  [\(category)]  \(message)" }
 
     /// What Copy puts on the pasteboard: copied lines end up in public issues, like the session file.
-    @usableFromInline package var shareable: String {
+    package var shareable: String {
         "\(timeString)  \(level.label.uppercased())  [\(category)]  \(redactedMessage ?? message)"
     }
 }
 
 /// O(1) ring under a short lock; the viewer reads newest-last snapshots. Each session's
 /// opening lines stay pinned so 1 Hz health lines can't evict the connect, codec and route.
-@usableFromInline package final class LogStore: Sendable {
-    @usableFromInline package static let shared = LogStore()
+package final class LogStore: Sendable {
+    package static let shared = LogStore()
 
     private struct Ring {
         var entries: [LogEntry] = []
@@ -105,7 +104,7 @@ extension Array where Element == String {
     private let state = Mutex(Ring())
     private let captureDebug: Atomic<Bool>
 
-    @usableFromInline package init(
+    package init(
         capacity: Int = 2000, pinnedCapacity: Int = 200,
         captureDebug: Bool = UserDefaults.standard.bool(forKey: "diagFileLogDebug")
     ) {
@@ -114,7 +113,7 @@ extension Array where Element == String {
         self.captureDebug = Atomic(captureDebug)
     }
 
-    @usableFromInline package func log(_ level: LogLevel, _ diag: DiagMessage, category: String) {
+    package func log(_ level: LogLevel, _ diag: DiagMessage, category: String) {
         let redacted = diag.systemLogText
         mirrorToSystemLog(level, redacted, category: category)
         // A debug flood stays out of the ring and the file unless verbose capture is on.
@@ -150,14 +149,13 @@ extension Array where Element == String {
 
     /// A stream is starting: pin its opening lines in place of the last session's, and
     /// resolve verbose capture once, the way the session file does.
-    @usableFromInline
     package func beginSession(captureDebug debug: Bool = UserDefaults.standard.bool(forKey: "diagFileLogDebug")) {
         captureDebug.store(debug, ordering: .relaxed)
         state.withLock { $0.pinned.removeAll(keepingCapacity: true) }
     }
 
     /// Newest-last: pinned lines the ring has since dropped, then the ring in order.
-    @usableFromInline package func snapshot() -> [LogEntry] {
+    package func snapshot() -> [LogEntry] {
         state.withLock { ring in
             let oldestKept = ring.entries.isEmpty ? UInt64.max : ring.entries[ring.head].id
             var out = Array(ring.pinned.prefix { $0.id < oldestKept })
@@ -167,7 +165,7 @@ extension Array where Element == String {
         }
     }
 
-    @usableFromInline package func clear() {
+    package func clear() {
         state.withLock { ring in
             ring.entries.removeAll(keepingCapacity: true)
             ring.head = 0
@@ -179,49 +177,49 @@ extension Array where Element == String {
 /// Terse façade: `Diag.info("Connecting to \(address, privacy: .private)", "Stream")`.
 /// Interpolations take Logger's `privacy:` argument and default to public; a
 /// private value reaches only the in-app viewer, never the system log or session file.
-@usableFromInline package enum Diag {
-    @usableFromInline package static func debug(
+package enum Diag {
+    package static func debug(
         _ message: DiagMessage,
         _ category: String
     ) { LogStore.shared.log(.debug, message, category: category) }
-    @usableFromInline package static func info(
+    package static func info(
         _ message: DiagMessage,
         _ category: String
     ) { LogStore.shared.log(.info, message, category: category) }
-    @usableFromInline package static func notice(
+    package static func notice(
         _ message: DiagMessage,
         _ category: String
     ) { LogStore.shared.log(.notice, message, category: category) }
-    @usableFromInline package static func warn(
+    package static func warn(
         _ message: DiagMessage,
         _ category: String
     ) { LogStore.shared.log(.warning, message, category: category) }
-    @usableFromInline package static func error(
+    package static func error(
         _ message: DiagMessage,
         _ category: String
     ) { LogStore.shared.log(.error, message, category: category) }
 }
 
 /// Logger's spelling, so a Diag line reads like the `log` line beside it.
-@usableFromInline package enum DiagPrivacy: Sendable {
+package enum DiagPrivacy: Sendable {
     case `public`, `private`
 }
 
 /// One Diag line in two renderings: `text` for the in-app viewer and its export,
 /// `systemLogText` for os_log and the session file. The redacted copy is built
 /// only once a private value appears.
-@usableFromInline package struct DiagMessage: ExpressibleByStringInterpolation, Sendable {
-    @usableFromInline package let text: String
+package struct DiagMessage: ExpressibleByStringInterpolation, Sendable {
+    package let text: String
     private let redacted: String?
 
-    @usableFromInline package var systemLogText: String { redacted ?? text }
+    package var systemLogText: String { redacted ?? text }
 
-    @usableFromInline package init(stringLiteral value: String) {
+    package init(stringLiteral value: String) {
         text = value
         redacted = nil
     }
 
-    @usableFromInline package init(stringInterpolation: StringInterpolation) {
+    package init(stringInterpolation: StringInterpolation) {
         text = stringInterpolation.text
         redacted = stringInterpolation.redacted
     }
@@ -232,25 +230,24 @@ extension Array where Element == String {
     }
 
     /// Long lines wrap with `+`; each piece keeps its own private values.
-    @usableFromInline package static func + (lhs: DiagMessage, rhs: DiagMessage) -> DiagMessage {
+    package static func + (lhs: DiagMessage, rhs: DiagMessage) -> DiagMessage {
         let redacted = lhs.redacted == nil && rhs.redacted == nil ? nil : lhs.systemLogText + rhs.systemLogText
         return DiagMessage(text: lhs.text + rhs.text, redacted: redacted)
     }
 
-    @usableFromInline package struct StringInterpolation: StringInterpolationProtocol {
+    package struct StringInterpolation: StringInterpolationProtocol {
         fileprivate var text = ""
         fileprivate var redacted: String?
 
-        @usableFromInline package init(literalCapacity: Int, interpolationCount: Int) {
+        package init(literalCapacity: Int, interpolationCount: Int) {
             text.reserveCapacity(literalCapacity + interpolationCount * 8)
         }
 
-        @usableFromInline package mutating func appendLiteral(_ literal: String) {
+        package mutating func appendLiteral(_ literal: String) {
             text += literal
             redacted? += literal
         }
 
-        @usableFromInline
         package mutating func appendInterpolation<Value>(_ value: Value, privacy: DiagPrivacy = .public) {
             let rendered = String(describing: value)
             switch privacy {
@@ -265,7 +262,6 @@ extension Array where Element == String {
 
         /// A nested line keeps its own private values, or goes private whole, instead
         /// of rendering as a struct dump.
-        @usableFromInline
         package mutating func appendInterpolation(_ message: DiagMessage, privacy: DiagPrivacy = .public) {
             if redacted == nil, privacy == .private || message.redacted != nil { redacted = text }
             redacted? += privacy == .private ? "<private>" : message.systemLogText
@@ -279,18 +275,17 @@ extension Array where Element == String {
 /// While a telemetry session runs, mirrors Diag's redacted text (INFO+, DEBUG with
 /// `diagFileLogDebug`) to Logs/Glimmer. `@unchecked Sendable`: the lock guards
 /// `pending`; the file and timer live on `flushQueue`, so loggers never touch disk.
-@usableFromInline package final class SessionLogFileSink: @unchecked Sendable {
+package final class SessionLogFileSink: @unchecked Sendable {
 
     /// Gate-checked singleton, non-nil only while a telemetry/debug session has it
     /// installed. `sharedBox` guards the slot: an unsynchronized load racing
     /// teardown's release of the previous sink would be an ARC use-after-free.
     private static let sharedBox = OSAllocatedUnfairLock<SessionLogFileSink?>(initialState: nil)
-    @usableFromInline package static var shared: SessionLogFileSink? { sharedBox.withLock { $0 } }
+    package static var shared: SessionLogFileSink? { sharedBox.withLock { $0 } }
 
     /// Install a fresh sink iff the caller's gate is on; off, nothing is installed
     /// and the logging path pays one nil load.
-    @usableFromInline
-    package static func startIfEnabled(enabled: Bool, directory: URL = TelemetryExporter.logsDirectory) {
+    package static func startIfEnabled(enabled: Bool, directory: URL) {
         guard enabled else { return }
         // Check-and-install under the lock so concurrent enables can't both create
         // a sink. open() runs off-lock; it only dispatches onto flushQueue.
@@ -305,7 +300,7 @@ extension Array where Element == String {
 
     /// Tear down + clear the singleton. Flushes whatever is pending and closes the
     /// file, so the per-session log is complete. Idempotent.
-    @usableFromInline package static func stop() {
+    package static func stop() {
         // Take the sink out of the slot (releasing the box's strong ref) before
         // closing off-lock, so no reader observes a half-released reference.
         let sink = sharedBox.withLock { box -> SessionLogFileSink? in
@@ -405,7 +400,7 @@ extension Array where Element == String {
 
     /// Producing-thread side: format one line and push it into the buffer under a
     /// short lock. No I/O here. Bounded - drops oldest on overflow.
-    @usableFromInline package func append(level: LogLevel, category: String, message: String) {
+    package func append(level: LogLevel, category: String, message: String) {
         // Level gate BEFORE formatting: a sub-threshold line costs one compare,
         // not a DateFormatter render - the per-ACK-class flood must not pay
         // string-building just to be discarded.

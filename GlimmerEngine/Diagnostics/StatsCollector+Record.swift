@@ -13,28 +13,23 @@ extension StatsCollector {
     /// Sunshine's timed captures exclude its repeats when timing is available.
     /// This estimates captured content, not unique game renders; missing timing
     /// falls back to received frames until this connection proves support.
-    @usableFromInline package struct HostFrameRate {
-        @usableFromInline internal struct Sample {
-            @inlinable internal init(duration: Double = 0, frames: UInt64 = 0, timedFrames: UInt64 = 0) {
-                self.duration = duration
-                self.frames = frames
-                self.timedFrames = timedFrames
-            }
+    package struct HostFrameRate {
+        private struct Sample {
 
-            @usableFromInline internal var duration: Double = 0
-            @usableFromInline internal var frames: UInt64 = 0
-            @usableFromInline internal var timedFrames: UInt64 = 0
+            var duration: Double = 0
+            var frames: UInt64 = 0
+            var timedFrames: UInt64 = 0
         }
 
-        @usableFromInline internal var windowStart: CFTimeInterval
-        @usableFromInline internal var frames: UInt64 = 0
-        @usableFromInline internal var timedFrames: UInt64 = 0
-        @usableFromInline internal var hasCaptureTiming = false
-        @usableFromInline internal var value: Double?
-        @usableFromInline internal var samples = [Sample](repeating: Sample(), count: 4)
-        @usableFromInline internal var nextSample = 0
+        private var windowStart: CFTimeInterval
+        private var frames: UInt64 = 0
+        private var timedFrames: UInt64 = 0
+        private var hasCaptureTiming = false
+        private var value: Double?
+        private var samples = [Sample](repeating: Sample(), count: 4)
+        private var nextSample = 0
 
-        @inlinable package init(now: CFTimeInterval = CACurrentMediaTime()) {
+        package init(now: CFTimeInterval = CACurrentMediaTime()) {
             windowStart = now
         }
 
@@ -46,7 +41,7 @@ extension StatsCollector {
             }
         }
 
-        @inlinable package mutating func sample(now: CFTimeInterval) -> Double? {
+        package mutating func sample(now: CFTimeInterval) -> Double? {
             let elapsed = now - windowStart
             // Allow timer jitter around 250 ms without skipping every other tick.
             guard elapsed >= 0.2 else { return value }
@@ -112,7 +107,7 @@ extension StatsCollector {
     /// if we've never decoded one. THIS is what the frame-arrival watchdog
     /// in StreamSession gates on - reception alone doesn't mean the user is
     /// seeing anything.
-    @inlinable package func secondsSinceLastDecodedFrame() -> Double {
+    package func secondsSinceLastDecodedFrame() -> Double {
         lock.lock()
         defer { lock.unlock() }
         guard lastDecodedFrameTime > 0 else { return .infinity }
@@ -124,7 +119,7 @@ extension StatsCollector {
     /// single `renderer.enqueue` site (`recordRendererEnqueue`) in both the paced
     /// and direct-enqueue paths, so the present-path watchdog gates on real
     /// screen updates in EITHER mode - the detector the direct path was missing.
-    @inlinable package func secondsSinceLastPresent() -> Double {
+    package func secondsSinceLastPresent() -> Double {
         lock.lock()
         defer { lock.unlock() }
         guard lastPresentTime > 0 else { return .infinity }
@@ -133,7 +128,7 @@ extension StatsCollector {
 
     /// Fold timing with its received frame under the same lock so a snapshot
     /// cannot split their counts. Zero is unmeasured, including Sunshine repeats.
-    @inlinable internal func recordHostProcessingLatencyLocked(_ tenthsOfMs: UInt16) {
+    private func recordHostProcessingLatencyLocked(_ tenthsOfMs: UInt16) {
         if tenthsOfMs != 0 {
             if minHostProcessingLatency != 0 {
                 minHostProcessingLatency = min(minHostProcessingLatency, tenthsOfMs)
@@ -213,7 +208,7 @@ extension StatsCollector {
     /// Split one submit-to-callback span: a frame submitted before the previous
     /// callback queued behind it until then (wait); the rest is VT service time.
     /// Clamped so a stale or out-of-order anchor never yields a negative part.
-    @inlinable package static func decodeTimeSplit(
+    package static func decodeTimeSplit(
         submit: CFTimeInterval, callback: CFTimeInterval, previousCallback: CFTimeInterval
     ) -> (service: Double, wait: Double) {
         let end = max(submit, callback)
@@ -221,7 +216,7 @@ extension StatsCollector {
         return (service: end - start, wait: start - submit)
     }
 
-    @inlinable internal static func foldDecodeEma(_ prev: Double?, _ sample: Double) -> Double {
+    private static func foldDecodeEma(_ prev: Double?, _ sample: Double) -> Double {
         guard let prev else { return sample }
         return decodeTimeEmaAlpha * sample + (1 - decodeTimeEmaAlpha) * prev
     }
@@ -281,7 +276,7 @@ extension StatsCollector {
     /// window is DESIGNED idle (backgrounded/occluded: receive continues,
     /// presents stop). The first present after clearing re-seeds the baseline
     /// un-judged, so the hidden span can never mint a false gap.
-    @inlinable package func setGapJudgingExcluded(_ excluded: Bool) {
+    package func setGapJudgingExcluded(_ excluded: Bool) {
         lock.lock()
         defer { lock.unlock() }
         gapJudgingExcluded = excluded
@@ -302,7 +297,7 @@ extension StatsCollector {
 
     /// Session-total renderer-backpressure drops for stream diagnostics.
     /// The overlay shows decoder drops; teardown logs this separate cause.
-    @inlinable package func backpressureDropCount() -> UInt64 {
+    package func backpressureDropCount() -> UInt64 {
         lock.lock()
         defer { lock.unlock() }
         return rendererBackpressureDrops
@@ -310,7 +305,7 @@ extension StatsCollector {
 
     /// Session-total decoder drops. The overlay uses the percentage;
     /// telemetry needs the absolute count for its drops-by-cause split.
-    @inlinable package func decoderDropCount() -> UInt64 {
+    package func decoderDropCount() -> UInt64 {
         lock.lock()
         defer { lock.unlock() }
         return totalDecoderDropped
@@ -355,7 +350,7 @@ extension StatsCollector {
 
     /// Total presentation-late drops this session. Surfaced in the overlay's
     /// drops-by-cause split and logged on teardown.
-    @inlinable package func presentationLateDropCount() -> UInt64 {
+    package func presentationLateDropCount() -> UInt64 {
         lock.lock()
         defer { lock.unlock() }
         return presentationLateDrops
@@ -374,7 +369,7 @@ extension StatsCollector {
 
     /// Total perceived present gaps this session. Exported as the badge's
     /// felt-stutter telemetry signal.
-    @inlinable package func presentationGapCount() -> UInt64 {
+    package func presentationGapCount() -> UInt64 {
         lock.lock()
         defer { lock.unlock() }
         return presentationGaps
@@ -422,7 +417,7 @@ extension StatsCollector {
 
     /// Keep the newest gaps when decoding stays hidden longer than the queue.
     /// MUST be called with `lock` held.
-    @inlinable internal func enqueueNetworkGapLocked(_ ptsSeconds: Double) {
+    private func enqueueNetworkGapLocked(_ ptsSeconds: Double) {
         let tail = (pendingNetworkGapHead + pendingNetworkGapCount) % Self.networkGapCapacity
         if tail == pendingNetworkGapPtsSeconds.count {
             pendingNetworkGapPtsSeconds.append(ptsSeconds)
@@ -439,8 +434,8 @@ extension StatsCollector {
     /// Whether the host's timing alone makes a present late: even the best present
     /// it allowed (its frame delta, but no sooner than one refresh) misses the
     /// stream interval by more than the cadence tolerance.
-    @inlinable package static func hostTimingExplainsLate(hostDeltaMs: Double, streamIntervalMs: Double,
-                                                          refreshMs: Double) -> Bool {
+    package static func hostTimingExplainsLate(hostDeltaMs: Double, streamIntervalMs: Double,
+                                               refreshMs: Double) -> Bool {
         guard hostDeltaMs > 0, hostDeltaMs < 1_000, streamIntervalMs > 0 else { return false }
         return abs(max(hostDeltaMs, refreshMs) - streamIntervalMs) > presentCadenceToleranceMs
     }
@@ -448,7 +443,7 @@ extension StatsCollector {
     /// Fold one received frame's host PTS into the window's host cadence. Zero, a
     /// backward step, frame skip or a gap of 1 s or more breaks the chain.
     /// MUST be called with `lock` held.
-    @inlinable package func foldHostDeltaLocked(ptsUs: UInt64, consecutive: Bool) {
+    package func foldHostDeltaLocked(ptsUs: UInt64, consecutive: Bool) {
         defer { lastReceivedPtsUs = ptsUs }
         guard consecutive, lastReceivedPtsUs > 0, ptsUs > lastReceivedPtsUs,
               ptsUs - lastReceivedPtsUs < 1_000_000 else {

@@ -17,17 +17,34 @@ struct EngineDiagnosticsBoundaryTests {
     }
 
     @Test func absentPlatformProbesStayAbsent() throws {
-        let exporter = TelemetryExporter(source: source(), serverName: "Test PC", counters: TelemetryCounters())
+        let exporter = TelemetryExporter(source: source(), serverName: "Test PC",
+            outputDirectory: .temporaryDirectory, counters: TelemetryCounters())
         exporter.workQueue.sync { exporter.capture() }
         let (snapshot, extras) = try #require(exporter.latestSample)
         #expect(snapshot.wifi == nil && snapshot.resource == nil && snapshot.clusterResidency == nil)
         #expect(snapshot.processCpuPercent == nil && snapshot.threadCount == nil)
-        #expect(snapshot.onBattery == nil)
+        #expect(snapshot.onBattery == false)
         #expect(snapshot.udpFullSockDelta == nil && extras.streamRoute == nil)
         #expect(extras.dualSenseHidReportsPerSecond == nil && extras.envStateOrdinal == nil)
         let line = TelemetryRenderer.ndjson(snapshot, extras: extras)
         #expect(!line.contains("wifi_rssi_dbm") && !line.contains("phys_footprint_bytes"))
         #expect(!line.contains("Test PC"))
+    }
+
+    @Test(arguments: [nil, ResourceSnapshot(), ResourceSnapshot(onBattery: false),
+                      ResourceSnapshot(onBattery: true)])
+    func batteryMetricAlwaysSurvivesMissingResourceEvidence(resource: ResourceSnapshot?) throws {
+        let capture = TelemetryCapture(resource: { resource })
+        let exporter = TelemetryExporter(
+            source: source(capture: capture), serverName: "Test PC",
+            outputDirectory: .temporaryDirectory, counters: TelemetryCounters())
+        exporter.workQueue.sync { exporter.capture() }
+        let (snapshot, extras) = try #require(exporter.latestSample)
+        let expected = resource?.onBattery ?? false
+        #expect(snapshot.onBattery == expected)
+        let metric = TelemetryRenderer.prometheus(snapshot, extras: extras)
+            .split(separator: "\n").first { $0.hasPrefix("glimmer_on_battery{") }
+        #expect(try #require(metric).hasSuffix(expected ? " 1" : " 0"))
     }
 
     @Test func suppliedEvidenceIsCapturedOnceForBothRenderers() throws {
@@ -42,7 +59,8 @@ struct EngineDiagnosticsBoundaryTests {
         }
         capture.hidReportsPerSecond = { 250 }
         let exporter = TelemetryExporter(
-            source: source(capture: capture), serverName: "Test PC", counters: TelemetryCounters())
+            source: source(capture: capture), serverName: "Test PC",
+            outputDirectory: .temporaryDirectory, counters: TelemetryCounters())
         exporter.workQueue.sync { exporter.capture() }
         let (snapshot, extras) = try #require(exporter.latestSample)
         #expect(calls.withLock { $0 } == 1)
@@ -62,7 +80,8 @@ struct EngineDiagnosticsBoundaryTests {
         capture.beginSession = { calls.withLock { $0 += 1 } }
         capture.environment = { calls.withLock { $0 += 1 }; return nil }
         let exporter = TelemetryExporter.makeIfEnabled(
-            source: source(capture: capture), serverName: "Test PC", enabled: false)
+            source: source(capture: capture), serverName: "Test PC",
+            outputDirectory: .temporaryDirectory, enabled: false)
         #expect(exporter == nil && calls.withLock { $0 } == 0)
     }
 
@@ -70,7 +89,6 @@ struct EngineDiagnosticsBoundaryTests {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         var capture = TelemetryCapture()
-        capture.outputDirectory = directory
         capture.configuration = TelemetryConfiguration(
             buildCommit: "boundary-build", fastPingSeconds: 0.125, relaxedPingSeconds: 0.75,
             keepaliveIdleSeconds: 9, audioCushionBaseMs: 31, audioCushionStepMs: 6, audioOverrunSlackMs: 41)
@@ -79,13 +97,14 @@ struct EngineDiagnosticsBoundaryTests {
                              configuredBitrateKbps: 20_000, askedBitrateKbps: 15_000, packetSize: 1024)
         }
         let exporter = try #require(TelemetryExporter.makeIfEnabled(
-            source: source(capture: capture), serverName: "Test PC", enabled: true))
+            source: source(capture: capture), serverName: "Test PC", outputDirectory: directory, enabled: true))
         #expect(exporter.outputDirectory == directory)
         exporter.workQueue.sync {
             exporter.openNDJSONFile()
             exporter.writeConfigEvent()
         }
         let url = try #require(exporter.ndjsonURL)
+        #expect(url.deletingLastPathComponent().path == directory.path)
         let data = try Data(contentsOf: url)
         let row = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(row["build_commit"] as? String == "boundary-build")

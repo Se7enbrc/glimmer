@@ -333,5 +333,6 @@ extension TelemetryExporter {
         /// Previous-tick gyro/accel sample total, for input_motion_per_s.
         package var inputMotionTotal: UInt64 = 0
     }
-    package nonisolated(unsafe) static var captureBaselines = CaptureBaselines()
+    // One active exporter owns these baselines; only its serial workQueue reads or mutates them.
+    nonisolated(unsafe) static var captureBaselines = CaptureBaselines()
 }

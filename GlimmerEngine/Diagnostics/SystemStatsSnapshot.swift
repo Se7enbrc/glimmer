@@ -3,9 +3,9 @@
 
 import Foundation
 
-@usableFromInline package struct SystemStatsSnapshot: Sendable, Equatable {
+package struct SystemStatsSnapshot: Sendable, Equatable {
 
-    @usableFromInline package init(
+    package init(
         batteryPercent: Int? = nil,
         batteryCharging: Bool? = nil,
         cpuPercent: Double? = nil,
@@ -18,14 +18,14 @@ import Foundation
     }
 
     /// Battery percentage (0-100). nil on desktops with no battery.
-    @usableFromInline package var batteryPercent: Int?
+    package var batteryPercent: Int?
     /// True if AC is plugged in. Drives the "charging" vs "discharging"
     /// glyph in the overlay row.
-    @usableFromInline package var batteryCharging: Bool?
+    package var batteryCharging: Bool?
     /// CPU usage 0-100, sum across all cores normalized to 100% =
     /// "all cores fully busy". Activity Monitor's "User + System" line.
-    @usableFromInline package var cpuPercent: Double?
+    package var cpuPercent: Double?
     /// RAM usage 0-100. (active + wired + compressed) / total - matches
     /// Activity Monitor's "Memory Used" percentage.
-    @usableFromInline package var ramPercent: Double?
+    package var ramPercent: Double?
 }

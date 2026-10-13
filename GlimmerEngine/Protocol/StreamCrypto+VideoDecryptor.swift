@@ -9,7 +9,7 @@ import CryptoKit
 /// Opens Sunshine's encrypted video (VideoStream.c): ENC_VIDEO_HEADER, then the whole RTP packet
 /// sealed with AES-128-GCM. CryptoKit takes ~0.8 µs for a 1.4 KB packet (OpenSSL ~0.2 µs), about
 /// 1% of a core at 4K240's 14k packets/s, and only when the PC requires encrypted video.
-@usableFromInline package final class VideoDecryptor {
+package final class VideoDecryptor {
     @usableFromInline internal let key: SymmetricKey
     @usableFromInline internal var loggedFailure = false
 

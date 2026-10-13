@@ -42,37 +42,37 @@ import os
 /// `@unchecked Sendable`: every field is an `Atomic*`-style counter guarded by
 /// its own lock, so the type is safe to touch from any thread (receive thread,
 /// decode queue, pacing queue, main actor).
-@usableFromInline package final class TelemetryCounters: @unchecked Sendable {
-    @usableFromInline package static let shared = TelemetryCounters()
+package final class TelemetryCounters: @unchecked Sendable {
+    package static let shared = TelemetryCounters()
 
     // The `Counter` type - one os_unfair_lock-guarded monotonic UInt64, the
     // building block of every total below - is in TelemetryCounters+Types.swift.
 
     // ---- Event counters (exposed as glimmer_*_total) ----
-    @usableFromInline package let rfiTotal = Counter()
-    @usableFromInline package let idrRequestedTotal = Counter()
-    @usableFromInline package let backlogOverflowTotal = Counter()
-    @usableFromInline package let presentStallTotal = Counter()
-    @usableFromInline package let frameLossTotal = Counter()
-    @usableFromInline package let unrecoverableFrameTotal = Counter()
-    @usableFromInline package let pacerDisabledTotal = Counter()
+    package let rfiTotal = Counter()
+    package let idrRequestedTotal = Counter()
+    package let backlogOverflowTotal = Counter()
+    package let presentStallTotal = Counter()
+    package let frameLossTotal = Counter()
+    package let unrecoverableFrameTotal = Counter()
+    package let pacerDisabledTotal = Counter()
 
     // ---- Receive-path totals (the exporter derives pkts/s + fec rate from
     //      deltas of these monotonic totals; recv-jitter is a live gauge). ----
-    @usableFromInline package let videoPacketsTotal = Counter()
-    @usableFromInline package let videoFramesTotal = Counter()
-    @usableFromInline package let fecRecoveredFramesTotal = Counter()
-    @usableFromInline package let inputEventsTotal = Counter()
-    @usableFromInline package let inputBatchFlushTotal = Counter()
+    package let videoPacketsTotal = Counter()
+    package let videoFramesTotal = Counter()
+    package let fecRecoveredFramesTotal = Counter()
+    package let inputEventsTotal = Counter()
+    package let inputBatchFlushTotal = Counter()
     /// Gyro/accel samples handed to the batcher. Kept out of `inputEventsTotal`:
     /// sensor noise never idles, so it would pin the input-idle state.
-    @usableFromInline package let inputMotionTotal = Counter()
+    package let inputMotionTotal = Counter()
     /// Input flush ticks that early-returned because the LOCAL outbound send count
     /// was over cap (the radio draining slowly) - one cause of the input p99 tail.
-    @usableFromInline package let inputFlushSendBackloggedSkipTotal = Counter()
+    package let inputFlushSendBackloggedSkipTotal = Counter()
     /// Input flush ticks that early-returned because the HOST stopped draining our
     /// reliable backlog (ACK silence) - the other cause of the input p99 tail.
-    @usableFromInline package let inputFlushReliableBackloggedSkipTotal = Counter()
+    package let inputFlushReliableBackloggedSkipTotal = Counter()
 
     // ---- P1 NETWORK receive-path totals (the exporter derives the per-second
     //      pre-FEC loss / out-of-order / duplicate RATES from deltas of these
@@ -84,12 +84,12 @@ import os
     /// Packets the host sent that never arrived (gaps in the RTP sequence space,
     /// counted BEFORE FEC recovery). The exporter derives the pre-FEC loss rate as
     /// this delta over the expected-packet delta.
-    @usableFromInline package let videoPacketsLostPreFecTotal = Counter()
+    package let videoPacketsLostPreFecTotal = Counter()
     /// Packets that arrived with a sequence number BEHIND the highest already seen
     /// (genuine reorder on the wire).
-    @usableFromInline package let videoPacketsOutOfOrderTotal = Counter()
+    package let videoPacketsOutOfOrderTotal = Counter()
     /// Packets whose sequence number was already observed (true duplicates).
-    @usableFromInline package let videoPacketsDuplicateTotal = Counter()
+    package let videoPacketsDuplicateTotal = Counter()
 
     // ---- P1 NETWORK ENet reliable-channel retransmit total. Incremented in
     //      checkRetransmit each time a reliable command's round-trip timeout
@@ -97,12 +97,12 @@ import os
     //      stall (paired with the already-surfaced oldest-unacked trend from
     //      enetHealth()). Always-live integer add at the already-rare retransmit
     //      site (sub-2Hz under a healthy link). ----
-    @usableFromInline package let enetRetransmitTotal = Counter()
+    package let enetRetransmitTotal = Counter()
 
     /// ACK-silence near-miss total (P1 NETWORK). Bumped once per EDGE the control
     /// loop's ACK silence crosses a deep RTT multiple short of the dead-peer cutoff
     /// - the near-death blip that recovers and otherwise leaves no trace.
-    @usableFromInline package let ackSilenceNearMissTotal = Counter()
+    package let ackSilenceNearMissTotal = Counter()
 
     /// Unknown inbound CONTROL datagrams ignored (already ACKed + decrypted,
     /// then discarded - e.g. SET_RGB_LED 0x5502, advertised on light-bar pads
@@ -113,7 +113,7 @@ import os
     /// alone ran ~135/s during active rumble, so cross-session comparisons
     /// spanning that change must not read the drop as a host behavior change.
     /// Always-live integer add on the inbound control path.
-    @usableFromInline package let ctrlIgnoredTotal = Counter()
+    package let ctrlIgnoredTotal = Counter()
 
     // ---- Inter-arrival GAP-EVENT counters, PER SOCKET (video / audio / ENet)
     //      × thresholds (20/50/100ms). The honest link-health signal and the
@@ -125,23 +125,23 @@ import os
     //      Source sites fold these off the per-datagram path (video buckets
     //      >20ms gaps per ~2s window; audio compares last-arrival; the ENet
     //      leg counts reliable-ACK DELAYS - idle-proof, sees idle doze). ----
-    @usableFromInline package let videoGapOver20msTotal = Counter()
-    @usableFromInline package let videoGapOver50msTotal = Counter()
-    @usableFromInline package let videoGapOver100msTotal = Counter()
-    @usableFromInline package let audioGapOver20msTotal = Counter()
-    @usableFromInline package let audioGapOver50msTotal = Counter()
-    @usableFromInline package let audioGapOver100msTotal = Counter()
-    @usableFromInline package let enetGapOver20msTotal = Counter()
-    @usableFromInline package let enetGapOver50msTotal = Counter()
-    @usableFromInline package let enetGapOver100msTotal = Counter()
+    package let videoGapOver20msTotal = Counter()
+    package let videoGapOver50msTotal = Counter()
+    package let videoGapOver100msTotal = Counter()
+    package let audioGapOver20msTotal = Counter()
+    package let audioGapOver50msTotal = Counter()
+    package let audioGapOver100msTotal = Counter()
+    package let enetGapOver20msTotal = Counter()
+    package let enetGapOver50msTotal = Counter()
+    package let enetGapOver100msTotal = Counter()
 
     /// Host RUMBLE (0x010b) events RECEIVED at protocol dispatch, BEFORE any
     /// validity guard (handleRumbleData) - a zero proves the host sent nothing.
     /// ~135/s active; no longer in `ctrlIgnoredTotal` (re-baseline note there).
-    @usableFromInline package let rumbleEventTotal = Counter()
+    package let rumbleEventTotal = Counter()
     /// Truncated / slot-out-of-range RUMBLE drops: deposited = events − dropped,
     /// keeping both zeros honest. Always-live (defect path, ~0 in practice).
-    @usableFromInline package let rumbleDroppedInvalidTotal = Counter()
+    package let rumbleDroppedInvalidTotal = Counter()
 
     /// Idle→active input EDGE markers: incremented the first time an input event
     /// arrives after `idleGapSeconds` of input silence. This is the single signal
@@ -150,7 +150,7 @@ import os
     /// rate. The exporter emits this as a counter; an `increase()` over a
     /// short window marks the exact resume beat. Always-live like the other input
     /// counters (the increment site is the already-rare edge case).
-    @usableFromInline package let inputIdleToActiveTotal = Counter()
+    package let inputIdleToActiveTotal = Counter()
 
     /// "That felt bad" bookmark markers (signal 4): incremented each time the user
     /// presses the client-only bookmark chord during a stream to flag jank. The
@@ -160,15 +160,15 @@ import os
     /// chord ALSO writes an explicit event line into the NDJSON + the Diag log
     /// (with the connect-relative time) - see TelemetryExporter.recordBookmark.
     /// Always-live like the other counters (the press is a rare, deliberate act).
-    @usableFromInline package let bookmarkTotal = Counter()
+    package let bookmarkTotal = Counter()
 
     /// CRUISE traversal-boost counters (signal: input, for tuning vKnee against
     /// real traces). `boosted` = batches where the velocity gate applied gain>1;
     /// `identity` = active-motion batches that stayed at gain==1 (below the knee
     /// or stale dt). The ratio is the share of motion that the boost touched.
     /// Always-live integer adds on the already-coalesced mouse-batch path.
-    @usableFromInline package let cruiseBoostedBatchesTotal = Counter()
-    @usableFromInline package let cruiseIdentityBatchesTotal = Counter()
+    package let cruiseBoostedBatchesTotal = Counter()
+    package let cruiseIdentityBatchesTotal = Counter()
 
     // ---- P2 SESSION-LIFECYCLE event counters (the lifecycle/recovery/quality
     //      signals). All always-live integer adds at already-rare sites (a
@@ -178,33 +178,33 @@ import os
     /// RECONNECT count (signal: lifecycle): incremented each time a session
     /// re-establishes its connection in place after a drop. Per session; an
     /// in-place reconnect's own reset keeps it (`resetForReconnect`).
-    @usableFromInline package let reconnectTotal = Counter()
+    package let reconnectTotal = Counter()
     /// WAKE count (signal: lifecycle): the Mac woke from sleep while a stream was live.
     /// Per session like `reconnectTotal`; a climb before a reconnect/disconnect marks
     /// the wake-on-different-AP stale-link case.
-    @usableFromInline package let wakeTotal = Counter()
+    package let wakeTotal = Counter()
     /// ROUTE-CHANGE count (signal: lifecycle): incremented each time the stream's
     /// egress route/link-class flips (the WiFiTelemetry route-change edge that
     /// already fires an NDJSON event). Run-global (NOT reset per session) so a
     /// wake-on-a-different-AP is visible in Prometheus, not just the NDJSON/Loki.
-    @usableFromInline package let routeChangeTotal = Counter()
+    package let routeChangeTotal = Counter()
     /// EXPLICIT REQUEST_IDR sends that started a round-trip measurement
     /// (signal: IDR-RTT). RE-BASELINE NOTE: RFI sends no longer arm round-trips
     /// (they ride `rfiTotal`) - conflating them made the pair unreadable (RFI
     /// stamps were mostly superseded mid-burst, so a scorecard read far more
     /// requests than matches). Now it pairs with `idrRoundTripMatchedTotal` as a
     /// true did-the-host-honor-us ratio.
-    @usableFromInline package let idrRoundTripRequestTotal = Counter()
+    package let idrRoundTripRequestTotal = Counter()
     /// Explicit IDR requests matched to an arriving IDR/recovery frame
     /// (signal: IDR-RTT). The numerator of the "did the host honor our request"
     /// view; the round-trip distribution rides the latency histogram.
-    @usableFromInline package let idrRoundTripMatchedTotal = Counter()
+    package let idrRoundTripMatchedTotal = Counter()
     /// CORRUPTION/ARTIFACT heuristic hits (signal: quality). Bumped at the cheap,
     /// already-computed corruption tells - a VT decode-status error / FrameDropped
     /// output, or a depacketizer discontinuity that orphaned the reference chain -
     /// NOT a per-pixel scan. A short-window `increase()` brackets the white/purple
     /// flash class without any hot-path cost beyond an integer add.
-    @usableFromInline package let corruptionHeuristicTotal = Counter()
+    package let corruptionHeuristicTotal = Counter()
 
     // ---- P1 DECODE/PRESENT event counters ----
     //
@@ -215,7 +215,7 @@ import os
     /// A short-window `increase()` brackets a decoder reset that correlates with
     /// a present hitch. Always-live integer add at the already-rare create site
     /// (≤ a handful per session under a healthy link).
-    @usableFromInline package let decoderRecreateTotal = Counter()
+    package let decoderRecreateTotal = Counter()
 
     /// Decoder (re)creates SPLIT BY CAUSE (signal: DECODE). Same already-rare
     /// create site as `decoderRecreateTotal`; these three sum to it. The split
@@ -224,9 +224,9 @@ import os
     /// the format-description dimensions at the rebuild site (resolution change =
     /// dims changed; otherwise a param-set rebuild that kept dims = colorspace/
     /// profile/HDR-signaling). Always-live integer adds like their parent.
-    @usableFromInline package let decoderRecreateFirstTotal = Counter()
-    @usableFromInline package let decoderRecreateResolutionTotal = Counter()
-    @usableFromInline package let decoderRecreateColorspaceTotal = Counter()
+    package let decoderRecreateFirstTotal = Counter()
+    package let decoderRecreateResolutionTotal = Counter()
+    package let decoderRecreateColorspaceTotal = Counter()
 
     /// Stale-frame REPEAT count (signal: PRESENT). Bumped on each pacer tick that
     /// fires but presents NO new frame because none was due - the layer re-shows
@@ -237,35 +237,35 @@ import os
     /// this monotonic total. Counted ONLY on the pacer's serial queue, so the
     /// increment sees no cross-queue race; always-live (the per-tick add is a
     /// sub-µs integer op, far below the per-vsync budget even at 240Hz).
-    @usableFromInline package let staleFrameRepeatTotal = Counter()
+    package let staleFrameRepeatTotal = Counter()
 
     /// STALE beats where the pacer queue was EMPTY (signal: PRESENT) - the
     /// starvation subset of `staleFrameRepeatTotal`. A stale beat with frames
     /// queued is a benign not-due idle tick (fps<refresh cadence); an EMPTY
     /// queue means content for this beat hadn't arrived - the clump-then-starve
     /// oscillation's visible half. not_due = staleFrameRepeatTotal − this.
-    @usableFromInline package let staleEmptyQueueTotal = Counter()
+    package let staleEmptyQueueTotal = Counter()
 
     /// REORDER-HOLD invariant violations (signal: NETWORK): a reordered packet that
     /// outlived the hold and became pre-FEC loss. THE reorder signal worth alerting
     /// on; the raw ooo count is a physics floor on shared spectrum.
-    @usableFromInline package let reorderHoldExceededTotal = Counter()
+    package let reorderHoldExceededTotal = Counter()
     /// Holds taken (a next-frame datagram deferred) and holds that rescued their frame.
-    @usableFromInline package let reorderHoldTakenTotal = Counter()
-    @usableFromInline package let reorderHoldRescuedTotal = Counter()
+    package let reorderHoldTakenTotal = Counter()
+    package let reorderHoldRescuedTotal = Counter()
 
     /// PERCEIVED-GAP cause split (signal: PRESENT): the DROUGHT subset of
     /// `presentationGaps` - a present landed after a >100ms hold with frames
     /// still arriving (loss storm / decode starvation / pacing wedge). The
     /// remainder (total − this) is the backoff-then-renderer-reject path.
-    @usableFromInline package let presentGapDroughtTotal = Counter()
+    package let presentGapDroughtTotal = Counter()
 
     /// AUDIO NEAR-MISS (signal: AUDIO) - steady-state playout fill dipped below
     /// ~15ms without fully draining (latched per dip; re-arms above 30ms).
     /// Margin erosion visible BEFORE it becomes an audible under-run: a rising
     /// rate here with zero under-runs means the cushion is thinning toward the
     /// edge (skew, gap texture) and the resampler/ratchet are living close.
-    @usableFromInline package let audioNearMissTotal = Counter()
+    package let audioNearMissTotal = Counter()
 
     /// AUDIO PLAYOUT-STALL RECOVERY (signal: AUDIO) - the watchdog rebuilt the
     /// output path after scheduled audio sat unconsumed ≥3s with every arrival
@@ -274,12 +274,12 @@ import os
     /// decoded, and discarded in silence). Zero in a healthy session; ANY
     /// increment is a session that would previously have stayed silent until
     /// reconnect.
-    @usableFromInline package let audioStallRecoveryTotal = Counter()
+    package let audioStallRecoveryTotal = Counter()
 
     /// AUDIO DEAD-AIR under-runs (signal: AUDIO) - drains after an arrival gap longer
     /// than the cushion cap: counted in `audioUnderrunTotal` too, but they neither
     /// grow the cushion nor teach its floor (no cushion could have bridged them).
-    @usableFromInline package let audioUnderrunDeadairTotal = Counter()
+    package let audioUnderrunDeadairTotal = Counter()
 
     /// OVER-TARGET force-release count (signal: PRESENT). Bumped on each pacer tick
     /// where the due gate would have latched not-due against a GENUINE drainable
@@ -293,7 +293,7 @@ import os
     /// exporter derives an over-target/sec rate from this monotonic total. Counted
     /// on the pacer's serial queue, so the increment sees no cross-queue race;
     /// always-live (a sub-µs integer op, far below the per-vsync budget at 240Hz).
-    @usableFromInline package let pacerOverTargetReleaseTotal = Counter()
+    package let pacerOverTargetReleaseTotal = Counter()
 
     /// Present-tick MISS split by ROOT CAUSE (signal: PRESENT, diagnostic). A
     /// stretched present tick (>1.5 vsyncs between successive CADisplayLink
@@ -304,8 +304,8 @@ import os
     /// The two need OPPOSITE fixes, so the split picks which to ship. Bumped on the
     /// tick path (sub-µs integer add, far below the per-vsync budget); per-session
     /// like the sibling present counters.
-    @usableFromInline package let tickMissDescheduledTotal = Counter()
-    @usableFromInline package let tickMissCoalescedTotal = Counter()
+    package let tickMissDescheduledTotal = Counter()
+    package let tickMissCoalescedTotal = Counter()
 
     /// Present-tick MISS split by a DIRECT promptness measure (signal: PRESENT,
     /// diagnostic). The descheduled/coalesced pair above tests the wall-clock
@@ -318,16 +318,16 @@ import os
     /// working, the residual is the display server). Kept ALONGSIDE the older pair
     /// for an old-vs-new comparison. Bumped on the tick path (one extra clock read +
     /// a subtract + a compare); per-session like the sibling present counters.
-    @usableFromInline package let tickMissPreemptedTotal = Counter()
-    @usableFromInline package let tickMissLinkskipTotal = Counter()
+    package let tickMissPreemptedTotal = Counter()
+    package let tickMissLinkskipTotal = Counter()
 
     /// Frames dropped to newest while the window is hidden and the pacer keeps one frame for the
     /// resume: designed drops, kept out of `drops_presentation_late` so that counter stays about
     /// real lateness rather than ~120/s of suppressed-mode noise.
-    @usableFromInline package let suppressedDropTotal = Counter()
+    package let suppressedDropTotal = Counter()
     /// Frames the pacer released straight from submit at rest instead of on a display tick. Read
     /// beside `drops_backpressure`: a fast present that crowds the layer's queue shows in both.
-    @usableFromInline package let pacerSubmitReleaseTotal = Counter()
+    package let pacerSubmitReleaseTotal = Counter()
 
     /// Frames dropped WITHOUT decode while the DECODE GATE is engaged (stage 2
     /// of hidden-window handling: after ~2s of continuous suppression the
@@ -335,17 +335,17 @@ import os
     /// (decoded, then dropped-to-newest) so a gated span - fps_decoded=0,
     /// drops_suppressed flat - is distinguishable from a genuine decode wedge.
     /// VideoDecoder increments on its quiet-drop path; always-live integer add.
-    @usableFromInline package let decodeGatedDropTotal = Counter()
+    package let decodeGatedDropTotal = Counter()
     /// Assembled frames the depacketizer discarded while waiting for an IDR or
     /// RFI recovery frame (its recovery gate); no other drop counter sees them.
-    @usableFromInline package let recoveryWaitDropTotal = Counter()
+    package let recoveryWaitDropTotal = Counter()
 
     /// STREAM-DISCONTINUITY flushes: param-set rebuilds mid-stream that flush the
     /// renderer + clear the pacer queue (a real multi-frame skip). 0 on a healthy
     /// wired link (the byte-equal short-circuit holds); a host that mutates param
     /// sets mid-stream surfaces as a measurable delta. VideoDecoder increments at
     /// the rebuild's flush site; always-live integer add at an already-rare event.
-    @usableFromInline package let discontinuityFlushTotal = Counter()
+    package let discontinuityFlushTotal = Counter()
 
     // ---- P1 AUDIO receive-path + playout totals (the OTHER stream) ----
     //
@@ -361,48 +361,48 @@ import os
     /// Audio DATA packets accepted into the queue this session (RtpAudioQueue's
     /// `packetCountAudio`). The exporter derives audio pkts/s + the loss/FEC RATES
     /// from deltas of this against the loss/recovered totals below.
-    @usableFromInline package let audioPacketsTotal = Counter()
+    package let audioPacketsTotal = Counter()
     /// Audio packets the host sent that never arrived AND could not be recovered by
     /// FEC - the genuine on-the-wire audio loss the user would hear as a gap
     /// (RtpAudioQueue's `packetCountFecFailed` shards). The exporter derives the
     /// unrecovered-audio-loss rate from this delta over the expected delta.
-    @usableFromInline package let audioPacketsLostTotal = Counter()
+    package let audioPacketsLostTotal = Counter()
     /// Audio packets RECOVERED by Reed-Solomon FEC this session (RtpAudioQueue's
     /// `packetCountFecRecovered`). Paired with the loss total it shows how much of
     /// the on-the-wire loss FEC papered over (the audio analogue of the video FEC
     /// recovery rate) - the known lossy-link audio-quality story.
-    @usableFromInline package let audioFecRecoveredTotal = Counter()
+    package let audioFecRecoveredTotal = Counter()
     /// Audio FEC blocks dropped on a BLOCK-SIZE MISMATCH (the parity-keyed and
     /// data-keyed sizes disagree): the block is discarded and COUNTED here
     /// instead of silently (and permanently) latching the incompatible-server
     /// flag - the mismatch stays visible and the next block gets a fresh shot.
     /// Always-live integer add at the already-rare mismatch site.
-    @usableFromInline package let audioFecMismatchTotal = Counter()
+    package let audioFecMismatchTotal = Counter()
     /// Audio output buffer UNDER-RUNs this session: the player drained its
     /// scheduled buffers and had nothing to play (a gap / glitch the user hears).
     /// Bumped on the audio output path when a scheduled buffer completes and the
     /// scheduled-ahead duration has fallen to zero. Always-live integer add.
-    @usableFromInline package let audioUnderrunTotal = Counter()
+    package let audioUnderrunTotal = Counter()
     /// Audio output buffer OVER-RUNs this session: a decoded buffer was dropped
     /// because the scheduled-ahead backlog already exceeded the safety CEILING
     /// (the worst-case-link backstop). CEILING-BACKSTOP ONLY - the designed
     /// playout-target trims count in `audioTrimTotal` below, so this stays a
     /// pathology signal a regression read can trust. Bumped on the decode path
     /// before scheduling. Always-live integer add.
-    @usableFromInline package let audioOverrunTotal = Counter()
+    package let audioOverrunTotal = Counter()
     /// Audio playout TRIMs this session: DESIGNED playout-backlog trims - 5ms
     /// decoded packets chopped on the schedule path to walk the backlog back down
     /// to the playout target (the post-gap catch-up clump). Split from
     /// `audioOverrunTotal` so designed trims and the ceiling backstop can never
     /// be conflated in a cross-session comparison again. Bumped on the decode
     /// path like its sibling. Always-live integer add.
-    @usableFromInline package let audioTrimTotal = Counter()
+    package let audioTrimTotal = Counter()
     /// Audio RECEIVE-start failures (H7): `RtpAudioReceiver.startReceive()` threw, so this
     /// session came up video-only. Bumped alongside the `.audioFailed` event.
-    @usableFromInline package let audioReceiveFailedTotal = Counter()
+    package let audioReceiveFailedTotal = Counter()
     /// Received Opus packets that decoded to nothing and were concealed instead; tells a
     /// decode fault apart from playout starvation when under-runs climb at zero loss.
-    @usableFromInline package let audioDecodeFailedTotal = Counter()
+    package let audioDecodeFailedTotal = Counter()
 
     // ---- Input-activity gauge (last-input instant + idle-edge detection) ----
     //
@@ -417,10 +417,10 @@ import os
     // when off.
     // Module-internal (not private) so the input accessors in
     // TelemetryCounters+InputActivity.swift can reach these.
-    @usableFromInline internal let inputLock = os_unfair_lock_t.allocate(capacity: 1)
+    let inputLock = os_unfair_lock_t.allocate(capacity: 1)
     /// `DispatchTime.now().uptimeNanoseconds` of the most recent input event, or
     /// 0 if none yet. Read by the exporter to compute time-since-last-input.
-    @usableFromInline internal var lastInputNanosValue: UInt64 = 0
+    var lastInputNanosValue: UInt64 = 0
     // The idle-edge threshold (`idleGapSeconds`) is in TelemetryCounters+Types.swift.
 
     // Every gauge lock/value pair from here down is module-internal (not
@@ -429,8 +429,8 @@ import os
     /// Live smoothed recv-jitter gauge (ms), written by the RTP receive path.
     /// A plain Double behind an unfair lock - last-writer-wins is fine for a
     /// gauge sampled at 1Hz against a multi-kHz writer.
-    @usableFromInline internal let jitterLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var recvJitterMsValue: Double = 0
+    let jitterLock = os_unfair_lock_t.allocate(capacity: 1)
+    var recvJitterMsValue: Double = 0
 
     /// Live smoothed network RTT gauge (ms), refreshed once per ~1Hz telemetry
     /// tick by the exporter from the ENet ping estimate. Read on the present hot
@@ -443,16 +443,16 @@ import os
     /// rather than guessing). The lock is on the telemetry path only - when the
     /// gate is off the tracker that reads it doesn't exist, so the present hot
     /// path never touches it.
-    @usableFromInline internal let rttLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var rttMsValue: Double = 0
+    let rttLock = os_unfair_lock_t.allocate(capacity: 1)
+    var rttMsValue: Double = 0
 
     /// LATEST VTDecompressionSessionCreate wall-clock cost (ms). HW decoder
     /// bring-up can't run until the first SPS/PPS, so it lands on the critical
     /// first-frame leg - this surfaces that one-shot startup cost. Stamped by the
     /// decode queue at each create (rare); read at 1Hz by the exporter. A plain
     /// Double behind an unfair lock, last-writer-wins like the other gauges.
-    @usableFromInline internal let vtSessionCreateLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var vtSessionCreateMsValue: Double = 0
+    let vtSessionCreateLock = os_unfair_lock_t.allocate(capacity: 1)
+    var vtSessionCreateMsValue: Double = 0
 
     // Module-internal (not private) so the gauge accessor in
     // TelemetryCounters+Gauges.swift can reach these.
@@ -461,8 +461,8 @@ import os
     /// session (1.0 = never boosted). Read with the resolution-derived gMax it
     /// tops out at, this proves whether real flicks ever cross vFull. A plain
     /// Double behind an unfair lock; `noteCruiseGain` keeps the running max.
-    @usableFromInline internal let cruiseMaxGainLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var cruiseMaxGainValue: Double = 1.0
+    let cruiseMaxGainLock = os_unfair_lock_t.allocate(capacity: 1)
+    var cruiseMaxGainValue: Double = 1.0
 
     /// PRESENT-SUPPRESSION gauge (0/1): true while presentation is deliberately
     /// suppressed (window backgrounded/occluded → display link suspended). Set/
@@ -472,8 +472,8 @@ import os
     /// `suppressedDropTotal` counts under, and the "silent transition" the
     /// os.Logger-only edges used to hide from the NDJSON). A plain Bool behind an
     /// unfair lock - same last-writer-wins discipline as the other gauges.
-    @usableFromInline internal let presentSuppressedLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var presentSuppressedValue = false
+    let presentSuppressedLock = os_unfair_lock_t.allocate(capacity: 1)
+    var presentSuppressedValue = false
 
     /// DECODE-GATE gauge (0/1): true while the decode gate is engaged (the
     /// THIRD hidden-window state - after ~2s of continuous suppression decode
@@ -482,8 +482,8 @@ import os
     /// so a zero-decode span self-labels as gated (vs wedged) on the same row
     /// that carries `presentSuppressedValue`. Same last-writer-wins discipline
     /// as the suppression gauge it extends.
-    @usableFromInline internal let decodeGatedLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var decodeGatedValue = false
+    let decodeGatedLock = os_unfair_lock_t.allocate(capacity: 1)
+    var decodeGatedValue = false
 
     /// PACER-TICK REALTIME gauge (0/1): 1 once `thread_policy_set` confirmed the
     /// Mach time-constraint (real-time) policy on the present-tick thread, 0 when
@@ -491,40 +491,40 @@ import os
     /// tick-thread start by PacerTickThread (never per frame) and read at 1Hz by
     /// the exporter - the one-query "are we getting RT priority" yes/no the
     /// `tick_miss_*` split is read against. Last-writer-wins behind its own lock.
-    @usableFromInline internal let pacerTickRealtimeLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var pacerTickRealtimeValue = false
+    let pacerTickRealtimeLock = os_unfair_lock_t.allocate(capacity: 1)
+    var pacerTickRealtimeValue = false
 
     /// Live inter-packet-gap distribution (microseconds) for the microburst
     /// detector, written once per ~2s receive-metrics window and read at 1Hz; the
     /// `PacketGapSnapshot` type + rationale are in TelemetryCounters+Types.swift.
-    @usableFromInline internal let gapLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var packetGapValue: PacketGapSnapshot?
+    let gapLock = os_unfair_lock_t.allocate(capacity: 1)
+    var packetGapValue: PacketGapSnapshot?
 
     // Live DECODE-side STATE gauge storage; the `DecodeState` value type +
     // its doc live with the accessors in TelemetryCounters+Gauges.swift
     // (moved there to keep this file under the length budget - pure move).
     // Module-internal (not private) so those accessors can reach these.
-    @usableFromInline internal let decodeStateLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var decodeStateValue: DecodeState?
+    let decodeStateLock = os_unfair_lock_t.allocate(capacity: 1)
+    var decodeStateValue: DecodeState?
 
     // Live FEC-HEALTH gauge storage; `FecHealthSnapshot` + its accessors live in
     // TelemetryCounters+Gauges.swift.
-    @usableFromInline internal let fecHealthLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var fecHealthValue: FecHealthSnapshot?
+    let fecHealthLock = os_unfair_lock_t.allocate(capacity: 1)
+    var fecHealthValue: FecHealthSnapshot?
     // Live REORDER-DISPLACEMENT gauge storage (session max ms/packets + the
     // live hold); value type + accessors in TelemetryCounters+Gauges.swift.
-    @usableFromInline internal let reorderDispLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var reorderDispValue: ReorderDisplacementSnapshot?
+    let reorderDispLock = os_unfair_lock_t.allocate(capacity: 1)
+    var reorderDispValue: ReorderDisplacementSnapshot?
 
     /// AWDL helper gauge (awdl0 parked + macOS re-raise count). Set by
     /// AWDLHelperManager on the suppress heartbeat; read by the exporter. Self-locked.
-    @usableFromInline internal let awdlHelperState = OSAllocatedUnfairLock<AWDLHelperSnapshot?>(initialState: nil)
+    let awdlHelperState = OSAllocatedUnfairLock<AWDLHelperSnapshot?>(initialState: nil)
 
     /// Host-RUMBLE receipt stamp (the last 0x010b receipt instant) - the detach-
     /// context breadcrumb's rumble-age source (ControllerForwarder.detach).
     /// Self-locked holder (the `P2State` idiom), defined in
     /// TelemetryCounters+InputActivity.swift next to its input-age sibling.
-    @usableFromInline package let rumbleActivity = RumbleActivity()
+    package let rumbleActivity = RumbleActivity()
 
     /// Live AUDIO playout STATE storage (signal: AUDIO - the other stream): buffer
     /// fill, playout target, clock drift, the windowed trough, re-prime count,
@@ -532,15 +532,15 @@ import os
     /// TelemetryCounters+Types.swift. Module-internal (not private) so the audio
     /// accessors in TelemetryCounters+AudioGauges.swift reach these (and the
     /// min-window field below).
-    @usableFromInline internal let audioStateLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var audioStateValue: AudioState?
+    let audioStateLock = os_unfair_lock_t.allocate(capacity: 1)
+    var audioStateValue: AudioState?
     /// Windowed MINIMUM buffer fill (ms) accumulated by the audio playout path
     /// between exporter reads. The audio path lowers this via `noteAudioBufferFill`
     /// on every completion (the trough sampler); the exporter consumes + resets it
     /// via `takeAudioBufferFillMinMs` at 1Hz. A separate min-window from the
     /// last-writer-wins `audioStateValue` gauge so the trough survives the 1Hz
     /// sampling that the gauge misses. `.infinity` = no sample this window.
-    @usableFromInline internal var audioBufferFillMinMsValue: Double = .infinity
+    var audioBufferFillMinMsValue: Double = .infinity
 
     // Module-internal (not private) so the audio accessors in
     // TelemetryCounters+AudioGauges.swift can reach these (and the fallback
@@ -551,31 +551,31 @@ import os
     /// to the first decoded audio packet. The known ~5-7s-on-lossy-link cold-start
     /// metric - surfaced here as a one-shot gauge so a dashboard/report shows it
     /// per session. Written once by the audio receive path; 0 = not yet measured.
-    @usableFromInline internal let audioFirstPacketLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var audioFirstPacketMsValue: Double = 0
+    let audioFirstPacketLock = os_unfair_lock_t.allocate(capacity: 1)
+    var audioFirstPacketMsValue: Double = 0
 
     /// P2 SESSION-LIFECYCLE state (handshake timeline + disconnect reason + IDR
     /// round-trip), behind its own lock. Defined in TelemetrySessionEvents.swift;
     /// always-live like the rest of this singleton (the exporter reads it at 1Hz,
     /// nothing reads it when off). Its own lock keeps the rare lifecycle/recovery
     /// writes off every other counter's lock.
-    @usableFromInline package let p2 = P2State()
+    package let p2 = P2State()
 
     /// PROCESS-GLOBAL monotonic disconnect tally by reason - the durable record of
     /// WHY sessions ended (the per-session ordinal is torn down <1ms after a session,
     /// before a scrape sees it). Bumped once per session at GENUINE teardown
     /// (`noteTelemetryDisconnect`); survives `resetForNewSession`.
-    @usableFromInline package let disconnectByReason = DisconnectReasonCounters()
+    package let disconnectByReason = DisconnectReasonCounters()
     /// AUDIO-TTF context: warm/cold host-bring-up classification + the host-idle
     /// covariate. Self-locked (TelemetryCounters+AudioGauges.swift); its last-stream-end
     /// stamp DELIBERATELY survives `resetForNewSession`.
-    @usableFromInline package let audioTtf = AudioTtfContext()
+    package let audioTtf = AudioTtfContext()
     /// `audio_gap_max_ms`; a reconnect keeps it, since the gap across the drop is real.
-    @usableFromInline package let audioArrivalGaps = AudioArrivalGaps()
+    package let audioArrivalGaps = AudioArrivalGaps()
     /// Per-TYPE ignored-control tallies (bounded). Self-locked, defined in
     /// TelemetryCounters+Gauges.swift - durable here (the teardown Diag NOTICE
     /// is lossy) so the session scorecard can render the per-type breakdown.
-    @usableFromInline package let ctrlIgnoredPerType = CtrlIgnoredPerType()
+    package let ctrlIgnoredPerType = CtrlIgnoredPerType()
     /// FALLBACK monotonic `DispatchTime` anchor (nanoseconds) for the audio
     /// cold-start metric: stamped when the audio receiver opens its socket
     /// (mid-handshake). Used ONLY when the P2 `connectStart` session anchor is
@@ -585,9 +585,9 @@ import os
     /// value on reconnect; the reset now happens at the CONNECT edge, before any
     /// receiver exists. 0 = not anchored yet. Crosses the receiver-init →
     /// recv-thread boundary, so it lives here behind the measured value's lock.
-    @usableFromInline internal var audioStreamStartNanosValue: UInt64 = 0
+    var audioStreamStartNanosValue: UInt64 = 0
 
-    @inlinable package init() { initializeGaugeLocks() }
+    package init() { initializeGaugeLocks() }
     deinit { deallocateGaugeLocks() }
 
     // The rest of this type lives in same-module extension files (pure moves, to

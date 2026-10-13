@@ -8,11 +8,11 @@
 import Foundation
 import QuartzCore
 import os
-@usableFromInline package final class StatsCollector: @unchecked Sendable {
+package final class StatsCollector: @unchecked Sendable {
 
-    @inlinable package init() {}
+    package init() {}
 
-    @usableFromInline package func receivedBytesSnapshot() -> UInt64 {
+    package func receivedBytesSnapshot() -> UInt64 {
         lock.lock(); defer { lock.unlock() }
         return receivedBytes
     }
@@ -33,20 +33,20 @@ import os
     /// it back to `OSSignposter.endInterval` from the VT output callback,
     /// even though `beginInterval` ran on a different thread. The flat
     /// `removeFirst` pop is O(N) but N ≤ 64, well under a microsecond.
-    @usableFromInline internal var submitFifo: [(timestamp: CFAbsoluteTime, state: OSSignpostIntervalState)] = []
-    @usableFromInline package static let submitFifoCapacity = 64
+    var submitFifo: [(timestamp: CFAbsoluteTime, state: OSSignpostIntervalState)] = []
+    package static let submitFifoCapacity = 64
 
     /// EMA of decoder wall-clock time, in seconds. `nil` until the first
     /// completed frame, then updated via `avg = alpha * sample + (1-alpha) * avg`.
     /// alpha = 0.1 → roughly the last ~10 frames dominate the average, which
     /// matches moonlight-qt's `m_AverageDecodeTimeMs` smoothing window.
-    @usableFromInline internal var decodeTimeEmaSeconds: Double?
-    @usableFromInline package static let decodeTimeEmaAlpha: Double = 0.1
+    var decodeTimeEmaSeconds: Double?
+    package static let decodeTimeEmaAlpha: Double = 0.1
     /// The same EMA split into VT service time and the wait behind the previous
     /// frame's decode (`decodeTimeSplit`); the last callback anchors the split.
-    @usableFromInline internal var decodeServiceEmaSeconds: Double?
-    @usableFromInline internal var decodeWaitEmaSeconds: Double?
-    @usableFromInline internal var lastDecodeCallbackTime: CFTimeInterval = 0
+    var decodeServiceEmaSeconds: Double?
+    var decodeWaitEmaSeconds: Double?
+    var lastDecodeCallbackTime: CFTimeInterval = 0
 
     // FPS counters. We track running totals plus a window-start time and
     // window-start total; FPS = (total - windowStartTotal) / (now - windowStart).
@@ -57,7 +57,7 @@ import os
     /// Wall-clock of the last frame VT successfully produced a CVPixelBuffer
     /// for. Set from the VT output callback on the success path.
     /// 0 means we haven't decoded our first frame yet.
-    @usableFromInline internal var lastDecodedFrameTime: CFAbsoluteTime = 0
+    var lastDecodedFrameTime: CFAbsoluteTime = 0
     /// Wall-clock of the last frame actually handed to the renderer
     /// (`recordRendererEnqueue`). This is the MODE-AGNOSTIC present clock: the
     /// single `renderer.enqueue` site in `presentFrame` feeds it in BOTH the
@@ -65,21 +65,21 @@ import os
     /// detect a screen freeze without depending on the pacer's liveness (which
     /// is nil in direct mode - the gap that let the direct path wedge with no
     /// recovery). 0 means we haven't presented our first frame yet.
-    @usableFromInline internal var lastPresentTime: CFAbsoluteTime = 0
-    @usableFromInline internal var receivedFrames: UInt64 = 0
-    @usableFromInline internal var decodedFrames: UInt64 = 0
-    @usableFromInline internal var decoderDroppedFrames: UInt64 = 0
-    @usableFromInline internal var renderedFrames: UInt64 = 0
-    @usableFromInline internal var receivedBytes: UInt64 = 0
+    var lastPresentTime: CFAbsoluteTime = 0
+    var receivedFrames: UInt64 = 0
+    var decodedFrames: UInt64 = 0
+    var decoderDroppedFrames: UInt64 = 0
+    var renderedFrames: UInt64 = 0
+    var receivedBytes: UInt64 = 0
 
     // Keep the HUD estimate's one-second window independent of exporter reads.
-    @usableFromInline internal var hostFrameRate = HostFrameRate()
+    var hostFrameRate = HostFrameRate()
 
-    @usableFromInline internal var windowStart: CFAbsoluteTime = 0
-    @usableFromInline internal var windowStartReceivedFrames: UInt64 = 0
-    @usableFromInline internal var windowStartDecodedFrames: UInt64 = 0
-    @usableFromInline internal var windowStartRenderedFrames: UInt64 = 0
-    @usableFromInline internal var windowStartReceivedBytes: UInt64 = 0
+    var windowStart: CFAbsoluteTime = 0
+    var windowStartReceivedFrames: UInt64 = 0
+    var windowStartDecodedFrames: UInt64 = 0
+    var windowStartRenderedFrames: UInt64 = 0
+    var windowStartReceivedBytes: UInt64 = 0
 
     /// All window-relative fields of the LAST COMPLETED ~1s slice, cached as one
     /// value. This is what lets the overlay tick FASTER than the FPS averaging
@@ -91,9 +91,9 @@ import os
     /// depth, cumulative drops) are always recomputed every call, so the latency
     /// rows stay genuinely live. `nil` until the first window completes (sub-
     /// window reads before then render as em-dashes, not zeros).
-    @usableFromInline package struct WindowCache {
+    package struct WindowCache {
 
-        @inlinable package init(
+        package init(
             receivedFps: Double = 0.0,
             decodedFps: Double = 0.0,
             renderedFps: Double = 0.0,
@@ -125,29 +125,29 @@ import os
             self.hostCadence = hostCadence
         }
 
-        @usableFromInline package var receivedFps = 0.0
-        @usableFromInline package var decodedFps = 0.0
-        @usableFromInline package var renderedFps = 0.0
-        @usableFromInline package var measuredBitrateMbps = 0.0
-        @usableFromInline package var avgPresentCadenceErrorMs: Double?
-        @usableFromInline package var maxPresentCadenceErrorMs: Double?
-        @usableFromInline package var onTimePresentPercent: Double?
-        @usableFromInline package var minHostProcessingLatencyMs: Double?
-        @usableFromInline package var maxHostProcessingLatencyMs: Double?
-        @usableFromInline package var avgHostProcessingLatencyMs: Double?
-        @usableFromInline package var avgFrameBytes: Double?
-        @usableFromInline package var maxFrameBytes: Int?
-        @usableFromInline package var idrFramePercent: Double?
-        @usableFromInline package var hostCadence: HostCadence?
+        package var receivedFps = 0.0
+        package var decodedFps = 0.0
+        package var renderedFps = 0.0
+        package var measuredBitrateMbps = 0.0
+        package var avgPresentCadenceErrorMs: Double?
+        package var maxPresentCadenceErrorMs: Double?
+        package var onTimePresentPercent: Double?
+        package var minHostProcessingLatencyMs: Double?
+        package var maxHostProcessingLatencyMs: Double?
+        package var avgHostProcessingLatencyMs: Double?
+        package var avgFrameBytes: Double?
+        package var maxFrameBytes: Int?
+        package var idrFramePercent: Double?
+        package var hostCadence: HostCadence?
     }
-    @usableFromInline internal var windowCache: WindowCache?
+    var windowCache: WindowCache?
 
     /// One window's host frame cadence (telemetry only): received frames' PTS-delta
     /// percentiles, adjacent deltas at least `hostUnevenRatio` apart, and the share
     /// of presents that were late because of the host's own timing.
-    @usableFromInline package struct HostCadence: Sendable {
+    package struct HostCadence: Sendable {
 
-        @inlinable package init(
+        package init(
             intervalP50Ms: Double,
             intervalP95Ms: Double,
             unevenPairs: UInt64,
@@ -159,43 +159,43 @@ import os
             self.lateByHostPercent = lateByHostPercent
         }
 
-        @usableFromInline package var intervalP50Ms: Double
-        @usableFromInline package var intervalP95Ms: Double
-        @usableFromInline package var unevenPairs: UInt64
-        @usableFromInline package var lateByHostPercent: Double?
+        package var intervalP50Ms: Double
+        package var intervalP95Ms: Double
+        package var unevenPairs: UInt64
+        package var lateByHostPercent: Double?
     }
     /// A single skipped frame doubles one delta (2×); game-side bunching such as
     /// 5 ms then 28 ms is far past this.
-    @usableFromInline package static let hostUnevenRatio = 2.5
+    package static let hostUnevenRatio = 2.5
     /// Host-cadence window state, under `lock`: last received PTS and delta, the
     /// window's deltas (capped) and uneven pairs, last presented PTS, host-late count.
-    @usableFromInline internal var lastReceivedPtsUs: UInt64 = 0
-    @usableFromInline internal var lastReceivedFrameNumber: Int32?
-    @usableFromInline internal var lastHostDeltaMs = 0.0
-    @usableFromInline internal var windowHostDeltasMs: [Double] = []
-    @usableFromInline package static let hostDeltaWindowCap = 1_024
-    @usableFromInline internal var windowHostUnevenPairs: UInt64 = 0
-    @usableFromInline internal var lastPresentedPtsSeconds = Double.nan
-    @usableFromInline internal var hostTimedLatePresents: UInt64 = 0
+    var lastReceivedPtsUs: UInt64 = 0
+    var lastReceivedFrameNumber: Int32?
+    var lastHostDeltaMs = 0.0
+    var windowHostDeltasMs: [Double] = []
+    package static let hostDeltaWindowCap = 1_024
+    var windowHostUnevenPairs: UInt64 = 0
+    var lastPresentedPtsSeconds = Double.nan
+    var hostTimedLatePresents: UInt64 = 0
     /// Client drops affect the next present; network gaps affect the present
     /// that reaches each first surviving PTS, even when older frames are queued.
-    @usableFromInline internal var clientSkipSinceLastPresent = false
-    @usableFromInline package static let networkGapCapacity = 256
-    @usableFromInline internal var pendingNetworkGapPtsSeconds: [Double] = []
-    @usableFromInline internal var pendingNetworkGapHead = 0
-    @usableFromInline internal var pendingNetworkGapCount = 0
+    var clientSkipSinceLastPresent = false
+    package static let networkGapCapacity = 256
+    var pendingNetworkGapPtsSeconds: [Double] = []
+    var pendingNetworkGapHead = 0
+    var pendingNetworkGapCount = 0
 
     // Session totals keep the decoder-drop percentage stable across windows
     // and reconnects.
-    @usableFromInline internal var totalReceived: UInt64 = 0
-    @usableFromInline internal var totalDecoderDropped: UInt64 = 0
+    var totalReceived: UInt64 = 0
+    var totalDecoderDropped: UInt64 = 0
     /// Frames the renderer refused (isReadyForMoreMediaData=false) and we
     /// dropped to keep latency bounded. Counted separately from decoder-side
     /// drops because the failure mode is different: this is "OS-side queue
     /// got full, we're behind on display," not "VT rejected the bitstream".
     /// Used by the renderer-backpressure path in VideoDecoder.enqueueDecoded-
     /// Frame to surface "stream feels laggy after a while" diagnostics.
-    @usableFromInline internal var rendererBackpressureDrops: UInt64 = 0
+    var rendererBackpressureDrops: UInt64 = 0
 
     // ---- Frame-pacer smoothness counters ------------------------------------
     //
@@ -209,7 +209,7 @@ import os
     /// out at a vsync. This is the NEW third drop cause, distinct from decoder
     /// drops (VT rejected the bitstream) and renderer-backpressure drops (the
     /// OS renderer queue was full). Session-cumulative.
-    @usableFromInline internal var presentationLateDrops: UInt64 = 0
+    var presentationLateDrops: UInt64 = 0
     /// Perceived present GAPS - the felt-stutter signal. Counted when (a) a
     /// drop-to-newest's replacement was ALSO refused by the renderer, or (b) a
     /// present landed after a drought > `perceivedGapSeconds` during which
@@ -217,38 +217,38 @@ import os
     /// wedge - the screen held while content flowed). Sparse content (desktop
     /// idle: nothing arriving) and designed-idle spans (window backgrounded)
     /// are excluded. Session-cumulative.
-    @usableFromInline internal var presentationGaps: UInt64 = 0
+    var presentationGaps: UInt64 = 0
     /// Present-drought baseline for the perceived-gap check: wall-clock + the
     /// receivedFrames total at the last judged present. 0 = re-seed (session
     /// start, or the first present after a designed-idle span).
-    @usableFromInline internal var gapBaselineTime: CFAbsoluteTime = 0
-    @usableFromInline internal var gapBaselineReceived: UInt64 = 0
+    var gapBaselineTime: CFAbsoluteTime = 0
+    var gapBaselineReceived: UInt64 = 0
     /// True while presentation is DESIGNED idle (window backgrounded/occluded:
     /// receive continues, presents stop). Droughts spanning it never count.
-    @usableFromInline internal var gapJudgingExcluded = false
+    var gapJudgingExcluded = false
     /// A present this long after the previous one, with frames still arriving
     /// in between, is a felt gap. 100ms is ~unambiguous at any content rate;
     /// sub-100ms microstutter stays the cadence metric's job.
-    @usableFromInline package static let perceivedGapSeconds: CFAbsoluteTime = 0.100
+    package static let perceivedGapSeconds: CFAbsoluteTime = 0.100
     /// Minimum frames RECEIVED inside the drought for it to count - proves
     /// content was flowing (a single frame at the boundary doesn't).
-    @usableFromInline package static let perceivedGapMinReceived: UInt64 = 2
+    package static let perceivedGapMinReceived: UInt64 = 2
 
     /// On-cadence presents this window: |cadence error| within tolerance of the
     /// stream's frame interval. Reset each snapshot alongside the FPS window.
-    @usableFromInline internal var onTimePresents: UInt64 = 0
+    var onTimePresents: UInt64 = 0
     /// Off-cadence presents this window: |cadence error| past tolerance - the
     /// frame landed visibly early/late vs the ideal present grid.
-    @usableFromInline internal var latePresents: UInt64 = 0
+    var latePresents: UInt64 = 0
     /// Running sum + count of |cadence error| (ms) for the window average.
-    @usableFromInline internal var presentCadenceErrorMsSum: Double = 0
-    @usableFromInline internal var presentCadenceSamples: UInt64 = 0
+    var presentCadenceErrorMsSum: Double = 0
+    var presentCadenceSamples: UInt64 = 0
     /// Worst |cadence error| (ms) seen this window - the spike a user feels.
-    @usableFromInline internal var presentCadenceErrorMsMax: Double = 0
+    var presentCadenceErrorMsMax: Double = 0
     /// Tolerance (ms) for the on-time/late split. 2ms is below the perceptual
     /// floor at every refresh we target (≈ a quarter-vsync at 120Hz) - inside
     /// it the present is indistinguishable from perfectly paced.
-    @usableFromInline package static let presentCadenceToleranceMs: Double = 2.0
+    package static let presentCadenceToleranceMs: Double = 2.0
 
     /// Most-recently-sampled pacing queue depth (frames waiting for a vsync),
     /// sampled once per link tick. We surface the last value rather than an
@@ -256,7 +256,7 @@ import os
     /// the tick rate (60-240 Hz) is far above the 4Hz overlay read so the
     /// last-sample is representative. Live, surfaced every snapshot (NOT
     /// window-reset).
-    @usableFromInline internal var lastPacingDepth: Int = 0
+    var lastPacingDepth: Int = 0
 
     // Host-side capture + encode latency, as reported in each DECODE_UNIT's
     // `frameHostProcessingLatency` (1/10 ms units; 0 == no measurement).
@@ -268,23 +268,23 @@ import os
     // so the numbers reflect the current sampling window, not the whole session.
     // The computed min/max/avg are cached so a sub-window overlay read serves
     // the last good window rather than a too-short slice.
-    @usableFromInline internal var minHostProcessingLatency: UInt16 = 0  // 0 sentinel = unset
-    @usableFromInline internal var maxHostProcessingLatency: UInt16 = 0
-    @usableFromInline internal var totalHostProcessingLatency: UInt64 = 0
-    @usableFromInline internal var framesWithHostProcessingLatency: UInt64 = 0
+    var minHostProcessingLatency: UInt16 = 0  // 0 sentinel = unset
+    var maxHostProcessingLatency: UInt16 = 0
+    var totalHostProcessingLatency: UInt64 = 0
+    var framesWithHostProcessingLatency: UInt64 = 0
 
     // Frame size + type (telemetry only): window-relative per-frame byte size +
     // IDR/P split, fed on the receive path so the exporter can publish avg/max
     // frame size + %IDR (the big-frame / recurring-IDR idle-spike hypothesis).
     // Reset each `snapshot()` with the FPS window; no overlay row.
-    @usableFromInline internal var windowFrameBytesSum: UInt64 = 0
-    @usableFromInline internal var windowFrameCount: UInt64 = 0
-    @usableFromInline internal var windowMaxFrameBytes: Int = 0
-    @usableFromInline internal var windowIdrFrameCount: UInt64 = 0
+    var windowFrameBytesSum: UInt64 = 0
+    var windowFrameCount: UInt64 = 0
+    var windowMaxFrameBytes: Int = 0
+    var windowIdrFrameCount: UInt64 = 0
 
-    @usableFromInline internal let lock = OSAllocatedUnfairLock()
+    let lock = OSAllocatedUnfairLock()
 
-    @inlinable package func dropPendingDecodeSubmits() {
+    package func dropPendingDecodeSubmits() {
         // Close abandoned intervals so a session replacement or reset cannot
         // leave DecodeFrame spans open indefinitely.
         var leftover: [OSSignpostIntervalState] = []
@@ -299,7 +299,7 @@ import os
         }
     }
 
-    @inlinable package func resetForConnection() {
+    package func resetForConnection() {
         dropPendingDecodeSubmits()
         lock.lock()
         decodeTimeEmaSeconds = nil
@@ -355,7 +355,7 @@ import os
     /// Pass `minWindowSeconds = 0` (the default) to preserve the original
     /// reset-on-every-read behaviour - the telemetry exporter calls it that way
     /// so its NDJSON keeps emitting fresh per-tick windows on its own cadence.
-    @inlinable package func snapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
+    package func snapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
         let now = CACurrentMediaTime()
         lock.lock()
         defer { lock.unlock() }
@@ -416,7 +416,7 @@ import os
     /// the window-scoped accumulators. MUST be called with `lock` held (the only
     /// caller is `snapshot()`, inside its lock). Factored out of `snapshot()` to
     /// keep that function under the body-length budget.
-    @inlinable internal func recomputeWindowCacheAndSlide(now: CFAbsoluteTime) {
+    private func recomputeWindowCacheAndSlide(now: CFAbsoluteTime) {
         let windowDuration = now - windowStart
         var cache = WindowCache()
         cache.receivedFps = Double(receivedFrames &- windowStartReceivedFrames) / windowDuration
@@ -482,7 +482,7 @@ import os
 
     /// This window's host cadence, nil before any received PTS delta. MUST be
     /// called with `lock` held, before the window accumulators reset.
-    @inlinable internal func hostCadenceLocked() -> HostCadence? {
+    private func hostCadenceLocked() -> HostCadence? {
         guard !windowHostDeltasMs.isEmpty else { return nil }
         let sorted = windowHostDeltasMs.sorted()
         func quantile(_ fraction: Double) -> Double {

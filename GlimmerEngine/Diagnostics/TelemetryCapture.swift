@@ -94,7 +94,6 @@ package struct TelemetryCapture: Sendable {
         self.linkGate = linkGate
     }
 
-    package var outputDirectory: URL?
     package var configuration = TelemetryConfiguration()
     package var beginSession: @Sendable () -> Void = {}
     package var wifi: @Sendable () -> WiFiSnapshot? = { nil }

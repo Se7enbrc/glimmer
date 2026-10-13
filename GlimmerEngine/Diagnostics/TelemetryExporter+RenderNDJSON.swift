@@ -527,7 +527,7 @@ extension TelemetryRenderer {
 
     /// JSON number with the same integer/decimal discipline as the Prometheus
     /// formatter - avoids exponent notation that some NDJSON readers choke on.
-    @usableFromInline package static func jsonNumber(_ value: Double) -> String {
+    package static func jsonNumber(_ value: Double) -> String {
         if value == value.rounded() && abs(value) < 1e15 {
             return String(Int64(value))
         }

@@ -19,9 +19,9 @@ import Foundation
 /// built on the exporter queue from `LatencyHistograms`; rendered to both wire
 /// forms (Prometheus `_bucket/_sum/_count`, NDJSON p50/p95/p99) and the session
 /// report. Each stage is its cumulative bucket counts + sum(ms) + count.
-@usableFromInline package struct LatencyHistogramSnapshot: Sendable {
+package struct LatencyHistogramSnapshot: Sendable {
 
-    @inlinable package init(
+    package init(
         receiveToAssemble: Stage,
         assembleToSubmit: Stage,
         submitToOutput: Stage,
@@ -45,9 +45,9 @@ import Foundation
         self.idrRoundTrip = idrRoundTrip
     }
 
-    @usableFromInline package struct Stage: Sendable {
+    package struct Stage: Sendable {
 
-        @inlinable package init(
+        package init(
             buckets: [UInt64],
             boundsMs: [Double],
             sumMs: Double,
@@ -59,38 +59,38 @@ import Foundation
             self.observationCount = observationCount
         }
 
-        @usableFromInline package var buckets: [UInt64]
+        package var buckets: [UInt64]
         /// The bucket upper bounds (ms) THIS stage was recorded against - carried
         /// on the snapshot so the Prometheus render + NDJSON quantile estimator
         /// use the matching bounds (fine for sub-stages, coarse for the composite
         /// glass-to-glass / input-to-photon / idr-round-trip stages) without a
         /// second lookup.
-        @usableFromInline package var boundsMs: [Double]
-        @usableFromInline package var sumMs: Double
+        package var boundsMs: [Double]
+        package var sumMs: Double
         /// Total observations (rendered as Prometheus `_count`). Named
         /// `observationCount` rather than `count` so a "no data this tick" check
         /// doesn't trip SwiftLint's `empty_count` rule, which flags any property
         /// literally named `count` compared to zero - a false positive here since
         /// this is a numeric total, not a collection size.
-        @usableFromInline package var observationCount: UInt64
+        package var observationCount: UInt64
         /// True iff this stage observed at least one frame this session.
-        @inlinable package var hasObservations: Bool { observationCount != 0 }
+        package var hasObservations: Bool { observationCount != 0 }
     }
-    @usableFromInline package var receiveToAssemble: Stage
-    @usableFromInline package var assembleToSubmit: Stage
-    @usableFromInline package var submitToOutput: Stage
-    @usableFromInline package var outputToPresent: Stage
-    @usableFromInline package var endToEnd: Stage
+    package var receiveToAssemble: Stage
+    package var assembleToSubmit: Stage
+    package var submitToOutput: Stage
+    package var outputToPresent: Stage
+    package var endToEnd: Stage
     /// Glass-to-glass: host-encode + ~RTT/2 + our pipeline. THE headline number.
-    @usableFromInline package var glassToGlass: Stage
+    package var glassToGlass: Stage
     /// Input-to-photon estimate: next-frame-present − last-input-sent.
-    @usableFromInline package var inputToPhoton: Stage
+    package var inputToPhoton: Stage
     /// DECODE time (submit→output) for IDR keyframes only.
-    @usableFromInline package var decodeIDR: Stage
+    package var decodeIDR: Stage
     /// DECODE time (submit→output) for P-frames only.
-    @usableFromInline package var decodeP: Stage
+    package var decodeP: Stage
     /// IDR/RFI round-trip: request-sent → matching IDR/recovery frame arrived.
-    @usableFromInline package var idrRoundTrip: Stage
+    package var idrRoundTrip: Stage
 }
 
 // MARK: - Rolling 60s window
@@ -109,13 +109,13 @@ import Foundation
 /// CoW references), owned by the exporter's per-session `CaptureBaselines`.
 /// Confined to the exporter's serial `workQueue` (no lock needed), and when
 /// telemetry is off the exporter - and therefore this ring - never exists.
-@usableFromInline package final class LatencyRollingWindow {
+package final class LatencyRollingWindow {
     /// Window span in capture ticks (1Hz capture → seconds).
-    @usableFromInline package static let windowTicks = 60
+    package static let windowTicks = 60
 
-    @usableFromInline internal var ring: [LatencyHistogramSnapshot?]
-    @usableFromInline internal var writeIndex = 0
-    @inlinable package init() { ring = Array(repeating: nil, count: Self.windowTicks) }
+    private var ring: [LatencyHistogramSnapshot?]
+    private var writeIndex = 0
+    package init() { ring = Array(repeating: nil, count: Self.windowTicks) }
 
     /// Fold one tick's cumulative snapshot into the ring and return the
     /// windowed difference (current − ring[t−60]). Until the ring fills, the
@@ -123,7 +123,7 @@ import Foundation
     /// window (the window honestly spans min(session age, 60s)). The buckets
     /// are monotonic within a session and the ring is per-session, so
     /// old ≤ current always; the subtraction still saturates defensively.
-    @inlinable package func advance(with current: LatencyHistogramSnapshot) -> LatencyHistogramSnapshot {
+    package func advance(with current: LatencyHistogramSnapshot) -> LatencyHistogramSnapshot {
         let baseline = ring[writeIndex]
         ring[writeIndex] = current
         writeIndex = (writeIndex + 1) % Self.windowTicks
@@ -137,7 +137,7 @@ import Foundation
     /// the existing `histogramQuantile` estimator unchanged. (Internal, not
     /// private: the scorecard's ACTIVE-seconds accumulator reuses it to slice
     /// per-tick deltas out of the cumulative stream - see SessionAggregate.)
-    @inlinable package static func difference(
+    package static func difference(
         _ current: LatencyHistogramSnapshot, minus old: LatencyHistogramSnapshot
     ) -> LatencyHistogramSnapshot {
         func stage(
@@ -177,7 +177,7 @@ import Foundation
     /// deltas back into one histogram covering only the active seconds. A
     /// mismatched bucket count (a mid-session stage rebuild - doesn't happen
     /// today) keeps the accumulated side rather than adding across bounds.
-    @inlinable package static func sum(
+    package static func sum(
         _ accumulated: LatencyHistogramSnapshot, plus delta: LatencyHistogramSnapshot
     ) -> LatencyHistogramSnapshot {
         func stage(

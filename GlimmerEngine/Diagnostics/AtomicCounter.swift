@@ -6,13 +6,13 @@ import Foundation
 /// A small thread-safe integer counter for in-flight send backpressure. NSLock is
 /// sufficient (the few inc/dec/read sites are not in a tight inner loop), and it
 /// matches the codebase's existing ManagedAtomicFlag style.
-@usableFromInline package final class AtomicCounter: @unchecked Sendable {
+package final class AtomicCounter: @unchecked Sendable {
 
-    @inlinable package init() {}
+    package init() {}
 
-    @usableFromInline internal let lock = NSLock()
-    @usableFromInline internal var total = 0
-    @inlinable package var value: Int { lock.lock(); defer { lock.unlock() }; return total }
-    @inlinable package func increment() { lock.lock(); total += 1; lock.unlock() }
-    @inlinable package func decrement() { lock.lock(); if total > 0 { total -= 1 }; lock.unlock() }
+    internal let lock = NSLock()
+    internal var total = 0
+    package var value: Int { lock.lock(); defer { lock.unlock() }; return total }
+    package func increment() { lock.lock(); total += 1; lock.unlock() }
+    package func decrement() { lock.lock(); if total > 0 { total -= 1 }; lock.unlock() }
 }

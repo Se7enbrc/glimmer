@@ -57,10 +57,10 @@ import Darwin
 
 /// Resolves the opt-in gate ONCE per process-relevant check. Kept tiny + free of
 /// any allocation so the OFF path is a pure boolean read.
-@usableFromInline package enum TelemetryGate {
+package enum TelemetryGate {
     /// True iff telemetry should run. Either the UserDefaults flag or the env
     /// var enables it; default OFF. Read at session start only.
-    @usableFromInline package static var isEnabled: Bool {
+    package static var isEnabled: Bool {
         isEnabled(defaults: .standard, environmentValue: getenv("GLIMMER_TELEMETRY").map { String(cString: $0) })
     }
 
@@ -105,7 +105,7 @@ package struct TelemetryConnectionSlots {
 /// Owns the all-interfaces HTTP server + NDJSON writer + 1Hz capture timer for one
 /// streaming session. Created (only) when the gate is on; torn down on stream
 /// teardown. `@unchecked Sendable`: all mutable state lives on `workQueue`.
-@usableFromInline package final class TelemetryExporter: @unchecked Sendable {
+package final class TelemetryExporter: @unchecked Sendable {
 
     package static let port: UInt16 = 9847
     package static let logCategory = "Telemetry"
@@ -131,7 +131,7 @@ package struct TelemetryConnectionSlots {
     /// Allocated only when the opt-in exporter starts its capture timer.
     package var rendererTelemetry: RendererTelemetry?
     package let counters: TelemetryCounters
-    /// Where the NDJSON rows and the session report land (`logsDirectory` in production).
+    /// The shell owns the destination so captures and retention always use the same directory.
     package let outputDirectory: URL
 
     /// Wi-Fi radio sampler (signal 3). Exists only on the gate-on path (this
@@ -244,16 +244,17 @@ package struct TelemetryConnectionSlots {
     /// Returns a ready-to-`start()` exporter iff the opt-in gate is on; nil
     /// otherwise (the default), so the caller allocates NOTHING when off.
     package static func makeIfEnabled(source: TelemetrySource, serverName: String,
+                                      outputDirectory: URL,
                                       enabled: Bool = TelemetryGate.isEnabled) -> TelemetryExporter? {
         guard enabled else { return nil }
         return TelemetryExporter(
             source: source, serverName: serverName,
-            outputDirectory: source.capture.outputDirectory ?? logsDirectory)
+            outputDirectory: outputDirectory)
     }
 
     /// Tests pass a temp directory, their own counters and port 0; production takes the defaults.
     package init(source: TelemetrySource, serverName: String,
-                 outputDirectory: URL = TelemetryExporter.logsDirectory, counters: TelemetryCounters = .shared,
+                 outputDirectory: URL, counters: TelemetryCounters = .shared,
                  port: UInt16 = TelemetryExporter.port, listenOnLAN: Bool = TelemetryGate.listensOnLAN()) {
         self.source = source
         self.listenPort = port
@@ -376,13 +377,9 @@ package struct TelemetryConnectionSlots {
     /// Diag logs and receipts included. 14 days.
     private static let logsMaxAgeSeconds: TimeInterval = 14 * 24 * 3600
 
-    // The shell supplies its persistent diagnostics directory; isolated consumers use temporary storage.
-    @usableFromInline package static let logsDirectory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("Glimmer", isDirectory: true)
-
     /// Age-only sweep at app launch, whatever the diagnostics setting, so the
     /// 14-day rule runs even when no diagnostics session ever starts again.
-    package static func sweepLogsAtLaunch(directory: URL = logsDirectory) {
+    package static func sweepLogsAtLaunch(directory: URL) {
         let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Telemetry")
         Task.detached(priority: .utility) {
             sweepLogsDirectory(directory, log: log, enforceBudget: false)

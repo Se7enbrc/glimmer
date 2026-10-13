@@ -33,9 +33,9 @@ import os
 
 /// One ~1Hz DISPLAY probe of the live present-side state. Plain value type read
 /// by the main-actor sampler from the decoder/screen; folded into the accumulator.
-@usableFromInline package struct DisplayProbe: Sendable {
+package struct DisplayProbe: Sendable {
 
-    @usableFromInline package init(
+    package init(
         edrHeadroom: Double,
         hdrEngaged: Bool,
         screenName: String,
@@ -54,22 +54,22 @@ import os
     /// `NSScreen.maximumExtendedDynamicRangeColorComponentValue` for the screen
     /// the stream composites on. 1.0 = SDR / HDR-off; >1.0 = HDR engaged with that
     /// much headroom. The number that proves the panel is (or isn't) in HDR.
-    @usableFromInline package var edrHeadroom: Double
+    package var edrHeadroom: Double
     /// HDR input presented on a screen currently reporting EDR headroom above 1.
-    @usableFromInline package var hdrEngaged: Bool
+    package var hdrEngaged: Bool
     /// The compositing screen's localized name (e.g. a display name). A label so a
     /// multi-display session is attributable to the panel actually showing it.
-    @usableFromInline package var screenName: String
+    package var screenName: String
     /// True iff the compositing screen supports ProMotion / variable refresh
     /// (`NSScreen.maximumFramesPerSecond` > 60). Pairs with the pacer's realized
     /// refresh-Hz window to tell "panel can't do 120" from "panel ramped down".
-    @usableFromInline package var proMotionCapable: Bool
+    package var proMotionCapable: Bool
     /// The panel's advertised maximum refresh (Hz) - the ProMotion ceiling, so a
     /// realized refresh well under it (the pacer's `refresh_min_hz`) reads as a
     /// genuine ramp-down rather than a slow panel.
-    @usableFromInline package var maxRefreshHz: Int
+    package var maxRefreshHz: Int
     /// PQ or HLG input, including when the display maps it to SDR.
-    @usableFromInline package var hdrInput: Bool = false
+    package var hdrInput: Bool = false
 }
 
 /// Accumulator + main-actor sampler for the DISPLAY signals. Owned by the
@@ -78,7 +78,7 @@ import os
 ///
 /// `@unchecked Sendable`: the accumulator is guarded by one `os_unfair_lock`; the
 /// timer + its main-actor sampler are confined to the main run loop.
-@usableFromInline package final class DisplayTelemetry: @unchecked Sendable {
+package final class DisplayTelemetry: @unchecked Sendable {
 
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Telemetry")
 
@@ -103,7 +103,7 @@ import os
     /// The 1Hz sampler timer, on the MAIN queue. Built in `start()`.
     private var samplerTimer: DispatchSourceTimer?
 
-    @usableFromInline package init(probe: @escaping @MainActor @Sendable () -> DisplayProbe?) {
+    package init(probe: @escaping @MainActor @Sendable () -> DisplayProbe?) {
         self.probe = probe
         lock.initialize(to: os_unfair_lock_s())
     }
@@ -112,7 +112,7 @@ import os
     /// Arm the ~1Hz main-actor sampler. Called by the exporter on the gate-on
     /// path. The timer is scheduled on the MAIN queue so the EDR/HDR/screen reads
     /// run main-actor-isolated; a generous leeway lets the OS coalesce the wakeup.
-    @usableFromInline package func start() {
+    package func start() {
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 1.0, repeating: 1.0, leeway: .milliseconds(200))
         timer.setEventHandler { [weak self] in
@@ -124,13 +124,13 @@ import os
 
     /// One sampler tick: probe the display and fold it in. The timer's body; tests call it directly.
     @MainActor
-    @usableFromInline package func sampleTick() {
+    package func sampleTick() {
         guard let sample = probe() else { return }
         accumulate(sample)
     }
 
     /// Stop the sampler. Synchronous teardown semantics (cancel is immediate).
-    @usableFromInline package func stop() {
+    package func stop() {
         samplerTimer?.cancel()
         samplerTimer = nil
     }
@@ -150,7 +150,7 @@ import os
     /// state. Called once per ~1Hz tick by the exporter on its serial queue (the
     /// only consumer - the window resets on read like the pacer's refresh window).
     /// nil min/avg/max when no probe landed this window (layer not bound yet).
-    @usableFromInline package func snapshotAndReset() -> DisplayTelemetrySnapshot {
+    package func snapshotAndReset() -> DisplayTelemetrySnapshot {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         defer {
             edrSum = 0; edrSamples = 0
@@ -172,9 +172,9 @@ import os
 /// One tick's resolved DISPLAY telemetry: the EDR-headroom trend (min/avg/max
 /// over the window) + the latest discrete state. Built on the exporter queue from
 /// `DisplayTelemetry.snapshotAndReset`; rendered to both wire forms.
-@usableFromInline package struct DisplayTelemetrySnapshot: Sendable {
+package struct DisplayTelemetrySnapshot: Sendable {
 
-    @usableFromInline package init(
+    package init(
         edrHeadroomMin: Double? = nil,
         edrHeadroomAvg: Double? = nil,
         edrHeadroomMax: Double? = nil,
@@ -186,9 +186,9 @@ import os
         self.state = state
     }
 
-    @usableFromInline package var edrHeadroomMin: Double?
-    @usableFromInline package var edrHeadroomAvg: Double?
-    @usableFromInline package var edrHeadroomMax: Double?
+    package var edrHeadroomMin: Double?
+    package var edrHeadroomAvg: Double?
+    package var edrHeadroomMax: Double?
     /// Latest HDR-engaged / screen / ProMotion state. nil before the first probe.
-    @usableFromInline package var state: DisplayProbe?
+    package var state: DisplayProbe?
 }

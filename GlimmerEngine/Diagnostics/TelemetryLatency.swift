@@ -73,16 +73,16 @@ import os
 ///
 /// `@unchecked Sendable`: the map is guarded by one `os_unfair_lock`; the
 /// histograms + trace writer are themselves Sendable.
-@usableFromInline package final class FrameTimingTracker: @unchecked Sendable {
+package final class FrameTimingTracker: @unchecked Sendable {
 
     /// The gate-checked singleton, installed by `start()` iff telemetry is on and
     /// cleared by `stop()`. `sharedBox` guards the slot: a per-frame read racing
     /// teardown's release of the previous tracker would be an ARC use-after-free.
-    @usableFromInline internal static let sharedBox = OSAllocatedUnfairLock<FrameTimingTracker?>(initialState: nil)
-    @inlinable package static var shared: FrameTimingTracker? { sharedBox.withLock { $0 } }
+    private static let sharedBox = OSAllocatedUnfairLock<FrameTimingTracker?>(initialState: nil)
+    package static var shared: FrameTimingTracker? { sharedBox.withLock { $0 } }
 
     #if DEBUG
-    @inlinable package static func installForTesting(_ tracker: FrameTimingTracker?) {
+    package static func installForTesting(_ tracker: FrameTimingTracker?) {
         sharedBox.withLock { $0 = tracker }
     }
     #endif
@@ -90,8 +90,8 @@ import os
     /// Install a fresh tracker iff the gate is on, and start its trace writer.
     /// Called from the exporter's `start()`. No-op (and nothing installed) when
     /// off, so `shared` stays nil and the hot path stays zero-cost.
-    @inlinable package static func startIfEnabled(sessionId: String, isoStamp: String,
-                                                  directory: URL = TelemetryExporter.logsDirectory) {
+    package static func startIfEnabled(sessionId: String, isoStamp: String,
+                                       directory: URL) {
         guard TelemetryGate.isEnabled else { return }
         let tracker = FrameTimingTracker(sessionId: sessionId, traceDirectory: directory)
         tracker.traceWriter.start(isoStamp: isoStamp)
@@ -99,7 +99,7 @@ import os
     }
 
     /// Tear down + clear the singleton. Flushes + closes the trace writer.
-    @inlinable package static func stop() {
+    package static func stop() {
         let tracker = sharedBox.withLock { box -> FrameTimingTracker? in
             let previous = box
             box = nil
@@ -111,24 +111,23 @@ import os
 
     // ---- Instance state (only exists when enabled) ----
 
-    @usableFromInline package let histograms = LatencyHistograms()
+    package let histograms = LatencyHistograms()
     /// CLIENT-SIDE input latency: the queue→wire age of merged input - how long
     /// an event waited on the batcher between enqueue and flush. Standalone (not in
     /// `histograms`) so it stays a Prometheus-only input-family signal without
     /// threading through the composite-snapshot plumbing. Observed off the present
     /// path on the batcher queue; the Stage is self-locked, so cross-thread is safe.
-    @usableFromInline package let inputTimingDropped = AtomicCounter()
-    @usableFromInline package let inputLatency = InputLatency()
-    @usableFromInline package let inputCallbackLatency = LatencyHistograms.Stage()
-    @usableFromInline package let inputLocalLatency = LatencyHistograms.Stage()
+    package let inputTimingDropped = AtomicCounter()
+    package let inputLatency = InputLatency()
+    package let inputCallbackLatency = LatencyHistograms.Stage()
+    package let inputLocalLatency = LatencyHistograms.Stage()
     /// CLIENT-SIDE input DELIVER latency: the pre-hop main-thread leg from the
     /// GameController valueChangedHandler entry to the batcher slot stamp (the
     /// deliver→enqueue age `inputLocalLatency` can't see - it starts at enqueue).
     /// Same self-locked Stage; observed off the present path. Measurement only.
-    @usableFromInline package let inputDeliverLatency = LatencyHistograms.Stage()
+    package let inputDeliverLatency = LatencyHistograms.Stage()
     /// RFI loss episodes: first loss detected → the frame that ended it, once per
     /// episode on the video receive thread (see VideoLossEpisode).
-    @usableFromInline
     package let rfiRecoveryMs = LatencyHistograms.Stage(bounds: LatencyHistograms.Stage.glassToGlassBoundsMs)
 
     /// PIPELINE CADENCE (clump forensics): inter-arrival between CONSECUTIVE
@@ -140,12 +139,12 @@ import os
     /// over-target churn + ~3/s stale beats on a smooth wire (recv jitter
     /// 0.3ms) made that the open question. Deltas > 1s are treated as content
     /// gaps and skipped, not cadence.
-    @usableFromInline package static let cadenceBoundsMs: [Double] = [
+    package static let cadenceBoundsMs: [Double] = [
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 20, 25, 33, 50, 66, 132
     ]
-    @usableFromInline package let receiveCadence = LatencyHistograms.Stage(bounds: FrameTimingTracker.cadenceBoundsMs)
-    @usableFromInline package let assembleCadence = LatencyHistograms.Stage(bounds: FrameTimingTracker.cadenceBoundsMs)
-    @usableFromInline package let outputCadence = LatencyHistograms.Stage(bounds: FrameTimingTracker.cadenceBoundsMs)
+    package let receiveCadence = LatencyHistograms.Stage(bounds: FrameTimingTracker.cadenceBoundsMs)
+    package let assembleCadence = LatencyHistograms.Stage(bounds: FrameTimingTracker.cadenceBoundsMs)
+    package let outputCadence = LatencyHistograms.Stage(bounds: FrameTimingTracker.cadenceBoundsMs)
 
     /// CRUISE forensics (units are counts/sec and gain multipliers, NOT ms -
     /// the Stage bucketing is unit-agnostic). Velocity distribution split MOVE
@@ -153,58 +152,54 @@ import os
     /// is load-bearing: menu drag-pans and held-button aim (ADS/spray) share
     /// the drag path, so any drag-specific band tune (owner-reported slow menu
     /// drags) needs this distribution first.
-    @usableFromInline package static let cruiseVelocityBounds: [Double] = [
+    package static let cruiseVelocityBounds: [Double] = [
         250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000,
         3500, 4000, 5000, 7000, 10000
     ]
-    @usableFromInline package static let cruiseGainBounds: [Double] = [
+    package static let cruiseGainBounds: [Double] = [
         1.02, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 1.98, 2.0, 2.67, 4.0
     ]
-    @usableFromInline
     package let cruiseVelocityMove = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseVelocityBounds)
-    @usableFromInline
     package let cruiseVelocityDrag = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseVelocityBounds)
-    @usableFromInline package let cruiseGainMove = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseGainBounds)
-    @usableFromInline package let cruiseGainDrag = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseGainBounds)
+    package let cruiseGainMove = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseGainBounds)
+    package let cruiseGainDrag = LatencyHistograms.Stage(bounds: FrameTimingTracker.cruiseGainBounds)
 
     /// REORDER-DISPLACEMENT: how late reordered packets arrive, in ms and sequence
     /// slots (the rare out-of-order branch). Bounds cluster under the fixed 24ms hold
     /// and single-digit-ms Block-Ack releases; `_packets` bounds are counts.
-    @usableFromInline package static let reorderDispMsBounds: [Double] = [
+    package static let reorderDispMsBounds: [Double] = [
         0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96
     ]
-    @usableFromInline package static let reorderDispPacketBounds: [Double] = [
+    package static let reorderDispPacketBounds: [Double] = [
         1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64
     ]
-    @usableFromInline
     package let reorderDisplacementMs = LatencyHistograms.Stage(bounds: FrameTimingTracker.reorderDispMsBounds)
-    @usableFromInline
     package let reorderDisplacementPackets = LatencyHistograms.Stage(bounds: FrameTimingTracker.reorderDispPacketBounds)
 
     /// Last-seen stage timestamps for the cadence deltas. Guarded by `mapLock`
     /// (stamped on the same calls that touch the in-flight map).
-    @usableFromInline internal var lastReceiveNanos: UInt64 = 0
-    @usableFromInline internal var lastAssembleNanos: UInt64 = 0
-    @usableFromInline internal var lastOutputNanos: UInt64 = 0
+    private var lastReceiveNanos: UInt64 = 0
+    private var lastAssembleNanos: UInt64 = 0
+    private var lastOutputNanos: UInt64 = 0
     /// The PC's frame interval (ms): the last stats window's host_frame_interval_p50,
     /// published by the exporter so both series read one source. Guarded by `mapLock`.
-    @usableFromInline internal var hostFrameIntervalP50Ms = 0.0
+    private var hostFrameIntervalP50Ms = 0.0
     /// Cadence deltas above this are a content gap (idle desktop, scene load),
     /// not delivery cadence - skipped so they can't pollute the histogram sum.
-    @usableFromInline internal static let cadenceGapCutoffNanos: UInt64 = 1_000_000_000
+    private static let cadenceGapCutoffNanos: UInt64 = 1_000_000_000
 
     /// Both internal (not private): the trace renderer + drop-stub emitter in
     /// TelemetryLatency+Trace.swift are the only cross-file consumers.
-    @usableFromInline package let traceWriter: FrameTraceWriter
-    @usableFromInline package let sessionId: String
+    package let traceWriter: FrameTraceWriter
+    package let sessionId: String
 
     /// One in-flight frame's stage timestamps (nanoseconds, monotonic uptime).
     /// receive + assemble are filled at `recordAssembled` (both are already
     /// captured upstream); submit/output/present fill as the frame advances.
     /// Module-internal so the drop-stub emitter (+Trace.swift) can read it.
-    @usableFromInline package struct Timing {
+    package struct Timing {
 
-        @inlinable package init(
+        package init(
             frameIndex: Int32,
             receiveNanos: UInt64,
             assembleNanos: UInt64,
@@ -226,25 +221,25 @@ import os
             self.outputNanos = outputNanos
         }
 
-        @usableFromInline package let frameIndex: Int32
-        @usableFromInline package let receiveNanos: UInt64
-        @usableFromInline package let assembleNanos: UInt64
+        package let frameIndex: Int32
+        package let receiveNanos: UInt64
+        package let assembleNanos: UInt64
         /// On-the-wire frame size (bytes) + keyframe flag, captured at assemble so
         /// the per-frame trace can carry size + IDR/P type - the signal that
         /// excludes / catches a big-frame or recurring-IDR spike on idle resume.
-        @usableFromInline package let frameBytes: Int32
-        @usableFromInline package let isIDR: Bool
+        package let frameBytes: Int32
+        package let isIDR: Bool
         /// Host capture+encode latency for THIS frame (ms), from Sunshine's
         /// `frameHostProcessingLatency` (1/10 ms on the wire → ms here). 0 == the
         /// host didn't measure this frame (repeated frame / GFE), in which case
         /// glass-to-glass omits the host-encode leg rather than guessing. Captured
         /// at assemble (it rides the DecodeUnit) so glass-to-glass is per-frame.
-        @usableFromInline package let hostEncodeMs: Double
+        package let hostEncodeMs: Double
         /// Assembled while the window was suppressed or decode-gated: any later
         /// drop was designed, whatever the state when it is evicted.
-        @usableFromInline package var assembledHidden = false
-        @usableFromInline package var submitNanos: UInt64 = 0
-        @usableFromInline package var outputNanos: UInt64 = 0
+        package var assembledHidden = false
+        package var submitNanos: UInt64 = 0
+        package var outputNanos: UInt64 = 0
     }
 
     /// STARTUP WARMUP GATE (metric honesty - ingestion only). The histograms are
@@ -261,17 +256,17 @@ import os
     /// the cumulative `observe()` calls are skipped.
     /// (Module-internal, not private: the consume-once input-to-photon gate in
     /// TelemetryLatency+Composites.swift rides this same present-path lock.)
-    @usableFromInline internal let warmupLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var firstPresentNanos: UInt64 = 0
+    let warmupLock = os_unfair_lock_t.allocate(capacity: 1)
+    private var firstPresentNanos: UInt64 = 0
     /// Grace (ns) after the first present during which onset frames are excluded
     /// from histogram ingestion. ~1.25s - covers encoder ramp + link onset, short
     /// enough that steady-state samples dominate immediately after.
-    @usableFromInline internal static let warmupGraceNanos: UInt64 = 1_250_000_000
+    private static let warmupGraceNanos: UInt64 = 1_250_000_000
 
     /// True while still inside the post-first-present warmup grace (this onset frame
     /// is EXCLUDED from histogram ingestion). Seeds the anchor on the first call.
     /// One short lock on the already-gate-on present path; never the decode/pace path.
-    @inlinable internal func isWithinWarmup(presentNanos: UInt64) -> Bool {
+    private func isWithinWarmup(presentNanos: UInt64) -> Bool {
         os_unfair_lock_lock(warmupLock); defer { os_unfair_lock_unlock(warmupLock) }
         if firstPresentNanos == 0 {
             firstPresentNanos = presentNanos
@@ -287,42 +282,42 @@ import os
     /// polluted the percentiles as a fake spike). Tagged frames skip histogram
     /// ingestion but still land in the trace with `resume:true` - recorded,
     /// just not averaged. Rides `warmupLock`; per-session by construction.
-    @usableFromInline internal var resumePresentPending = false
+    private var resumePresentPending = false
     /// Most recent input stamp already CONSUMED by an input-to-photon
     /// observation (consume-once; see computeInputToPhoton in the Composites
     /// split). Module-internal + rides `warmupLock` so the split can reach both.
-    @usableFromInline package var lastInputConsumedNanos: UInt64 = 0
+    package var lastInputConsumedNanos: UInt64 = 0
     /// Client-side legs (deliver + queue→wire, ms) of the latest flushed input;
     /// rides `warmupLock` like the consume-once stamp it is read with.
-    @usableFromInline package var lastInputLegsMs = 0.0
-    @inlinable package func noteInputLegs(_ legsMs: Double) {
+    package var lastInputLegsMs = 0.0
+    package func noteInputLegs(_ legsMs: Double) {
         os_unfair_lock_lock(warmupLock); lastInputLegsMs = legsMs; os_unfair_lock_unlock(warmupLock)
     }
-    @inlinable package func armResumePresentTag() {
+    package func armResumePresentTag() {
         os_unfair_lock_lock(warmupLock); resumePresentPending = true; os_unfair_lock_unlock(warmupLock)
     }
-    @inlinable internal func takeResumePresentTag() -> Bool {
+    private func takeResumePresentTag() -> Bool {
         os_unfair_lock_lock(warmupLock); defer { os_unfair_lock_unlock(warmupLock) }
         let pending = resumePresentPending; resumePresentPending = false
         return pending
     }
 
     /// The bounded map, keyed by rtpTimestamp. Guarded by `mapLock`.
-    @usableFromInline internal let mapLock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var inFlight: [UInt32: Timing] = [:]
+    private let mapLock = os_unfair_lock_t.allocate(capacity: 1)
+    private var inFlight: [UInt32: Timing] = [:]
     /// Insertion order of the keys, so eviction drops the STALEST in-flight frame
     /// (a dropped / never-presented frame) when the map exceeds its bound.
-    @usableFromInline internal var insertionOrder: [UInt32] = []
+    private var insertionOrder: [UInt32] = []
 
     /// Map bound. ~256 in-flight frames is far beyond the real pipeline depth
     /// (decode backlog + pacer queue are each ~tens of frames), so a healthy
     /// stream never evicts; the bound exists purely so a frame that is received
     /// but never presented (dropped at decode or pacing) can't leak.
-    @usableFromInline internal static let maxInFlight = 256
-    @usableFromInline internal static let dropAgeNanos: UInt64 = 2_000_000_000
+    private static let maxInFlight = 256
+    private static let dropAgeNanos: UInt64 = 2_000_000_000
 
     /// Only an old leading run can be discarded without disturbing the order.
-    @inlinable package static func expiredDropCount(
+    package static func expiredDropCount(
         order: [UInt32],
         timings: [UInt32: Timing],
         nowNanos: UInt64
@@ -337,7 +332,7 @@ import os
     }
 
     @discardableResult
-    @inlinable package func flushRemainingDrops(nowNanos: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Int {
+    package func flushRemainingDrops(nowNanos: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Int {
         os_unfair_lock_lock(mapLock)
         let expired = Self.expiredDropCount(order: insertionOrder, timings: inFlight,
                                             nowNanos: nowNanos)
@@ -353,13 +348,13 @@ import os
     }
 
     /// Stage stamps (submit, output, present) read this uptime clock; tests script it and the counters.
-    @usableFromInline package let now: @Sendable () -> UInt64
-    @usableFromInline package let counters: TelemetryCounters
+    package let now: @Sendable () -> UInt64
+    package let counters: TelemetryCounters
 
     /// Internal for tests; the engine only reaches a tracker through `shared`.
-    @inlinable package init(sessionId: String, traceDirectory: URL = TelemetryExporter.logsDirectory,
-                            now: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
-                            counters: TelemetryCounters = .shared) {
+    package init(sessionId: String, traceDirectory: URL,
+                 now: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
+                 counters: TelemetryCounters = .shared) {
         self.sessionId = sessionId
         self.now = now
         self.counters = counters
@@ -424,13 +419,13 @@ import os
 
     /// Observe one inter-arrival delta into a cadence stage; skips the first
     /// event (no prev), out-of-order stamps, and content-gap deltas (> 1s).
-    @inlinable internal func observeCadence(_ stage: LatencyHistograms.Stage, prev: UInt64, now: UInt64) {
+    private func observeCadence(_ stage: LatencyHistograms.Stage, prev: UInt64, now: UInt64) {
         guard prev > 0, now > prev, now &- prev < Self.cadenceGapCutoffNanos else { return }
         stage.observe(Double(now &- prev) / 1_000_000.0)
     }
 
     /// The PC's frame interval (ms) input-to-photon waits half of; 0 until the first window.
-    @inlinable package var hostFrameIntervalMs: Double {
+    package var hostFrameIntervalMs: Double {
         get {
             os_unfair_lock_lock(mapLock); defer { os_unfair_lock_unlock(mapLock) }
             return hostFrameIntervalP50Ms
@@ -578,7 +573,7 @@ import os
 
     /// Delta in milliseconds between two monotonic-nanosecond stamps, or nil if
     /// either is unset (0) or the delta is negative (clock skew / partial entry).
-    @inlinable internal func msBetween(_ start: UInt64, _ end: UInt64) -> Double? {
+    private func msBetween(_ start: UInt64, _ end: UInt64) -> Double? {
         guard start != 0, end != 0, end >= start else { return nil }
         return Double(end &- start) / 1_000_000.0
     }

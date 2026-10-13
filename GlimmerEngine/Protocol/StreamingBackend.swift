@@ -40,9 +40,9 @@ import Foundation
 // MARK: - Glimmer-owned value types (no Limelight.h leakage)
 
 /// Server-identification inputs for `start`. Mirrors SERVER_INFORMATION.
-@usableFromInline package struct BackendServerInfo: Sendable {
+package struct BackendServerInfo: Sendable {
 
-    @inlinable package init(
+    package init(
         address: String,
         appVersion: String,
         rtspSessionUrl: String,
@@ -54,18 +54,18 @@ import Foundation
         self.serverCodecModeRaw = serverCodecModeRaw
     }
 
-    @usableFromInline package var address: String
-    @usableFromInline package var appVersion: String
-    @usableFromInline package var rtspSessionUrl: String
+    package var address: String
+    package var appVersion: String
+    package var rtspSessionUrl: String
     /// The RAW SCM_* bitmask straight from /serverinfo. NOT the VIDEO_FORMAT_*
     /// layout - see StreamProtocol.SCM_* landmine note.
-    @usableFromInline package var serverCodecModeRaw: Int32
+    package var serverCodecModeRaw: Int32
 }
 
 /// One PLENTRY-equivalent buffer in a DecodeUnit's chain.
-@usableFromInline package struct DecodeBuffer: Sendable {
+package struct DecodeBuffer: Sendable {
 
-    @inlinable package init(
+    package init(
         kind: Kind,
         data: Data
     ) {
@@ -73,18 +73,18 @@ import Foundation
         self.data = data
     }
 
-    @usableFromInline package enum Kind: Sendable {
+    package enum Kind: Sendable {
         case picData, sps, pps, vps
     }
-    @usableFromInline package var kind: Kind
-    @usableFromInline package var data: Data
+    package var kind: Kind
+    package var data: Data
 }
 
 /// A video access unit. The native backend produces these and hands them to
 /// VideoDecoder.
-@usableFromInline package struct DecodeUnit: Sendable {
+package struct DecodeUnit: Sendable {
 
-    @inlinable package init(
+    package init(
         frameNumber: Int32,
         frameType: Int32,
         fullLength: Int32,
@@ -110,25 +110,25 @@ import Foundation
         self.buffers = buffers
     }
 
-    @usableFromInline package var frameNumber: Int32
-    @usableFromInline package var frameType: Int32
-    @usableFromInline package var fullLength: Int32
-    @usableFromInline package var frameHostProcessingLatency: UInt16
-    @usableFromInline package var receiveTimeUs: UInt64
-    @usableFromInline package var enqueueTimeUs: UInt64
-    @usableFromInline package var presentationTimeUs: UInt64
-    @usableFromInline package var rtpTimestamp: UInt32
-    @usableFromInline package var hdrActive: Bool
-    @usableFromInline package var colorspace: Int32
-    @usableFromInline package var buffers: [DecodeBuffer]
+    package var frameNumber: Int32
+    package var frameType: Int32
+    package var fullLength: Int32
+    package var frameHostProcessingLatency: UInt16
+    package var receiveTimeUs: UInt64
+    package var enqueueTimeUs: UInt64
+    package var presentationTimeUs: UInt64
+    package var rtpTimestamp: UInt32
+    package var hdrActive: Bool
+    package var colorspace: Int32
+    package var buffers: [DecodeBuffer]
 }
 
 /// Flattened HDR10 static metadata. Primaries normalized to 50000, luminance
 /// in nits / 1-10000 nit. The native engine fills it from the host's SDP HDR
 /// mastering metadata.
-@usableFromInline package struct HdrMetadata: Sendable, Equatable {
+package struct HdrMetadata: Sendable, Equatable {
 
-    @inlinable package init(
+    package init(
         displayPrimariesRX: UInt16,
         displayPrimariesRY: UInt16,
         displayPrimariesGX: UInt16,
@@ -158,13 +158,13 @@ import Foundation
         self.maxFullFrameLuminance = maxFullFrameLuminance
     }
 
-    @usableFromInline package var displayPrimariesRX, displayPrimariesRY: UInt16
-    @usableFromInline package var displayPrimariesGX, displayPrimariesGY: UInt16
-    @usableFromInline package var displayPrimariesBX, displayPrimariesBY: UInt16
-    @usableFromInline package var whitePointX, whitePointY: UInt16
-    @usableFromInline package var maxDisplayLuminance, minDisplayLuminance: UInt16
-    @usableFromInline package var maxContentLightLevel, maxFrameAverageLightLevel: UInt16
-    @usableFromInline package var maxFullFrameLuminance: UInt16
+    package var displayPrimariesRX, displayPrimariesRY: UInt16
+    package var displayPrimariesGX, displayPrimariesGY: UInt16
+    package var displayPrimariesBX, displayPrimariesBY: UInt16
+    package var whitePointX, whitePointY: UInt16
+    package var maxDisplayLuminance, minDisplayLuminance: UInt16
+    package var maxContentLightLevel, maxFrameAverageLightLevel: UInt16
+    package var maxFullFrameLuminance: UInt16
 }
 
 // MARK: - Inbound sink/event protocols
@@ -241,11 +241,11 @@ package protocol ConnectionEvents: AnyObject, Sendable {
 extension ConnectionEvents {
     /// No-op defaults for the controller-feedback requirements: silence is
     /// correct for a conformer with no actuator/sampler behind it.
-    @usableFromInline package func rumble(controller: UInt16, lowFreq: UInt16, highFreq: UInt16) {}
-    @usableFromInline package func rumbleTriggers(controller: UInt16, left: UInt16, right: UInt16) {}
-    @usableFromInline package func setControllerLED(controller: UInt16, r: UInt8, g: UInt8, b: UInt8) {}
-    @usableFromInline package func setMotionEventState(controller: UInt16, motionType: UInt8, reportRateHz: UInt16) {}
-    @usableFromInline package func setAdaptiveTriggers(
+    package func rumble(controller: UInt16, lowFreq: UInt16, highFreq: UInt16) {}
+    package func rumbleTriggers(controller: UInt16, left: UInt16, right: UInt16) {}
+    package func setControllerLED(controller: UInt16, r: UInt8, g: UInt8, b: UInt8) {}
+    package func setMotionEventState(controller: UInt16, motionType: UInt8, reportRateHz: UInt16) {}
+    package func setAdaptiveTriggers(
         controller: UInt16,
         eventFlags: UInt8,
         typeLeft: UInt8,
@@ -253,9 +253,9 @@ extension ConnectionEvents {
         left: [UInt8],
         right: [UInt8]
     ) {}
-    @usableFromInline package func setPlayerLEDs(controller: UInt16, solid: UInt8, flashing: UInt8) {}
+    package func setPlayerLEDs(controller: UInt16, solid: UInt8, flashing: UInt8) {}
     // Future controller-feedback slots; NULL today, no-op for parity.
-    @usableFromInline package func logMessage(_ message: String) {}
+    package func logMessage(_ message: String) {}
 }
 
 /// = DECODER_RENDERER_CALLBACKS (VideoDecoder.swift:409-419).
@@ -390,16 +390,15 @@ extension StreamingBackend {
     /// Default: no control-stream health to report. Backends with an ENet
     /// control channel (NativeBackend) override this; a future C backend would
     /// inherit nil rather than be forced to fabricate the numbers.
-    @usableFromInline
     package func enetHealth() -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)? { nil }
 
     /// Default: no control channel to re-anchor/ping. NativeBackend overrides this.
-    @usableFromInline package func wakeReanchorAndPing() {}
+    package func wakeReanchorAndPing() {}
 
     /// Default async connect: run blocking `startConnection` on a detached task so
     /// the caller isn't parked; cancelling interrupts the in-flight connect. The
     /// native backend overrides this with its own continuation-driven path.
-    @usableFromInline package func startConnectionAsync(
+    package func startConnectionAsync(
         server: BackendServerInfo,
         config: BackendStreamConfig
     ) async throws {

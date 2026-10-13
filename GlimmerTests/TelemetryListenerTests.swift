@@ -6,7 +6,7 @@
 //  The /metrics listener on an ephemeral loopback port, scraped with plain HTTP requests.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Darwin
 import Foundation
 import Network

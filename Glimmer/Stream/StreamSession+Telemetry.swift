@@ -26,7 +26,8 @@ extension StreamSession {
     func startTelemetryExporter(
         decoder: VideoDecoder, serverName: String, enabled: Bool = TelemetryGate.isEnabled,
         make: (TelemetrySource, String) -> TelemetryExporter? = {
-            TelemetryExporter.makeIfEnabled(source: $0, serverName: $1)
+            TelemetryExporter.makeIfEnabled(
+                source: $0, serverName: $1, outputDirectory: MacTelemetryCapture.logsDirectory)
         }
     ) {
         guard enabled else { return }

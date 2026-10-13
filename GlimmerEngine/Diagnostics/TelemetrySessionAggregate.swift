@@ -32,13 +32,13 @@ import Foundation
 /// after behavior normalized. The raw all-session values stay under
 /// explicitly-named `*_raw` keys (with the worst second's segment tag), so
 /// nothing is hidden - it is labeled.
-@usableFromInline package struct SessionAggregate {
+package struct SessionAggregate {
 
     /// One 1Hz tick's segment. Priority order is the classification order:
     /// a hidden (suppressed/gated) second is GATED even inside bring-up; a
     /// visible second inside the first ~10s is BRING-UP; a visible second
     /// within ~5s of an un-gate edge is RESUME; everything else is ACTIVE.
-    @usableFromInline package enum TickSegment: String {
+    package enum TickSegment: String {
         case active
         case gated
         case bringUp = "bring_up"
@@ -48,18 +48,18 @@ import Foundation
     /// Bring-up era: connect-relative seconds treated as cold-open settling
     /// (game load / encoder ramp / cushion ratchet - content legitimately
     /// wild, not stream quality).
-    @usableFromInline package static let bringUpSeconds = 10.0
+    package static let bringUpSeconds = 10.0
     /// Resume corridor: seconds after an un-gate/un-suppress edge during
     /// which drops/cadence are designed catch-up (queued-frame drain, IDR
     /// resync), not steady-state quality.
-    @usableFromInline package static let resumeCorridorSeconds = 5.0
+    package static let resumeCorridorSeconds = 5.0
 
     /// min / avg / max accumulator for a per-tick gauge. avg is the mean across
     /// ticks that had a value (a divide-by-`samples`), which for a 1Hz cadence is
     /// the per-second-averaged session mean.
-    @usableFromInline package struct Stat {
+    package struct Stat {
 
-        @usableFromInline package init(
+        package init(
             min: Double? = nil,
             max: Double? = nil,
             sum: Double = 0,
@@ -71,36 +71,36 @@ import Foundation
             self.samples = samples
         }
 
-        @usableFromInline package var min: Double?
-        @usableFromInline package var max: Double?
-        @usableFromInline package var sum: Double = 0
-        @usableFromInline package var samples: Int = 0
-        @usableFromInline package mutating func add(_ value: Double) {
+        package var min: Double?
+        package var max: Double?
+        package var sum: Double = 0
+        package var samples: Int = 0
+        package mutating func add(_ value: Double) {
             guard value.isFinite else { return }
             min = min.map { Swift.min($0, value) } ?? value
             max = max.map { Swift.max($0, value) } ?? value
             sum += value
             samples += 1
         }
-        @usableFromInline package var avg: Double? { samples > 0 ? sum / Double(samples) : nil }
+        package var avg: Double? { samples > 0 ? sum / Double(samples) : nil }
     }
 
     // ---- fps stats: HEADLINE over ACTIVE seconds, raw over every tick ----
-    @usableFromInline package var gpuPowerW = Stat()
-    @usableFromInline package var packagePowerW = Stat()
-    @usableFromInline package var gpuResidencyPercent = Stat()
+    package var gpuPowerW = Stat()
+    package var packagePowerW = Stat()
+    package var gpuResidencyPercent = Stat()
 
-    @usableFromInline package init() {}
+    package init() {}
 
-    @usableFromInline package var receivedFps = Stat()
-    @usableFromInline package var decodedFps = Stat()
-    @usableFromInline package var renderedFps = Stat()
-    @usableFromInline package var receivedFpsRaw = Stat()
-    @usableFromInline package var decodedFpsRaw = Stat()
-    @usableFromInline package var renderedFpsRaw = Stat()
+    package var receivedFps = Stat()
+    package var decodedFps = Stat()
+    package var renderedFps = Stat()
+    package var receivedFpsRaw = Stat()
+    package var decodedFpsRaw = Stat()
+    package var renderedFpsRaw = Stat()
 
     /// Peak of the 1 Hz pacing-depth samples, a sustained buffer-build signal.
-    @usableFromInline package var peakPacingDepth: Int = 0
+    package var peakPacingDepth: Int = 0
 
     // ---- Worst single 1s windows (the transient that defined the run) ----
     // Headline pair = worst ACTIVE second; `*Raw` = worst second of the whole
@@ -108,26 +108,26 @@ import Foundation
     // `resume` is the instrument seeing a designed window, not the stream).
     /// Worst per-tick mean present-cadence error (ms) + the connect-relative
     /// second it happened on - the hitch a user feels, and exactly when.
-    @usableFromInline package var worstPresentCadenceErrorMs: Double?
-    @usableFromInline package var worstPresentCadenceErrorAtSeconds: Double?
-    @usableFromInline package var worstPresentCadenceErrorRawMs: Double?
-    @usableFromInline package var worstPresentCadenceErrorRawAtSeconds: Double?
-    @usableFromInline package var worstPresentCadenceErrorRawSegment: TickSegment?
+    package var worstPresentCadenceErrorMs: Double?
+    package var worstPresentCadenceErrorAtSeconds: Double?
+    package var worstPresentCadenceErrorRawMs: Double?
+    package var worstPresentCadenceErrorRawAtSeconds: Double?
+    package var worstPresentCadenceErrorRawSegment: TickSegment?
     /// Worst per-tick glass-to-glass p95 (ms) + when - the second the headline
     /// "how good is it" number was at its worst.
-    @usableFromInline package var worstGlassToGlassP95Ms: Double?
-    @usableFromInline package var worstGlassToGlassP95AtSeconds: Double?
-    @usableFromInline package var worstGlassToGlassP95RawMs: Double?
-    @usableFromInline package var worstGlassToGlassP95RawAtSeconds: Double?
-    @usableFromInline package var worstGlassToGlassP95RawSegment: TickSegment?
+    package var worstGlassToGlassP95Ms: Double?
+    package var worstGlassToGlassP95AtSeconds: Double?
+    package var worstGlassToGlassP95RawMs: Double?
+    package var worstGlassToGlassP95RawAtSeconds: Double?
+    package var worstGlassToGlassP95RawSegment: TickSegment?
 
     /// How many 1Hz ticks were folded in - a sanity/coverage count.
-    @usableFromInline package var tickCount: Int = 0
+    package var tickCount: Int = 0
     // ---- Per-segment second counts (ticks ≈ seconds at the 1Hz cadence) ----
-    @usableFromInline package var activeTicks = 0
-    @usableFromInline package var gatedTicks = 0
-    @usableFromInline package var bringUpTicks = 0
-    @usableFromInline package var resumeTicks = 0
+    package var activeTicks = 0
+    package var gatedTicks = 0
+    package var bringUpTicks = 0
+    package var resumeTicks = 0
     /// Previous tick's hidden (suppressed-or-gated) state - the edge detector
     /// that arms the resume corridor.
     private var prevTickHidden = false
@@ -146,7 +146,7 @@ import Foundation
 
     /// Classify this tick AND advance the corridor state. Called once per
     /// capture tick, BEFORE `accumulate`, on the exporter queue.
-    @usableFromInline package mutating func classifyTick(atSeconds seconds: Double, hidden: Bool) -> TickSegment {
+    package mutating func classifyTick(atSeconds seconds: Double, hidden: Bool) -> TickSegment {
         // Arm the resume corridor at the un-hide edge (gated/suppressed →
         // visible); a re-hide simply re-arms on its own next clear edge.
         if prevTickHidden && !hidden {
@@ -177,7 +177,7 @@ import Foundation
     /// iff this tick is ACTIVE. Must be called EVERY tick (the baseline has to
     /// advance through gated spans too, or the first active tick after one
     /// would swallow the whole hidden era's observations).
-    @usableFromInline package mutating func foldLatency(_ current: LatencyHistogramSnapshot, active: Bool) {
+    package mutating func foldLatency(_ current: LatencyHistogramSnapshot, active: Bool) {
         defer { prevLatencyCumulative = current }
         guard active else { return }
         // First-ever active tick with no baseline can't happen in practice
@@ -194,12 +194,12 @@ import Foundation
     /// clear/caution/distress) + the final transition count - "how long was
     /// each state, and how often did it move" is the scorecard half of
     /// judging the state machine against felt events.
-    @usableFromInline package var envStateSeconds = [Int](repeating: 0, count: 3)
-    @usableFromInline package var envStateChangesTotal: UInt64 = 0
+    package var envStateSeconds = [Int](repeating: 0, count: 3)
+    package var envStateChangesTotal: UInt64 = 0
 
     /// Fold one tick's env state. Called on the exporter queue right after
     /// `accumulate` (the env fields ride Extras, not the snapshot).
-    @usableFromInline package mutating func noteEnvState(ordinal: Int, changesTotal: UInt64) {
+    package mutating func noteEnvState(ordinal: Int, changesTotal: UInt64) {
         if envStateSeconds.indices.contains(ordinal) { envStateSeconds[ordinal] += 1 }
         envStateChangesTotal = changesTotal
     }

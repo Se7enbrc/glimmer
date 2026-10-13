@@ -4,15 +4,14 @@
 import Foundation
 import Darwin
 
-@usableFromInline package struct InputEventTiming: Sendable {
-    @usableFromInline
+package struct InputEventTiming: Sendable {
     package enum Source: String, CaseIterable, Sendable { case keyboard, mouse, controller, rawHID = "raw_hid" }
-    @usableFromInline package let source: Source
-    @usableFromInline package let capture: UInt64
-    @usableFromInline package let handler: UInt64
-    @usableFromInline package var batcher: UInt64 = 0
+    package let source: Source
+    package let capture: UInt64
+    package let handler: UInt64
+    package var batcher: UInt64 = 0
 
-    @inlinable package init(
+    package init(
         source: Source,
         timestamp: TimeInterval,
         handler: UInt64 = DispatchTime.now().uptimeNanoseconds
@@ -26,24 +25,24 @@ import Darwin
 }
 
 /// Each TLS cell belongs to one OS thread. Scopes clear it before returning to the event loop.
-@usableFromInline package final class InputTimingContext: @unchecked Sendable {
+package final class InputTimingContext: @unchecked Sendable {
 
-    @inlinable package init() {}
+    package init() {}
 
-    @usableFromInline internal static let key: pthread_key_t = {
+    private static let key: pthread_key_t = {
         var key = pthread_key_t()
         pthread_key_create(&key) { pointer in
             Unmanaged<InputTimingContext>.fromOpaque(pointer).release()
         }
         return key
     }()
-    @usableFromInline internal var timings = [InputEventTiming?](repeating: nil, count: 4096)
-    @usableFromInline internal var used = 0
-    @usableFromInline internal var consumed = false
-    @usableFromInline internal enum ReleaseTarget {
+    private var timings = [InputEventTiming?](repeating: nil, count: 4096)
+    private var used = 0
+    private var consumed = false
+    private enum ReleaseTarget {
         case input(InputReleaseLedger.Release), modifiers
 
-        @inlinable internal func matches(_ release: InputReleaseLedger.Release) -> Bool {
+        func matches(_ release: InputReleaseLedger.Release) -> Bool {
             switch self {
             case .input(let target): return release == target
             case .modifiers:
@@ -52,11 +51,11 @@ import Darwin
             }
         }
     }
-    @usableFromInline internal var releaseTarget: ReleaseTarget?
+    private var releaseTarget: ReleaseTarget?
 
-    @usableFromInline package struct Capture: Sendable {
+    package struct Capture: Sendable {
 
-        @inlinable package init(
+        package init(
             context: InputTimingContext,
             batcher: UInt64
         ) {
@@ -64,11 +63,11 @@ import Darwin
             self.batcher = batcher
         }
 
-        @usableFromInline package let context: InputTimingContext
-        @usableFromInline package let batcher: UInt64
+        package let context: InputTimingContext
+        package let batcher: UInt64
 
         // The producer waits for its sender request before ending or reusing this thread-local scope.
-        @inlinable package func samples() -> [InputEventTiming] {
+        package func samples() -> [InputEventTiming] {
             (0..<context.used).compactMap { index in
                 var timing = context.timings[index]
                 timing?.batcher = batcher
@@ -77,8 +76,8 @@ import Darwin
         }
     }
 
-    @inlinable package static func begin(source: InputEventTiming.Source, timestamp: TimeInterval,
-                                         handler: UInt64 = DispatchTime.now().uptimeNanoseconds) {
+    package static func begin(source: InputEventTiming.Source, timestamp: TimeInterval,
+                              handler: UInt64 = DispatchTime.now().uptimeNanoseconds) {
         guard FrameTimingTracker.shared != nil else { return }
         let cell: InputTimingContext
         if let pointer = pthread_getspecific(key) {
@@ -93,7 +92,7 @@ import Darwin
         cell.releaseTarget = nil
     }
 
-    @inlinable package static func begin(samples: [InputEventTiming]) {
+    package static func begin(samples: [InputEventTiming]) {
         guard let first = samples.first else { return }
         begin(source: first.source, timestamp: Double(first.capture) / 1e9, handler: first.handler)
         guard let pointer = pthread_getspecific(key) else { return }
@@ -102,14 +101,14 @@ import Darwin
         for index in 0..<cell.used { cell.timings[index] = samples[index] }
     }
 
-    @inlinable package static func end() {
+    package static func end() {
         guard let pointer = pthread_getspecific(key) else { return }
         Unmanaged<InputTimingContext>.fromOpaque(pointer).takeUnretainedValue().used = 0
     }
 
-    @usableFromInline package struct Pause {
+    package struct Pause {
 
-        @inlinable package init(
+        package init(
             context: InputTimingContext,
             used: Int,
             consumed: Bool
@@ -119,23 +118,23 @@ import Darwin
             self.consumed = consumed
         }
 
-        @usableFromInline package let context: InputTimingContext
-        @usableFromInline package let used: Int
-        @usableFromInline package let consumed: Bool
-        @inlinable package func restore() { context.used = used; context.consumed = consumed }
+        package let context: InputTimingContext
+        package let used: Int
+        package let consumed: Bool
+        package func restore() { context.used = used; context.consumed = consumed }
     }
 
-    @inlinable package static func allowRelease(_ release: InputReleaseLedger.Release) {
+    package static func allowRelease(_ release: InputReleaseLedger.Release) {
         guard let pointer = pthread_getspecific(key) else { return }
         Unmanaged<InputTimingContext>.fromOpaque(pointer).takeUnretainedValue().releaseTarget = .input(release)
     }
 
-    @inlinable package static func allowModifierReleases() {
+    package static func allowModifierReleases() {
         guard let pointer = pthread_getspecific(key) else { return }
         Unmanaged<InputTimingContext>.fromOpaque(pointer).takeUnretainedValue().releaseTarget = .modifiers
     }
 
-    @inlinable package static func suspend(except release: InputReleaseLedger.Release? = nil) -> Pause? {
+    package static func suspend(except release: InputReleaseLedger.Release? = nil) -> Pause? {
         guard let pointer = pthread_getspecific(key) else { return nil }
         let cell = Unmanaged<InputTimingContext>.fromOpaque(pointer).takeUnretainedValue()
         if let release, cell.releaseTarget?.matches(release) == true { return nil }
@@ -144,7 +143,7 @@ import Darwin
         return pause
     }
 
-    @inlinable package static func coalesced(timestamp: TimeInterval) {
+    package static func coalesced(timestamp: TimeInterval) {
         guard let pointer = pthread_getspecific(key) else { return }
         let cell = Unmanaged<InputTimingContext>.fromOpaque(pointer).takeUnretainedValue()
         guard cell.used > 0, !cell.consumed else { return }
@@ -156,7 +155,7 @@ import Darwin
         cell.used += 1
     }
 
-    @inlinable package static func take() -> Capture? {
+    package static func take() -> Capture? {
         guard let pointer = pthread_getspecific(key) else { return nil }
         let cell = Unmanaged<InputTimingContext>.fromOpaque(pointer).takeUnretainedValue()
         guard cell.used > 0, !cell.consumed else { return nil }
@@ -165,25 +164,25 @@ import Darwin
     }
 }
 
-@usableFromInline package struct InputTimingBatch: Sendable {
-    @usableFromInline package let samples: [InputEventTiming]
-    @usableFromInline package let flushed: UInt64
-    @usableFromInline package let latency: InputLatency
+package struct InputTimingBatch: Sendable {
+    package let samples: [InputEventTiming]
+    package let flushed: UInt64
+    package let latency: InputLatency
 
-    @inlinable package init?(_ samples: [InputEventTiming], tracker: FrameTimingTracker?) {
+    package init?(_ samples: [InputEventTiming], tracker: FrameTimingTracker?) {
         guard !samples.isEmpty, let tracker else { return nil }
         self.samples = samples
         flushed = DispatchTime.now().uptimeNanoseconds
         latency = tracker.inputLatency
     }
 
-    @inlinable package func submitted(at sent: UInt64) {
+    package func submitted(at sent: UInt64) {
         for sample in samples {
             latency.observe(sample, flushed: flushed, sent: sent)
         }
     }
 
-    @inlinable package func completed(sent: UInt64, at completed: UInt64) {
+    package func completed(sent: UInt64, at completed: UInt64) {
         for sample in samples {
             latency.observe(source: sample.source, stage: .sendCompletion, from: sent, to: completed)
             latency.observe(source: sample.source, stage: .captureCompletion, from: sample.capture, to: completed)
@@ -192,18 +191,18 @@ import Darwin
 }
 
 /// Histogram storage is allocated once; one lock guards counts, buckets and exact maxima together.
-@usableFromInline package final class InputLatency: @unchecked Sendable {
+package final class InputLatency: @unchecked Sendable {
 
-    @inlinable package init() {}
+    package init() {}
 
-    @usableFromInline package enum Stage: String, CaseIterable, Sendable {
+    package enum Stage: String, CaseIterable, Sendable {
         case captureHandler = "capture_handler", handlerBatcher = "handler_batcher"
         case batcherFlush = "batcher_flush", flushSend = "flush_send"
         case captureSend = "capture_send", sendCompletion = "send_completion", captureCompletion = "capture_completion"
     }
-    @usableFromInline package struct Row: Sendable {
+    package struct Row: Sendable {
 
-        @inlinable package init(
+        package init(
             source: InputEventTiming.Source,
             stage: Stage,
             histogram: LatencyHistogramSnapshot.Stage,
@@ -221,18 +220,17 @@ import Darwin
             self.over50 = over50
         }
 
-        @usableFromInline package let source: InputEventTiming.Source
-        @usableFromInline package let stage: Stage
-        @usableFromInline package var histogram: LatencyHistogramSnapshot.Stage
-        @usableFromInline package var maxMs: Double = 0
-        @usableFromInline package var over10: UInt64 = 0
-        @usableFromInline package var over20: UInt64 = 0
-        @usableFromInline package var over50: UInt64 = 0
+        package let source: InputEventTiming.Source
+        package let stage: Stage
+        package var histogram: LatencyHistogramSnapshot.Stage
+        package var maxMs: Double = 0
+        package var over10: UInt64 = 0
+        package var over20: UInt64 = 0
+        package var over50: UInt64 = 0
     }
-    @usableFromInline
     package static let bounds: [Double] = [0.1, 0.25, 0.5, 1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 50, 100, 250, 1000]
-    @usableFromInline internal let lock = NSLock()
-    @usableFromInline internal var rows = InputEventTiming.Source.allCases.flatMap { source in
+    private let lock = NSLock()
+    private var rows = InputEventTiming.Source.allCases.flatMap { source in
         Stage.allCases.map { stage in
             Row(source: source, stage: stage, histogram: .init(
                 buckets: Array(repeating: 0, count: bounds.count), boundsMs: bounds, sumMs: 0, observationCount: 0))
@@ -263,5 +261,5 @@ import Darwin
         if ms > 50 { rows[index].over50 &+= 1 }
     }
 
-    @inlinable package func snapshot() -> [Row] { lock.withLock { rows } }
+    package func snapshot() -> [Row] { lock.withLock { rows } }
 }

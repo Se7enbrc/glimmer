@@ -360,7 +360,7 @@ the comment at `StreamBridgeContext.eventContinuation` (in
   when you add a file, don't reuse a neighbour's category. Signposts sit on the
   same subsystem with their own categories (`Stream.Decode`, `Stream.Render`,
   `Stream.Network`, `Stream.Pairing`, `Stream.Audio`) in
-  `Glimmer/Stream/Signposts.swift`.
+  `GlimmerEngine/Diagnostics/Signposts.swift`.
 - Privacy:
   - `privacy: .public` for non-sensitive diagnostic data (stage names, decode
     timings, codec format ints, error codes).

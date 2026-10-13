@@ -12,7 +12,7 @@ extension TelemetryCounters {
     /// Allocate + initialize every `os_unfair_lock` backing the gauge storage.
     /// Module-internal (not private) so the class's `init()` in
     /// TelemetryCounters.swift still runs it across the file split.
-    @inlinable package func initializeGaugeLocks() {
+    package func initializeGaugeLocks() {
         jitterLock.initialize(to: os_unfair_lock_s())
         inputLock.initialize(to: os_unfair_lock_s())
         rttLock.initialize(to: os_unfair_lock_s())
@@ -31,7 +31,7 @@ extension TelemetryCounters {
 
     /// Release every gauge lock. Paired with `initializeGaugeLocks()`;
     /// module-internal for the same reason - the class's `deinit` calls it.
-    @inlinable package func deallocateGaugeLocks() {
+    package func deallocateGaugeLocks() {
         jitterLock.deallocate(); inputLock.deallocate()
         rttLock.deallocate(); vtSessionCreateLock.deallocate()
         cruiseMaxGainLock.deallocate()
@@ -45,7 +45,7 @@ extension TelemetryCounters {
     /// Reset and anchor the P2 handshake timeline at a CONNECT-START edge, before any
     /// receiver can latch a one-shot. A session's first connect resets everything; an
     /// in-place reconnect keeps the totals, the first handshake and its audio TTF.
-    @inlinable package func anchorConnectStart(now: UInt64, reconnecting: Bool) {
+    package func anchorConnectStart(now: UInt64, reconnecting: Bool) {
         if reconnecting {
             p2.anchorReconnect(now, audioTtfMs: audioFirstPacketMs, audioTtf: audioTtf.latched)
             resetForReconnect()
@@ -59,7 +59,7 @@ extension TelemetryCounters {
     /// Reset everything at a session's first connect (`anchorConnectStart`), not at
     /// exporter start, so a warm host's one-shot latches can't serve a prior session's
     /// values. A Prometheus scrape across the boundary just sees a counter reset.
-    @inlinable package func resetForNewSession() {
+    package func resetForNewSession() {
         ReceiveTimingTelemetry.video.reset()
         ReceiveTimingTelemetry.audio.reset()
         AudioPipelineTelemetry.shared.reset()
@@ -131,7 +131,7 @@ extension TelemetryCounters {
     /// In-place reconnect, a new connection inside the same session: clear the
     /// one-shot audio latches and the per-connection link gauges, keep every total
     /// so the receipt covers the whole session.
-    @inlinable package func resetForReconnect() {
+    package func resetForReconnect() {
         setRecvJitterMs(0)
         setRttMs(0)
         os_unfair_lock_lock(gapLock); packetGapValue = nil; os_unfair_lock_unlock(gapLock)

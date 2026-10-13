@@ -46,7 +46,7 @@ extension TelemetryCounters {
     /// the SAME stamp `noteInputEvent()` already writes from the InputBatcher
     /// producers - so input-to-photon adds NO new input-side write, only this
     /// present-side read.
-    @inlinable package var lastInputNanos: UInt64? {
+    package var lastInputNanos: UInt64? {
         os_unfair_lock_lock(inputLock)
         let last = lastInputNanosValue
         os_unfair_lock_unlock(inputLock)
@@ -55,7 +55,7 @@ extension TelemetryCounters {
 
     /// Milliseconds since the last input event, or nil if no input yet. Read by
     /// the exporter on its 1Hz queue (never the hot path).
-    @inlinable package func timeSinceLastInputMs(now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Double? {
+    package func timeSinceLastInputMs(now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Double? {
         os_unfair_lock_lock(inputLock)
         let last = lastInputNanosValue
         os_unfair_lock_unlock(inputLock)
@@ -73,27 +73,27 @@ extension TelemetryCounters {
 /// auto-sleep (age ~minutes) - observed Bluetooth drops needed a manual
 /// three-file join to recover it. Always-live like the counters; self-locked
 /// (the `P2State` idiom) so the control path never touches another gauge's lock.
-@usableFromInline package final class RumbleActivity: @unchecked Sendable {
-    @usableFromInline internal let lock = os_unfair_lock_t.allocate(capacity: 1)
-    @usableFromInline internal var lastRumbleNanos: UInt64 = 0
-    @inlinable package init() { lock.initialize(to: os_unfair_lock_s()) }
+package final class RumbleActivity: @unchecked Sendable {
+    private let lock = os_unfair_lock_t.allocate(capacity: 1)
+    private var lastRumbleNanos: UInt64 = 0
+    package init() { lock.initialize(to: os_unfair_lock_s()) }
     deinit { lock.deallocate() }
 
     /// Stamp a host-rumble receipt (called next to `rumbleEventTotal`).
-    @inlinable package func stamp() {
+    package func stamp() {
         let now = DispatchTime.now().uptimeNanoseconds
         os_unfair_lock_lock(lock); lastRumbleNanos = now; os_unfair_lock_unlock(lock)
     }
 
     /// Clear the stamp at the connect edge (with `resetForNewSession`) so a
     /// prior session's rumble can never masquerade as this session's.
-    @inlinable package func reset() {
+    package func reset() {
         os_unfair_lock_lock(lock); lastRumbleNanos = 0; os_unfair_lock_unlock(lock)
     }
 
     /// Milliseconds since the last host-rumble receipt, or nil if none yet this
     /// session. Read at the (rare) detach edge - never a hot path.
-    @inlinable package func ageMs() -> Double? {
+    package func ageMs() -> Double? {
         os_unfair_lock_lock(lock)
         let last = lastRumbleNanos
         os_unfair_lock_unlock(lock)
