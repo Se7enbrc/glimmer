@@ -24,7 +24,9 @@ extension PairingClient {
         return Data(bytes)
     }
 
-    // MARK: AES-128-ECB (no padding) Sunshine requires raw ECB for pairing challenges and hashes, with block-aligned
+    // MARK: AES-128-ECB (no padding)
+
+    // Sunshine requires raw ECB for pairing challenges and hashes, with block-aligned
     // inputs. Signature and challenge checks are separate from this cipher; see SECURITY.md for its limits.
 
     package static func aesEcbEncrypt(_ plaintext: Data, key: Data) throws -> Data {
@@ -68,7 +70,9 @@ extension PairingClient {
         Data(SHA256.hash(data: data))
     }
 
-    // MARK: Certificate signature The "cert signature" hashed into the challenge response is the bytes already on the
+    // MARK: Certificate signature
+
+    // The "cert signature" hashed into the challenge response is the bytes already on the
     // cert, not a recomputed signature, so both sides read the same value from the same PEM.
 
     package static func signatureFromPemCert(_ pem: String) throws -> Data {

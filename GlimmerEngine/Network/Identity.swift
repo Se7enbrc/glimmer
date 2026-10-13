@@ -44,8 +44,8 @@ package enum FileIdentityStore {
         }
     }
 
-    /// `~/Library/Application Support/Glimmer/Identity/`. Created on first
-    /// write with mode 0700.
+    /// The shell supplies the base; identities live under `Glimmer/Identity` within it.
+    /// Created on first write with mode 0700.
     package static func directoryURL(base: URL) throws -> URL {
         base.appendingPathComponent("Glimmer/Identity", isDirectory: true)
     }
@@ -116,8 +116,8 @@ package enum FileIdentityStore {
 
 public actor IdentityManager {
 
-    /// Where this manager keeps its state; the defaults are the real locations.
-    let defaults: UserDefaults
+    /// A failed named suite stays unavailable; never borrow another domain's identity.
+    let defaults: UserDefaults?
     let storageRoot: @Sendable () throws -> URL
     let protectedDataAvailable: @Sendable () -> Bool
     let migrateIdentity: @Sendable (String?) throws -> AdoptedQtIdentity?
@@ -136,15 +136,20 @@ public actor IdentityManager {
                              category: "Stream.Identity")
 
     public init(defaultsSuite: String?, supportBase: URL,
-                protectedDataAvailable: @escaping @Sendable () -> Bool = { true }) {
+                protectedDataAvailable: @escaping @Sendable () -> Bool) {
         self.init(defaultsSuite: defaultsSuite, storageRoot: { supportBase },
                   protectedDataAvailable: protectedDataAvailable, migrateIdentity: { _ in nil })
     }
 
     package init(defaultsSuite: String?, storageRoot: @escaping @Sendable () throws -> URL,
                  protectedDataAvailable: @escaping @Sendable () -> Bool = { true },
-                 migrateIdentity: @escaping @Sendable (String?) throws -> AdoptedQtIdentity?) {
-        self.defaults = defaultsSuite.flatMap { UserDefaults(suiteName: $0) } ?? .standard
+                 migrateIdentity: @escaping @Sendable (String?) throws -> AdoptedQtIdentity?,
+                 makeDefaults: @Sendable (String) -> UserDefaults? = { UserDefaults(suiteName: $0) }) {
+        if let defaultsSuite {
+            self.defaults = makeDefaults(defaultsSuite)
+        } else {
+            self.defaults = .standard
+        }
         self.storageRoot = storageRoot
         self.protectedDataAvailable = protectedDataAvailable
         self.migrateIdentity = migrateIdentity
@@ -198,4 +203,5 @@ public actor IdentityManager {
 
 public enum IdentityStorageError: Error, Sendable {
     case unavailable
+    case defaultsUnavailable
 }

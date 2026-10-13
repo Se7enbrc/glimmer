@@ -19,8 +19,7 @@ NATIVE=Glimmer/Stream/Native
 sources() {
     case "$1" in
         rtsp|fec) ;;
-        video) echo "$NATIVE/RtpVideoQueue*.swift $NATIVE/VideoDepacketizer*.swift" \
-            "Glimmer/Stream/StreamingBackend.swift" ;;
+        video) echo "$NATIVE/RtpVideoQueue*.swift $NATIVE/VideoDepacketizer*.swift" ;;
         audio) echo "$NATIVE/RtpAudioQueue*.swift $NATIVE/AudioFecDecoder+Recovery.swift" ;;
         opus) echo "Glimmer/Stream/OpusDecoder+Packet.swift" ;;
     esac
@@ -36,7 +35,8 @@ swiftc -swift-version 6 -strict-concurrency=complete -package-name Glimmer -O -g
     -module-name GlimmerEngine -emit-module-path "$OUT/engine/GlimmerEngine.swiftmodule" \
     "$ENGINE/EnetWire.swift" "$ENGINE/ReedSolomon.swift" "$ENGINE/AudioFecDecoder.swift" \
     "$ENGINE/AudioFecDecoder+Recovery.swift" "$ENGINE/InputEncoder.swift" "$ENGINE/SdpCodec.swift" "$ENGINE/StreamProtocolConstants.swift" \
-    "$ENGINE/StreamingBackend+Values.swift" "$ENGINE/StreamCrypto+VideoPacketLayout.swift" \
+    "$ENGINE/StreamingBackend.swift" "$ENGINE/StreamingBackend+Values.swift" "$ENGINE/NativeAudioSink.swift" \
+    "$ENGINE/StreamCrypto+VideoPacketLayout.swift" \
     -o "$OUT/engine/GlimmerEngine.o"
 for target in ${FUZZ_TARGETS:-rtsp video audio fec opus}; do
     mkdir -p "$OUT/$target/corpus"

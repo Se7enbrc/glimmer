@@ -90,13 +90,19 @@ External packages need no `@testable` import or shared package identity for:
 - `HostDiscovery`: construct a browser, start its update stream, and stop all
   browsing or just the matching run. `Discovered` exposes service ID, display
   name, resolved address and port; `Update` exposes PCs and permission denial.
+  The shared Mac instance is package-only; an iOS shell creates its own
+  instance.
 - `IdentityManager(defaultsSuite:supportBase:protectedDataAvailable:)` and
   `uniqueID()`: the shell must supply its defaults domain (nil explicitly means
   standard defaults) and writable application-support base. Existing identity
   filenames remain under `Glimmer/Identity` relative to that base. The
   synchronous Sendable policy must reflect protected-data availability; false
   throws `IdentityStorageError.unavailable` before cache access, migration or
-  generation. Identity PEM getters remain package-only.
+  generation. This policy is a required initializer argument. If a named
+  defaults suite cannot be opened, identity access throws
+  `IdentityStorageError.defaultsUnavailable` before storage or migration; it
+  never falls back to standard defaults. Identity PEM getters remain
+  package-only.
 - `ServerInfo`: construct the address, stable PC ID and name, set known ports
   and the previously authenticated certificate, and read pairing/readiness
   results. Codec negotiation fields remain package-only. `PairStatus`,
@@ -106,10 +112,12 @@ External packages need no `@testable` import or shared package identity for:
   `pinnedServerCertPEM`, `shutdown` and the shared `controlTimeout`: the device
   name is supplied by the shell. A saved certificate requires pinned mutual TLS;
   an unpaired HTTP discovery reply cannot install or replace a pin.
-- `PairingClient(network:server:)` and `pair(pin:)`: return the authenticated PC
-  and certificate after the unchanged five requests. The shell validates the PC
-  identity using the existing post-pair `fetchServerInfo(requiredUniqueId:)`
-  call and persists the pin only after that succeeds, as the Mac flow does.
+- `PairingClient(network:server:)` and `pair(pin:expectedUniqueId:)`: return the
+  authenticated PC and certificate only after the five handshake requests and a
+  pinned `fetchServerInfo(requiredUniqueId:)` bind the certificate to that PC.
+  Missing or mismatched IDs reject pairing. Persist only the returned result.
+  The package-only `pair(pin:)` keeps the Mac's existing two-step flow and its
+  cancellation checks; the Mac still verifies the pinned identity before saving.
 - `HostReachability.measureRTT` and its `Outcome`, plus `HostReadiness`'s
   predicate and bounded polling loop. The shell owns when to poll and cancel.
 - `CertFingerprint.sha256`, `WakeOnLAN.normalizeMac` and `magicPacket`:
@@ -118,6 +126,22 @@ External packages need no `@testable` import or shared package identity for:
 Everything else added by this slice is package or internal access. Raw HTTP,
 XML, crypto helpers, launch/resume, entropy seams and file migration helpers are
 not an external API. The existing public RTSP smoke-test API is unchanged.
+
+### iOS local-network requirements
+
+The consuming app's Info.plist must include `NSLocalNetworkUsageDescription` and
+`NSBonjourServices` entries for both `_nvstream._tcp` and `_nvstream-tcp._tcp`,
+matching the engine's browsers. Start discovery while the app is foregrounded
+and the person expects to find a PC: the first protected local-network operation
+can trigger the system permission prompt. The system remembers the decision;
+restarting discovery does not prompt again after a refusal. The shell owns the
+explanation and Settings guidance. See Apple's
+[local-network privacy requirements](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy).
+
+The engine reports Bonjour policy refusal through `HostDiscovery.Update.denied`;
+consume it separately from an empty PC list. It does not present permission UI
+or bypass the decision. An iOS shell owns its browser's lifetime and stops it
+when discovery is no longer needed.
 
 ### Mac adapters and persistence
 

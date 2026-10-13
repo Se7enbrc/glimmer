@@ -233,13 +233,13 @@ public actor NetworkClient {
     /// The client credential and uniqueid requests carry; tests pass a generated one.
     package typealias Identity = @Sendable () async throws -> (certPEM: String, keyPEM: String, uniqueID: String)
 
-    let deviceName: String
+    let deviceName: @Sendable () -> String
     let transport: ControlTransport.Get
     let identity: Identity
 
     // MARK: Init
 
-    package init(server: ServerInfo, deviceName: String,
+    package init(server: ServerInfo, deviceName: @escaping @Sendable () -> String,
                  transport: @escaping ControlTransport.Get = ControlTransport.get,
                  identity: @escaping Identity) {
         self.server = server
@@ -252,7 +252,7 @@ public actor NetworkClient {
     }
 
     public init(server: ServerInfo, identity: IdentityManager, deviceName: String) {
-        self.init(server: server, deviceName: deviceName, identity: {
+        self.init(server: server, deviceName: { deviceName }, identity: {
             (try await identity.clientCertPEM(), try await identity.clientKeyPEM(), try await identity.uniqueID())
         })
     }
@@ -276,7 +276,9 @@ public actor NetworkClient {
         server.serverCertPEM
     }
 
-    // MARK: Identity prep Snapshot the client cert + key (PEM) out of the IdentityManager actor before any HTTPS call.
+    // MARK: Identity prep
+
+    // Snapshot the client cert + key (PEM) before HTTPS so the transport needs no actor hop.
 
     func ensureIdentityLoaded() async throws {
         if clientCertPEM != nil { return }

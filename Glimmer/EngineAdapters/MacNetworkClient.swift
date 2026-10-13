@@ -11,8 +11,9 @@ extension NetworkClient {
     }
 
     init(server: ServerInfo, transport: @escaping ControlTransport.Get = ControlTransport.get,
-         identity: @escaping Identity = NetworkClient.installIdentity) {
-        self.init(server: server, deviceName: Self.pairingDeviceName, transport: transport, identity: identity)
+         identity: @escaping Identity = NetworkClient.installIdentity,
+         deviceName: @escaping @Sendable () -> String = { NetworkClient.pairingDeviceName }) {
+        self.init(server: server, deviceName: deviceName, transport: transport, identity: identity)
     }
 
     /// What the host's pairing page shows for this Mac: its computer name, or

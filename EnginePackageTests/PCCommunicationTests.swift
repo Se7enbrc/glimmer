@@ -34,7 +34,8 @@ struct PCCommunicationTests {
         #expect(try Data(contentsOf: keyURL) == originalKey)
         available.withLock { $0 = true }
         #expect(try await manager.uniqueID() == original)
-        let reloaded = IdentityManager(defaultsSuite: store.suite, supportBase: store.root)
+        let reloaded = IdentityManager(defaultsSuite: store.suite, supportBase: store.root,
+                                       protectedDataAvailable: { true })
         #expect(try await reloaded.uniqueID() == original)
     }
 
@@ -51,6 +52,25 @@ struct PCCommunicationTests {
         await #expect(throws: CocoaError.self) { try await manager.uniqueID() }
         #expect(!migrated.withLock { $0 })
         #expect(store.defaults.integer(forKey: "glimmer.identityFileStorageVersion") == 0)
+    }
+
+    @Test func unavailableDefaultsDoesNotUseStandardOrTouchStorage() async throws {
+        let store = try Store()
+        defer { store.remove() }
+        let root = store.root
+        let suite = store.suite
+        let manager = IdentityManager(defaultsSuite: suite, storageRoot: {
+            Issue.record("An unavailable defaults suite must stop before storage access")
+            return root
+        }, migrateIdentity: { _ in
+            Issue.record("An unavailable defaults suite must not migrate an identity")
+            return nil
+        }, makeDefaults: { requested in
+            #expect(requested == suite)
+            return nil
+        })
+        await #expect(throws: IdentityStorageError.defaultsUnavailable) { try await manager.uniqueID() }
+        #expect(!FileManager.default.fileExists(atPath: store.root.path))
     }
 
     @Test func unavailablePinStorePreservesSavedAndLegacyPins() throws {
@@ -117,7 +137,11 @@ struct PCCommunicationTests {
                 <PairStatus>0</PairStatus><state>SUNSHINE_SERVER_FREE</state><currentgame>0</currentgame></root>
                 """.utf8))
         }
-        let client = NetworkClient(server: server, deviceName: "Test client", transport: transport,
+        let lookups = OSAllocatedUnfairLock(initialState: 0)
+        let client = NetworkClient(server: server, deviceName: {
+            lookups.withLock { $0 += 1 }
+            return "Test client"
+        }, transport: transport,
                                    identity: { ("", "", "stable-id") })
         let info = try await client.fetchServerInfo()
         #expect(info.uniqueId == "pc")
@@ -125,6 +149,7 @@ struct PCCommunicationTests {
         #expect(info.serverCertPEM == nil)
         #expect(HostReadiness.isReadyForStream(info))
         #expect(calls.withLock { $0 } == 1)
+        #expect(lookups.withLock { $0 } == 0)
     }
 
     @Test func wakePacketRetainsWireLayout() throws {

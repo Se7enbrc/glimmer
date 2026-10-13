@@ -10,6 +10,7 @@ extension IdentityManager {
 
     func load() throws -> Identity {
         guard protectedDataAvailable() else { throw IdentityStorageError.unavailable }
+        guard let defaults else { throw IdentityStorageError.defaultsUnavailable }
         if let cached { return cached }
         _ = try storageRoot()
 
@@ -64,7 +65,7 @@ extension IdentityManager {
             }
             let identity = Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
             try writeIdentityToFileStore(identity)
-            wipeUserDefaultsPlaintext()
+            wipeUserDefaultsPlaintext(defaults: defaults)
             defaults.set(Self.fileStorageVersion, forKey: Self.fileStorageFlag)
             cached = identity
             log.info("Migrated identity from UserDefaults plaintext to file store")
@@ -84,7 +85,7 @@ extension IdentityManager {
         }
         let identity = Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
         try writeIdentityToFileStore(identity)
-        wipeUserDefaultsPlaintext()
+        wipeUserDefaultsPlaintext(defaults: defaults)
         defaults.set(Self.fileStorageVersion, forKey: Self.fileStorageFlag)
         cached = identity
         log.info("Wrote freshly-generated identity to file store")
@@ -151,7 +152,7 @@ extension IdentityManager {
     /// Remove any plaintext PEMs left in UserDefaults. The uniqueID is
     /// wiped too - once we're in file-store mode the only authoritative copy
     /// lives on disk. Idempotent: removing missing keys is a no-op.
-    func wipeUserDefaultsPlaintext() {
+    func wipeUserDefaultsPlaintext(defaults: UserDefaults) {
         defaults.removeObject(forKey: IdentityKey.certificate)
         defaults.removeObject(forKey: IdentityKey.privateKey)
         defaults.removeObject(forKey: IdentityKey.uniqueID)

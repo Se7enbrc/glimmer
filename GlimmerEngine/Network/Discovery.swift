@@ -7,7 +7,7 @@ import os.log
 
 /// Continuously-updated list of hosts seen on the network.
 public actor HostDiscovery {
-    public static let shared = HostDiscovery()
+    package static let shared = HostDiscovery()
 
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Discovery")
     private var browsers: [NWBrowser] = []

@@ -83,9 +83,6 @@ enum TelemetryRenderer {
     static func jsonNumber(_ value: Double) -> String { "\(value)" }
 }
 
-/// Named by StreamingBackend; the audio receiver that defines it needs Network.
-public protocol NativeAudioSink: AnyObject, Sendable {}
-
 final class EnvSignalController: Sendable {
     static let shared = EnvSignalController()
     let streamLink = "unknown"

@@ -26,9 +26,17 @@ public actor PairingClient {
 
     // MARK: Public API
 
-    /// Walk the full PIN handshake. On success the returned `ServerInfo` has
-    /// `pairStatus = .paired` and `serverCertPEM` holding the host's pinned certificate.
-    public func pair(pin: String) async throws -> ServerInfo {
+    /// Bind the proven certificate to the expected PC before the shell can save it.
+    public func pair(pin: String, expectedUniqueId: String) async throws -> ServerInfo {
+        _ = try await runPairingFlow(pin: pin)
+        let verified = try await network.fetchServerInfo(requiredUniqueId: expectedUniqueId)
+        try Task.checkCancellation()
+        return verified
+    }
+
+    /// The Mac shell checks cancellation between the handshake and its pinned identity request.
+    /// It must verify /serverinfo before persisting this provisional result.
+    package func pair(pin: String) async throws -> ServerInfo {
         try await runPairingFlow(pin: pin)
     }
 
@@ -229,7 +237,7 @@ public actor PairingClient {
             "PairingStep",
             id: signpostID,
             "step=\(stepLabel)")
-        var fullQuery = ["devicename": network.deviceName, "updateState": "1"]
+        var fullQuery = ["devicename": network.deviceName(), "updateState": "1"]
         for (key, value) in query { fullQuery[key] = value }
         let response = try await network.request(
             path: "pair",
