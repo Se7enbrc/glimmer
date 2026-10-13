@@ -124,7 +124,7 @@ public final class InputForwarder {
     /// user makes in Settings while a stream is live take effect immediately
     /// - capturing the chord once at attach time meant the live edit silently
     /// did nothing until the next stream restart, which is a real UX trap.
-    public var quitHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultQuit }
+    package var quitHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultQuit }
 
     /// Called when the user presses the configured stats-overlay hotkey.
     /// The session owner wires this to toggle the in-stream stats overlay.
@@ -134,7 +134,7 @@ public final class InputForwarder {
 
     /// Provider for the stats-overlay hotkey. See `quitHotkeyProvider` for
     /// why this is a closure rather than a stored chord value.
-    public var statsHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultStats }
+    package var statsHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultStats }
 
     /// Called when the user presses the telemetry-bookmark chord (signal 4 -
     /// "that felt bad"). CLIENT-ONLY: the chord is consumed in the input path and
@@ -152,16 +152,16 @@ public final class InputForwarder {
 
     /// Provider for the bookmark chord. See `quitHotkeyProvider` for why this is
     /// a closure rather than a stored chord value.
-    public var bookmarkHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultBookmark }
+    package var bookmarkHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultBookmark }
 
     /// Read live like the quit/stats chords; toggles capture in every presentation.
-    public var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
+    package var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
 
     /// Precise scroll slices summed into whole wheel notches (ScrollQuantizer.swift).
     var scrollQuantizer = ScrollQuantizer()
 
     /// The mini player chord: a client-only toggle, never forwarded.
-    public var miniPlayerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultMiniPlayer }
+    package var miniPlayerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultMiniPlayer }
     public var onMiniPlayerHotkey: (@MainActor () -> Void)?
 
     /// Mini player: no hover grab, a click takes the pointer. Set live by
@@ -209,13 +209,13 @@ public final class InputForwarder {
     /// consults this on every gamepad update and fires `onQuitHotkey`
     /// when all chord buttons are held simultaneously. Closure so live
     /// edits in Settings take effect on the next gamepad event.
-    public var controllerQuitChordProvider: (@MainActor () -> ControllerQuitChord) = { .none } {
+    package var controllerQuitChordProvider: (@MainActor () -> ControllerQuitChord) = { .none } {
         didSet { observeControllerConfiguration() }
     }
 
     /// The user-recorded button set for the `.custom` quit chord.
     /// Consulted only when `controllerQuitChordProvider()` returns `.custom`.
-    public var customControllerChordProvider: (@MainActor () -> Set<ControllerButton>) = { [] } {
+    package var customControllerChordProvider: (@MainActor () -> Set<ControllerButton>) = { [] } {
         didSet { observeControllerConfiguration() }
     }
 

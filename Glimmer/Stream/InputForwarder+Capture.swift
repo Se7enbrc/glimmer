@@ -10,6 +10,7 @@
 //  that file for the forwarder's stored state.
 //
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics

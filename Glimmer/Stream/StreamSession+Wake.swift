@@ -19,6 +19,7 @@
 //  into one episode.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 

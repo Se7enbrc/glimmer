@@ -20,6 +20,7 @@
 //  AudioDecoder+Route.swift.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension AudioDecoder {

@@ -8,7 +8,7 @@
 //  how the 1 Hz audio fields tell a blackout from the fold beat.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import QuartzCore
 import Testing

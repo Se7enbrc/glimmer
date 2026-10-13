@@ -17,27 +17,27 @@ import Foundation
 extension NativeBackend {
     // MARK: - Telemetry / control (no native A/V receive yet)
 
-    func estimatedRtt() -> (rttMs: Double, varianceMs: Double)? {
+    package func estimatedRtt() -> (rttMs: Double, varianceMs: Double)? {
         withState { enetChannel }?.estimatedRtt()
     }
 
-    func enetHealth() -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)? {
+    package func enetHealth() -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)? {
         withState { enetChannel }?.health()
     }
 
-    func requestIdrFrame() {
+    package func requestIdrFrame() {
         withState { enetChannel }?.requestIdrFrame()
     }
 
-    func wakeReanchorAndPing() {
+    package func wakeReanchorAndPing() {
         withState { enetChannel }?.reanchorAckAndPing()
     }
 
-    func hdrMetadata() -> HdrMetadata? { withState { enetChannel }?.hdrMetadata() }
+    package func hdrMetadata() -> HdrMetadata? { withState { enetChannel }?.hdrMetadata() }
 
-    func launchUrlQueryParameters() -> String { "" }
+    package func launchUrlQueryParameters() -> String { "" }
 
-    func stageName(for stage: Int32) -> String {
+    package func stageName(for stage: Int32) -> String {
         StreamStageNames.name(for: stage)
     }
 
@@ -66,50 +66,50 @@ extension NativeBackend {
         return batcher.passThrough(plaintext(), channel: channel)
     }
 
-    func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 {
+    package func sendKeyboard(keyCode: Int16, action: Int8, modifiers: Int8, flags: Int8) -> Int32 {
         dispatchInput(
             InputEncoder.keyboard(keyCode: keyCode, action: action,
                                   modifiers: modifiers, flags: flags),
             channel: Enet.ctrlChannelKeyboard)
     }
 
-    func sendMouseMove(dx: Int16, dy: Int16) -> Int32 {
+    package func sendMouseMove(dx: Int16, dy: Int16) -> Int32 {
         // Merged: ACCUMULATE into the running delta; the batcher's 1ms tick sends
         // the total (splitting into Int16 chunks). NOT one packet per move event.
         guard let batcher = readyBatcher() else { return Self.inputNotReady }
         return batcher.accumulateMouseMove(dx: dx, dy: dy)
     }
 
-    func sendMousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 {
+    package func sendMousePosition(x: Int16, y: Int16, refW: Int16, refH: Int16) -> Int32 {
         // Merged: latest-only per tick.
         guard let batcher = readyBatcher() else { return Self.inputNotReady }
         return batcher.setAbsMouse(x: x, y: y, refW: refW, refH: refH)
     }
 
-    func sendMouseButton(action: Int8, button: Int32) -> Int32 {
+    package func sendMouseButton(action: Int8, button: Int32) -> Int32 {
         dispatchInput(
             InputEncoder.mouseButton(action: action, button: UInt8(truncatingIfNeeded: button)),
             channel: Enet.ctrlChannelMouse)
     }
 
-    func sendScroll(_ amount: Int16) -> Int32 {
+    package func sendScroll(_ amount: Int16) -> Int32 {
         dispatchInput(InputEncoder.scroll(amount), channel: Enet.ctrlChannelMouse)
     }
 
-    func sendHScroll(_ amount: Int16) -> Int32 {
+    package func sendHScroll(_ amount: Int16) -> Int32 {
         // hscroll rides the mouse channel (CTRL_CHANNEL_MOUSE, InputStream.c). It is Sunshine-only,
         // and a GameStream PC is refused before a stream starts, so the C's !IS_SUNSHINE guard is moot.
         dispatchInput(InputEncoder.hscroll(amount), channel: Enet.ctrlChannelMouse)
     }
 
-    func sendMultiController(num: Int16, mask: Int16, buttons: Int32, analog: GamepadAnalog) -> Int32 {
+    package func sendMultiController(num: Int16, mask: Int16, buttons: Int32, analog: GamepadAnalog) -> Int32 {
         // Merged: latest state per gamepad slot; a buttonFlags change flushes the
         // slot first so the host gets exact axes at the press edge.
         guard let batcher = readyBatcher() else { return Self.inputNotReady }
         return batcher.updateController(num: num, mask: mask, buttons: buttons, analog: analog)
     }
 
-    func sendControllerArrival(
+    package func sendControllerArrival(
         num: UInt8, mask: UInt16, type: UInt8,
         supportedButtons: UInt32, caps: UInt16
     ) -> Int32 {
@@ -130,7 +130,7 @@ extension NativeBackend {
             channel: channel)
     }
 
-    func sendControllerTouch(
+    package func sendControllerTouch(
         num: UInt8, eventType: UInt8, touchpadIndex: UInt8,
         pointerId: UInt32, x: Float, y: Float, pressure: Float
     ) -> Int32 {
@@ -150,7 +150,7 @@ extension NativeBackend {
     /// = LiSendUtf8TextEvent: whole code points, packed to the host's limit, on
     /// CTRL_CHANNEL_UTF8. Each packet flushes pending merged input first, so the
     /// text lands after everything already sent.
-    func sendUtf8Text(_ text: String) -> Int32 {
+    package func sendUtf8Text(_ text: String) -> Int32 {
         guard let batcher = readyBatcher() else { return Self.inputNotReady }
         return batcher.passThroughText(text)
     }

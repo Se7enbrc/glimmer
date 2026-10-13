@@ -8,6 +8,7 @@
 //  streamed, and how a failed quit reads in the launcher and the terminal.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

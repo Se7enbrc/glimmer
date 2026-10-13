@@ -9,6 +9,7 @@
 //  help and failures use. Nothing here touches a PC, the model or defaults.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

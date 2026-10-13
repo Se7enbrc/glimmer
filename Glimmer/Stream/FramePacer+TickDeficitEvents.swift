@@ -20,6 +20,7 @@
 //  reconcile flag drives.
 //
 
+import GlimmerEngine
 import QuartzCore
 import os
 

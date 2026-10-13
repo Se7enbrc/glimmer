@@ -13,6 +13,7 @@
 //  inline in `AppModel.swift`.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 

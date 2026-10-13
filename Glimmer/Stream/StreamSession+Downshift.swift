@@ -14,6 +14,7 @@
 //  place it is ever set, so rebuilding the SDP is the only way to change it.
 //
 
+import GlimmerEngine
 import Foundation
 import os
 

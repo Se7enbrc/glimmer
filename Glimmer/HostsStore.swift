@@ -11,6 +11,7 @@
 //  UserDefaults key is read-only there for one-shot migration.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import os.log

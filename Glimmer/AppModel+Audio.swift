@@ -8,6 +8,7 @@
 //  mid-stream on one gets its level back at the next launch. Delete next release.
 //
 
+import GlimmerEngine
 import AudioToolbox
 import CoreAudio
 import Foundation

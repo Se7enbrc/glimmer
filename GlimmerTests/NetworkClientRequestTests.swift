@@ -8,6 +8,7 @@
 //  it sends, how replies hydrate or fail, and that the launch query is redacted before logging.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

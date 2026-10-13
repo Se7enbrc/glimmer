@@ -9,6 +9,7 @@
 //  General pane run. Registration plumbing, not a pane, so it lives apart.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import ServiceManagement

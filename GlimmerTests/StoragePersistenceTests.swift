@@ -8,6 +8,7 @@
 //  cushion memory and the frame trace file, each on a scratch suite and temp directory.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

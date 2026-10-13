@@ -8,6 +8,7 @@
 //  how host cadence and input latency are attributed, and what the trace keeps.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import QuartzCore
 import Testing
@@ -150,7 +151,7 @@ struct TelemetryRowTests {
     }
 
     @Test func kernelUdpFullSocketCounterIsReadable() {
-        #expect(TelemetryExporter.udpFullSockTotal() != nil)
+        #expect(MacTelemetryCapture.udpFullSockTotal() != nil)
     }
 
     // MARK: - Host cadence (StatsCollector)

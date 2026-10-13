@@ -14,6 +14,7 @@
 //  receiver, recvQueue-confined as before.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension RtpAudioReceiver {

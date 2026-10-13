@@ -48,6 +48,7 @@
 //  carries the measured fault and the jittery-link argument.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension AudioDecoder {

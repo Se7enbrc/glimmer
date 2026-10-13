@@ -58,7 +58,7 @@ extension VideoDecoder: VideoSink {
     /// handleSubmitDecodeUnit's PLENTRY walk) into parameter sets + concatenated
     /// picture data, then hands them to the shared decode core. Returns
     /// StreamProtocol.DR_OK / DR_NEED_IDR.
-    nonisolated func submitDecodeUnit(_ unit: DecodeUnit) -> Int32 {
+    package nonisolated func submitDecodeUnit(_ unit: DecodeUnit) -> Int32 {
         guard isStreaming else { return StreamProtocol.DR_OK }
 
         // Stats: one decode-unit-in == one network-delivered frame;

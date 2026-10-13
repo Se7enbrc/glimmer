@@ -9,6 +9,7 @@
 //  entry points. Also quitting a PC's running app without streaming into it.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import Observation

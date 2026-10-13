@@ -11,6 +11,7 @@
 //  our client cert, then an HTTPS pairchallenge. Wire hex is lowercase; one wrong byte and the host rejects us.
 //
 
+import GlimmerEngine
 import CryptoKit
 import Foundation
 import os

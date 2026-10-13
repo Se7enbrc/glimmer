@@ -8,6 +8,7 @@
 //  answers through a handler, so request building and reply handling run without a socket.
 //
 
+import GlimmerEngine
 import Foundation
 import os
 @testable import Glimmer

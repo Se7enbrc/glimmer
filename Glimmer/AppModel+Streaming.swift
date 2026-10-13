@@ -9,6 +9,7 @@
 //  failure copy in AppModel+StreamFailure.swift.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox

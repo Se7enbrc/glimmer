@@ -3,6 +3,7 @@
 
 // First-frame fade-in and close after the native Space has finished exiting.
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import QuartzCore

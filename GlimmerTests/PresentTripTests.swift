@@ -9,6 +9,7 @@
 //  stays quiet on the burst that ends a network drought.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

@@ -8,6 +8,7 @@
 //  extras with a distinct value in every field, plus parsers for both wire forms.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -35,6 +36,7 @@ enum TelemetryRenderFixtures {
         snap.sinceConnectSeconds = 42.5
         snap.wallClockISO8601 = "2026-10-10T12:00:00Z"
         snap.serverName = "deadbeef"
+        snap.clientLabel = TelemetryRenderer.pseudonym("Test Mac")
         snap.buildCommit = "abc123"
         snap.buildDate = "2026-10-10"
         fillFrames(&snap)

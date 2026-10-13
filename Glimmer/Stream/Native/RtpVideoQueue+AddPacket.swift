@@ -6,6 +6,7 @@
 //
 //  RtpVideoQueue+AddPacket.swift
 //  RTP packet assembly on the single receive thread shared with reconstruction.
+import GlimmerEngine
 import Foundation
 
 extension RtpVideoQueue {

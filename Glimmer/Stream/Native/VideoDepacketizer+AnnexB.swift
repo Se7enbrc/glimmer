@@ -6,6 +6,7 @@
 // H.264/HEVC key-frame detection and parameter-set routing for Sunshine payloads.
 // Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 
+import GlimmerEngine
 import Foundation
 
 extension VideoDepacketizer {

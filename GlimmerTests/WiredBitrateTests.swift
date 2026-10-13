@@ -8,6 +8,7 @@
 //  gets, the floor, and the connect-time withdrawal when the RTT says Wi-Fi.
 //
 
+import GlimmerEngine
 import Testing
 @testable import Glimmer
 

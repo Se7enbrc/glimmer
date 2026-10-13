@@ -3,6 +3,7 @@
 
 // Text and traces stay inside the HDR video layer without a panel over the picture.
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import QuartzCore
@@ -185,7 +186,7 @@ public final class StatsOverlayLayer {
         }
     }
 
-    public func update(
+    package func update(
         snapshot: StreamStatsSnapshot,
         enabled: Set<StatsRow.Kind>,
         targetFps: Double,

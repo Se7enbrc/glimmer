@@ -9,6 +9,7 @@
 //  reconnect that rebuilds a decoder fed packets it never decodes. +Watchdog covers the present path.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import os

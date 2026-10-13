@@ -22,6 +22,7 @@
 //  Split out of FramePacer.swift to keep that file under the length limit.
 //
 
+import GlimmerEngine
 import Darwin
 import Foundation
 import QuartzCore

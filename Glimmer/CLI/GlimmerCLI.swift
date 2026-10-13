@@ -9,6 +9,7 @@
 //  result to the exit code. Verbs live in GlimmerCLI+*.swift.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 

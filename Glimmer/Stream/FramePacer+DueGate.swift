@@ -15,6 +15,7 @@
 //  dispatcher) and `decayTargetLocked` (the adaptive trim target).
 //
 
+import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import os

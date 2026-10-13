@@ -8,6 +8,7 @@
 //  Mac's certificate, so the in-memory identity and the exact-DER pin run end to end.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import Testing

@@ -96,6 +96,7 @@
 //  Pacing model ported from moonlight-qt's pacer.cpp (GPLv3); see CREDITS.md.
 //
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreMedia

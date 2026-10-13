@@ -8,6 +8,7 @@
 //  PC list and pins in a scratch store: the requests sent, the state left behind, and the copy shown.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

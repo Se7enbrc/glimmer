@@ -10,6 +10,7 @@
 //  Security (never the keychain) and written as the PEM files Sunshine and moonlight-qt expect.
 //
 
+import GlimmerEngine
 import Foundation
 import os.log
 import Security

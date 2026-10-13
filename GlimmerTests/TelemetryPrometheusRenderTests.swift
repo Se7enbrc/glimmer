@@ -8,6 +8,7 @@
 //  the builder's escaping and histogram layout, and which sections a sparse snapshot omits.
 //
 
+import GlimmerEngine
 import CryptoKit
 import Foundation
 import Testing
@@ -153,7 +154,7 @@ struct TelemetryPrometheusRenderTests {
 
     @Test func everySampleCarriesTheSessionClientAndPseudonymousHostLabels() {
         let body = fullBody()
-        let shared = "session=\"abcd1234\",client=\"\(TelemetryRenderer.clientLabel)\",host=\"deadbeef\""
+        let shared = "session=\"abcd1234\",client=\"\(Fixtures.snapshot().clientLabel)\",host=\"deadbeef\""
         let samples = body.split(separator: "\n").filter { !$0.hasPrefix("#") }
         #expect(samples.count > 200)
         #expect(samples.allSatisfy { $0.contains(shared) })

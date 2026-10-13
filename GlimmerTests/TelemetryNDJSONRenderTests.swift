@@ -8,6 +8,7 @@
 //  sparse one omits, the latency percentile fields, escaping, and number formatting.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -37,7 +38,7 @@ struct TelemetryNDJSONRenderTests {
         #expect(row["build_commit"] as? String == "abc123")
         #expect(row["build_date"] as? String == "2026-10-10")
         let client = try #require(row["client"] as? String)
-        #expect(client == TelemetryRenderer.clientLabel)
+        #expect(client == Fixtures.snapshot().clientLabel)
         #expect(client.count == 8 && client.allSatisfy(\.isHexDigit))
         check(row, ["t_connect_s": 42.5])
     }
@@ -277,10 +278,10 @@ struct TelemetryNDJSONRenderTests {
     }
 
     @Test func thermalOrdinalsFollowSeverity() {
-        #expect(ProcessMetrics.thermalOrdinal(.nominal) == 0)
-        #expect(ProcessMetrics.thermalOrdinal(.fair) == 1)
-        #expect(ProcessMetrics.thermalOrdinal(.serious) == 2)
-        #expect(ProcessMetrics.thermalOrdinal(.critical) == 3)
+        #expect(ProcessThermalState.thermalOrdinal(.nominal) == 0)
+        #expect(ProcessThermalState.thermalOrdinal(.fair) == 1)
+        #expect(ProcessThermalState.thermalOrdinal(.serious) == 2)
+        #expect(ProcessThermalState.thermalOrdinal(.critical) == 3)
     }
 
     @Test func processSampleReportsALiveThreadCount() {

@@ -8,6 +8,7 @@
 //  query values, the request helpers, and what the diagnostic dumps redact before logging.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

@@ -8,6 +8,7 @@
 //  spec-chip rows, plus the empty-pairing and stream-ended states.
 //
 
+import GlimmerEngine
 import Accessibility
 import AppKit
 import SwiftUI

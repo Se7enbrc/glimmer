@@ -3,6 +3,7 @@
 
 // Wake and Connect work and notifications share per-model cancellation state.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import UserNotifications

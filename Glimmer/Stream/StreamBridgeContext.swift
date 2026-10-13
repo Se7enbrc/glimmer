@@ -12,6 +12,7 @@
 //  contract.
 //
 
+import GlimmerEngine
 import Foundation
 import os
 

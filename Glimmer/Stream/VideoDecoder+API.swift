@@ -10,6 +10,7 @@
 //  VideoDecoder.swift to keep each unit focused; see that file for stored state.
 //
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreMedia
@@ -39,7 +40,7 @@ extension VideoDecoder {
     /// `minWindowSeconds`-wide average while the live latency gauges refresh
     /// every call. Defaults to 0 (reset-every-read) to preserve every existing
     /// caller's behaviour.
-    public func statsSnapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
+    package func statsSnapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
         var snap = statsCollector.snapshot(minWindowSeconds: minWindowSeconds)
         snap.videoCodec = Self.codecDisplayName(for: streamVideoFormat)
         if streamFps > 0 {
@@ -162,7 +163,7 @@ extension VideoDecoder {
     /// `StreamStatsSnapshot` is public, so this one can be too. The rest return
     /// module-internal types (`FramePacer.LivenessSnapshot`) and stay internal -
     /// the only caller is StreamSession, in this module.
-    public nonisolated func telemetryStatsSnapshot() -> StreamStatsSnapshot {
+    package nonisolated func telemetryStatsSnapshot() -> StreamStatsSnapshot {
         var snap = statsCollector.snapshot()
         // Surface the negotiated bitrate ceiling so the exporter can publish the
         // goodput-vs-ceiling (P1) signal; the atomic makes this off-main read safe.

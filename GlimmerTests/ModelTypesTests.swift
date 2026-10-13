@@ -9,6 +9,7 @@
 //  checked against AGENTS.md (no em dashes, no exclamation marks, no "host").
 //
 
+import GlimmerEngine
 import Foundation
 import SwiftUI
 import Testing
@@ -23,6 +24,17 @@ struct ModelTypesTests {
     private func pc(apps: [LibraryApp]) -> Glimmer.Host {
         Host(id: "u", name: "Tower", customName: nil, localAddress: nil, manualAddress: nil,
              apps: apps, lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+    }
+
+    @Test func theMacWrapperUsesTheSharedPCRecord() {
+        var host = pc(apps: [app(1, "Desktop")])
+        #expect(host.record.displayName == host.displayName)
+        #expect(host.record.app(named: "desktop") == host.app(named: "desktop"))
+        host.wakeOnLAN = false
+        #expect(!host.record.wakeOnLAN)
+        host.record.wakeOnLAN = true
+        #expect(host.wakeOnLAN)
+        #expect(host.launcherStyle == .buttons)
     }
 
     @Test func aCustomNameWinsOverThePCsOwn() {

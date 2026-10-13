@@ -4,69 +4,6 @@
 import GlimmerEngine
 import AppKit
 
-struct InputReleaseLedger {
-    enum Release: Hashable {
-        case key(VKScanCode)
-        case mouse(Int32)
-        case controller(UInt8)
-    }
-
-    var held: Set<Release> = []
-    var pending: [Release] = []
-    var keyReleaseModifiers: [VKScanCode: Int8] = [:]
-    var controllerRemovals: Set<UInt8> = []
-    var flushCount = 0
-    var reconciledCount = 0
-    var lastNoticeTime: TimeInterval = 0
-    // Accepted releases may still be unacknowledged when a connection closes.
-    private var connectionInputs: [Release] = []
-
-    mutating func hold(_ input: Release) {
-        held.insert(input)
-        remember(input)
-    }
-
-    mutating func remember(_ input: Release) {
-        if !connectionInputs.contains(input) { connectionInputs.append(input) }
-    }
-
-    mutating func release(_ input: Release, modifiers: Int8 = 0) {
-        guard held.contains(input), !pending.contains(input) else { return }
-        pending.append(input)
-        if case .key(let key) = input { keyReleaseModifiers[key] = modifiers }
-    }
-
-    mutating func releaseAll(connectionLost: Bool = false) {
-        if connectionLost {
-            held.formUnion(connectionInputs)
-            keyReleaseModifiers.removeAll()
-        }
-        for input in connectionInputs { release(input) }
-        if connectionLost {
-            // A replacement announces pads before its live-state resync, never an old neutral frame.
-            held = held.filter { if case .controller = $0 { return false }; return true }
-            pending.removeAll { if case .controller = $0 { return true }; return false }
-            controllerRemovals.removeAll()
-            connectionInputs.removeAll()
-        }
-    }
-
-    mutating func releaseKeyboardAndMouse(preservingMouse: Set<Int32> = []) {
-        for input in connectionInputs {
-            if case .controller = input { continue }
-            if case .mouse(let button) = input, preservingMouse.contains(button) { continue }
-            release(input)
-        }
-    }
-
-    mutating func accepted(_ input: Release) {
-        held.remove(input)
-        if case .key(let key) = input { keyReleaseModifiers[key] = nil }
-        if case .controller(let slot) = input { controllerRemovals.remove(slot) }
-        pending.removeAll { $0 == input }
-    }
-}
-
 extension InputForwarder {
     var ownsKeyboard: Bool {
         guard let window else { return true }

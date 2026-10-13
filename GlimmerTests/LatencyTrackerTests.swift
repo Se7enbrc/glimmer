@@ -6,6 +6,7 @@
 //  Latency histogram buckets, the in-flight frame map, cadence and trace lines.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

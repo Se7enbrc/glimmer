@@ -16,6 +16,7 @@
 //  receiver.
 //
 
+import GlimmerEngine
 import Foundation
 import Darwin
 

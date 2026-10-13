@@ -8,6 +8,7 @@
 //  which order, when a busy PC is cancelled or needs a takeover, and the copy a refusal carries.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

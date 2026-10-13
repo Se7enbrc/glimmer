@@ -3,6 +3,7 @@
 
 // Text commits preserve held game input; clipboard pastes release it first.
 
+import GlimmerEngine
 import AppKit
 
 /// The text rules, pure so they are testable without a pasteboard or a stream.

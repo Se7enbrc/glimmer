@@ -6,6 +6,7 @@
 // The socket loop only timestamps and queues datagrams; the decode worker owns RTP/FEC and startup state.
 // Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 
+import GlimmerEngine
 import Foundation
 import Darwin
 

@@ -12,6 +12,7 @@
 //  see that file for the remaining hero pieces.
 //
 
+import GlimmerEngine
 import SwiftUI
 
 enum ChipPresentation: Equatable {

@@ -9,6 +9,7 @@
 //  Details (refreshed while the menu is open), stop, overlay, pairing, takeover.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import GameController

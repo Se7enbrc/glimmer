@@ -8,6 +8,7 @@
 //  of the decoder, overlay and pill, so tests drive one tick at a time.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import os

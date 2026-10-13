@@ -35,6 +35,7 @@
 //  state + the observer-token storage.
 //
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import Foundation

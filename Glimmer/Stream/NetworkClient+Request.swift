@@ -12,6 +12,7 @@
 //  hex). Split out of Network.swift to keep each unit focused.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import os.log

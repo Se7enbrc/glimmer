@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import Foundation
 
 /// A probe runs on the same queue as completions and ACKs; the lock protects its outstanding timestamp.

@@ -9,6 +9,7 @@
 //  lives on the class; AudioDecoder.swift documents the locking.
 //
 
+import GlimmerEngine
 import AVFoundation
 import Foundation
 

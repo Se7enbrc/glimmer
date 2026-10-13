@@ -7,6 +7,7 @@
 //  Stream lifecycle, pairing, Sunshine web UI and menu-bar accessors.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox

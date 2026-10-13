@@ -5,6 +5,7 @@
 // since extensions can't hold it; the machinery lives in the AudioDecoder+*.swift
 // siblings by topic: engine, decode, meter, prime, route, cushion memory, resampler.
 
+import GlimmerEngine
 import Foundation
 import AVFoundation
 import CoreAudio

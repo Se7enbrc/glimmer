@@ -9,6 +9,7 @@
 //  tag promises HDR only on a display that can show it.
 //
 
+import GlimmerEngine
 import Testing
 @testable import Glimmer
 

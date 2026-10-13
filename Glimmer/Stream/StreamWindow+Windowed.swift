@@ -28,6 +28,7 @@
 //  out lives in StreamWindow+PointerAffordances.swift.
 //
 
+import GlimmerEngine
 import AppKit
 
 extension StreamWindow {

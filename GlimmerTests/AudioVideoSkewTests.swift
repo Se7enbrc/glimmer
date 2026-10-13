@@ -8,6 +8,7 @@
 //  how its session percentiles read the top of the distribution.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

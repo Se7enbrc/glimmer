@@ -4,6 +4,7 @@
 // Decisions behind system services, with the services stood in: wake notices,
 // Shortcuts streams, display defaults, quitting, paste and the PIN page.
 
+import GlimmerEngine
 import Foundation
 import Testing
 import UserNotifications

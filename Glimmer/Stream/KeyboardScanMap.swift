@@ -20,26 +20,8 @@
 //  Returns nil for keys we don't know how to forward.
 //
 
+import GlimmerEngine
 import Carbon.HIToolbox
-
-/// One key as the host receives it: the Windows VK plus the keyboard-event
-/// flags. An integer literal is a plain VK with no flags.
-struct VKScanCode: Hashable {
-    /// SS_KBE_FLAG_NON_NORMALIZED: the VK is already in the PC's layout.
-    static let nonNormalized: Int8 = 0x01
-
-    let vk: Int16
-    var flags: Int8 = 0
-
-    /// The high bit asks the host to skip its layout-correction pass.
-    var wireCode: Int16 { Int16(bitPattern: 0x8000 | UInt16(bitPattern: vk)) }
-}
-
-extension VKScanCode: ExpressibleByIntegerLiteral {
-    init(integerLiteral vk: Int16) {
-        self.init(vk: vk)
-    }
-}
 
 // Flat positional map: Carbon kVK_* keyCode → Windows VK_* scancode. A data
 // table rather than a switch so the lookup is O(1) and reads as the pure

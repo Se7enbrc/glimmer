@@ -9,6 +9,7 @@
 //  nor CA trust is ever in the path.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import Security

@@ -8,7 +8,7 @@
 //  pacing bring-up and fallback, and the RTP clock recovered from a sample's PTS.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreMedia

@@ -9,6 +9,7 @@
 //  the stream runs with its window and permissions, never a second instance.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 

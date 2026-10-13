@@ -9,6 +9,7 @@
 //  StreamRouteProbe; a Wi-Fi route adds a 1 Hz PHY-rate read off the main thread.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import SwiftUI

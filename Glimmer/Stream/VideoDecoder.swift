@@ -5,6 +5,7 @@
 // Lifecycle and shared state live here; decode, pacing and HDR details live in extensions.
 // See docs/ARCHITECTURE.md for the pipeline and the display-layer choice.
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreMedia
