@@ -38,7 +38,7 @@ extension StreamSession {
         // video packet fragments. An explicit .local/.remote from the caller is
         // honoured as-is; only `.auto` consults the probe.
         let path = config.remoteness == .auto
-            ? StreamPathMTU.probe(host: server.address,
+            ? MacStreamPath.probe(host: server.address,
                                   rttPort: UInt16(server.httpsPort), rtt: rtt) : StreamPathProbe()
         let resolvedRemoteness: Remoteness
         switch config.remoteness {
@@ -174,6 +174,10 @@ extension StreamSession {
             // Wiring awaited the main actor; stop may have finished meanwhile.
             // Check before attaching sinks so teardown cannot regain the decoder.
             try checkAttempt(deadline: deadline)
+            if let native = backend as? NativeBackend {
+                bridge?.setEventSource(native)
+                native.attachConnectionEvents(NativeConnectionEvents(bridge: bridge, backend: native))
+            }
             backend.attachVideoSink(setup.2)
             backend.attachAudioSink(audioDecoder)
 

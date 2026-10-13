@@ -11,7 +11,7 @@
 import Foundation
 
 /// Splits a fuzz input into datagrams: [clock step][length, 2 bytes BE][bytes].
-func datagrams(_ input: UnsafeRawBufferPointer) -> [(stepUs: UInt64, bytes: [UInt8])] {
+package func datagrams(_ input: UnsafeRawBufferPointer) -> [(stepUs: UInt64, bytes: [UInt8])] {
     var out: [(UInt64, [UInt8])] = []
     var cursor = 0
     while cursor + 3 <= input.count {
@@ -83,7 +83,7 @@ enum TelemetryRenderer {
     static func jsonNumber(_ value: Double) -> String { "\(value)" }
 }
 
-final class EnvSignalController: Sendable {
-    static let shared = EnvSignalController()
+final class TransportRoute: Sendable {
+    static let shared = TransportRoute()
     let streamLink = "unknown"
 }

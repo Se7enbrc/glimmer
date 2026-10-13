@@ -359,25 +359,6 @@ final class ControllerBattery: @unchecked Sendable {
     }
 }
 
-// MARK: - NativeBackend battery uplink
-
-extension NativeBackend {
-    /// = LiSendControllerBatteryEvent (InputStream.c). Routes the report
-    /// through the batcher's quiet pass-through (ordering preserved, no
-    /// input-activity stamp - a device report is not user input) on the
-    /// pad's gamepad channel, the C's channel choice. Deliberately NO
-    /// feature-flag gate: unlike touch/motion, the C checks only
-    /// `initialized` (readyBatcher here) and IS_SUNSHINE (structural - this
-    /// wire only speaks Sunshine). Lives here, not NativeBackend+Input.swift,
-    /// so the battery uplink reads end-to-end in this file.
-    public func sendControllerBattery(num: UInt8, state: UInt8, percentage: UInt8) -> Int32 {
-        guard let batcher = readyBatcher() else { return Self.inputNotReady }
-        return batcher.passThroughReport(
-            InputEncoder.controllerBattery(num: num, state: state, percentage: percentage),
-            channel: gamepadChannel(Int(num)))
-    }
-}
-
 // MARK: - Local overlay read (StreamSession+Watchdog)
 
 extension InputForwarder {

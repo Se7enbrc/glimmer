@@ -3,6 +3,7 @@
 
 // Loopback tests pin the Darwin record layout and keep payloads, peer addresses and timestamps paired.
 
+@testable import GlimmerEngine
 import Darwin
 import Foundation
 import Testing
@@ -60,7 +61,7 @@ struct DatagramBatchTests {
         try #require(waitForQueuedDatagrams(Int32(sizes.count), on: receiver))
 
         let queuedAt = mach_absolute_time()
-        let batch = DatagramBatch(capacity: 32, stride: 1500)
+        let batch = DatagramBatch(capacity: 32, stride: 1500, receiveBatch: MacTransport.receiveBatch)
         let expected = try #require(UdpPinger.makeSockaddr(for: .init("127.0.0.1"), port: 1))
         let other = try #require(UdpPinger.makeSockaddr(for: .init("127.0.0.2"), port: 1))
         if batched { #expect(batch.receive(from: receiver) == sizes.count) }

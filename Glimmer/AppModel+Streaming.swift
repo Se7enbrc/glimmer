@@ -153,7 +153,7 @@ extension AppModel {
                 return
             }
             // The Swift-native engine is the only path.
-            let session = StreamSession(backend: NativeBackend(), makeNetwork: makeNetwork)
+            let session = StreamSession(backend: MacTransport.makeBackend(), makeNetwork: makeNetwork)
             self.nativeSession = session
             await session.authorizeTakeover(takeoverAuthorized)
             if let launch = cfg.bitrateDecision {

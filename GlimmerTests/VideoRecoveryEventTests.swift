@@ -8,7 +8,7 @@
 //  a key-frame row that says whether it was asked for, and a row per long gap.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

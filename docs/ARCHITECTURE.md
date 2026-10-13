@@ -110,13 +110,13 @@ renamed or removed.
 
 ## The `StreamingBackend` boundary
 
-`Glimmer/Stream/StreamingBackend.swift` is **the** streaming-engine abstraction:
-one protocol for lifecycle, telemetry and input uplink, plus sink protocols for
-the inbound direction (`VideoSink`, `AudioSink`, `ConnectionEvents`), plus
-Glimmer-owned value types (`BackendServerInfo`, `BackendStreamConfig`,
-`DecodeUnit`, `DecodeBuffer`, `OpusConfig`, `HdrMetadata`, `GamepadAnalog`) so
-nothing outside the engine sees wire-level types. `NativeBackend` is the sole
-conformer.
+`GlimmerEngine/Protocol/StreamingBackend.swift` is **the** streaming-engine
+abstraction: one protocol for lifecycle, telemetry and input uplink, plus sink
+protocols for the inbound direction (`VideoSink`, `AudioSink`,
+`ConnectionEvents`), plus Glimmer-owned value types (`BackendServerInfo`,
+`BackendStreamConfig`, `DecodeUnit`, `DecodeBuffer`, `OpusConfig`,
+`HdrMetadata`, `GamepadAnalog`) so nothing outside the engine sees wire-level
+types. `NativeBackend` is the sole conformer.
 
 The method set deliberately mirrors the protocol's own surface: the outbound
 input methods map 1:1 to its `LiSend*` family, and doc comments keep the `Li*`
@@ -126,17 +126,22 @@ engine satisfies.
 Protocol constants live in a Swift mirror (`StreamProtocolConstants.swift`,
 `enum StreamProtocol`); nothing imports a `Limelight.h`.
 
-## The native engine (`Glimmer/Stream/Native/`)
+## The native engine (`GlimmerEngine/Network/` and `Session/`)
 
-`GlimmerEngine.framework` owns the slice 1 wire foundation: ENet layouts,
-Reed-Solomon and fixed audio FEC, input encoding, RTSP/SDP parsers, protocol
-constants, control crypto and their stream/Opus/controller values. The app keeps
-transport, audio shard pooling and diagnostic video decryption. The audio
-recovery byte loop stays in the framework beside its GF(256) arithmetic. Pure
-sequence comparison, Opus defaults, RTSP version and encrypted-video packet
-sizing live with the wire types so this dependency runs only from app to engine.
-No wire values, algorithms, launch requests or diagnostics changed during
-extraction.
+`GlimmerEngine.framework` owns the wire formats, crypto, FEC, RTSP/ENet/RTP
+transport, reorder/depacketization, packet workers and native backend. All
+packet loops compile together. The app supplies connection events, media sinks,
+Mac batch receive/realtime scheduling and route observations through adapters
+under `Glimmer/EngineAdapters/`. Decoder recovery capabilities come from the
+supplied video sink. `NativeConnectionEvents` retains session identity and
+ordered main-queue delivery; late events cannot reach a replacement backend.
+
+The source package exposes the same transport through `StreamConnection`, a
+one-attempt actor with supplied media sinks and identity-tagged callbacks. Its
+local stop leaves the PC app running; Mac StreamSession retains its existing
+cancel/reconnect policy. See ENGINE_EXTRACTION.md for the public API and
+remaining media extraction slices. Wire values, launch requests, defaults and
+diagnostics are unchanged.
 
 `NativeBackend` runs the whole bring-up on a dedicated connect thread:
 

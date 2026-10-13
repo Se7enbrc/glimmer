@@ -8,7 +8,7 @@
 //  zero moved instead of waiting: paced, burst-then-drain, and the quiet-socket resolution.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

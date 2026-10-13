@@ -14,6 +14,14 @@ import Testing
 @testable import Glimmer
 
 struct EnvSignalStateMachineTests {
+    @Test func routeObservationsStayWithTheirController() {
+        let first = EnvSignalController()
+        let second = EnvSignalController()
+        first.streamLinkValue = "wired"
+        #expect(second.streamLink == "unknown")
+        second.streamLinkValue = "wifi"
+        #expect(first.streamLink == "wired")
+    }
 
     private func associated(rssi: Int?, rate: Double?) -> WiFiSnapshot {
         WiFiSnapshot(linkState: .associated, rssiDbm: rssi, txRateMbps: rate)

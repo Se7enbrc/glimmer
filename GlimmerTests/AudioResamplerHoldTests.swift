@@ -9,6 +9,7 @@
 //  trims fire, persists a window mean, and remembers skew per output device.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

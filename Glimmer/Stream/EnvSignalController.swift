@@ -65,7 +65,7 @@ import Foundation
 /// session's 2 s tick; read by the RTP ping loops and the pacer. `@unchecked Sendable`:
 /// cross-thread fields are lock-guarded, evidence state is `feedQueue`-confined.
 final class EnvSignalController: @unchecked Sendable {
-    static let shared = EnvSignalController()
+    static let shared = EnvSignalController(transportRoute: .shared)
     // Module-internal (not private) so the transition breadcrumb in
     // EnvSignalController+Evidence.swift logs under the same category.
     static let cat = "EnvSignal"
@@ -83,11 +83,20 @@ final class EnvSignalController: @unchecked Sendable {
     // lock across the file split. `pingLoopStartNanos` below stays private:
     // only this file's keepalive actuation touches it.
 
+    let transportRoute: TransportRoute
+
+    init(transportRoute: TransportRoute = TransportRoute()) {
+        self.transportRoute = transportRoute
+    }
+
     let lock = NSLock()
     var stateValue: EnvState = .clear
     /// Last published stream route class (a `LinkClass.rawValue`:
     /// "wired"/"wifi"/"tunnel"/"unknown").
-    var streamLinkValue = LinkClass.unknown.rawValue
+    var streamLinkValue: String {
+        get { transportRoute.streamLink }
+        set { transportRoute.streamLink = newValue }
+    }
     /// Monotonic instant of the last session feed (0 = never) - the cadence
     /// only trusts the route within `routeTrustHorizonNanos` of this.
     var lastFedNanos: UInt64 = 0

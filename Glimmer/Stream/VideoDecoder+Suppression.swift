@@ -183,7 +183,7 @@ extension VideoDecoder {
     /// Seconds since this connection's last gate lift, or `.infinity` without one.
     /// The watchdog floors decode idle at the lift so a gated span cannot cause
     /// a premature trip; a missing post-gate IDR still gets the normal timeout.
-    nonisolated func secondsSinceDecodeGateLifted() -> Double {
+    nonisolated public func secondsSinceDecodeGateLifted() -> Double {
         presentSuppressedLock.lock(); defer { presentSuppressedLock.unlock() }
         guard let lifted = _decodeGateLiftedAtNanos else { return .infinity }
         return Double(now() &- lifted) / 1_000_000_000

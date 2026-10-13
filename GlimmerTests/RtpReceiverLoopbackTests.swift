@@ -8,7 +8,7 @@
 //  sent back to the ping's source runs the real receive loop through to the sink.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

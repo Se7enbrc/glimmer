@@ -179,27 +179,6 @@ final class AudioPCMBufferPool: @unchecked Sendable {
     }
 }
 
-// Formatting and preferences can block; their work never belongs to the packet or render threads.
-enum AudioDiagnostics {
-    static let queue = DispatchQueue(label: "io.ugfugl.Glimmer.audio.diagnostics", qos: .utility)
-
-    static func notice(_ message: @autoclosure @escaping @Sendable () -> DiagMessage, _ category: String) {
-        queue.async { Diag.notice(message(), category) }
-    }
-
-    static func warn(_ message: @autoclosure @escaping @Sendable () -> DiagMessage, _ category: String) {
-        queue.async { Diag.warn(message(), category) }
-    }
-
-    static func error(_ message: @autoclosure @escaping @Sendable () -> DiagMessage, _ category: String) {
-        queue.async { Diag.error(message(), category) }
-    }
-
-    static func info(_ message: @autoclosure @escaping @Sendable () -> DiagMessage, _ category: String) {
-        queue.async { Diag.info(message(), category) }
-    }
-}
-
 // Render progress proves HAL is running; query the device only when that evidence stops.
 struct AudioRenderProgress {
     private var lastFrames: Int64?
