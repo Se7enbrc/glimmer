@@ -544,6 +544,7 @@
 		E26101210000000000000014 /* GlimmerEngine.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; };
 		E26101210000000000000015 /* GlimmerEngine.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E26101210000000000000001 /* GlimmerEngine.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E26101220000000000000002 /* AudioFecDecoder+Recovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26101220000000000000001 /* AudioFecDecoder+Recovery.swift */; };
+		E26101300000000000000001 /* EnginePackageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26101300000000000000002 /* EnginePackageTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1142,6 +1143,7 @@
 		E26101210000000000000011 /* AudioFecDecoder+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/AudioFecDecoder+Recovery.swift"; sourceTree = "<group>"; };
 		E26101210000000000000001 /* GlimmerEngine.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = GlimmerEngine.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E26101220000000000000001 /* AudioFecDecoder+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioFecDecoder+Recovery.swift"; sourceTree = "<group>"; };
+		E26101300000000000000002 /* EnginePackageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../EnginePackageTests/EnginePackageTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1589,6 +1591,7 @@
 				D2000024 /* InputEncoderTests.swift */,
 				D2000CR1 /* CruiseTraversalTests.swift */,
 				D2000026 /* SdpCodecTests.swift */,
+				E26101300000000000000002 /* EnginePackageTests.swift */,
 				D2B00003 /* BitrateDownshiftTests.swift */,
 				D2B00001 /* StreamPathMTUTests.swift */,
 				DEC0DE202609230800000002 /* StreamReconnectTests.swift */,
@@ -2293,6 +2296,7 @@
 				D2000025 /* InputEncoderTests.swift in Sources */,
 				D2000CR2 /* CruiseTraversalTests.swift in Sources */,
 				D2000027 /* SdpCodecTests.swift in Sources */,
+				E26101300000000000000001 /* EnginePackageTests.swift in Sources */,
 				D2B00004 /* BitrateDownshiftTests.swift in Sources */,
 				D2B00002 /* StreamPathMTUTests.swift in Sources */,
 				DEC0DE202609230800000001 /* StreamReconnectTests.swift in Sources */,

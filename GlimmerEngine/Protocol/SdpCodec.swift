@@ -11,12 +11,12 @@ import Foundation
 
 // MARK: - RTSP message
 
-/// One RTSP request or response. Headers are an ORDERED array because the host
+/// One RTSP request or response. Headers are an ORDERED array because the PC
 /// is sensitive to header order (CSeq first, then X-GS-ClientVersion). Lookup is
 /// case-SENSITIVE to match the C strcmp.
-package struct RtspMessage {
+public struct RtspMessage: Sendable {
     /// rtspClientVersion for app version 7, the one Sunshine reports (RtspConnection.c).
-    package static let clientVersion = 14
+    public static let clientVersion = 14
 
     /// Request command (e.g. "OPTIONS"); nil for parsed responses.
     package var command: String?
@@ -27,11 +27,11 @@ package struct RtspMessage {
     /// Response status string.
     package var statusString: String = ""
     /// Ordered (name, content) pairs.
-    package var headers: [(String, String)] = []
+    public var headers: [(String, String)] = []
     /// Raw payload bytes (SDP for ANNOUNCE; nil otherwise).
     package var payload: Data?
 
-    package init(command: String? = nil, target: String? = nil) {
+    public init(command: String? = nil, target: String? = nil) {
         self.command = command
         self.target = target
     }
@@ -44,7 +44,7 @@ package struct RtspMessage {
 
     /// Serialize a REQUEST to wire bytes:
     /// "<cmd> <target> RTSP/1.0\r\n" + headers + "\r\n" + payload.
-    package func serialize() -> Data {
+    public func serialize() -> Data {
         var text = "\(command ?? "") \(target ?? "") RTSP/1.0\r\n"
         for (name, content) in headers {
             text += "\(name): \(content)\r\n"

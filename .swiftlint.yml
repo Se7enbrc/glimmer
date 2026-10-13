@@ -6,6 +6,7 @@ included:
   - Glimmer
   - GlimmerEngine
   - GlimmerTests
+  - EnginePackageTests
   - helper
   - LoginHelper
   # scripts/ is build-time tooling (icon generators, not product code) - not

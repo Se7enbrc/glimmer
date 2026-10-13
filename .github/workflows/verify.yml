@@ -194,6 +194,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Build and test the source package
+        run: |
+          swift build -Xswiftc -warnings-as-errors
+          swift test -Xswiftc -warnings-as-errors
+
       - name: Build engine for device and Simulator
         run: |
           xcodebuild -version

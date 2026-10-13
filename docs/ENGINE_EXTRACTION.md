@@ -32,6 +32,41 @@ recreate one. The current datagram fallback is `recvmsg` in
 `DatagramBatch.receiveOne`, preserving ancillary timestamps; earlier
 roadmap/AGENTS references to `recvfrom` describe an older path.
 
+## External source package, slice 1 follow-up
+
+`Package.swift` now exposes the existing `GlimmerEngine/` source tree as the
+`GlimmerEngine` library for macOS/iOS 26. The external `glimmer-ios` consumer is
+the distribution need described in the roadmap. The Phase 1 framework decision
+above remains the Mac build path; no Mac make, signing or embedding step
+changes.
+
+Swift tools 6.2 supplies the platform 26 declarations; Swift 6 language mode
+supplies complete concurrency checking and the enabled Swift 6 language
+features. SwiftPM sets package identity itself, so no unsafe `-package-name`
+override is needed. Package-only members remain inaccessible to external apps.
+The small public `RtspMessage` request initializer, ordered headers, serializer
+and protocol version provide a real linking check without broadening the whole
+wire API.
+
+Debug and Release use SwiftPM’s standard `-Onone`/`-O` settings. The framework’s
+Clang-only stack/typed-allocation settings have no source to act on in this pure
+Swift package. Bundle hardening, install paths and code signing remain consumer
+responsibilities. There are no resources, plugins, dependencies, copied sources
+or extra network requests in the package.
+
+Run `swift build -Xswiftc -warnings-as-errors` and
+`swift test -Xswiftc -warnings-as-errors`. Verify’s required engine job runs
+both alongside the device and Simulator framework builds. `EnginePackageTests`
+also belongs to the existing Mac test target. The iOS consumer compiles the
+public API from a separate package identity, without `@testable` or
+`-package-name` access.
+
+The source package has no independent semantic version yet; its consumer pins an
+exact commit. Publish this change before updating the consumer revision. The
+uncommitted scaffold uses a documented local-path override until that commit
+exists. Slice 1 links but cannot discover, pair or stream; the framework handoff
+and hardware performance gates remain open.
+
 ## Ownership map
 
 Complete inventory: **245 Stream files, 4 Models files, all 63 root Swift files,
