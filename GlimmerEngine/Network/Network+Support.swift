@@ -1,29 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
-
-//
-//  Network+Support.swift
-//
-//  Supporting types for NetworkClient: the optional-knobs extension on
-//  StreamConfig and the SAX XML tree builder. Split out of Network.swift to keep
-//  each unit focused.
-//
 
 import Foundation
 import os.log
 
-// MARK: - Optional knobs on StreamConfig
-//
-// The shared StreamConfig type in Types.swift doesn't yet expose the
-// remote-input AES key / IV - they're internal to the launch handshake and
-// not something a caller should set. We extend it here with two computed
-// Optional<Data> stubs so the launch path has a single, testable seam to
-// override the entropy. In production both come back nil and we generate
-// fresh randoms.
+// Tests can pin launch entropy; production always generates fresh input-channel key material.
 
-extension StreamConfig {
+extension StreamRequest {
     /// Optional override for the AES key used on the remote-input channel.
     /// Tests pin this so they can replay captured launches.
     var remoteInputKey: Data? { nil }
@@ -32,10 +16,8 @@ extension StreamConfig {
 }
 
 // MARK: - XML parser
-//
-// Builds an in-memory XMLNode tree from raw bytes. We deliberately do this by
-// hand on top of XMLParser instead of pulling in SWXMLHash or similar - the
-// GameStream protocol is tiny and the dependency cost isn't worth it.
+
+// Sunshine needs only this small XML tree, so no general parser dependency is warranted.
 
 final class XMLTreeBuilder: NSObject, XMLParserDelegate {
 

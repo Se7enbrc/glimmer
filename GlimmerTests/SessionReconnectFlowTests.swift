@@ -8,7 +8,7 @@
 //  engines: what each terminate asks the PC, when it relaunches, retries or ends, and what it says.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import os
 import Testing

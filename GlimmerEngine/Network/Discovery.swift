@@ -1,13 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  Discovery.swift
-//
-//  mDNS discovery for GameStream/Sunshine hosts on the local network. Apple
-//  Bonjour exposes `_nvstream._tcp` (GFE) and `_nvstream-tcp._tcp` (Sunshine
-//  alias) services. We browse, then resolve each result to an IP/port.
-
 import Foundation
 import Network
 import os.log
@@ -24,10 +17,8 @@ public actor HostDiscovery {
     private var run: UInt64 = 0
     private var denied = false
 
-    /// Resolver connections kept alive long enough for `NWConnection`'s state
-    /// machine to walk from `.preparing` → `.ready` and expose its resolved
-    /// `currentPath.remoteEndpoint`. Keyed by service name so a flapping mDNS
-    /// announcement doesn't spawn duplicate probes.
+    /// Retain resolvers until their state machine exposes a remote endpoint.
+    /// Key by service name so flapping Bonjour announcements cannot duplicate probes.
     private(set) var resolvers: [String: NWConnection] = [:]
 
     /// Never fall back past IPv4, for a caller that needs an address Wake on LAN reaches.
@@ -61,6 +52,10 @@ public actor HostDiscovery {
     /// Start browsing. Emits the *current* set on every change. Cancel by
     /// breaking out of the for-await loop or calling `stop()`.
     public func start() -> (stream: AsyncStream<Update>, run: UInt64) {
+        start(startBrowser: { $0.start(queue: .global(qos: .userInitiated)) })
+    }
+
+    package func start(startBrowser: (NWBrowser) -> Void) -> (stream: AsyncStream<Update>, run: UInt64) {
         run &+= 1
         reset()
         let currentRun = run
@@ -87,7 +82,7 @@ public actor HostDiscovery {
                     let isDenied = Self.isPolicyDenied(state)
                     Task { await self?.setDenied(isDenied, run: currentRun) }
                 }
-                browser.start(queue: .global(qos: .userInitiated))
+                startBrowser(browser)
                 browsers.append(browser)
             }
             continuation.onTermination = { [weak self] _ in
@@ -267,7 +262,10 @@ public actor HostDiscovery {
             log.error("Resolve failed for \(name, privacy: .private): \(error.localizedDescription, privacy: .private)")
             return
         }
-        log.info("No IPv4 answer for \(name, privacy: .private) (\(error.localizedDescription, privacy: .private)); trying any family")
+        log.info("""
+            No IPv4 answer for \(name, privacy: .private) \
+            (\(error.localizedDescription, privacy: .private)); trying any family
+            """)
         startResolve(name: name, endpoint: endpoint, run: expectedRun, anyFamily: true)
     }
 }

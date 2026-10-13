@@ -8,7 +8,7 @@
 //  parse, how a PC is found, and how results read and exit.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

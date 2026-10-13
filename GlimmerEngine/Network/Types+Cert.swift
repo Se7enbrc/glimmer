@@ -1,27 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  Types+Cert.swift
-//
-//  Server certificate fingerprinting and the canonical pinned-cert storage key
-//  (+ PairStatus). Split out of Types.swift to keep each unit focused.
-//
-
-import GlimmerEngine
 import Foundation
 import CommonCrypto
 import CryptoKit
 import Darwin
 
 // MARK: - Cert fingerprint helper
-//
-// SHA-256 of the DER-encoded cert, formatted as lowercase hex bytes
-// separated by `:` - the same shape `ssh-keygen -E sha256 -lf` prints
-// and the shape Sunshine's web UI surfaces to the user. Keeping the
-// format identical means the user can copy-paste the fingerprint
-// Sunshine shows next to the one Glimmer's UI shows and visually
-// compare without translating between styles.
+
+// Match Sunshine's lowercase, colon-separated SHA-256 DER fingerprint for visual comparison.
 
 public enum CertFingerprint {
     /// `ab:cd:ef:01:23:...` SHA-256 fingerprint of the cert PEM. Returns
@@ -49,29 +36,11 @@ public enum CertFingerprint {
     }
 }
 
-// MARK: - Pinned cert storage key (canonical form)
-//
-// Pinning is split across call sites - Pairing.swift writes the pin
-// after a successful pair, AppModel.nativeServerInfo /
-// HostsStore.unpair / HostsStore.saveHost read or delete it.
-// All MUST hash to the same UserDefaults key for the pin to actually
-// authenticate a TLS handshake. The previous shape used `host.id` for
-// reads (= the host UUID from moonlight-qt migration, or the hostname for
-// fresh-Glimmer hosts) and `server.uniqueId` for writes (= the hostname
-// before `/serverinfo`'s `<uniqueid>` element was parsed). For users with
-// a real qt-migrated UUID, those two diverged - a freshly-paired host's
-// pin would land under the hostname key while the lookup checked the
-// UUID key. Result: every stream went through trust-on-first-use even
-// though the user had a "paired" host record on disk.
-//
-// Canonical key: the host's `<uniqueid>` from `/serverinfo`. We now parse
-// it in `NetworkClient.fetchServerInfo` and seed it onto ServerInfo, so
-// `server.uniqueId` is the right value at pair time. The lookup side
-// (`AppModel.nativeServerInfo`) uses `host.id`, which for migrated
-// hosts is the qt UUID - same value the host emits in `/serverinfo`. The
-// fresh-pair fallback (no qt migration) is the hostname on both sides, so
-// the keys still align.
-public enum PinnedCertStore {
+// MARK: - Pinned cert storage key
+
+// Every read, write and deletion uses the PC's /serverinfo uniqueid. Mixing a hostname with
+// a migrated UUID loses the pin and breaks authentication across restarts.
+package enum PinnedCertStore {
     /// Legacy UserDefaults key, kept only for the read-side migration
     /// (`load(forHostID:)`) which lifts the value out then deletes it.
     /// Nothing writes here anymore - see the file-backed store below.
@@ -82,39 +51,17 @@ public enum PinnedCertStore {
     /// Backward-compat alias used by a couple of HostsStore call sites.
     /// New code should not need this - the file-backed `load/store/delete`
     /// methods are the API.
-    public static func key(for hostID: String) -> String {
+    package static func key(for hostID: String) -> String {
         legacyDefaultsKey(for: hostID)
     }
 
-    // MARK: File-backed store (mode-0600 files under Application Support)
-    //
-    // UserDefaults backs onto a plain XML plist in
-    // ~/Library/Preferences/. Any same-UID
-    // process can both read and *write* to it via cfprefsd - there is no
-    // per-app ACL. For a pinned host cert the read leak is mostly
-    // harmless (the cert is public anyway), but the write surface is the
-    // problem: a same-UID attacker can swap the pin for their own,
-    // making us trust a MITM host across restarts. Part of the
-    // security pass.
-    //
-    // New shape: one PEM file per host at
-    //   <ApplicationSupport>/Glimmer/PinnedHosts/<sanitized-id>.pem
-    // with mode 0600 (owner-only). Same enforcement pattern as
-    // `FileIdentityStore` in Identity.swift - atomic write, stat(2)
-    // verify, on-failure delete-and-throw. mode 0600 keeps it
-    // owner-only at the filesystem level.
-    //
-    // Migration: read-side hits the legacy UserDefaults key as a
-    // fallback, copies forward to the file store, and deletes the
-    // UserDefaults entry. This is one-way; old keys never get
-    // re-written.
+    // Owner-only atomic files narrow the writable defaults surface; same-UID compromise remains possible.
+    // Migrate defaults forward only after a verified write, leaving legacy data intact on failure.
 
-    /// Read the PEM for a paired host, in order:
-    ///   1. The new file store
-    ///   2. The legacy UserDefaults key (migrated forward + cleaned up)
-    /// Returns nil if neither has it.
-    public static func load(forHostID hostID: String, defaults: UserDefaults = .standard,
-                            base: URL? = nil) -> String? {
+    /// Prefer the file pin, then migrate legacy defaults after a successful file write.
+    package static func loadAvailable(forHostID hostID: String, defaults: UserDefaults,
+                                      base: URL, protectedDataAvailable: () -> Bool = { true }) throws -> String? {
+        guard protectedDataAvailable() else { throw IdentityStorageError.unavailable }
         // 1. File store.
         if let url = try? fileURL(for: hostID, base: base),
            FileManager.default.fileExists(atPath: url.path),
@@ -132,10 +79,7 @@ public enum PinnedCertStore {
                 defaults.synchronize()
                 return legacy
             } catch {
-                // Can't write the file - return the legacy value so the
-                // current stream still authenticates; next launch will
-                // try again. We deliberately do NOT delete the legacy
-                // entry on write failure.
+                // Retain the legacy pin on write failure so this connection authenticates and migration can retry.
                 return legacy
             }
         }
@@ -144,8 +88,10 @@ public enum PinnedCertStore {
 
     /// Persist a pinned cert PEM for the given host. Atomic 0600 write.
     /// Throws on any IO / permission failure.
-    public static func store(pem: String, forHostID hostID: String,
-                             defaults: UserDefaults = .standard, base: URL? = nil) throws {
+    package static func storeAvailable(pem: String, forHostID hostID: String,
+                                       defaults: UserDefaults, base: URL,
+                                       protectedDataAvailable: () -> Bool = { true }) throws {
+        guard protectedDataAvailable() else { throw IdentityStorageError.unavailable }
         try writePEM(pem, forHostID: hostID, base: base)
         // Belt-and-braces: nuke any legacy UserDefaults entry under the
         // same key. Idempotent.
@@ -154,8 +100,9 @@ public enum PinnedCertStore {
 
     /// Remove the pinned cert for a host. Wipes both stores so a stale
     /// UserDefaults entry can't resurrect a wiped pin.
-    public static func delete(forHostID hostID: String, defaults: UserDefaults = .standard,
-                              base: URL? = nil) {
+    package static func deleteAvailable(forHostID hostID: String, defaults: UserDefaults,
+                                        base: URL, protectedDataAvailable: () -> Bool = { true }) throws {
+        guard protectedDataAvailable() else { throw IdentityStorageError.unavailable }
         if let url = try? fileURL(for: hostID, base: base) {
             try? FileManager.default.removeItem(at: url)
         }
@@ -166,15 +113,11 @@ public enum PinnedCertStore {
 
     /// `~/Library/Application Support/Glimmer/PinnedHosts/`. Created at
     /// mode 0700 on first write.
-    private static func directoryURL(base: URL?) throws -> URL {
-        try URL.supportRoot(base: base).appendingPathComponent("Glimmer/PinnedHosts", isDirectory: true)
+    private static func directoryURL(base: URL) throws -> URL {
+        base.appendingPathComponent("Glimmer/PinnedHosts", isDirectory: true)
     }
 
-    /// Restrict host-id characters in the filename to a known-safe set
-    /// so an attacker can't path-traverse via a doctored uniqueid
-    /// (e.g. "../../identity/client-key.pem"). The UUIDs we expect are
-    /// hex + dashes, but `host.id` falls back to the hostname which
-    /// can in principle contain anything; tightening the set defensively.
+    /// Restrict filenames so an untrusted uniqueid cannot traverse out of the pin directory.
     private static func sanitized(_ hostID: String) -> String {
         let allowed = CharacterSet(charactersIn:
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
@@ -183,15 +126,15 @@ public enum PinnedCertStore {
         return sanitizedName.isEmpty ? "unnamed" : sanitizedName
     }
 
-    private static func fileURL(for hostID: String, base: URL?) throws -> URL {
+    private static func fileURL(for hostID: String, base: URL) throws -> URL {
         try directoryURL(base: base).appendingPathComponent("\(sanitized(hostID)).pem",
                                                    isDirectory: false)
     }
 
     /// Validate a temporary 0600 file before replacing a saved pin.
     /// A failed permission check must leave the old pin intact.
-    static func writePEM(_ pem: String, forHostID hostID: String, base: URL? = nil,
-                         verify: (URL) throws -> Void = verifyPermissions) throws {
+    package static func writePEM(_ pem: String, forHostID hostID: String, base: URL,
+                                 verify: (URL) throws -> Void = verifyPermissions) throws {
         let fm = FileManager.default
         let dir = try directoryURL(base: base)
         try fm.createDirectory(at: dir,

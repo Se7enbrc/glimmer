@@ -152,21 +152,21 @@ package enum ColorRange: Sendable {
 
 /// Everything we need to know about the remote host to start a session.
 /// Populated by Network's /serverinfo call + cached pairing data.
-package struct ServerInfo: Sendable {
-    package var address: String                  // hostname or IP, no port
-    package var httpPort: Int = 47989
-    package var httpsPort: Int = 47984
+public struct ServerInfo: Sendable {
+    public var address: String                  // hostname or IP, no port
+    public var httpPort: Int = 47989
+    public var httpsPort: Int = 47984
     /// Host's cert (PEM), which is the TLS pin. Set only by the RSA-verified PIN
     /// handshake or from `PinnedCertStore` via `AppModel.nativeServerInfo`;
     /// /serverinfo never sets it (C2), so nil means not paired.
-    package var serverCertPEM: String?
-    package var uniqueId: String                 // GUID identifying this host
-    package var serverName: String               // friendly name from /serverinfo
-    package var pairStatus: PairStatus = .unpaired
-    package var appVersion: String?              // GFE/Sunshine version string
+    public var serverCertPEM: String?
+    public var uniqueId: String                 // GUID identifying this host
+    public var serverName: String               // friendly name from /serverinfo
+    public var pairStatus: PairStatus = .unpaired
+    public var appVersion: String?              // GFE/Sunshine version string
     /// True only for NVIDIA GameStream, whose `<state>` holds "MJOLNIR" (moonlight-qt's test); Sunshine sends
     /// `GfeVersion` too, so that proves nothing. Pairing and stream start refuse such a PC.
-    package var isRealGFE: Bool = false
+    public var isRealGFE: Bool = false
     package var maxLumaPixelsHEVC: Int = 0       // HEVC capability hint
     // The PC's supported formats, decoded into our VIDEO_FORMAT_* bitmask.
     package var serverCodecSupport: VideoFormats = []
@@ -180,14 +180,14 @@ package struct ServerInfo: Sendable {
     /// code thinks in, while `serverCodecModeRaw` is what the backend
     /// needs on the wire.
     package var serverCodecModeRaw: Int = 0
-    package var isBusy = false
-    package var currentGameID: Int = 0           // 0 = host is idle; otherwise the app ID that's streaming
+    public var isBusy = false
+    public var currentGameID: Int = 0           // 0 = host is idle; otherwise the app ID that's streaming
     /// Host's primary-NIC MAC from /serverinfo's `<mac>`, as stock Moonlight uses for WoL.
     /// Only learnable while the host is ONLINE; some Sunshine NIC configs report a zeroed
     /// MAC, which `WakeOnLAN.normalizeMac` treats as absent (Wake on LAN fails closed on it).
-    package var macAddress: String?
+    public var macAddress: String?
 
-    package init(address: String, uniqueId: String, serverName: String) {
+    public init(address: String, uniqueId: String, serverName: String) {
         self.address = address
         self.uniqueId = uniqueId
         self.serverName = serverName
@@ -250,7 +250,7 @@ package enum ConnectionQuality: Sendable {
 
 // MARK: - Errors
 
-package enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedError {
+public enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedError {
     case binaryNotFound
     case hostUnreachable(String)
     case pairingFailed(String)
@@ -280,7 +280,7 @@ package enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErr
     /// The PC runs NVIDIA GameStream, not Sunshine. Refused before anything is launched.
     case gameStreamHost
 
-    package var description: String {
+    public var description: String {
         switch self {
         case .binaryNotFound: return "Streaming library not available."
         case .hostUnreachable(let detail): return "Couldn't reach the PC: \(detail)."
@@ -312,5 +312,5 @@ package enum StreamError: Error, Sendable, CustomStringConvertible, LocalizedErr
     /// Routing `errorDescription` back to our `description` guarantees the
     /// human sentence shows up on every path, not just the ones that special-
     /// case StreamError before reading localizedDescription.
-    package var errorDescription: String? { description }
+    public var errorDescription: String? { description }
 }

@@ -1,18 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  NetworkClient+Request.swift
-//
-//  The low-level HTTPS request plumbing NetworkClient and Pairing share
-//  (request/rawRequest/performRequest), response status verification, codec-mode
-//  decoding, and the small request helpers (timeouts, nonce, secure random,
-//  hex). Split out of Network.swift to keep each unit focused.
-//
-
-import GlimmerEngine
 import Foundation
 import Network
 import os.log
@@ -24,10 +13,10 @@ extension NetworkClient {
     /// Raw access used by Pairing.swift for the multi-step pairing handshake.
     /// `usePaired = true` means HTTPS (47984) with mutual TLS via client cert.
     /// `usePaired = false` means HTTP (47989).
-    public func request(path: String,
-                        query: [String: String],
-                        usePaired: Bool,
-                        timeout: TimeInterval = NetworkClient.controlTimeout) async throws -> XMLNode {
+    package func request(path: String,
+                         query: [String: String],
+                         usePaired: Bool,
+                         timeout: TimeInterval = NetworkClient.controlTimeout) async throws -> XMLNode {
         try await rawRequest(path: path,
                              query: query,
                              extraQuery: nil,
@@ -36,7 +25,7 @@ extension NetworkClient {
     }
 
     /// A PC this Mac holds no pin for, in the sentence the banner shows as is.
-    static func notPaired(_ pcName: String) -> StreamError {
+    package static func notPaired(_ pcName: String) -> StreamError {
         let name = pcName.isEmpty ? "The PC" : pcName
         return .pairingFailed("\(name) isn't paired with this Mac. Choose Pair Again… to keep streaming.")
     }
@@ -165,18 +154,12 @@ extension NetworkClient {
     // MARK: - Codec mode decoding
 
     /// Preserves the /serverinfo uint32 mask's bit pattern for RTSP checks.
-    static func backendCodecModeMask(_ raw: Int) -> Int32 {
+    package static func backendCodecModeMask(_ raw: Int) -> Int32 {
         Int32(truncatingIfNeeded: raw)
     }
 
-    /// Sunshine/GFE pack supported codecs into ServerCodecModeSupport as a
-    /// bitfield. The values aren't documented anywhere except the moonlight
-    /// source - here they are, copied verbatim:
-    ///   bit 0    : H.264 (always implicitly supported)
-    ///   bit 8    : HEVC
-    ///   bit 9    : HEVC Main10
-    ///   bit 16   : AV1 Main8
-    ///   bit 17   : AV1 Main10
+    /// Sunshine's ServerCodecModeSupport uses upstream SCM bits, not VIDEO_FORMAT bits.
+    /// Keep the mapping literal so HEVC/AV1 and 10-bit capabilities negotiate unchanged.
     static func decodeCodecMode(_ raw: Int) -> VideoFormats {
         var out: VideoFormats = [.h264]   // h.264 is always supported
         if raw & (1 << 8)  != 0 { out.insert(.hevc) }
@@ -202,13 +185,6 @@ extension NetworkClient {
     /// moonlight-qt's shared `uniqueid`, only a fallback: `ensureIdentityLoaded` sets this
     /// install's own id before every request.
     static let wireUniqueID = "0123456789ABCDEF"
-
-    /// What the host's pairing page shows for this Mac: its computer name, or
-    /// "Glimmer" when that is unavailable. Replaces Moonlight's legacy "roth".
-    static var pairingDeviceName: String {
-        let name = Foundation.Host.current().localizedName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return name.isEmpty ? "Glimmer" : name
-    }
 
     /// Per-request nonce, matching the protocol's hex-encoded 16-byte UUID shape.
     /// SecRandomCopyBytes supplies the entropy; Swift's system generator is also secure on macOS.

@@ -11,7 +11,7 @@
 //  against CryptoKit with the matching IV, the framing the production code documents.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 import CryptoKit

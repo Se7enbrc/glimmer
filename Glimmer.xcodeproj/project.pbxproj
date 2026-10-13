@@ -570,6 +570,14 @@
 		1E1F825D58AE41FBA9EA5C17 /* EngineDiagnosticsBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E2D9DE57D16436AA178E464 /* EngineDiagnosticsBoundaryTests.swift */; };
 		227254F4AB8A45BA94D2F158 /* StreamRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18473C03B5D940B9BC3CA2AA /* StreamRequest.swift */; };
 		7502C8910A0C4B688E5F7444 /* HostRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5C645FD3D094A728226497C /* HostRecord.swift */; };
+		CC4AA62839124AC6AAE6C233 /* MacIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2A06EC15394CD0B0C35B47 /* MacIdentity.swift */; };
+		B668F11F22C74753B70E8937 /* MacPinnedCertStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E7516E542014BFFB5622218 /* MacPinnedCertStore.swift */; };
+		3800023C8F9F4060A0F49462 /* MacNetworkClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CEE0A8D942C4BFFBA6899B6 /* MacNetworkClient.swift */; };
+		B36CB9B75DB44717A66AAEBB /* MacWakeOnLAN.swift in Sources */ = {isa = PBXBuildFile; fileRef = 990DE890C0DE453CBD8D7A20 /* MacWakeOnLAN.swift */; };
+		0D807DAE4E8E417A8FA49D70 /* StreamAttempt.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD2B9C9CD58C42E7B06E58D5 /* StreamAttempt.swift */; };
+		FC37441810C646A98BBD76F1 /* HostReadiness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 793410BE9BD84BC6AD3D5068 /* HostReadiness.swift */; };
+		529ACE474BBC48E3AE9C99A7 /* PairingFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC6544C038B448B9A4B9670 /* PairingFailure.swift */; };
+		9A621DC44DF54B10B3656B77 /* PCCommunicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B655C0313DBB4627B46D06FB /* PCCommunicationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -673,8 +681,8 @@
 		3A952BEEC96F2A8042E0F4C3 /* StatsOverlaySettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StatsOverlaySettings.swift; sourceTree = "<group>"; };
 		447FF92C9458E21549E4965D /* HostStatusPoller.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HostStatusPoller.swift; sourceTree = "<group>"; };
 		448F2B492E4B38A0CFF51260 /* StreamingState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreamingState.swift; sourceTree = "<group>"; };
-		48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Stream/ControlTransport.swift; sourceTree = "<group>"; };
-		D2C00005 /* PEM.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Stream/PEM.swift; sourceTree = "<group>"; };
+		48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/ControlTransport.swift"; sourceTree = SOURCE_ROOT; };
+		D2C00005 /* PEM.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/PEM.swift"; sourceTree = SOURCE_ROOT; };
 		505E37FB63C22AC476506587 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Glimmer Login Helper.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		71A5B2E11628E68BFAF05421 /* AppIcon.icon */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
@@ -715,7 +723,7 @@
 		5E5A5E202610100000000002 /* LoginItemApplyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemApplyTests.swift; sourceTree = "<group>"; };
 		5E5A5E202610100000000004 /* SystemServiceSeamTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemServiceSeamTests.swift; sourceTree = "<group>"; };
 		A100019B /* AboutPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPane.swift; sourceTree = "<group>"; };
-		DEC0DE2026092000000000D2 /* WakeOnLAN.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WakeOnLAN.swift"; sourceTree = "<group>"; };
+		DEC0DE2026092000000000D2 /* WakeOnLAN.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/WakeOnLAN.swift"; sourceTree = SOURCE_ROOT; };
 		DEC0DE202609220300000010 /* AppShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppShellTests.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C8 /* MenuBarPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPanel.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentation.swift"; sourceTree = "<group>"; };
@@ -725,10 +733,10 @@
 		A647C41163064ECDA1D86EA8 /* MacSystemStats.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacSystemStats.swift"; sourceTree = SOURCE_ROOT; };
 		AB00000001 /* Types.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Types.swift; sourceTree = "<group>"; };
 		AB00000003 /* StreamSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamSession.swift; sourceTree = "<group>"; };
-		AB00000005 /* Identity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Identity.swift; sourceTree = "<group>"; };
-		AB00000007 /* Network.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Network.swift; sourceTree = "<group>"; };
-		AB00000009 /* Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Pairing.swift; sourceTree = "<group>"; };
-		AB00000011 /* Discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/Discovery.swift; sourceTree = "<group>"; };
+		AB00000005 /* Identity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Identity.swift"; sourceTree = SOURCE_ROOT; };
+		AB00000007 /* Network.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Network.swift"; sourceTree = SOURCE_ROOT; };
+		AB00000009 /* Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Pairing.swift"; sourceTree = SOURCE_ROOT; };
+		AB00000011 /* Discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Discovery.swift"; sourceTree = SOURCE_ROOT; };
 		AB00000013 /* VideoDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/VideoDecoder.swift; sourceTree = "<group>"; };
 		AB00000015 /* AudioDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/AudioDecoder.swift; sourceTree = "<group>"; };
 		AB00000017 /* InputForwarder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/InputForwarder.swift; sourceTree = "<group>"; };
@@ -816,20 +824,20 @@
 		D100004B /* StreamSession+Callbacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Callbacks.swift"; sourceTree = "<group>"; };
 		D100004D /* StreamBridgeContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamBridgeContext.swift; sourceTree = "<group>"; };
 		D100004F /* RtspClient+Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Native/RtspClient+Handshake.swift"; sourceTree = "<group>"; };
-		D1000051 /* Pairing+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Pairing+Crypto.swift"; sourceTree = "<group>"; };
-		D1000053 /* Types+Cert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+Cert.swift"; sourceTree = "<group>"; };
+		D1000051 /* Pairing+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Pairing+Crypto.swift"; sourceTree = SOURCE_ROOT; };
+		D1000053 /* Types+Cert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Types+Cert.swift"; sourceTree = SOURCE_ROOT; };
 		D1000055 /* Types+Stats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+Stats.swift"; sourceTree = "<group>"; };
 		D1000057 /* Types+StatsSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+StatsSnapshot.swift"; sourceTree = "<group>"; };
-		D1000059 /* Identity+Loading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Identity+Loading.swift"; sourceTree = "<group>"; };
-		D100005B /* Identity+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Identity+Crypto.swift"; sourceTree = "<group>"; };
+		D1000059 /* Identity+Loading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Identity+Loading.swift"; sourceTree = SOURCE_ROOT; };
+		D100005B /* Identity+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Identity+Crypto.swift"; sourceTree = SOURCE_ROOT; };
 		D100005D /* AppModel+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Lifecycle.swift"; sourceTree = "<group>"; };
 		D2000096 /* AppModel+Defaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Defaults.swift"; sourceTree = "<group>"; };
 		D100005F /* AppModel+Streaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Streaming.swift"; sourceTree = "<group>"; };
 		D1000061 /* AppModel+Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Pairing.swift"; sourceTree = "<group>"; };
 		E20000A3 /* AppModel+Power.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Power.swift"; sourceTree = "<group>"; };
-		D1000063 /* NetworkClient+Endpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Endpoints.swift"; sourceTree = "<group>"; };
-		D1000065 /* NetworkClient+Request.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/NetworkClient+Request.swift"; sourceTree = "<group>"; };
-		D1000067 /* Network+Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Network+Support.swift"; sourceTree = "<group>"; };
+		D1000063 /* NetworkClient+Endpoints.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/NetworkClient+Endpoints.swift"; sourceTree = SOURCE_ROOT; };
+		D1000065 /* NetworkClient+Request.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/NetworkClient+Request.swift"; sourceTree = SOURCE_ROOT; };
+		D1000067 /* Network+Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Network+Support.swift"; sourceTree = SOURCE_ROOT; };
 		D1000069 /* InputForwarder+Capture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+Capture.swift"; sourceTree = "<group>"; };
 		D2C0000B /* MouseAccelerationControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/MouseAccelerationControl.swift; sourceTree = "<group>"; };
 		D1000CR1 /* InputForwarder+Cruise.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+Cruise.swift"; sourceTree = "<group>"; };
@@ -1194,6 +1202,14 @@
 		7E2D9DE57D16436AA178E464 /* EngineDiagnosticsBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/EngineDiagnosticsBoundaryTests.swift"; sourceTree = SOURCE_ROOT; };
 		18473C03B5D940B9BC3CA2AA /* StreamRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/StreamRequest.swift"; sourceTree = SOURCE_ROOT; };
 		F5C645FD3D094A728226497C /* HostRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/HostRecord.swift"; sourceTree = SOURCE_ROOT; };
+		AB2A06EC15394CD0B0C35B47 /* MacIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacIdentity.swift"; sourceTree = SOURCE_ROOT; };
+		4E7516E542014BFFB5622218 /* MacPinnedCertStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacPinnedCertStore.swift"; sourceTree = SOURCE_ROOT; };
+		9CEE0A8D942C4BFFBA6899B6 /* MacNetworkClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacNetworkClient.swift"; sourceTree = SOURCE_ROOT; };
+		990DE890C0DE453CBD8D7A20 /* MacWakeOnLAN.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacWakeOnLAN.swift"; sourceTree = SOURCE_ROOT; };
+		CD2B9C9CD58C42E7B06E58D5 /* StreamAttempt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/StreamAttempt.swift"; sourceTree = SOURCE_ROOT; };
+		793410BE9BD84BC6AD3D5068 /* HostReadiness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/HostReadiness.swift"; sourceTree = SOURCE_ROOT; };
+		BBC6544C038B448B9A4B9670 /* PairingFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/PairingFailure.swift"; sourceTree = SOURCE_ROOT; };
+		B655C0313DBB4627B46D06FB /* PCCommunicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/PCCommunicationTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1287,6 +1303,10 @@
 		A10000031 /* Glimmer */ = {
 			isa = PBXGroup;
 			children = (
+				990DE890C0DE453CBD8D7A20 /* MacWakeOnLAN.swift */,
+				9CEE0A8D942C4BFFBA6899B6 /* MacNetworkClient.swift */,
+				4E7516E542014BFFB5622218 /* MacPinnedCertStore.swift */,
+				AB2A06EC15394CD0B0C35B47 /* MacIdentity.swift */,
 				A29D3F8305894AEFB2A62B0E /* MacTelemetryCapture.swift */,
 				D48985D11B784CB1BC748E97 /* ProcessMetrics.swift */,
 				A10000011 /* GlimmerApp.swift */,
@@ -1319,7 +1339,6 @@
 				CA2026101100000000000006 /* SettingsInput+NintendoLayout.swift */,
 				DEC0DE202609222400000002 /* SettingsShortcutRecorders.swift */,
 				A100019B /* AboutPane.swift */,
-				DEC0DE2026092000000000D2 /* WakeOnLAN.swift */,
 				DEC0DE2026092000000000C8 /* MenuBarPanel.swift */,
 				DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */,
 				A100011B /* DualSenseHID.swift */,
@@ -1401,9 +1420,6 @@
 				D1000069 /* InputForwarder+Capture.swift */,
 				D2C0000B /* MouseAccelerationControl.swift */,
 				D1000CR1 /* InputForwarder+Cruise.swift */,
-				D1000067 /* Network+Support.swift */,
-				D1000065 /* NetworkClient+Request.swift */,
-				D1000063 /* NetworkClient+Endpoints.swift */,
 				D1000061 /* AppModel+Pairing.swift */,
 				E20000A3 /* AppModel+Power.swift */,
 				D100005F /* AppModel+Streaming.swift */,
@@ -1411,12 +1427,8 @@
 				D1A00003 /* AppModel+SessionReceipt.swift */,
 				D100005D /* AppModel+Lifecycle.swift */,
 				D2000096 /* AppModel+Defaults.swift */,
-				D100005B /* Identity+Crypto.swift */,
-				D1000059 /* Identity+Loading.swift */,
 				D1000057 /* Types+StatsSnapshot.swift */,
 				D1000055 /* Types+Stats.swift */,
-				D1000053 /* Types+Cert.swift */,
-				D1000051 /* Pairing+Crypto.swift */,
 				D100004F /* RtspClient+Handshake.swift */,
 				D100004D /* StreamBridgeContext.swift */,
 				D100004B /* StreamSession+Callbacks.swift */,
@@ -1487,10 +1499,6 @@
 				ABCD20260609000000000401 /* RtpAudioReceiver+Decrypt.swift */,
 				ABCD20260609000000000501 /* RtpAudioReceiver+Events.swift */,
 				AB00000003 /* StreamSession.swift */,
-				AB00000005 /* Identity.swift */,
-				AB00000007 /* Network.swift */,
-				AB00000009 /* Pairing.swift */,
-				AB00000011 /* Discovery.swift */,
 				AB00000013 /* VideoDecoder.swift */,
 				AB00000015 /* AudioDecoder.swift */,
 				ABCD20260609000000000701 /* AudioDecoder+Meter.swift */,
@@ -1548,8 +1556,6 @@
 				DA2026100900000000000022 /* AWDLProcess.swift */,
 				DEC0DE202609258300000002 /* Protocol.swift */,
 				DEC0DE202609256700000002 /* AWDLStreamLease.swift */,
-				48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */,
-				D2C00005 /* PEM.swift */,
 				DEC0DE202609220100000001 /* GlimmerMain.swift */,
 				DEC0DE202609250100000001 /* CommandLineToolInstaller.swift */,
 				DEC0DE202609220100000003 /* GlimmerCLI.swift */,
@@ -1583,6 +1589,7 @@
 		D2000016 /* GlimmerTests */ = {
 			isa = PBXGroup;
 			children = (
+				B655C0313DBB4627B46D06FB /* PCCommunicationTests.swift */,
 				7E2D9DE57D16436AA178E464 /* EngineDiagnosticsBoundaryTests.swift */,
 				DEC0DE202609253700000002 /* AWDLHelperTests.swift */,
 				5EA320261010000000001302 /* ProcessRunnerTests.swift */,
@@ -1788,6 +1795,23 @@
 		E26101210000000000000009 /* GlimmerEngine */ = {
 			isa = PBXGroup;
 			children = (
+				BBC6544C038B448B9A4B9670 /* PairingFailure.swift */,
+				793410BE9BD84BC6AD3D5068 /* HostReadiness.swift */,
+				CD2B9C9CD58C42E7B06E58D5 /* StreamAttempt.swift */,
+				DEC0DE2026092000000000D2 /* WakeOnLAN.swift */,
+				D1000053 /* Types+Cert.swift */,
+				D1000051 /* Pairing+Crypto.swift */,
+				AB00000009 /* Pairing.swift */,
+				D2C00005 /* PEM.swift */,
+				D1000065 /* NetworkClient+Request.swift */,
+				D1000063 /* NetworkClient+Endpoints.swift */,
+				D1000067 /* Network+Support.swift */,
+				AB00000007 /* Network.swift */,
+				D1000059 /* Identity+Loading.swift */,
+				D100005B /* Identity+Crypto.swift */,
+				AB00000005 /* Identity.swift */,
+				AB00000011 /* Discovery.swift */,
+				48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */,
 				F5C645FD3D094A728226497C /* HostRecord.swift */,
 				18473C03B5D940B9BC3CA2AA /* StreamRequest.swift */,
 				C2A6490A4BF841A6926E8139 /* VKScanCode.swift */,
@@ -2030,6 +2054,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B36CB9B75DB44717A66AAEBB /* MacWakeOnLAN.swift in Sources */,
+				3800023C8F9F4060A0F49462 /* MacNetworkClient.swift in Sources */,
+				B668F11F22C74753B70E8937 /* MacPinnedCertStore.swift in Sources */,
+				CC4AA62839124AC6AAE6C233 /* MacIdentity.swift in Sources */,
 				33202E100F154B6AA3704FDB /* MacTelemetryCapture.swift in Sources */,
 				4B4DB077B2A34F90ADABA597 /* ProcessMetrics.swift in Sources */,
 				E26101210000000000000012 /* AudioFecDecoder+Recovery.swift in Sources */,
@@ -2063,7 +2091,6 @@
 				CA2026101100000000000005 /* SettingsInput+NintendoLayout.swift in Sources */,
 				DEC0DE202609222400000001 /* SettingsShortcutRecorders.swift in Sources */,
 				A100019A /* AboutPane.swift in Sources */,
-				DEC0DE2026092000000000D1 /* WakeOnLAN.swift in Sources */,
 				DEC0DE2026092000000000C7 /* MenuBarPanel.swift in Sources */,
 				DEC0DE2026092000000000C3 /* MenuBarPresentation.swift in Sources */,
 				A100011A /* DualSenseHID.swift in Sources */,
@@ -2147,9 +2174,6 @@
 				D100006A /* InputForwarder+Capture.swift in Sources */,
 				D2C0000C /* MouseAccelerationControl.swift in Sources */,
 				D1000CR2 /* InputForwarder+Cruise.swift in Sources */,
-				D1000068 /* Network+Support.swift in Sources */,
-				D1000066 /* NetworkClient+Request.swift in Sources */,
-				D1000064 /* NetworkClient+Endpoints.swift in Sources */,
 				D1000062 /* AppModel+Pairing.swift in Sources */,
 				E20000A4 /* AppModel+Power.swift in Sources */,
 				D1000060 /* AppModel+Streaming.swift in Sources */,
@@ -2157,12 +2181,8 @@
 				D1A00004 /* AppModel+SessionReceipt.swift in Sources */,
 				D100005E /* AppModel+Lifecycle.swift in Sources */,
 				D2000097 /* AppModel+Defaults.swift in Sources */,
-				D100005C /* Identity+Crypto.swift in Sources */,
-				D100005A /* Identity+Loading.swift in Sources */,
 				D1000058 /* Types+StatsSnapshot.swift in Sources */,
 				D1000056 /* Types+Stats.swift in Sources */,
-				D1000054 /* Types+Cert.swift in Sources */,
-				D1000052 /* Pairing+Crypto.swift in Sources */,
 				D1000050 /* RtspClient+Handshake.swift in Sources */,
 				D100004E /* StreamBridgeContext.swift in Sources */,
 				D100004C /* StreamSession+Callbacks.swift in Sources */,
@@ -2228,10 +2248,6 @@
 				ABCD20260609000000000402 /* RtpAudioReceiver+Decrypt.swift in Sources */,
 				ABCD20260609000000000502 /* RtpAudioReceiver+Events.swift in Sources */,
 				AB00000004 /* StreamSession.swift in Sources */,
-				AB00000006 /* Identity.swift in Sources */,
-				AB00000008 /* Network.swift in Sources */,
-				AB00000010 /* Pairing.swift in Sources */,
-				AB00000012 /* Discovery.swift in Sources */,
 				AB00000014 /* VideoDecoder.swift in Sources */,
 				AB00000016 /* AudioDecoder.swift in Sources */,
 				ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */,
@@ -2288,8 +2304,6 @@
 				DA2026100900000000000021 /* AWDLProcess.swift in Sources */,
 				DEC0DE202609258300000001 /* Protocol.swift in Sources */,
 				DEC0DE202609256700000001 /* AWDLStreamLease.swift in Sources */,
-				C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */,
-				D2C00006 /* PEM.swift in Sources */,
 				DEC0DE202609220100000002 /* GlimmerMain.swift in Sources */,
 				DEC0DE202609250100000002 /* CommandLineToolInstaller.swift in Sources */,
 				DEC0DE202609220100000004 /* GlimmerCLI.swift in Sources */,
@@ -2312,6 +2326,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9A621DC44DF54B10B3656B77 /* PCCommunicationTests.swift in Sources */,
 				1E1F825D58AE41FBA9EA5C17 /* EngineDiagnosticsBoundaryTests.swift in Sources */,
 				DEC0DE202609253700000001 /* AWDLHelperTests.swift in Sources */,
 				5EA320261010000000001301 /* ProcessRunnerTests.swift in Sources */,
@@ -2517,6 +2532,23 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				529ACE474BBC48E3AE9C99A7 /* PairingFailure.swift in Sources */,
+				FC37441810C646A98BBD76F1 /* HostReadiness.swift in Sources */,
+				0D807DAE4E8E417A8FA49D70 /* StreamAttempt.swift in Sources */,
+				DEC0DE2026092000000000D1 /* WakeOnLAN.swift in Sources */,
+				D1000054 /* Types+Cert.swift in Sources */,
+				D1000052 /* Pairing+Crypto.swift in Sources */,
+				AB00000010 /* Pairing.swift in Sources */,
+				D2C00006 /* PEM.swift in Sources */,
+				D1000066 /* NetworkClient+Request.swift in Sources */,
+				D1000064 /* NetworkClient+Endpoints.swift in Sources */,
+				D1000068 /* Network+Support.swift in Sources */,
+				AB00000008 /* Network.swift in Sources */,
+				D100005A /* Identity+Loading.swift in Sources */,
+				D100005C /* Identity+Crypto.swift in Sources */,
+				AB00000006 /* Identity.swift in Sources */,
+				AB00000012 /* Discovery.swift in Sources */,
+				C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */,
 				7502C8910A0C4B688E5F7444 /* HostRecord.swift in Sources */,
 				227254F4AB8A45BA94D2F158 /* StreamRequest.swift in Sources */,
 				7A51BDEA113A4AC3BC826DE8 /* VKScanCode.swift in Sources */,

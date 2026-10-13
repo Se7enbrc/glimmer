@@ -8,7 +8,7 @@
 //  including truncated, oversized and wrongly shaped input.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

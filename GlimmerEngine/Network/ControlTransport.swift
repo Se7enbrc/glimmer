@@ -1,21 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ControlTransport.swift
-//
-//  HTTP/1.1 client for the control channel on Network.framework: mutual TLS with an in-memory
-//  client identity and the PC's self-signed cert pinned by exact DER, so neither the keychain
-//  nor CA trust is ever in the path.
-//
+// In-memory mutual TLS and exact DER pinning keep CA trust and the keychain out of control requests.
 
-import GlimmerEngine
 import Foundation
 import Network
 import Security
 import os
 
-enum ControlTransport {
+package enum ControlTransport {
 
     final class RequestLifetime: Sendable {
         let deadline: Date
@@ -49,41 +42,52 @@ enum ControlTransport {
     }
 
     /// One control response.
-    struct Response: Sendable {
-        let status: Int
-        let body: Data
+    package struct Response: Sendable {
+        package let status: Int
+        package let body: Data
+
+        package init(status: Int, body: Data) {
+            self.status = status
+            self.body = body
+        }
     }
 
     /// The PEM material one control call carries: the client credential we
     /// present on the mutual-TLS handshake plus the host leaf we pin against.
     /// All-nil is the plain-HTTP unpaired probe (no cert, no pin).
-    struct TLSCredential: Sendable {
-        let clientCertPEM: String?
-        let clientKeyPEM: String?
+    package struct TLSCredential: Sendable {
+        package let clientCertPEM: String?
+        package let clientKeyPEM: String?
         /// The host leaf must match it byte-for-byte (DER) or the handshake is
         /// refused (MITM gate). NetworkClient never opens TLS without one, and
         /// only a finished PIN handshake supplies it.
-        let pinnedCertPEM: String?
+        package let pinnedCertPEM: String?
+
+        package init(clientCertPEM: String?, clientKeyPEM: String?, pinnedCertPEM: String?) {
+            self.clientCertPEM = clientCertPEM
+            self.clientKeyPEM = clientKeyPEM
+            self.pinnedCertPEM = pinnedCertPEM
+        }
     }
 
     private static let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Network.TLS")
 
     /// Requests wrapped in `StreamAttempt.run` report its deadline as `hostTimedOut`; this
     /// backstop only ends an unwrapped `/launch`, so it lands just after the same deadline.
-    static let backstopGrace: TimeInterval = 0.25
+    package static let backstopGrace: TimeInterval = 0.25
 
     /// One control GET in `get`'s shape: NetworkClient's seam, so tests can answer as a fake Sunshine.
-    typealias Get = @Sendable (_ host: String, _ port: Int, _ target: String, _ userAgent: String,
+    package typealias Get = @Sendable (_ host: String, _ port: Int, _ target: String, _ userAgent: String,
                                _ tls: Bool, _ credential: TLSCredential,
                                _ timeout: TimeInterval) async throws -> Response
 
     /// Perform one HTTP/1.1 GET. `tls == false` is plain HTTP (the unpaired probe
     /// path - no cert, no pin); `tls == true` presents the client cert and pins.
-    static func get(host: String, port: Int, target: String,
-                    userAgent: String,
-                    tls: Bool,
-                    credential: TLSCredential,
-                    timeout: TimeInterval) async throws -> Response {
+    package static func get(host: String, port: Int, target: String,
+                            userAgent: String,
+                            tls: Bool,
+                            credential: TLSCredential,
+                            timeout: TimeInterval) async throws -> Response {
         let lifetime = RequestLifetime(timeout: timeout)
         var request = "GET \(target) HTTP/1.1\r\n"
         request += "Host: \(host):\(port)\r\n"
@@ -168,7 +172,9 @@ enum ControlTransport {
             try await withCheckedThrowingContinuation { continuation in
                 queue.async { [self] in
                     self.continuation = continuation
-                    guard lifetime.attach(connection) else { return finish(.failure(CancellationError()), closing: nil) }
+                    guard lifetime.attach(connection) else {
+                        return finish(.failure(CancellationError()), closing: nil)
+                    }
                     connection.stateUpdateHandler = { [self] state in handle(state, on: connection) }
                     connection.start(queue: queue)
                     let backstop = max(0, lifetime.deadline.timeIntervalSinceNow) + backstopGrace
@@ -197,13 +203,14 @@ enum ControlTransport {
         }
 
         private func receive(on connection: NWConnection) {
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 16 * 1024) { [self] data, _, isComplete, error in
+            let maxLength = 16 * 1024
+            connection.receive(minimumIncompleteLength: 1, maximumLength: maxLength) { [self] data, _, done, error in
                 do {
                     if let data, try reply.append(data) {
                         return finish(.success(try parse(reply.bytes)), closing: connection)
                     }
                     // The PC's close ends the reply; a body short of Content-Length is truncated.
-                    if isComplete || error != nil {
+                    if done || error != nil {
                         return finish(.success(try parse(reply.finish())), closing: connection)
                     }
                     receive(on: connection)
@@ -230,20 +237,22 @@ enum ControlTransport {
             connection?.cancel()
             guard let continuation else { return }
             self.continuation = nil
-            if case .failure = result, lifetime.isCancelled { return continuation.resume(throwing: CancellationError()) }
+            if case .failure = result, lifetime.isCancelled {
+                return continuation.resume(throwing: CancellationError())
+            }
             continuation.resume(with: result)
         }
     }
 
     // MARK: - Client identity (PEM to an in-memory identity, no keychain)
 
-    static func acceptsHostCertificate(_ certificate: SecCertificate, pinnedDER: Data?) throws -> Bool {
+    package static func acceptsHostCertificate(_ certificate: SecCertificate, pinnedDER: Data?) throws -> Bool {
         _ = try PEM.certificateKey(certificate, context: "PC certificate")
         return pinnedDER.map { SecCertificateCopyData(certificate) as Data == $0 } ?? true
     }
 
     /// The client identity from its PEM files, held in memory only.
-    static func clientIdentity(certPEM: String, keyPEM: String) throws -> sec_identity_t {
+    package static func clientIdentity(certPEM: String, keyPEM: String) throws -> sec_identity_t {
         let identity = try PEM.identity(certPEM: certPEM, keyPEM: keyPEM)
         guard let secIdentity = sec_identity_create(identity) else {
             throw StreamError.crypto("could not create TLS client identity")
@@ -255,13 +264,15 @@ enum ControlTransport {
 
     /// Ceiling for one control response. Real replies are tens of KiB of XML at
     /// most, so anything past this is a broken or hostile responder.
-    static let maxResponseBytes = 4 * 1024 * 1024
+    package static let maxResponseBytes = 4 * 1024 * 1024
 
     /// One reply as it arrives: whole at `Content-Length` when the PC sends one, else at close.
     struct ResponseBuffer {
         private(set) var bytes = Data()
         private var headerEnd: Int?
         private var contentLength: Int?
+
+        init() {}
 
         /// Adds a chunk; true once the body has reached `Content-Length`.
         mutating func append(_ chunk: Data) throws -> Bool {
@@ -290,7 +301,7 @@ enum ControlTransport {
     /// `Content-Length` from a completed header block, so a reply ends at its body instead of
     /// the PC's close; the last matching line wins, and nil (also for an empty or negative value) = no header.
     /// Fails closed on non-UTF-8 headers: this is host-supplied input, and a lossy decode would half-parse it.
-    static func contentLengthHeader(in headerBytes: Data) throws -> Int? {
+    package static func contentLengthHeader(in headerBytes: Data) throws -> Int? {
         guard let head = String(bytes: headerBytes, encoding: .utf8) else {
             throw StreamError.hostUnreachable("malformed HTTP response (headers are not UTF-8)")
         }

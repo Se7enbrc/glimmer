@@ -8,7 +8,7 @@
 //  and the session file), telemetry's name pseudonyms, and the launch-response redactor.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import CryptoKit
 import Foundation
 import Testing

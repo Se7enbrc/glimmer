@@ -13,6 +13,7 @@
 //  Also hosts PINTiles + FloatingWindowLevel, both used only here.
 //
 
+import GlimmerEngine
 import AppKit
 import Network
 import SwiftUI

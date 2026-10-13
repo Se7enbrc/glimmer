@@ -4,6 +4,7 @@
 // What the decode and prime paths hand the player, recorded through `schedulePlayout`:
 // buffer order, frame counts, zeroed backfill silence and the cushion target behind it.
 
+@testable import GlimmerEngine
 import AVFAudio
 import Foundation
 import Testing

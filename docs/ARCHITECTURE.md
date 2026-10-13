@@ -62,9 +62,9 @@ Top-level pieces:
 | `StreamingBackend`    | protocol (the engine boundary)                           | `Glimmer/Stream/StreamingBackend.swift`                            |
 | `NativeBackend`       | `final class`, sole backend conformer                    | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/`            |
 | `StreamBridgeContext` | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/StreamBridgeContext.swift`                         |
-| `NetworkClient`       | `actor` over `ControlTransport` (Network.framework mTLS) | `Glimmer/Stream/Network.swift`                                     |
+| `NetworkClient`       | `actor` over `ControlTransport` (Network.framework mTLS) | `GlimmerEngine/Network/Network.swift`                              |
 | `PairingClient`       | `actor`                                                  | `Glimmer/Stream/Pairing.swift`                                     |
-| `IdentityManager`     | `actor` (singleton)                                      | `Glimmer/Stream/Identity.swift`                                    |
+| `IdentityManager`     | `actor` (Mac adapter owns singleton)                     | `GlimmerEngine/Network/Identity.swift`                             |
 | `VideoDecoder`        | `@MainActor final class`                                 | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)                 |
 | `FramePacer`          | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/FramePacer.swift` (+ extensions)                   |
 | `AudioDecoder`        | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/AudioDecoder.swift`                                |
@@ -722,10 +722,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md#nonisolatedunsafe) for the rule on when
 
 ## Identity & pairing
 
-`Identity.swift`: a per-machine 32-hex `uniqueID`, an RSA-2048 keypair, and a
-20-year self-signed cert (CN `NVIDIA GameStream Client`, the string every client
-of this protocol identifies as). Three mode-0600 files under
-`~/Library/Application Support/Glimmer/Identity/`:
+`GlimmerEngine/Network/Identity.swift`: a per-machine 32-hex `uniqueID`, an
+RSA-2048 keypair, and a 20-year self-signed cert (CN `NVIDIA GameStream Client`,
+the string every client of this protocol identifies as). Three mode-0600 files
+under `~/Library/Application Support/Glimmer/Identity/`:
 
 - `client-cert.pem`
 - `client-key.pem`
@@ -737,12 +737,12 @@ identity migration is part of that signing change. Files get mode 0600, atomic
 writes and a stat-after-chmod check (some FUSE and NFS backends silently ignore
 the chmod). See SECURITY.md for the remaining same-user exposure.
 
-`Pairing.swift`: the PIN handshake, four HTTP rounds plus a final HTTPS
-`pairchallenge`. AES-128-ECB on raw 16-byte buffers (no padding; the protocol
-pre-sizes its blocks) keyed off `SHA-256(salt || PIN)[0..16]`, with SHA-256 for
-the challenge hashes too; a PC running NVIDIA GameStream is refused before the
-handshake starts. RSA signatures using the long-lived client cert prove
-possession of the private key.
+`GlimmerEngine/Network/Pairing.swift`: the PIN handshake, four HTTP rounds plus
+a final HTTPS `pairchallenge`. AES-128-ECB on raw 16-byte buffers (no padding;
+the protocol pre-sizes its blocks) keyed off `SHA-256(salt || PIN)[0..16]`, with
+SHA-256 for the challenge hashes too; a PC running NVIDIA GameStream is refused
+before the handshake starts. RSA signatures using the long-lived client cert
+prove possession of the private key.
 
 Critically: the PC's cert is pinned (`NetworkClient.setPinnedHostCert`) only
 after the RSA signature in step 5 verifies and the PIN-correctness check passes.

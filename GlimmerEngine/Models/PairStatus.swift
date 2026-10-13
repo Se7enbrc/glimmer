@@ -3,7 +3,7 @@
 
 import Foundation
 
-package enum PairStatus: Sendable, Equatable {
+public enum PairStatus: Sendable, Equatable {
     case paired
     case unpaired
 }
