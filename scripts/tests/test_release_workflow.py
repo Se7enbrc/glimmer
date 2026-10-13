@@ -21,7 +21,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         used = set(re.findall(r"secrets\.([A-Z_]+)", called))
         declared = set(re.findall(r"^      ([A-Z_]+):\n        required: false$", called, re.M))
         call = re.split(r"\n  [a-z][a-z_-]*:\n", caller.split("uses: ./.github/workflows/release-publication.yml", 1)[1])[0]
-        passed = set(re.findall(r"^      ([A-Z_]+): \$\{\{ secrets\.([A-Z_]+) \}\}$", call, re.M))
+        passed = set(re.findall(r"^      ([A-Z_]+):\s+\$\{\{ secrets\.([A-Z_]+) \}\}$", call, re.M))
         self.assertTrue(used)
         self.assertEqual(used, declared)
         self.assertEqual({name for name, _ in passed}, used)
