@@ -127,6 +127,20 @@ Everything else added by this slice is package or internal access. Raw HTTP,
 XML, crypto helpers, launch/resume, entropy seams and file migration helpers are
 not an external API. The existing public RTSP smoke-test API is unchanged.
 
+The first iPhone launcher also consumes `NetworkClient.appList()` and the
+read-only `HostApp` values (`id`, `name`, `hdrCapable`, `hidden`). The existing
+single pinned mutual-TLS request and hidden-app metadata remain unchanged.
+`StreamFailureCopy.needsSunshineMessage` provides the shared requirement text.
+
+`PinnedCertStore.load/store/delete` require the shell's explicit defaults,
+Application Support base and protected-data availability closure. Store only an
+authenticated pairing result under its verified PC ID. Protected-data
+unavailability throws before storage access; load distinguishes an absent pin
+from unreadable, empty or non-UTF8 storage and never substitutes a legacy pin
+for a broken saved file. Delete reports failures rather than claiming success
+while a pin survives. Existing Mac adapter methods and migration behavior remain
+unchanged. PC metadata and the decision to pair or forget stay in the shell.
+
 ### iOS local-network requirements
 
 The consuming app's Info.plist must include `NSLocalNetworkUsageDescription` and
@@ -329,6 +343,63 @@ spatial impulse, channel-layout, lifecycle, persistence and fuzz tests remain
 part of the gate. Physical routes, audible equivalence, idle/load/recovery
 telemetry and iPhone RemoteIO playback still need owner testing; local builds do
 not establish those results.
+
+## Paired slices 6 and 7: pacing and video
+
+`GlimmerEngine/Pacing/` owns the existing pacer state, bounded queue, cadence
+and rate-hint decisions, `CADisplayLink` target, tick thread and release queue.
+`GlimmerEngine/Video/` owns `VideoDecoder`, VideoToolbox session and output
+callbacks, bitstream/colour/HDR handling, presentation and backdrop sampling.
+The decoded-frame handoff and renderer enqueue stay inside one module. These
+slices are reviewed and validated as a pair; the intermediate pacer commit is
+not a mergeable or performance-validated release boundary.
+
+`MacPacer` supplies the NSView-bound link factory, scalar screen capabilities,
+existing defaults and one-time Mach scheduling. `MacVideo` supplies NSScreen
+headroom/name/refresh observations. Both adapters remain in
+`Glimmer/EngineAdapters/`. The existing evidence reconciler publishes headroom
+level/generation into `PacerHeadroom` at the same reconciliation/reset sites;
+the release loop reads only shared engine storage. No per-frame adapter call,
+new renderer, clock policy, timer or tuning change is introduced.
+
+### Public video attachment contract
+
+Construct `VideoDecoder(configuration:displayInfo:)` on main with the same
+`StreamConnection.Configuration` used to connect. The display-info closure
+returns current/potential EDR headroom, screen name and maximum refresh rate, or
+nil for no display. It is sampled only for existing display/colour probes.
+Attach the app-owned `AVSampleBufferDisplayLayer` through `attach(to:)`;
+replacement attachments restore the decoder's current resolved colour/HDR state.
+
+`startPacing(display:configuredFps:)` accepts `PacerDisplay`: a main-actor
+factory that creates the platform's display-bound `CADisplayLink` with the
+engine's NSObject target and selector, a scalar `PacerScreen` probe, a bind-time
+`tickOffMain` preference closure, and a once-per-thread scheduling hook. Capture
+the view weakly; a nil link means detached. The engine retains the target and
+link and reads timestamps directly. iOS uses public display-link creation and an
+empty scheduling hook; it must not copy the Mac Mach policy. Call
+`pacingScreenDidChange()` on display changes. Stable screen signatures retain
+the existing link; changed identity, scale or refresh capabilities rebind it.
+
+Supply the decoder as `StreamConnection`'s video sink. Successful backend
+adoption binds its existing IDR and HDR-metadata access internally; stopped
+backends cannot adopt or bind a replacement. Consume ordered connection HDR
+events and call `setHDR(enabled:)` once per current connection event. The
+decoder reports resolved output through `onHDRActiveChanged` and first pixels
+through `onFirstDecodedFrame`. A shell may set `rebuildDisplayLayerHook` to
+replace and reattach its layer on a hard renderer failure.
+
+Await connection stop before `teardown()`. Final teardown releases display
+factory/probe, rebuild, first-frame and HDR callback contexts; nonfinal sink
+stop/cleanup retains them for reconnect. The first-frame callback is main-actor
+isolated and guarded by a connection-lifecycle generation, so replacing a live
+layer preserves its pending notification while stopping cancels it. Stop
+invalidates pending display ticks and releases; attachment generations reject
+deferred colour, failure-recovery, and notification work from replaced or
+detached layers. The shell owns foreground/background policy; iOS
+disconnect/lock/background leave the PC game running. Mac watchdog and telemetry
+helpers stay package-only. Public consumer tests construct, attach and stop real
+engine objects without networking.
 
 ## Ownership map
 

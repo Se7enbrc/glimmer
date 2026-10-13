@@ -13,8 +13,6 @@
 //  for the decoder's stored state.
 //
 
-import GlimmerEngine
-import AppKit
 import AVFoundation
 import CoreMedia
 import CoreVideo
@@ -38,6 +36,11 @@ extension VideoDecoder {
         }
     }
 
+    /// Bind after attaching the layer and showing its view on the intended display.
+    public func startPacing(display: PacerDisplay, configuredFps: Int32) {
+        startPacing(display: display, configuredFps: configuredFps, warmHandover: false)
+    }
+
     // MARK: - Frame pacer bring-up + control surface
 
     /// Stand up the display-clock frame pacer and bind its CADisplayLink to
@@ -53,8 +56,8 @@ extension VideoDecoder {
     /// pacer no longer has a sustained-lag → IDR hook: a presentation-timing trim
     /// of an already-decoded frame never requests a keyframe (the reference chain
     /// is intact), so that escalation path is gone entirely.
-    public func startPacing(
-        drivingView view: NSView, configuredFps: Int32, warmHandover: Bool = false
+    package func startPacing(
+        display: PacerDisplay, configuredFps: Int32, warmHandover: Bool
     ) {
         // Build fresh each session so a restart doesn't inherit stale cadence
         // history or a dead link.
@@ -95,8 +98,8 @@ extension VideoDecoder {
         // Remember the driving view so the present-watchdog's give-up → re-enable
         // path can rebuild onto the same screen without touching the actor-
         // isolated StreamWindow.
-        pacingDrivingView = view
-        pacer.start(drivingView: view)
+        pacingDisplay = display
+        pacer.start(display: display)
     }
 
     /// Notify the pacer that the stream window changed display (moved to
@@ -110,7 +113,7 @@ extension VideoDecoder {
     /// Grow the pacer's adaptive depth one step toward the level EnvSignalController publishes.
     /// Driven by StreamSession's 2 s present-metric timer, the pacer's only grow path. No-op
     /// while pacing is down; `nonisolated` so the timer needs no actor hop.
-    nonisolated func pacingGrowDepthTowardTarget() {
+    package nonisolated func pacingGrowDepthTowardTarget() {
         framePacer?.growDepthTowardTarget()
     }
 
@@ -122,25 +125,25 @@ extension VideoDecoder {
     /// actor - `livenessSnapshot()` is lock-guarded. Module-internal (returns
     /// the pacer's internal `LivenessSnapshot`); the only caller is
     /// StreamSession's present-path watchdog, in the same module.
-    func pacingLiveness() -> FramePacer.LivenessSnapshot? {
+    package func pacingLiveness() -> FramePacer.LivenessSnapshot? {
         framePacer?.livenessSnapshot()
     }
 
     /// Escalation step 1 (gate wedged, link still ticking): re-seed the
     /// cadence base so the next tick force-releases. Cheap; preserves pacing.
-    func pacingForceRelease(reason: String) {
+    package func pacingForceRelease(reason: String) {
         framePacer?.forceReleaseNextTick(reason: reason)
     }
 
     /// Escalation step 2 (link dead, no ticks): push the freshest queued frame
     /// straight to the renderer so the screen updates while the link rebuilds.
-    func pacingDrainHeadDirectly(reason: String) {
+    package func pacingDrainHeadDirectly(reason: String) {
         framePacer?.drainHeadDirectly(reason: reason)
     }
 
     /// Escalation step 3 (link dead): rebuild the CADisplayLink. Resets the
     /// cadence base, so the first tick after the rebuild releases.
-    func pacingRebuildLink(reason: String) {
+    package func pacingRebuildLink(reason: String) {
         framePacer?.rebuildLink(reason: reason)
     }
 
@@ -152,7 +155,7 @@ extension VideoDecoder {
     /// re-engaged once the link is healthy. `enqueueDecodedFrame` falls through to
     /// `presentFrame` when `framePacer` is nil (the same fallback the early-frame
     /// path uses). This is NEVER a permanent one-way disable.
-    func disablePacingFallbackToDirect(reason: String) {
+    package func disablePacingFallbackToDirect(reason: String) {
         guard framePacer != nil else { return }
         // NOTICE, not error: this is a RECOVERABLE transient degradation - the
         // direct path is watched and the adaptive pacer is continuously
@@ -181,8 +184,8 @@ extension VideoDecoder {
     /// (window torn down - nothing to pace onto). Returns true if pacing was
     /// rebuilt. Driven by StreamSession's present-path watchdog, which owns the
     /// stability-window timing and the per-session give-up budget.
-    func reenablePacing(configuredFps: Int32) -> Bool {
-        guard framePacer == nil, let view = pacingDrivingView else { return false }
+    package func reenablePacing(configuredFps: Int32) -> Bool {
+        guard framePacer == nil, let display = pacingDisplay else { return false }
         log.notice("""
             Present-path recovered after give-up; re-enabling FramePacer (fresh pacer, warm handover - direct present continues \
             until the rebuilt link proves healthy ticks)
@@ -192,7 +195,7 @@ extension VideoDecoder {
             + "pacing smoothing restores once the rebuilt link proves healthy ticks",
             "Stream")
         OSSignposter.render.emitEvent("PacerReenabled", "fps=\(configuredFps, privacy: .public)")
-        startPacing(drivingView: view, configuredFps: configuredFps, warmHandover: true)
+        startPacing(display: display, configuredFps: configuredFps, warmHandover: true)
         return true
     }
 
@@ -216,7 +219,7 @@ extension VideoDecoder {
     /// rebuilding the layer touches AppKit. `nonisolated`-callable wrappers exist
     /// for the pacer/decode-queue FAILED path; see `recoverPresentPathFromRenderQueue`.
     @MainActor
-    func recoverPresentPath(reason: String) {
+    package func recoverPresentPath(reason: String) {
         let layer = displayLayer
         let renderer = layer?.sampleBufferRenderer
         let failed = renderer?.status == .failed
@@ -248,9 +251,14 @@ extension VideoDecoder {
     /// nothing and keeps layer rebuilding on the main actor.
     nonisolated func recoverPresentPathFromRenderQueue(reason: String) -> Bool {
         guard !presentRecoveryPending.exchange(true, ordering: .acquiringAndReleasing) else { return false }
+        let generation = attachmentGeneration
         DispatchQueue.main.async { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                guard self.attachmentGeneration == generation else {
+                    self.presentRecoveryPending.store(false, ordering: .releasing)
+                    return
+                }
                 self.recoverPresentPath(reason: reason)
                 self.presentRecoveryPending.store(false, ordering: .releasing)
             }

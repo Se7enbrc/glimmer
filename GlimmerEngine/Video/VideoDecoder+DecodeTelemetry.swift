@@ -19,7 +19,6 @@
 //  rare events), and nothing here touches the proven decode/pace locks.
 //
 
-import GlimmerEngine
 import CoreMedia
 import CoreVideo
 import Foundation
@@ -118,7 +117,7 @@ extension VideoDecoder {
     }
 
     /// Map a negotiated stream-format bitmask to a codec label for telemetry.
-    nonisolated static func codecLabel(for format: Int32) -> String {
+    package nonisolated static func codecLabel(for format: Int32) -> String {
         if (format & StreamProtocol.VIDEO_FORMAT_MASK_AV1) != 0 { return "av1" }
         if (format & StreamProtocol.VIDEO_FORMAT_MASK_H265) != 0 { return "hevc" }
         if (format & StreamProtocol.VIDEO_FORMAT_MASK_H264) != 0 { return "h264" }

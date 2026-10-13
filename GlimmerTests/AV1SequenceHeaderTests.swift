@@ -6,6 +6,7 @@ import CoreVideo
 import Foundation
 import Testing
 
+@testable import GlimmerEngine
 @testable import Glimmer
 
 @MainActor

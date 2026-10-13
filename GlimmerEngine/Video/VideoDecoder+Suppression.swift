@@ -35,8 +35,6 @@
 //  state + the observer-token storage.
 //
 
-import GlimmerEngine
-import AppKit
 import AVFoundation
 import Foundation
 import os
@@ -49,7 +47,7 @@ extension VideoDecoder {
     /// requests one keyframe through the existing recovery path; duplicate visibility notifications
     /// must not repeat either edge. Network-loss recovery remains independent of this gate.
     @MainActor
-    func setPresentSuppressed(_ suppressed: Bool) {
+    package func setPresentSuppressed(_ suppressed: Bool) {
         presentSuppressedLock.lock()
         let changed = _presentSuppressed != suppressed
         if changed {
@@ -175,7 +173,7 @@ extension VideoDecoder {
     /// Lock-guarded read of the gate flag for the frame watchdog (gated =
     /// healthy-by-design, not a decode stall). Same accessor shape as
     /// `presentSuppressed` above it in the ladder.
-    nonisolated var decodeGated: Bool {
+    package nonisolated var decodeGated: Bool {
         presentSuppressedLock.lock(); defer { presentSuppressedLock.unlock() }
         return _decodeGated
     }
@@ -353,6 +351,7 @@ extension VideoDecoder {
         removeLayerStallObservers()
 
         let nc = NotificationCenter.default
+        let generation = attachmentGeneration
         let renderer = layer.sampleBufferRenderer
 
         layerStallObservers.append(
@@ -366,7 +365,7 @@ extension VideoDecoder {
                     // Re-read the renderer through the live layer (don't capture
                     // the non-Sendable renderer in this @Sendable closure); the
                     // notification only fires for the renderer we registered on.
-                    guard let self,
+                    guard let self, self.attachmentGeneration == generation,
                           let renderer = self.displayLayer?.sampleBufferRenderer,
                           renderer.requiresFlushToResumeDecoding
                     else { return }
@@ -394,7 +393,7 @@ extension VideoDecoder {
                     AVSampleBufferDisplayLayerFailedToDecodeNotificationErrorKey]
                     as? NSError)?.localizedDescription ?? "unknown"
                 MainActor.assumeIsolated {
-                    guard let self else { return }
+                    guard let self, self.attachmentGeneration == generation else { return }
                     self.log.warning(
                         "Layer failedToDecode (\(errDesc, privacy: .private)) - proactive present-path self-heal")
                     OSSignposter.render.emitEvent("LayerFailedToDecode", "")

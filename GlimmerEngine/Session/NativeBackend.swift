@@ -62,7 +62,10 @@ package final class NativeBackend: StreamingBackend, @unchecked Sendable {
 
     /// Inject the video sink (the VideoDecoder). Set-once before startConnection.
     package func attachVideoSink(_ sink: VideoSink) {
-        _ = adoptWhileConnecting { videoSink = sink }
+        _ = adoptWhileConnecting {
+            videoSink = sink
+            (sink as? VideoDecoder)?.setBackend(self)
+        }
     }
 
     /// Scoped lock helper - `NSLock.lock()/unlock()` are unavailable from async

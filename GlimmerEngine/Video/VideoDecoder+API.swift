@@ -10,8 +10,6 @@
 //  VideoDecoder.swift to keep each unit focused; see that file for stored state.
 //
 
-import GlimmerEngine
-import AppKit
 import AVFoundation
 import CoreMedia
 import CoreVideo
@@ -22,7 +20,7 @@ import os
 
 extension VideoDecoder {
 
-    public func toggleStatsOverlay() {
+    package func toggleStatsOverlay() {
         statsOverlayEnabled.toggle()
     }
 
@@ -88,7 +86,7 @@ extension VideoDecoder {
     /// Stash the negotiated bitrate for the overlay and telemetry. Set by
     /// `StreamSession.start`; nonisolated so a renegotiating reconnect can update
     /// it from any thread. Unset, the overlay shows only the measured value.
-    public nonisolated func setNegotiatedBitrateKbps(_ kbps: Int) {
+    package nonisolated func setNegotiatedBitrateKbps(_ kbps: Int) {
         negotiatedBitrateKbps.store(kbps, ordering: .relaxed)
     }
 
@@ -96,7 +94,7 @@ extension VideoDecoder {
     /// it in the overlay. Called by `StreamSession.start` right after it
     /// picks the AudioConfig. The value is the user-facing display string
     /// from `AudioConfig.displayLabel`, not the underlying channel bitmask.
-    public func setActiveAudioConfigLabel(_ label: String) {
+    package func setActiveAudioConfigLabel(_ label: String) {
         activeAudioConfigLabel = label
     }
 
@@ -121,13 +119,13 @@ extension VideoDecoder {
     /// exposed alongside so the watchdog can distinguish "host gone silent"
     /// (both stalls) from "host sending but we can't decode" (only decode
     /// stalls) and pick the appropriate recovery.
-    public nonisolated func secondsSinceLastDecodedFrame() -> Double {
+    package nonisolated func secondsSinceLastDecodedFrame() -> Double {
         statsCollector.secondsSinceLastDecodedFrame()
     }
 
     /// Reads the video DATAGRAM clock, not assembled frames: frames shredded by
     /// loss die in the depacketizer's recovery gate, and reception is still alive.
-    public nonisolated func secondsSinceLastReceivedFrame() -> Double {
+    package nonisolated func secondsSinceLastReceivedFrame() -> Double {
         VideoReceiveStatus.secondsSinceLastDatagram()
     }
 
@@ -137,7 +135,7 @@ extension VideoDecoder {
     /// every `renderer.enqueue` in BOTH modes. The present-path watchdog uses it
     /// to detect a screen freeze (decode healthy, nothing presented) regardless
     /// of whether pacing is up.
-    public nonisolated func secondsSinceLastPresentedFrame() -> Double {
+    package nonisolated func secondsSinceLastPresentedFrame() -> Double {
         statsCollector.secondsSinceLastPresent()
     }
 
@@ -145,7 +143,7 @@ extension VideoDecoder {
     /// output). Lock-guarded read of the same counter the receive-thread backlog
     /// gate maintains; safe from any thread. Surfaced ONLY by the opt-in
     /// telemetry exporter.
-    public nonisolated func inFlightDecodeBacklog() -> Int {
+    package nonisolated func inFlightDecodeBacklog() -> Int {
         inFlightDecodeLock.lock(); defer { inFlightDecodeLock.unlock() }
         return inFlightDecodes
     }
@@ -176,40 +174,39 @@ extension VideoDecoder {
     /// RTT / ENet health through the LIVE backend slot (re-pointed by
     /// `setBackend` on a silent reconnect) - so the overlay + exporter never read
     /// a dead pre-reconnect backend (the by-value-capture staleness bug).
-    nonisolated func telemetryEstimatedRtt() -> (rttMs: Double, varianceMs: Double)? { backend?.estimatedRtt() }
-    nonisolated func telemetryEnetHealth()
+    package nonisolated func telemetryEstimatedRtt() -> (rttMs: Double, varianceMs: Double)? { backend?.estimatedRtt() }
+    package nonisolated func telemetryEnetHealth()
         -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)? { backend?.enetHealth() }
-    nonisolated func telemetryDecoderDrops() -> UInt64 { statsCollector.decoderDropCount() }
-    nonisolated func telemetryBackpressureDrops() -> UInt64 { statsCollector.backpressureDropCount() }
-    nonisolated func telemetryPresentationLateDrops() -> UInt64 {
+    package nonisolated func telemetryDecoderDrops() -> UInt64 { statsCollector.decoderDropCount() }
+    package nonisolated func telemetryBackpressureDrops() -> UInt64 { statsCollector.backpressureDropCount() }
+    package nonisolated func telemetryPresentationLateDrops() -> UInt64 {
         statsCollector.presentationLateDropCount()
     }
-    nonisolated func telemetryPresentationGaps() -> UInt64 {
+    package nonisolated func telemetryPresentationGaps() -> UInt64 {
         statsCollector.presentationGapCount()
     }
     /// Pacer present-side liveness (adaptive depth, queue depth) for the
     /// exporter; nil when pacing isn't up. `livenessSnapshot()` is lock-guarded.
-    nonisolated func telemetryPacingLiveness() -> FramePacer.LivenessSnapshot? {
+    package nonisolated func telemetryPacingLiveness() -> FramePacer.LivenessSnapshot? {
         framePacer?.livenessSnapshot()
     }
     /// Per-second display-refresh window (min/avg/max derived Hz + change marker)
     /// for the exporter; nil when pacing isn't up. RESET-ON-READ - only the 1Hz
     /// exporter may call this (see `FramePacer.refreshWindowSnapshot`).
-    nonisolated func telemetryRefreshWindow() -> FramePacer.RefreshWindowSnapshot? {
+    package nonisolated func telemetryRefreshWindow() -> FramePacer.RefreshWindowSnapshot? {
         framePacer?.refreshWindowSnapshot()
     }
 
     /// Sample current display output separately from the resolved PQ/HLG input.
     @MainActor
-    func telemetryDisplayProbe() -> DisplayProbe? {
-        let view = displayLayer?.delegate as? NSView
-        guard let screen = view?.window?.screen ?? NSScreen.main else { return nil }
-        let edr = Double(screen.maximumExtendedDynamicRangeColorComponentValue)
-        let maxFps = screen.maximumFramesPerSecond
+    package func telemetryDisplayProbe() -> DisplayProbe? {
+        guard let display = displayInfo() else { return nil }
+        let edr = display.currentHeadroom
+        let maxFps = display.maximumFramesPerSecond
         return DisplayProbe(
             edrHeadroom: edr,
             hdrEngaged: VideoColorDescription.hdrDisplayOutput(inputHDR: isHDRActive, currentEDR: edr),
-            screenName: screen.localizedName,
+            screenName: display.name,
             proMotionCapable: maxFps > 60,
             maxRefreshHz: maxFps, hdrInput: isHDRActive)
     }
@@ -228,6 +225,7 @@ extension VideoDecoder {
         // Refuse further frame submissions immediately. Set before touching
         // session state so anything in flight on the decode queue bails out.
         isStreaming = false
+        firstFrameLifecycleGeneration.wrappingAdd(1, ordering: .releasing)
 
         // Stand down the hidden-window decode gate: cancel a pending gate
         // timer (its task must not fire against a dead session) and clear the
@@ -248,6 +246,11 @@ extension VideoDecoder {
         // serial queue no-ops. Drop our reference after.
         framePacer?.stop()
         framePacer = nil
+        pacingDisplay = nil
+        rebuildDisplayLayerHook = nil
+        displayInfo = { nil }
+        onFirstDecodedFrame = nil
+        onHDRActiveChanged = nil
         colorDisplayProbeTask?.cancel()
         colorDisplayProbeTask = nil
 
@@ -348,13 +351,14 @@ extension VideoDecoder {
         // layer failed-to-decode) onto the new layer. Lives in
         // VideoDecoder+Suppression.swift alongside the present-suppression state.
         installLayerStallObservers(on: displayLayer)
+        configureLayerColorspace()
     }
 
     /// Inject the streaming engine. Called by StreamSession on the main actor
     /// right after `attach(to:)` and before the stream starts, so IDR requests
     /// (decode queue) and HDR-metadata pulls (main actor) route through the
     /// protocol. Set-once before any backend callback fires.
-    func setBackend(_ backend: StreamingBackend) {
+    package nonisolated func setBackend(_ backend: StreamingBackend) {
         self.backend = backend
     }
 

@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import CoreVideo
 
 // The CF dictionary is created once from immutable values and never mutated after publication.
-struct VideoColorDescription: Equatable, @unchecked Sendable {
+package struct VideoColorDescription: Equatable, @unchecked Sendable {
     let primaries: String
     let transfer: String
     let matrix: String
@@ -41,7 +40,7 @@ struct VideoColorDescription: Equatable, @unchecked Sendable {
         attachments = values as CFDictionary
     }
 
-    static func == (lhs: Self, rhs: Self) -> Bool {
+    package static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.primaries == rhs.primaries && lhs.transfer == rhs.transfer && lhs.matrix == rhs.matrix
             && lhs.range == rhs.range && lhs.gamma == rhs.gamma
     }
@@ -50,7 +49,7 @@ struct VideoColorDescription: Equatable, @unchecked Sendable {
         CVImageBufferCreateColorSpaceFromAttachments(attachments)?.takeRetainedValue()
     }
 
-    static func hdrDisplayOutput(inputHDR: Bool, currentEDR: Double) -> Bool {
+    package static func hdrDisplayOutput(inputHDR: Bool, currentEDR: Double) -> Bool {
         inputHDR && currentEDR > 1
     }
 }

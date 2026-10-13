@@ -10,8 +10,6 @@
 //  unit focused; see that file for the decoder's stored state.
 //
 
-import GlimmerEngine
-import AppKit
 import AVFoundation
 import CoreMedia
 import CoreVideo
@@ -87,6 +85,7 @@ extension VideoDecoder {
     nonisolated func handleStop() {
         log.info("Stream stopping")
         isStreaming = false
+        firstFrameLifecycleGeneration.wrappingAdd(1, ordering: .releasing)
         // ZOMBIE-SESSION GUARD: on a HOST-INITIATED terminate this stop (via
         // stopConnection's sink-stop) runs with NO StreamSession.stop() yet -
         // an engaged hidden-window decode gate would otherwise block the frame

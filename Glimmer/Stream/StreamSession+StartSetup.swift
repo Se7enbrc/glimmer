@@ -115,7 +115,7 @@ extension StreamSession {
         win.coversNotch = config.coversNotch
         win.windowTitle = config.windowTitle
         win.streamPixelSize = CGSize(width: config.width, height: config.height)
-        let dec = VideoDecoder(colorSpace: config.colorSpace, colorRange: config.colorRange)
+        let dec = VideoDecoder(macColorSpace: config.colorSpace, colorRange: config.colorRange)
         dec.attach(to: win.displayLayer)
         // Focus drives the launcher; actual visibility drives decode presentation and power.
         win.onBackgroundedChanged = onBackgroundedChanged

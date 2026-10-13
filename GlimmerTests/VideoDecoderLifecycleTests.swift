@@ -202,7 +202,7 @@ struct VideoDecoderLifecycleTests {
         let first = try #require(decoder.framePacer)
         #expect(first.running && first.presentSuppressed)
         #expect(!first.tickDeficit.warmingUp)
-        #expect(decoder.pacingDrivingView === view)
+        #expect(decoder.pacingDisplay != nil)
         #expect(!decoder.reenablePacing(configuredFps: 120))
 
         decoder.disablePacingFallbackToDirect(reason: "test")

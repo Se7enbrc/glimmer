@@ -65,8 +65,8 @@ Top-level pieces:
 | `NetworkClient`       | `actor` over `ControlTransport` (Network.framework mTLS) | `GlimmerEngine/Network/Network.swift`                              |
 | `PairingClient`       | `actor`                                                  | `Glimmer/Stream/Pairing.swift`                                     |
 | `IdentityManager`     | `actor` (Mac adapter owns singleton)                     | `GlimmerEngine/Network/Identity.swift`                             |
-| `VideoDecoder`        | `@MainActor final class`                                 | `Glimmer/Stream/VideoDecoder.swift` (+ extensions)                 |
-| `FramePacer`          | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/FramePacer.swift` (+ extensions)                   |
+| `VideoDecoder`        | `@MainActor final class`                                 | `GlimmerEngine/Video/VideoDecoder.swift` (+ extensions)            |
+| `FramePacer`          | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Pacing/FramePacer.swift` (+ extensions)             |
 | `AudioDecoder`        | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Audio/AudioDecoder.swift`                           |
 | `InputForwarder`      | `@MainActor final class`                                 | `Glimmer/Stream/InputForwarder.swift`                              |
 | `ControllerForwarder` | `@MainActor` lifecycle; capture uses locked `InputCore`  | `Glimmer/Stream/ControllerForwarder.swift`                         |
@@ -315,7 +315,7 @@ and AVSampleBufferDisplayLayer teardowns.
 
 ## Video pipeline
 
-Owned by `VideoDecoder` (`Glimmer/Stream/VideoDecoder.swift`), with HDR
+Owned by `VideoDecoder` (`GlimmerEngine/Video/VideoDecoder.swift`), with HDR
 specifics in `+HDR.swift` and bitstream parsing in `+Bitstream.swift`.
 
 **Packet ingest.** The native engine's depacketizer calls `submitDecodeUnit(_:)`
@@ -344,8 +344,13 @@ release runs on a dedicated serial queue, never the main actor; at rest, a frame
 that is already due is released straight from the submit. The target depth rests
 at 1 frame and grows one frame per 2 s session tick toward the headroom level
 `EnvSignalController` publishes from sustained receive jitter, then decays back
-once the level drops (`FramePacer+AdaptiveDepth.swift`). There is no Metal
-shader: the OS owns color and EDR handling end to end.
+once the level drops (`FramePacer+AdaptiveDepth.swift`). The controller
+publishes its existing reconciled decision into engine-owned `PacerHeadroom`;
+frame releases never call the app. `GlimmerEngine/Pacing/` owns the display-link
+target, tick thread, queues and release handoff. `MacPacer` creates the
+view-bound link and supplies screen capabilities, preferences and one-time
+thread scheduling. There is no Metal shader: the OS owns color and EDR handling
+end to end.
 
 At enqueue, decoded images carry `kCMSampleAttachmentKey_DisplayImmediately`:
 the pacer has already decided when to release them. Their RTP timestamps remain
