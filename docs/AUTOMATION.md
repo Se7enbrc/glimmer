@@ -23,6 +23,22 @@ accepted parameters.
 
 {% endhint %}
 
+## End a stream from anywhere
+
+Stopping works like the menu bar Stop: it also quits the app on the PC.
+
+```bash
+glimmer stop
+open 'glimmer://stop'
+```
+
+{% hint style="info" %}
+
+Add `pc=Living%20Room` (or `glimmer stop "Living Room"`) to stop only that PC.
+`glimmer stop` exits 5 when nothing is streaming.
+
+{% endhint %}
+
 ## Add a launcher button
 
 1. Add an Open URL action in Raycast Quicklinks, Stream Deck or Alfred.
@@ -37,11 +53,12 @@ installation steps.
 2. Add an action.
 3. Select your paired PC.
 
-| Action         | Result                                  |
-| -------------- | --------------------------------------- |
-| Stream from PC | Opens a stream; app name is optional.   |
-| Wake PC        | Wakes and waits for an answer.          |
-| Quit App on PC | Quits without confirmation. Save first. |
+| Action         | Result                                       |
+| -------------- | -------------------------------------------- |
+| Stream from PC | Opens a stream; app name is optional.        |
+| Wake PC        | Wakes and waits for an answer.               |
+| Quit App on PC | Quits without confirmation. Save first.      |
+| Stop Streaming | Ends the stream and quits its app on the PC. |
 
 {% hint style="info" %}
 
