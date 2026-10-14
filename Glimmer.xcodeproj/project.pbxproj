@@ -44,6 +44,16 @@
 		F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */; };
 		7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69AB6019C55BC9409A7FA80F /* LauncherTests.swift */; };
 		E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */; };
+		2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = F08434884699435EA80067AB /* StreamTouchCapture.swift */; };
+		BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */; };
+		2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */; };
+		BF51A1858C9E4892B1CD845D /* IOSControllerCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */; };
+		7C852A7B0A774B1287D2B023 /* IOSControllerCapture+Samples.swift in Sources */ = {isa = PBXBuildFile; fileRef = 390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */; };
+		0A34A869941C483784D1C76F /* IOSControllerCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 198F3AC99E774F7CB79C6798 /* IOSControllerCaptureTests.swift */; };
+		169D2FE0FC0B48999584D8A7 /* IOSControllerFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1876A69C29C4777911C52EE /* IOSControllerFeedback.swift */; };
+		0A75FC5D61394A19A155A87D /* IOSControllerFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6958391F13644D4EBE6E2E6D /* IOSControllerFeedbackTests.swift */; };
+		CB8A71DDD3734C7D93110306 /* IOSControllerSensors.swift in Sources */ = {isa = PBXBuildFile; fileRef = E63F8D899AF944BB9D5502AA /* IOSControllerSensors.swift */; };
+		610DFE85BF994F3ABF7A541A /* IOSControllerSensorsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -95,6 +105,16 @@
 		155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionTests.swift"; sourceTree = "<group>"; };
 		69AB6019C55BC9409A7FA80F /* LauncherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherTests.swift"; sourceTree = "<group>"; };
 		2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests.swift"; sourceTree = "<group>"; };
+		F08434884699435EA80067AB /* StreamTouchCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCapture.swift"; sourceTree = "<group>"; };
+		4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCaptureTests.swift"; sourceTree = "<group>"; };
+		5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchRecognizers.swift"; sourceTree = "<group>"; };
+		1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerCapture.swift"; sourceTree = "<group>"; };
+		390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerCapture+Samples.swift"; sourceTree = "<group>"; };
+		198F3AC99E774F7CB79C6798 /* IOSControllerCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerCaptureTests.swift"; sourceTree = "<group>"; };
+		C1876A69C29C4777911C52EE /* IOSControllerFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerFeedback.swift"; sourceTree = "<group>"; };
+		6958391F13644D4EBE6E2E6D /* IOSControllerFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerFeedbackTests.swift"; sourceTree = "<group>"; };
+		E63F8D899AF944BB9D5502AA /* IOSControllerSensors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerSensors.swift"; sourceTree = "<group>"; };
+		7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerSensorsTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -170,7 +190,11 @@
 				2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */,
 				69AB6019C55BC9409A7FA80F /* LauncherTests.swift */,
 				155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */,
+				4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */,
 				9F5102EDB7AD2531AE0663B1 /* ControllerMonitorTests.swift */,
+				198F3AC99E774F7CB79C6798 /* IOSControllerCaptureTests.swift */,
+				7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */,
+				6958391F13644D4EBE6E2E6D /* IOSControllerFeedbackTests.swift */,
 				EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */,
 				8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */,
 				22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */,
@@ -197,9 +221,15 @@
 				087279E7E4417E5B10AADB05 /* LauncherServices.swift */,
 				5A97E5B4E562286545BA6412 /* StreamView.swift */,
 				11C92E9EC00985D64D0C1CC7 /* StreamSurface.swift */,
+				F08434884699435EA80067AB /* StreamTouchCapture.swift */,
+				5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */,
 				449C39977453B76D4D682FFF /* StreamSessionModel.swift */,
 				57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */,
 				36171098F2FC6D807B7809E9 /* ControllerMonitor.swift */,
+				390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */,
+				1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */,
+				E63F8D899AF944BB9D5502AA /* IOSControllerSensors.swift */,
+				C1876A69C29C4777911C52EE /* IOSControllerFeedback.swift */,
 				67A9450697D192F522AF5030 /* IOSAudioOutput+Properties.swift */,
 				C6D0443C4EE9DE4BECB00D8B /* IOSAudioOutput.swift */,
 				B00048335526E571C8D00BEB /* IOSAudioSession+Notifications.swift */,
@@ -319,7 +349,11 @@
 				E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */,
 				7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */,
 				F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */,
+				BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */,
 				99827218F70ECA345A8EED25 /* ControllerMonitorTests.swift in Sources */,
+				0A34A869941C483784D1C76F /* IOSControllerCaptureTests.swift in Sources */,
+				610DFE85BF994F3ABF7A541A /* IOSControllerSensorsTests.swift in Sources */,
+				0A75FC5D61394A19A155A87D /* IOSControllerFeedbackTests.swift in Sources */,
 				FAA9B2DAAD28F9FC05CD2E80 /* IOSAudioOutputTests.swift in Sources */,
 				5357DD73479F12579699A792 /* IOSAudioSessionTests.swift in Sources */,
 				1A26CF1176BA5F2D37E40F0A /* IOSAudioFixtures.swift in Sources */,
@@ -337,9 +371,15 @@
 				83B27EBA9F210DF76B77D772 /* LauncherServices.swift in Sources */,
 				53442F74573A5960DB86B797 /* StreamView.swift in Sources */,
 				9A28A0B31BBB599B016AAED4 /* StreamSurface.swift in Sources */,
+				2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */,
+				2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */,
 				BFCC9B0DBFB951A6374D2892 /* StreamSessionModel.swift in Sources */,
 				902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */,
 				56379B99BE31A1E9E8BAC42F /* ControllerMonitor.swift in Sources */,
+				7C852A7B0A774B1287D2B023 /* IOSControllerCapture+Samples.swift in Sources */,
+				BF51A1858C9E4892B1CD845D /* IOSControllerCapture.swift in Sources */,
+				CB8A71DDD3734C7D93110306 /* IOSControllerSensors.swift in Sources */,
+				169D2FE0FC0B48999584D8A7 /* IOSControllerFeedback.swift in Sources */,
 				542D884924A5B2C317194CD5 /* IOSAudioOutput+Properties.swift in Sources */,
 				8A57E19FAEB7FAD612489EEC /* IOSAudioOutput.swift in Sources */,
 				3F860A0B0CF3D204A85B1905 /* IOSAudioSession+Notifications.swift in Sources */,
@@ -588,7 +628,7 @@
 			repositoryURL = "https://github.com/Se7enbrc/glimmer.git";
 			requirement = {
 				kind = revision;
-				revision = 410e8280defd936f89e21dab61772faea2acdec7;
+				revision = 518a3ceb57ba4a424c4c1791b63f9fbd3751167a;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

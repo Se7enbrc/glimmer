@@ -77,10 +77,11 @@ retains those bundles in the `simulator-logs` artifact. Inspect the images
 before claiming visual acceptance.
 
 Plug in Backbone One and another controller: verify initial detection, unplug,
-reconnect and background/return. Controller input forwarding is not implemented
-yet. Pairing, hardware decode, audio routing, background/lock teardown and
-sustained play need real-PC and physical-device measurements. The UI rendering
-tests use fake network/session state only and do not prove playback.
+reconnect and background/return. Follow the fixed [input mapping](docs/INPUT.md)
+and validate controller navigation, held-input release and native feedback.
+Pairing, hardware decode, audio routing, background/lock teardown and sustained
+play need real-PC and physical-device measurements. The UI rendering tests use
+fake network/session state only and do not prove playback.
 
 The app opts into
 [higher refresh rates](https://developer.apple.com/documentation/bundleresources/information-property-list/cadisableminimumframedurationonphone)

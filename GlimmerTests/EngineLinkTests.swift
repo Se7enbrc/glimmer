@@ -17,7 +17,8 @@ struct EngineLinkTests {
 
     @Test func stoppedConnectionReleasesSinkOnceAndCannotRestart() async {
         let sink = ConnectionTestVideoSink()
-        let connection = StreamConnection(video: sink) { _, _ in
+        let connection = StreamConnection(video: sink) { _, event in
+            if case .input = event { return }
             Issue.record("A connection stopped before startup must not emit transport events.")
         }
         await connection.stop()
@@ -32,7 +33,8 @@ struct EngineLinkTests {
 
     @Test func invalidConfigurationFailsBeforeIdentityOrNetworking() async {
         let sink = ConnectionTestVideoSink()
-        let connection = StreamConnection(video: sink) { _, _ in
+        let connection = StreamConnection(video: sink) { _, event in
+            if case .input = event { return }
             Issue.record("Invalid configuration must not emit transport events.")
         }
         do {
@@ -64,7 +66,7 @@ struct EngineLinkTests {
     }
 }
 
-private final class ConnectionTestVideoSink: VideoSink {
+final class ConnectionTestVideoSink: VideoSink {
     let calls = Mutex<[String]>([])
     let capabilities: Int32 = 0
 

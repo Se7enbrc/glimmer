@@ -10,6 +10,39 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct StreamSessionTests {
+    @Test func controlsAndTemporaryInactivityOwnInputFocus() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        var focus: [Bool] = []
+        model.inputCaptureChanged = { focus.append($0) }
+        model.start(surface: StreamSurface())
+        model.receive(.firstFrame(fixture.id))
+        #expect(model.controlsVisible)
+        #expect(!model.inputFocused)
+        model.resumeInput()
+        #expect(model.inputFocused)
+        model.showControls()
+        #expect(!model.inputFocused)
+        model.resumeInput()
+        model.availabilityChanged(active: false, background: false, protectedDataAvailable: true)
+        #expect(!model.inputFocused)
+        model.resumeInput()
+        #expect(!model.inputFocused)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        #expect(model.inputFocused)
+        model.stop()
+        #expect(focus == [false, true, false, true, false, true, false])
+        await model.waitUntilStopped()
+    }
+
+    @Test func videoHasAccessibleShowControlsAction() {
+        let model = PlaybackFixture().model()
+        let controller = StreamViewController(model: model, close: {})
+        controller.loadViewIfNeeded()
+        #expect(controller.surface.accessibilityCustomActions?.map(\.name) == ["Show controls"])
+        #expect(controller.controllerUserInteractionEnabled)
+    }
+
     @Test func onlyMatchingFirstFramePromotesStream() async {
         let fixture = PlaybackFixture()
         let model = fixture.model()

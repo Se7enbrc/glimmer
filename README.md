@@ -4,7 +4,8 @@ Your PC games, on your iPhone or iPad. Native controls. No accounts or tracking.
 
 **This is an early development build.** The app finds nearby PCs running
 Sunshine, pairs with a PIN, lists their apps and connects a landscape video and
-stereo audio stream. Controller input forwarding is still being built.
+stereo audio stream. Physical controllers and simple touch use the shared input
+engine. See the fixed [input mapping](docs/INPUT.md).
 
 The initial stream is H.264, 1920 × 1080 at 60 fps, SDR and 20 Mbps.
 Disconnecting or backgrounding the app stops the local stream and leaves the

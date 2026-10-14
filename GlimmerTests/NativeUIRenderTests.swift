@@ -42,14 +42,15 @@ struct NativeUIRenderTests {
                          name: "pairing-\(style)", landscape: false, dark: dark)
     }
 
-    @Test(arguments: ["connecting", "streaming", "ended"])
+    @Test(arguments: ["connecting", "streaming", "playing", "ended"])
     func streamControls(state: String) async throws {
         let id = UUID()
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
             StreamPlayback(id: id, connect: {}, stop: {}, teardown: {}, screenChanged: {}, setHDR: { _ in })
         }, readIdleTimer: { false }, writeIdleTimer: { _ in })
         model.start(surface: StreamSurface())
-        if state == "streaming" { model.receive(.firstFrame(id)) }
+        if state == "streaming" || state == "playing" { model.receive(.firstFrame(id)) }
+        if state == "playing" { model.resumeInput() }
         if state == "ended" { model.stop(); await model.waitUntilStopped() }
         try await record(ZStack { Color.black.ignoresSafeArea(); StreamControls(model: model, close: {}) },
                          name: "stream-\(state)", landscape: true, dark: true)

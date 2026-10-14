@@ -39,6 +39,9 @@ struct StreamPlayback {
     let teardown: @MainActor () -> Void
     let screenChanged: @MainActor () -> Void
     let setHDR: @MainActor (Bool) -> Void
+    var input: StreamInput?
+    var focusInput: (@MainActor (Bool) -> Void)?
+    var stopInput: (@MainActor () -> Void)?
 
     static func make(launch: StreamLaunch, surface: StreamSurface,
                      events: AsyncStream<Event>.Continuation) -> StreamPlayback {
@@ -56,6 +59,9 @@ struct StreamPlayback {
         let connection = StreamConnection(video: video, audio: audio) { id, event in
             events.yield(.connection(id, event))
         }
+        let controllers = IOSControllerCapture(input: connection.input)
+        connection.input.setStopChord(.menuOptionsShoulders)
+        controllers.start()
         let id = connection.id
         video.onFirstDecodedFrame = { events.yield(.firstFrame(id)) }
         video.rebuildDisplayLayerHook = { [weak surface, weak video] in
@@ -69,6 +75,7 @@ struct StreamPlayback {
         }, stop: { await connection.stop() }, teardown: {
             video.teardown()
             audio.shutdown()
-        }, screenChanged: { video.pacingScreenDidChange() }, setHDR: { video.setHDR(enabled: $0) })
+        }, screenChanged: { video.pacingScreenDidChange() }, setHDR: { video.setHDR(enabled: $0) },
+           input: connection.input, focusInput: controllers.setFocused, stopInput: controllers.stop)
     }
 }

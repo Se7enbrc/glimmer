@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GameController
 import OSLog
 import SwiftUI
 
@@ -23,10 +24,11 @@ struct StreamView: UIViewControllerRepresentable {
 }
 
 @MainActor
-final class StreamViewController: UIViewController {
+final class StreamViewController: GCEventViewController {
     let model: StreamSessionModel
     let surface = StreamSurface()
     private let overlay: UIHostingController<StreamControls>
+    private var touchCapture: StreamTouchCapture?
     private var screenIdentity: ObjectIdentifier?
 
     init(model: StreamSessionModel, close: @escaping () -> Void) {
@@ -44,12 +46,14 @@ final class StreamViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        controllerUserInteractionEnabled = true
         view.backgroundColor = .black
         view.addSubview(surface)
         addChild(overlay)
         overlay.view.backgroundColor = .clear
         view.addSubview(overlay.view)
         overlay.didMove(toParent: self)
+        installInputCapture()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -88,6 +92,31 @@ final class StreamViewController: UIViewController {
         updateOrientation(.allButUpsideDown)
     }
 
+    private func installInputCapture() {
+        touchCapture = StreamTouchCapture(view: view, actions: .init(move: { [weak self] delta, time in
+            guard let self else { return }
+            let scale = surface.window?.windowScene?.screen.scale ?? 1
+            model.streamInput?.movePointer(dx: Double(delta.x * scale), dy: Double(delta.y * scale), capturedAt: time)
+        }, scroll: { [weak self] delta, time in
+            guard let self else { return }
+            let scale = surface.window?.windowScene?.screen.scale ?? 1
+            model.streamInput?.scroll(x: Double(-delta.x * scale), y: Double(delta.y * scale),
+                                     precise: true, capturedAt: time)
+        }, click: { [weak model] secondary, time in
+            model?.streamInput?.setPointerButton(secondary ? .right : .left, pressed: true, capturedAt: time)
+            model?.streamInput?.setPointerButton(secondary ? .right : .left, pressed: false, capturedAt: time)
+        }, endScroll: { [weak model] in model?.streamInput?.endScroll() },
+           revealControls: { [weak model] in model?.showControls() }))
+        model.inputCaptureChanged = { [weak self] focused in
+            self?.touchCapture?.setEnabled(focused)
+            self?.controllerUserInteractionEnabled = !focused
+        }
+        surface.accessibilityCustomActions = [UIAccessibilityCustomAction(name: "Show controls") { [weak model] _ in
+            model?.showControls()
+            return true
+        }]
+    }
+
     private func updateOrientation(_ mask: UIInterfaceOrientationMask) {
         AppDelegate.orientationMask = mask
         guard let scene = view.window?.windowScene else { return }
@@ -104,39 +133,35 @@ final class StreamViewController: UIViewController {
 struct StreamControls: View {
     let model: StreamSessionModel
     let close: () -> Void
-    @State private var controlsVisible = true
 
     var body: some View {
         ZStack {
-            if model.phase == .streaming {
-                Button {
-                    controlsVisible.toggle()
-                } label: {
-                    Color.clear.contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(controlsVisible ? "Hide stream controls" : "Show stream controls")
-                .ignoresSafeArea()
-            }
             status
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(.dark)
         .safeAreaInset(edge: .top, alignment: .trailing) {
-            if controlsVisible || model.phase != .streaming {
-                Button(model.phase.isEnded ? "Done" : "Disconnect", systemImage: "xmark") {
-                    model.stop()
-                    Task { await model.waitUntilStopped(); close() }
-                }
-                .buttonStyle(.glass)
-                .disabled(model.phase == .stopping)
-                .padding()
-                .accessibilityHint("Disconnects without quitting the game on the PC.")
+            if model.controlsVisible || model.phase != .streaming {
+                controls
             }
         }
-        .onChange(of: model.phase) { _, phase in
-            if phase == .streaming { controlsVisible = false }
-        }
+    }
+
+    private var controls: some View {
+        HStack {
+            if model.phase == .streaming {
+                Button("Resume", systemImage: "play.fill", action: model.resumeInput)
+                    .buttonStyle(.glass)
+                    .accessibilityHint("Returns controller and touch input to the PC.")
+            }
+            Button(model.phase.isEnded ? "Done" : "Disconnect", systemImage: "xmark") {
+                model.stop()
+                Task { await model.waitUntilStopped(); close() }
+            }
+            .buttonStyle(.glass)
+            .disabled(model.phase == .stopping)
+            .accessibilityHint("Disconnects without quitting the game on the PC.")
+        }.padding()
     }
 
     @ViewBuilder private var status: some View {
@@ -152,12 +177,18 @@ struct StreamControls: View {
         case .ended(let message):
             Text(message).multilineTextAlignment(.center).padding(32)
         case .streaming:
-            if controlsVisible && (model.audioUnavailable || model.connectionPoor) {
-                VStack(spacing: 8) {
-                    if model.audioUnavailable { Label("Audio is unavailable", systemImage: "speaker.slash") }
-                    if model.connectionPoor { Label("Connection is unstable", systemImage: "wifi.exclamationmark") }
+            if model.controlsVisible {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        Text("Hold Menu, Options, and both shoulder buttons to disconnect.")
+                        Text("Drag to move the pointer. Tap to click.")
+                        Text("Use two fingers to scroll or tap for a secondary click.")
+                        Text("Tap with three fingers to show these controls.")
+                            .accessibilityHint("VoiceOver users can choose Show controls on the video.")
+                        if model.audioUnavailable { Label("Audio is unavailable", systemImage: "speaker.slash") }
+                        if model.connectionPoor { Label("Connection is unstable", systemImage: "wifi.exclamationmark") }
+                    }.padding(32).multilineTextAlignment(.center)
                 }
-                .padding().background(.regularMaterial, in: .rect(cornerRadius: 12))
             }
         }
     }

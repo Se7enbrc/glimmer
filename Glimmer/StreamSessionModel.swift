@@ -16,6 +16,10 @@ final class StreamSessionModel {
     private(set) var audioUnavailable = false
     private(set) var connectionPoor = false
     private(set) var canStart = true
+    private(set) var controlsVisible = true
+    var inputCaptureChanged: ((Bool) -> Void)?
+    var inputFocused: Bool { canStart && phase == .streaming && !controlsVisible }
+    var streamInput: StreamInput? { playback?.input }
     nonisolated let launch: StreamLaunch
     private let makePlayback: @MainActor (StreamLaunch, StreamSurface, AsyncStream<StreamPlayback.Event>.Continuation)
         -> StreamPlayback
@@ -76,6 +80,8 @@ final class StreamSessionModel {
         }
         generation &+= 1
         phase = .stopping
+        synchronizeInputFocus()
+        playback.stopInput?()
         connectTask?.cancel()
         connectTask = nil
         eventTask?.cancel()
@@ -94,7 +100,24 @@ final class StreamSessionModel {
 
     func availabilityChanged(active: Bool, background: Bool, protectedDataAvailable: Bool) {
         canStart = active && protectedDataAvailable
+        synchronizeInputFocus()
         if background || !protectedDataAvailable { stop() }
+    }
+
+    func showControls() {
+        controlsVisible = true
+        synchronizeInputFocus()
+    }
+
+    func resumeInput() {
+        guard canStart, phase == .streaming else { return }
+        controlsVisible = false
+        synchronizeInputFocus()
+    }
+
+    private func synchronizeInputFocus() {
+        playback?.focusInput?(inputFocused)
+        inputCaptureChanged?(inputFocused)
     }
 
     func screenChanged() { playback?.screenChanged() }
@@ -107,6 +130,7 @@ final class StreamSessionModel {
         case .firstFrame(let id):
             guard playback?.id == id else { return }
             phase = .streaming
+            synchronizeInputFocus()
         case .connection(let id, let event):
             guard playback?.id == id else { return }
             switch event {
@@ -117,6 +141,8 @@ final class StreamSessionModel {
             case .connectionPoor(let poor): connectionPoor = poor
             case .audioFailed: audioUnavailable = true
             case .hdrMode(let enabled): playback?.setHDR(enabled)
+            case .input(let event):
+                if event == .stopRequested { stop() }
             case .connected, .stageStarting, .stageComplete: break
             }
         }
