@@ -19,6 +19,7 @@
 //  because `detach()` and `setReady(_:)` write it from this file.
 //
 
+import GlimmerEngine
 import AppKit
 
 extension InputForwarder {

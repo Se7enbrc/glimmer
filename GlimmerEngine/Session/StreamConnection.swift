@@ -6,6 +6,7 @@ import Foundation
 /// One transport attempt. The shell supplies media sinks and owns presentation and reconnect policy.
 public actor StreamConnection {
     public nonisolated let id: UUID
+    public nonisolated let input: StreamInput
     private let backend: NativeBackend
     private var started = false
     private var stopped = false
@@ -20,6 +21,7 @@ public actor StreamConnection {
         case connectionPoor(Bool)
         case hdrMode(Bool)
         case audioFailed(String)
+        case input(StreamInput.Event)
     }
 
     public enum Failure: Error, Sendable {
@@ -34,8 +36,10 @@ public actor StreamConnection {
                 onEvent: @escaping @Sendable (UUID, Event) -> Void) {
         let id = UUID()
         self.id = id
-        backend = NativeBackend()
-        backend.attachConnectionEvents(TransportConnectionEvents(id: id, emit: onEvent))
+        let backend = NativeBackend()
+        self.backend = backend
+        input = StreamInput(backend: backend) { onEvent(id, .input($0)) }
+        backend.attachConnectionEvents(TransportConnectionEvents(id: id, input: input, emit: onEvent))
         backend.attachVideoSink(video)
         if let audio { backend.attachAudioSink(audio) }
     }
@@ -82,17 +86,19 @@ public actor StreamConnection {
                 serverCodecModeRaw: NetworkClient.backendCodecModeMask(server.serverCodecModeRaw))
             try await backend.startConnectionAsync(server: info, config: config)
         } catch {
+            input.stop()
             backend.stopConnection()
             throw error
         }
     }
 
-    deinit { backend.stopConnection() }
+    deinit { input.stop(); backend.stopConnection() }
 
     /// Stops local transport and joins media workers. It does not quit the game on the PC.
     public func stop() {
         stopped = true
         launchTask?.cancel()
+        input.stop()
         backend.stopConnection()
     }
 }
@@ -101,10 +107,30 @@ public actor StreamConnection {
 final class TransportConnectionEvents: ConnectionEvents {
     let id: UUID
     let emit: @Sendable (UUID, StreamConnection.Event) -> Void
+    let input: StreamInput?
 
-    init(id: UUID, emit: @escaping @Sendable (UUID, StreamConnection.Event) -> Void) {
+    init(id: UUID, input: StreamInput? = nil, emit: @escaping @Sendable (UUID, StreamConnection.Event) -> Void) {
         self.id = id
+        self.input = input
         self.emit = emit
+    }
+
+    func controllersActivated() { input?.enqueueActivation(true) }
+    func controllersDeactivated() { input?.enqueueActivation(false) }
+    func rumble(controller: UInt16, lowFreq: UInt16, highFreq: UInt16) {
+        input?.feedback(slot: controller, .rumble(lowFrequency: lowFreq, highFrequency: highFreq))
+    }
+    func rumbleTriggers(controller: UInt16, left: UInt16, right: UInt16) {
+        input?.feedback(slot: controller, .triggerRumble(left: left, right: right))
+    }
+    func setControllerLED(controller: UInt16, r: UInt8, g: UInt8, b: UInt8) {
+        input?.feedback(slot: controller, .rgbLED(red: r, green: g, blue: b))
+    }
+    func setPlayerLEDs(controller: UInt16, solid: UInt8, flashing: UInt8) {
+        input?.feedback(slot: controller, .playerLEDs(solid: solid, flashing: flashing))
+    }
+    func setMotionEventState(controller: UInt16, motionType: UInt8, reportRateHz: UInt16) {
+        input?.feedback(slot: controller, .motion(type: motionType, reportRateHz: reportRateHz))
     }
 
     func stageStarting(_ name: String) { emit(id, .stageStarting(name)) }

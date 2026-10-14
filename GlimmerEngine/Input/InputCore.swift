@@ -1,68 +1,93 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
 import Foundation
 import os
 
 /// The recursive lock serializes snapshots, forwarding and the shared release barrier across capture threads.
-final class InputCore: @unchecked Sendable {
-    struct Snapshot: Sendable {
-        var ready = false
-        var focused = false
-        var mask: UInt16 = 0
-        var controllersAnnounced = true
-        var chord: ControllerQuitChord = .none
-        var customChord: Set<ControllerButton> = []
-        var nintendoSlots: Set<UInt8> = []
-        var acceptEventsAfter: TimeInterval = 0
+package final class InputCore: @unchecked Sendable {
+    package struct Snapshot: Sendable {
+        package var ready = false
+        package var focused = false
+        package var mask: UInt16 = 0
+        package var controllersAnnounced = true
+        package var chord: ControllerQuitChord = .none
+        package var customChord: Set<ControllerButton> = []
+        package var nintendoSlots: Set<UInt8> = []
+        package var acceptEventsAfter: TimeInterval = 0
+
+        package init(ready: Bool = false, focused: Bool = false, mask: UInt16 = 0,
+                     controllersAnnounced: Bool = true, chord: ControllerQuitChord = .none,
+                     customChord: Set<ControllerButton> = [], nintendoSlots: Set<UInt8> = [],
+                     acceptEventsAfter: TimeInterval = 0) {
+            self.ready = ready
+            self.focused = focused
+            self.mask = mask
+            self.controllersAnnounced = controllersAnnounced
+            self.chord = chord
+            self.customChord = customChord
+            self.nintendoSlots = nintendoSlots
+            self.acceptEventsAfter = acceptEventsAfter
+        }
     }
 
-    let lock = NSRecursiveLock()
-    var snapshot = Snapshot()
-    var backend: StreamingBackend?
-    var releases = InputReleaseLedger()
-    var buttons: [UInt8: Int32] = [:]
-    var analogs: [UInt8: GamepadAnalog] = [:]
-    var current: [UInt8: (buttons: Int32, analog: GamepadAnalog)] = [:]
-    struct ControllerSample {
-        let slot: UInt8
-        var buttons: Int32
-        var analog: GamepadAnalog
+    package let lock = NSRecursiveLock()
+    package var snapshot = Snapshot()
+    package var backend: StreamingBackend?
+    package var releases = InputReleaseLedger()
+    package var announcedControllers: [UInt8: ControllerArrival] = [:]
+    package var pendingArrivals: [UInt8: ControllerArrival] = [:]
+    package var buttons: [UInt8: Int32] = [:]
+    package var analogs: [UInt8: GamepadAnalog] = [:]
+    package var current: [UInt8: (buttons: Int32, analog: GamepadAnalog)] = [:]
+    package struct ControllerSample {
+        package let slot: UInt8
+        package let token: UUID
+        package let registeredAt: TimeInterval
+        package var buttons: Int32
+        package var analog: GamepadAnalog
     }
-    var hidRegistrations: [UInt8: UUID] = [:]
-    var controllers: [ObjectIdentifier: ControllerSample] = [:]
-    var touchpadStates: [UInt8: InputForwarder.TouchpadState] = [:]
-    var controllerMouseStates: [UInt8: ControllerMouseState] = [:]
-    var heldMouseButtons: Set<Int32> = []
-    var controllerMouseTimer: DispatchSourceTimer?
-    let mouseQueue = DispatchQueue(label: "io.ugfugl.Glimmer.controllerMouse", qos: .userInteractive)
-    var mouseTimings: [UInt8: [InputEventTiming]] = [:]
-    var onMouseMode: (@Sendable (UInt8, Bool) -> Void)?
-    var nextTouchPointerId: UInt32 = 1
+    package var hidRegistrations: [UInt8: UUID] = [:]
+    package var controllers: [ObjectIdentifier: ControllerSample] = [:]
+    package var pendingTouchReleases: [(slot: UInt8, finger: ControllerTouchpadFinger)] = []
+    package var touchpadStates: [UInt8: ControllerTouchpadState] = [:]
+    package var controllerMouseStates: [UInt8: ControllerMouseState] = [:]
+    package var heldMouseButtons: Set<Int32> = []
+    package var mousePollingGeneration: UInt64 = 0
+    package var controllerMouseTimer: DispatchSourceTimer?
+    package let mouseQueue = DispatchQueue(label: "io.ugfugl.Glimmer.controllerMouse", qos: .userInteractive)
+    package var mouseTimings: [UInt8: [InputEventTiming]] = [:]
+    package var onMotionInputEnabled: (@Sendable (UInt8, Bool) -> Void)?
+    package var onMouseMode: (@Sendable (UInt8, Bool) -> Void)?
+    package var pointerResidual = SIMD2<Double>.zero
+    var scrollQuantizer = ScrollQuantizer()
+    package var nextTouchPointerId: UInt32 = 1
     private(set) var failureCodes: Set<Int32> = []
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Input")
-    var chordSlots: Set<UInt8> = []
-    var onCenterPartial: (@Sendable (UInt8) -> Void)?
-    var onChord: (@Sendable (UInt8, Bool) -> Void)?
-    var onActivity: (@Sendable () -> Void)?
-    var activityPublished = false
-    static let neutral = GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
+    package var chordSlots: Set<UInt8> = []
+    package var onCenterPartial: (@Sendable (UInt8) -> Void)?
+    package var chordEdges: [UInt8: UUID] = [:]
+    package var onChord: (@Sendable (UInt8, Bool, UUID) -> Void)?
+    package var onActivity: (@Sendable () -> Void)?
+    package var activityPublished = false
+    package static let neutral = GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
                                        leftStickX: 0, leftStickY: 0, rightStickX: 0, rightStickY: 0)
+
+    package init() {}
 
     deinit { controllerMouseTimer?.cancel() }
 
-    func record(_ name: StaticString, _ result: Int32) {
+    package func record(_ name: StaticString, _ result: Int32) {
         guard result != 0, failureCodes.insert(result).inserted else { return }
         log.error("\(name, privacy: .public) returned \(result) (first occurrence)")
     }
 
-    func withLock<Result>(_ body: () -> Result) -> Result {
+    package func withLock<Result>(_ body: () -> Result) -> Result {
         lock.lock(); defer { lock.unlock() }
         return body()
     }
 
-    func publish(_ value: Snapshot, backend: StreamingBackend?) {
+    package func publish(_ value: Snapshot, backend: StreamingBackend?) {
         withLock {
             var value = value
             value.acceptEventsAfter = snapshot.acceptEventsAfter
@@ -75,50 +100,51 @@ final class InputCore: @unchecked Sendable {
         }
     }
 
-    func state(slot: UInt8) -> (buttons: Int32, analog: GamepadAnalog)? {
+    package func state(slot: UInt8) -> (buttons: Int32, analog: GamepadAnalog)? {
         withLock { current[slot] }
     }
 
-    var needsReconciliation: Bool {
-        !releases.pending.isEmpty || !releases.held.isEmpty
+    package var needsReconciliation: Bool {
+        !releases.pending.isEmpty || !pendingTouchReleases.isEmpty || !pendingArrivals.isEmpty || !releases.held.isEmpty
             || controllerMouseStates.values.contains { $0.isMouse && ($0.buttons != 0 || $0.analog != Self.neutral) }
     }
 
-    func receive(slot: UInt8, buttons: Int32, analog: GamepadAnalog, chordButtons: Int32? = nil,
-                 capturedAt: TimeInterval? = nil) {
+    package enum ControllerAcceptance { case gated, chord, mouse, forwarded }
+
+    @discardableResult
+    package func receive(slot: UInt8, buttons: Int32, analog: GamepadAnalog, chordButtons: Int32? = nil,
+                         capturedAt: TimeInterval? = nil) -> ControllerAcceptance {
         withLock {
-            guard snapshot.ready, snapshot.focused, snapshot.mask & (1 << slot) != 0 else { return }
-            if let capturedAt, capturedAt < snapshot.acceptEventsAfter { return }
+            guard snapshot.ready, snapshot.focused, snapshot.mask & (1 << slot) != 0 else { return .gated }
+            if let capturedAt, capturedAt < snapshot.acceptEventsAfter { return .gated }
             guard snapshot.controllersAnnounced else {
                 flushReleases()
                 if !activityPublished { activityPublished = true; onActivity?() }
-                return
+                return .gated
             }
             current[slot] = (chordButtons ?? buttons, analog)
             let held = heldControllerButtons(buttons: chordButtons ?? buttons,
                                              leftTrigger: analog.leftTrigger, rightTrigger: analog.rightTrigger)
-            let chord = InputForwarder.chordSatisfied(snapshot.chord, custom: snapshot.customChord, held: held)
-            if chord != chordSlots.contains(slot) {
-                if chord { chordSlots.insert(slot) } else { chordSlots.remove(slot) }
-                onChord?(slot, chord)
-            }
+            let chord = ControllerChord.satisfied(snapshot.chord, custom: snapshot.customChord, held: held)
+            updateChord(slot: slot, held: chord)
             let isMouse = routeControllerMouse(slot: slot, buttons: buttons, analog: analog,
                                                chordHeld: chord,
                                                now: capturedAt ?? ProcessInfo.processInfo.systemUptime)
             let mapped = ControllerButtonLayout.apply(buttons, useNintendoLabels: snapshot.nintendoSlots.contains(slot))
             if chord {
                 guard needsRelease(slot: slot, buttons: mapped, leftDown: analog.leftTrigger > 0,
-                                   rightDown: analog.rightTrigger > 0) else { return }
+                                   rightDown: analog.rightTrigger > 0) else { return .chord }
                 sendController(slot: slot, buttons: (self.buttons[slot] ?? 0) & mapped, analog: Self.neutral)
             } else if !isMouse {
                 sendController(slot: slot, buttons: mapped, analog: analog)
             }
             if !activityPublished, needsReconciliation { activityPublished = true; onActivity?() }
+            return chord ? .chord : (isMouse ? .mouse : .forwarded)
         }
     }
 
-    func sendController(slot: UInt8, buttons: Int32, analog: GamepadAnalog) {
-        guard snapshot.ready, flushReleases() else {
+    package func sendController(slot: UInt8, buttons: Int32, analog: GamepadAnalog) {
+        guard snapshot.ready, flushReleases(), flushControllerArrivals() else {
             releases.release(.controller(slot))
             return
         }
@@ -135,15 +161,16 @@ final class InputCore: @unchecked Sendable {
         }
     }
 
-    func needsRelease(slot: UInt8, buttons: Int32, leftDown: Bool, rightDown: Bool) -> Bool {
+    package func needsRelease(slot: UInt8, buttons: Int32, leftDown: Bool, rightDown: Bool) -> Bool {
         let analog = analogs[slot] ?? Self.neutral
         return (self.buttons[slot] ?? 0) & ~buttons != 0
             || (analog.leftTrigger > 0 && !leftDown) || (analog.rightTrigger > 0 && !rightDown)
     }
 
     @discardableResult
-    func flushReleases() -> Bool {
-        guard snapshot.ready else { return releases.pending.isEmpty }
+    package func flushReleases() -> Bool {
+        guard snapshot.ready else { return releases.pending.isEmpty && pendingTouchReleases.isEmpty }
+        guard flushTouchReleases() else { return false }
         let count = releases.pending.count
         while let release = releases.pending.first {
             let timing = InputTimingContext.suspend(except: release)

@@ -91,6 +91,7 @@ struct ControllerButtonLayoutTests {
         let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
         forwarder.isReady = true
+        forwarder.gamepadMask = 3
         let pro = try #require(NintendoControllerType.identify(category: "Switch Pro Controller", name: ""))
         let joy = try #require(NintendoControllerType.identify(category: "JoyConPair", name: ""))
         var reads = 0
@@ -122,6 +123,7 @@ struct ControllerButtonLayoutTests {
         forwarder.registerNintendoController(slot: 12, type: pro, bottomSymbol: "b.circle")
         forwarder.registerNintendoController(slot: 13, type: nil, bottomSymbol: "a.circle")
         forwarder.isReady = true
+        forwarder.gamepadMask = 3
         for _ in 0..<3 {
             forwarder.routeControllerMouse(slot: 12, buttons: 0,
                                            analog: InputForwarder.neutralControllerAnalog, chordHeld: false)
@@ -138,6 +140,7 @@ struct ControllerButtonLayoutTests {
         let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
         forwarder.isReady = true
+        forwarder.gamepadMask = 3
         let pro = try #require(NintendoControllerType.identify(category: "Switch Pro Controller", name: ""))
         forwarder.nintendoLayoutProvider = { true }
         forwarder.registerNintendoController(slot: 0, type: pro)
@@ -162,6 +165,7 @@ struct ControllerButtonLayoutTests {
         let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
         forwarder.isReady = true
+        forwarder.gamepadMask = 3
         forwarder.nintendoLayoutProvider = { true }
         let pro = try #require(NintendoControllerType.identify(category: "Switch Pro Controller", name: ""))
         forwarder.registerNintendoController(slot: 0, type: pro)
@@ -183,6 +187,7 @@ struct ControllerButtonLayoutTests {
         let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
         forwarder.isReady = true
+        forwarder.gamepadMask = 3
         let pro = try #require(NintendoControllerType.identify(category: "Switch Pro Controller", name: ""))
         forwarder.nintendoLayoutProvider = { true }
         forwarder.registerNintendoController(slot: 0, type: pro)

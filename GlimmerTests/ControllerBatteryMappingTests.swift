@@ -8,7 +8,7 @@
 //  HID pad's type, advertised buttons and trigger kind derived from its mapping.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import GameController
 import Testing
 @testable import Glimmer

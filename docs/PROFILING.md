@@ -50,7 +50,7 @@ verify; some `Logger(` calls put the category on the next line):
 | `Stream.Capabilities`  | `Glimmer/Stream/Types.swift` (the VT codec probe)                                 |
 | `Stream.Discovery`     | `Glimmer/Stream/Discovery.swift`                                                  |
 | `Stream.Identity`      | `Glimmer/Stream/Identity.swift`                                                   |
-| `Input`                | `Glimmer/Stream/InputCore.swift`                                                  |
+| `Input`                | `GlimmerEngine/Input/InputCore.swift`                                             |
 | `Stream.Input`         | `Glimmer/Stream/InputForwarder.swift` (+ extensions)                              |
 | `Stream.NativeBackend` | `Glimmer/Stream/NativeBackend.swift`                                              |
 | `Stream.Network`       | `Glimmer/Stream/Network.swift`                                                    |

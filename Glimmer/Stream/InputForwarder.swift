@@ -158,7 +158,6 @@ public final class InputForwarder {
     package var releasePointerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultReleasePointer }
 
     /// Precise scroll slices summed into whole wheel notches (ScrollQuantizer.swift).
-    var scrollQuantizer = ScrollQuantizer()
 
     /// The mini player chord: a client-only toggle, never forwarded.
     package var miniPlayerHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultMiniPlayer }
@@ -225,13 +224,14 @@ public final class InputForwarder {
     /// session teardown (`detach()`). Stored here because extensions can't
     /// add stored properties - the dwell logic lives with the chord matcher
     /// in ControllerForwarder+QuitChord.swift.
-    var quitChordDwellTask: Task<Void, Never>?
+    let controllerChordDwell = ControllerChordDwell()
+    var quitChordDwellTask: Task<Void, Never>? { controllerChordDwell.task }
 
     /// Slot that armed the in-flight dwell. Only that pad's value-changed
     /// frames may cancel the count - a second pad's frames (which won't
     /// match the chord) say nothing about whether the holder is still
     /// holding.
-    var quitChordDwellSlot: UInt8?
+    var quitChordDwellSlot: UInt8? { controllerChordDwell.slot }
 
     /// Rate-limit state for the quit-chord Diag breadcrumbs (arm / cancel /
     /// expiry / partial hold). Same stored-property-in-extension constraint as
@@ -288,7 +288,10 @@ public final class InputForwarder {
 
     /// Bitmask of slots currently in use; bit N == 1 means slot N is occupied.
     /// Sent to the host as `activeGamepadMask` on every controller event.
-    var gamepadMask: UInt16 = 0 { didSet { publishInputSnapshot() } }
+    var gamepadMask: UInt16 {
+        get { inputCore.withLock { inputCore.snapshot.mask } }
+        set { inputCore.withLock { inputCore.snapshot.mask = newValue }; publishInputSnapshot() }
+    }
 
     var onControllerMouseChanged: (@MainActor (String) -> Void)?
     var nintendoLayoutProvider: @MainActor () -> Bool = { ControllerButtonLayout.usesLabels() }
@@ -298,7 +301,10 @@ public final class InputForwarder {
 
     /// What the PC may still hold in each slot. Only a stream start retires an entry,
     /// since a removal sent into a link that is already dead never arrives.
-    var announcedControllers: [UInt8: ControllerArrival] = [:]
+    var announcedControllers: [UInt8: ControllerArrival] {
+        _read { inputCore.lock.lock(); defer { inputCore.lock.unlock() }; yield inputCore.announcedControllers }
+        _modify { inputCore.lock.lock(); defer { inputCore.lock.unlock() }; yield &inputCore.announcedControllers }
+    }
 
     /// Cached connection observers so we can deregister on `detach()`.
     var connectObserver: NSObjectProtocol?
@@ -309,8 +315,6 @@ public final class InputForwarder {
     /// with a slow-moving trackpad we routinely see 0.3px/event. The
     /// accumulator carries the fraction forward until it crosses a
     /// whole-pixel boundary, which is what the host expects.
-    var mouseResidualX: Double = 0
-    var mouseResidualY: Double = 0
 
     /// Cruise traversal-boost state (see InputForwarder+Cruise.swift). Stored on
     /// the class because extensions can't add stored properties.
@@ -451,6 +455,7 @@ public final class InputForwarder {
     // Log the first non-zero return per code so transient failures stay quiet.
 
     func record(_ name: StaticString, _ rc: Int32) {
+        guard rc != 0 else { return }
         inputCore.withLock { inputCore.record(name, rc) }
     }
 

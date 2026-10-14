@@ -347,6 +347,7 @@ struct InputReleaseTests {
 
     @Test func quitChordAllowsTriggerReleaseWithoutSendingChordButtons() {
         let (input, backend, _) = setup()
+        input.gamepadMask = 1
         input.controllerQuitChordProvider = { .l1r1 }
         var analog = InputForwarder.neutralControllerAnalog
         analog.leftTrigger = 255

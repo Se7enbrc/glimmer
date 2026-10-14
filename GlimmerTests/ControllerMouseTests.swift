@@ -125,7 +125,7 @@ struct ControllerMouseTests {
         forwarder.pushHID(slot: 0, state: (start, neutral)) { (self.start, self.neutral) }
         #expect(forwarder.quitChordDwellSlot == 0)
         forwarder.quitChordDwellTask?.cancel()
-        forwarder.quitChordDwellExpired(slot: 0, pad: nil) { (self.start, self.neutral) }
+        forwarder.controllerChordDwell.expire()
         #expect(stopped)
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: neutral, chordHeld: false, now: .infinity)
         #expect(forwarder.controllerMouseStates[0]?.isMouse == true)
