@@ -58,10 +58,10 @@ Top-level pieces:
 | --------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
 | SwiftUI views         | views + observable state                                 | `Glimmer/ContentView.swift`, `SettingsView.swift`                  |
 | `AppModel`            | `@MainActor` `@Observable`                               | `Glimmer/AppModel.swift` (+ extensions)                            |
-| `StreamSession`       | `actor`                                                  | `Glimmer/Stream/StreamSession.swift` (+ extensions)                |
+| `StreamSession`       | `actor`                                                  | `GlimmerEngine/Session/StreamSession.swift` (+ extensions)         |
 | `StreamingBackend`    | protocol (the engine boundary)                           | `Glimmer/Stream/StreamingBackend.swift`                            |
 | `NativeBackend`       | `final class`, sole backend conformer                    | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/`            |
-| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                     | `Glimmer/Stream/StreamBridgeContext.swift`                         |
+| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Session/StreamBridgeContext.swift`                  |
 | `NetworkClient`       | `actor` over `ControlTransport` (Network.framework mTLS) | `GlimmerEngine/Network/Network.swift`                              |
 | `PairingClient`       | `actor`                                                  | `Glimmer/Stream/Pairing.swift`                                     |
 | `IdentityManager`     | `actor` (Mac adapter owns singleton)                     | `GlimmerEngine/Network/Identity.swift`                             |
@@ -129,19 +129,22 @@ Protocol constants live in a Swift mirror (`StreamProtocolConstants.swift`,
 ## The native engine (`GlimmerEngine/Network/` and `Session/`)
 
 `GlimmerEngine.framework` owns the wire formats, crypto, FEC, RTSP/ENet/RTP
-transport, reorder/depacketization, packet workers and native backend. All
-packet loops compile together. The app supplies connection events, media sinks,
-Mac batch receive/realtime scheduling and route observations through adapters
-under `Glimmer/EngineAdapters/`. Decoder recovery capabilities come from the
-supplied video sink. `NativeConnectionEvents` retains session identity and
-ordered main-queue delivery; late events cannot reach a replacement backend.
+transport, reorder/depacketization, packet workers, native backend and session
+recovery. All packet loops compile together. The app supplies native media
+surfaces, input capture, presentation hooks, activity/observer ownership and
+route observations through adapters under `Glimmer/EngineAdapters/`.
+`NativeConnectionEvents` retains session identity and ordered main-queue
+delivery; late events cannot reach a replacement backend.
 
-The source package exposes the same transport through `StreamConnection`, a
-one-attempt actor with supplied media sinks and identity-tagged callbacks. Its
-local stop leaves the PC app running; Mac StreamSession retains its existing
-cancel/reconnect policy. See ENGINE_EXTRACTION.md for the public API and
-remaining media extraction slices. Wire values, launch requests, defaults and
-diagnostics are unchanged.
+The source package exposes `StreamSession.make(media:network:hostDisposition:)`
+for a complete session with concrete decoders, one stable `StreamInput`, and
+ordered `Update` events carrying session and attempt IDs. The shared actor owns
+launch, recovery, watchdogs and final teardown. The required host disposition
+selects local disconnect or cancellation of the owned PC session; it is separate
+from the diagnostic stop reason. `StreamConnection` remains the low-level,
+one-attempt compatibility API. See [ENGINE_EXTRACTION.md](ENGINE_EXTRACTION.md)
+for the extraction boundaries. Wire values, defaults and measured policy are
+unchanged.
 
 `NativeBackend` runs the whole bring-up on a dedicated connect thread:
 
@@ -230,8 +233,13 @@ event continuation so the connection UI lights up live.
 
 ## Stream session lifecycle
 
-`StreamSession.start(server:config:appID:…)` returns an
-`AsyncStream<StreamEvent>` that drives the launcher's UI state. The phases:
+The Mac adapter's `StreamSession.start(server:config:appID:…)` returns the
+existing `AsyncStream<StreamEvent>`. External consumers create a session and
+stable input handle with `make(media:network:hostDisposition:)`, consume
+`session.events`, and call `start(appID:configuration:)`. The cached paired
+client avoids an extra initial server-info request. Both routes use the same
+actor and recovery policy; only the appropriate event stream is allocated. The
+phases:
 
 1. **Verify pairing**: `NetworkClient.fetchServerInfo()` (over HTTPS if the PC's
    cert is already pinned, plain HTTP otherwise). If `pairStatus != .paired`,
@@ -242,20 +250,24 @@ event continuation so the connection UI lights up live.
    A stopped session is never resumed later on a different or degraded link.
    Waiting for idle lets Sunshine finish its Undo commands before the fresh
    launch applies this stream's configuration. An occupied PC that this session
-   does not own requires takeover confirmation before cancellation.
+   does not own requires takeover confirmation before cancellation. The
+   `.disconnectOnly` disposition resumes the same app or launches once, without
+   entering a cancel/retry path; recovery ends locally if another app took over.
 3. **Build `BackendStreamConfig`**: `width`, `height`, `fps`, `bitrate`, the
    `supportedVideoFormats` codec bitmask, `colorSpace`, `colorRange`,
    `encryptionFlags`. The remote-input AES key and IV are copied in from the
    launch response.
-4. **Build window, decoder and input on the main actor**: `StreamWindow`,
-   `VideoDecoder` and `InputForwarder` are all `@MainActor`. The decoder is
-   attached to the window's `AVSampleBufferDisplayLayer` before the connection
-   starts so the first decoded frame has somewhere to land.
-5. **Build `StreamBridgeContext`**: holds weak references to the session,
-   decoder, audio decoder and input forwarder, plus the
-   `AsyncStream.Continuation`. `Unmanaged.passRetained` keeps the bridge alive
-   for the connection lifetime; `StreamBridgeContext.current` is a weak static
-   for context-less callback paths.
+4. **Adopt prepared media and native input on the main actor**: the Mac adapter
+   builds its `StreamWindow` and `InputForwarder`; external consumers supply
+   `PreparedMedia` with concrete video/audio decoders and native
+   quiesce/disposal closures. The decoder is attached to its
+   `AVSampleBufferDisplayLayer` before the connection starts so the first
+   decoded frame has somewhere to land.
+5. **Build `StreamBridgeContext`**: holds weak references to the session, video
+   and audio decoders, plus the native feedback operations and ordered event
+   source. `Unmanaged.passRetained` keeps the bridge alive for the connection
+   lifetime; `StreamBridgeContext.current` is a weak static for context-less
+   callback paths.
 6. **Build the event stream before connecting**: the backend fires
    `stageStarting` and `stageComplete` while the connect runs, so the
    continuation has to exist before the call or those early events are dropped.
@@ -264,7 +276,8 @@ event continuation so the connection UI lights up live.
    thread; throws on failure.
 8. **Install timers**: four on the main run loop (the stats-overlay refresh, the
    1 Hz frame watchdog, the present-path watchdog, and the 2 s session tick that
-   also feeds the pacer's depth; see `StreamSession+FrameWatchdog.swift`,
+   also feeds the pacer's depth; the stats timer is Mac-owned, while the other
+   three live in the shared session; see `StreamSession+FrameWatchdog.swift`,
    `+Watchdog.swift` and `+PresentMetric.swift`). The frame watchdog asks for
    keyframes from 2 s of decode silence. At `frameWatchdogTimeout` (10 s,
    moonlight-common-c's `FIRST_FRAME_TIMEOUT_SEC`) it tears down, unless video
@@ -295,11 +308,14 @@ Teardown order is load-bearing:
 3. Main-actor teardowns: `input.detach()`, `videoDecoder.teardown()`,
    `window.close()`, so a dead link cannot hold a frozen full-screen frame.
 4. `audioDecoder.shutdown()` (HAL output teardown).
-5. Briefly settle any pending launch, send `/cancel` for this session's app, and
-   close the control client. A late successful launch is cancelled again unless
-   a newer launch owns the PC.
+5. If the disposition permits cancellation, briefly settle any pending launch
+   and send `/cancel` for this session's app. A late successful launch is
+   cancelled again unless a newer launch owns the PC. Local disconnect skips
+   both cancellation paths. Close the control client.
 6. Clear `StreamBridgeContext.current`, release the bridge's
-   `Unmanaged.passRetained` +1, then `finish()` the event stream.
+   `Unmanaged.passRetained` +1, await native visual/media disposal, then finish
+   the event stream. Public sessions emit one final `.stopped` after disposal;
+   repeated stops await the same teardown and cannot restart the session.
 7. Release the `beginActivity` power assertion.
 
 Every stop path uses this teardown, including shortcuts, the menu, window close,
@@ -312,6 +328,20 @@ The bridge holds weak refs to every subsystem, so a callback firing against a
 torn-down subsystem just no-ops. But “no use-after-free” isn't “well-behaved”,
 and the order above keeps the engine's receive threads from racing the HAL audio
 and AVSampleBufferDisplayLayer teardowns.
+
+During internal recovery, the input handle and native registrations survive. The
+old attempt is revoked and held input released before its backend closes; a
+replacement receives its own immutable attempt identity. Delayed input, battery
+readings and media callbacks cannot adopt the replacement. The native surface
+keeps the last video frame until fresh media arrives.
+
+`EnvSignalController` keeps its measured evidence and policy in the engine.
+Native route/radio observations come from an owned source created at the
+existing two-second timer's start edge. Missing mobile observations remain
+unknown while receive counters still feed policy. Source disposal stops probes
+exactly once, and generation checks discard samples that finish after stop or
+replacement. Opt-in telemetry creates native capture only after its gate and
+rechecks lifecycle after reading main-actor presentation state.
 
 ## Video pipeline
 
@@ -698,11 +728,12 @@ The native engine delivers frames and control events on receive threads, and
 audio on its packet worker. These callbacks run outside actor isolation; the
 bridge avoids an actor hop for each frame:
 
-- **`StreamBridgeContext`** (`Glimmer/Stream/StreamBridgeContext.swift`) is the
-  single instance allocated per session. It holds _weak_ references to the
-  session and every subsystem, plus the `AsyncStream<StreamEvent>.Continuation`.
-  A subsystem torn down before the receive threads drain just becomes nil at the
-  callback site: no use-after-free, no order dependency.
+- **`StreamBridgeContext`** (`GlimmerEngine/Session/StreamBridgeContext.swift`)
+  is the single instance allocated per session. It holds _weak_ references to
+  the session and every subsystem, plus the
+  `AsyncStream<StreamEvent>.Continuation`. A subsystem torn down before the
+  receive threads drain just becomes nil at the callback site: no
+  use-after-free, no order dependency.
 - `Unmanaged.passRetained(bridge)` keeps the bridge alive across the
   connection's lifetime regardless of which subsystem nils out.
 - **`StreamBridgeContext.current`** is a weak static, guarded by a lock, for

@@ -69,13 +69,8 @@ enum MacTransport {
             .map { unsafeBitCast($0, to: TransportPlatform.ReceiveBatch.self) }
 
     static func makeBackend() -> NativeBackend {
-        var platform = TransportPlatform(receiveBatch: receiveBatch,
+        let platform = TransportPlatform(receiveBatch: receiveBatch,
             configureAudioThread: configureAudioThread, configureInputThread: configureInputThread)
-        platform.steadyPingInterval = { EnvSignalController.shared.steadyPingInterval() }
-        platform.audioPingStarted = { EnvSignalController.shared.noteAudioPingLoopStart() }
-        platform.videoPingStarted = { EnvSignalController.shared.noteVideoPingLoopStart() }
-        platform.audioPings = EnvSignalController.shared.audioPingsSentTotal
-        platform.videoPings = EnvSignalController.shared.videoPingsSentTotal
         return NativeBackend(platform: platform)
     }
 }

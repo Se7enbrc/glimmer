@@ -5,7 +5,6 @@
 //  StreamSession+PresentMetric.swift
 //
 
-import GlimmerEngine
 import Foundation
 import os
 
@@ -13,11 +12,11 @@ extension StreamSession {
 
     /// The two-second session tick: feeds the env-signal windows, grows the pacer depth toward
     /// the published level, and logs present-path liveness (healthy ticks stay at debug).
-    func startPresentMetricTimer() async {
+    package func startPresentMetricTimer() async {
         let dec = videoDecoder
         await MainActor.run {
             self.presentMetricTimer?.invalidate()
-            EnvSignalController.shared.beginSession()
+            EnvSignalController.shared.beginSession(observations: services.makeEnvironment())
             self.prevMetricTotalTicks = 0
             self.prevMetricTotalReleases = 0
             self.prevMetricTime = clock.absolute()
@@ -38,14 +37,14 @@ extension StreamSession {
 
     /// Stop the tick and end the env-signal session. Main actor, from `stop()`.
     @MainActor
-    func stopPresentMetricTimer() {
+    package func stopPresentMetricTimer() {
         presentMetricTimer?.invalidate()
         presentMetricTimer = nil
         EnvSignalController.shared.endSession()
     }
 
     @MainActor
-    func emitPresentMetric(dec: VideoDecoder) {
+    package func emitPresentMetric(dec: VideoDecoder) {
         let now = clock.absolute()
         let decodeIdle = dec.secondsSinceLastDecodedFrame()
         // Only emit once frames have started flowing, so a quiet handshake
@@ -96,7 +95,7 @@ extension StreamSession {
             """)
     }
 
-    static func presentMetricNeedsNotice(
+    package static func presentMetricNeedsNotice(
         sinceTick: Double, sinceRelease: Double, sincePresent: Double,
         decodeIdle: Double, sinceNotice: Double
     ) -> Bool {

@@ -3,14 +3,14 @@
 
 import Foundation
 
-/// Synchronous, connection-bound acceptance. Capture timestamps are monotonic system uptime.
+/// Synchronous session input acceptance. Capture timestamps are monotonic system uptime.
 /// The shell captures device state; the engine owns slots, mapping, release ordering and local chords.
 public final class StreamInput: @unchecked Sendable {
     let lifecycleQueue = DispatchQueue(label: "io.ugfugl.Glimmer.inputLifecycle")
     let core = InputCore()
     let haptics = ControllerHaptics()
     let motion = ControllerMotion()
-    let battery = ControllerBattery()
+    let battery: ControllerBattery
     var registrations: [UInt8: RegistrationState] = [:]
     let chordDwell = ControllerChordDwell()
     var chordContext = UUID()
@@ -18,6 +18,9 @@ public final class StreamInput: @unchecked Sendable {
     @MainActor var reconciliationTimer: Timer?
     var terminal = false
     var focused = false
+    let initialAttempt = UUID()
+    var activeAttempt: UUID?
+    var rearmOnActivation = false
     let emit: @Sendable (Event) -> Void
 
     struct RegistrationState {
@@ -42,9 +45,9 @@ public final class StreamInput: @unchecked Sendable {
         case motion(type: UInt8, reportRateHz: UInt16)
     }
 
-    init(backend: any StreamingBackend, emit: @escaping @Sendable (Event) -> Void) {
+    package init(battery: ControllerBattery = ControllerBattery(), emit: @escaping @Sendable (Event) -> Void) {
+        self.battery = battery
         self.emit = emit
-        core.backend = backend
         core.onMotionInputEnabled = { [weak motion] slot, enabled in
             motion?.setInputEnabled(enabled, slot: slot)
         }
@@ -53,6 +56,11 @@ public final class StreamInput: @unchecked Sendable {
             guard let self, let registration = self.registrations[slot] else { return }
             self.emit(.mouseMode(registration.identity, enabled: enabled))
         }
+    }
+
+    convenience init(backend: any StreamingBackend, emit: @escaping @Sendable (Event) -> Void) {
+        self.init(emit: emit)
+        rebind(to: backend, attempt: initialAttempt)
     }
 
     /// Returns nil after stop or when all sixteen slots are occupied. Registration alone sends no input.
@@ -146,20 +154,25 @@ public final class StreamInput: @unchecked Sendable {
     }
 
     // Backend lifecycle enqueues under its latch; no core lock or backend call occurs inside that latch.
-    func enqueueActivation(_ value: Bool) {
-        lifecycleQueue.async { [weak self] in self?.activate(value) }
-    }
+    func enqueueActivation(_ value: Bool) { enqueueActivation(value, attempt: initialAttempt) }
 
-    func activate(_ value: Bool) {
+    func activate(_ value: Bool) { activate(value, attempt: initialAttempt) }
+
+    func activate(_ value: Bool, attempt: UUID) {
         core.withLock {
-            guard !terminal else { return }
+            guard !terminal, activeAttempt == attempt, core.backend != nil else { return }
             if value {
+                if rearmOnActivation {
+                    for slot in registrations.keys { registrations[slot]?.rearm.suppressHeld() }
+                    rearmOnActivation = false
+                }
                 haptics.streamActivated(appActive: focused)
                 haptics.setOwnership(focused)
                 if let backend = core.backend { motion.streamActivated(backend: backend) }
             } else {
                 haptics.stopAll(reason: "controllers deactivated")
                 motion.stopAll(reason: "controllers deactivated")
+                battery.pause()
             }
             if !value { releaseOwnership() }
             core.snapshot.ready = value
@@ -179,6 +192,8 @@ public final class StreamInput: @unchecked Sendable {
             guard !terminal else { return }
             haptics.stopAll(reason: "connection stopped")
             motion.stopAll(reason: "connection stopped")
+            battery.pause()
+            activeAttempt = nil
             Task { @MainActor [self, battery] in
                 battery.stopAll()
                 reconcile()
@@ -227,8 +242,12 @@ public final class StreamInput: @unchecked Sendable {
     }
 
     func feedback(slot: UInt16, _ value: ControllerFeedback) {
+        feedback(slot: slot, value, attempt: initialAttempt)
+    }
+
+    func feedback(slot: UInt16, _ value: ControllerFeedback, attempt: UUID) {
         core.withLock {
-            guard !terminal, core.snapshot.ready, let slot = UInt8(exactly: slot),
+            guard !terminal, activeAttempt == attempt, core.snapshot.ready, let slot = UInt8(exactly: slot),
                   registrations[slot] != nil else { return }
             switch value {
             case .rumble(let low, let high): haptics.setRumble(controllerNumber: UInt16(slot), lowFreq: low, highFreq: high)

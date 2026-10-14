@@ -34,8 +34,7 @@ struct BackendGlueTests {
     @Test func eventsReachTheBridgeStreamInOrder() async {
         let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let bridge = StreamBridgeContext(
-            session: session, videoDecoder: VideoDecoder(), audioDecoder: AudioDecoder(),
-            inputForwarder: InputForwarder())
+            session: session, videoDecoder: VideoDecoder(), audioDecoder: AudioDecoder())
         let (stream, continuation) = AsyncStream.makeStream(of: StreamEvent.self)
         bridge.eventContinuation = continuation
         bridge.session = nil
@@ -61,7 +60,7 @@ struct BackendGlueTests {
         let bridge = StreamBridgeContext(
             session: StreamSession(
                 hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend()), videoDecoder: VideoDecoder(),
-            audioDecoder: AudioDecoder(), inputForwarder: InputForwarder())
+            audioDecoder: AudioDecoder())
         let pointer = Unmanaged.passUnretained(bridge).toOpaque()
         #expect(StreamBridgeContext.from(pointer) === bridge)
         #expect(StreamBridgeContext.from(nil) == nil)
@@ -108,7 +107,7 @@ extension BackendGlueTests {
         let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let decoder = VideoDecoder()
         let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
-                                         audioDecoder: AudioDecoder(), inputForwarder: InputForwarder())
+                                         audioDecoder: AudioDecoder())
         let old = NativeBackend()
         let replacement = NativeBackend()
         let events = NativeConnectionEvents(bridge: bridge, backend: old)

@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
 import Foundation
 
-struct TakeoverRequired: Error {
-    let appID: Int
+package struct TakeoverRequired: Error {
+    package let appID: Int
 }
 
 extension StreamSession {
-    func authorizeTakeover(_ authorized: Bool) { takeoverAuthorized = authorized }
+    package func authorizeTakeover(_ authorized: Bool) { takeoverAuthorized = authorized }
 
-    func checkAttempt(deadline: Date? = nil) throws {
+    package func checkAttempt(deadline: Date? = nil) throws {
         guard StreamAttempt.shouldContinue(
             cancelled: Task.isCancelled, streaming: isStreaming, stopping: stopInProgress) else {
             throw CancellationError()
@@ -20,10 +19,10 @@ extension StreamSession {
     }
 }
 
-actor SharedTeardown {
+package actor SharedTeardown {
     private var task: Task<Void, Never>?
 
-    func run(_ operation: @escaping @Sendable () async -> Void) async {
+    package func run(_ operation: @escaping @Sendable () async -> Void) async {
         if let task { await task.value; return }
         let task = Task { await operation() }
         self.task = task
@@ -32,11 +31,11 @@ actor SharedTeardown {
 }
 
 /// Only /cancel is serialized with the next launch; a hung /launch never holds this gate.
-actor HostLaunchMutations {
+package actor HostLaunchMutations {
     private var epochs: [String: Int] = [:]
     private var cancellations: [String: Task<Void, Never>] = [:]
 
-    func beginLaunch(for pc: String) async throws -> Int {
+    package func beginLaunch(for pc: String) async throws -> Int {
         while let pending = cancellations[pc] {
             await pending.value
             if cancellations[pc] == pending { cancellations[pc] = nil }
@@ -46,7 +45,7 @@ actor HostLaunchMutations {
         return epochs[pc, default: 0]
     }
 
-    func cancelIfCurrent(pc: String, epoch: Int, operation: @escaping @Sendable () async -> Void) async {
+    package func cancelIfCurrent(pc: String, epoch: Int, operation: @escaping @Sendable () async -> Void) async {
         while let pending = cancellations[pc] {
             await pending.value
             if cancellations[pc] == pending { cancellations[pc] = nil }

@@ -16,7 +16,7 @@ struct SessionHostDispositionTests {
         let session = StreamSession(hostDisposition: .disconnectOnly, backend: InputRecordingBackend())
         await session.prepareLaunchFlow(server: server)
         _ = try await session.launchWithDeadline(network: sunshine.client(server), appID: 7,
-            config: SessionFlow.config, info: server)
+            config: SessionFlow.config.request, info: server)
         #expect(sunshine.paths == [runningApp == 7 ? "resume" : "launch"])
         await session.settlePendingLaunch { Issue.record("Local disconnect must not cancel an owned launch") }
     }
@@ -32,7 +32,7 @@ struct SessionHostDispositionTests {
         await session.prepareLaunchFlow(server: server)
         await #expect(throws: StreamError.self) {
             _ = try await session.launchWithDeadline(network: sunshine.client(server), appID: 7,
-                config: SessionFlow.config, info: server)
+                config: SessionFlow.config.request, info: server)
         }
         #expect(sunshine.paths == ["launch"])
         await session.settlePendingLaunch { Issue.record("Failed local connection must not cancel") }
@@ -47,7 +47,7 @@ struct SessionHostDispositionTests {
                                     makeNetwork: { sunshine.client($0) })
         await session.prepareLaunchFlow(server: server)
         _ = try await session.launchWithDeadline(network: sunshine.client(server), appID: 7,
-            config: SessionFlow.config, info: server)
+            config: SessionFlow.config.request, info: server)
         await session.stop(cause: cause)
         await session.stop()
         #expect(sunshine.paths == ["launch"])

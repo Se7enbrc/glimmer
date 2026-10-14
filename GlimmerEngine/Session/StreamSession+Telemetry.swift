@@ -15,7 +15,6 @@
 //  exporter's own background queue never reaches into actor-isolated state.
 //
 
-import GlimmerEngine
 import Foundation
 
 extension StreamSession {
@@ -23,19 +22,32 @@ extension StreamSession {
     /// Build + start the telemetry exporter iff enabled. No-op (and no
     /// allocation) when the gate is off. Called from `start()` once the
     /// connection is up and the decoder/backend are live. Tests pass `enabled` and `make`.
-    func startTelemetryExporter(
+    package func startTelemetryExporter(
         decoder: VideoDecoder, serverName: String, enabled: Bool = TelemetryGate.isEnabled,
-        make: (TelemetrySource, String) -> TelemetryExporter? = {
-            TelemetryExporter.makeIfEnabled(
-                source: $0, serverName: $1, outputDirectory: MacTelemetryCapture.logsDirectory)
-        }
-    ) {
+        readPresentation: @MainActor @Sendable (SessionPresentation?, String)
+            -> ((@Sendable () -> RendererPerformanceSource?)?, String) = { presentation, fallback in
+                (presentation?.rendererProbe, presentation?.displayMode ?? fallback)
+            },
+        make: ((TelemetrySource, String) -> TelemetryExporter?)? = nil
+    ) async {
         guard enabled else { return }
         // Capture the decoder weakly; its telemetry accessors are all
         // `nonisolated` + lock-guarded, so the exporter's utility queue can call
         // them directly. RTT / ENet health route through the decoder's LIVE
         // backend (re-pointed on reconnect) - a by-value backend capture here
         // went dead after a silent reconnect swapped the backend.
+        let generation = telemetryGeneration
+        let attempt = attemptID
+        let preparedPresentation = presentation
+        let fallbackDisplayMode = services.defaultDisplayMode
+        let snapshot = await MainActor.run {
+            readPresentation(preparedPresentation, fallbackDisplayMode)
+        }
+        guard generation == telemetryGeneration, attempt == attemptID, !stopInProgress, !publicTerminal else { return }
+        let rendererProbe: @Sendable () -> RendererPerformanceSource?
+        if let prepared = snapshot.0 { rendererProbe = prepared } else { rendererProbe = { nil } }
+        let displayMode = snapshot.1
+        let capture = services.makeCapture()
         let source = TelemetrySource(
             videoStats: { [weak decoder] in
                 decoder?.telemetryStatsSnapshot() ?? StreamStatsSnapshot()
@@ -50,49 +62,30 @@ extension StreamSession {
             inFlightDecodeBacklog: { [weak decoder] in decoder?.inFlightDecodeBacklog() ?? 0 },
             refreshWindow: { [weak decoder] in decoder?.telemetryRefreshWindow() },
             displayProbe: { [weak decoder] in decoder?.telemetryDisplayProbe() },
-            rendererProbe: { [weak decoder, weak window] in
-                guard let decoder, let renderer = decoder.sampleBufferRenderer else { return nil }
-                let identity = ObjectIdentifier(renderer)
-                return RendererPerformanceSource(
-                    renderer, presentation: decoder.rendererPresentationState
-                ) { [weak decoder, weak window] transition in
-                    Task { @MainActor in
-                        guard let window, let decoder, !window.didClose,
-                              ObjectIdentifier(window.displayLayer.sampleBufferRenderer) == identity else { return }
-                        window.logRendererTransition(transition, hdrInput: decoder.isHDRActive)
-                    }
-                }
-            },
+            rendererProbe: rendererProbe,
             // The mode the session STARTED in (a Path-B Space exit can land it
             // in a window later; the per-second rows don't re-state it).
-            displayMode: (reconnectConfig?.displayMode ?? .defaultMode).rawValue,
+            displayMode: displayMode,
             // The decoder's setup ran during the connect, so the shape is negotiated.
             stream: StreamTelemetryConfig(
                 width: Int(decoder.streamWidth), height: Int(decoder.streamHeight),
                 fps: Int(decoder.streamFps), codec: VideoDecoder.codecLabel(for: decoder.streamVideoFormat),
                 bitrate: reconnectConfig?.bitrateDecision),
-            capture: MacTelemetryCapture.make())
+            capture: capture)
 
-        guard let exporter = make(source, serverName) else {
+        guard let exporter = (make ?? services.makeExporter)(source, serverName) else {
             // Gate off - the default. Nothing allocated, nothing started.
             return
         }
         self.telemetryExporter = exporter
         exporter.start()
-        // Discoverability (signal 4): log the bookmark chord on stream start so the
-        // user knows how to flag jank. Logged only when telemetry is ON - that's
-        // when a bookmark is actionable (it writes into the live telemetry). The
-        // default ⌃B is the simple two-key chord (vs the quit/stats ⌃⌥ family) -
-        // easy to hit mid-jank; the displayString renders the glyphs.
-        Diag.notice("Telemetry bookmark chord = \(HotkeyChord.defaultBookmark.displayString) "
-            + "- press it any time the stream \"feels bad\" to drop a timestamped jank "
-            + "marker (client-only; never sent to the host).", TelemetryExporter.logCategory)
+        services.bookmarkHint()
     }
 
     /// Reset telemetry and anchor the P2 handshake timeline at the connect START
     /// edge, before any receiver can latch a one-shot. A session's first connect
     /// resets everything; an in-place reconnect keeps the totals and first handshake.
-    func anchorTelemetryConnectStart(hostAddress: String) {
+    package func anchorTelemetryConnectStart(hostAddress: String) {
         TelemetryCounters.shared.anchorConnectStart(
             now: TelemetryCounters.monotonicNowNanos(), reconnecting: isReconnecting)
         if !isReconnecting {
@@ -105,13 +98,13 @@ extension StreamSession {
         // Latch the host for the stream-route probe (stream_link/stream_if):
         // the exporter is built long after the address is known, so the
         // connect edge hands it over (one String store, always-live).
-        StreamRouteProbe.latchHost(hostAddress)
+        services.latchHost(hostAddress)
     }
 
     /// Called only from GENUINE teardown (user stop / watchdog / connect failure).
     /// Latches the per-session reason ordinal (first concrete wins) and bumps the
     /// process-global tally once. Always-live; no-op-safe.
-    func noteTelemetryDisconnect(_ reason: DisconnectReason) {
+    package func noteTelemetryDisconnect(_ reason: DisconnectReason) {
         // Bump the global once, keyed by the latched reason (a host terminate may
         // have latched it first). The per-terminate latch deliberately does NOT
         // count, so a recovered silent-reconnect blip never inflates the tally.
@@ -126,7 +119,7 @@ extension StreamSession {
     /// the `onBookmarkHotkey` closure can read the actor-isolated exporter via a
     /// `Task` hop. No-op when telemetry is off (`telemetryExporter` is nil) - the
     /// chord is still consumed in the input path, it simply records nothing.
-    func recordTelemetryBookmark() {
+    package func recordTelemetryBookmark() {
         guard let exporter = telemetryExporter else { return }
         let marker = exporter.recordBookmark()
         audioDecoder.requestOutputDiagnostic(bookmark: marker)
@@ -134,7 +127,8 @@ extension StreamSession {
 
     /// Stop + drop the telemetry exporter, if one is running. Idempotent. Called
     /// from `stop()` teardown.
-    func stopTelemetryExporter() {
+    package func stopTelemetryExporter() {
+        telemetryGeneration &+= 1
         telemetryExporter?.stop()
         telemetryExporter = nil
     }

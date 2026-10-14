@@ -28,7 +28,7 @@ enum MacTelemetryCapture {
         capture.configuration = config
         capture.beginSession = { ioReport?.beginSession() }
         capture.wifi = { wifi.sample() }
-        capture.route = { EnvSignalController.shared.routeProbe?.current() }
+        capture.route = { EnvSignalController.shared.routeSnapshot }
         capture.resource = { ResourceTelemetry.sample() }
         capture.auditQoS = { QoSAudit.runAndLog($0, category: $1) }
         capture.cluster = { ioReport?.sample() }

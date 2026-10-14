@@ -407,8 +407,8 @@ private final class InputReleaseWindow: NSWindow {
 }
 
 private extension StreamSession {
-    func adoptInputForReleaseTest(_ input: InputForwarder) {
+    func adoptInputForReleaseTest(_ input: InputForwarder) async {
         isStreaming = true
-        self.input = input
+        self.input = await SessionInputHooks(input)
     }
 }

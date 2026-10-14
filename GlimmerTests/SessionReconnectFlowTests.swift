@@ -43,6 +43,7 @@ struct SessionReconnectFlowTests {
         let supply: BackendSupply
         let clock: ScriptedClock
         let events: AsyncStream<StreamEvent>
+        let window: StreamWindow
 
         /// Ends the session and returns every event it emitted, in order.
         func finish() async -> [String] {
@@ -64,8 +65,8 @@ struct SessionReconnectFlowTests {
         let session = StreamSession(
             hostDisposition: hostDisposition, backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
                                     makeBackend: { supply.make() }, clock: clock.session)
-        let events = await session.goLive(server: SessionFlow.pairedPC(), config: config, appID: Self.appID)
-        return Live(session: session, sunshine: sunshine, supply: supply, clock: clock, events: events)
+        let (events, window) = await session.goLive(server: SessionFlow.pairedPC(), config: config, appID: Self.appID)
+        return Live(session: session, sunshine: sunshine, supply: supply, clock: clock, events: events, window: window)
     }
 
     fileprivate static func label(_ event: StreamEvent) -> String {
@@ -248,7 +249,7 @@ struct SessionReconnectFlowTests {
         #expect(live.sunshine.paths == ["serverinfo", "launch"])
         #expect(await live.session.reconnectConfig?.bitrateKbps == 50_400)
         #expect(await live.session.downshift.stepsDown == 1)
-        #expect(await live.session.bannerText() == "Weak connection. Lowering quality to 50 Mbps…")
+        #expect(await live.window.reconnectBanner.displayedText == "Weak connection. Lowering quality to 50 Mbps…")
         #expect(await live.finish() == ["reconnecting", "reconnected"])
     }
 
@@ -269,42 +270,36 @@ struct SessionReconnectFlowTests {
 
 private extension StreamSession {
     /// A session that reached its live state: subsystems up, a bridge carrying the event stream.
-    func goLive(server: ServerInfo, config: StreamConfig, appID: Int) async -> AsyncStream<StreamEvent> {
+    func goLive(server: ServerInfo, config: StreamConfig, appID: Int) async -> (AsyncStream<StreamEvent>, StreamWindow) {
         isStreaming = true
         reachedLiveState = true
         reconnectServer = server
-        reconnectConfig = config
+        reconnectConfig = config.request
         reconnectAppID = appID
         let (window, input, decoder) = await MainActor.run {
             (StreamWindow(displayMode: .window), InputForwarder(), VideoDecoder())
         }
-        self.window = window
-        self.input = input
+        self.presentation = await SessionPresentation(window)
+        self.input = await SessionInputHooks(input)
         videoDecoder = decoder
-        let bridge = StreamBridgeContext(session: self, videoDecoder: decoder, audioDecoder: audioDecoder,
-                                         inputForwarder: input)
+        let bridge = StreamBridgeContext(session: self, videoDecoder: decoder, audioDecoder: audioDecoder)
         let (stream, continuation) = AsyncStream<StreamEvent>.makeStream()
         bridge.eventContinuation = continuation
         self.bridge = bridge
-        return stream
+        return (stream, window)
     }
 
     func failReconnectTransport(network: NetworkClient) async throws {
-        guard let window, let input, let videoDecoder, let server = reconnectServer,
+        guard let presentation, let input, let videoDecoder, let server = reconnectServer,
               let config = reconnectConfig else { throw StreamError.launchFailed("Missing test setup") }
         backend = InputRecordingBackend(connectFailure: .sessionFailed(-1))
         let launch = LaunchResponse(sessionURL: SessionFlow.sessionURL, gcmKey: Data(), gcmKeyId: Data())
         let backendConfig = makeBackendConfig(config: config, launch: launch, server: server)
         try await connectBackend(serverInfo: server, launch: launch, backendConfig: backendConfig,
-            setup: (window, input, videoDecoder), network: network, duringReconnect: true)
+            setup: SessionMedia(presentation: presentation, input: input, video: videoDecoder), network: network, duringReconnect: true)
     }
 
     func forgetLiveState() { reachedLiveState = false }
 
     func markRemotePath() { isRemotePathSession = true }
-
-    func bannerText() async -> String? {
-        let window = window
-        return await MainActor.run { window?.reconnectBanner.displayedText }
-    }
 }

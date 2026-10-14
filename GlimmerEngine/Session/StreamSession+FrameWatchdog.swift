@@ -9,15 +9,13 @@
 //  reconnect that rebuilds a decoder fed packets it never decodes. +Watchdog covers the present path.
 //
 
-import GlimmerEngine
 import Foundation
-import AppKit
 import os
 
 /// Keyframe nudges for one decode stall: at 2 s, then 4, 8, 16 and every 16 s after. A paused encoder
 /// answers the first; repeats only push more keyframes into whatever is already failing.
-struct DecodeStallNudge: Equatable {
-    static let maxIntervalSeconds: Double = 16
+package struct DecodeStallNudge: Equatable {
+    package static let maxIntervalSeconds: Double = 16
     private(set) var nextAt = StreamSession.decodeStallRecoveryThreshold
     private var interval = StreamSession.decodeStallRecoveryThreshold
 
@@ -34,17 +32,17 @@ extension StreamSession {
 
     /// moonlight-common-c's ML_ERROR_NO_VIDEO_TRAFFIC: no video frame ever
     /// arrived, almost always a firewall on UDP 47998 or a VPN's MTU.
-    static let noVideoTrafficTerminationCode: Int32 = -100
+    package static let noVideoTrafficTerminationCode: Int32 = -100
     /// ML_ERROR_NO_VIDEO_FRAME: video arrived, but not one frame decoded.
-    static let noVideoFrameTerminationCode: Int32 = -101
+    package static let noVideoFrameTerminationCode: Int32 = -101
     /// Packets arriving while nothing decodes for this long, on a live control link, earns one reconnect
     /// in place: it rebuilds the receiver and the decode session, which the hold alone never would.
-    static let decodeOnlyReconnectSeconds: Double = 30
+    package static let decodeOnlyReconnectSeconds: Double = 30
 
     /// The terminate code a watchdog teardown reports. A bring-up that never
     /// showed a frame names why, so the user gets the right fix; a stall
     /// after video flowed is the dead-peer loss (-1).
-    static func watchdogTerminationCode(
+    package static func watchdogTerminationCode(
         neverDecodedFirstFrame: Bool, receiveIdleSeconds: Double
     ) -> Int32 {
         guard neverDecodedFirstFrame else { return deadPeerTerminationCode }
@@ -53,7 +51,7 @@ extension StreamSession {
 
     /// Decode silence for this connection. A reconnect inherits the old connection's decoded-frame
     /// clock, so it is floored at this connection's arm; a gate lift since the arm also restarts it.
-    static func watchdogDecodeIdle(sinceDecoded: Double, sinceGateLift: Double, sinceArm: Double) -> Double {
+    package static func watchdogDecodeIdle(sinceDecoded: Double, sinceGateLift: Double, sinceArm: Double) -> Double {
         let gateLift = sinceGateLift <= sinceArm ? sinceGateLift : .infinity
         let decoded = sinceDecoded.isFinite ? min(sinceDecoded, sinceArm) : .infinity
         return min(decoded, gateLift)
@@ -61,7 +59,7 @@ extension StreamSession {
 
     /// Install the frame-arrival watchdog: 1 Hz on the main run loop, gated on decoded frames rather
     /// than bytes, so video the Mac can't decode ends in an error instead of a black screen.
-    func startFrameWatchdog() async {
+    package func startFrameWatchdog() async {
         let dec = videoDecoder
         await MainActor.run {
             self.frameWatchdogTimer?.invalidate()
@@ -77,7 +75,7 @@ extension StreamSession {
 
     /// One watchdog tick, on the main thread. A gated decoder (hidden window) is healthy by design and
     /// trips nothing; stopConnection clears the gate, so it can never shield a dead session from teardown.
-    nonisolated func frameWatchdogTick(decoder dec: VideoDecoder) {
+    package nonisolated func frameWatchdogTick(decoder dec: VideoDecoder) {
         if dec.decodeGated { return }
         let sinceArm = uptimeSeconds - frameWatchdogArmedAt
         let sinceDecoded = dec.secondsSinceLastDecodedFrame()
@@ -146,16 +144,23 @@ extension StreamSession {
 
     /// Decode resumed: clear the stall latches so a later stall logs and recovers afresh, hide the hold
     /// banner, and let a lowered bitrate earn its step back up. A reconnect episode owns its banner.
-    fileprivate func clearDecodeOnlyStallLatch() async {
+    func clearDecodeOnlyStallLatch() async {
         resetStallLatches()
         didReconnectForDecodeStall = false
         guard !isReconnecting else { return }
-        let winForHide = window
-        await MainActor.run { winForHide?.reconnectBanner.setVisible(false) }
+        let winForHide = presentation
+        await MainActor.run { winForHide?.showRecovery(nil) }
         await considerBitrateStepUp()
     }
 
-    func resetStallLatches() {
+    package func setWaitingForVideo(_ waiting: Bool) {
+        guard waitingForVideo != waiting else { return }
+        waitingForVideo = waiting
+        bridge?.emit(.waitingForVideo(waiting))
+    }
+
+    package func resetStallLatches() {
+        setWaitingForVideo(false)
         didLogDecodeOnlyStall = false
         didAttemptStallRecovery = false
         didLogWatchdogHold = false
@@ -221,17 +226,18 @@ extension StreamSession {
         noteTelemetryDisconnect(.watchdogStall)
         let code = Self.watchdogTerminationCode(
             neverDecodedFirstFrame: neverDecodedFirstFrame, receiveIdleSeconds: receiveIdleSeconds)
-        bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: code))
+        bridge?.emit(.connectionTerminated(errorCode: code))
         await stop()
     }
 
     /// The control link is alive, so hold. Nothing received means the PC paused video; packets that never
     /// decode mean a fault on this side, which one reconnect in place rebuilds.
-    private func holdForAliveLink(decodeIdle: Double, receiveIdle: Double, ackMs: UInt32) async {
-        let winForHold = window
+    func holdForAliveLink(decodeIdle: Double, receiveIdle: Double, ackMs: UInt32) async {
+        guard isStreaming, !stopInProgress, !isReconnecting else { return }
+        setWaitingForVideo(true)
+        let winForHold = presentation
         await MainActor.run {
-            winForHold?.reconnectBanner.setText("Waiting for video…")
-            winForHold?.reconnectBanner.setVisible(true)
+            winForHold?.showRecovery("Waiting for video…")
         }
         let receiving = receiveIdle < Self.decodeOnlyStallThreshold
         if receiving, decodeIdle >= Self.decodeOnlyReconnectSeconds, !didReconnectForDecodeStall {

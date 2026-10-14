@@ -9,11 +9,11 @@ package struct TransportPlatform: Sendable {
     package let configureAudioThread: @Sendable () -> Void
     package let configureInputThread: @Sendable () -> Void
 
-    package var steadyPingInterval: @Sendable () -> TimeInterval = { UdpPinger.steadyPingIntervalSeconds }
-    package var audioPingStarted: @Sendable () -> Void = {}
-    package var videoPingStarted: @Sendable () -> Void = {}
-    package var audioPings = TelemetryCounters.Counter()
-    package var videoPings = TelemetryCounters.Counter()
+    package var steadyPingInterval: @Sendable () -> TimeInterval = { EnvSignalController.shared.steadyPingInterval() }
+    package var audioPingStarted: @Sendable () -> Void = { EnvSignalController.shared.noteAudioPingLoopStart() }
+    package var videoPingStarted: @Sendable () -> Void = { EnvSignalController.shared.noteVideoPingLoopStart() }
+    package var audioPings = EnvSignalController.shared.audioPingsSentTotal
+    package var videoPings = EnvSignalController.shared.videoPingsSentTotal
 
     package init(receiveBatch: ReceiveBatch? = nil,
                  configureAudioThread: @escaping @Sendable () -> Void = {},

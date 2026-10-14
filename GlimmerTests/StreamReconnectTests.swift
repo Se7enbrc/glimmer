@@ -293,8 +293,8 @@ struct StreamReconnectTests {
 
 private extension StreamSession {
     func prepareCallbackTest(input: InputForwarder, streaming: Bool = true,
-                             stopping: Bool = false, reconnecting: Bool = false) {
-        self.input = input
+                             stopping: Bool = false, reconnecting: Bool = false) async {
+        self.input = await SessionInputHooks(input)
         isStreaming = streaming
         stopInProgress = stopping
         isReconnecting = reconnecting

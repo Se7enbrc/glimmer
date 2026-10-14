@@ -14,7 +14,6 @@
 //  place it is ever set, so rebuilding the SDP is the only way to change it.
 //
 
-import GlimmerEngine
 import Foundation
 import os
 
@@ -23,7 +22,7 @@ extension StreamSession {
     /// Consider walking the bitrate down because a remote path demonstrably cannot carry the negotiated
     /// rate. `reconnectConfig` is what `reconnectInPlace` builds the next SDP from, so lowering its
     /// bitrate IS the downshift; the reconnect holds the frozen frame rather than bouncing to the launcher.
-    func considerBitrateDownshift(
+    package func considerBitrateDownshift(
         decodeIdle: Double, receiveIdle: Double
     ) async {
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
@@ -73,7 +72,7 @@ extension StreamSession {
 
     /// After a clean window at a lowered rate, one step back toward the route's ask, applied the way the
     /// downshift was: a reconnect in place under a banner that says why. Called on healthy watchdog ticks.
-    func considerBitrateStepUp() async {
+    package func considerBitrateStepUp() async {
         guard isStreaming, !stopInProgress, !isReconnecting, downshift.isDownshifted,
               let current = reconnectConfig?.bitrateKbps else { return }
         let now = uptimeSeconds

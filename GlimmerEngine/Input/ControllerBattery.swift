@@ -3,8 +3,8 @@
 
 import Foundation
 
-/// Main-actor battery policy, with native state supplied by prepared probes and sampling shared across
-/// registered slots.
+/// Main-actor battery policy; the uplink lock orders synchronous revocation against sends.
+/// Native sampling stays outside that lock and carries its original uplink generation.
 package final class ControllerBattery: @unchecked Sendable {
     package static let logCategory = "Controller"
 
@@ -17,13 +17,27 @@ package final class ControllerBattery: @unchecked Sendable {
     @MainActor private var pads: [UInt8: Pad] = [:]
     /// Retain the live input uplink only while active. Battery state uses the same existing input
     /// channel as controller feedback.
-    @MainActor private weak var uplink: NativeBackend?
+    private let uplinkLock = NSLock()
+    private weak var uplink: NativeBackend?
+    private var uplinkGeneration: UInt64 = 0
+    private let send: @Sendable (NativeBackend, UInt8, UInt8, UInt8) -> Int32
     /// The shared poll timer; nil while no battery pad is registered.
     @MainActor private var timer: DispatchSourceTimer?
     /// Log the first send failure per code; clear the latch for a fresh active stream.
     @MainActor private var loggedReportFailureCodes: Set<Int32> = []
 
-    package init() {}
+    package init(send: @escaping @Sendable (NativeBackend, UInt8, UInt8, UInt8) -> Int32 = {
+        $0.sendControllerBattery(num: $1, state: $2, percentage: $3)
+    }) { self.send = send }
+
+    package func pause() { setUplink(nil) }
+
+    func setUplink(_ backend: NativeBackend?) {
+        uplinkLock.withLock {
+            uplink = backend
+            uplinkGeneration &+= 1
+        }
+    }
 
     // MARK: - Registration (ControllerForwarder, main thread)
 
@@ -55,12 +69,33 @@ package final class ControllerBattery: @unchecked Sendable {
     /// shared poll cadence.
     @MainActor
     package func announce(slot: UInt8, backend: StreamingBackend?) {
+        if let announcement = prepareAnnouncement(slot: slot, backend: backend) { report(announcement) }
+    }
+
+    package struct Announcement {
+        let slot: UInt8
+        let token: UUID
+        let backend: NativeBackend
+        let generation: UInt64
+    }
+
+    /// Adopt the uplink while the caller orders its attempt, without invoking native capture.
+    @MainActor
+    package func prepareAnnouncement(slot: UInt8, backend: StreamingBackend?) -> Announcement? {
         // Arm/refresh the uplink even when THIS pad has no battery; the
         // arrival replay at stream start must arm it for the pads that do.
-        uplink = backend as? NativeBackend
-        guard let pad = pads[slot] else { return }
+        setUplink(backend as? NativeBackend)
+        let target = uplinkLock.withLock { (uplink, uplinkGeneration) }
+        guard let pad = pads[slot], let backend = target.0 else { return nil }
         pad.lastSent = nil
-        report(slot: slot, pad: pad)
+        return Announcement(slot: slot, token: pad.token, backend: backend, generation: target.1)
+    }
+
+    /// Execute outside the input owner's lock; the receipt cannot adopt another attempt's uplink.
+    @MainActor
+    package func report(_ announcement: Announcement) {
+        guard let pad = pads[announcement.slot], pad.token == announcement.token else { return }
+        report(slot: announcement.slot, pad: pad, target: (announcement.backend, announcement.generation))
     }
 
     @MainActor
@@ -68,7 +103,7 @@ package final class ControllerBattery: @unchecked Sendable {
         timer?.cancel()
         timer = nil
         pads.removeAll()
-        uplink = nil
+        pause()
     }
 
     // MARK: - Poll (main)
@@ -99,14 +134,26 @@ package final class ControllerBattery: @unchecked Sendable {
     /// the reading.
     @MainActor
     private func report(slot: UInt8, pad: Pad) {
-        guard let backend = uplink else { return }
+        let target = uplinkLock.withLock { (uplink, uplinkGeneration) }
+        guard let backend = target.0 else { return }
+        report(slot: slot, pad: pad, target: (backend, target.1))
+    }
+
+    @MainActor
+    private func report(slot: UInt8, pad: Pad, target: (NativeBackend, UInt64)) {
+        let backend = target.0
+        guard uplinkLock.withLock({ uplink === backend && uplinkGeneration == target.1 }) else { return }
         // The native probe chooses its authoritative source. Shared policy handles unknown data and
         // protocol conversion consistently.
         guard let sample = pad.capture.read() else { return }
+        guard pads[slot] === pad else { return }
         let reading = Self.wireReading(sample)
         if let last = pad.lastSent, last == reading { return }
-        let rc = backend.sendControllerBattery(num: slot, state: reading.state,
-                                               percentage: reading.percentage)
+        let result: Int32? = uplinkLock.withLock {
+            guard uplink === backend, uplinkGeneration == target.1 else { return nil }
+            return send(backend, slot, reading.state, reading.percentage)
+        }
+        guard let rc = result else { return }
         guard rc == 0 else {
             // Log each send failure code once; a persistent failure must not add a recurring notice.
             if !loggedReportFailureCodes.contains(rc) {

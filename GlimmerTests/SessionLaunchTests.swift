@@ -168,7 +168,7 @@ struct SessionLaunchTests {
     @Test func eventsGoToTheSessionTheirPipelineStartedFor() async {
         let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         let bridge = StreamBridgeContext(session: session, videoDecoder: await VideoDecoder(),
-                                         audioDecoder: AudioDecoder(), inputForwarder: await InputForwarder())
+                                         audioDecoder: AudioDecoder())
         let (stream, continuation) = AsyncStream<StreamEvent>.makeStream()
         bridge.eventContinuation = continuation
         NativeConnectionEvents(bridge: bridge).stageStarting("name resolution")
@@ -361,9 +361,8 @@ private extension StreamSession {
 
     func publishLaunchTestBridge() async {
         let decoder = await VideoDecoder()
-        let forwarder = await InputForwarder()
         bridge = StreamBridgeContext(session: self, videoDecoder: decoder,
-                                     audioDecoder: audioDecoder, inputForwarder: forwarder)
+                                     audioDecoder: audioDecoder)
     }
 }
 

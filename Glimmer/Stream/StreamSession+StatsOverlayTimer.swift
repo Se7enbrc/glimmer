@@ -10,37 +10,6 @@ import os
 
 extension StreamSession {
 
-    /// Refresh the overlay at 4 Hz. Capture FPS rolls across four samples;
-    /// pipeline rates retain their independent one-second measurement window.
-    func startStatsOverlayTimer(
-        statsRowsProvider: @escaping @MainActor () -> Set<StatsRow.Kind>,
-        statsThresholdsProvider: @escaping @MainActor () -> StatsThresholds
-    ) async {
-        let dec = videoDecoder
-        let win = window
-        let inp = input
-        await MainActor.run {
-            self.statsOverlayTimer?.invalidate()
-            // Scheduled inside `MainActor.run`, so it fires on the main run loop
-            // where the decoder and window live.
-            let clock = self.clock
-            let refresh = StatsOverlayRefresh(now: { Double(clock.uptimeNanos()) / 1_000_000_000 })
-            let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak dec, weak win, weak inp] _ in
-                MainActor.assumeIsolated {
-                    guard let dec, let win else { return }
-                    refresh.tick(
-                        dec: dec, overlay: win.statsOverlay, banner: win.networkBanner, input: inp,
-                        rows: statsRowsProvider, thresholds: statsThresholdsProvider,
-                        visible: win.window.occlusionState.contains(.visible))
-                }
-            }
-            // 30 ms lets the run loop coalesce the timer, well under half the interval.
-            timer.tolerance = 0.03
-            self.statsOverlayTimer = timer
-        }
-    }
-
-    /// One snapshot for the menu bar's Connection Details, plus the overlay state.
     func menuBarDetails() async
         -> (snapshot: StreamStatsSnapshot, overlayShown: Bool, resolution: (width: Int, height: Int))? {
         guard let dec = videoDecoder else { return nil }
@@ -51,12 +20,6 @@ extension StreamSession {
         }
     }
 
-    func setStatsOverlayCorner(_ corner: StatsOverlayCorner) async {
-        guard let win = window else { return }
-        await MainActor.run { win.statsOverlay.corner = corner }
-    }
-
-    /// The current session's overlay, the same switch the keyboard toggle drives.
     func setStatsOverlay(_ shown: Bool) async {
         guard let dec = videoDecoder else { return }
         await MainActor.run { dec.statsOverlayEnabled = shown }
@@ -65,6 +28,43 @@ extension StreamSession {
 
 /// One 4 Hz overlay refresh, with the per-tick memory the pill and audit carry.
 /// Runs on the main run loop and reads only cached ~1s windows or cheap gauges.
+@MainActor
+final class MacSessionStats {
+    let window: StreamWindow
+    let input: InputForwarder
+    let decoder: VideoDecoder
+    let clock: SessionClock
+    let rows: @MainActor () -> Set<StatsRow.Kind>
+    let thresholds: @MainActor () -> StatsThresholds
+    var timer: Timer?
+
+    init(window: StreamWindow, input: InputForwarder, decoder: VideoDecoder, clock: SessionClock,
+         rows: @escaping @MainActor () -> Set<StatsRow.Kind>, thresholds: @escaping @MainActor () -> StatsThresholds) {
+        self.window = window
+        self.input = input
+        self.decoder = decoder
+        self.clock = clock
+        self.rows = rows
+        self.thresholds = thresholds
+    }
+
+    func start() {
+        stop()
+        let clock = self.clock
+        let refresh = StatsOverlayRefresh(now: { Double(clock.uptimeNanos()) / 1_000_000_000 })
+        timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                refresh.tick(dec: self.decoder, overlay: self.window.statsOverlay, banner: self.window.networkBanner, input: self.input,
+                    rows: self.rows, thresholds: self.thresholds, visible: self.window.window.occlusionState.contains(.visible))
+            }
+        }
+        timer?.tolerance = 0.03
+    }
+
+    func stop() { timer?.invalidate(); timer = nil }
+}
+
 @MainActor
 final class StatsOverlayRefresh {
     // Capture FPS rolls across ticks; raw pipeline rates keep their own 1 s window.

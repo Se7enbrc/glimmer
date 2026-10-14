@@ -8,6 +8,7 @@
 
 @testable import GlimmerEngine
 import Foundation
+import os
 import Testing
 @testable import Glimmer
 
@@ -213,15 +214,63 @@ final class TelemetrySinkTests {
     // MARK: - StreamSession wiring
 
     @Test func sessionWithTheGateOffBuildsNothing() async {
-        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
+        let captures = OSAllocatedUnfairLock(initialState: 0)
+        var services = SessionServices()
+        services.makeCapture = {
+            captures.withLock { $0 += 1 }
+            return TelemetryCapture()
+        }
+        let session = Self.telemetrySession(services: services)
         let decoder = await VideoDecoder()
-        await session.startTelemetryExporter(decoder: decoder, serverName: "Den PC", enabled: false) { _, _ in
+        await session.startTelemetryExporter(decoder: decoder, serverName: "Den PC", enabled: false, make: { _, _ in
             Issue.record("built an exporter with telemetry off")
             return nil
-        }
+        })
         #expect(await session.telemetryExporter == nil)
+        #expect(captures.withLock { $0 } == 0)
         await session.recordTelemetryBookmark()
         await session.stopTelemetryExporter()
+    }
+
+    @Test func stopDuringNativeSnapshotPreventsLateCaptureAndExporterCreation() async {
+        let captures = OSAllocatedUnfairLock(initialState: 0)
+        let exporters = OSAllocatedUnfairLock(initialState: 0)
+        var services = SessionServices()
+        services.makeCapture = {
+            captures.withLock { $0 += 1 }
+            return TelemetryCapture()
+        }
+        services.makeExporter = { _, _ in
+            exporters.withLock { $0 += 1 }
+            return nil
+        }
+        let session = Self.telemetrySession(services: services)
+        let decoder = await VideoDecoder()
+        let entered = AsyncStream<Void>.makeStream()
+        let release = DispatchSemaphore(value: 0)
+        let starting = Task {
+            await session.startTelemetryExporter(
+                decoder: decoder, serverName: "Den PC", enabled: true,
+                readPresentation: { _, fallback in
+                    entered.continuation.yield(())
+                    entered.continuation.finish()
+                    #expect(release.wait(timeout: .now() + 10) == .success)
+                    return (nil, fallback)
+                })
+        }
+        for await _ in entered.stream { break }
+        await session.stopTelemetryExporter()
+        release.signal()
+        await starting.value
+        #expect(captures.withLock { $0 } == 0)
+        #expect(exporters.withLock { $0 } == 0)
+        #expect(await session.telemetryExporter == nil)
+    }
+
+    private static func telemetrySession(services: SessionServices) -> StreamSession {
+        StreamSession(hostDisposition: .disconnectOnly, audioDecoder: AudioDecoder(), services: services,
+                      backend: InputRecordingBackend(), makeNetwork: { NetworkClient(server: $0) },
+                      makeBackend: { InputRecordingBackend() })
     }
 
     @Test func sessionStartsTheExporterWithTheDecodersShapeAndStopsIt() async throws {
@@ -233,14 +282,14 @@ final class TelemetrySinkTests {
         decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_MASK_AV1
         let counters = TelemetryCounters()
         let dir = dir
-        await session.startTelemetryExporter(decoder: decoder, serverName: "Den PC", enabled: true) { source, name in
+        await session.startTelemetryExporter(decoder: decoder, serverName: "Den PC", enabled: true, make: { source, name in
             #expect(name == "Den PC")
             #expect(source.displayMode == StreamDisplayMode.defaultMode.rawValue)
             #expect(source.stream?.width == 3840 && source.stream?.height == 2160 && source.stream?.fps == 120)
             #expect(source.stream?.codec == "av1" && source.stream?.bitrate == nil)
             return TelemetryExporter(source: source, serverName: name, outputDirectory: dir,
                                      counters: counters, port: 0, listenOnLAN: false)
-        }
+        })
         let exporter = try #require(await session.telemetryExporter)
         _ = try await TelemetryListenerTests.readyPort(exporter)
         await session.recordTelemetryBookmark()

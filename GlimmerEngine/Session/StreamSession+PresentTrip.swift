@@ -27,7 +27,6 @@
 //  how deep the buffer rides or on late-drop count.
 //
 
-import GlimmerEngine
 import Foundation
 import os
 
@@ -40,7 +39,7 @@ extension StreamSession {
     /// frames keep releasing is HEALTHY jitter absorption, not a stall - and no
     /// EMPTY-queue trip either: a drought with nothing queued to release belongs
     /// to the RFI/decode machinery, not the present watchdog.
-    struct PresentTrip {
+    package struct PresentTrip {
         let linkDead: Bool
         let presentStalled: Bool
         /// Partial-rate tick collapse: ticks measurably collapsed AND releases
@@ -94,7 +93,7 @@ extension StreamSession {
     /// cluster instead of starting fresh. ~10s spans the measured re-trip
     /// cadence (2s apart) with margin, while two genuinely independent wedges
     /// (e.g. two screen-mode switches minutes apart) never cluster.
-    static let presentTripStickyWindowSeconds: Double = 10.0
+    package static let presentTripStickyWindowSeconds: Double = 10.0
 
     /// TICK-DEFICIT trip: the pacer's MEASURED realized tick rate has been in
     /// deficit (<0.5× expected, hysteresis-latched in FramePacer) for this long
@@ -107,13 +106,13 @@ extension StreamSession {
     /// expected callbacks missing for SEVEN consecutive 250ms windows, which
     /// zero-loss wifi jitter (a network-side signal; ticks are display-side)
     /// cannot produce.
-    static let tickDeficitTripSeconds: Double = 1.75
+    package static let tickDeficitTripSeconds: Double = 1.75
     /// Release-rate collapse term of the tick-deficit trip, as a fraction of
     /// the expected tick rate. The in-pacer degraded mode holds releases at
     /// ≈stream rate when it works, so requiring releases <0.5× expected makes
     /// this trip fire ONLY when that first-line failsafe failed too - the
     /// watchdog never tears down a pacer whose degraded mode is presenting fine.
-    static let tickDeficitReleaseRatio: Double = 0.5
+    package static let tickDeficitReleaseRatio: Double = 0.5
     /// Consecutive renderer rejections before a tripped episode is classed
     /// `rendererRejecting`. 8 in a row ≈ 46ms of continuous refusal at 172fps
     /// - far past the transient single-frame `isReadyForMoreMediaData` flips
@@ -123,15 +122,15 @@ extension StreamSession {
     /// the streak is a renderer-side signal network jitter can't move, and it
     /// only ever re-aims recovery INSIDE an episode the jitter-proof trips
     /// already opened.
-    static let rendererRejectStreakTrip: Int = 8
+    package static let rendererRejectStreakTrip: Int = 8
     /// Deep-streak fallback retained alongside the timed refusal window. It also
     /// catches a high-rate refusal burst before the normal freeze window expires.
-    static let rendererStarvationStreakTrip: Int = 90
+    package static let rendererStarvationStreakTrip: Int = 90
 
     /// Refusals can empty the queue at every tick. Measure their duration as well as
     /// count, so recovery doesn't wait for 90 frames at a lower stream rate.
     /// A stale last attempt cannot turn a network drought into a renderer freeze.
-    static func rendererStarvationTripped(
+    package static func rendererStarvationTripped(
         rejectStreak: Int, inStartupGrace: Bool,
         refusalSeconds: Double = 0, sinceLastReject: Double = .infinity
     ) -> Bool {
@@ -143,7 +142,7 @@ extension StreamSession {
 
     /// The present-freeze trip predicate, pure (unit-tested); rationale inline
     /// in `evaluatePresentTrip`. Keeps the link-dead two-tick latch out.
-    static func presentStallTripped(live: FramePacer.LivenessSnapshot, inStartupGrace: Bool) -> Bool {
+    package static func presentStallTripped(live: FramePacer.LivenessSnapshot, inStartupGrace: Bool) -> Bool {
         !inStartupGrace
             && live.secondsSinceLastTick <= presentLinkDeadThreshold
             && live.depth > 0
@@ -160,7 +159,7 @@ extension StreamSession {
     /// `lastWatchdogTotalTicks`) - it MUST run every evaluation, trip or not, so
     /// the link-dead latch stays consistent. MainActor (the watchdog body's actor).
     @MainActor
-    func evaluatePresentTrip(
+    package func evaluatePresentTrip(
         live: FramePacer.LivenessSnapshot, inStartupGrace: Bool
     ) -> PresentTrip {
         // Link-dead trip requires GENUINELY no ticks across two consecutive
@@ -269,7 +268,7 @@ extension StreamSession {
     /// cheaper paced recovery. Each step runs at most once per stage advance; if
     /// it resumes presentation the episode clears next tick.
     @MainActor
-    func escalatePresentRecovery(
+    package func escalatePresentRecovery(
         dec: VideoDecoder, trip: PresentTrip, stalledFor: Double
     ) {
         // STICKY LADDER: a 2nd trip within the sticky window means the cheaper
@@ -370,7 +369,7 @@ extension StreamSession {
     /// itself frozen would just hand a wedge to a fresh pacer. Any hiccup on
     /// either clock re-arms the stability window so it measures CONTINUOUS health.
     @MainActor
-    func maybeReenablePacing(dec: VideoDecoder, decodeIdle: Double) {
+    package func maybeReenablePacing(dec: VideoDecoder, decodeIdle: Double) {
         guard let disabledSince = self.pacingDisabledSince else { return }
         // Decode AND present must both be healthy right now; a hiccup on either
         // re-arms the clock so the window only completes after an UNBROKEN stretch.

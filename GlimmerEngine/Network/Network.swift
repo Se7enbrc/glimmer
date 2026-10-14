@@ -139,6 +139,10 @@ package struct LaunchResponse: Sendable {
         self.gcmKey = gcmKey
         self.gcmKeyId = gcmKeyId
     }
+
+    func validateSessionKey() throws {
+        guard gcmKey.count == 16, gcmKeyId.count == 16 else { throw StreamConnection.Failure.invalidSessionKey }
+    }
 }
 
 // MARK: - XMLNode
@@ -255,6 +259,10 @@ public actor NetworkClient {
         self.init(server: server, deviceName: { deviceName }, identity: {
             (try await identity.clientCertPEM(), try await identity.clientKeyPEM(), try await identity.uniqueID())
         })
+    }
+
+    package nonisolated func freshClient(for server: ServerInfo) -> NetworkClient {
+        NetworkClient(server: server, deviceName: deviceName, transport: transport, identity: identity)
     }
 
     /// No-op: the control channel is per-request (ControlTransport opens and

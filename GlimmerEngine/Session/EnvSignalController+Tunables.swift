@@ -1,24 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  EnvSignalController+Tunables.swift
-//
-//  The env-signal layer's VOCABULARY and DIALS: the reconciler kill-switch,
-//  the link-class + state enums (whose ordinals/rawValues are the wire and
-//  persistence labels), the window and jitter/loss thresholds the
-//  sustained/hysteresis guarantees are expressed in, the reconciler decision
-//  mapping constants, and the conditional-keepalive cadence dials. Split out
-//  of EnvSignalController.swift (pure move) to keep each unit under the
-//  length limit; see that file for the header contract, the lock-guarded
-//  outputs, and the keepalive actuation that reads these.
-//
-//  Everything here is a compile-time constant or a plain value type -
-//  immutable, so it is concurrency-safe by construction and callable from
-//  any thread.
-//
-
-import GlimmerEngine
 import Foundation
 
 extension EnvSignalController {
@@ -37,7 +19,7 @@ extension EnvSignalController {
 
     /// The three-level link-condition state. Ordinals are stable (exported as
     /// the `env_state` gauge): 0 clear, 1 caution, 2 distress.
-    enum EnvState: Int, Sendable {
+    package enum EnvState: Int, Sendable {
         /// No sustained evidence - the baseline. Wired routes are pinned here.
         case clear = 0
         /// Sustained degradation evidence (co-gaps and/or a radio sag): the
@@ -47,7 +29,7 @@ extension EnvSignalController {
         /// hurting delivery. Excluded from present-path quality scorecards.
         case distress = 2
 
-        var label: String {
+        package var label: String {
             switch self {
             case .clear: return "clear"
             case .caution: return "caution"
@@ -124,29 +106,16 @@ extension EnvSignalController {
     /// RELAXED cadence = upstream moonlight's 500ms keepalive - the proven-
     /// sufficient rate wherever NIC doze is not in play.
     static let relaxedPingIntervalSeconds = UdpPinger.relaxedPingIntervalSeconds
-    /// Input-silence gate for "input-idle": NIC power-save doze sets in well
-    /// under a second after uplink traffic stops, and active-play inter-input
-    /// gaps are sub-100ms - 1s cleanly separates the regimes (deliberately
-    /// NOT TelemetryCounters.idleGapSeconds, which is a 2s telemetry-UX edge,
-    /// not a radio constant).
-    static let keepaliveIdleSeconds = 1.0
+    /// One second separates active sub-100ms input gaps from radio doze; the telemetry idle gap
+    /// is a different two-second UX threshold. A fresh connection with no input remains idle.
+    package static let keepaliveIdleSeconds = 1.0
     /// How long a published stream_link stays trusted without a fresh feed. The session feeds
     /// every 2 s; once feeds stop the route claim expires and the cadence falls back to the
     /// validated fast dial - stale knowledge never relaxes the countermeasure.
     static let routeTrustHorizonNanos: UInt64 = 30_000_000_000
-    /// Wi-Fi keepalive WARM-UP window (ns), measured from the ping-loop
-    /// bring-up edge (stream start or silent reconnect). For its duration the
-    /// wifi branch pins the FAST cadence unconditionally - ignoring the
-    /// "active input holds the radio awake" relaxation - because in a stream's
-    /// opening stretch that assumption is measurably false: the AP-side
-    /// power-save / aggregation ramp gaps the DOWNLINK even with steady
-    /// uplink input traffic (2026-08-17, 6GHz at -43dBm: 36 gaps >100ms in
-    /// the first 30s while the cadence flapped fast↔relaxed, then ZERO for
-    /// the next 150s once fast pings pinned - the clear→gap→caution→fast→
-    /// clear→relaxed limit cycle). 90s matches the independently measured
-    /// ~80s wifi warm-up the audio floor-learning gate already covers
-    /// (AudioDecoder+Meter.startupFloorGateNanos, measured 2026-07-21).
-    /// Cost: ~13Hz of tiny UDP pings for 90s - negligible airtime.
+    /// Pin fast pings for90s after every flow:6GHz/-43dBm measurements (2026-08-17) saw36 gaps
+    /// >100ms in30s while cadence flapped, then zero in150s pinned fast. The audio floor already
+    /// covers an independently measured~80s warmup;~13Hz tiny UDP pings cost negligible airtime.
     static let wifiWarmupPingNanos: UInt64 = 90_000_000_000
     /// Send-due slop: the ping threads wake on the fast quantum and gate the
     /// send on elapsed-since-last-ping; without a few ms of slop a 74.9ms

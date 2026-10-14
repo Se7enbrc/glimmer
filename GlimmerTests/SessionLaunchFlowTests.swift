@@ -62,7 +62,7 @@ struct SessionLaunchFlowTests {
         await prepare(session)
         let info = try await session.fetchAndVerifyServerInfo(network: network, pcName: server.serverName)
         let response = try await session.launchWithDeadline(
-            network: network, appID: appID, config: SessionFlow.config, info: info)
+            network: network, appID: appID, config: SessionFlow.config.request, info: info)
         return (session, response)
     }
 
@@ -150,7 +150,7 @@ struct SessionLaunchFlowTests {
         await session.prepareLaunchFlow(server: SessionFlow.pairedPC())
         await #expect(throws: StreamError.self) {
             _ = try await session.launchWithDeadline(
-                network: sunshine.client(SessionFlow.pairedPC()), appID: 7, config: SessionFlow.config,
+                network: sunshine.client(SessionFlow.pairedPC()), appID: 7, config: SessionFlow.config.request,
                 info: SessionFlow.pairedPC(), deadline: Date())
         }
         #expect(sunshine.requests.isEmpty)

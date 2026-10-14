@@ -19,39 +19,22 @@
 //  into one episode.
 //
 
-import GlimmerEngine
 import Foundation
-import AppKit
 
 extension StreamSession {
 
-    /// Arm the sleep/wake observers for the LIVE session. Called once the stream
-    /// is up (StreamSession+Start). On NSWorkspace's OWN notification center, not
-    /// the default - sleep/wake live there. Removed in `stop()`.
-    func armWakeObservers() {
-        let wsnc = NSWorkspace.shared.notificationCenter
-        wakeObservers.append(wsnc.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            Task { await self.handleSystemWake() }
-        })
+    /// Native services own live-session wake observers; shared policy owns the bounded liveness probe.
+    package func armWakeObservers() {
+        services.armWake { [weak self] in Task { await self?.handleSystemWake() } }
     }
 
-    /// Remove the sleep/wake observers and cancel any in-flight probe. Called from
-    /// `stop()`; idempotent (a second call sees an empty list / nil task).
-    func teardownWakeObservers() {
-        let wsnc = NSWorkspace.shared.notificationCenter
-        for token in wakeObservers { wsnc.removeObserver(token) }
-        wakeObservers.removeAll()
+    package func teardownWakeObservers() {
+        services.stopWake()
         wakeProbeTask?.cancel()
         wakeProbeTask = nil
     }
 
-    /// On wake: if the session is live and idle of any teardown/episode, count the
-    /// wake, re-anchor the silence clock + solicit a ping, and start the bounded
-    /// liveness probe. Everything downstream routes through `handleHostTerminate`.
-    func handleSystemWake() async {
+    package func handleSystemWake() async {
         guard isStreaming, reachedLiveState, !stopInProgress, !isReconnecting else { return }
         TelemetryCounters.shared.wakeTotal.increment()
         Diag.notice("Woke from sleep mid-stream - re-anchoring the dead-peer clock "
