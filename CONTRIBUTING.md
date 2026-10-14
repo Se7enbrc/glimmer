@@ -26,10 +26,10 @@ and offline private-key scans.
 ## Engine dependency
 
 The shared project pins `Se7enbrc/glimmer` to the exact commit
-`7891fac58264b211830a0e630e6e4bdb7cc55599`, including the public connection API,
-shared transport and audio output adapter contract. The package lock records the
-same revision. Update the pin to a full commit SHA, never a branch or tag, and
-never copy engine source here.
+`410e8280defd936f89e21dab61772faea2acdec7`, including the public connection API,
+shared transport, audio output contract, video decoder and display pacing. The
+package lock records the same revision. Update the pin to a full commit SHA,
+never a branch or tag, and never copy engine source here.
 
 For development against a local engine checkout:
 
@@ -52,8 +52,9 @@ local override does not prove remote resolution. The public connection tests
 exercise cancellation and teardown without opening a connection to the PC; they
 do not prove media playback or complete the framework handoff. The iOS
 [AudioToolbox adapter](docs/AUDIO.md) supplies real output units and session
-lifecycle handling through that public contract; it is not yet attached to a
-streaming UI.
+lifecycle handling through that public contract and is attached to the streaming
+UI. Video decoding and display pacing also use the shared engine through public
+APIs; the app supplies the native display layer and display link.
 
 ## Physical devices
 
@@ -70,14 +71,16 @@ App Store Connect, distribution profiles and release automation come later.
 
 Before accepting UI, inspect light/dark appearance, large Dynamic Type,
 VoiceOver, keyboard focus, iPhone and iPad, both landscape directions, safe-area
-Done button, status/home indicator behavior and portrait restoration after the
-preview. Attach screenshots from the first rendered build; there is no earlier
-app UI.
+Disconnect button, status/home indicator behavior and portrait restoration after
+streaming. Native UI rendering tests attach PNGs to the test result bundle; CI
+retains those bundles in the `simulator-logs` artifact. Inspect the images
+before claiming visual acceptance.
 
 Plug in Backbone One and another controller: verify initial detection, unplug,
-reconnect and background/return. The preview sends no input and opens no network
-connection. Pairing, hardware decode, controller input, audio and sustained 120
-Hz play still need later engine slices and real-PC measurements.
+reconnect and background/return. Controller input forwarding is not implemented
+yet. Pairing, hardware decode, audio routing, background/lock teardown and
+sustained play need real-PC and physical-device measurements. The UI rendering
+tests use fake network/session state only and do not prove playback.
 
 The app opts into
 [higher refresh rates](https://developer.apple.com/documentation/bundleresources/information-property-list/cadisableminimumframedurationonphone)

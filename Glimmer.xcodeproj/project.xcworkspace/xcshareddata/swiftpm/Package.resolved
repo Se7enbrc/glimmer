@@ -6,7 +6,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Se7enbrc/glimmer.git",
       "state" : {
-        "revision" : "7891fac58264b211830a0e630e6e4bdb7cc55599"
+        "revision" : "410e8280defd936f89e21dab61772faea2acdec7"
       }
     }
   ],

@@ -6,16 +6,9 @@ import UIKit
 @testable import Glimmer
 
 @MainActor
-struct StreamPreviewTests {
-    @Test func previewUsesBothLandscapeOrientationsAndHidesSystemChrome() {
-        let controller = StreamPreviewController(close: {})
-        #expect(controller.supportedInterfaceOrientations == .landscape)
-        #expect(controller.prefersStatusBarHidden)
-        #expect(controller.prefersHomeIndicatorAutoHidden)
-        controller.viewWillAppear(false)
-        #expect(AppDelegate.orientationMask == .landscape)
-        controller.viewWillDisappear(false)
-        #expect(AppDelegate.orientationMask == .allButUpsideDown)
+struct AppDeclarationTests {
+    @Test func pcSymbolExistsInSystemSymbolSet() {
+        #expect(UIImage(systemName: LauncherView.pcSymbol) != nil)
     }
 
     @Test func appDeclaresDiscoveryControllersAndHighRefresh() {
