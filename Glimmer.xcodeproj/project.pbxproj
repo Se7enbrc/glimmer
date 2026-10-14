@@ -632,6 +632,9 @@
 		0DD0989952AF4DED816FB36D /* InputCore+Chord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA44D4BCF9C494B97AD12E1 /* InputCore+Chord.swift */; };
 		C031D6FF235D417D90A561D7 /* InputText.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD11FABF4F6143C7A916EBC6 /* InputText.swift */; };
 		59F41A463AE44BE281229BA9 /* InputAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D0B87CC9234840AB170535 /* InputAPITests.swift */; };
+		4B9C3A9CAC234A17B608A7DE /* StreamQuality.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEAB3CD1CB06453590481EAD /* StreamQuality.swift */; };
+		6621497229C14C37A1839C78 /* StreamHostDisposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = F886BE09F80C42ACAC44B849 /* StreamHostDisposition.swift */; };
+		21B30BD95DBE473A9BE2CC35 /* SessionHostDispositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A94F72CE390A4492A80CBC69 /* SessionHostDispositionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -859,7 +862,7 @@
 		DEC0DE202609221900000007 /* VideoRtpReceiver+Recovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/VideoRtpReceiver+Recovery.swift"; sourceTree = "<group>"; };
 		D1000027 /* UdpPinger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/UdpPinger.swift; sourceTree = "<group>"; };
 		D1B00005 /* StreamSession+Downshift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamSession+Downshift.swift"; sourceTree = "<group>"; };
-		D1B00003 /* BitrateDownshiftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/BitrateDownshiftController.swift; sourceTree = "<group>"; };
+		D1B00003 /* BitrateDownshiftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerEngine/Session/BitrateDownshiftController.swift; sourceTree = SOURCE_ROOT; };
 		D1B00001 /* StreamPathMTU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Network/StreamPathMTU.swift; sourceTree = "<group>"; };
 		D1000029 /* InputEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputEncoder.swift; sourceTree = "<group>"; };
 		D1000031 /* AudioFecDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFecDecoder.swift; sourceTree = "<group>"; };
@@ -1318,6 +1321,9 @@
 		5CA44D4BCF9C494B97AD12E1 /* InputCore+Chord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Chord.swift"; sourceTree = SOURCE_ROOT; };
 		AD11FABF4F6143C7A916EBC6 /* InputText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputText.swift"; sourceTree = SOURCE_ROOT; };
 		04D0B87CC9234840AB170535 /* InputAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/InputAPITests.swift"; sourceTree = SOURCE_ROOT; };
+		CEAB3CD1CB06453590481EAD /* StreamQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerEngine/Session/StreamQuality.swift; sourceTree = SOURCE_ROOT; };
+		F886BE09F80C42ACAC44B849 /* StreamHostDisposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerEngine/Session/StreamHostDisposition.swift; sourceTree = SOURCE_ROOT; };
+		A94F72CE390A4492A80CBC69 /* SessionHostDispositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerTests/SessionHostDispositionTests.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1541,7 +1547,6 @@
 				D10000C4 /* BuildInfo.generated.swift */,
 				D1000084 /* StreamSession+Telemetry.swift */,
 				D1B00005 /* StreamSession+Downshift.swift */,
-				D1B00003 /* BitrateDownshiftController.swift */,
 				EFCC9963C7874789A8E1E9F8 /* InputCore+Controller.swift */,
 				FB65E5B3DCD24CBE8815F406 /* InputForwarder+Core.swift */,
 				26243A8C57F546E1AED2C764 /* HIDGamepadCapture.swift */,
@@ -1732,6 +1737,7 @@
 				6A0C06102026101000000002 /* EnetControlInboundTests.swift */,
 				21C273D96FC84878A5D36D98 /* InputCoreTests.swift */,
 				495E63BB12264898A2E14C16 /* StreamInputChordEdgeTests.swift */,
+				A94F72CE390A4492A80CBC69 /* SessionHostDispositionTests.swift */,
 				F67B762716E944619C75C896 /* ControllerFeedbackBoundaryTests.swift */,
 				E2296FF6A713465DABEA1251 /* InputExtractionBoundaryTests.swift */,
 				FFDB27E27E6B4A149293B838 /* StreamInputBoundaryTests.swift */,
@@ -1843,7 +1849,10 @@
 				9661AB923333423AAE88F251 /* ControllerFeedbackOutput.swift */,
 				898FE8088E6C45BDB614B481 /* ControllerBatteryCapture.swift */,
 				4F3D334C8F274B91A48231E6 /* ControllerBattery.swift */,
+				F886BE09F80C42ACAC44B849 /* StreamHostDisposition.swift */,
 				05794E62155A42239406A9B3 /* StreamInput.swift */,
+				CEAB3CD1CB06453590481EAD /* StreamQuality.swift */,
+				D1B00003 /* BitrateDownshiftController.swift */,
 				F0B52A28D21944389B72F67E /* StreamInput+Values.swift */,
 				0E8506F94D144550AF8AA2E0 /* StreamInput+Pointer.swift */,
 				0CF4EBEEDF0140568600D373 /* StreamInput+Chord.swift */,
@@ -2344,7 +2353,6 @@
 				D10000C5 /* BuildInfo.generated.swift in Sources */,
 				D1000085 /* StreamSession+Telemetry.swift in Sources */,
 				D1B00006 /* StreamSession+Downshift.swift in Sources */,
-				D1B00004 /* BitrateDownshiftController.swift in Sources */,
 				FD400C6BE16340179C394914 /* InputCore+Controller.swift in Sources */,
 				BDFBB23C586F4324AC8E344A /* InputForwarder+Core.swift in Sources */,
 				5B42984DADB44F10995572B9 /* HIDGamepadCapture.swift in Sources */,
@@ -2524,6 +2532,7 @@
 				6A0C06102026101000000001 /* EnetControlInboundTests.swift in Sources */,
 				FC0BF6D54C37471FB74A1E5E /* InputCoreTests.swift in Sources */,
 				D218BE89D58F4B61A16B6530 /* StreamInputChordEdgeTests.swift in Sources */,
+				21B30BD95DBE473A9BE2CC35 /* SessionHostDispositionTests.swift in Sources */,
 				9457688C09C64D7EAA26FF38 /* ControllerFeedbackBoundaryTests.swift in Sources */,
 				66C8CCDC9ABC4E5491B48EBE /* InputExtractionBoundaryTests.swift in Sources */,
 				B6EBDAE5E14B486CBC3109D3 /* StreamInputBoundaryTests.swift in Sources */,
@@ -2634,7 +2643,10 @@
 				EB3610B9E80645C18AA7968A /* ControllerFeedbackOutput.swift in Sources */,
 				E6E0DCA956BC40C989EDDE70 /* ControllerBatteryCapture.swift in Sources */,
 				F35A65A216A64304B1CC6C99 /* ControllerBattery.swift in Sources */,
+				6621497229C14C37A1839C78 /* StreamHostDisposition.swift in Sources */,
 				50E712FA407F488D8BE5E9FB /* StreamInput.swift in Sources */,
+				4B9C3A9CAC234A17B608A7DE /* StreamQuality.swift in Sources */,
+				D1B00004 /* BitrateDownshiftController.swift in Sources */,
 				C50A55E3689F4353AD0C302E /* StreamInput+Values.swift in Sources */,
 				79C6D2C343B84364A310913D /* StreamInput+Pointer.swift in Sources */,
 				DC6C4EFE1C0A460CB5C22120 /* StreamInput+Chord.swift in Sources */,

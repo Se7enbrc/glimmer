@@ -194,7 +194,7 @@ struct StreamSignalTests {
     @Test func backgroundBeforeDecoderAdoptionReleasesDisplayAssertion() async {
         let decoder = VideoDecoder()
         decoder.setPresentSuppressed(true)
-        let session = StreamSession()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         let (beforeAdoption, afterAdoption) = await session.checkEarlyBackgroundAdoption(decoder)
         #expect(!beforeAdoption)
         #expect(afterAdoption)
@@ -202,7 +202,7 @@ struct StreamSignalTests {
     }
 
     @Test func resettingStallLatchesClearsEveryLatch() async {
-        let session = StreamSession()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         await session.setStallLatchesForTesting()
         await session.resetStallLatches()
         #expect(!session.didLogDecodeOnlyStall)

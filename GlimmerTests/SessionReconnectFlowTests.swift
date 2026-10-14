@@ -55,12 +55,14 @@ struct SessionReconnectFlowTests {
 
     private func live(
         _ script: [String: [Result<ControlTransport.Response, StreamError>]],
-        failing: Int = 0, config: StreamConfig = SessionFlow.config
+        failing: Int = 0, config: StreamConfig = SessionFlow.config,
+        hostDisposition: StreamHostDisposition = .cancelOwnedHostSession
     ) async -> Live {
         let sunshine = FakeSunshine.scripted(script)
         let supply = BackendSupply(failing: failing)
         let clock = ScriptedClock()
-        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
+        let session = StreamSession(
+            hostDisposition: hostDisposition, backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
                                     makeBackend: { supply.make() }, clock: clock.session)
         let events = await session.goLive(server: SessionFlow.pairedPC(), config: config, appID: Self.appID)
         return Live(session: session, sunshine: sunshine, supply: supply, clock: clock, events: events)
@@ -102,6 +104,43 @@ struct SessionReconnectFlowTests {
         #expect(live.supply.backends.count == 2)
         #expect(live.supply.backends.map(\.startedServers.count) == [1, 1])
         #expect(await live.finish() == ["reconnecting", "reconnected"])
+    }
+
+    @Test(arguments: [StreamHostDisposition.disconnectOnly, .cancelOwnedHostSession])
+    func failedReconnectTransportHonorsHostDisposition(disposition: StreamHostDisposition) async {
+        let live = await live(["cancel": [SessionFlow.cancelled]], hostDisposition: disposition)
+        await #expect(throws: StreamError.self) {
+            try await live.session.failReconnectTransport(network: live.sunshine.client(SessionFlow.pairedPC()))
+        }
+        #expect(live.sunshine.paths == (disposition == .disconnectOnly ? [] : ["cancel"]))
+        _ = await live.finish()
+    }
+
+    @Test func localRecoveryFailureRetriesWithoutCancellingTheRunningGame() async {
+        let live = await live(["serverinfo": [SessionFlow.running(7)], "resume": [SessionFlow.launched]],
+                              failing: 1, hostDisposition: .disconnectOnly)
+        await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
+        #expect(live.sunshine.paths == ["serverinfo", "resume", "serverinfo", "resume"])
+        #expect(await live.finish() == ["reconnecting", "reconnected"])
+        #expect(!live.sunshine.paths.contains("cancel"))
+    }
+
+    @Test func localRecoveryGiveUpLeavesTheGameRunning() async {
+        let cap = StreamSession.reconnectAttemptCap
+        let live = await live(["serverinfo": [SessionFlow.running(7)], "resume": [SessionFlow.launched]],
+                              failing: cap, hostDisposition: .disconnectOnly)
+        await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
+        #expect(live.sunshine.paths == Array(repeating: ["serverinfo", "resume"], count: cap).flatMap { $0 })
+        #expect(await live.finish() == ["reconnecting", "terminated(-1)"])
+        #expect(!live.sunshine.paths.contains("cancel"))
+    }
+
+    @Test func localRecoveryCannotReplaceAnotherGame() async {
+        let live = await live(["serverinfo": [SessionFlow.running(9)]], hostDisposition: .disconnectOnly)
+        await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
+        #expect(await live.finish() == ["reconnecting", "terminated(0)"])
+        #expect(live.sunshine.paths == ["serverinfo"])
+        #expect(live.supply.backends.map(\.startedServers.count) == [0])
     }
 
     /// The PC sent the terminate and no longer runs the game: it ended the session on purpose, so
@@ -248,6 +287,16 @@ private extension StreamSession {
         bridge.eventContinuation = continuation
         self.bridge = bridge
         return stream
+    }
+
+    func failReconnectTransport(network: NetworkClient) async throws {
+        guard let window, let input, let videoDecoder, let server = reconnectServer,
+              let config = reconnectConfig else { throw StreamError.launchFailed("Missing test setup") }
+        backend = InputRecordingBackend(connectFailure: .sessionFailed(-1))
+        let launch = LaunchResponse(sessionURL: SessionFlow.sessionURL, gcmKey: Data(), gcmKeyId: Data())
+        let backendConfig = makeBackendConfig(config: config, launch: launch, server: server)
+        try await connectBackend(serverInfo: server, launch: launch, backendConfig: backendConfig,
+            setup: (window, input, videoDecoder), network: network, duringReconnect: true)
     }
 
     func forgetLiveState() { reachedLiveState = false }

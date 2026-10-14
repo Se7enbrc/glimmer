@@ -213,7 +213,7 @@ final class TelemetrySinkTests {
     // MARK: - StreamSession wiring
 
     @Test func sessionWithTheGateOffBuildsNothing() async {
-        let session = StreamSession()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         let decoder = await VideoDecoder()
         await session.startTelemetryExporter(decoder: decoder, serverName: "Den PC", enabled: false) { _, _ in
             Issue.record("built an exporter with telemetry off")
@@ -225,7 +225,7 @@ final class TelemetrySinkTests {
     }
 
     @Test func sessionStartsTheExporterWithTheDecodersShapeAndStopsIt() async throws {
-        let session = StreamSession()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         let decoder = await VideoDecoder()
         decoder.streamWidth = 3840
         decoder.streamHeight = 2160

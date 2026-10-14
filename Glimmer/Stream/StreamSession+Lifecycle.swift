@@ -144,7 +144,9 @@ extension StreamSession {
         //    gets its own cleanup without holding the launcher open.
         let net = cleanupNetwork
         await settlePendingLaunch {
-            if let net { await Self.cancelOwnedSession(net) }
+            if let net, let cancellation = self.hostDisposition.cancellation {
+                await Self.cancelOwnedSession(net, cancellation: cancellation)
+            }
         }
         if let net {
             // shutdown() is a no-op now (the control channel is per-request) -
@@ -193,10 +195,10 @@ extension StreamSession {
         network ?? reconnectServer.map(makeNetwork)
     }
 
-    private static func cancelOwnedSession(_ network: NetworkClient) async {
+    private static func cancelOwnedSession(_ network: NetworkClient, cancellation: HostCancellation) async {
         await network.setRequestDeadline(Date().addingTimeInterval(stopCancelSeconds))
         do {
-            try await network.cancel()
+            try await cancellation.cancel(network)
             Diag.notice("Teardown /cancel succeeded", "Stream")
         } catch {
             Diag.notice("Teardown /cancel failed: \(error, privacy: .private)", "Stream")
@@ -217,6 +219,10 @@ extension StreamSession {
         network: NetworkClient, appID: Int, config: StreamConfig, info: ServerInfo, deadline: Date
     ) async throws -> LaunchResponse {
         try checkAttempt(deadline: deadline)
+        guard hostDisposition.cancellation != nil else {
+            return try await launchWithoutCancellation(network: network, appID: appID,
+                                                       config: config, info: info, deadline: deadline)
+        }
         try await authorizeOccupancy(info, network: network, deadline: deadline)
         do {
             if info.currentGameID != 0 || info.isBusy {
@@ -231,6 +237,19 @@ extension StreamSession {
             try await authorizeOccupancy(fresh, network: network, deadline: deadline)
             return try await cancelThenLaunch(network: network, appID: appID, config: config, deadline: deadline)
         }
+    }
+
+    private func launchWithoutCancellation(
+        network: NetworkClient, appID: Int, config: StreamConfig, info: ServerInfo, deadline: Date
+    ) async throws -> LaunchResponse {
+        let client = await network.clientUniqueID
+        try checkAttempt(deadline: deadline)
+        let response = try await launchAndRecordOwnership(client: client, appID: appID) {
+            if info.currentGameID == appID { return try await network.resume(config: config.request) }
+            return try await network.launch(appID: appID, config: config)
+        }
+        try checkAttempt(deadline: deadline)
+        return response
     }
 
     func authorizeOccupancy(_ info: ServerInfo, network: NetworkClient, deadline: Date) async throws {
@@ -295,6 +314,7 @@ extension StreamSession {
     private var launchPCKey: String { reconnectServer?.uniqueId ?? "" }
 
     func settlePendingLaunch(cancel: @escaping @Sendable () async -> Void) async {
+        guard hostDisposition.cancellation != nil else { return }
         let task = pendingLaunch
         let key = launchPCKey
         let epoch = hostLaunchEpoch
@@ -333,8 +353,9 @@ extension StreamSession {
         network: NetworkClient, appID: Int, config: StreamConfig, deadline: Date
     ) async throws -> LaunchResponse {
         try checkAttempt(deadline: deadline)
+        guard let cancellation = hostDisposition.cancellation else { throw CancellationError() }
         let start = Date()
-        try await network.cancel()
+        try await cancellation.cancel(network)
         try checkAttempt(deadline: deadline)
         ConnectTimingTelemetry.shared.recordLaunchLeg(cancelMs: Date().timeIntervalSince(start) * 1000)
         try await waitForHostIdle(network: network, deadline: deadline)

@@ -56,7 +56,7 @@ struct SessionLaunchFlowTests {
         on sunshine: FakeSunshine, server: ServerInfo, appID: Int = 7,
         prepare: (StreamSession) async -> Void = { _ in }
     ) async throws -> (StreamSession, LaunchResponse) {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let network = sunshine.client(server)
         await session.prepareLaunchFlow(server: server)
         await prepare(session)
@@ -146,7 +146,7 @@ struct SessionLaunchFlowTests {
 
     @Test func anExpiredLaunchBudgetSendsNothing() async throws {
         let sunshine = FakeSunshine.scripted([:])
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         await session.prepareLaunchFlow(server: SessionFlow.pairedPC())
         await #expect(throws: StreamError.self) {
             _ = try await session.launchWithDeadline(

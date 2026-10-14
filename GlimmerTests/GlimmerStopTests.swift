@@ -94,7 +94,7 @@ struct GlimmerStopTests {
 
     @MainActor @Test func urlMismatchAndIdleNeverStopOrAskForConfirmation() async throws {
         let model = AppModel()
-        model.nativeSession = StreamSession(backend: InputRecordingBackend())
+        model.nativeSession = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         model.lastLaunchAttempt = (app, pc())
         var reply: [String: String]?
         model.postCommandReply = { reply = $0 }
@@ -115,7 +115,7 @@ struct GlimmerStopTests {
     func everyStopUsesTheMenuTeardownAndCancelsThePC(_ route: String) async throws {
         let model = AppModel()
         let sunshine = FakeSunshine.scripted(["cancel": [SessionFlow.cancelled]])
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let server = SessionFlow.pairedPC()
         await session.prepareLaunchFlow(server: server)
         await session.prepareStopCommandTest(network: sunshine.client(server))
@@ -157,7 +157,7 @@ struct GlimmerStopTests {
     @MainActor @Test func matchingUsesTheActivePCsNamesIDsAndAddresses() async {
         for name in ["den pc", "PC-ID", "192.0.2.10", "DEN.LOCAL"] {
             let model = AppModel()
-            model.nativeSession = StreamSession(backend: InputRecordingBackend())
+            model.nativeSession = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
             model.lastLaunchAttempt = (app, pc())
             #expect(await model.stopActiveStream(matching: name, source: "a test") == .stopped)
             #expect(model.menuStopInProgress)

@@ -279,6 +279,10 @@ extension StreamSession {
             pcAnswered = true
             try checkAttempt(deadline: deadline)
             if serverInfo.currentGameID != appID { ownsHostSession = false }
+            if hostDisposition.cancellation == nil, serverInfo.currentGameID != 0,
+               serverInfo.currentGameID != appID {
+                throw TakeoverRequired(appID: serverInfo.currentGameID)
+            }
             let launch = try await launchWithDeadline(
                 network: net, appID: appID, config: config, info: serverInfo, deadline: deadline)
             try checkAttempt(deadline: deadline)

@@ -32,7 +32,7 @@ struct BackendGlueTests {
 
     /// With no session left to classify it, a terminate still reaches the UI.
     @Test func eventsReachTheBridgeStreamInOrder() async {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let bridge = StreamBridgeContext(
             session: session, videoDecoder: VideoDecoder(), audioDecoder: AudioDecoder(),
             inputForwarder: InputForwarder())
@@ -59,7 +59,8 @@ struct BackendGlueTests {
 
     @Test func bridgePointerResolvesToTheSameBridge() {
         let bridge = StreamBridgeContext(
-            session: StreamSession(backend: InputRecordingBackend()), videoDecoder: VideoDecoder(),
+            session: StreamSession(
+                hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend()), videoDecoder: VideoDecoder(),
             audioDecoder: AudioDecoder(), inputForwarder: InputForwarder())
         let pointer = Unmanaged.passUnretained(bridge).toOpaque()
         #expect(StreamBridgeContext.from(pointer) === bridge)
@@ -104,7 +105,7 @@ struct BackendGlueTests {
 
 extension BackendGlueTests {
     @Test func obsoleteBackendCannotPublishHdrOrAudioIntoReplacement() async {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let decoder = VideoDecoder()
         let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
                                          audioDecoder: AudioDecoder(), inputForwarder: InputForwarder())

@@ -403,13 +403,15 @@ public actor StreamSession {
     /// answer as the PC; production uses the real client and the native engine.
     let makeNetwork: @Sendable (ServerInfo) -> NetworkClient
     let makeBackend: @Sendable () -> StreamingBackend
+    let hostDisposition: StreamHostDisposition
     /// Every watchdog, metric and backoff reads time here, so tests can script it.
     let clock: SessionClock
 
-    init(backend: StreamingBackend = MacTransport.makeBackend(),
+    init(hostDisposition: StreamHostDisposition, backend: StreamingBackend = MacTransport.makeBackend(),
          makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) },
          makeBackend: @escaping @Sendable () -> StreamingBackend = { MacTransport.makeBackend() },
          clock: SessionClock = SessionClock()) {
+        self.hostDisposition = hostDisposition
         self.backend = backend
         self.makeNetwork = makeNetwork
         self.makeBackend = makeBackend

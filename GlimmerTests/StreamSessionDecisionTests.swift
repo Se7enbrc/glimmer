@@ -22,7 +22,7 @@ struct PresentRecoveryLadderTests {
         StreamSession.presentTripLastClearedAt = .nan
         let decoder = VideoDecoder()
         decoder.backend = recorder
-        return (StreamSession(backend: recorder), decoder)
+        return (StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder), decoder)
     }
 
     private func trip(
@@ -177,7 +177,7 @@ struct SessionConnectMappingTests {
                       StreamProtocol.VIDEO_FORMAT_H265_MAIN10, StreamProtocol.VIDEO_FORMAT_AV1_MAIN8,
                       StreamProtocol.VIDEO_FORMAT_AV1_MAIN10])
     func rec709FullReachesTheBackendAndSDP(_ format: Int32) async throws {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         var config = StreamConfig(width: 1920, height: 1080, fps: 60, bitrateKbps: 20_000)
         config.remoteness = .local
         let backend = await session.makeBackendConfig(config: config, launch: launch, server: server)
@@ -193,7 +193,7 @@ struct SessionConnectMappingTests {
 
     /// An explicit route is honoured without a probe, and re-latched on every build.
     @Test func explicitRouteSetsPacketSizeAndTheDownshiftTier() async {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         var config = StreamConfig(width: 2560, height: 1440, fps: 120, bitrateKbps: 80_000)
         config.remoteness = .remote
         let remote = await session.makeBackendConfig(config: config, launch: launch, server: server)
@@ -214,7 +214,7 @@ struct SessionConnectMappingTests {
     }
 
     @Test func attemptsStopWhenNotStreamingOrPastTheDeadline() async throws {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         await #expect(throws: CancellationError.self) { try await session.checkAttempt() }
         await session.markStreamingForAttemptTest()
         try await session.checkAttempt(deadline: .distantFuture)

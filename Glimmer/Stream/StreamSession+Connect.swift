@@ -124,12 +124,8 @@ extension StreamSession {
             remoteInputAesIv: [UInt8](launch.gcmKeyId))
     }
 
-    /// Open the connect-flow signpost interval, anchor the connect telemetry,
-    /// attach the native engine's Swift sinks, and start the connection. On
-    /// startConnection failure this cancels the host session and tears the
-    /// session down (so the next attempt isn't blocked) before throwing - the
-    /// caller suppresses its leak-safety defer because stop() already released
-    /// the bridge retain.
+    /// Attach the media sinks and start this transport attempt. Failure cleanup follows
+    /// the required host disposition; initial failure also joins full local teardown.
     func connectBackend(
         serverInfo: ServerInfo,
         launch: LaunchResponse,
@@ -193,19 +189,19 @@ extension StreamSession {
             }
             try checkAttempt(deadline: deadline)
         } catch {
-            // A failed transport must release the PC app we already launched.
+            // A failed transport follows the session-wide host disposition.
             let code: Int32
             if case let StreamError.sessionFailed(failureCode) = error {
                 code = failureCode
             } else {
                 code = -1
             }
-            log.error("startConnection failed with \(code) - cancelling host session")
+            log.error("startConnection failed with \(code)")
             // Reconnect cancels only its failed launch, preserving the frozen frame and event stream
             // while the driver retries. Initial connect failure runs the full teardown.
             if duringReconnect {
                 try checkAttempt(deadline: deadline)
-                try? await network.cancel()
+                if let cancellation = hostDisposition.cancellation { try? await cancellation.cancel(network) }
                 try checkAttempt(deadline: deadline)
                 throw StreamError.sessionFailed(code)
             }
