@@ -41,7 +41,7 @@ package final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendabl
         bridge?.emit(event, source: backend, attempt: attempt)
     }
 
-    private var isCurrent: Bool { bridge?.acceptsEvent(from: backend) ?? false }
+    private var isCurrent: Bool { bridge?.acceptsEvent(from: backend, attempt: attempt) ?? false }
 
     package func stageStarting(_ name: String) {
         guard isCurrent else { return }

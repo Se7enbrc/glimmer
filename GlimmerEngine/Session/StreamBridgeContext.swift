@@ -38,8 +38,10 @@ package final class StreamBridgeContext: @unchecked Sendable {
         }
     }
 
-    package func acceptsEvent(from backend: NativeBackend?) -> Bool {
-        sourceLock.withLock { eventSource == nil || backend.map(ObjectIdentifier.init) == eventSource }
+    package func acceptsEvent(from backend: NativeBackend?, attempt: UUID) -> Bool {
+        sourceLock.withLock {
+            attempt == attemptID && (eventSource == nil || backend.map(ObjectIdentifier.init) == eventSource)
+        }
     }
 
     /// The session's event stream, yielded to straight from backend threads so events keep the order
