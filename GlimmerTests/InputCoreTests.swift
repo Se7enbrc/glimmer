@@ -23,8 +23,8 @@ struct InputCoreTests {
         let id = ObjectIdentifier(identity)
         let analog = GamepadAnalog(leftTrigger: 127, rightTrigger: 255, leftStickX: -32767,
                                    leftStickY: 32767, rightStickX: 123, rightStickY: -456)
-        core.registerController(id: id, slot: 1, buttons: 0, analog: InputCore.neutral)
-        core.receiveController(id: id, buttons: StreamProtocol.A_FLAG, analog: analog,
+        let token = core.registerController(id: id, slot: 1, buttons: 0, analog: InputCore.neutral)
+        core.receiveController(id: id, token: token, buttons: StreamProtocol.A_FLAG, analog: analog,
                                chordButtons: StreamProtocol.A_FLAG, capturedAt: .infinity)
         #expect(backend.calls.last?.num == 1)
         #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG)
@@ -33,7 +33,7 @@ struct InputCoreTests {
         #expect(core.withLock { core.chordSlots.insert(1).inserted })
         core.removeController(id: id)
         core.removeController(id: id)
-        core.receiveController(id: id, buttons: StreamProtocol.B_FLAG, analog: analog,
+        core.receiveController(id: id, token: token, buttons: StreamProtocol.B_FLAG, analog: analog,
                                chordButtons: 0, capturedAt: .infinity)
         #expect(backend.calls.count == 1)
         #expect(core.state(slot: 1) == nil)
@@ -48,9 +48,9 @@ struct InputCoreTests {
         core.onCenterPartial = { slot in partials.withLock { $0.append(slot) } }
         let analog = GamepadAnalog(leftTrigger: 12, rightTrigger: 34, leftStickX: 56,
                                    leftStickY: 78, rightStickX: 90, rightStickY: 123)
-        core.registerController(id: id, slot: 0, buttons: StreamProtocol.A_FLAG | StreamProtocol.PLAY_FLAG,
+        let token = core.registerController(id: id, slot: 0, buttons: StreamProtocol.A_FLAG | StreamProtocol.PLAY_FLAG,
                                 analog: analog)
-        core.receiveCenterButtons(device: 17, capturedAt: .infinity, controller: { _ in id }, buttons: { _ in
+        core.receiveCenterButtons(device: 17, capturedAt: .infinity, controller: { _ in (id, token) }, buttons: { _ in
             DualSenseExtraButtons(create: true, ps: true, mute: true)
         })
         #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG | StreamProtocol.BACK_FLAG
@@ -58,18 +58,17 @@ struct InputCoreTests {
         #expect(core.state(slot: 0)?.analog == analog)
         #expect(partials.withLock { $0 } == [0])
         core.receiveCenterButtons(device: 17, capturedAt: 0, controller: { _ in
-            Issue.record("Pre-handoff input must be rejected before routing")
-            return id
+            (id, token)
         })
         core.receiveCenterButtons(device: 17, controller: { _ in nil })
         #expect(backend.calls.count == 1)
-        core.receiveCenterButtons(device: 17, capturedAt: .infinity, controller: { _ in id }, buttons: { _ in
+        core.receiveCenterButtons(device: 17, capturedAt: .infinity, controller: { _ in (id, token) }, buttons: { _ in
             DualSenseExtraButtons()
         })
         #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG)
         #expect(partials.withLock { $0 } == [0])
         core.withLock { core.snapshot.chord = .l1r1 }
-        core.receiveCenterButtons(device: 17, capturedAt: .infinity, controller: { _ in id }, buttons: { _ in
+        core.receiveCenterButtons(device: 17, capturedAt: .infinity, controller: { _ in (id, token) }, buttons: { _ in
             DualSenseExtraButtons(options: true, l1: true, r1: true)
         })
         #expect(core.withLock { core.chordSlots.contains(0) })
@@ -106,7 +105,7 @@ struct InputCoreTests {
         forwarder.installFirstResponder()
         #expect(forwarder.inputCore.withLock { forwarder.inputCore.snapshot.focused })
         let core = forwarder.inputCore
-        await Task.detached {
+        _ = await Task.detached {
             core.receive(slot: 0, buttons: StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG,
                          analog: InputCore.neutral)
         }.value
@@ -116,8 +115,7 @@ struct InputCoreTests {
         #expect(forwarder.quitChordDwellSlot == 0)
         var stopped = false
         forwarder.onQuitHotkey = { stopped = true }
-        forwarder.cancelQuitChordDwell()
-        forwarder.quitChordDwellExpired(slot: 0, pad: nil) { core.state(slot: 0) }
+        forwarder.controllerChordDwell.expire()
         #expect(stopped)
     }
 

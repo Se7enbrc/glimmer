@@ -266,16 +266,18 @@ struct TimedPresentPathTests {
         let analog = InputForwarder.neutralControllerAnalog
         let shoulders = StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG
 
-        forwarder.armQuitChordDwell(slot: 0) { (shoulders, analog) }
+        let held = OSAllocatedUnfairLock(initialState: shoulders)
+        forwarder.armQuitChordDwell(slot: 0) { (held.withLock { $0 }, analog) }
         forwarder.quitChordDwellTask?.cancel()
-        forwarder.quitChordDwellExpired(slot: 0, pad: nil) { (StreamProtocol.LB_FLAG, analog) }
+        held.withLock { $0 = StreamProtocol.LB_FLAG }
+        forwarder.controllerChordDwell.expire()
         #expect(quits == 0)
         #expect(forwarder.quitChordDwellTask == nil)
         #expect(forwarder.quitChordDwellSlot == nil)
 
         forwarder.armQuitChordDwell(slot: 1) { (shoulders, analog) }
         forwarder.quitChordDwellTask?.cancel()
-        forwarder.quitChordDwellExpired(slot: 1, pad: nil) { (shoulders, analog) }
+        forwarder.controllerChordDwell.expire()
         #expect(quits == 1)
     }
 

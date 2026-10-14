@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
 import Foundation
 
-struct ControllerTouchpadMouseState {
-    struct Movement: Equatable {
+package struct ControllerTouchpadMouseState {
+    package struct Movement: Equatable {
         var dx: Int16 = 0
         var dy: Int16 = 0
         var scrollX: Int16 = 0
         var scrollY: Int16 = 0
     }
 
-    private(set) var clickedButton: Int32?
+    package private(set) var clickedButton: Int32?
     private var clickDown = false
     private var contacts: UInt8 = 0
     private var anchor = SIMD2<Float>.zero
@@ -20,15 +19,17 @@ struct ControllerTouchpadMouseState {
     private var residual = SIMD2<Float>.zero
     private var scroll = ScrollQuantizer()
 
+    package init() {}
+
     // GameController uses (0,0) for no contact, including the ambiguous exact centre.
-    static func contact(_ position: (x: Float, y: Float)) -> SIMD2<Float>? {
+    package static func contact(_ position: (x: Float, y: Float)) -> SIMD2<Float>? {
         guard position.x.isFinite, position.y.isFinite, position.x != 0 || position.y != 0 else { return nil }
         return SIMD2((min(1, max(-1, position.x)) + 1) / 2,
                      (1 - min(1, max(-1, position.y))) / 2)
     }
 
-    mutating func update(primary: SIMD2<Float>?, secondary: SIMD2<Float>?, clicked: Bool,
-                         now: TimeInterval) -> Movement {
+    package mutating func update(primary: SIMD2<Float>?, secondary: SIMD2<Float>?, clicked: Bool,
+                                 now: TimeInterval) -> Movement {
         let nextContacts: UInt8 = (primary == nil ? 0 : 1) | (secondary == nil ? 0 : 2)
         if clicked && !clickDown {
             clickedButton = nextContacts == 3 ? StreamProtocol.BUTTON_RIGHT : StreamProtocol.BUTTON_LEFT
@@ -67,8 +68,8 @@ struct ControllerTouchpadMouseState {
 }
 
 extension InputCore {
-    func forwardTouchpadMouse(slot: UInt8, primary: (x: Float, y: Float), secondary: (x: Float, y: Float),
-                              clicked: Bool, now: TimeInterval) {
+    package func forwardTouchpadMouse(slot: UInt8, primary: (x: Float, y: Float), secondary: (x: Float, y: Float),
+                                      clicked: Bool, now: TimeInterval) {
         guard !chordSlots.contains(slot), var state = controllerMouseStates[slot]?.touchpad else { return }
         let movement = state.update(primary: ControllerTouchpadMouseState.contact(primary),
                                     secondary: ControllerTouchpadMouseState.contact(secondary),
@@ -81,7 +82,7 @@ extension InputCore {
         sendControllerScroll(x: movement.scrollX, y: movement.scrollY)
     }
 
-    func updateControllerTouchpadMouse(slot: UInt8, state: ControllerTouchpadMouseState) {
+    package func updateControllerTouchpadMouse(slot: UInt8, state: ControllerTouchpadMouseState) {
         guard controllerMouseStates[slot]?.touchpad.clickedButton != state.clickedButton else {
             controllerMouseStates[slot]?.touchpad = state
             return

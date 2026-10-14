@@ -18,7 +18,8 @@ extension InputForwarder {
     func reconcilePhysicalInputs() {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         guard !physicalKeys.isEmpty || !heldModifierVKs.isEmpty || !heldMouseButtons.isEmpty
-            || !releases.pending.isEmpty else { return }
+            || !releases.pending.isEmpty || !inputCore.pendingTouchReleases.isEmpty
+            || !inputCore.pendingArrivals.isEmpty else { return }
         let before = physicalKeys.count + heldModifierVKs.count + heldMouseButtons.count
         reconcileKeyboard()
         let mouse = currentMouseButtons()
@@ -62,12 +63,7 @@ extension InputForwarder {
             return
         }
         guard reconciliationTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tickReconciliation() }
-        }
-        timer.tolerance = 0.025
-        reconciliationTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
+        reconciliationTimer = InputReconciliation.makeTimer { [weak self] in self?.tickReconciliation() }
     }
 
     func tickReconciliation() {

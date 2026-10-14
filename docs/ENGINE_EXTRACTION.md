@@ -401,6 +401,62 @@ disconnect/lock/background leave the PC game running. Mac watchdog and telemetry
 helpers stay package-only. Public consumer tests construct, attach and stop real
 engine objects without networking.
 
+## Slice 8: synchronous input and prepared feedback
+
+`GlimmerEngine/Input/` owns controller slot/arrival state, normalized
+acceptance, button layout, stop-chord dwell, controller mouse/touchpad behavior,
+pointer residuals, scroll quantization and release obligations. The engine
+retains the existing feedback mapping, haptic coalescing/backoff, motion
+rate/unit conversion, battery mapping and reconciliation cadence. Mac GC/raw-HID
+capture, device routing, AppKit/Carbon ownership, native actuator objects and UI
+stay in the Mac adapters. Window/capture pointer-mode policy stays native;
+aspect-fit/origin mapping stays shared. A GC snapshot delivers touch once;
+raw-HID centre-button updates only merge the registered controller's retained
+axes and centre/shoulder state.
+
+### Public input contract
+
+Each `StreamConnection` owns one synchronous, Sendable `input` handle. Register
+an actual controller descriptor to obtain an opaque `ControllerRegistration`;
+all samples and prepared feedback/sensor attachments use that exact identity.
+Unregister before releasing native capture. Slot reuse never authorizes a stale
+callback. Controller arrival must succeed before state or touch is sent, and
+failed releases block new presses until the existing reconciliation retry
+accepts them. Connection lifecycle activation is ordered on a serial lifecycle
+queue, leaving the backend state lock before input can send an arrival.
+
+`submitController(_:sample:capturedAt:)` takes GC-normalized physical button
+positions, triggers in [0,1], sticks in [-1,1] with Y up, optional GC touch
+axes, and monotonic capture uptime. The engine owns layout, timing and wire
+conversion. Nonfinite analog values become neutral; touch coordinates are
+bounded and an invalid contact becomes absent. `setFocused(false)` releases
+ownership. Before reopening input after native UI, capture a current snapshot
+while unfocused; `setFocused(true)` suppresses each held button, axis and
+contact independently until its release/neutral sample. Mac resynchronization
+keeps its existing policy.
+
+`movePointer` uses native pixels, positive right/down; `scroll` accepts precise
+pixel deltas (or wheel lines when not precise), positive right/up. The shared
+core retains fractions and owns wire quantization and absolute pointer mapping.
+Pointer buttons and controller touch share release barriers. `setStopChord`
+selects the existing presets; ordered `.input` connection events report local
+stop requests, mouse mode and controller activity. Stop requests mean local
+disconnect, with the PC game left running. Chord edges and delayed expiry both
+validate capture generation, including release/repress and reused slots.
+
+`ControllerFeedbackOutput` supplies scalar localities and prepared motor/light/
+player-index functions. Its optional throwing factory receives shared sharpness
+and intensity and returns a closure-owned `ControllerMotor`. Native start/reset/
+stop operations stay in the adapter. The shared feedback queue owns mapping and
+coalescing; cancellation revokes adoption synchronously, and a motor returned
+late is disposed before queued cleanup. Each remaining actuation in a drained
+batch rechecks the original ownership epoch; old feedback cannot replay after
+resume. `ControllerMotionCapture` supplies raw acceleration in G and angular
+velocity in radians/second plus native handler/power hooks; delayed callbacks
+validate registration and ownership generation. `ControllerBatteryCapture`
+supplies a main-actor raw state/level probe. The engine owns existing polling
+and protocol conversion; applications add no sampler timer.
+
 ## Ownership map
 
 Complete inventory: **245 Stream files, 4 Models files, all 63 root Swift files,

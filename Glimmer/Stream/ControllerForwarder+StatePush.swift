@@ -50,40 +50,13 @@ extension InputForwarder {
     /// Returns false when input is gated or the quit chord is held; mouse mode still needs the surface.
     @discardableResult
     private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8) -> Bool {
-        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         guard forwardsControllerEvents else { return false }
+        publishInputSnapshot()
         let buttons = pressedButtonFlags(pad: pad)
-
-        // The chord ends the stream only after the hold dwell (ControllerForwarder+QuitChord.swift),
-        // so an in-game overlap can't. New presses stay off the PC during the dwell;
-        // releases still pass so unrelated buttons and triggers cannot get stuck.
-        let analog = Self.controllerAnalog(pad)
-        let chordHeld = matchesControllerQuitChord(pad: pad, buttons: buttons)
-        let isMouse = routeControllerMouse(slot: slot, buttons: buttons, analog: analog, chordHeld: chordHeld)
-        if chordHeld {
-            armQuitChordDwell(pad: pad, slot: slot)
-            releaseSuppressedControllerButtons(slot: slot, buttons: buttons,
-                                               leftDown: pad.leftTrigger.value > 0,
-                                               rightDown: pad.rightTrigger.value > 0)
-            // A suppressed frame must not age into the next push.
-            _ = InputDeliverStamp.shared.take(slot: Int(slot))
-            return false
-        }
-        // Released before the dwell elapsed (or never held): an in-game
-        // button coincidence, not a quit. Only the arming pad's frames may
-        // cancel - another pad's traffic says nothing about the holder.
-        if quitChordDwellSlot == slot {
-            cancelQuitChordDwell(reason: "released before the dwell elapsed", pad: pad)
-        }
-
-        guard !isMouse else {
-            _ = InputDeliverStamp.shared.take(slot: Int(slot))
-            return true
-        }
-        let mapped = ControllerButtonLayout.apply(
-            buttons, useNintendoLabels: useNintendoLabels && nintendoControllerTypes[slot] != nil)
-        sendControllerState(slot: slot, buttons: mapped, analog: analog)
-        return true
+        let result = inputCore.receive(slot: slot, buttons: buttons, analog: Self.controllerAnalog(pad),
+                                       chordButtons: Self.controllerChordButtons(pad, buttons: buttons))
+        if result == .chord || result == .mouse { _ = InputDeliverStamp.shared.take(slot: Int(slot)) }
+        return result == .forwarded || result == .mouse
     }
 
     /// The host button bitmask for a gamepad's current state. Table-driven so
@@ -144,7 +117,7 @@ extension InputForwarder {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         controllerOwnershipSuspended = true
         publishInputSnapshot(focused: false)
-        inputCore.chordSlots.removeAll()
+        inputCore.clearChords()
         releaseControllerTouches()
         suspendControllerMouse()
         for state in attachedControllers.values {

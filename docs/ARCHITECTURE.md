@@ -512,15 +512,19 @@ whose pad left or changed before it replays the arrivals. Old controller release
 frames are discarded on connection loss so arrivals precede live-state resync.
 An entry is cleared only there, since a removal sent into a link that has
 already died is lost. Controllers share a serial `.userInteractive` capture
-queue. `InputCore` owns forwarding snapshots and the shared release ledger under
-a recursive lock, so capture, focus changes and pending releases remain ordered.
-AppKit responders stay on main; keyboard/button encoding runs on the sender.
-Controller motion sampling is also lock-protected. UI and lifecycle publications
-stay on main. State updates go through `sendMultiController`. Feedback from the
-PC comes back through `ConnectionEvents`: rumble (`0x010b`), trigger rumble
-(`0x5500`), motion-sensor enable (`0x5501`, answered with `sendControllerMotion`
-samples), and RGB lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion`
-and `ControllerBattery` own the actuator and sampler sides.
+queue. `GlimmerEngine/Input/InputCore` owns forwarding snapshots and the shared
+release ledger under a recursive lock, so capture, focus changes and pending
+releases remain ordered. AppKit responders stay on main; keyboard/button
+encoding runs on the sender. Controller motion sampling is also lock-protected.
+UI and lifecycle publications stay on main. State updates go through
+`sendMultiController`. Feedback from the PC comes back through
+`ConnectionEvents`: rumble (`0x010b`), trigger rumble (`0x5500`), motion-sensor
+enable (`0x5501`, answered with `sendControllerMotion` samples), and RGB
+lightbar (`0x5502`); `ControllerHaptics`, `ControllerMotion` and
+`ControllerBattery` own shared feedback/sampling policy in the engine. Prepared
+Mac adapters own native haptic engines, GC capture and raw-HID routing;
+`StreamConnection.input` exposes the same synchronous acceptance and release
+barriers to iOS capture without exposing native device objects.
 
 Mini Player keeps controller input active when another Mac app has focus.
 Keyboard and mouse still release on focus loss. A shared ownership set manages

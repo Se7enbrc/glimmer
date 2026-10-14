@@ -54,26 +54,8 @@ extension InputForwarder {
     /// empty recording - an empty set is vacuously a subset of anything, which
     /// would quit the stream on the first frame.
     nonisolated static func chordSatisfied(_ chord: ControllerQuitChord,
-                                           custom: Set<ControllerButton>,
-                                           held: Set<ControllerButton>) -> Bool {
-        let required: Set<ControllerButton>
-        switch chord {
-        case .none:
-            return false
-        case .startSelectL1R1:
-            // Moonlight default: Start (Options ≡ / Xbox Menu) + Select
-            // (Create/Share / Xbox View) + both shoulders.
-            required = [.options, .create, .l1, .r1]
-        case .l1r1:
-            required = [.l1, .r1]
-        case .l1r1l2r2:
-            required = [.l1, .r1, .l2, .r2]
-        case .l3r3:
-            required = [.l3, .r3]
-        case .custom:
-            required = custom
-        }
-        return !required.isEmpty && required.isSubset(of: held)
+                                           custom: Set<ControllerButton>, held: Set<ControllerButton>) -> Bool {
+        ControllerChord.satisfied(chord, custom: custom, held: held)
     }
 
     /// One-time guard for the raw-HID-needed warning below.
@@ -119,61 +101,47 @@ extension InputForwarder {
     /// grace. 400ms is far longer than a combat-coincidence chord survives
     /// (those release within a frame or two) and short enough that a
     /// deliberate hold still feels immediate.
-    static let quitChordDwellSeconds: Double = 0.4
+    static let quitChordDwellSeconds = ControllerChord.dwellSeconds
 
     /// Start (or keep) the dwell countdown for a fully-held chord on `slot`.
     /// GameController only fires the valueChangedHandler on CHANGES - a chord
     /// held perfectly still after the matching frame produces no further
     /// frames - so the dwell must complete on its own timer, re-reading the
     /// LIVE pad state at expiry rather than trusting the arming frame.
-    func armQuitChordDwell(pad: GCExtendedGamepad, slot: UInt8) {
-        armQuitChordDwell(slot: slot, pad: pad) { [weak self, weak pad] in
+    func armQuitChordDwell(pad: GCExtendedGamepad, slot: UInt8, edge: UUID? = nil) {
+        armQuitChordDwell(slot: slot, pad: pad, edge: edge) { [weak self, weak pad] in
             guard let self, let pad else { return nil }
             return self.quitChordState(pad: pad)
         }
     }
 
-    func armQuitChordDwell(slot: UInt8, pad: GCExtendedGamepad? = nil,
+    func armQuitChordDwell(slot: UInt8, pad: GCExtendedGamepad? = nil, edge: UUID? = nil,
                            readState: @escaping @MainActor () -> (buttons: Int32, analog: GamepadAnalog)?) {
-        guard quitChordDwellTask == nil else { return }
-        quitChordDwellSlot = slot
-        quitChordBreadcrumb(.armed, "held on slot \(slot) - dwell armed "
-            + "(\(Int(Self.quitChordDwellSeconds * 1000))ms)", pad: pad)
-        quitChordDwellTask = Task { [weak self, weak pad] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.quitChordDwellSeconds * 1_000_000_000))
-            guard !Task.isCancelled, let self else { return }
-            self.quitChordDwellExpired(slot: slot, pad: pad, readState: readState)
-        }
+        let edge = edge ?? inputCore.withLock { inputCore.chordEdges[slot] }
+        controllerChordDwell.arm(slot: slot, edge: edge, held: { [weak self] in
+            guard let self, self.forwardsControllerEvents,
+                  self.inputCore.withLock({ self.inputCore.chordEdges[slot] == edge }),
+                  let state = readState() else { return false }
+            return self.matchesControllerQuitChord(buttons: state.buttons,
+                leftTrigger: state.analog.leftTrigger, rightTrigger: state.analog.rightTrigger)
+        }, armed: { [weak self, weak pad] in
+            self?.quitChordBreadcrumb(.armed, "held on slot \(slot) - dwell armed "
+                + "(\(Int(Self.quitChordDwellSeconds * 1000))ms)", pad: pad)
+        }, expired: { [weak self, weak pad] held in
+            guard let self else { return }
+            guard held else {
+                self.quitChordBreadcrumb(.cycle, "not held at dwell expiry (slot \(slot)) - not quitting", pad: pad)
+                return
+            }
+            Diag.notice("controller quit chord held - ending stream", "Controller")
+            self.onQuitHotkey?()
+        })
     }
 
-    /// The dwell ran out: quit if the chord is still held. The timer's body; tests call it directly.
-    func quitChordDwellExpired(slot: UInt8, pad: GCExtendedGamepad?,
-                               readState: @MainActor () -> (buttons: Int32, analog: GamepadAnalog)?) {
-        quitChordDwellTask = nil
-        quitChordDwellSlot = nil
-        guard forwardsControllerEvents, let state = readState() else { return }
-        guard matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
-                                         rightTrigger: state.analog.rightTrigger) else {
-            quitChordBreadcrumb(.cycle, "not held at dwell expiry (slot \(slot)) - not quitting", pad: pad)
-            return
-        }
-        Diag.notice("controller quit chord held - ending stream", "Controller")
-        onQuitHotkey?()
-    }
-
-    /// Cancel an in-flight dwell (chord released early, arming pad detached,
-    /// or session teardown). Safe to call with none pending. `reason` (with
-    /// the pad when one is still around) leaves the diagnosable breadcrumb;
-    /// teardown passes nothing - the session end is its own log line.
-    func cancelQuitChordDwell(reason: String? = nil, pad: GCExtendedGamepad? = nil) {
-        guard let task = quitChordDwellTask else {
-            quitChordDwellSlot = nil
-            return
-        }
-        task.cancel()
-        quitChordDwellTask = nil
-        quitChordDwellSlot = nil
-        if let reason { quitChordBreadcrumb(.cycle, "cancelled - \(reason)", pad: pad) }
+    func cancelQuitChordDwell(reason: String? = nil, pad: GCExtendedGamepad? = nil, slot: UInt8? = nil) {
+        let hadTask = quitChordDwellTask != nil
+        controllerChordDwell.cancel(slot: slot)
+        if hadTask, let reason { quitChordBreadcrumb(.cycle, "cancelled - \(reason)", pad: pad) }
     }
 
     // MARK: - Breadcrumbs
@@ -281,19 +249,3 @@ func heldControllerButtons(pad: GCExtendedGamepad) -> Set<ControllerButton> {
 }
 
 /// Shared host-mask reader for generic HID pads and the quit-chord predicate.
-func heldControllerButtons(buttons: Int32, leftTrigger: UInt8, rightTrigger: UInt8) -> Set<ControllerButton> {
-    let mapping: [(Int32, ControllerButton)] = [
-        (StreamProtocol.A_FLAG, .faceDown), (StreamProtocol.B_FLAG, .faceRight),
-        (StreamProtocol.X_FLAG, .faceLeft), (StreamProtocol.Y_FLAG, .faceUp),
-        (StreamProtocol.UP_FLAG, .dpadUp), (StreamProtocol.DOWN_FLAG, .dpadDown),
-        (StreamProtocol.LEFT_FLAG, .dpadLeft), (StreamProtocol.RIGHT_FLAG, .dpadRight),
-        (StreamProtocol.LB_FLAG, .l1), (StreamProtocol.RB_FLAG, .r1),
-        (StreamProtocol.LS_CLK_FLAG, .l3), (StreamProtocol.RS_CLK_FLAG, .r3),
-        (StreamProtocol.TOUCHPAD_FLAG, .touchpad), (StreamProtocol.PLAY_FLAG, .options),
-        (StreamProtocol.BACK_FLAG, .create), (StreamProtocol.SPECIAL_FLAG, .ps), (StreamProtocol.MISC_FLAG, .mute)
-    ]
-    var held = Set(mapping.compactMap { buttons & $0.0 != 0 ? $0.1 : nil })
-    if leftTrigger >= 128 { held.insert(.l2) }
-    if rightTrigger >= 128 { held.insert(.r2) }
-    return held
-}

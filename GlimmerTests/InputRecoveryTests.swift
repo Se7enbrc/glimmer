@@ -124,7 +124,7 @@ struct InputRecoveryTests {
         rig.input.gamepadMask = 1
         rig.input.sendControllerState(slot: 0, buttons: StreamProtocol.A_FLAG,
                                       analog: InputForwarder.neutralControllerAnalog)
-        rig.input.quitChordDwellTask = Task { try? await Task.sleep(for: .seconds(10)) }
+        rig.input.controllerChordDwell.arm(slot: 0, held: { true }, expired: { _ in })
         if responder {
             _ = rig.input.inputView?.resignFirstResponder()
         } else {

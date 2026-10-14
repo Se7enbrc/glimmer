@@ -14,7 +14,9 @@ extension InputForwarder {
     @discardableResult
     func flushPendingReleases() -> Bool {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
-        guard inputCore.flushReleases() else { updateReconciliationTimer(); return false }
+        if releases.pending.isEmpty, inputCore.pendingTouchReleases.isEmpty,
+           inputCore.pendingArrivals.isEmpty, !controllersNeedAnnouncement, releases.flushCount == 0 { return true }
+        guard inputCore.flushReleases(), inputCore.flushControllerArrivals() else { updateReconciliationTimer(); return false }
         if releases.flushCount > 0 { reportReleaseRecovery() }
         if controllersNeedAnnouncement {
             let timing = InputTimingContext.suspend(); defer { timing?.restore() }
@@ -74,19 +76,6 @@ extension InputForwarder {
     func sendControllerState(slot: UInt8, buttons: Int32, analog: GamepadAnalog) {
         inputCore.withLock { inputCore.sendController(slot: slot, buttons: buttons, analog: analog) }
         updateReconciliationTimer()
-    }
-
-    /// During a client chord only releases from the last accepted frame may pass.
-    func releaseSuppressedControllerButtons(slot: UInt8, buttons: Int32, leftDown: Bool, rightDown: Bool) {
-        let buttons = ControllerButtonLayout.apply(
-            buttons, useNintendoLabels: useNintendoLabels && nintendoControllerTypes[slot] != nil)
-        guard inputCore.withLock({
-            inputCore.needsRelease(slot: slot, buttons: buttons, leftDown: leftDown, rightDown: rightDown)
-        }) else {
-            return
-        }
-        sendControllerState(slot: slot, buttons: (controllerButtons[slot] ?? 0) & buttons,
-                            analog: Self.neutralControllerAnalog)
     }
 
     func controllerNeedsRelease(slot: UInt8, buttons: Int32, leftDown: Bool, rightDown: Bool) -> Bool {
