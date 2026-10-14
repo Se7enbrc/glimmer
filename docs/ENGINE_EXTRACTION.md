@@ -511,11 +511,41 @@ Verify/CodeQL, optimized boundary audit, and physical stream/performance
 acceptance remain required before this slice is declared complete. Consumer pins
 change only after the reviewed engine revision is published.
 
+## Consumer boundary closure (slice 10)
+
+`StreamFailure` classifies start errors and termination codes without choosing
+native controls or wording. Its associated messages are transport/server
+presentation inputs and may contain Mac wording; a consumer can use local copy
+for the neutral reason instead. The Mac retains its exact sentences, video
+history lookup and existing fallback for non-`StreamError` failures.
+
+`RouteBitratePolicy` owns scalar route selection, codec/boost multiplication,
+floor/cap rounding, PHY gating and reconnect host matching. Native route probes,
+preferences and measured boost defaults remain in `AppModel`; the package-only
+policy receives those values explicitly. `StreamQuality.videoFormats` owns the
+SDR format mask. These cuts add no mobile tuning API or changes to the iPhone's
+explicit 1080p/60 H.264, 20 Mbps, stereo baseline.
+
+`make check` now runs `scripts/check-engine-boundary.py`. The persistent audit
+checks unique Xcode objects/source membership, agreement with SwiftPM's engine
+sources, dependency/import direction and the committed shared engine scheme.
+Existing native helper source sharing and generated `BuildInfo` remain explicit
+exceptions. Lint, CodeQL/coverage filters and signing fixtures include the
+engine.
+
+These are source-ownership and reproducible-build closures. Final reviewed-tree
+Verify, ASan fuzz, platform builds and all three CodeQL jobs remain gates;
+framework loading, app/CLI identity, real-PC media/input and CPU/energy
+acceptance still require the owner-installed published RC. Extraction keeps RC
+disabled.
+
 ## Ownership map
 
-Complete inventory: **245 Stream files, 4 Models files, all 63 root Swift files,
-and 8 CLI files**. Every current file appears once below. Paths are relative to
-each heading.
+Baseline extraction inventory: **245 Stream files, 4 Models files, all 63 root
+Swift files, and 8 CLI files**. Rows track those original files and their
+ownership cuts; the persistent boundary audit checks the current engine source
+inventory and target membership. Paths below are relative to each original
+heading.
 
 | Code  | Ownership and meaning                                                                                                                                                                                                                                                        |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -786,80 +816,80 @@ each heading.
 
 ### Glimmer/Models
 
-| File                        | Owner | Blocking symbol or move boundary                                                                            | Slice |
-| --------------------------- | ----- | ----------------------------------------------------------------------------------------------------------- | ----- |
-| `BitrateMode.swift`         | E     | Portable bitrate/codec preference semantics.                                                                | 2     |
-| `Host.swift`                | W     | LibraryApp.icon: SwiftUI.Image, LauncherStyle and Mac preference copy; extract PC/app/input/quality values. | 2     |
-| `HostCodecPreference.swift` | E     | Portable bitrate/codec preference semantics.                                                                | 2     |
-| `StreamDisplayMode.swift`   | A     | Pure Mac fullScreen/window preference; extract StreamSizeBounds into shared values, retain persisted mode.  | 2/9   |
+| File                        | Owner | Blocking symbol or move boundary                                                                            | Slice  |
+| --------------------------- | ----- | ----------------------------------------------------------------------------------------------------------- | ------ |
+| `BitrateMode.swift`         | E     | Portable bitrate/codec preference semantics.                                                                | 2      |
+| `Host.swift`                | W     | LibraryApp.icon: SwiftUI.Image, LauncherStyle and Mac preference copy; extract PC/app/input/quality values. | 2      |
+| `HostCodecPreference.swift` | E     | Portable bitrate/codec preference semantics.                                                                | 2      |
+| `StreamDisplayMode.swift`   | A     | Pure Mac fullScreen/window preference; extract StreamSizeBounds into shared values, retain persisted mode.  | 2/9/10 |
 
 ### Glimmer
 
-| File                                            | Owner | Blocking symbol or move boundary                                                                                 | Slice |
-| ----------------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------- | ----- |
-| `AWDLHelperManager.swift`                       | A     | SMAppService.daemon / NSXPCConnection / AWDLEnablePrompt; helper offer remains in Mac app.                       | 9     |
-| `AWDLHelperRecovery.swift`                      | A     | Mac AWDL service/process/lease policy; no iOS helper equivalent.                                                 | 9     |
-| `AWDLProcess.swift`                             | A     | Foundation.Process and ifconfig child process; Mac helper support.                                               | 9     |
-| `AWDLStreamLease.swift`                         | A     | Mac AWDL service/process/lease policy; no iOS helper equivalent.                                                 | 9     |
-| `AboutPane.swift`                               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `AppModel+Audio.swift`                          | A     | MutedOutput / CoreAudio AudioObject APIs; Mac local-output muting and restoration.                               | 9     |
-| `AppModel+CommandURL.swift`                     | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `AppModel+Commands.swift`                       | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `AppModel+Defaults.swift`                       | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `AppModel+Derived.swift`                        | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `AppModel+HostRoute.swift`                      | W     | HostRouteMonitor tied to AppModel; share NWPath route values, retain observation/publication.                    | 9     |
-| `AppModel+Lifecycle.swift`                      | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `AppModel+MenuBar.swift`                        | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `AppModel+Pairing.swift`                        | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `AppModel+Power.swift`                          | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `AppModel+RawHID.swift`                         | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `AppModel+SessionReceipt.swift`                 | A     | SessionReceiptStore app persistence and notification copy; pure shell consumer.                                  | 9     |
-| `AppModel+StreamFailure.swift`                  | W     | AppModel presentation dependency; shared Sunshine requirement copy moves in 2, remaining classification in 9.    | 2/9   |
-| `AppModel+Streaming+Config.swift`               | W     | AppModel preferences/display inputs; extract request validation and preserve Mac defaults.                       | 9     |
-| `AppModel+Streaming.swift`                      | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `AppModel.swift`                                | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                             | 9     |
-| `ContainerMigration.swift`                      | A     | AppModel/UserDefaults and Mac container or Moonlight migration; keep persistence orchestration app-side.         | 3     |
-| `ContentView+ConnectBanner.swift`               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `ContentView+Covers.swift`                      | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `ContentView+Menus.swift`                       | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `ContentView+ReadinessChip.swift`               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `ContentView+StreamButton.swift`                | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `ContentView.swift`                             | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `ContentViewSubviews.swift`                     | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `ControllerInputTestView.swift`                 | A     | SwiftUI/AppKit test UI plus ControllerBackgroundEvents; keep Mac background ownership outside engine.            | 8     |
-| `DiagnosticsPane.swift`                         | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `GlimmerApp.swift`                              | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `GlimmerIntents.swift`                          | A     | AppIntents PCEntity / AppModel dispatch; Mac product entry point.                                                | 10    |
-| `HostStatusPoller.swift`                        | A     | NSApp / AppModel foreground polling; no extra engine launch request.                                             | 3     |
-| `HostsStore.swift`                              | A     | AppModel/UserDefaults and Mac container or Moonlight migration; keep persistence orchestration app-side.         | 3     |
-| `LauncherArtCache.swift`                        | A     | App artwork cache/storage policy; NetworkClient fetch shared, decoded artwork stays shell-side.                  | 3     |
-| `LauncherController.swift`                      | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `LauncherNavigation.swift`                      | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `LauncherStyle.swift`                           | A     | Pure pairing/launcher/menu presentation state; no unavailable API, shell-owned.                                  | 10    |
-| `LogStore.swift`                                | W     | SessionLogFileSink default TelemetryExporter.logsDirectory; shared Diag/privacy/ring, supplied file destination. | 2     |
-| `LogViewerView.swift`                           | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `MacSystemStats.swift`                          | W     | IOKit.ps plus machine-wide host_statistics; Mac probe, neutral optional snapshot for engine.                     | 2     |
-| `MenuBarChartAccessibility.swift`               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `MenuBarPanel+Charts.swift`                     | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `MenuBarPanel.swift`                            | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `MenuBarPresentation.swift`                     | A     | Pure pairing/launcher/menu presentation state; no unavailable API, shell-owned.                                  | 10    |
-| `Motion.swift`                                  | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `PairSheet+Launcher.swift`                      | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `PairSheet.swift`                               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `PairingAttempt.swift`                          | A     | Pure pairing/launcher/menu presentation state; no unavailable API, shell-owned.                                  | 10    |
-| `QualityCalculator.swift`                       | W     | extension AppModel, NSScreen / CGDisplayCopyAllDisplayModes; move math, inject capability values.                | 9     |
-| `SettingsGeneralStreamingPanes+LoginItem.swift` | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `SettingsGeneralStreamingPanes.swift`           | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `SettingsInput+NintendoLayout.swift`            | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `SettingsPCsShortcutsPanes.swift`               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `SettingsShortcutRecorders.swift`               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `SettingsView.swift`                            | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `StatsOverlaySettings.swift`                    | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `StreamingState.swift`                          | A     | Pure pairing/launcher/menu presentation state; no unavailable API, shell-owned.                                  | 10    |
-| `TerminationGate.swift`                         | A     | NSApplication termination coordination; await shared session teardown.                                           | 9     |
-| `TroubleshootingPane.swift`                     | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                     | 10    |
-| `UpdaterController.swift`                       | A     | Sparkle / SPUStandardUpdaterController; Mac update presentation.                                                 | 10    |
-| `WakeOnLAN.swift`                               | E     | Darwin UDP magic-packet logic; iOS entitlement/network-permission acceptance remains Phase 2.                    | 3     |
+| File                                            | Owner | Blocking symbol or move boundary                                                                                                                   | Slice  |
+| ----------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `AWDLHelperManager.swift`                       | A     | SMAppService.daemon / NSXPCConnection / AWDLEnablePrompt; helper offer remains in Mac app.                                                         | 9      |
+| `AWDLHelperRecovery.swift`                      | A     | Mac AWDL service/process/lease policy; no iOS helper equivalent.                                                                                   | 9      |
+| `AWDLProcess.swift`                             | A     | Foundation.Process and ifconfig child process; Mac helper support.                                                                                 | 9      |
+| `AWDLStreamLease.swift`                         | A     | Mac AWDL service/process/lease policy; no iOS helper equivalent.                                                                                   | 9      |
+| `AboutPane.swift`                               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `AppModel+Audio.swift`                          | A     | MutedOutput / CoreAudio AudioObject APIs; Mac local-output muting and restoration.                                                                 | 9      |
+| `AppModel+CommandURL.swift`                     | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `AppModel+Commands.swift`                       | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `AppModel+Defaults.swift`                       | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `AppModel+Derived.swift`                        | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `AppModel+HostRoute.swift`                      | W     | HostRouteMonitor tied to AppModel; share NWPath route values, retain observation/publication.                                                      | 9      |
+| `AppModel+Lifecycle.swift`                      | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `AppModel+MenuBar.swift`                        | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `AppModel+Pairing.swift`                        | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `AppModel+Power.swift`                          | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `AppModel+RawHID.swift`                         | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `AppModel+SessionReceipt.swift`                 | A     | SessionReceiptStore app persistence and notification copy; pure shell consumer.                                                                    | 9      |
+| `AppModel+StreamFailure.swift`                  | W     | AppModel presentation dependency; shared Sunshine requirement copy moves in 2, neutral classification completed in 10; native copy/history remain. | 2/9/10 |
+| `AppModel+Streaming+Config.swift`               | W     | Native preferences/display/route inputs; scalar request/bitrate policy shared in 9/10, Mac defaults retained.                                      | 9      |
+| `AppModel+Streaming.swift`                      | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `AppModel.swift`                                | A     | AppModel @MainActor shell orchestration; construct engine request and adapters here.                                                               | 9      |
+| `ContainerMigration.swift`                      | A     | AppModel/UserDefaults and Mac container or Moonlight migration; keep persistence orchestration app-side.                                           | 3      |
+| `ContentView+ConnectBanner.swift`               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `ContentView+Covers.swift`                      | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `ContentView+Menus.swift`                       | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `ContentView+ReadinessChip.swift`               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `ContentView+StreamButton.swift`                | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `ContentView.swift`                             | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `ContentViewSubviews.swift`                     | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `ControllerInputTestView.swift`                 | A     | SwiftUI/AppKit test UI plus ControllerBackgroundEvents; keep Mac background ownership outside engine.                                              | 8      |
+| `DiagnosticsPane.swift`                         | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `GlimmerApp.swift`                              | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `GlimmerIntents.swift`                          | A     | AppIntents PCEntity / AppModel dispatch; Mac product entry point.                                                                                  | 10     |
+| `HostStatusPoller.swift`                        | A     | NSApp / AppModel foreground polling; no extra engine launch request.                                                                               | 3      |
+| `HostsStore.swift`                              | A     | AppModel/UserDefaults and Mac container or Moonlight migration; keep persistence orchestration app-side.                                           | 3      |
+| `LauncherArtCache.swift`                        | A     | App artwork cache/storage policy; NetworkClient fetch shared, decoded artwork stays shell-side.                                                    | 3      |
+| `LauncherController.swift`                      | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `LauncherNavigation.swift`                      | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `LauncherStyle.swift`                           | A     | Pure pairing/launcher/menu presentation state; no unavailable API, shell-owned.                                                                    | 10     |
+| `LogStore.swift`                                | W     | SessionLogFileSink default TelemetryExporter.logsDirectory; shared Diag/privacy/ring, supplied file destination.                                   | 2      |
+| `LogViewerView.swift`                           | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `MacSystemStats.swift`                          | W     | IOKit.ps plus machine-wide host_statistics; Mac probe, neutral optional snapshot for engine.                                                       | 2      |
+| `MenuBarChartAccessibility.swift`               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `MenuBarPanel+Charts.swift`                     | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `MenuBarPanel.swift`                            | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `MenuBarPresentation.swift`                     | A     | Pure pairing/launcher/menu presentation state; no unavailable API, shell-owned.                                                                    | 10     |
+| `Motion.swift`                                  | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `PairSheet+Launcher.swift`                      | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `PairSheet.swift`                               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `PairingAttempt.swift`                          | A     | Pure pairing/launcher/menu presentation state; no unavailable API, shell-owned.                                                                    | 10     |
+| `QualityCalculator.swift`                       | W     | extension AppModel, NSScreen / CGDisplayCopyAllDisplayModes; move math, inject capability values.                                                  | 9      |
+| `SettingsGeneralStreamingPanes+LoginItem.swift` | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `SettingsGeneralStreamingPanes.swift`           | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `SettingsInput+NintendoLayout.swift`            | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `SettingsPCsShortcutsPanes.swift`               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `SettingsShortcutRecorders.swift`               | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `SettingsView.swift`                            | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `StatsOverlaySettings.swift`                    | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `StreamingState.swift`                          | A     | Pure pairing/launcher/menu presentation state; no unavailable API, shell-owned.                                                                    | 10     |
+| `TerminationGate.swift`                         | A     | NSApplication termination coordination; await shared session teardown.                                                                             | 9      |
+| `TroubleshootingPane.swift`                     | A     | AppKit/SwiftUI shell or shell-owned state; imports engine only at use sites.                                                                       | 10     |
+| `UpdaterController.swift`                       | A     | Sparkle / SPUStandardUpdaterController; Mac update presentation.                                                                                   | 10     |
+| `WakeOnLAN.swift`                               | E     | Darwin UDP magic-packet logic; iOS entitlement/network-permission acceptance remains Phase 2.                                                      | 3      |
 
 ### Glimmer/CLI
 
@@ -932,7 +962,7 @@ file-reference/build-file/group/Sources entries, checked for ID collisions.
 | **7. Video boundary**                | Move VideoDecoder features; app provides AVSampleBufferDisplayLayer attachment, prepared display capabilities and display probe. Reuse existing decoder factory seams. StreamWindow, StreamInputView, HUD/banner and geometry remain app-owned. Remove unused AppKit imports from media-only extensions.                                                                                                                                                                                                                                                                                                                                                             | VideoDecoder\* suites, AV1SequenceHeaderTests, AnnexBToAVCCTests, VideoFormatDescriptionTests, VideoDepacketizerRecoveryTests, VideoRecoveryEventTests, HUDBackdropLuminanceTests, StreamHDRTests, StreamWindowFirstFrameTests. Add detached-layer/stale-renderer callback tests.                                                                                                                | High presentation risk. Same hardware decode, pixel buffers, suppression/recreation, HDR/EDR and renderer path; no new copy/pass. Direct versus composited watts and renderer deltas are mandatory.                                                                                   |
 | **8. Input and controller boundary** | Move InputCore, release ledger, controller slot/arrival/chord/mouse/touchpad/button semantics, PointerMapping and ScrollQuantizer. Split InputForwarder/ControllerForwarder into shared state and Mac capture; GameController/CoreHaptics functions supply normalized states and feedback. Raw HID, DualSense side channel, Carbon, private hotkey hooks and background-event ownership remain Mac adapters.                                                                                                                                                                                                                                                         | InputCoreTests, InputReleaseTests, InputRecoveryTests, InputLatencyTests, ControllerArrivalTests, ControllerStatePushTests, ControllerMouseTests, ControllerTouchpadMouseTests, ControllerQuitChordTests, ControllerButtonLayoutTests, ControllerHapticsActuationTests, HIDGamepadTests, DualSense* and StreamView* suites. Add detach/focus-generation tests across adapter boundary.           | High input risk. Preserve synchronous local edge acceptance and shared slot mask. Match `input_*_capture_send_*`, queue tails and zero dropped timing samples; real held-input, two-pad, raw-HID, IME and paste checks.                                                               |
 | **9. Session and quality boundary**  | Move StreamSession features, bridge, EnvSignalController, BitrateDownshiftController and pure QualityCalculator/config/failure logic. Mac AppModel supplies prepared presentation/input/audio, route provider, activity/visibility/wake and helper lease hooks. Reuse makeNetwork/makeBackend/SessionClock. HUD/history timers stay shell-owned; shared watchdogs keep their meaning/cadence.                                                                                                                                                                                                                                                                        | SessionLaunchFlowTests, SessionReconnectFlowTests, SessionSafetyTests, SessionTimerBodyTests, StreamSessionDecisionTests, StreamReconnectTests, DisconnectRegressionTests, AdaptiveRecoveryTests, EnvSignalStateMachineTests, BitrateDownshiftTests, WiredBitrateTests, QualityPresetMigrationTests, AWDLHelperManagerTests. Add slow-consumer terminal-order and adapter startup-failure tests. | High cancellation risk. Same launch epochs, takeover rules, reconnect/downshift decisions and idempotent stop; ten start/stop cycles. Mac hidden/audio behavior, helper offer and lease remain unchanged.                                                                             |
-| **10. Consumer and release closure** | Finish necessary AppModel/CLI imports and remove obsolete glue; touch other shell files only at affected call sites; no deferred engine source left in app Sources. Check engine-facing API contains no native views/device objects. Update architecture/build/profiling references and source/API audits, lint/coverage/CodeQL path filters and shared scheme. No iOS app yet.                                                                                                                                                                                                                                                                                      | Full GlimmerTests including GlimmerCLI\*, AppModelSunshineTests, GlimmerIntentsTests, SystemServiceSeamTests, AppShellTests, StreamAwareUpdateAlertsTests; release-tool signing/packaging fixtures, full ASan fuzz gates. Add dependency/membership audit, not tests mirroring trivial moves.                                                                                                    | Medium packaging risk. Required hosted Verify and all three CodeQL jobs on reviewed commit; owner-installed published RC verification and exact-byte promotion rules. Check framework load, app/CLI identity, Sparkle, login/helper and teardown on a real PC.                        |
+| **10. Consumer and release closure** | Finish necessary AppModel/CLI imports and remove obsolete glue; touch other shell files only at affected call sites; no deferred engine source left in app Sources. Check engine-facing API contains no native views/device objects. Update architecture/build/profiling references and source/API audits, lint/coverage/CodeQL path filters and shared scheme. Complete remaining neutral failure/route policy cuts; native copy/preferences remain in shells.                                                                                                                                                                                                      | Full GlimmerTests including GlimmerCLI\*, AppModelSunshineTests, GlimmerIntentsTests, SystemServiceSeamTests, AppShellTests, StreamAwareUpdateAlertsTests; release-tool signing/packaging fixtures, full ASan fuzz gates. Add dependency/membership audit, not tests mirroring trivial moves.                                                                                                    | Medium packaging risk. Required hosted Verify and all three CodeQL jobs on reviewed commit; owner-installed published RC verification and exact-byte promotion rules. Check framework load, app/CLI identity, Sparkle, login/helper and teardown on a real PC.                        |
 
 ### Buildable cut points
 

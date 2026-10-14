@@ -2,7 +2,7 @@
 
 Glimmer is a SwiftUI launcher plus a pure-Swift streaming engine, in one
 process. No external player, no linked C streaming library: Sunshine's streaming
-protocol is implemented in Swift under `Glimmer/Stream/Native/` and
+protocol is implemented in Swift under `GlimmerEngine/Network/` and
 `GlimmerEngine/Protocol/` (ported from `moonlight-common-c`, GPLv3; see
 [CREDITS.md](../CREDITS.md)). Crypto, TLS, audio decode and audio output use
 CryptoKit, CommonCrypto, Security, Network.framework and AudioToolbox directly
@@ -54,27 +54,28 @@ running (`isStreaming` guard).
 
 Top-level pieces:
 
-| Layer                 | Type                                                     | Lives where                                                        |
-| --------------------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
-| SwiftUI views         | views + observable state                                 | `Glimmer/ContentView.swift`, `SettingsView.swift`                  |
-| `AppModel`            | `@MainActor` `@Observable`                               | `Glimmer/AppModel.swift` (+ extensions)                            |
-| `StreamSession`       | `actor`                                                  | `GlimmerEngine/Session/StreamSession.swift` (+ extensions)         |
-| `StreamingBackend`    | protocol (the engine boundary)                           | `Glimmer/Stream/StreamingBackend.swift`                            |
-| `NativeBackend`       | `final class`, sole backend conformer                    | `Glimmer/Stream/NativeBackend.swift` + `Stream/Native/`            |
-| `StreamBridgeContext` | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Session/StreamBridgeContext.swift`                  |
-| `NetworkClient`       | `actor` over `ControlTransport` (Network.framework mTLS) | `GlimmerEngine/Network/Network.swift`                              |
-| `PairingClient`       | `actor`                                                  | `Glimmer/Stream/Pairing.swift`                                     |
-| `IdentityManager`     | `actor` (Mac adapter owns singleton)                     | `GlimmerEngine/Network/Identity.swift`                             |
-| `VideoDecoder`        | `@MainActor final class`                                 | `GlimmerEngine/Video/VideoDecoder.swift` (+ extensions)            |
-| `FramePacer`          | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Pacing/FramePacer.swift` (+ extensions)             |
-| `AudioDecoder`        | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Audio/AudioDecoder.swift`                           |
-| `InputForwarder`      | `@MainActor final class`                                 | `Glimmer/Stream/InputForwarder.swift`                              |
-| `ControllerForwarder` | `@MainActor` lifecycle; capture uses locked `InputCore`  | `Glimmer/Stream/ControllerForwarder.swift`                         |
-| `HIDGamepadManager`   | `@MainActor final class` (singleton)                     | `Glimmer/Stream/HIDGamepad/`                                       |
-| `DualSenseHID`        | `final class`, `@unchecked Sendable` (singleton)         | `Glimmer/Stream/DualSenseHID.swift` (+ extensions)                 |
-| `StreamWindow`        | `@MainActor final class`                                 | `Glimmer/Stream/StreamWindow.swift`                                |
-| `StatsCollector`      | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Diagnostics/StatsCollector.swift`                   |
-| Telemetry (opt-in)    | exporter + counters                                      | `GlimmerEngine/Diagnostics/TelemetryExporter.swift` (+ extensions) |
+| Layer                       | Type                                                     | Lives where                                                            |
+| --------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------- |
+| SwiftUI views               | views + observable state                                 | `Glimmer/ContentView.swift`, `SettingsView.swift`                      |
+| `AppModel`                  | `@MainActor` `@Observable`                               | `Glimmer/AppModel.swift` (+ extensions)                                |
+| `StreamSession`             | `actor`                                                  | `GlimmerEngine/Session/StreamSession.swift` (+ extensions)             |
+| `StreamingBackend`          | protocol (the engine boundary)                           | `GlimmerEngine/Protocol/StreamingBackend.swift`                        |
+| `NativeBackend`             | `final class`, sole backend conformer                    | `GlimmerEngine/Session/NativeBackend.swift` + `GlimmerEngine/Network/` |
+| `StreamBridgeContext`       | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Session/StreamBridgeContext.swift`                      |
+| `NetworkClient`             | `actor` over `ControlTransport` (Network.framework mTLS) | `GlimmerEngine/Network/Network.swift`                                  |
+| `PairingClient`             | `actor`                                                  | `GlimmerEngine/Network/Pairing.swift`                                  |
+| `IdentityManager`           | `actor` (Mac adapter owns singleton)                     | `GlimmerEngine/Network/Identity.swift`                                 |
+| `VideoDecoder`              | `@MainActor final class`                                 | `GlimmerEngine/Video/VideoDecoder.swift` (+ extensions)                |
+| `FramePacer`                | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Pacing/FramePacer.swift` (+ extensions)                 |
+| `AudioDecoder`              | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Audio/AudioDecoder.swift`                               |
+| `StreamInput` / `InputCore` | Synchronous locked input owner and acceptance policy     | `GlimmerEngine/Input/`                                                 |
+| `InputForwarder`            | `@MainActor final class`                                 | `Glimmer/Stream/InputForwarder.swift`                                  |
+| `ControllerForwarder`       | `@MainActor` lifecycle; capture uses locked `InputCore`  | `Glimmer/Stream/ControllerForwarder.swift`                             |
+| `HIDGamepadManager`         | `@MainActor final class` (singleton)                     | `Glimmer/Stream/HIDGamepad/`                                           |
+| `DualSenseHID`              | `final class`, `@unchecked Sendable` (singleton)         | `Glimmer/Stream/DualSenseHID.swift` (+ extensions)                     |
+| `StreamWindow`              | `@MainActor final class`                                 | `Glimmer/Stream/StreamWindow.swift`                                    |
+| `StatsCollector`            | `final class`, `@unchecked Sendable`                     | `GlimmerEngine/Diagnostics/StatsCollector.swift`                       |
+| Telemetry (opt-in)          | exporter + counters                                      | `GlimmerEngine/Diagnostics/TelemetryExporter.swift` (+ extensions)     |
 
 > The control and HTTP path runs over `ControlTransport`
 > (`ControlTransport.swift`): mutual TLS on Network.framework, deliberately
@@ -230,6 +231,24 @@ Inbound callbacks fire on the engine's receive threads or the audio packet
 worker and are routed through `StreamBridgeContext` (below). Stage events
 (`stageStarting`, `stageComplete`, `stageFailed`) yield through the bridge's
 event continuation so the connection UI lights up live.
+
+## Native configuration and failure presentation
+
+The engine owns `StreamQuality` and package-only `RouteBitratePolicy`: measured
+quality math, format masking, route boost/cap arithmetic, radio gating and
+reconnect host matching. The Mac supplies native route observations and saved
+preferences, preserving its existing defaults. External mobile configuration
+remains explicit; extraction does not select different mobile quality settings.
+
+Public `StreamFailure` classifies start and termination reasons. Shells choose
+wording and actions, retain their own video-history evidence, and may replace
+transport/server message payloads with local copy. Mac presentation wrappers
+preserve the existing messages and fallback behavior.
+
+`make check` enforces engine Xcode/SwiftPM source ownership, native import and
+dependency direction, unique source entries and the shared engine scheme through
+`scripts/check-engine-boundary.py`. Native media adapters remain outside the
+engine; approved shared Apple-media attachment types are lifecycle boundaries.
 
 ## Stream session lifecycle
 
