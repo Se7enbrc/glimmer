@@ -210,7 +210,7 @@ class HomebrewCommitPathTests(unittest.TestCase):
                 log, request = root / "calls", root / "request"
                 env = {"PATH": f"{root / 'bin'}:/usr/bin:/bin", "HOME": str(root),
                        "GLIMMER_TAP_CACHE": str(root / "tap"), "TAP_REPO": "fork/homebrew-glimmer",
-                       "RELEASES_REPO": "fork/glimmer", "FIXTURE_LOG": str(log),
+                       "RELEASES_REPO": "fork/glimmer", "FIXTURE_LOG": str(log), "EXPECTED_DMG_SHA256": digest,
                        "FIXTURE_REQUEST": str(request), "GITHUB_ACTIONS": "true" if hosted else "false"}
                 if prerelease:
                     env["FIXTURE_PRERELEASE"] = "1"

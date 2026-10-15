@@ -4,6 +4,7 @@
 // Window mode's grab and release as the forwarder walks them, and the diagnostic
 // event sampler. No key event reaches the diagnostic log.
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import Testing
@@ -69,7 +70,7 @@ struct StreamViewCaptureTests {
                         appVersion: nil, macAddress: nil)
         var config = model.nativeStreamConfig(for: host, app: app)
         config.displayMode = .fullScreen
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let setup = session.buildStreamSubsystems(.init(
             config: config, negotiatedBitrateKbps: config.bitrateKbps,
             initialStatsOverlay: false, initialStatsCorner: .topLeft,

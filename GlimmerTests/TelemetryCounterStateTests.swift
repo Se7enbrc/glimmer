@@ -6,6 +6,7 @@
 //  Counters, gauges, session resets and the connect and audio telemetry state.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -190,9 +191,11 @@ struct TelemetryCounterStateTests {
         #expect(counters.audioFirstPacketMs == first)
     }
 
-    @Test func audioFirstPacketFallsBackToTheStreamStartAnchor() {
+    @Test func audioFirstPacketFallsBackToTheStreamStartAnchor() async throws {
         let counters = TelemetryCounters()
         counters.anchorAudioStreamStart()
+        // The gauge uses zero as its unset sentinel, so the packet must arrive on a later clock tick.
+        try await Task.sleep(for: .milliseconds(1))
         counters.recordAudioFirstPacket()
         #expect((counters.audioFirstPacketMs ?? -1) >= 0)
     }

@@ -11,6 +11,7 @@
 //  no clock.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import CoreGraphics
 import Testing
@@ -22,7 +23,7 @@ struct WindowPointerTests {
         for windowed in [false, true] {
             for captured in [false, true] {
                 for relative in [false, true] {
-                    let absolute = PointerMapping.usesAbsolutePointer(
+                    let absolute = InputForwarder.usesAbsolutePointer(
                         windowed: windowed, captured: captured, fullscreenRelative: relative)
                     #expect(absolute == (!captured && (windowed || !relative)))
                 }

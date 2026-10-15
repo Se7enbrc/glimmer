@@ -14,6 +14,7 @@
 //  identical to the prior inline form.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import GameController
@@ -24,17 +25,6 @@ extension StreamSession {
     static func sessionActivityOptions(hidden: Bool) -> ProcessInfo.ActivityOptions {
         let options: ProcessInfo.ActivityOptions = [.userInitiated, .latencyCritical]
         return hidden ? options : options.union([.idleDisplaySleepDisabled, .idleSystemSleepDisabled])
-    }
-
-    func refreshPowerAssertion() {
-        guard isStreaming, !stopInProgress, let token = powerAssertion else { return }
-        let hidden = videoDecoder?.presentSuppressed ?? false
-        guard hidden != powerAssertionHidden else { return }
-        ProcessInfo.processInfo.endActivity(token)
-        powerAssertion = ProcessInfo.processInfo.beginActivity(
-            options: Self.sessionActivityOptions(hidden: hidden),
-            reason: "Glimmer is streaming")
-        powerAssertionHidden = hidden
     }
 
     /// The collected inputs `buildStreamSubsystems` needs: the negotiated config,
@@ -114,7 +104,7 @@ extension StreamSession {
         win.coversNotch = config.coversNotch
         win.windowTitle = config.windowTitle
         win.streamPixelSize = CGSize(width: config.width, height: config.height)
-        let dec = VideoDecoder(colorSpace: config.colorSpace, colorRange: config.colorRange)
+        let dec = VideoDecoder(macColorSpace: config.colorSpace, colorRange: config.colorRange)
         dec.attach(to: win.displayLayer)
         // Focus drives the launcher; actual visibility drives decode presentation and power.
         win.onBackgroundedChanged = onBackgroundedChanged
@@ -261,95 +251,6 @@ extension StreamSession {
         }
         inp.onMiniPlayerHoverChanged = { [weak win] hovering in
             win?.setMiniPlayerHovering(hovering)
-        }
-    }
-
-    /// Inject the streaming engine into the input forwarder + decoder and wire
-    /// the quit/stats/bookmark/HDR/first-frame callbacks. Done AFTER the bridge
-    /// + its event continuation exist so the HDR/first-frame closures can yield
-    /// through the bridge.
-    @MainActor
-    func wireSubsystemBackends(
-        setup: (StreamWindow, InputForwarder, VideoDecoder),
-        bridge: StreamBridgeContext,
-        backend: StreamingBackend
-    ) {
-        // Inject the streaming engine into the input forwarder so keyboard /
-        // mouse / controller / touchpad uplink goes through `backend.send*`.
-        // `backend` is passed in (read on the actor by the caller) because it's
-        // now an actor-isolated `var` (swappable for reconnect) and this
-        // @MainActor method can't read actor state synchronously.
-        let backendForInput = backend
-        setup.1.setBackend(backendForInput)
-        // Same injection for the decoder so its IDR requests + HDR-metadata
-        // pulls route through the protocol.
-        setup.2.setBackend(backendForInput)
-        // Set the quit handler now that the session reference is stable.
-        setup.1.onQuitHotkey = { [weak self] in
-            Task { await self?.stop() }
-        }
-        // Window mode: the red button / Cmd-W ends the stream exactly like the
-        // quit hotkey (same stop(), same /cancel). The delegate refuses the
-        // close itself so the session's own fade-out teardown owns the exit.
-        setup.0.onCloseRequested = { [weak self] in
-            Task { await self?.stop() }
-        }
-        // The chord toggles the window directly; both live on the main actor.
-        setup.1.onMiniPlayerHotkey = { [weak win = setup.0] in
-            win?.toggleMiniPlayer()
-        }
-        // Stats-overlay toggle. Flips a MainActor-isolated bool on the
-        // VideoDecoder (read by the render loop) but intentionally does
-        // NOT touch `AppModel.showStreamStats` - the toggle is
-        // session-scoped so the user's persisted preference is what the
-        // next stream starts with. Capture the decoder weakly so the
-        // InputForwarder's closure doesn't extend its lifetime past
-        // StreamSession.stop().
-        setup.1.onStatsHotkey = { [weak decoder = setup.2] in
-            decoder?.toggleStatsOverlay()
-        }
-        // Bookmark chord (signal 4 - "that felt bad"). Client-only: the chord
-        // is consumed in the input path; this just records the marker into the
-        // telemetry. `telemetryExporter` is nil unless telemetry is opt-in ON
-        // (the exporter is started later in startTelemetryExporter), so when
-        // off this is a harmless no-op - the chord is still swallowed (never
-        // forwarded to the host), it simply records nothing. Resolved at press
-        // time so it picks up the exporter once it exists.
-        setup.1.onBookmarkHotkey = { [weak self] in
-            // `telemetryExporter` is actor-isolated, so hop onto the session
-            // actor to read it. The marker timestamp is taken inside
-            // `recordBookmark` (connect-relative), and a "felt bad" marker
-            // tolerates the few-ms hop - the user's perception spans hundreds
-            // of ms. Mirrors how `onQuitHotkey` hops to `stop()`.
-            Task { await self?.recordTelemetryBookmark() }
-        }
-        // Watch effective HDR-active state. Decoder fires this on the
-        // main actor when the layer transitions to/from the PQ pipeline.
-        // Yield directly through the bridge's continuation - no actor hop
-        // needed; AsyncStream.Continuation is Sendable + ordered.
-        setup.2.onHDRActiveChanged = { [weak bridge] active in
-            bridge?.eventContinuation?.yield(.hdrActive(active))
-        }
-        // Re-wire the first-decoded-frame hook (set above for window
-        // fade-in) to ALSO yield `.firstFrame` through the bridge now that
-        // the bridge + its event continuation exist. This is the
-        // belt-and-suspenders for the connecting→streaming transition:
-        // `.connectionEstablished` is a ONE-SHOT edge fired from inside the
-        // synchronous startConnection - before the consumer's for-await loop
-        // is necessarily draining - so if it is ever torn/dropped the
-        // launcher would stay stuck at "Connecting" forever even though
-        // video is on screen. A decoded frame is GROUND TRUTH that the
-        // stream is live, and unlike the established edge it CANNOT be lost
-        // (by the time frames flow the consumer is up and the continuation
-        // is bound). handleNativeEvent maps `.firstFrame` to
-        // streamPhase=.streaming, idempotent with .connectionEstablished:
-        // whichever lands first promotes; the second is a harmless
-        // re-assert. The window fade-in stays wired here so the original
-        // behaviour is preserved exactly.
-        let priorFirstFrame = setup.2.onFirstDecodedFrame
-        setup.2.onFirstDecodedFrame = { [weak bridge] in
-            priorFirstFrame?()
-            bridge?.eventContinuation?.yield(.firstFrame)
         }
     }
 }

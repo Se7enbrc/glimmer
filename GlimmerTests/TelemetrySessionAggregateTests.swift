@@ -8,6 +8,7 @@
 //  active-versus-raw statistics, worst windows, and the cumulative and rolling bucket math.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

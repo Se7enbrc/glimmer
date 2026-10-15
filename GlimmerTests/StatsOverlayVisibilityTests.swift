@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import AppKit
 import QuartzCore
 import Testing
@@ -116,11 +117,11 @@ struct StatsOverlayVisibilityTests {
 
     @Test func inkHysteresisHoldsInTheDeadBandAndRejectsInvalidSamples() {
         for value in [0.48, 0.55, 0.62] {
-            #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: false))
-            #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: true))
+            #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: pow(value, 2.4), currentlyDark: false))
+            #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: pow(value, 2.4), currentlyDark: true))
         }
-        #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: 0.621, currentlyDark: false))
-        #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: 0.479, currentlyDark: true))
+        #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: pow(0.621, 2.4), currentlyDark: false))
+        #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: pow(0.479, 2.4), currentlyDark: true))
         for value in [Double.nan, .infinity, -0.1, 1.1] {
             #expect(!StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: false))
             #expect(StatsOverlayLayer.shouldUseDarkInk(luminance: value, currentlyDark: true))
@@ -263,6 +264,30 @@ struct StatsOverlayVisibilityTests {
             #expect(StatsOverlayLayer.panelFrame(size: size, in: bounds, corner: corner)
                     == CGRect(origin: origin, size: size))
         }
+    }
+
+    @Test func sampleRectRecoversAcrossAttachmentVideoSizeAndRendererReplacement() {
+        let overlay = StatsOverlayLayer()
+        overlay.update(snapshot: StreamStatsSnapshot(), enabled: [.renderFps], targetFps: 60)
+        overlay.setVisible(true)
+        let video = CALayer()
+        video.bounds = CGRect(x: 0, y: 0, width: 1_280, height: 800)
+        overlay.attach(to: video)
+        #expect(overlay.backdropSampleRect == .zero)
+        overlay.videoSize = CGSize(width: 1_920, height: 1_080)
+        let initial = overlay.backdropSampleRect
+        #expect(!initial.isEmpty)
+        #expect(abs(initial.minY - 16 / 720) < 0.0001)
+        overlay.layer.removeFromSuperlayer()
+        #expect(overlay.backdropSampleRect == .zero)
+        let replacement = CALayer()
+        replacement.bounds = CGRect(x: 0, y: 0, width: 800, height: 1_280)
+        overlay.attach(to: replacement)
+        #expect(!overlay.backdropSampleRect.isEmpty)
+        #expect(overlay.backdropSampleRect != initial)
+        overlay.setVisible(false)
+        overlay.setVisible(true)
+        #expect(CGRect(x: 0, y: 0, width: 1, height: 1).contains(overlay.backdropSampleRect))
     }
 
     @Test func eachCornerRespectsSafeInsetsAndBoundsOrigin() {

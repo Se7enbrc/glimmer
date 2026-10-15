@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamWindowSlideTests.swift
-//
-//  The borderless cover's slide: which moments slide, where an interrupted
-//  slide picks up, and that any mix of slides comes to rest at identity.
-//
+// Interrupted cover motion must return to identity and ignore superseded completions.
 
 import AppKit
 import QuartzCore
@@ -16,6 +11,114 @@ import SwiftUI
 
 @MainActor
 struct StreamWindowSlideTests {
+    @Test func resumeWaitsForOpaqueSettlementEvenWhenAnimationCompletionIsLost() throws {
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        var deadlines: [@MainActor () -> Void] = []
+        stream.scheduleCoverSettlement = { _, settle in deadlines.append(settle) }
+        defer { stream.resetCoverSlide() }
+        var resumes = 0
+        stream.slideCover(entering: false) {}
+        animations.finish()
+        stream.slideCover(entering: true) { resumes += 1 }
+        #expect(StreamWindow.suppressesPresentation(isVisible: true, isMiniaturized: false,
+            occlusionVisible: true, revealing: stream.presentationRevealInProgress))
+        #expect(!stream.window.isOpaque)
+        let settle = try #require(deadlines.first)
+        settle()
+        #expect(resumes == 1)
+        #expect(stream.window.isOpaque)
+        #expect(stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) == nil)
+        #expect(!StreamWindow.suppressesPresentation(isVisible: true, isMiniaturized: false,
+            occlusionVisible: true, revealing: stream.presentationRevealInProgress))
+        animations.finish()
+        settle()
+        #expect(resumes == 1)
+    }
+
+    @Test func staleSettlementCannotUndoAnotherRetreat() throws {
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        var settle: (@MainActor () -> Void)?
+        stream.scheduleCoverSettlement = { _, completion in settle = completion }
+        defer { stream.resetCoverSlide() }
+        var returned = false
+        stream.slideCover(entering: true) { returned = true }
+        stream.slideCover(entering: false) {}
+        let staleSettlement = try #require(settle)
+        staleSettlement()
+        #expect(!returned)
+        #expect(!stream.window.isOpaque)
+        #expect(stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) != nil)
+    }
+
+    @Test func reducedMotionReturnAlsoSettlesWithoutACompletion() throws {
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        var settle: (@MainActor () -> Void)?
+        stream.scheduleCoverSettlement = { _, completion in settle = completion }
+        defer { stream.resetCoverSlide() }
+        stream.window.alphaValue = 0
+        stream.refreshPresentationVisibility()
+        #expect(stream.presentationSuppressed)
+        #expect(StreamWindow.suppressesPresentation(isVisible: true, isMiniaturized: false,
+            occlusionVisible: true, alpha: 0))
+        var returned = 0
+        stream.fadeCover(entering: true) { returned += 1 }
+        let deadline = try #require(settle)
+        deadline()
+        #expect(!stream.presentationRevealInProgress)
+        #expect(stream.window.alphaValue == 1)
+        animations.finish()
+        #expect(returned == 1)
+    }
+
+    @Test func steadyPresentationHasNoCompositionEffectsAfterTransitions() async throws {
+        let stream = StreamWindow()
+        defer { stream.resetCoverSlide() }
+        stream.statsOverlay.setVisible(true)
+        stream.leaveHintBanner.announce = { _ in }
+        stream.leaveHintBanner.setText("Stream started")
+        stream.leaveHintBanner.setVisible(true)
+        stream.slideCover(entering: true) {}
+        CATransaction.flush()
+        try await Task.sleep(for: .seconds(1))
+        stream.leaveHintBanner.setText("Pointer captured")
+        stream.statsOverlay.setVisible(false)
+        stream.leaveHintBanner.setVisible(false)
+        CATransaction.flush()
+        try await Task.sleep(for: .seconds(1))
+        let layer = stream.displayLayer
+        #expect(stream.displayView.layer === layer)
+        #expect(stream.window.isOpaque)
+        #expect(stream.window.alphaValue == 1)
+        #expect(layer.isOpaque)
+        #expect(layer.opacity == 1)
+        #expect(CATransform3DIsIdentity(layer.transform))
+        #expect(layer.animationKeys()?.isEmpty ?? true)
+        #expect(layer.mask == nil)
+        #expect(!layer.masksToBounds)
+        #expect(layer.cornerRadius == 0)
+        #expect(layer.shadowOpacity == 0)
+        #expect(layer.filters?.isEmpty ?? true)
+        #expect(layer.backgroundFilters?.isEmpty ?? true)
+        #expect(layer.compositingFilter == nil)
+        #expect(!layer.shouldRasterize)
+        let overlays = [stream.statsOverlay.layer, stream.reconnectBanner.layer, stream.networkBanner.layer,
+                        stream.leaveHintBanner.layer, stream.captureHintBanner.layer]
+        for (index, overlay) in overlays.enumerated() {
+            #expect(overlay.isHidden, "Overlay \(index), opacity \(overlay.opacity)")
+            expectNoAnimations(in: overlay)
+        }
+    }
+
+    private func expectNoAnimations(in layer: CALayer) {
+        #expect(layer.animationKeys()?.isEmpty ?? true, "\(type(of: layer)): \(layer.animationKeys() ?? [])")
+        for child in layer.sublayers ?? [] { expectNoAnimations(in: child) }
+    }
 
     @Test(arguments: [CoverSlideEvent.firstFrame, .away, .back, .close])
     func onlyTheBorderlessCoverSlides(event: CoverSlideEvent) {
@@ -107,6 +210,100 @@ struct StreamWindowSlideTests {
         #expect(animation.damping == expected.damping)
         #expect(animation.duration == expected.settlingDuration)
         stream.resetCoverSlide()
+    }
+
+    @MainActor private final class AnimationDriver {
+        var completions: [@MainActor () -> Void] = []
+
+        func install(on stream: StreamWindow) {
+            stream.runSlideAnimation = { changes, completion in
+                changes()
+                self.completions.append(completion)
+            }
+            stream.runFadeAnimation = { window, alpha, completion in
+                window.alphaValue = alpha
+                self.completions.append(completion)
+            }
+        }
+
+        func finish() {
+            let pending = completions
+            completions.removeAll()
+            for completion in pending { completion() }
+        }
+    }
+
+    @Test func completedEntryClearsTheRevealAndInvalidatedFadeCannotComplete() {
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        defer { stream.resetCoverSlide() }
+        var completed = false
+        stream.slideCover(entering: true) { completed = true }
+        #expect(!completed)
+        #expect(stream.presentationRevealInProgress)
+        animations.finish()
+        #expect(completed)
+        #expect(!stream.presentationRevealInProgress)
+        #expect(stream.window.isOpaque)
+        #expect(stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) == nil)
+        var stale = false
+        stream.fadeCover(entering: false) { stale = true }
+        #expect(stream.window.ignoresMouseEvents)
+        stream.awaitingFirstFrameFadeIn = true
+        stream.resetCoverSlide()
+        #expect(stream.window.ignoresMouseEvents)
+        animations.finish()
+        #expect(!stale)
+    }
+
+    @Test func completedFadeClearsRevealAndRestoresEntryAlpha() {
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        defer { stream.resetCoverSlide() }
+        var completed = false
+        stream.window.alphaValue = 0
+        stream.fadeCover(entering: true) { completed = true }
+        #expect(!completed)
+        #expect(stream.presentationRevealInProgress)
+        animations.finish()
+        #expect(completed)
+        #expect(!stream.presentationRevealInProgress)
+        #expect(!stream.window.ignoresMouseEvents)
+        #expect(stream.window.alphaValue == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func returnAndRetreatRespectMotionAndLeaveNativeSpacesAtRest(reduceMotion: Bool) {
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        defer { stream.resetCoverSlide() }
+        stream.window.alphaValue = 0
+        stream.returnCover(reduceMotion: reduceMotion)
+        #expect(!stream.window.ignoresMouseEvents)
+        #expect((stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) == nil) == reduceMotion)
+        #expect(stream.presentationRevealInProgress)
+        animations.finish()
+        #expect(stream.window.alphaValue == 1)
+        #expect(!stream.presentationRevealInProgress)
+        #expect(stream.window.isOpaque)
+        #expect(stream.presentationSuppressed)
+        stream.retreatCover(reduceMotion: reduceMotion)
+        #expect(stream.window.ignoresMouseEvents)
+        animations.finish()
+        #expect(!stream.window.isVisible)
+        #expect(stream.window.alphaValue == (reduceMotion ? 0 : 1))
+        stream.coversNotch = false
+        stream.returnCover(reduceMotion: reduceMotion)
+        #expect(animations.completions.isEmpty)
+        #expect(stream.window.isOpaque)
+        #expect(!stream.presentationRevealInProgress)
+        #expect(stream.displayLayer.animation(forKey: StreamWindow.coverSlideKey) == nil)
+        stream.retreatCover(reduceMotion: reduceMotion)
+        #expect(!stream.window.isVisible)
+        #expect(!stream.window.ignoresMouseEvents)
     }
 
     @Test func visualCloseWaitsForTheWindowAndSupportsLateWaiters() async {

@@ -21,18 +21,23 @@ you're changing before you change it. Before UI work, read
 it's for). [docs/PROFILING.md](docs/PROFILING.md) gets the telemetry an engine
 change needs, and [docs/SECURITY.md](docs/SECURITY.md) covers the root helper.
 
-| Path                         | What lives there                                                                             |
-| ---------------------------- | -------------------------------------------------------------------------------------------- |
-| `Glimmer/`                   | The app: SwiftUI and AppKit UI, `AppModel+*`, menu bar, settings, logging (`LogStore.swift`) |
-| `Glimmer/Stream/`            | The stream around the protocol: decode, display, audio playout, input, pairing, telemetry    |
-| `Glimmer/Stream/Native/`     | Sunshine's protocol: RTSP, the ENet control channel, RTP video and audio, FEC                |
-| `Glimmer/Stream/HIDGamepad/` | Raw-HID game controllers and the generated controller database                               |
-| `Glimmer/CLI/`               | The `glimmer` command line, in the app binary                                                |
-| `Glimmer/Models/`            | The PC record and a few settings types                                                       |
-| `helper/`                    | The opt-in root daemon that parks AirDrop's radio during a stream                            |
-| `LoginHelper/`               | The login item                                                                               |
-| `GlimmerTests/`              | Hostless unit tests                                                                          |
-| `scripts/`                   | Build, signing and release tooling the Makefile calls                                        |
+| Path                                                  | What lives there                                                              |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `Glimmer/`                                            | Native Mac app: SwiftUI/AppKit UI, `AppModel+*`, menus and settings           |
+| `Glimmer/EngineAdapters/`                             | Prepared Mac media, presentation, telemetry and session adapters              |
+| `Glimmer/Stream/`                                     | Native windows, capture, controller bindings and remaining Mac shell adapters |
+| `Glimmer/Stream/HIDGamepad/`                          | Raw-HID game controllers and the generated controller database                |
+| `GlimmerEngine/Network/`                              | Pairing, TLS/control transport, RTSP, ENet, RTP and FEC                       |
+| `GlimmerEngine/Session/`                              | Canonical session/backend lifecycle, recovery and scalar quality policy       |
+| `GlimmerEngine/Video/`, `Pacing/`, `Audio/`, `Input/` | Shared decode, presentation handoff, audio and synchronous input policy       |
+| `GlimmerEngine/Models/`, `Protocol/`                  | Shared values, neutral failure classification and protocol contracts          |
+| `GlimmerEngine/Diagnostics/`                          | Shared logging, signposts, statistics and telemetry                           |
+| `Glimmer/CLI/`                                        | The `glimmer` command line, in the app binary                                 |
+| `Glimmer/Models/`                                     | Native PC records and settings adapters                                       |
+| `helper/`                                             | Opt-in root daemon that parks AirDrop's radio during a stream                 |
+| `LoginHelper/`                                        | Login item                                                                    |
+| `GlimmerTests/`, `EnginePackageTests/`                | Mac hostless and external shared-package tests                                |
+| `scripts/`                                            | Build, boundary audits, signing and release tooling used by the Makefile      |
 
 ## Protect the bar
 
@@ -175,6 +180,9 @@ Each of these gets a pull request sent back.
 These are settled. A pull request is not the place to reopen them.
 
 - The renderer is `AVSampleBufferDisplayLayer`. Not Metal.
+- Glimmer stays light: real time and fast, but cheap to run. No feature may cost
+  meaningful CPU, GPU or power in steady state; judge cost in watts
+  (`gpu_power_w`, `package_power_w`), not GPU residency.
 - Fullscreen defaults to a borderless window covering the whole panel, notch
   included; a native full-screen Space is opt-in. Preserve saved fullscreen
   preferences. macOS owns the Game Mode toggle; never use private APIs or

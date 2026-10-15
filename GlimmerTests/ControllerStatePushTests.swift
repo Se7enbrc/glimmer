@@ -8,6 +8,7 @@
 //  sticks, triggers, the quit-chord hold gate, held-button sets and touchpad contacts.
 //
 
+import GlimmerEngine
 import GameController
 import Testing
 @testable import Glimmer

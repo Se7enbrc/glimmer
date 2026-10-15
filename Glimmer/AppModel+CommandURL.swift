@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import AppKit
 import Foundation
 
@@ -10,7 +11,17 @@ extension AppModel {
         dispatch: (([String: String]) -> Void)? = nil,
         resume: (() -> Void)? = nil
     ) {
-        guard let command = GlimmerCLI.parseURL(url), let query = command.arguments.first,
+        guard let command = GlimmerCLI.parseURL(url) else {
+            Diag.notice("Ignored an unknown or malformed command URL", "Commands")
+            return
+        }
+        if command.verb == .stop {
+            var request = [CommandChannel.Key.id: UUID().uuidString, CommandChannel.Key.verb: "stop"]
+            request[CommandChannel.Key.pc] = command.arguments.first
+            if let dispatch { dispatch(request) } else { handleCommand(request, fromURL: true) }
+            return
+        }
+        guard let query = command.arguments.first,
               let host = GlimmerCLI.matchHost(query, in: hosts) else {
             Diag.notice("Ignored an unknown or malformed command URL", "Commands")
             return

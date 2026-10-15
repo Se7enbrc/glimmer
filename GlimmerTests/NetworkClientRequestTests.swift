@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  NetworkClientRequestTests.swift
-//
-//  NetworkClient against a fake Sunshine: which port and scheme each endpoint uses, the query
-//  it sends, how replies hydrate or fail, and that the launch query is redacted before logging.
-//
+// Fake control requests keep transport and identity regressions independent of a real PC.
 
+@testable import GlimmerEngine
 import Foundation
+import os
 import Testing
 @testable import Glimmer
 
@@ -26,6 +23,19 @@ struct NetworkClientRequestTests {
     }
 
     // MARK: - /serverinfo
+
+    @Test func macPollingDoesNotLookUpTheComputerName() async throws {
+        let lookups = OSAllocatedUnfairLock(initialState: 0)
+        let sunshine = FakeSunshine { _ in FakeSunshine.xml(Self.serverInfoBody) }
+        let client = NetworkClient(server: FakeSunshine.server(), transport: sunshine.transport,
+                                   identity: { ("", "", FakeSunshine.clientUniqueID) }, deviceName: {
+            lookups.withLock { $0 += 1 }
+            return "Test Mac"
+        })
+        _ = try await client.fetchServerInfo()
+        #expect(lookups.withLock { $0 } == 0)
+        #expect(sunshine.paths == ["serverinfo"])
+    }
 
     @Test func unpairedServerInfoIsPlainHTTPWithoutCredentialsAndHydrates() async throws {
         let sunshine = FakeSunshine { _ in FakeSunshine.xml(Self.serverInfoBody) }

@@ -9,6 +9,7 @@
 //  out) and the per-frame trace rollover, which keeps the connect segment.
 //
 
+import GlimmerEngine
 import Foundation
 import os
 import Testing

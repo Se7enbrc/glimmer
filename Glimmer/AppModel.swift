@@ -18,6 +18,7 @@
 //    * HostStatusPoller.swift - periodic readiness-chip polling Task
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox
@@ -149,9 +150,7 @@ final class AppModel {
     /// The PC the error is about, which a mid-connect switch can leave unselected.
     var nativeStreamErrorHostID: String?
 
-    enum StreamErrorKind {
-        case unreachable, pairing, other
-    }
+    typealias StreamErrorKind = StreamFailure.Category
 
     /// Effective HDR-active state from the native engine. True only when the
     /// host signalled HDR mode AND the bitstream is 10-bit AND the Metal
@@ -498,6 +497,7 @@ final class AppModel {
         let tokens = notificationTokens
         for token in tokens { NotificationCenter.default.removeObserver(token) }
         hostStatusTask?.cancel()
+        for task in hostPolling.readinessTasks.values { task.cancel() }
     }
 
     init() {

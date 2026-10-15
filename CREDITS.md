@@ -24,10 +24,11 @@ permission notices are preserved here, as the MIT license requires:
 
 - **[enet](https://github.com/lsalzman/enet)**: Copyright (c) 2002-2024 Lee
   Salzman. MIT License. `Glimmer/Stream/Native/EnetControlChannel*.swift` and
-  `EnetWire.swift` port the protocol logic of the enet sources vendored in
-  moonlight-common-c (`protocol.h` / `host.c` / `protocol.c`).
+  `GlimmerEngine/Protocol/EnetWire.swift` port the protocol logic of the enet
+  sources vendored in moonlight-common-c (`protocol.h` / `host.c` /
+  `protocol.c`).
 - **[nanors](https://github.com/sleepybishop/nanors)**: Copyright (c) 2021
-  Joseph Calderon. MIT License. `Glimmer/Stream/Native/ReedSolomon.swift` ports
+  Joseph Calderon. MIT License. `GlimmerEngine/Protocol/ReedSolomon.swift` ports
   `nanors/rs.c` plus the scalar GF(256) math from nanors' vendored
   `deps/obl/oblas_lite.c` (covered by the same nanors license).
 

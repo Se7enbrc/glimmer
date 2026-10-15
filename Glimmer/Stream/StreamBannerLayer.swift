@@ -44,6 +44,9 @@ public final class StreamBannerLayer {
     /// stream says how to leave it. Nil for pills that never linger.
     var lingerHint: (@MainActor () -> String)?
     var lingerDelay: TimeInterval = 5
+    var scheduleLingerDelay: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, action in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: action)
+    }
     /// VoiceOver can't focus a CALayer, so shown and changed text is announced.
     var announce: @MainActor (String) -> Void = { AccessibilityNotification.Announcement($0).post() }
 
@@ -68,6 +71,8 @@ public final class StreamBannerLayer {
         bg.addSublayer(dot)
 
         let text = CATextLayer()
+        // Wording has its own transition; an implicit contents fade can outlive a hidden pill.
+        text.actions = StatsOverlayLayer.disabledActions
         text.contentsScale = bg.contentsScale
         text.isWrapped = false
         text.truncationMode = .end
@@ -128,7 +133,11 @@ public final class StreamBannerLayer {
             // un-hide a shown pill - and a real hide always lands.
             CATransaction.setCompletionBlock { [weak self] in
                 guard let self, !self.visible, self.showGeneration == generation else { return }
+                // Finish the fade without leaving an implicit order-out transition on the hidden pill.
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
                 self.layer.isHidden = true
+                CATransaction.commit()
             }
             layer.opacity = 0
         }
@@ -175,7 +184,7 @@ public final class StreamBannerLayer {
     private func scheduleLinger() {
         guard lingerHint != nil else { return }
         let generation = showGeneration
-        DispatchQueue.main.asyncAfter(deadline: .now() + lingerDelay) { [weak self] in
+        scheduleLingerDelay(lingerDelay) { [weak self] in
             guard let self, self.visible, self.showGeneration == generation else { return }
             self.lingered = true
             self.render()

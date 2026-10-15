@@ -259,6 +259,9 @@ struct MenuBarPanel: View {
                 model.streamHeroApp()
                 activate()
             }
+            .disabled(model.selectedReadinessReason != nil)
+            .help(model.selectedReadinessReason ?? "Starts the stream")
+            .accessibilityHint(model.selectedReadinessReason ?? "Starts the stream")
         case .wake:
             prominentButton("Wake and Connect", systemImage: "power") { model.wakeHost(host, thenConnect: true) }
             if model.wakeFailedHostID == host.id, let reason = model.wakeFailureReason {

@@ -9,6 +9,7 @@
 //
 
 import Foundation
+@testable import GlimmerEngine
 import Testing
 @testable import Glimmer
 

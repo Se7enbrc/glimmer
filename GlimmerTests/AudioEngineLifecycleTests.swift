@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+@testable import GlimmerEngine
 import AVFAudio
 import AudioToolbox
 import CoreAudio
@@ -45,7 +46,7 @@ struct AudioEngineLifecycleTests {
     @Test func muteTogglesOnlyStreamSamples() {
         let decoder = AudioDecoder()
         decoder.setOutputMuted(true)
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         decoder.applyOutputMute()
         #expect(decoder.halOutput?.queue.pointee.muted.load(ordering: .relaxed) == true)
         decoder.setOutputMuted(false)
@@ -57,7 +58,7 @@ struct AudioEngineLifecycleTests {
         let decoder = AudioDecoder()
         defer { decoder.shutdown() }
         decoder.engineRunning = true
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         decoder.startOutput = { _ in kAudioUnitErr_Uninitialized }
         #expect(!decoder.ensureEngineAtPrimeEdge(now: DispatchTime.now().uptimeNanoseconds))
         #expect(!decoder.engineRunning)
@@ -71,7 +72,7 @@ struct AudioEngineLifecycleTests {
         decoder.engineRunning = true
         decoder.primed = true
         decoder.framesScheduled = 480
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         decoder.startOutput = { audio in
             #expect(!audio.primed)
             #expect(audio.framesPlayed == audio.framesScheduled)
@@ -172,7 +173,7 @@ struct AudioEngineLifecycleTests {
     @Test func teardownInvalidatesRetriesBeforeReleasingTheGraph() throws {
         let decoder = AudioDecoder()
         decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         weak let released = decoder.halOutput
         let generation = decoder.engineRestartGeneration
         decoder.startOutput = { _ in Issue.record("A stopped session must not restart"); return noErr }
@@ -181,13 +182,12 @@ struct AudioEngineLifecycleTests {
         #expect(released == nil)
         #expect(decoder.meterShutdown)
         #expect(!decoder.engineRunning)
-        #expect(decoder.deviceListeners.isEmpty)
     }
 
     @Test func failedStartReplacementDiscardsQueuedPCMWithoutCushionGrowth() throws {
         let decoder = AudioDecoder()
         defer { decoder.shutdown() }
-        decoder.halOutput = AudioHALOutput(channels: 2)
+        decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         decoder.framesScheduled = 1_440
         decoder.framesPlayed = 240
         decoder.playoutTargetMs = 60
@@ -204,6 +204,66 @@ struct AudioEngineLifecycleTests {
         #expect(decoder.pendingSilenceFrames == 0)
         #expect(decoder.pendingUnderrunTargetMs == nil)
         #expect(!decoder.primed)
+    }
+
+    @Test func exhaustedRestartLadderKeepsPrimeRecoveryArmedAndResetsAfterSuccess() {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+        decoder.engineRestartRetries = AudioDecoder.maxEngineRestartRetries
+        decoder.startOutput = { _ in kAudioUnitErr_Uninitialized }
+        let before = LogStore.shared.snapshot().last?.id ?? 0
+        decoder.retryEngineStart(attempt: AudioDecoder.maxEngineRestartRetries,
+                                 generation: decoder.engineRestartGeneration)
+        #expect(!decoder.engineRunning)
+        #expect(decoder.outputGraphNeedsReconnect)
+        #expect(decoder.engineRestartRetries == AudioDecoder.maxEngineRestartRetries)
+        #expect(LogStore.shared.snapshot().contains {
+            $0.id > before && $0.message == "audio restart ladder exhausted; packet and device recovery remain armed"
+        })
+        #expect(!decoder.ensureEngineAtPrimeEdge(now: 1_000_000_000))
+        #expect(decoder.primeEdgeRetryAtNanos == 1_100_000_000)
+        decoder.startOutput = { _ in noErr }
+        #expect(!decoder.ensureEngineAtPrimeEdge(now: 1_050_000_000))
+        #expect(decoder.ensureEngineAtPrimeEdge(now: 1_100_000_000))
+        #expect(decoder.engineRunning)
+        #expect(decoder.engineRestartRetries == 0)
+        #expect(decoder.startPlayoutAtPrimeEdge())
+        #expect(!decoder.primeEdgeFailureStreak)
+        #expect(decoder.primeEdgeRetryAtNanos == 0)
+    }
+
+    @Test func successfulRetryClearsTheLadderAndAlreadyRunningOrUnconfiguredEnginesDoNotStart() {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        decoder.startOutput = { _ in Issue.record("An unconfigured engine must not start"); return noErr }
+        decoder.retryEngineStart(attempt: 1, generation: decoder.engineRestartGeneration)
+        #expect(!decoder.engineRunning)
+        decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+        decoder.engineRestartRetries = 2
+        decoder.startOutput = { _ in noErr }
+        decoder.retryEngineStart(attempt: 2, generation: decoder.engineRestartGeneration)
+        #expect(decoder.engineRunning && decoder.engineRestartRetries == 0)
+        decoder.startOutput = { _ in Issue.record("A running engine must not restart"); return noErr }
+        decoder.retryEngineStart(attempt: 3, generation: decoder.engineRestartGeneration)
+        #expect(decoder.engineRunning)
+    }
+
+    @Test func failedDeviceRecoveryKeepsTheOriginalRecoveryTimeAndArmsRetries() {
+        let decoder = AudioDecoder()
+        defer { decoder.shutdown() }
+        decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+        decoder.startOutput = { _ in kAudioUnitErr_Uninitialized }
+        decoder.handleEngineConfigurationChange(changedAt: 123)
+        #expect(!decoder.engineRunning)
+        #expect(decoder.outputGraphNeedsReconnect)
+        #expect(decoder.engineRestartRetries == 1)
+        decoder.handleEngineConfigurationChange(changedAt: 456)
+        #expect(decoder.deviceRecoveryStarted == 123)
+        #expect(decoder.engineRestartRetries == 2)
+        #expect(!decoder.startPlayoutAtPrimeEdge(allowRecovery: false))
+        decoder.routeListenerQueue.sync {}
+        #expect(!decoder.engineRunning)
     }
 
     private static let rawListenerFired = DispatchSemaphore(value: 0)

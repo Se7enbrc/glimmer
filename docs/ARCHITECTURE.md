@@ -8,7 +8,7 @@ rules. For setup and checks, use the [developer guide](CONTRIBUTING.md).
 Follow one stream through one Swift process: network → decode → pacing →
 display, with audio and input alongside it.
 
-Glimmer implements Sunshine's RTSP-based protocol in `Glimmer/Stream/Native/`,
+Glimmer implements Sunshine's RTSP-based protocol in `GlimmerEngine/Network/`,
 ported from moonlight-common-c. It uses system video, audio and cryptography
 frameworks, with no external player, linked C streaming engine or Objective-C
 shim. Sparkle handles updates. See
@@ -32,21 +32,21 @@ rechecked after awaiting. Unknown results preserve the existing registration.
 
 Keep one in-flight stream; `StreamSession.start()` refuses a second.
 
-| Layer                      | Ownership and source                                                                    |
-| -------------------------- | --------------------------------------------------------------------------------------- |
-| Views and app model        | Main actor; `ContentView.swift`, `SettingsView.swift`, `AppModel.swift` and extensions. |
-| Stream lifecycle           | `StreamSession` actor in `Stream/StreamSession*.swift`.                                 |
-| Protocol                   | `StreamingBackend`, `NativeBackend`, `Stream/Native/`.                                  |
-| Callback bridge            | `StreamBridgeContext`, weak subsystem references and ordered events.                    |
-| Network, pairing, identity | `NetworkClient`, `PairingClient`, `IdentityManager` actors.                             |
-| Video                      | Main-actor `VideoDecoder` lifecycle, serial decode queue, locked display-layer access.  |
-| Pacing                     | `FramePacer`, dedicated display tick and serial release queue.                          |
-| Audio                      | `AudioDecoder`, packet worker, SPSC PCM ring and HAL callbacks.                         |
-| Keyboard and mouse         | Main-actor `InputForwarder` and `StreamInputView`.                                      |
-| Controllers                | Main-actor lifecycle, locked `InputCore`, dedicated capture queues.                     |
-| Raw controllers            | `HIDGamepadManager`, `DualSenseHID`, owned HID run loop.                                |
-| Window                     | Main-actor `StreamWindow`.                                                              |
-| Metrics                    | Locked `StatsCollector`; optional `TelemetryExporter`.                                  |
+| Layer                      | Ownership and source                                                                           |
+| -------------------------- | ---------------------------------------------------------------------------------------------- |
+| Views and app model        | Main actor; `ContentView.swift`, `SettingsView.swift`, `AppModel.swift` and extensions.        |
+| Stream lifecycle           | `StreamSession` actor in `GlimmerEngine/Session/`.                                             |
+| Protocol                   | `StreamingBackend` in `GlimmerEngine/Protocol/`; native transport in `GlimmerEngine/Network/`. |
+| Callback bridge            | `StreamBridgeContext`, weak subsystem references and ordered events.                           |
+| Network, pairing, identity | `NetworkClient`, `PairingClient`, `IdentityManager` actors.                                    |
+| Video                      | Main-actor `VideoDecoder` lifecycle, serial decode queue, locked display-layer access.         |
+| Pacing                     | `FramePacer`, dedicated display tick and serial release queue.                                 |
+| Audio                      | `AudioDecoder`, packet worker, SPSC PCM ring and HAL callbacks.                                |
+| Keyboard and mouse         | Main-actor `InputForwarder` and `StreamInputView`.                                             |
+| Controllers                | Main-actor lifecycle, locked `InputCore`, dedicated capture queues.                            |
+| Raw controllers            | `HIDGamepadManager`, `DualSenseHID`, owned HID run loop.                                       |
+| Window                     | Main-actor `StreamWindow`.                                                                     |
+| Metrics                    | Locked `StatsCollector`; optional `TelemetryExporter`.                                         |
 
 ### Commands and App Intents
 
@@ -56,14 +56,44 @@ Route every entry point through the app's existing model and session code.
 with `-h`/`--help`. App launch arguments must start with a dash. A symlink
 invocation re-execs the real binary so bundle/defaults lookup stays correct.
 
-Pair/list/wake/quit run headlessly. Stream hands off to the app over
+Pair/list/wake/quit run headlessly. Stream and stop hand off to the app over
 `CommandChannel` distributed notifications; status queries it without opening
 the app or contacting the PC. URLs parse into the same command type, with
 mandatory quit confirmation. See [command reference](COMMAND_LINE.md).
 
-`GlimmerIntents.swift` provides Stream from PC, Wake PC and Quit App on PC.
-`PCEntity` exposes saved PCs; `GlimmerShortcuts` refreshes names after pairing,
-rename or removal. These actions use the launcher's own entry points.
+`GlimmerIntents.swift` provides Stream from PC, Wake PC, Stop Streaming and Quit
+App on PC. `PCEntity` exposes saved PCs; `GlimmerShortcuts` refreshes names
+after pairing, rename or removal. These actions use the launcher's own entry
+points.
+
+## Shared engine and native adapters
+
+`GlimmerEngine/` owns transport, audio decode and PCM storage, video decode,
+pacing, synchronous input, session recovery, diagnostics and scalar quality
+policy. The Mac shell in `Glimmer/EngineAdapters/` owns windows, native capture,
+Core Audio output/routes, device capabilities and platform scheduling.
+
+External clients create `PreparedMedia`, then call
+`StreamSession.make(media:network:hostDisposition:diagnosticsDirectory:)` on the
+main actor. Consume its ordered events before starting, and retain the stable
+`StreamInput` through reconnects. Final stop awaits native disposal before the
+single terminal event. Old attempt callbacks cannot affect a replacement.
+
+The Mac uses `.cancelOwnedHostSession`; iPhone uses `.disconnectOnly`, which
+leaves the PC game running even after a late launch or failed recovery. Public
+clients reuse their paired network client without an extra initial status probe.
+
+Native display code calls `VideoDecoder.setPresentSuppressed(_:)` while hidden.
+It reuses newest-frame retention, decode gating and watchdog suppression.
+`PacerHeadroom` keeps policy reads inside the engine; frame releases do not call
+the app. Handed controller mouse mappings preserve the Mac default, shared curve
+and polling cadence.
+
+`LauncherArtCache` and `NetworkClient.appAsset(appID:)` share bounded artwork
+storage and pinned TLS. Shells decide when to fetch visible covers. An optional
+local diagnostics directory still requires the telemetry gate and uses loopback
+metrics only. See [engine extraction](ENGINE_EXTRACTION.md) for exact boundaries
+and the [iOS roadmap](IOS_ENGINE_ROADMAP.md) for device acceptance.
 
 ## The `StreamingBackend` boundary
 
@@ -79,7 +109,7 @@ protocols.
 methods mirror the upstream `LiSend*` contract. Constants in
 `StreamProtocolConstants.swift` preserve upstream C names for searching.
 
-## The native engine (`Glimmer/Stream/Native/`)
+## The native engine (`GlimmerEngine/Network/`)
 
 Use the connect thread for bring-up and dedicated receive paths for media.
 
@@ -145,7 +175,9 @@ and decode alive. No raw head-pose/profile data is collected. See
 
 ## Stream session lifecycle
 
-Create the event stream and display target before starting the connection.
+Create the event stream and display target before starting the connection. The
+steps below describe the Mac adapter; disconnect-only consumers resume the same
+app or launch once, without entering the cancel/retry path.
 
 1. Fetch PC status and require pairing.
 2. Launch if idle; otherwise confirm takeover when needed, cancel and wait up to
@@ -174,8 +206,10 @@ their targets.
    input.
 3. Stop the backend and drain receive/control threads.
 4. Detach input, tear down video, close the window and shut down audio.
-5. Settle pending launch work, cancel this session's PC app and close control.
-6. Clear/release the bridge, finish events and release the power assertion.
+5. Settle pending launch work; cancel the owned PC app only when the disposition
+   permits it, then close control. Disconnect-only sessions never cancel it.
+6. Clear/release the bridge, await native disposal, finish events and release
+   the power assertion.
 
 Every stop path uses this order. Cancellation is bounded and best-effort when
 the PC is unreachable. A PC-side quit or another client's takeover clears
@@ -359,7 +393,7 @@ verified signature and PIN proof permit pinning. First contact never pins. See
 
 ## Build pipeline
 
-Compile the engine into the app target and keep version fields in one place.
+Build the shared engine target/package and keep app version fields in one place.
 
 `Glimmer/StreamLib.xcconfig` includes `Version.xcconfig`, pins arm64 and enables
 compiler protections. Release strips path-bearing debug maps for
@@ -373,172 +407,6 @@ Use the [build command table](CONTRIBUTING.md#build) and
 
 ## Protocol security
 
-Review these boundaries when changing pairing, transport or local commands.
-
-### Threat model
-
-Treat Glimmer as a client for your own PC, not an isolation boundary against a
-compromised Mac or PC.
-
-| Threat                                       | Protection or limit                                                                                                      |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Someone observing the network                | Input is encrypted; video is plaintext unless Sunshine requires encryption. Audio encryption has protocol limits below.  |
-| Someone intercepting connections             | PIN-verified pairing establishes a certificate pin; later certificate mismatches fail. First contact is unauthenticated. |
-| Malicious paired PC                          | Pairing proves identity, not safe data. Protocol-parser bugs belong to Glimmer and should be reported here.              |
-| Software running as your Mac user            | Can read identity files, replace pins and send local commands. Owner-only permissions do not stop it.                    |
-| Root, a compromised macOS or build toolchain | Outside the protection model. Nation-state attacks are also outside scope.                                               |
-
-Sunshine protocol-design limits are documented below. Bugs in
-[Sunshine itself](https://github.com/LizardByte/Sunshine) belong upstream.
-
-### Local commands and links
-
-Distinguish local automation from links that can arrive through a browser.
-
-| Entry point           | Boundary                                                                                                                                                                           |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local command channel | Distributed notifications are unauthenticated. Software running as you can start or end streams, quit PC apps and authorize takeover. CLI/UI confirmation happens before dispatch. |
-| `glimmer://` links    | Only stream, wake and quit for saved PCs. Quit always asks; stream uses normal takeover checks.                                                                                    |
-| Malformed links       | Unknown or duplicate parameters, empty/control-character values, paths, credentials, ports and fragments are rejected without logging their contents.                              |
-
-See [URL commands](COMMAND_LINE.md#url-commands). There is no stop or pair URL
-action.
-
-### Identity
-
-Protect your Mac account and the files under
-`~/Library/Application Support/Glimmer/Identity/`.
-
-| File                  | Contents                                                     |
-| --------------------- | ------------------------------------------------------------ |
-| `client-cert.pem`     | Self-signed RSA-2048 client certificate, valid for 20 years. |
-| `client-key.pem`      | Unencrypted PKCS#8 private key.                              |
-| `client-uniqueid.txt` | 32-character hexadecimal client ID.                          |
-
-Files use mode 0600 in a mode-0700 directory. Writes are atomic and verify
-permissions; failures remove the partial file. The identity is file-backed, not
-in the keychain, and software running as you can read it.
-
-On first launch, Glimmer can import moonlight-qt's identity and pairings. It
-never changes Moonlight's preferences or their permissions. The one-time import
-does not create a stronger boundary around Moonlight's original copy.
-
-### Pairing
-
-Enter Glimmer's four-digit PIN in Sunshine only on a trusted network or
-authenticated encrypted tunnel.
-
-Do not expose Sunshine's pairing or streaming ports directly to the internet.
-Four-digit PINs have about 13 bits of entropy; retry handling does not establish
-resistance to offline guessing of a captured handshake.
-
-Glimmer checks the PC's RSA signature and PIN proof before sending its own
-pairing secret and committing the pin. Imported identities, pairing certificates
-and pinned peers need RSA keys of at least 2048 bits. Rejected keys and
-certificates are not silently replaced; fix them at the source and re-pair.
-
-#### Protocol limits
-
-Use Sunshine's mandatory encryption mode for video, while recognizing what it
-cannot fix.
-
-| Mechanism           | Limit                                                                                                                                   |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Pairing AES-128-ECB | Protocol-required, unauthenticated cipher; signatures and challenge checks supplement it.                                               |
-| Audio AES-128-CBC   | No authentication tag; IVs derived from the session value and 16-bit sequence repeat on wrap. Padding checks do not authenticate audio. |
-| TLS 1.2 minimum     | Glimmer does not require an ephemeral key agreement suite, so forward secrecy is not guaranteed.                                        |
-| GCM counters        | Direction/channel-specific deterministic IVs must stay unique under each fresh session key.                                             |
-
-CryptoKit, CommonCrypto and Security provide the cryptography. Random keys,
-salts and challenges use system cryptographic generators. See
-[NIST's GCM IV guidance](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf#page=28).
-These constraints are not a claim of a newly demonstrated Glimmer exploit.
-
-### Pinning
-
-Choose “Pair again…” after confirming a legitimate certificate change on the PC.
-
-A mismatch fails the connection and shows “Trust needed”. Glimmer does not
-silently replace a pin. TLS compares the PC's exact certificate bytes, with
-session resumption disabled; the system certificate authorities are not the
-trust anchor.
-
-Pins live in `~/Library/Application Support/Glimmer/PinnedHosts/<hostID>.pem` at
-mode 0600. IDs are sanitized to `[A-Za-z0-9-_.]`. The file wins; a missing or
-unreadable file falls back to the legacy defaults pin and attempts migration. A
-conflicting or unmigratable PC-record pin requires re-pairing.
-
-Plain-HTTP discovery data cannot establish trust: `<PlainCert>` and
-`<PairStatus>` from `/serverinfo` are ignored before pairing, and HTTPS without
-a pin is refused.
-
-### Transport
-
-Use the table to see which parts of a session are encrypted.
-
-| Path              | Protection                                                                                             |
-| ----------------- | ------------------------------------------------------------------------------------------------------ |
-| Before pairing    | HTTP on 47989; four pairing rounds, then a final HTTPS liveness check.                                 |
-| Paired requests   | Mutual TLS on 47984 for status, app lists, artwork, launch and cancellation; session keys travel here. |
-| RTSP setup        | AES-128-GCM over TCP with `rtspenc://`; unencrypted replies are rejected.                              |
-| Control and input | AES-128-GCM over ENet/UDP in both directions.                                                          |
-| Video             | UDP, plaintext by default; AES-128-GCM when Sunshine requires encryption.                              |
-| Audio             | UDP, AES-128-CBC whenever offered, as current Sunshine does.                                           |
-
-Video and audio check the resolved PC's source IP, allowing varying source
-ports. This rejects unrelated senders but does not authenticate plaintext
-packets or prevent IP spoofing. Encryption cannot stop packets being dropped or
-delayed.
-
-#### Network paths
-
-Use this list for the connections outside the media stream.
-
-| Path                      | Exposure and check                                                                                                                     |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Bonjour discovery         | Unauthenticated `_nvstream._tcp` and `_nvstream-tcp._tcp`; a discovered address is saved only after pinned HTTPS confirms the PC's ID. |
-| Reachability probe        | TCP connect to the PC's HTTP port, no payload; status can be forged, trust cannot.                                                     |
-| Stream keepalives         | Unencrypted UDP ping identifiers, no keys or input.                                                                                    |
-| Wake on LAN               | Unauthenticated UDP magic packets, including ports 9 and 47009 and Sunshine ports; the PC's MAC address is visible.                    |
-| Updates                   | HTTPS feed and GitHub downloads; each ZIP has an Ed25519 signature. The feed is unsigned.                                              |
-| Optional metrics listener | HTTP port 9847 on loopback; a separate LAN opt-in allows anyone on the network to read metrics.                                        |
-
-Glimmer makes no analytics or tracking calls. See [Privacy](PRIVACY.md).
-
-### Runtime hardening
-
-Approve the optional root helper knowing that Glimmer itself runs without App
-Sandbox.
-
-| Boundary             | What it does                                                                                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Wi-Fi helper         | Root LaunchDaemon through `SMAppService.daemon`; pauses `awdl0` during a stream.                                         |
-| Helper authorization | Requires the signed `io.ugfugl.Glimmer` app from Apple team `5T7M4RH3F8`, not just a claimed bundle ID.                  |
-| Helper API           | Only `setAWDLDown(_:reason:)` changes state; status, ping and suppression count are read-only. No arbitrary-command API. |
-| Release runtime      | Hardened Runtime, no JIT or library injection, library validation enabled.                                               |
-| Distribution         | Developer ID signing, Apple notarization and a stapled ticket on the app.                                                |
-| Parser checks        | Deterministic fuzz tests and coverage-guided fuzzing under AddressSanitizer; neither contains a successful exploit.      |
-
-The current helper architecture is unsandboxed. USB access alone does not
-require that choice; a sandboxed distribution would need a separate architecture
-review. Debug builds relax library validation for unsigned instrumentation;
-Release does not.
-
-#### Capabilities and capture
-
-Check the separate app and helper grants when reviewing a signed build.
-
-| Bundle       | Capabilities                                                                                                                  |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| App          | Head Pose and Spatial Audio Profile for system spatial playback; Enhanced Security for heap, platform and loader protections. |
-| Root helper  | Network Topology Observation for routing-socket observation under macOS 27; does not grant root or replace approval.          |
-| Login helper | Neither audio capability.                                                                                                     |
-
-Enhanced Security version 1 remains selected while version 2's streaming costs
-are unmeasured. Profiles are validated and embedded separately; see
-[Release](RELEASE.md). Glimmer never reads or exports raw head-pose or profile
-data.
-
-The stream window's legacy capture hint does not block ScreenCaptureKit. Your
-stream can appear in screen recordings or shares; Glimmer provides no DRM
-boundary.
+Preserve authenticated pairing, pinned mutual TLS and explicit local-command
+trust boundaries. See [protocol security](PROTOCOL_SECURITY.md) for the threat
+model, encryption limits and runtime capabilities.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+@testable import GlimmerEngine
 import AVFoundation
 import AudioToolbox
 import CoreAudio
@@ -34,12 +35,31 @@ struct SpatialAudioTests {
         #expect(AudioOutputRoute(kind: .headphones).spatialOutput(sourceChannels: 8)
             == .spatialMixerOutputType_Headphones)
         #expect(AudioOutputRoute(kind: .builtInSpeakers).spatialOutput(sourceChannels: 8)
-            == .spatialMixerOutputType_BuiltInSpeakers)
+            == nil)
         #expect(AudioOutputRoute().spatialOutput(sourceChannels: 8) == .spatialMixerOutputType_ExternalSpeakers)
         #expect(AudioOutputRoute(kind: .headphones).spatialOutput(sourceChannels: 2) == nil)
         for channels in [1, 4, 6, 8] {
             #expect(AudioOutputRoute(channels: channels, kind: .headphones).spatialOutput(sourceChannels: 8) == nil)
         }
+    }
+
+    @Test func macBookProHALValuesSelectBuiltInDownmix() {
+        // M4 Pro: Built-in transport, IOAudio OUTPUT_SPEAKER, internal-speaker data source.
+        let kind = AudioOutputRoute.classify(transport: 0x626C746E, terminals: [0x0301], dataSource: 0x6973706B)
+        #expect(kind == .builtInSpeakers)
+        #expect(AudioOutputRoute(kind: kind).spatialOutput(sourceChannels: 8) == nil)
+        #expect(AudioOutputRoute.classify(transport: 0x626C746E, terminals: [0x0301]) == .builtInSpeakers)
+        #expect(AudioOutputRoute.classify(transport: 0x626C746E, terminals: [],
+                                          dataSource: 0x6973706B) == .builtInSpeakers)
+        for transport in [kAudioDeviceTransportTypeUSB, kAudioDeviceTransportTypeBluetooth] {
+            #expect(AudioOutputRoute.classify(transport: transport, terminals: [0x0301]) == .other)
+            #expect(AudioOutputRoute.classify(transport: transport, terminals: [0x0302]) == .headphones)
+        }
+        #expect(AudioOutputRoute.classify(transport: 0x626C746E, terminals: [0x0301, 0x0302],
+                                          dataSource: 0x6973706B) == .headphones)
+        #expect(AudioOutputRoute.classify(transport: 0x626C746E, terminals: [0x0301],
+                                          dataSource: 0x6864706E) == .headphones)
+        #expect(AudioOutputRoute.classify(transport: 0x626C746E, terminals: []) == .other)
     }
 
     @Test(arguments: [2, 6, 8])
@@ -56,7 +76,7 @@ struct SpatialAudioTests {
 
     @Test(arguments: [6, 8])
     func spatialRendererRetainsEveryChannelIncludingLFE(channels: Int) throws {
-        for kind: AudioOutputRoute.Kind in [.other, .headphones] {
+        for kind: AudioOutputRoute.Kind in [.builtInSpeakers, .other, .headphones] {
             for source in 0..<channels {
                 let energy = try renderImpulse(channels: channels, route: AudioOutputRoute(kind: kind), source: source)
                 #expect(energy.allSatisfy { $0.isFinite })
@@ -64,6 +84,43 @@ struct SpatialAudioTests {
                         "Channel \(source) disappeared from \(channels)-channel audio on \(kind)")
             }
         }
+    }
+
+    @Test(arguments: [44_100.0, 48_000.0])
+    func multichannelTonesSurviveEveryStereoRoute(rate: Double) throws {
+        let preferredLayout = try unknownStereoLayout()
+        for kind: AudioOutputRoute.Kind in [.builtInSpeakers, .other, .headphones] {
+            for source in 0..<8 {
+                let energy = try renderImpulse(channels: 8, route: AudioOutputRoute(kind: kind), source: source,
+                                               outputRate: rate, preferredLayout: preferredLayout, tone: true)
+                #expect(energy.allSatisfy { $0.isFinite })
+                #expect(energy.reduce(0, +) > 0.01,
+                        "Tone channel \(source) disappeared on \(kind) at \(rate): \(energy)")
+                if kind == .headphones || [2, 3].contains(source) {
+                    #expect(energy.allSatisfy { $0 > 0.001 })
+                } else if kind == .other {
+                    let side = [0, 4, 6].contains(source) ? 0 : 1
+                    #expect(energy[side] > energy[1 - side])
+                }
+                if kind == .builtInSpeakers {
+                    let gains: [[Double]] = [[1, 0], [0, 1], [sqrt(0.5), sqrt(0.5)], [0.5, 0.5],
+                                             [sqrt(0.5), 0], [0, sqrt(0.5)], [sqrt(0.5), 0], [0, sqrt(0.5)]]
+                    let headroom = 1 / (1.5 + 3 * sqrt(0.5))
+                    for channel in 0..<2 {
+                        let expected = 256 * rate / 48_000 * pow(gains[source][channel] * headroom, 2)
+                        #expect(abs(energy[channel] - expected) < max(0.001, expected * 0.06),
+                                "Channel \(source) to \(channel): \(energy[channel]), expected \(expected)")
+                    }
+                }
+            }
+        }
+    }
+
+    @Test(arguments: [6, 8])
+    func builtInDownmixKeepsHeadroomForCorrelatedChannels(channels: Int) throws {
+        let energy = try renderImpulse(channels: channels, route: AudioOutputRoute(kind: .builtInSpeakers),
+                                       source: -1, tone: true)
+        #expect(energy.allSatisfy { abs($0 - 256) < 10 })
     }
 
     @Test(arguments: [44_100.0, 96_000.0])
@@ -81,6 +138,32 @@ struct SpatialAudioTests {
             #expect(energy[destination] > 0.001)
             #expect(energy.enumerated().filter { $0.offset != destination }.allSatisfy { $0.element < 0.000001 })
         }
+    }
+
+    @Test(arguments: [2, 8])
+    func stereoOutputIgnoresUnknownHardwareLabels(channels: Int) throws {
+        let layout = try unknownStereoLayout()
+        for kind: AudioOutputRoute.Kind in [.builtInSpeakers, .other, .headphones] {
+            let energy = try renderImpulse(channels: channels, route: AudioOutputRoute(kind: kind), source: 0,
+                                           preferredLayout: layout, tone: true)
+            #expect(energy[0] > 0.01, "Unknown hardware labels silenced \(kind): \(energy)")
+        }
+    }
+
+    private func unknownStereoLayout() throws -> AVAudioChannelLayout {
+        let bytes = 12 + 2 * MemoryLayout<AudioChannelDescription>.size
+        return try #require(AudioHALDevice.preferredLayout(42, dataSize: { _, _, size in
+            size = UInt32(bytes)
+            return noErr
+        }, data: { _, _, _, storage in
+            storage.initializeMemory(as: UInt8.self, repeating: 0, count: bytes)
+            let layout = storage.assumingMemoryBound(to: AudioChannelLayout.self)
+            layout.pointee.mChannelLayoutTag = kAudioChannelLayoutTag_UseChannelDescriptions
+            layout.pointee.mNumberChannelDescriptions = 2
+            let descriptions = storage.advanced(by: 12).assumingMemoryBound(to: AudioChannelDescription.self)
+            for channel in 0..<2 { descriptions[channel].mChannelLabel = kAudioChannelLabel_Unknown }
+            return noErr
+        }))
     }
 
     @Test func teardownDisposesReadersBeforeSourcesAndRetainsFailedDisposals() throws {
@@ -124,9 +207,118 @@ struct SpatialAudioTests {
         #expect(!graph.isRunning)
     }
 
+    @Test func softwareGraphNegotiatesFormatAndRejectsInvalidProperties() throws {
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+        let graph = AudioHALOutput(channels: 2)
+        #expect(graph.start() == kAudioUnitErr_Uninitialized)
+        #expect(graph.setRate(1) == kAudioUnitErr_Uninitialized)
+        try graph.configure(format: format, route: .init(),
+                            hardware: { AudioHALDevice(id: 42, rate: 96_000, latencyMs: 7.5) }, connectHardware: false)
+        #expect(graph.device == 42 && graph.sampleRate == 96_000 && graph.latencyMs == 7.5)
+        #expect(graph.channels == 2 && !graph.spatial && !graph.isRunning)
+        #expect(graph.setRate(1.001) == noErr)
+        let unit = try #require(graph.speed)
+        var output = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        #expect(AudioUnitGetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output,
+                                     0, &output, &size) == noErr)
+        #expect(output.mSampleRate == 96_000 && output.mChannelsPerFrame == 2)
+        #expect(output.mBitsPerChannel == 32 && output.mBytesPerFrame == 4)
+        #expect(output.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0)
+        do {
+            try graph.set(unit, UInt32.max, value: UInt32(0))
+            Issue.record("An unknown property must fail")
+        } catch let failure as AudioHALOutput.Failure {
+            #expect(failure.property == UInt32.max && failure.status != noErr)
+        }
+        #expect(throws: AudioHALOutput.Failure.self) { try graph.makeUnit(type: 0, subtype: 0) }
+        #expect(graph.stop())
+        #expect(graph.units.isEmpty && graph.speed == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func outputProbeMeasuresFinalGraphAndExcludesIntentionalMute(dropSignal: Bool) throws {
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+        let graph = AudioHALOutput(channels: 2)
+        try graph.configure(format: format, route: .init(),
+                            hardware: { AudioHALDevice(id: 0, rate: 48_000, latencyMs: 0) }, connectHardware: false)
+        let mixer = try #require(graph.units.last)
+        if dropSignal {
+            let speed = try #require(graph.speed)
+            try #require(AudioUnitAddRenderNotify(speed, silenceTestAudio, graph.queue) == noErr)
+        }
+        let input = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8_192))
+        let data = try #require(input.floatChannelData)
+        for channel in 0..<2 { data[channel].update(repeating: 0.25, count: 8_192) }
+        #expect(Bool(graph.queue.pointee.write(data, frames: 8_192, isSilence: false)))
+        graph.queue.pointee.enabled.store(true, ordering: .releasing)
+        let output = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 512))
+        for quantum in 0..<8 {
+            // The last pulls are intentionally muted at the ring, even though decoded PCM is nonzero.
+            graph.queue.pointee.muted.store(quantum >= 4, ordering: .relaxed)
+            graph.queue.pointee.outputProbe.requested.store(true, ordering: .releasing)
+            output.frameLength = 512
+            var flags: AudioUnitRenderActionFlags = []
+            var timestamp = AudioTimeStamp()
+            timestamp.mFlags = .sampleTimeValid
+            timestamp.mSampleTime = Double(quantum * 512)
+            try #require(AudioUnitRender(mixer, &flags, &timestamp, 0, 512, output.mutableAudioBufferList) == noErr)
+            let result = graph.queue.pointee.outputProbe.result.load(ordering: .acquiring)
+            #expect(result == (dropSignal && quantum < 4 ? 2 : 1))
+        }
+        #expect(graph.queue.pointee.consumed.load(ordering: .acquiring) > 0)
+    }
+
+    @Test func outputProbeHonorsSilenceFlagAndClearsStaleResults() throws {
+        let graph = AudioHALOutput(channels: 2)
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 512))
+        buffer.frameLength = 512
+        let data = try #require(buffer.floatChannelData)
+        for channel in 0..<2 { data[channel].update(repeating: 0.25, count: 512) }
+        graph.queue.pointee.outputProbe.requested.store(true, ordering: .releasing)
+        graph.queue.pointee.outputProbe.begin()
+        graph.queue.pointee.outputProbe.captureInput(buffer.mutableAudioBufferList, frames: 512)
+        graph.queue.pointee.outputProbe.finish(buffer.mutableAudioBufferList, frames: 512,
+                                              failed: false, isSilence: true)
+        #expect(graph.queue.pointee.outputProbe.result.load(ordering: .acquiring) == 2)
+        let previous = graph.sharedOutput
+        previous.outputSilence.seconds = 4
+        try graph.configure(format: format, route: .init(),
+                            hardware: { AudioHALDevice(id: 0, rate: 48_000, latencyMs: 0) }, connectHardware: false)
+        #expect(graph.queue.pointee.outputProbe.result.load(ordering: .acquiring) == 0)
+        #expect(graph.sharedOutput.outputSilence.seconds == 0)
+    }
+
+    @Test func silenceObservationIsSampledAndLogsOnceUntilRecovery() {
+        let graph = AudioHALOutput(channels: 2)
+        let shared = graph.sharedOutput
+        let telemetry = AudioPipelineTelemetry()
+        var messages: [String] = []
+        for second: UInt64 in 1...4 {
+            graph.queue.pointee.outputProbe.result.store(2, ordering: .releasing)
+            shared.observeOutputSilence(now: second * 1_000_000_000, telemetry: telemetry, log: { messages.append($0) })
+            shared.observeOutputSilence(now: second * 1_000_000_000 + 10_000_000,
+                                       telemetry: telemetry, log: { messages.append($0) })
+        }
+        #expect(messages.count == 1)
+        #expect(telemetry.takeSnapshot().window.outputSilentSeconds == 3)
+        shared.observeOutputSilence(now: 5_000_000_000, telemetry: telemetry, log: { messages.append($0) })
+        #expect(telemetry.takeSnapshot().window.outputSilentSeconds == 0)
+        #expect(messages.count == 1)
+        var observer = AudioOutputSilence()
+        observer.observe(result: .silent, elapsed: 1, log: { messages.append($0) })
+        observer.observe(result: .silent, elapsed: 1, log: { messages.append($0) })
+        #expect(observer.seconds == 1)
+        observer.observe(result: .silent, elapsed: 3, log: { messages.append($0) })
+        #expect(observer.seconds == 0)
+        observer.observe(result: .failed, elapsed: 1, log: { messages.append($0) })
+        #expect(observer.seconds == 0)
+    }
+
     private func renderImpulse(channels: Int, route: AudioOutputRoute, source: Int,
                                outputRate: Double = 48_000,
-                               preferredLayout: AVAudioChannelLayout? = nil) throws -> [Double] {
+                               preferredLayout: AVAudioChannelLayout? = nil, tone: Bool = false) throws -> [Double] {
         let layout = try #require(AVAudioChannelLayout(layoutTag: AudioHALDevice.layout(channels: UInt32(channels))))
         let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000,
                                    interleaved: false, channelLayout: layout)
@@ -134,12 +326,20 @@ struct SpatialAudioTests {
         try graph.configure(format: format, route: route,
                             hardware: { AudioHALDevice(id: 0, rate: outputRate, latencyMs: 0,
                                                       channelLayout: preferredLayout) }, connectHardware: false)
-        #expect(graph.spatial == (channels > 2 && route.channels == 2))
+        #expect(graph.spatial == (route.spatialOutput(sourceChannels: channels) != nil))
         let input = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8_192))
         input.frameLength = 8_192
         let data = try #require(input.floatChannelData)
         for channel in 0..<channels { data[channel].update(repeating: 0, count: 8_192) }
-        data[source][512] = 0.5
+        if tone {
+            for channel in 0..<channels where source == -1 || source == channel {
+                for frame in 0..<8_192 {
+                    data[channel][frame] = 0.25 * sin(Float(frame) * 2 * .pi * 80 / 48_000)
+                }
+            }
+        } else {
+            data[source][512] = 0.5
+        }
         #expect(Bool(graph.queue.pointee.write(data, frames: 8_192, isSilence: false)))
         graph.queue.pointee.enabled.store(true, ordering: .releasing)
         let outputTag = AudioHALDevice.layout(channels: graph.channels)
@@ -161,6 +361,18 @@ struct SpatialAudioTests {
                 for frame in 0..<512 { energy[channel] += Double(rendered[channel][frame] * rendered[channel][frame]) }
             }
         }
+        #expect(graph.queue.pointee.consumed.load(ordering: .acquiring) > 0)
         return energy
     }
+}
+
+private func silenceTestAudio(_ context: UnsafeMutableRawPointer,
+                              _ flags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+                              _ timestamp: UnsafePointer<AudioTimeStamp>, _ bus: UInt32, _ frames: UInt32,
+                              _ buffers: UnsafeMutablePointer<AudioBufferList>?) -> OSStatus {
+    guard flags.pointee.contains(.unitRenderAction_PostRender), let buffers else { return noErr }
+    for buffer in UnsafeMutableAudioBufferListPointer(buffers) {
+        buffer.mData?.initializeMemory(as: UInt8.self, repeating: 0, count: Int(buffer.mDataByteSize))
+    }
+    return noErr
 }

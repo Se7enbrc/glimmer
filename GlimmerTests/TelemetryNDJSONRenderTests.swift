@@ -8,6 +8,7 @@
 //  sparse one omits, the latency percentile fields, escaping, and number formatting.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -37,7 +38,7 @@ struct TelemetryNDJSONRenderTests {
         #expect(row["build_commit"] as? String == "abc123")
         #expect(row["build_date"] as? String == "2026-10-10")
         let client = try #require(row["client"] as? String)
-        #expect(client == TelemetryRenderer.clientLabel)
+        #expect(client == Fixtures.snapshot().clientLabel)
         #expect(client.count == 8 && client.allSatisfy(\.isHexDigit))
         check(row, ["t_connect_s": 42.5])
     }
@@ -105,7 +106,7 @@ struct TelemetryNDJSONRenderTests {
         check(row, [
             "phys_footprint_bytes": 512_000_000, "soc_ecluster_active": 0.25, "soc_pcluster_active": 0.75,
             "soc_ecluster_channels": 2, "soc_pcluster_channels": 4, "package_power_w": 9.5,
-            "gpu_residency_percent": 38.5
+            "gpu_residency_percent": 38.5, "gpu_power_w": 0.69
         ])
         #expect(row["on_battery"] as? Bool == true)
         #expect(row["battery_charging"] as? Bool == false)
@@ -230,7 +231,7 @@ struct TelemetryNDJSONRenderTests {
         #expect(!line.contains("null") && !line.contains("nan") && !line.contains("inf"))
         for absent in ["fps_received", "rtt_ms", "wifi_link", "stream_link", "threads", "decode_hw",
                        "audio_packets_total", "handshake_rtsp_ms", "lat_end_to_end_p50_ms", "host",
-                       "build_commit", "vt_session_create_ms", "audio_cushion_floor_ms"] {
+                       "build_commit", "vt_session_create_ms", "audio_cushion_floor_ms", "gpu_power_w"] {
             #expect(row[absent] == nil, "\(absent) should be omitted")
         }
         #expect(row["session"] as? String == "s1")
@@ -277,10 +278,10 @@ struct TelemetryNDJSONRenderTests {
     }
 
     @Test func thermalOrdinalsFollowSeverity() {
-        #expect(ProcessMetrics.thermalOrdinal(.nominal) == 0)
-        #expect(ProcessMetrics.thermalOrdinal(.fair) == 1)
-        #expect(ProcessMetrics.thermalOrdinal(.serious) == 2)
-        #expect(ProcessMetrics.thermalOrdinal(.critical) == 3)
+        #expect(ProcessThermalState.thermalOrdinal(.nominal) == 0)
+        #expect(ProcessThermalState.thermalOrdinal(.fair) == 1)
+        #expect(ProcessThermalState.thermalOrdinal(.serious) == 2)
+        #expect(ProcessThermalState.thermalOrdinal(.critical) == 3)
     }
 
     @Test func processSampleReportsALiveThreadCount() {

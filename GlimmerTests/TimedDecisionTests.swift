@@ -8,6 +8,7 @@
 //  age and idle edges, the decode gate, present recovery, display and audio windows, the quit dwell.
 //
 
+@testable import GlimmerEngine
 import AVFoundation
 import Foundation
 import os
@@ -64,7 +65,8 @@ struct TimedLatencyTests {
         let clock = ScriptedClock()
         let counters = TelemetryCounters()
         counters.setRttMs(10)
-        let tracker = FrameTimingTracker(sessionId: "t", now: clock.now, counters: counters)
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory,
+                                         now: clock.now, counters: counters)
         func present(_ rtp: UInt32) {
             let received = clock.nanos
             tracker.recordAssembled(rtpTimestamp: rtp, frameIndex: Int32(rtp), receiveNanos: received,
@@ -102,7 +104,8 @@ struct TimedLatencyTests {
     @Test func oneInputFeedsOneInputToPhoton() {
         let clock = ScriptedClock()
         let counters = TelemetryCounters()
-        let tracker = FrameTimingTracker(sessionId: "t", now: clock.now, counters: counters)
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory,
+                                         now: clock.now, counters: counters)
         func present(_ rtp: UInt32) {
             tracker.recordAssembled(rtpTimestamp: rtp, frameIndex: Int32(rtp), receiveNanos: clock.nanos,
                                     assembleNanos: clock.nanos)
@@ -134,16 +137,16 @@ struct TimedLatencyTests {
 
     /// Merged motion held back by a stalled reliable channel ages until an edge event drains it.
     @Test func heldMotionReportsItsQueueAgeWhenAnEdgeDrainsIt() throws {
-        // Every read is 7 ms after the last: the stamp, then the drain's two reads.
-        let clock = ScriptedClock(step: .milliseconds(7))
-        let tracker = FrameTimingTracker(sessionId: "t", counters: TelemetryCounters())
+        let scheduler = InputBatcherScheduler()
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory,
+                                         counters: TelemetryCounters())
         let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
                                          crypto: try ControlCrypto(rikey: EnetFixture.key))
         EnetFixture.connect(channel)
         channel.reliableBackloggedFlag.store(true, ordering: .relaxed)
-        let batcher = InputBatcher(enet: channel, now: { DispatchTime(uptimeNanoseconds: clock.now()) },
-                                   tracker: { tracker })
+        let batcher = scheduler.makeBatcher(enet: channel, tracker: { tracker })
         _ = batcher.accumulateMouseMove(dx: 5, dy: 0)
+        scheduler.clock.advance(.milliseconds(14))
         _ = batcher.passThrough(
             InputEncoder.mouseButton(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: 1),
             channel: Enet.ctrlChannelMouse)
@@ -173,7 +176,7 @@ struct TimedPresentPathTests {
 
     @Test func aFrozenDirectPresentRecoversOnceThenAgainAfterAFullWindow() {
         let clock = ScriptedClock()
-        let session = StreamSession(backend: recorder, clock: clock.session)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session)
         let frozen = decoder(presenting: false)
         session.tickPresentWatchdog(dec: frozen)
         #expect(session.directPresentStallSince == clock.seconds)
@@ -195,7 +198,7 @@ struct TimedPresentPathTests {
     /// A healthy stream's present metric reaches notice level once a minute, debug in between.
     @Test func aHealthyPresentMetricNoticesOncePerMinute() {
         let clock = ScriptedClock()
-        let session = StreamSession(backend: recorder, clock: clock.session)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session)
         let healthy = decoder(presenting: true)
         session.emitPresentMetric(dec: healthy)
         let first = clock.seconds
@@ -263,16 +266,18 @@ struct TimedPresentPathTests {
         let analog = InputForwarder.neutralControllerAnalog
         let shoulders = StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG
 
-        forwarder.armQuitChordDwell(slot: 0) { (shoulders, analog) }
+        let held = OSAllocatedUnfairLock(initialState: shoulders)
+        forwarder.armQuitChordDwell(slot: 0) { (held.withLock { $0 }, analog) }
         forwarder.quitChordDwellTask?.cancel()
-        forwarder.quitChordDwellExpired(slot: 0, pad: nil) { (StreamProtocol.LB_FLAG, analog) }
+        held.withLock { $0 = StreamProtocol.LB_FLAG }
+        forwarder.controllerChordDwell.expire()
         #expect(quits == 0)
         #expect(forwarder.quitChordDwellTask == nil)
         #expect(forwarder.quitChordDwellSlot == nil)
 
         forwarder.armQuitChordDwell(slot: 1) { (shoulders, analog) }
         forwarder.quitChordDwellTask?.cancel()
-        forwarder.quitChordDwellExpired(slot: 1, pad: nil) { (shoulders, analog) }
+        forwarder.controllerChordDwell.expire()
         #expect(quits == 1)
     }
 
@@ -304,7 +309,7 @@ struct TimedAudioReceiveTests {
 
     private static func receiver() -> RtpAudioReceiver {
         RtpAudioReceiver(host: .ipv4(.loopback), audioPort: 0, pingPayload: [], audioPacketDuration: 5,
-                         opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+                         opusConfig: SdpScan.defaultOpusConfig, audioConfig: 0,
                          audioEncryption: false, aesKey: EnetFixture.key,
                          aesIvId: [UInt8](repeating: 0, count: 16), sink: SilentSink())
     }

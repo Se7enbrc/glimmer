@@ -9,6 +9,7 @@
 //  failure copy in AppModel+StreamFailure.swift.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox
@@ -24,7 +25,7 @@ extension AppModel {
     /// Prompt at once when the launcher already knows the host is taken; the
     /// launch flow re-checks fresh server-info and prompts if that disagrees.
     func requestStream(app: LibraryApp, on host: Host) {
-        if !isStreaming, let live = hostLiveStatus, live.hostID == host.id,
+        if readinessReason(for: host) == nil, !isStreaming, let live = hostLiveStatus, live.hostID == host.id,
            Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
            let occupant = Self.occupant(of: live.state) {
             pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
@@ -97,6 +98,7 @@ extension AppModel {
         }
         LogStore.shared.beginSession()
         Diag.notice("Starting stream → \(host.displayName, privacy: .private) · \(app.name)", "Stream")
+        let readiness = hostPolling.readinessTasks[host.id]
         armLaunchState(app: app, host: host)
         // NB: the "last played" timestamp is intentionally NOT written here.
         // It records when the stream ENDED, not when it started - writing it
@@ -151,7 +153,8 @@ extension AppModel {
                 return
             }
             // The Swift-native engine is the only path.
-            let session = StreamSession(backend: NativeBackend(), makeNetwork: makeNetwork)
+            let session = StreamSession(
+                hostDisposition: .cancelOwnedHostSession, backend: MacTransport.makeBackend(), makeNetwork: makeNetwork)
             self.nativeSession = session
             await session.authorizeTakeover(takeoverAuthorized)
             if let launch = cfg.bitrateDecision {
@@ -160,7 +163,7 @@ extension AppModel {
             var caughtError: Error?
             var takeover: TakeoverRequired?
             do {
-                guard !menuStopInProgress else { throw CancellationError() }
+                try await waitForStreamReadiness(readiness)
                 // Provider closures (rather than captured values) so the user
                 // can edit either hotkey in Settings while a stream is live
                 // and the change takes effect on the next keyDown - no need
@@ -217,6 +220,15 @@ extension AppModel {
                 caughtError = error
             }
             await finishStreamSession(session, app: app, host: host, error: caughtError, takeover: takeover)
+        }
+    }
+
+    /// A stop during readiness must not start a session when the shared check eventually finishes.
+    func waitForStreamReadiness(_ readiness: Task<Void, Never>?) async throws {
+        await readiness?.value
+        try Task.checkCancellation()
+        guard !menuStopInProgress, !Self.connectCancelRequested, !hostPollingPausedForSleep else {
+            throw CancellationError()
         }
     }
 
@@ -308,6 +320,7 @@ extension AppModel {
             }
         }
         // An established session holds the chip through transient misses, even when its pre-stream sample is stale.
+        beginHostReadiness(for: host, afterStream: true)
         self.restartHostStatusPolling(afterStream: true)
         NSApp.activate()
         if let main = NSApp.windows.first(where: {
@@ -346,12 +359,14 @@ extension AppModel {
             // Latched once inside the store - repeat edges are no-ops.
             SessionReceiptStore.markSessionLive()
         case .firstFrame:
+            noteVideoReceived(from: host)
             if case .connecting = streamPhase { hostPolling.establishedHostID = host.id }
             promoteToStreamingOnFirstFrame()
         case .connectionTerminated(let code, let error):
             streamPhase = .idle
             nativeHDRActive = false
             showStreamEnded(code: code, error: error, host: host)
+        case .waitingForVideo: break
         case .reconnecting:
             // The host closed a live session (it likely restarted across a
             // lock/desktop transition) and the engine is silently re-establishing
@@ -380,7 +395,7 @@ extension AppModel {
             // Non-fatal to the visual stream, so stay in the streaming phase;
             // the failure is already logged + counted at the source.
             break
-        case .log: break
+        case .log, .input, .stopped: break
         }
     }
 
@@ -391,7 +406,9 @@ extension AppModel {
         if let error {
             showStreamFailure(Self.connectFailure(for: error, hostName: host.displayName), on: host)
         } else if code != 0 {
-            showStreamFailure((Self.streamEndedMessage(code: code, hostName: host.displayName), .other), on: host)
+            let message = Self.streamEndedMessage(
+                code: code, hostName: host.displayName, hasReceivedVideo: hasReceivedVideo(from: host))
+            showStreamFailure((message, .other), on: host)
         }
     }
 

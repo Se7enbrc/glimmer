@@ -9,6 +9,7 @@
 //  cancel is what Network.framework logs as a fault on every poll.
 //
 
+@testable import GlimmerEngine
 import Testing
 @testable import Glimmer
 

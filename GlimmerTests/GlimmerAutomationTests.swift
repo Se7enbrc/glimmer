@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -32,7 +33,7 @@ struct GlimmerAutomationTests {
     }
 
     @Test(arguments: [
-        "glimmer://pair?pc=Den", "glimmer://stop?pc=Den", "glimmer://unknown?pc=Den", "https://stream?pc=Den",
+        "glimmer://pair?pc=Den", "glimmer://unknown?pc=Den", "https://stream?pc=Den",
         "glimmer://stream", "glimmer://stream?pc=", "glimmer://stream?pc=%20",
         "glimmer://stream?pc", "glimmer://stream?pc=Den&pc=Other", "glimmer://stream?pc=Den&app=",
         "glimmer://stream?pc=Den&app=A&app=B", "glimmer://stream?pc=Den&force=1",
@@ -107,6 +108,82 @@ struct GlimmerAutomationTests {
             #expect(host.id == "pc-id")
         }
         #expect(confirmations == 1)
+    }
+
+    @MainActor @Test func quitConfirmationUsesOnlyFreshMatchingPCOrOwnLiveApp() {
+        let model = AppModel()
+        let host = pc()
+        var targets: [String] = []
+        for (id, date, expected) in [(host.id, Date(), "Hades II"),
+                                     ("other", Date(), "the running app"),
+                                     (host.id, Date.distantPast, "the running app")] {
+            model.hostLiveStatus = .init(hostID: id, state: .streamingApp(name: app.name), capturedAt: date)
+            model.confirmURLQuit(on: host) { target, pc in
+                targets.append(target.name)
+                #expect(target.name == expected && pc.id == host.id)
+            }
+        }
+        model.isStreaming = true
+        model.lastLaunchAttempt = (app, host)
+        model.confirmURLQuit(on: host) { target, _ in #expect(target == app) }
+        #expect(targets == ["Hades II", "the running app", "the running app"])
+    }
+
+    @MainActor @Test func nonJSONStatusReportsLiveIdleMalformedAndRejectedReplies() async throws {
+        let command = try GlimmerCLI.parse(["status"])
+        for (json, expected, code) in [("{\"live\":true}", "Streaming.\n", Int32(0)),
+                                        ("{\"live\":false}", "Not streaming.\n", Int32(0)),
+                                        ("invalid", "", Int32(1))] {
+            let terminal = CapturedTerminal()
+            let result = await CLITerminal.$write.withValue(terminal.write) {
+                await GlimmerCLI.status(command, appIsRunning: { true }, send: { _ in
+                    [CommandChannel.Key.event: CommandChannel.Event.accepted, CommandChannel.Key.detail: json]
+                })
+            }
+            #expect(result == code && terminal.out == expected)
+            #expect(terminal.err == (code == 0 ? "" : "Couldn't read the stream status. Try again.\n"))
+        }
+        let terminal = CapturedTerminal()
+        let result = await CLITerminal.$write.withValue(terminal.write) {
+            await GlimmerCLI.status(command, appIsRunning: { true }, send: { _ in
+                [CommandChannel.Key.event: CommandChannel.Event.accepted]
+            })
+        }
+        #expect(result == 1 && terminal.out.isEmpty)
+        #expect(terminal.err == "Glimmer didn't answer. Try again.\n")
+        let model = AppModel()
+        let idle = try object(await model.commandStatusJSON())
+        #expect(idle["live"] as? Bool == false && idle["pc"] is NSNull)
+    }
+
+    @MainActor @Test func appStatusReadsTheCurrentSessionAndRejectsSnapshotsAfterTeardown() async throws {
+        let model = AppModel()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
+        model.nativeSession = session
+        model.lastLaunchAttempt = (app, pc())
+        model.isStreaming = true
+        model.streamPhase = .streaming
+        model.nativeHDRActive = true
+        var snapshot = StreamStatsSnapshot()
+        snapshot.configuredFps = 120
+        snapshot.videoCodec = "HEVC"
+        snapshot.negotiatedBitrateMbps = 50
+        let live = try object(await model.commandStatusJSON { current in
+            #expect(current === session)
+            return (snapshot, false, (2560, 1440))
+        })
+        #expect(live["live"] as? Bool == true && live["hdr"] as? Bool == true)
+        #expect(live["resolution"] as? [String: Int] == ["width": 2560, "height": 1440])
+        #expect(live["fps"] as? Double == 120 && live["bitrateMbps"] as? Double == 50)
+        model.isReconnecting = true
+        let reconnecting = try object(await model.commandStatusJSON { _ in nil })
+        #expect(reconnecting["live"] as? Bool == false && reconnecting["hdr"] is NSNull)
+        #expect((reconnecting["app"] as? [String: Any])?["name"] as? String == app.name)
+        let retired = try object(await model.commandStatusJSON { _ in
+            model.nativeSession = nil
+            return (snapshot, false, (2560, 1440))
+        })
+        #expect(retired["live"] as? Bool == false && retired["pc"] is NSNull)
     }
 
     @Test func jsonFlagsAndStatusArityAreStrict() throws {

@@ -8,6 +8,7 @@
 //  and the chord that asks for it.
 //
 
+import GlimmerEngine
 import Testing
 @testable import Glimmer
 

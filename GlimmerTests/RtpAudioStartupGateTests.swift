@@ -8,6 +8,7 @@
 //  zero moved instead of waiting: paced, burst-then-drain, and the quiet-socket resolution.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -27,7 +28,7 @@ struct RtpAudioStartupGateTests {
 
     private static func receiver(_ sink: NativeAudioSink, encrypted: Bool = false) -> RtpAudioReceiver {
         RtpAudioReceiver(host: .ipv4(.loopback), audioPort: 0, pingPayload: [], audioPacketDuration: 5,
-                         opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+                         opusConfig: SdpScan.defaultOpusConfig, audioConfig: 0,
                          audioEncryption: encrypted, aesKey: EnetFixture.key,
                          aesIvId: [UInt8](repeating: 0, count: 16), sink: sink)
     }

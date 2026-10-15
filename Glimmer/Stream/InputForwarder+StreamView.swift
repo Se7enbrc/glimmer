@@ -10,6 +10,7 @@
 //  keep each unit focused.
 //
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
@@ -338,18 +339,7 @@ extension InputForwarder: StreamInputViewDelegate {
         // It still carries any sub-pixel fraction forward for the rare
         // NSEvent.deltaX/Y fallback (an event with no CGEvent backing), so
         // slow trackpad motion under 1px/event isn't rounded away.
-        mouseResidualX += accumDx
-        mouseResidualY += accumDy  // macOS deltaY is down-positive - matches Windows VK input.
-        // Send only what fits the wire's Int16 and keep the rest in the residual,
-        // so an oversized batch never loses the overflow to the clamp.
-        let outDx = Int16(clamping: Int(mouseResidualX.rounded(.towardZero)))
-        let outDy = Int16(clamping: Int(mouseResidualY.rounded(.towardZero)))
-        if outDx != 0 || outDy != 0 {
-            mouseResidualX -= Double(outDx)
-            mouseResidualY -= Double(outDy)
-            let rc = backend?.sendMouseMove(dx: outDx, dy: outDy) ?? -2
-            record("LiSendMouseMoveEvent", rc)
-        }
+        inputCore.sendRelativePointer(dx: accumDx, dy: accumDy)
 
         // Don't spam absolute position on every motion event - that's a
         // mode the host enters separately for Desktop apps. Most games want
@@ -413,50 +403,15 @@ extension InputForwarder: StreamInputViewDelegate {
     }
 
     func streamView(_ view: StreamInputView, handleScroll event: NSEvent) {
-        InputTimingContext.begin(source: .mouse, timestamp: event.timestamp)
+        InputTimingContext.begin(source: .mouse, timestamp: event.timestamp, handler: DispatchTime.now().uptimeNanoseconds)
         defer { InputTimingContext.end() }
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         noteInputEvent()
         guard isReady, forwardsMouseEvents else { return }
-        // DEADZONE REMOVED. This handler
-        // used to clamp each event's delta to ±1.0 line before the WHEEL_DELTA
-        // scale - a per-event magnitude cap added
-        // because a third-party mouse driver's button-pan flooded synthetic scroll events
-        // that the host's camera-zoom mapping amplified into wild zooming.
-        // That cap punished legitimate input:
-        // macOS scroll acceleration reports a fast wheel spin as multi-line
-        // deltas per event, which the clamp flattened to one line each - fast
-        // scrolling crawled no matter how hard the wheel was spun. Scroll now
-        // passes through at its reported magnitude.
-        //
-        // Unit normalisation (required for clean pass-through once the cap is
-        // gone): wheel mice report scrollingDelta in LINES; precise devices
-        // (trackpads, Magic Mouse, smooth-scroll drivers) report PIXELS,
-        // which would overshoot ~10× fed raw into the line-based WHEEL_DELTA
-        // scale. SDL's macOS backend (SDL_cocoamouse.m) converts precise
-        // deltas at 0.1 pixels→lines - the exact values moonlight-qt's
-        // non-Darwin path forwards as preciseY * 120 - so use the same
-        // factor. Sub-half-unit results round to zero and are skipped (the
-        // wire can't carry them; the next event in a momentum tail carries
-        // fresh magnitude, so nothing accumulates wrongly).
-        //
-        // Whole notches for precise devices: a trackpad arrives as 40-100 unit
-        // slices, which a game dividing by WHEEL_DELTA (120) reads as zero. A
-        // mouse wheel's units go out unchanged, as moonlight sends them.
         let precise = event.hasPreciseScrollingDeltas
-        let lineScale = precise ? 0.1 : 1.0
-        let y = Int((Double(event.scrollingDeltaY) * lineScale * 120).rounded())
-        let sendY = Int16(clamping: scrollQuantizer.consumeVertical(y, precise: precise))
-        if sendY != 0 {
-            let rc = backend?.sendScroll(sendY) ?? -2
-            record("LiSendHighResScrollEvent", rc)
-        }
-        let x = Int((Double(event.scrollingDeltaX) * lineScale * 120).rounded())
-        let sendX = Int16(clamping: scrollQuantizer.consumeHorizontal(x, precise: precise))
-        if sendX != 0 {
-            let rc = backend?.sendHScroll(sendX) ?? -2
-            record("LiSendHighResHScrollEvent", rc)
-        }
+        let ended = event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .ended
+        let sent = inputCore.sendScroll(x: Double(event.scrollingDeltaX), y: Double(event.scrollingDeltaY),
+                                        precise: precise, ended: ended)
         // Trace: what macOS delivered and what went out, on the frame trace's clock.
         if let tracker = FrameTimingTracker.shared {
             let nowMs = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0
@@ -465,12 +420,9 @@ extension InputForwarder: StreamInputViewDelegate {
                 + "\"precise\":\(precise),"
                 + "\"dy\":\(TelemetryRenderer.jsonNumber(Double(event.scrollingDeltaY))),"
                 + "\"dx\":\(TelemetryRenderer.jsonNumber(Double(event.scrollingDeltaX))),"
-                + "\"units_y\":\(y),\"sent_y\":\(sendY),\"sent_x\":\(sendX),"
+                + "\"units_y\":\(sent.unitsY),\"sent_y\":\(sent.sentY),\"sent_x\":\(sent.sentX),"
                 + "\"phase\":\(event.phase.rawValue),\"momentum\":\(event.momentumPhase.rawValue),"
                 + "\"t_ms\":\(TelemetryRenderer.jsonNumber(nowMs))}")
-        }
-        if event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .ended {
-            scrollQuantizer.reset()
         }
     }
 

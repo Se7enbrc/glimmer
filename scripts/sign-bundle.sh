@@ -49,6 +49,12 @@ if [ -d "$FW" ]; then
 	sign_plain "$FW"
 fi
 
+ENGINE="$APP/Contents/Frameworks/GlimmerEngine.framework"
+if [ -d "$ENGINE" ]; then
+	echo "Signing GlimmerEngine.framework without entitlements"
+	sign_plain "$ENGINE"
+fi
+
 HELPER="$APP/Contents/Library/LoginItems/Glimmer Login Helper.app"
 if [ -d "$HELPER" ]; then
 	echo "Signing Login Helper with its own entitlements"

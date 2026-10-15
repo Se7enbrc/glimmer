@@ -10,6 +10,7 @@
 //  that file for the forwarder's stored state.
 //
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
@@ -90,8 +91,7 @@ extension InputForwarder {
         guard !isMouseCaptured, let window, let inputView,
               inputView.window === window, window.isKeyWindow,
               !window.ignoresMouseEvents else { return }
-        mouseResidualX = 0
-        mouseResidualY = 0
+        inputCore.resetPointerMotion()
         // Reset the Cruise inter-batch clock AND the windowed-velocity accums
         // so the first post-focus motion reads a stale dt (>0.1s) and forces
         // gain==1.0 - never a spurious or carried-over boost on resume.

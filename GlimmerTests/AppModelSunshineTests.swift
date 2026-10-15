@@ -8,6 +8,7 @@
 //  PC list and pins in a scratch store: the requests sent, the state left behind, and the copy shown.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -44,6 +45,7 @@ struct FakePCModel {
 
     /// Stops the poll a selection starts, so only the test's own requests reach the fake.
     func settle() {
+        model.cancelHostReadiness()
         model.hostStatusTask?.cancel()
         model.hostPolling.movedHostSearch?.cancel()
     }
@@ -288,8 +290,9 @@ struct AppModelSunshineTests {
         #expect(model.nativeSession == nil)
         // A failed connect stamps its attempt in the model's own store.
         #expect(fixture.store.defaults.object(forKey: "glimmer.lastConnected.tower-id") is Date)
-        #expect(sunshine.paths == ["serverinfo", "serverinfo"])
-        #expect(sunshine.requests.map(\.tls) == [true, false])
+        #expect(Array(sunshine.paths.prefix(2)) == ["serverinfo", "serverinfo"])
+        #expect(sunshine.requests.prefix(2).map(\.tls) == [true, false])
+        #expect(sunshine.requests.dropFirst(2).allSatisfy { $0.path == "/serverinfo" && $0.tls })
     }
 
     @Test func aPCRunningGameStreamIsRefusedWithTheSharedSunshineCopy() async throws {
@@ -305,7 +308,7 @@ struct AppModelSunshineTests {
 
         #expect(model.nativeStreamError == AppModel.needsSunshineMessage("Tower"))
         #expect(model.nativeStreamErrorKind == .pairing)
-        #expect(sunshine.paths == ["serverinfo"])
+        #expect(!sunshine.paths.isEmpty && sunshine.paths.allSatisfy { $0 == "serverinfo" })
         #expect(!sunshine.paths.contains("launch"))
     }
 

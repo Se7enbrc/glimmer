@@ -8,6 +8,7 @@
 //  `glimmer list <pc> [--csv]`: the apps that PC offers right now.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension GlimmerCLI {

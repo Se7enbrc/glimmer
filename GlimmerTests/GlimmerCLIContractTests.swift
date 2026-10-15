@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  GlimmerCLIContractTests.swift
-//
-//  The command line's contract: what each argument shape parses to or is
-//  refused with, the exit status a bad invocation ends in, and the words the
-//  help and failures use. Nothing here touches a PC, the model or defaults.
-//
+// Keep argument parsing, exit codes and help consistent for scripts.
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -25,14 +20,16 @@ struct GlimmerCLIContractTests {
              apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
     }
 
-    @Test func exitCodesAreTheDocumentedFive() {
+    @Test func exitCodesAreTheDocumentedSix() {
         let exit = GlimmerCLI.Exit.self
-        #expect([exit.ok, exit.failed, exit.usage, exit.unreachable, exit.notPaired] == [0, 1, 2, 3, 4])
-        #expect(GlimmerCLI.usage.contains("Exit status: 0 success, 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired."))
+        #expect([exit.ok, exit.failed, exit.usage, exit.unreachable, exit.notPaired, exit.noActiveStream]
+            == [0, 1, 2, 3, 4, 5])
+        #expect(GlimmerCLI.usage.contains("4 PC not paired,"))
+        #expect(GlimmerCLI.usage.contains("5 no active stream."))
     }
 
     @Test func theHelpNamesEveryVerbAndFlagTheParserTakes() {
-        for verb in ["pair", "list", "status", "stream", "quit", "wake", "help"] {
+        for verb in ["pair", "list", "status", "stream", "stop", "quit", "wake", "help"] {
             #expect(GlimmerCLI.usage.contains("  \(verb)"), "\(verb)")
         }
         for flag in ["--pin", "--csv", "--force", "--wait", "--exit-after-first-frame", "--json"] {

@@ -13,6 +13,7 @@
 //  inline in `AppModel.swift`.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 
@@ -92,186 +93,22 @@ extension AppModel {
         return (w, h, fps)
     }
 
-    // MARK: - Bitrate formula
-
-    /// Port of Moonlight's StreamingPreferences::getDefaultBitrate.
-    /// Resolution table × frame-rate factor (sub-linear above 60 fps).
-    /// Exponent on the frame-rate curve past 60 fps. See `bitrateKbps` for why
-    /// 0.5 (plain sqrt) starves high-refresh panels; 0.75 is the one number to
-    /// turn if high-fps modes want more or less headroom.
-    static let frameRateExponent = 0.75
-
-    /// Ceiling on the computed dial. This is a WIRE budget that is discounted
-    /// twice downstream - once for codec efficiency (`codecBudgetMultiplier`,
-    /// 0.80 on AV1/HEVC) and once for FEC (`SdpBuilder`, another 0.80) - so the
-    /// encoder receives ~64% of it. 200_000 clipped 4K240 (which now computes
-    /// 226) back to a starved budget; 300_000 leaves the largest panels bounded
-    /// without clipping the modes this curve exists to serve.
-    nonisolated static let maxBitrateKbps = 300_000
+    static let frameRateExponent = StreamQuality.frameRateExponent
+    nonisolated static let maxBitrateKbps = StreamQuality.maxBitrateKbps
+    typealias MeasuredBitrateAnchor = StreamQuality.MeasuredBitrateAnchor
+    static let measuredBitrateAnchors = StreamQuality.measuredBitrateAnchors
 
     func bitrateKbps(width: Int, height: Int, fps: Int, preset: QualityPreset) -> Int {
-        let pixels = width * height
-
-        let table: [(Int, Double)] = [
-            (640 * 360, 1),
-            (854 * 480, 2),
-            (1280 * 720, 5),
-            (1920 * 1080, 10),
-            (2560 * 1440, 20),
-            (3840 * 2160, 40)
-        ]
-        // `table` is a non-empty literal; the guard pins `first`/`last` without
-        // force-unwrapping and degrades to the min-bitrate clamp if it ever isn't.
-        guard let firstEntry = table.first, let lastEntry = table.last else {
-            return 5_000
-        }
-        var resolutionFactor: Double = firstEntry.1
-        if pixels >= lastEntry.0 {
-            // Above 4K (5K/6K Apple panels): extrapolate off the 4K anchor by
-            // pixel ratio, mildly discounted (^0.9) for codec efficiency at
-            // higher resolution - mirroring the sub-linear fps curve below.
-            // Clamping flat at the 4K factor gave a 5K (14.7 Mpx) or 6K (20 Mpx)
-            // stream the same budget as 4K (8.3 Mpx) - roughly half the bits per
-            // pixel, which reads as smeared detail and banding on exactly the
-            // high-end Macs most likely to drive these resolutions. The 200 Mbps
-            // clamp at the end of this function still bounds the largest panels.
-            let fourKPixels = Double(lastEntry.0)
-            resolutionFactor = lastEntry.1 * pow(Double(pixels) / fourKPixels, 0.9)
-        } else {
-            for i in 0..<table.count {
-                if pixels == table[i].0 {
-                    resolutionFactor = table[i].1
-                    break
-                } else if pixels < table[i].0 {
-                    if i == 0 { resolutionFactor = table[i].1 } else {
-                        let prev = table[i - 1]
-                        let next = table[i]
-                        let lerp = Double(pixels - prev.0) / Double(next.0 - prev.0)
-                        resolutionFactor = lerp * (next.1 - prev.1) + prev.1
-                    }
-                    break
-                }
-            }
-        }
-
-        // Frame-rate factor: sub-linear past 60 fps. Higher frame rates make
-        // consecutive frames MORE similar, so P-frames genuinely need fewer bits
-        // each - the curve should be sub-linear. But `sqrt` (exponent 0.5) is far
-        // too steep once the multiple gets large, because bits-per-FRAME falls as
-        // 2^(e-1) per doubling: at 0.5 a 240Hz panel receives 0.708x the
-        // per-frame budget of a 120Hz one, which is visible blocking on exactly
-        // the high-refresh displays users buy for smoothness.
-        //
-        // Measured, 4K AV1 10-bit HDR on an RTX 5080 (NVENC CBR, P2, two-pass):
-        // at 240fps the encoder produced 47,320 bytes/frame against a 53,333
-        // budget - 89%, i.e. tracking its target, NOT quality-satisfied. It
-        // spends whatever it is given, so the budget IS the quality dial here.
-        // (Confirmed separately that Sunshine's nvenc_vbv_increase moved nothing:
-        // the per-frame VBV ceiling was never the constraint, the average
-        // bitrate target was.)
-        //
-        // 0.75 keeps the curve sub-linear - 240fps still gets 0.84x the
-        // per-frame bits of 120fps, crediting the extra temporal redundancy -
-        // while restoring 4K240 to the per-frame budget 4K120 receives today.
-        let fpsValue = Double(fps)
-        let frameRateFactor = (fpsValue <= 60
-            ? fpsValue
-            : (pow(fpsValue / 60.0, Self.frameRateExponent) * 60.0)) / 30.0
-
-        // Preset multiplier: the surviving presets all stream at the formula's
-        // reference bits-per-pixel and differ by RESOLUTION instead (HiDPI sends
-        // a quarter of the pixels, so the resolution factor already discounts it).
-        // Kept as an explicit switch so a future preset has to make a choice.
-        let presetMultiplier: Double
-        switch preset {
-        case .matchDisplay, .hidpi, .custom: presetMultiplier = 1.0
-        }
-
-        let kbps = Int((resolutionFactor * frameRateFactor * presetMultiplier).rounded() * 1000)
-        return min(max(kbps, 5_000), Self.maxBitrateKbps)
+        StreamQuality.bitrateKbps(width: width, height: height, fps: fps, preset: preset)
     }
 
-    // MARK: - Codec-aware budget
-
-    /// Discount on the H.264-anchored `bitrateKbps` budget for the intended top
-    /// codec (HEVC ~25% / AV1 more bits cheaper at equal quality). Conservative so
-    /// heavy scenes keep headroom; the 5 Mbps floor bounds the low end. Field-tunable.
     static func codecBudgetMultiplier(for formats: VideoFormats) -> Double {
-        switch formats.topCodec {
-        case .av1:  return 0.80
-        case .hevc: return 0.80
-        case .h264: return 1.0
-        }
+        StreamQuality.codecBudgetMultiplier(for: formats)
     }
 
-    // MARK: - Measured bitrate guidance (Tier 1: baked-in)
-
-    /// One mode our harness actually measured, and the wire bitrate we
-    /// recommend for it: measured demand plus ~20% headroom.
-    struct MeasuredBitrateAnchor {
-        let width: Int
-        let height: Int
-        let fps: Int
-        let recommendedMbps: Int
-    }
-
-    /// Harness-measured recommendation anchors. Provenance (wired
-    /// measurements, telemetry NDJSON):
-    ///   * 3024×1964@120 (MBP 14″ panel) - measured p95 66 Mbps of the 67.2
-    ///     encoder budget (84 wire × 0.8). The 84 default is correct;
-    ///     recommend 85.
-    ///   * 4K@120 - measured ~66 Mbps avg / 86 p95 → +20% headroom ≈ 100.
-    ///   * 4K@240 - measured p95 ~87 Mbps → +20% headroom ≈ 105.
-    /// Modes between/outside the anchors scale by the Moonlight formula
-    /// curve (`bitrateKbps`) re-anchored to these measured points - see
-    /// `recommendedBitrateMbps`. Sorted ascending by pixel-rate.
-    static let measuredBitrateAnchors: [MeasuredBitrateAnchor] = [
-        MeasuredBitrateAnchor(width: 3024, height: 1964, fps: 120, recommendedMbps: 85),
-        MeasuredBitrateAnchor(width: 3840, height: 2160, fps: 120, recommendedMbps: 100),
-        MeasuredBitrateAnchor(width: 3840, height: 2160, fps: 240, recommendedMbps: 105)
-    ]
-
-    /// Tier-1 recommendation for an arbitrary mode: the Moonlight formula
-    /// value rescaled by a measured-over-formula ratio, interpolated
-    /// linearly in pixel-rate (pixels × fps) between the anchors above. At
-    /// the anchors this reproduces the measured recommendations exactly
-    /// (85 / 100 / 105); below the smallest anchor the formula already
-    /// matches measurement (ratio ≈ 1), and above the largest we hold the
-    /// last ratio rather than extrapolate a trend we never measured.
-    /// Snapped to a 5 Mbps grid - these read as "~105", not false precision.
     func recommendedBitrateMbps(width: Int, height: Int, fps: Int) -> Int {
-        let formulaMbps = Double(bitrateKbps(width: width, height: height, fps: fps, preset: .matchDisplay)) / 1000.0
-        let points = Self.measuredBitrateAnchors.map { anchor -> (pixelRate: Double, ratio: Double) in
-            let anchorFormula = Double(bitrateKbps(
-                width: anchor.width, height: anchor.height, fps: anchor.fps, preset: .matchDisplay)) / 1000.0
-            return (Double(anchor.width * anchor.height) * Double(anchor.fps),
-                    Double(anchor.recommendedMbps) / anchorFormula)
-        }
-        let ratio = Self.interpolatedRatio(
-            at: Double(width * height) * Double(fps), points: points)
-        let mbps = (formulaMbps * ratio / 5.0).rounded() * 5.0
-        return max(5, Int(mbps))
+        StreamQuality.recommendedBitrateMbps(width: width, height: height, fps: fps)
     }
-
-    /// Piecewise-linear interpolation of the measured/formula ratio over
-    /// pixel-rate, clamped flat outside the anchored range. `points` must be
-    /// sorted ascending by pixel-rate (the anchor table is).
-    private static func interpolatedRatio(
-        at pixelRate: Double, points: [(pixelRate: Double, ratio: Double)]
-    ) -> Double {
-        guard let first = points.first, let last = points.last else { return 1.0 }
-        if pixelRate <= first.pixelRate { return first.ratio }
-        if pixelRate >= last.pixelRate { return last.ratio }
-        for (lower, upper) in zip(points, points.dropFirst()) where pixelRate <= upper.pixelRate {
-            let fraction = (pixelRate - lower.pixelRate) / (upper.pixelRate - lower.pixelRate)
-            return lower.ratio + fraction * (upper.ratio - lower.ratio)
-        }
-        return last.ratio
-    }
-
-    // Tier-2 LEARNED bitrate advice RETIRED: its session-AVERAGE-vs-~90%-ceiling
-    // trigger was unreachable (an average incl. idle time can't clear it). Re-keying
-    // off a goodput p95 needs a percentile accumulator the receipt lacks; deferred.
 
     // MARK: - Effective config + persistence
 
@@ -345,7 +182,7 @@ extension AppModel {
     /// Encoders need even dimensions for 4:2:0 video. A 16" MacBook Pro halves to 1728x1117, which a
     /// PC that builds its display to order (Apollo) took as asked and then never encoded (issue #110).
     nonisolated static func encodableSize(width: Int, height: Int) -> (width: Int, height: Int) {
-        (width & ~1, height & ~1)
+        StreamQuality.encodableSize(width: width, height: height)
     }
 
     private func rawValuesForPreset(_ preset: QualityPreset) -> PresetSnapshot {
@@ -373,7 +210,7 @@ extension AppModel {
     /// The spec surfaces promise HDR only when it is on and the display can
     /// show it (potential EDR headroom above 1; nil means no screen).
     nonisolated static func showsHDR(requested: Bool, edrHeadroom: CGFloat?) -> Bool {
-        requested && (edrHeadroom ?? 1) > 1
+        StreamQuality.showsHDR(requested: requested, edrHeadroom: edrHeadroom)
     }
 
     /// HiDPI preset target: the display's DEFAULT "looks like" logical
@@ -386,10 +223,8 @@ extension AppModel {
     /// degenerately small panel where halving would drop below 720p-ish.
     func hidpiDefaultsForCurrentDisplay() -> (width: Int, height: Int, fps: Int) {
         let native = smartDefaultsForCurrentDisplay()
-        let w = native.width / 2
-        let h = native.height / 2
-        guard w >= 1280, h >= 720 else { return native }
-        return (w, h, native.fps)
+        let size = StreamQuality.hidpiSize(width: native.width, height: native.height)
+        return (size.width, size.height, native.fps)
     }
 
     /// The names players use for standard modes; anything else, Mac panels included, reads as its size.

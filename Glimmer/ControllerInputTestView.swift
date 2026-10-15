@@ -9,6 +9,7 @@
 //  of TroubleshootingPane.swift to keep each file focused.
 //
 
+import GlimmerEngine
 import AppKit
 import GameController
 import SwiftUI

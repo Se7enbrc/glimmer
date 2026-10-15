@@ -13,6 +13,7 @@
 //  window involved.
 //
 
+import GlimmerEngine
 import CoreGraphics
 import Testing
 @testable import Glimmer

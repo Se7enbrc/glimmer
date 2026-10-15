@@ -10,6 +10,7 @@ final class DualSenseRouting: @unchecked Sendable {
     private let lock = NSLock()
     private var binder = DualSenseBinder()
     private var faces: [ObjectIdentifier: Set<DualSenseFaceButton>] = [:]
+    private var inputTokens: [ObjectIdentifier: UUID] = [:]
     private var slots: [UInt8: ObjectIdentifier] = [:]
 
     func device(for controller: ObjectIdentifier) -> DualSenseDeviceKey? {
@@ -26,6 +27,17 @@ final class DualSenseRouting: @unchecked Sendable {
     func controller(for device: DualSenseDeviceKey) -> ObjectIdentifier? {
         lock.lock(); defer { lock.unlock() }
         return binder.controller(for: device)
+    }
+
+    func inputRegistration(for device: DualSenseDeviceKey) -> (id: ObjectIdentifier, token: UUID)? {
+        lock.lock(); defer { lock.unlock() }
+        guard let id = binder.controller(for: device), let token = inputTokens[id] else { return nil }
+        return (id, token)
+    }
+
+    func registerInputToken(_ token: UUID, controller: ObjectIdentifier) {
+        lock.lock(); defer { lock.unlock() }
+        inputTokens[controller] = token
     }
 
     @MainActor func syncControllers() {
@@ -53,6 +65,7 @@ final class DualSenseRouting: @unchecked Sendable {
 
     func unregister(slot: UInt8) {
         lock.lock(); defer { lock.unlock() }
+        if let id = slots[slot] { inputTokens[id] = nil }
         slots[slot] = nil
     }
 

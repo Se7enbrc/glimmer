@@ -17,10 +17,22 @@ final class LauncherController {
     private var controllers: [GCController] = []
     private var repeats: [ObjectIdentifier: LauncherControllerRepeat] = [:]
     private let navigationEnabled: (() -> Bool)?
+    private let availableControllers: () -> [GCController]
+    private let now: () -> TimeInterval
+    private let keyWindow: () -> NSWindow?
+    private let postEvent: (NSEvent) -> Void
     var isPolling: Bool { timer != nil }
 
-    init(navigationEnabled: (() -> Bool)? = nil) {
+    init(navigationEnabled: (() -> Bool)? = nil,
+         availableControllers: @escaping () -> [GCController] = { GCController.controllers() },
+         now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+         keyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow },
+         postEvent: @escaping (NSEvent) -> Void = { NSApp.postEvent($0, atStart: false) }) {
         self.navigationEnabled = navigationEnabled
+        self.availableControllers = availableControllers
+        self.now = now
+        self.keyWindow = keyWindow
+        self.postEvent = postEvent
     }
 
     func attach(window: NSWindow?) {
@@ -77,7 +89,7 @@ final class LauncherController {
     /// Lifecycle's existing connect/disconnect observers refresh this list, as they do the controller chip.
     func refresh() {
         guard canNavigate else { stop(); return }
-        let live = GCController.controllers()
+        let live = availableControllers()
         let liveIDs = Set(live.map(ObjectIdentifier.init))
         for controller in controllers where !liveIDs.contains(ObjectIdentifier(controller)) {
             controller.extendedGamepad?.valueChangedHandler = nil
@@ -137,7 +149,7 @@ final class LauncherController {
         let inputs = inputs ?? currentInputs()
         for (id, input) in inputs {
             var repeatState = repeats[id] ?? LauncherControllerRepeat()
-            let commands = repeatState.commands(input, at: ProcessInfo.processInfo.systemUptime)
+            let commands = repeatState.commands(input, at: now())
             repeats[id] = repeatState
             for command in commands {
                 guard canNavigate else { return }
@@ -159,7 +171,7 @@ final class LauncherController {
 
     /// Local AppKit events let native menus and cancel buttons keep their own keyboard behavior, without TCC.
     func postKey(_ command: LauncherCommand) {
-        guard canNavigate, let target = NSApp.keyWindow else { return }
+        guard canNavigate, let target = keyWindow() else { return }
         let key = command == .activate && menuDepth > 0 ? (code: UInt16(36), characters: "\r") : command.key
         for type in [NSEvent.EventType.keyDown, .keyUp] {
             if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [],
@@ -167,7 +179,7 @@ final class LauncherController {
                                            windowNumber: target.windowNumber, context: nil,
                                            characters: key.characters, charactersIgnoringModifiers: key.characters,
                                            isARepeat: false, keyCode: key.code) {
-                NSApp.postEvent(event, atStart: false)
+                postEvent(event)
             }
         }
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import Foundation
 
 extension InputForwarder {
@@ -20,11 +21,11 @@ extension InputForwarder {
 
     func attachHID(_ pad: HIDGamepadDevice) {
         guard attachedHIDControllers[pad.id] == nil else { return }
-        guard let slot = (0..<UInt8(16)).first(where: { gamepadMask & (1 << $0) == 0 }) else {
+        guard let slot = inputCore.reserveControllerSlot() else {
             Diag.notice("HID attach refused: all 16 slots occupied (\(pad.name))", "Controller")
             return
         }
-        gamepadMask |= UInt16(1) << slot
+        publishInputSnapshot()
         registerNintendoController(slot: slot, type: NintendoControllerType.identify(pad))
         var caps = ControllerBattery.shared.register(slot: slot, hid: pad)
         if pad.mapping.hasAnalogTriggers { caps |= UInt16(StreamProtocol.LI_CCAP_ANALOG_TRIGGERS) }
@@ -53,24 +54,10 @@ extension InputForwarder {
     /// The pad's decoded state as values; `readState` re-reads it for the quit-chord dwell.
     func pushHID(slot: UInt8, state: (buttons: Int32, analog: GamepadAnalog),
                  readState: @escaping @MainActor () -> (buttons: Int32, analog: GamepadAnalog)?) {
-        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         guard forwardsControllerEvents else { return }
-        let chordHeld = matchesControllerQuitChord(buttons: state.buttons, leftTrigger: state.analog.leftTrigger,
-                                                   rightTrigger: state.analog.rightTrigger)
-        let isMouse = routeControllerMouse(slot: slot, buttons: state.buttons,
-                                           analog: state.analog, chordHeld: chordHeld)
-        if chordHeld {
-            armQuitChordDwell(slot: slot, readState: readState)
-            releaseSuppressedControllerButtons(slot: slot, buttons: state.buttons,
-                                               leftDown: state.analog.leftTrigger > 0,
-                                               rightDown: state.analog.rightTrigger > 0)
-            return
-        }
-        if quitChordDwellSlot == slot { cancelQuitChordDwell(reason: "HID chord released") }
-        guard !isMouse else { return }
-        let buttons = ControllerButtonLayout.apply(
-            state.buttons, useNintendoLabels: useNintendoLabels && nintendoControllerTypes[slot] != nil)
-        sendControllerState(slot: slot, buttons: buttons, analog: state.analog)
+        publishInputSnapshot()
+        let result = inputCore.receive(slot: slot, buttons: state.buttons, analog: state.analog)
+        if result == .chord { armQuitChordDwell(slot: slot, readState: readState) }
     }
 
     func detachHID(_ pad: HIDGamepadDevice, sendFinal: Bool = true) {
@@ -78,7 +65,7 @@ extension InputForwarder {
         inputCore.withLock {
             inputCore.hidRegistrations[attached.slot] = nil
             inputCore.current[attached.slot] = nil
-            inputCore.chordSlots.remove(attached.slot)
+            inputCore.updateChord(slot: attached.slot, held: false, invalidate: true)
         }
         pad.capture.setHandler(nil)
         nintendoControllerTypes[attached.slot] = nil

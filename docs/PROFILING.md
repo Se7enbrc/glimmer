@@ -9,6 +9,9 @@ Compare latency, consistency and recovery on the same real stream before
 changing engine defaults. For a user bug report, start with
 [recording a rough moment](guides/TROUBLESHOOTING.md#record-a-rough-moment).
 
+See [current performance validation](PERFORMANCE_VALIDATION.md) for GPU power,
+kernel receive timing, audio silence, refocus and display-rate investigations.
+
 ## Choose a measurement
 
 Start with the symptom and collect only the evidence you need.
@@ -208,6 +211,11 @@ PC/Mac fields `host` and `client` are per-install pseudonyms. Input trace events
 include `input_mouse`, `input_mouse_abs`, `input_pad`, `input_motion` at 20 Hz
 per sensor and `input_scroll`. They exclude keyboard keys, mouse buttons, pasted
 text and touchpad contacts. Review [privacy limits](PRIVACY.md) before sharing.
+
+`audio_output_silent_s` counts sampled seconds with nonzero input PCM but silent
+final-mixer output. Two consecutive samples log once per episode. Muted/empty
+input, missing samples and route replacement reset it. It cannot detect physical
+mute or acoustic faults after HAL; compare listening and `audio_output_state`.
 
 ### Retention and metrics access
 
@@ -527,7 +535,8 @@ Run the reset after the recording, not before it.
 
 ## Adding new signposts
 
-Reuse the closest shared signposter in `Glimmer/Stream/Signposts.swift`.
+Reuse the closest shared signposter in
+`GlimmerEngine/Diagnostics/Signposts.swift`.
 
 ```swift
 let id = OSSignposter.decode.makeSignpostID()

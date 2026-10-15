@@ -16,6 +16,32 @@ import Testing
 
 struct ResourceTelemetryTests {
 
+    @Test func gpuPowerUsesItsOwnRailAndChannelUnits() {
+        for (unit, value) in [("mJ", 1_380.0), ("uJ", 1_380_000.0), ("nJ", 1_380_000_000.0)] {
+            var power = EnergyPower(elapsedSeconds: 2)
+            let cpuAccepted = power.add(name: "CPU Energy", value: 6_000, unit: "mJ")
+            let gpuAccepted = power.add(name: "GPU Energy", value: value, unit: unit)
+            #expect(cpuAccepted && gpuAccepted)
+            #expect(power.gpu == 0.69)
+            #expect(power.package == 3.69)
+        }
+    }
+
+    @Test func missingInvalidAndIdleGpuRailsRemainDistinct() {
+        var power = EnergyPower(elapsedSeconds: 1)
+        #expect(power.gpu == nil && power.package == nil)
+        let unknownUnit = power.add(name: "GPU Energy", value: 10, unit: "unknown")
+        let counterReset = power.add(name: "GPU Energy", value: -1, unit: "nJ")
+        #expect(!unknownUnit && !counterReset && power.gpu == nil)
+        let cpuAccepted = power.add(name: "CPU Energy", value: 1_000, unit: "mJ")
+        #expect(cpuAccepted && power.gpu == nil)
+        let gpuAccepted = power.add(name: "GPU Energy", value: 0, unit: "nJ")
+        #expect(gpuAccepted && power.gpu == 0 && power.package == 1)
+        var invalidWindow = EnergyPower(elapsedSeconds: 0)
+        let invalidTime = invalidWindow.add(name: "GPU Energy", value: 100, unit: "mJ")
+        #expect(!invalidTime && invalidWindow.gpu == nil)
+    }
+
     /// Back-to-back samples often see no rail advance (about 1 in 5 did before
     /// the fix). Such a window must read as no sample, not a 0 W row.
     @Test(.enabled(if: IOReportSampler.shared != nil, "IOReport unavailable on this Mac"))

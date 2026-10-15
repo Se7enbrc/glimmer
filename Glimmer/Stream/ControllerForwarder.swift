@@ -22,6 +22,7 @@
 //  dwell in ControllerForwarder+QuitChord.swift.
 //
 
+import GlimmerEngine
 import AppKit
 import GameController
 
@@ -30,11 +31,7 @@ extension InputForwarder {
     // MARK: - Per-controller state
 
     /// What an arrival tells the PC about a pad: LI_CTYPE_*, button flags, LI_CCAP_* bits.
-    struct ControllerArrival: Equatable {
-        let type: UInt8
-        let supportedButtons: UInt32
-        let caps: UInt16
-    }
+    typealias ControllerArrival = GlimmerEngine.ControllerArrival
 
     struct AttachedController {
         let slot: UInt8           // 0..15, used as `controllerNumber`
@@ -146,12 +143,12 @@ extension InputForwarder {
         // Lowest free slot 0..15, Sunshine's 16-pad limit (MAX_GAMEPADS). A 17th pad is REFUSED: slot 0 would
         // double-map it, two handlers interleaving full states into one controllerNumber and a haptics
         // register tearing down the legitimate pad's engines.
-        guard let slot = (0..<UInt8(16)).first(where: { (gamepadMask & (1 << $0)) == 0 }) else {
+        guard let slot = inputCore.reserveControllerSlot() else {
             Diag.notice("controller attach refused: all 16 slots occupied "
                 + "(\(gamepad.vendorName ?? "Unknown"))", "Controller")
             return
         }
-        gamepadMask |= UInt16(1) << slot
+        publishInputSnapshot()
         registerNintendoController(slot: slot, type: NintendoControllerType.identify(gamepad),
                                    bottomSymbol: gamepad.extendedGamepad?.buttonA.sfSymbolsName ?? "unavailable")
         let priorPlayerIndex = gamepad.playerIndex
@@ -373,12 +370,7 @@ extension InputForwarder {
 
     func sendArrival(slot: UInt8, _ arrival: ControllerArrival) {
         guard flushPendingReleases() else { return }
-        let rc = backend?.sendControllerArrival(
-            num: slot, mask: gamepadMask, type: arrival.type,
-            supportedButtons: arrival.supportedButtons, caps: arrival.caps
-        ) ?? -2
-        record("LiSendControllerArrivalEvent", rc)
-        announcedControllers[slot] = arrival
+        let rc = inputCore.announceController(slot: slot, arrival: arrival)
         // Durable per-session witness of what the PC was told; record() only
         // reaches os_log. Arrivals replay once per pad per stream, so bounded.
         Diag.info("controller \(slot) arrival sent: "
@@ -391,10 +383,7 @@ extension InputForwarder {
     /// An empty event with the slot's bit cleared, which Sunshine takes as the pad leaving.
     func sendControllerRemoval(slot: UInt8) {
         inputCore.lock.lock(); defer { inputCore.lock.unlock() }
-        releases.controllerRemovals.insert(slot)
-        releases.hold(.controller(slot))
-        releases.release(.controller(slot))
-        controllerButtons[slot] = 0
+        inputCore.retireController(slot: slot)
         flushPendingReleases()
     }
 
@@ -418,7 +407,7 @@ extension InputForwarder {
     /// client's pads across a reconnect and ignores an arrival for a slot it holds.
     static func staleControllerSlots(announced: [UInt8: ControllerArrival],
                                      current: [UInt8: ControllerArrival]) -> [UInt8] {
-        announced.filter { current[$0.key] != $0.value }.keys.sorted()
+        InputCore.staleControllerSlots(announced: announced, current: current)
     }
 
     // MARK: - GCController -> moonlight type/flag derivation
@@ -499,10 +488,12 @@ extension InputForwarder {
         let routesHID = state.retainedHID
         publishInputSnapshot()
         let id = ObjectIdentifier(gamepad)
+        let token: UUID
         if let pad = gamepad.extendedGamepad {
-            inputCore.registerController(id: id, slot: slot, buttons: pressedButtonFlags(pad: pad),
+            token = inputCore.registerController(id: id, slot: slot, buttons: pressedButtonFlags(pad: pad),
                                          analog: Self.controllerAnalog(pad))
-        }
+        } else { return }
+        dualSenseRouting.registerInputToken(token, controller: id)
         gamepad.extendedGamepad?.valueChangedHandler = nil
         gamepad.handlerQueue = controllerCaptureQueue
         // Reassert on main whenever handlers heal, before capture can run.
@@ -515,22 +506,18 @@ extension InputForwarder {
             defer { InputTimingContext.end() }
             guard let self else { return }
             if routesHID { DualSenseRouting.shared.gc(pad: pad) }
-            inputCore.lock.lock(); defer { inputCore.lock.unlock() }
-            guard inputCore.controllers[id]?.slot == slot,
-                  inputCore.snapshot.ready, inputCore.snapshot.focused,
-                  pad.lastEventTimestamp >= inputCore.snapshot.acceptEventsAfter else { return }
             let buttons = self.pressedButtonFlags(pad: pad)
-            let analog = Self.controllerAnalog(pad)
-            inputCore.receiveController(id: id, buttons: buttons, analog: analog,
-                                        chordButtons: Self.controllerChordButtons(pad, buttons: buttons),
-                                        capturedAt: pad.lastEventTimestamp)
-            if let touch = self.touchpadElements(of: pad) {
-                inputCore.forwardTouchpad(slot: slot,
-                    primary: (touch.primary.xAxis.value, touch.primary.yAxis.value),
-                    secondary: (touch.secondary.xAxis.value, touch.secondary.yAxis.value),
-                    clicked: touch.button.isPressed, now: pad.lastEventTimestamp)
+            let surface = self.touchpadElements(of: pad).map {
+                ControllerTouchpadSample(primaryX: $0.primary.xAxis.value, primaryY: $0.primary.yAxis.value,
+                    secondaryX: $0.secondary.xAxis.value, secondaryY: $0.secondary.yAxis.value,
+                    clicked: $0.button.isPressed)
             }
-            inputCore.retainMouseTiming(slot: slot)
+            inputCore.acceptController(id: id, token: token, buttons: buttons,
+                                        axes: ((pad.leftTrigger.value, pad.rightTrigger.value),
+                                            (pad.leftThumbstick.xAxis.value, pad.leftThumbstick.yAxis.value),
+                                            (pad.rightThumbstick.xAxis.value, pad.rightThumbstick.yAxis.value)),
+                                        chordButtons: Self.controllerChordButtons(pad, buttons: buttons),
+                                        touchpad: surface, capturedAt: pad.lastEventTimestamp)
         }
         // Centre-button edges reuse the bound pad's captured GC axes, without resubmitting touches.
         // Raw shoulders also recheck the chord when GameController withholds a gesture-bound frame.

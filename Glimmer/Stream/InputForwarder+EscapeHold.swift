@@ -20,6 +20,7 @@
 //  released state to return to, so nothing here ever arms.
 //
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 

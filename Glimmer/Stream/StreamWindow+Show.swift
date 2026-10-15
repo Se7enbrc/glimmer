@@ -10,6 +10,7 @@
 //  to keep each unit focused; see that file for the window's stored state.
 //
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreGraphics

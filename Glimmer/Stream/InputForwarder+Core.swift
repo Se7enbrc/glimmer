@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import Foundation
 import Observation
 
@@ -61,11 +62,18 @@ extension InputForwarder {
 
     func connectInputCore() {
         inputCore.withLock {
+            inputCore.onMotionInputEnabled = { slot, enabled in
+                ControllerMotion.shared.setInputEnabled(enabled, slot: slot)
+            }
             inputCore.onMouseMode = { [weak self] slot, enabled in
-                DispatchQueue.main.async { self?.controllerMouseModeChanged(slot: slot, enabled: enabled) }
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated { self?.controllerMouseModeChanged(slot: slot, enabled: enabled) }
+                } else { DispatchQueue.main.async { self?.controllerMouseModeChanged(slot: slot, enabled: enabled) } }
             }
             inputCore.onActivity = { [weak self] in
-                DispatchQueue.main.async { self?.updateReconciliationTimer() }
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated { self?.updateReconciliationTimer() }
+                } else { DispatchQueue.main.async { self?.updateReconciliationTimer() } }
             }
             inputCore.onCenterPartial = { [weak self] slot in
                 DispatchQueue.main.async {
@@ -74,21 +82,29 @@ extension InputForwarder {
                     self.quitChordBreadcrumb(.partial, "partial hold on slot \(slot)", pad: pad)
                 }
             }
-            inputCore.onChord = { [weak self, weak inputCore] slot, held in
-                DispatchQueue.main.async {
-                    guard let self, let inputCore else { return }
-                    let stillHeld = inputCore.withLock { inputCore.chordSlots.contains(slot) }
-                    guard held == stillHeld else { return }
-                    let pad = self.attachedControllers.values.first { $0.slot == slot }?.controller?.extendedGamepad
-                    if held {
-                        self.armQuitChordDwell(slot: slot, pad: pad) { inputCore.state(slot: slot) }
-                    } else if self.quitChordDwellSlot == slot {
-                        self.cancelQuitChordDwell(reason: "released before the dwell elapsed", pad: pad)
-                    }
+            inputCore.onChord = { [weak self] slot, held, edge in
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated { self?.capturedChordChanged(slot: slot, held: held, edge: edge) }
+                } else {
+                    DispatchQueue.main.async { self?.capturedChordChanged(slot: slot, held: held, edge: edge) }
                 }
             }
         }
         publishInputSnapshot()
         observeControllerConfiguration()
+    }
+    func capturedChordChanged(slot: UInt8, held: Bool, edge: UUID) {
+        guard inputCore.withLock({ inputCore.chordEdges[slot] == edge && inputCore.chordSlots.contains(slot) == held })
+            else { return }
+        let pad = attachedControllers.values.first { $0.slot == slot }?.controller?.extendedGamepad
+        guard held else {
+            cancelQuitChordDwell(reason: "released before the dwell elapsed", pad: pad, slot: slot)
+            return
+        }
+        if let pad {
+            armQuitChordDwell(pad: pad, slot: slot, edge: edge)
+        } else if let hid = attachedHIDControllers.values.first(where: { $0.slot == slot })?.device {
+            armQuitChordDwell(slot: slot, edge: edge) { [weak hid] in hid?.state }
+        } else { armQuitChordDwell(slot: slot, edge: edge) { [inputCore] in inputCore.state(slot: slot) } }
     }
 }

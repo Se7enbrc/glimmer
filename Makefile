@@ -85,12 +85,13 @@ CREDS           := scripts/signing-creds.sh
 # which the login keychain can't promise. Created by `make codesign-setup`.
 SIGN_KEYCHAIN   ?= $(HOME)/Library/Keychains/developer-id.keychain-db
 # Version single source of truth: Glimmer/Version.xcconfig (NOT pbxproj).
-MARKETING_VERSION := $(shell sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' Glimmer/Version.xcconfig | tr -d ' ')
+RELEASE_VERSION_CONFIG ?= Glimmer/Version.xcconfig
+MARKETING_VERSION := $(shell sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' "$(RELEASE_VERSION_CONFIG)" | tr -d ' ')
 DMG_NAME        := Glimmer-$(MARKETING_VERSION).dmg
 DIST_DIR        := $(DERIVED)/dist
 APPCAST_FEED    := $(DERIVED)/appcast.xml
 # Build number (CFBundleVersion) - the monotonic stamp Sparkle keys updates on.
-BUILD_NUMBER    := $(shell sed -n 's/^CURRENT_PROJECT_VERSION = \(.*\)/\1/p' Glimmer/Version.xcconfig | tr -d ' ')
+BUILD_NUMBER    := $(shell sed -n 's/^CURRENT_PROJECT_VERSION = \(.*\)/\1/p' "$(RELEASE_VERSION_CONFIG)" | tr -d ' ')
 # Repo that hosts the Sparkle appcast (GitHub Pages) + release assets - the
 # public source repo itself.
 RELEASES_REPO   ?= Se7enbrc/glimmer
@@ -116,9 +117,9 @@ HELPER_SDK    := $(shell xcrun --sdk macosx --show-sdk-path)
 HELPER_TARGET := arm64-apple-macos26.0
 HELPER_BUNDLE := $(GLIMMER_APP_SRC)/Contents/Library/LaunchServices/Glimmer Network Helper.app
 
-.PHONY: all release install reinstall uninstall clean app sign open \
+.PHONY: all release install reinstall uninstall clean app sign sign-bundle open \
         helper-build embed-helper \
-        profile profile-signposts setup-notary notarize dmg dmg-background sparkle-zip dist preflight \
+        profile profile-signposts setup-notary notarize notarize-bundle dmg dmg-background sparkle-zip dist preflight \
         codesign-setup codesign-teardown ensure-signing dev test test-asan \
         creds-init enable-telem disable-telem release-publish sparkle-keys \
         guard-clean-tree guard-release-version appcast-feed check verify test-scripts brew-bump rc
@@ -237,16 +238,12 @@ embed-helper: app $(HELPER_BIN)
 	@install -m 0644 "$(HELPER_PLIST)" "$(GLIMMER_APP_SRC)/Contents/Library/LaunchDaemons/$(HELPER_LABEL).plist"
 	@echo "  ✓ helper bundle and launchd service embedded"
 
-# Each executable receives only its own profile and entitlements.
-sign: app embed-helper ensure-signing
-	@test -n "$(strip $(DEVELOPER_ID))" || { echo "ERR: restricted capabilities require Developer ID signing" >&2; exit 1; }
-	@echo "▶ Signing bundle inside-out with: $(DEVELOPER_ID)"
-	scripts/sign-bundle.sh "$(GLIMMER_APP_SRC)" "$(DEVELOPER_ID)" "$(SIGN_KEYCHAIN)" $(if $(filter Release,$(CONFIG)),Glimmer/Glimmer.entitlements,Glimmer/Glimmer-Debug.entitlements)
+include scripts/release-bundle.mk
 
 # Install the everything-but-publish build (see `release`) to /Applications.
 # `reinstall`/`open`/`dev` build on this.
 install: release appcast-feed
-	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast "$(APPCAST_FEED)" --app "$(DERIVED)/Build/Products/Release/Glimmer.app" --validate-distribution
+	@python3 scripts/release_validation.py --config "$(RELEASE_VERSION_CONFIG)" --appcast "$(APPCAST_FEED)" --app "$(DERIVED)/Build/Products/Release/Glimmer.app" --validate-distribution
 	@SRC="$(DERIVED)/Build/Products/Release/Glimmer.app"; \
 	echo "▶ Installing Glimmer.app to $(GLIMMER_APP_DST)..."; \
 	if [ -d "$(GLIMMER_APP_DST)" ]; then echo "  removing existing $(GLIMMER_APP_DST)"; rm -rf "$(GLIMMER_APP_DST)"; fi; \
@@ -400,44 +397,6 @@ setup-notary:
 		--keychain "$(SIGN_KEYCHAIN)"; \
 	echo "  ✓ notary profile stored (dedicated keychain - readable from any session)"
 
-# Notarize the signed bundle: zip, submit and wait, then staple. Re-runs
-# ensure-signing first: the Release build before it is long enough for a sleep
-# to re-lock the keychain holding the notary profile.
-notarize: sign appcast-feed
-	@test -n "$(strip $(DEVELOPER_ID))" || { echo "ERR: no Developer ID cert - can't notarize" >&2; exit 1; }
-	@$(MAKE) --no-print-directory ensure-signing
-	@echo "▶ Notarizing $(GLIMMER_APP_SRC)..."
-	@rm -f "$(DERIVED)/Glimmer-notarize.zip"
-	ditto -c -k --sequesterRsrc --keepParent "$(GLIMMER_APP_SRC)" "$(DERIVED)/Glimmer-notarize.zip"
-	xcrun notarytool submit "$(DERIVED)/Glimmer-notarize.zip" \
-		--keychain-profile "$(NOTARY_PROFILE)" --keychain "$(SIGN_KEYCHAIN)" --wait
-	xcrun stapler staple "$(GLIMMER_APP_SRC)"
-	@rm -f "$(DERIVED)/Glimmer-notarize.zip"
-	@echo "  ✓ notarized + stapled"
-	@spctl --assess --type execute --verbose=2 "$(GLIMMER_APP_SRC)"
-	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast "$(APPCAST_FEED)" --app "$(GLIMMER_APP_SRC)" --validate-distribution
-
-# Build a distributable DMG from the signed (and ideally notarized) bundle.
-# scripts/make-dmg.sh does the hdiutil + Finder-AppleScript dance (background
-# art, window bounds, icon positions, baked .DS_Store) with no Homebrew
-# dependency; it degrades to a plain-but-installable DMG if Finder scripting is
-# unavailable, so a release never fails over cosmetics. Same output path/name as
-# before, so `dist`, `release-publish`, and the Homebrew bump are unaffected.
-dmg:
-	@test -d "$(GLIMMER_APP_SRC)" || { echo "ERR: build first (make release)" >&2; exit 1; }
-	@echo "▶ Building $(DMG_NAME)..."
-	@rm -rf "$(DIST_DIR)" && mkdir -p "$(DIST_DIR)"
-	@scripts/make-dmg.sh "$(GLIMMER_APP_SRC)" "$(DIST_DIR)/$(DMG_NAME)" "Glimmer $(MARKETING_VERSION)"
-	@echo "  ✓ $(DIST_DIR)/$(DMG_NAME)"
-	@shasum -a 256 "$(DIST_DIR)/$(DMG_NAME)"
-
-# Package the final stapled app before attestation or publication.
-sparkle-zip:
-	@test -d "$(GLIMMER_APP_SRC)" || { echo "ERR: build first (make release)" >&2; exit 1; }
-	@mkdir -p "$(DIST_DIR)"
-	@rm -f "$(DIST_DIR)/Glimmer-$(MARKETING_VERSION).zip"
-	@ditto -c -k --sequesterRsrc --keepParent "$(GLIMMER_APP_SRC)" "$(DIST_DIR)/Glimmer-$(MARKETING_VERSION).zip"
-
 # Regenerate the DMG window background art (scripts/dmg/*.png). Committed, so
 # this only needs re-running when the layout or palette changes - keep it in
 # step with the geometry in scripts/make-dmg.sh.
@@ -500,7 +459,7 @@ appcast-feed:
 	@git show refs/remotes/origin/appcast:appcast.xml >"$(APPCAST_FEED)"
 
 guard-release-version: appcast-feed
-	@python3 scripts/release_validation.py --config Glimmer/Version.xcconfig --appcast "$(APPCAST_FEED)"
+	@python3 scripts/release_validation.py --config "$(RELEASE_VERSION_CONFIG)" --appcast "$(APPCAST_FEED)"
 
 # Full distribution pipeline: clean-tree gate → preflight (fail fast, see above)
 # → clean Release → Developer ID sign → notarize + staple → DMG. The
@@ -519,6 +478,7 @@ check:
 	@echo "▶ Check (workflows + lint --strict + release-tool tests)..."
 	@actionlint
 	@scripts/check-spdx.sh
+	@python3 scripts/check-engine-boundary.py
 	@swiftlint lint --strict --quiet
 	@$(MAKE) test-scripts
 

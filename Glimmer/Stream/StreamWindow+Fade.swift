@@ -3,6 +3,7 @@
 
 // First-frame fade-in and close after the native Space has finished exiting.
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import QuartzCore
@@ -18,7 +19,7 @@ extension StreamWindow {
             guard !pendingFirstFrameReveal else { return }
             pendingFirstFrameReveal = true
             // AppKit can drop settlement delivery; never strand a decoded picture behind alpha zero.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            scheduleCoverSettlement(1.5) { [weak self] in
                 guard let self, self.pendingFirstFrameReveal else { return }
                 self.revealFirstFrame()
             }

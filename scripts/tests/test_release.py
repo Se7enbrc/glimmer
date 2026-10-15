@@ -39,6 +39,8 @@ class ReleaseValidationTests(unittest.TestCase):
             (root / "Glimmer/Version.xcconfig").write_text(
                 "MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 400\n")
             shutil.copy2(SCRIPTS.parent / "Makefile", root / "Makefile")
+            (root / "scripts").mkdir()
+            shutil.copy2(SCRIPTS / "release-bundle.mk", root / "scripts/release-bundle.mk")
             app = root / "prepared app/Glimmer.app"
             app.mkdir(parents=True)
             output = root / "prepared assets"

@@ -7,6 +7,7 @@
 //  The stream value types' wire encodings, overlay labels, codec ranking and error copy.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 
@@ -15,6 +16,19 @@ import Testing
 struct StreamTypesTests {
 
     /// Limelight.h's STREAM_CFG_*, COLORSPACE_* and COLOR_RANGE_* values.
+    @Test func mediaRequestAndMacConfigurationShareTheSameValues() {
+        var config = StreamConfig(width: 1920, height: 1080, fps: 60, bitrateKbps: 20_000)
+        #expect(config.request.packetSize == 1392 && config.request.audio == .surround71)
+        #expect(config.request.videoFormats == .probedSupported)
+        config.width = 2560
+        config.audio = .stereo
+        config.playAudioOnHost = true
+        #expect(config.request.width == 2560 && config.request.audio == .stereo)
+        #expect(config.request.playAudioOnHost)
+        config.request.fps = 120
+        #expect(config.fps == 120 && config.displayMode == .fullScreen)
+    }
+
     @Test func configEnumsEncodeLimelightValues() {
         #expect([Remoteness.local, .remote, .auto].map(\.cValue) == [0, 1, 2])
         #expect([ColorSpace.rec601, .rec709, .rec2020].map(\.cValue) == [0, 1, 2])

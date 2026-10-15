@@ -8,6 +8,7 @@
 //  the builder's escaping and histogram layout, and which sections a sparse snapshot omits.
 //
 
+import GlimmerEngine
 import CryptoKit
 import Foundation
 import Testing
@@ -109,7 +110,7 @@ struct TelemetryPrometheusRenderTests {
             "glimmer_power_on_battery": 1,
             "glimmer_power_battery_charging": 0, "glimmer_soc_ecluster_active_residency": 0.25,
             "glimmer_soc_pcluster_active_residency": 0.75, "glimmer_package_power_w": 9.5,
-            "glimmer_gpu_residency_percent": 38.5, "glimmer_handshake_rtsp_ms": 120.5,
+            "glimmer_gpu_power_w": 0.69, "glimmer_gpu_residency_percent": 38.5, "glimmer_handshake_rtsp_ms": 120.5,
             "glimmer_handshake_control_setup_ms": 15, "glimmer_handshake_enet_connect_ms": 80.25,
             "glimmer_handshake_first_frame_ms": 210, "glimmer_handshake_total_ms": 425.75,
             "glimmer_connect_click_to_first_frame_ms": 900, "glimmer_launch_path_ms": 470,
@@ -153,7 +154,7 @@ struct TelemetryPrometheusRenderTests {
 
     @Test func everySampleCarriesTheSessionClientAndPseudonymousHostLabels() {
         let body = fullBody()
-        let shared = "session=\"abcd1234\",client=\"\(TelemetryRenderer.clientLabel)\",host=\"deadbeef\""
+        let shared = "session=\"abcd1234\",client=\"\(Fixtures.snapshot().clientLabel)\",host=\"deadbeef\""
         let samples = body.split(separator: "\n").filter { !$0.hasPrefix("#") }
         #expect(samples.count > 200)
         #expect(samples.allSatisfy { $0.contains(shared) })
@@ -272,7 +273,8 @@ struct TelemetryPrometheusRenderTests {
                        "glimmer_wifi_link_state", "glimmer_handshake_rtsp_ms", "glimmer_decode_hw_accelerated",
                        "glimmer_latency_end_to_end_ms_count", "glimmer_idr_round_trip_request_total",
                        "glimmer_vt_session_create_ms", "glimmer_cruise_max_gain", "glimmer_env_state",
-                       "glimmer_display_hdr_engaged", "glimmer_thread_cpu_percent", "glimmer_on_battery"] {
+                       "glimmer_display_hdr_engaged", "glimmer_thread_cpu_percent", "glimmer_on_battery",
+                       "glimmer_gpu_power_w"] {
             #expect(metrics[absent] == nil, "\(absent) should be omitted")
         }
         #expect(metrics["glimmer_rfi_total"]?.first?.value == 0)

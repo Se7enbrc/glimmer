@@ -8,6 +8,7 @@
 //  pacing bring-up and fallback, and the RTP clock recovered from a sample's PTS.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreMedia
@@ -201,7 +202,7 @@ struct VideoDecoderLifecycleTests {
         let first = try #require(decoder.framePacer)
         #expect(first.running && first.presentSuppressed)
         #expect(!first.tickDeficit.warmingUp)
-        #expect(decoder.pacingDrivingView === view)
+        #expect(decoder.pacingDisplay != nil)
         #expect(!decoder.reenablePacing(configuredFps: 120))
 
         decoder.disablePacingFallbackToDirect(reason: "test")

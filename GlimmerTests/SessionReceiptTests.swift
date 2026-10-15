@@ -9,6 +9,7 @@
 //  never arrived stated as such.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

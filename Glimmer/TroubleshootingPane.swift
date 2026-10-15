@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TroubleshootingPane.swift
-//
-//  The Extra DualSense buttons control in Settings › Input, and the one Input
-//  Monitoring flow every controller path shares. The name outlived its pane.
-//
+// The Input Monitoring flow is shared by every controller path.
 
 import AppKit
 import Combine
@@ -110,14 +105,19 @@ enum InputMonitoring {
     }
 
     /// The request blocks its thread while the prompt is up, so it never runs on main.
-    @MainActor static func ask() {
-        switch step(for: state) {
-        case .reopenReaders: reopenReaders()
-        case .openSettings: openSettings()
+    @MainActor static func ask(
+        access: State? = nil,
+        reopen: @escaping @MainActor @Sendable () -> Void = { reopenReaders() },
+        settings: @MainActor () -> Void = { openSettings() },
+        request: @escaping @Sendable () -> Bool = { IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) }
+    ) {
+        switch step(for: access ?? state) {
+        case .reopenReaders: reopen()
+        case .openSettings: settings()
         case .systemPrompt:
             DispatchQueue.global(qos: .userInitiated).async {
-                let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-                if granted { DispatchQueue.main.async { reopenReaders() } }
+                let granted = request()
+                if granted { DispatchQueue.main.async { reopen() } }
             }
         }
     }
@@ -131,10 +131,10 @@ enum InputMonitoring {
     @MainActor private static var lastSeen = state
 
     /// On return to Glimmer, a grant made in System Settings takes effect without a relaunch.
-    @MainActor static func noticeReturn() {
-        let now = state
+    @MainActor static func noticeReturn(access: State? = nil, reopen: () -> Void = { reopenReaders() }) {
+        let now = access ?? state
         defer { lastSeen = now }
-        if now == .granted, lastSeen != .granted { reopenReaders() }
+        if now == .granted, lastSeen != .granted { reopen() }
     }
 
     @MainActor static func openSettings() {

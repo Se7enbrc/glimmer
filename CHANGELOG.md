@@ -4,6 +4,15 @@
 
 ### Features
 
+- Stop the current stream and quit its game on the PC from a `glimmer://stop`
+  link, `glimmer stop` or the Stop Streaming shortcut.
+
+- Smoother motion when the PC can't hold your display's refresh rate. On a
+  variable-refresh display, refresh changes settle before taking effect and stay
+  in a high range to reduce brightness flicker. On a fixed display, repeated
+  frames are spaced evenly. When you switch away, Glimmer leaves the display's
+  refresh rate to macOS.
+
 - Quieter, more consistent transitions across the launcher, stream and settings,
   including Reduce Motion.
 - Open a stream, wake a PC or ask to quit a PC app with a `glimmer://` link.
@@ -40,6 +49,18 @@
 - The readiness chip shows Ready and latency when the PC is reachable.
 
 ### Bug fixes
+
+- After a stream ends, Glimmer briefly waits for the PC to finish before
+  offering another stream. The launcher explains the wait, and command-line
+  launches wait too.
+- If a PC that has streamed video before sends none, the message asks you to try
+  again instead of changing the firewall.
+- Optional diagnostics report GPU power in watts alongside time awake, so
+  low-clock activity is not mistaken for heavy GPU use.
+
+- Returning to a full-screen stream waits for its transition to settle before
+  resuming video. A missed animation callback no longer leaves the window
+  transparent.
 
 - Idle controller mouse mode no longer keeps polling, and hidden stream windows
   skip stats-overlay updates. Audio avoids repeated device queries while sound

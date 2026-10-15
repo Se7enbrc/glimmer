@@ -13,6 +13,7 @@
 //  remoteness, the controller decides, StreamSession owns the side effects.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

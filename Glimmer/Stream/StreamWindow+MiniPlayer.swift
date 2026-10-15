@@ -16,6 +16,7 @@
 //  full-screen user lands back in full screen and the window user in a window.
 //
 
+import GlimmerEngine
 import AppKit
 
 extension StreamWindow {

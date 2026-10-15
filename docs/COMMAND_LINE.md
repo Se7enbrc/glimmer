@@ -16,6 +16,7 @@
 | -------------------------------------- | ------------------------------------------------------------------------- |
 | `glimmer pair 192.0.2.10 [--pin NNNN]` | Pair; enter generated or supplied four-digit PIN on Sunshine's PIN page.  |
 | `glimmer list [<pc>] [--csv\|--json]`  | List PCs, or a PC's apps. CSV app columns: Name, ID, HDR Support, Hidden. |
+| `glimmer stop [<pc>] [--json]`         | End the local stream and its PC app; optional PC must match.              |
 | `glimmer status [--json]`              | Local stream; doesn't open Glimmer or contact PC.                         |
 | `glimmer stream <pc> [<app>]`          | Stream; omitted app prefers running app, then Start with.                 |
 
@@ -43,13 +44,14 @@ There is no disconnect command.
 
 ## Exit status
 
-| Code | Meaning                                           |
-| ---- | ------------------------------------------------- |
-| 0    | Success.                                          |
-| 1    | Failure, including running Glimmer not answering. |
-| 2    | Usage error.                                      |
-| 3    | PC unreachable.                                   |
-| 4    | Unpaired PC, trust failure or no saved match.     |
+| Code | Meaning                                                                     |
+| ---- | --------------------------------------------------------------------------- |
+| 0    | Success.                                                                    |
+| 1    | Failure, including no app response or a stop request naming a different PC. |
+| 2    | Usage error.                                                                |
+| 3    | PC unreachable.                                                             |
+| 4    | Unpaired PC, trust failure or no saved match.                               |
+| 5    | Nothing is streaming.                                                       |
 
 ## URL commands
 
@@ -57,15 +59,16 @@ There is no disconnect command.
 | --------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `glimmer://stream?pc=Living%20Room&app=Steam` | Start or bring matching stream forward; normal takeover checks.                      |
 | `glimmer://wake?pc=Living%20Room`             | Wake without activating Glimmer; shell: `open -g 'glimmer://wake?pc=Living%20Room'`. |
+| `glimmer://stop`                              | Stop the current stream; optional `pc` limits it to that saved PC.                   |
 | `glimmer://quit?pc=Living%20Room`             | Always confirm, even when running app unknown.                                       |
 
 | Parameter | Rule                                                                                                                          |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `pc`      | Required saved name, ID or address; case-insensitive.                                                                         |
+| `pc`      | Saved name, ID or address; case-insensitive. Required except for stop.                                                        |
 | `app`     | Optional for stream only; omitted prefers known running app, then Start with.                                                 |
 | Encoding  | Percent-encode; `%20` is space, `+` is literal plus.                                                                          |
 | Rejected  | Unknown action/PC/app, unknown or duplicate parameters, empty/control-character values, paths, credentials, ports, fragments. |
-| Limits    | No flags, confirmation bypass, stop or pair action. Invalid links ignored without logging URL or PC name.                     |
+| Limits    | No flags, confirmation bypass or pair action. Invalid links ignored without logging URL or PC name.                           |
 
 ## JSON for automation
 

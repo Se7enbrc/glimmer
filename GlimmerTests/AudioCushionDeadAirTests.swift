@@ -9,6 +9,7 @@
 //  once per window, and a quiet window walks a learned floor back down.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

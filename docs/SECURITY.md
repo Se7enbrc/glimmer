@@ -51,7 +51,9 @@ recordings.
 ## Local commands and links
 
 [`glimmer://` links](COMMAND_LINE.md#url-commands) work only with saved PCs.
-Quit links always ask; stream links keep takeover checks.
+Quit links always ask; stream links keep takeover checks. Stop links end the
+current local stream and its PC app without confirmation; an optional PC limits
+the request. Treat local automation as trusted software.
 
 ## Network paths
 

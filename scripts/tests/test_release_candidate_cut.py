@@ -16,6 +16,9 @@ import unittest
 SCRIPTS = Path(__file__).resolve().parents[1]
 VERSION = "2026.10.6"
 BUILD = "20261010"
+RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-publication.yml",
+                 "scripts/ci-release.sh", "scripts/install-ci-scanner.sh", "scripts/release-checks.py",
+                 "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py")
 REQUIRED = ["macOS", "Analyze (swift)", "Analyze (python)", "Analyze (actions)"]
 
 
@@ -89,7 +92,13 @@ class ReleaseCandidateCutTests(unittest.TestCase):
                            ("remote.origin.url", str(self.origin)),
                            ("remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")):
             self.git("config", key, value)
+        for name in RELEASE_PATHS:
+            path = self.work / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not path.exists():
+                path.write_text("# Trusted release fixture\n")
         self.old = self.commit("20261009")
+        self.git("push", "--quiet", "origin", f"{self.old}:refs/heads/main")
         self.sha = self.commit(BUILD)
         self.git("push", "--quiet", "origin", "HEAD:refs/heads/feat/rc")
         self.publish_feed("20261007", "20261008")
@@ -155,6 +164,35 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn(message, result.stderr)
         self.assertEqual(self.dispatches(), [])
+
+    def test_ci_cut_refuses_changed_release_workflows_and_candidate_release_scripts(self):
+        for name in RELEASE_PATHS:
+            with self.subTest(path=name):
+                path = self.work / name
+                original = path.read_text()
+                path.write_text(original + "\n# Unreviewed release change\n")
+                sha = self.commit(BUILD)
+                before = self.remote()
+                self.assert_refused(self.cut("--ci-sha", sha, "--pr", "114"),
+                                    "land workflow and release-script changes on main first")
+                self.assertEqual(self.remote(), before)
+                path.write_text(original)
+
+    def test_ci_cut_accepts_release_workflow_changes_once_landed_on_main(self):
+        path = self.work / ".github/workflows/release.yml"
+        path.write_text("# Reviewed release workflow change\n")
+        sha = self.commit(BUILD)
+        self.git("push", "--quiet", "origin", f"{sha}:refs/heads/main")
+        (self.state / "pr-head").write_text(sha)
+        result = self.cut("--ci-sha", sha, "--pr", "114")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.dispatches()), 1)
+
+    def test_missing_main_fails_closed_before_cutting(self):
+        self.git("push", "--quiet", "origin", ":refs/heads/main")
+        before = self.remote()
+        self.assert_refused(self.cut("--ci-sha", self.sha, "--pr", "114"), "couldn't fetch main")
+        self.assertEqual(self.remote(), before)
 
     def test_dirty_tree_is_refused(self):
         (self.work / "notes.txt").write_text("untracked\n")

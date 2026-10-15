@@ -8,263 +8,55 @@
 //  manager.
 //
 
+import GlimmerEngine
 import Foundation
 import SwiftUI
 
 // MARK: - Persisted host model
 
-/// A paired Sunshine/GeForce Experience host known to Glimmer. Mirrors the
-/// shape of the moonlight-qt-persisted host blob so the one-shot migration
-/// in `HostsStore.migrateFromMoonlightQtIfNeeded` can copy values verbatim.
+// Keep the launcher preference in the Mac shell while the PC record travels with the engine.
 struct Host: Identifiable, Hashable {
-    let id: String  // uuid from Moonlight, or hostname fallback
-    let name: String
-    let customName: String?
-    let localAddress: String?
-    let manualAddress: String?
-    let apps: [LibraryApp]
-    let lastConnected: Date?
-    let serverCertPEM: String?    // pinned from moonlight-qt's hosts.N.srvcert (migration)
-    let appVersion: String?
-
-    /// The PC's MAC from /serverinfo's `<mac>`, for Wake on LAN.
-    let macAddress: String?
-
-    /// Per-PC "Wake on LAN": on by default; only matters when a MAC is known.
-    var wakeOnLAN: Bool = true
+    var record: HostRecord
     var launcherStyle: LauncherStyle = .buttons
 
-    var displayName: String { customName ?? name }
-
-    /// The app a spoken or typed name means: an exact match first, then one
-    /// that differs only in case, accents or surrounding spaces.
-    func app(named name: String) -> LibraryApp? {
-        let wanted = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return apps.first { $0.name == wanted }
-            ?? apps.first { $0.name.compare(wanted, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
-    }
-}
-
-/// One launchable app on a paired host (Sunshine's "applist" entries).
-struct LibraryApp: Identifiable, Hashable {
-    let id: Int
-    let name: String
-    let hdr: Bool
-    let hidden: Bool
-
-    var isDesktop: Bool { name.lowercased() == "desktop" }
-
-    /// Steam has no SF Symbol, so it gets its own mark, built as a custom symbol so it
-    /// sizes and tints like the others.
-    var icon: Image {
-        switch name.lowercased() {
-        case _ where isDesktop: Image(systemName: "macwindow")
-        case let lowered where lowered.contains("steam"): Image("steam")
-        case let lowered where lowered.contains("big picture"): Image(systemName: "tv")
-        default: Image(systemName: "app")
-        }
-    }
-}
-
-// MARK: - Quality preset
-
-enum QualityPreset: String, CaseIterable, Identifiable {
-    // Declaration order drives `allCases`, which drives the picker order.
-    // Native Retina is the default and sits at the top.
-    //
-    // Smooth/Maximum were dropped: their 16:9 caps looked poor on the 16:10
-    // Retina panels these run on, and the bitrate-multiplier axis they rode
-    // was redundant once presets differ by RESOLUTION instead. The two that
-    // remain are the two real choices - full native, or the Mac's own default
-    // Retina scale at a quarter of the pixels - plus Custom.
-    case matchDisplay  // panel-native pixel grid + host-native fps (sharpest)
-    case hidpi         // default "looks like" scale (native ÷ 2), 2x-crisp, ~¼ the bitrate
-    case custom        // user-defined width/height/fps
-
-    var id: String { rawValue }
-
-    /// What "no usable choice on record" resolves to: a fresh install, and any
-    /// persisted raw value we can't make sense of. One source of truth so the
-    /// `AppModel.qualityPreset` declared default and the legacy remap below
-    /// can't drift apart.
-    static let defaultPreset: QualityPreset = .matchDisplay
-
-    /// Resolve a persisted `qualityPreset` raw value to a live case, remapping
-    /// the two cases the preset rework deleted.
-    ///
-    /// The failure this closes: `QualityPreset(rawValue:)` answers nil for
-    /// "smooth" / "maximum", so the load fell through to the DEFAULT - Native
-    /// Retina, the panel-native, top-of-the-bitrate-curve preset - and the next
-    /// `persistQualitySettings()` rewrote the key, destroying the evidence. A
-    /// user who deliberately picked Smooth for a thin Wi-Fi link came back from
-    /// an update on the most demanding preset in the app with no way to tell
-    /// what had happened.
-    ///
-    /// The remap preserves each dropped case's INTENT rather than its numbers:
-    /// Smooth was "stay fluid, spend fewer bits", which is exactly what HiDPI is
-    /// now (a quarter of the pixels); Maximum was "sharpest picture, spend the
-    /// bandwidth", which is Native Retina. Anything else unrecognised (a
-    /// downgrade from a build carrying a preset this one has never heard of)
-    /// lands on the default rather than guessing.
-    ///
-    /// Idempotent by construction: every value this returns maps to itself on a
-    /// second pass, so re-running the migration is a no-op.
-    static func migrated(fromPersistedRawValue raw: String) -> QualityPreset {
-        if let known = QualityPreset(rawValue: raw) { return known }
-        switch raw {
-        case "smooth":  return .hidpi
-        case "maximum": return .matchDisplay
-        default:        return defaultPreset
-        }
+    var id: String { record.id }
+    var name: String { record.name }
+    var customName: String? { record.customName }
+    var localAddress: String? { record.localAddress }
+    var manualAddress: String? { record.manualAddress }
+    var apps: [LibraryApp] { record.apps }
+    var lastConnected: Date? { record.lastConnected }
+    var serverCertPEM: String? { record.serverCertPEM }
+    var appVersion: String? { record.appVersion }
+    var macAddress: String? { record.macAddress }
+    var displayName: String { record.displayName }
+    var wakeOnLAN: Bool {
+        get { record.wakeOnLAN }
+        set { record.wakeOnLAN = newValue }
     }
 
-    /// Named by outcome, not mechanism: a player picks how it looks, and the
-    /// numbers live in the Quality pane's "Your next stream" summary.
-    var displayName: String {
-        switch self {
-        case .matchDisplay: return "Sharpest"
-        case .hidpi: return "Balanced"
-        case .custom: return "Custom"
-        }
+    init(
+        id: String,
+        name: String,
+        customName: String?,
+        localAddress: String?,
+        manualAddress: String?,
+        apps: [LibraryApp],
+        lastConnected: Date?,
+        serverCertPEM: String?,
+        appVersion: String?,
+        macAddress: String?,
+        wakeOnLAN: Bool = true,
+        launcherStyle: LauncherStyle = .buttons
+    ) {
+        record = HostRecord(
+            id: id, name: name, customName: customName, localAddress: localAddress, manualAddress: manualAddress,
+            apps: apps, lastConnected: lastConnected, serverCertPEM: serverCertPEM, appVersion: appVersion,
+            macAddress: macAddress, wakeOnLAN: wakeOnLAN)
+        self.launcherStyle = launcherStyle
     }
 
-    var subtitle: String {
-        switch self {
-        case .matchDisplay: return "Every pixel of this Mac's display. Needs a solid network."
-        case .hidpi: return "This Mac's usual Retina scale. A touch softer, far less bandwidth."
-        case .custom: return "Pick your own resolution and refresh rate."
-        }
-    }
-}
-
-// MARK: - Hotkey model
-
-/// A single user-configurable in-stream hotkey: modifier flags + one character
-/// key. One type covers every chord-shaped intercept Glimmer fires at the
-/// SwiftUI layer (currently: quit-stream, toggle-stats-overlay). The JSON
-/// shape matches the blob historically persisted under the UserDefaults key
-/// `"quitHotkey"`, so stored chords decode without a migration step.
-public struct HotkeyChord: Codable, Equatable, Sendable {
-    public var ctrl: Bool
-    public var alt: Bool
-    public var shift: Bool
-    public var cmd: Bool
-    public var keyChar: String  // single character, e.g. "q"
-
-    public init(ctrl: Bool, alt: Bool, shift: Bool, cmd: Bool, keyChar: String) {
-        self.ctrl = ctrl; self.alt = alt; self.shift = shift; self.cmd = cmd
-        self.keyChar = keyChar
-    }
-
-    // Every default is ⌃ plus one letter: two keys, one family. No ⌘, so they fire whether
-    // or not ⌘ is forwarded to the PC, and no ⇧, which games and Windows bind freely. The
-    // letters avoid crouch combos a shooter sends with ⌃ held (S, R, and the WASD cluster).
-
-    /// ⌃Q. ⌃⌘Q is macOS's Lock Screen and never reaches an app.
-    public static let defaultQuit = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "q")
-
-    /// ⌃I, not ⌃S: ⌃S is crouch plus walk back in most shooters.
-    public static let defaultStats = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
-
-    /// ⌃B, client-only and telemetry-gated: it only means anything in a diagnostic session.
-    public static let defaultBookmark = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "b")
-
-    /// ⌃P for the pointer toggle, not ⌃R: ⌃R is crouch plus reload. Window mode only;
-    /// in full screen capture follows key status, so the chord reaches the PC.
-    public static let defaultReleasePointer = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "p")
-
-    /// ⌃M toggles the mini player and the full presentation.
-    public static let defaultMiniPlayer = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "m")
-
-    var displayString: String {
-        var parts: [String] = []
-        if ctrl { parts.append("⌃") }
-        if alt { parts.append("⌥") }
-        if shift { parts.append("⇧") }
-        if cmd { parts.append("⌘") }
-        parts.append(keyChar.uppercased())
-        return parts.joined()
-    }
-
-    var serialized: String {
-        var parts: [String] = []
-        if ctrl { parts.append("ctrl") }
-        if alt { parts.append("alt") }
-        if shift { parts.append("shift") }
-        if cmd { parts.append("cmd") }
-        parts.append(keyChar.lowercased())
-        return parts.joined(separator: "+")
-    }
-}
-
-/// A single capturable controller button, used for the user-recorded custom
-/// quit chord. Covers everything ControllerForwarder can read (GameController
-/// face/dpad/shoulders/sticks + the DualSense raw-HID center buttons).
-public enum ControllerButton: String, CaseIterable, Codable, Sendable {
-    case faceDown, faceRight, faceLeft, faceUp   // ✕ ○ □ △  (Xbox A B X Y)
-    case dpadUp, dpadDown, dpadLeft, dpadRight
-    case l1, r1, l2, r2, l3, r3
-    case options, create, ps, mute, touchpad
-
-    public var label: String {
-        switch self {
-        case .faceDown: return "✕"
-        case .faceRight: return "○"
-        case .faceLeft: return "□"
-        case .faceUp: return "△"
-        case .dpadUp: return "↑"
-        case .dpadDown: return "↓"
-        case .dpadLeft: return "←"
-        case .dpadRight: return "→"
-        case .l1: return "L1"
-        case .r1: return "R1"
-        case .l2: return "L2"
-        case .r2: return "R2"
-        case .l3: return "L3"
-        case .r3: return "R3"
-        case .options: return "Options"
-        case .create: return "Create"
-        case .ps: return "PS"
-        case .mute: return "Mute"
-        case .touchpad: return "Touchpad"
-        }
-    }
-
-    /// Format a set as a stable, readable chord string ("✕ + L1 + R1"),
-    /// ordered by the declaration order above.
-    public static func describe(_ buttons: Set<ControllerButton>) -> String {
-        guard !buttons.isEmpty else { return "Not set" }
-        return allCases.filter(buttons.contains).map(\.label).joined(separator: " + ")
-    }
-}
-
-/// Controller-side quit chord. `.custom` is a user-recorded set of buttons
-/// (press the buttons, we store them); the presets cover the common pad
-/// layouts. ControllerForwarder consults this every input event and fires the
-/// same quit path as the keyboard hotkey when all the chord's buttons are held.
-public enum ControllerQuitChord: String, CaseIterable, Codable, Sendable {
-    case none
-    case startSelectL1R1
-    case l1r1
-    case l1r1l2r2
-    case l3r3
-    case custom
-    // NOTE: `.home` (the PS / Guide / "menu" button) was removed - macOS
-    // gamecontrollerd reserves that button for system gestures, so it never
-    // reliably reached the app as a quit chord. A persisted `.home` decodes to
-    // nil and falls back to the default (see AppModel load), so this is
-    // a clean removal with no migration step.
-
-    public var displayName: String {
-        switch self {
-        case .none: return "None (keyboard only)"
-        case .startSelectL1R1: return "Start + Select + L1 + R1"
-        case .l1r1: return "L1 + R1"
-        case .l1r1l2r2: return "L1 + R1 + L2 + R2"
-        case .l3r3: return "L3 + R3 (stick clicks)"
-        case .custom: return "Custom (recorded)"
-        }
-    }
+    func app(named name: String) -> LibraryApp? { record.app(named: name) }
 }
 
 // MARK: - Deterministic hashing
@@ -298,57 +90,25 @@ extension String {
     }
 }
 
-// MARK: - Host live status
-
-/// What we know about the selected host between streams. Surfaced on the
-/// launcher's readiness chip. Refreshed by a low-frequency poller that runs
-/// only while the main window is foreground, a host is selected, and we're
-/// NOT actively streaming (during a stream the engine's own RTT estimator
-/// drives the stats overlay - polling /serverinfo on top of that is noise).
-struct HostLiveStatus: Equatable {
-    enum State: Equatable {
-        /// First poll hasn't completed yet; chip shows the generic
-        /// "Ready" / "No PC" text it had pre-feature.
-        case unknown
-        /// Host answered /serverinfo and reports no active session.
-        case idle
-        /// Host is busy streaming an app we know the name of.
-        case streamingApp(name: String)
-        /// Host is busy streaming an app whose ID isn't in our cached
-        /// applist (uncommon - usually means the user added a new game
-        /// on the host and hasn't refreshed the pairing).
-        case streamingUnknownApp(id: Int)
-        /// /serverinfo failed AND the TCP probe failed. The PC is most
-        /// likely powered off or asleep.
-        case asleep
-        /// HTTPS-only mode, cert pin failed. We deliberately do NOT
-        /// downgrade this to "asleep" - the readiness chip renders this as a
-        /// distinct amber "Trust needed" state whose tap re-pairs (re-pinning
-        /// the new cert).
-        case certMismatch
+extension LibraryApp {
+    /// Steam has no SF Symbol, so it gets its own mark, built as a custom symbol so it
+    /// sizes and tints like the others.
+    var icon: Image {
+        switch name.lowercased() {
+        case _ where isDesktop: Image(systemName: "macwindow")
+        case let lowered where lowered.contains("steam"): Image("steam")
+        case let lowered where lowered.contains("big picture"): Image(systemName: "tv")
+        default: Image(systemName: "app")
+        }
     }
+}
 
-    /// UUID of the host this snapshot belongs to. Lets us discard stale
-    /// results that land after the user has switched PCs.
-    var hostID: String
-    var state: State
-    /// Time-to-TCP-ready in ms. Only meaningful when `state` resolved via
-    /// the TCP probe - i.e. anything other than `.unknown` / `.certMismatch`.
-    var rttMs: Int?
-    /// Host's reported version (Sunshine/GFE). Surfaced opt-in as a footnote.
-    var sunshineVersion: String?
-    /// When this snapshot was captured. Used to age out a stale
-    /// "Streaming X" reading if the host stops answering - we don't want
-    /// the chip lying about a half-hour-old session.
-    var capturedAt: Date
-    /// Names need not be unique, so automation keeps the PC's reported app ID.
-    var runningAppID: Int?
-
-    static let stale: TimeInterval = 60
-
-    /// A sample of `hostID` young enough to act on; an unknown state never is.
-    static func isFresh(_ live: HostLiveStatus?, for hostID: String, at now: Date = Date()) -> Bool {
-        guard let live, live.hostID == hostID, live.state != .unknown else { return false }
-        return now.timeIntervalSince(live.capturedAt) <= stale
+extension QualityPreset {
+    var subtitle: String {
+        switch self {
+        case .matchDisplay: return "Every pixel of this Mac's display. Needs a solid network."
+        case .hidpi: return "This Mac's usual Retina scale. A touch softer, far less bandwidth."
+        case .custom: return "Pick your own resolution and refresh rate."
+        }
     }
 }

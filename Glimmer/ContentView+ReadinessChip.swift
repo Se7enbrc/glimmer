@@ -12,9 +12,11 @@
 //  see that file for the remaining hero pieces.
 //
 
+import GlimmerEngine
 import SwiftUI
 
 enum ChipPresentation: Equatable {
+    case checkingReadiness(reason: String)
     case noPC                                   // gray dot, "No PC"
     case ready(rttMs: Int?)                     // green dot, "Ready" / "Ready · 12 ms"
     case streamingOurs                          // green, "Streaming" (our session)
@@ -35,6 +37,7 @@ enum ChipPresentation: Equatable {
     /// The same words untruncated, where there's room (`glimmer list`).
     var fullLabel: String {
         switch self {
+        case .checkingReadiness(let reason): reason
         case .noPC: "No PC"
         case .ready(nil): "Ready"
         case .ready(let ms?): "Ready · \(ms) ms"
@@ -50,6 +53,7 @@ enum ChipPresentation: Equatable {
     /// The screen-reader sentence, so the chip isn't read as bare jargon.
     var accessibility: String {
         switch self {
+        case .checkingReadiness(let reason): return reason
         case .noPC: return "No PC selected"
         case .ready(nil): return "PC ready"
         case .ready(let ms?): return "PC ready, round trip \(ms) milliseconds"
@@ -65,6 +69,7 @@ enum ChipPresentation: Equatable {
 
     var dotColor: Color {
         switch self {
+        case .checkingReadiness: return Color.orange
         case .noPC: return Color.gray
         case .ready: return Color.green
         case .streamingOurs: return Color.green
@@ -105,6 +110,7 @@ struct ReadinessChip: View {
     /// our own session beats the polled host state (we'd rather show the live
     /// truth than briefly flash "Asleep" off a stale poller sample).
     private var presentation: ChipPresentation {
+        if let reason = model.selectedReadinessReason { return .checkingReadiness(reason: reason) }
         // The CONNECTING phase outranks the in-flight flag: `isStreaming`
         // flips at stream() ENTRY (the in-flight latch, not the live edge),
         // so checking it first pulsed a green "Streaming" through the entire
@@ -114,11 +120,11 @@ struct ReadinessChip: View {
             return .connecting(phase: stage)
         }
         if model.isStreaming { return .streamingOurs }
-        guard model.selectedHost != nil else { return .noPC }
+        guard let host = model.selectedHost else { return .noPC }
 
         // Polled live snapshot → chip state. The host-id guard in
         // `publishLiveStatus` already scopes it to the selected host.
-        return ChipPresentation(live: model.hostLiveStatus)
+        return model.polledChip(for: host)
     }
 
     var body: some View {

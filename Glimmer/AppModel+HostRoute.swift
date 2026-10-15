@@ -9,6 +9,7 @@
 //  StreamRouteProbe; a Wi-Fi route adds a 1 Hz PHY-rate read off the main thread.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import SwiftUI
@@ -25,9 +26,7 @@ final class HostRouteMonitor {
     /// (utun/ipsec - Network.framework's `.other`) and `unknown` (no route /
     /// not yet resolved) both render as NO glyph: absent knowledge stays
     /// unlabelled, never guessed.
-    enum RouteClass {
-        case wired, wifi, tunnel, unknown
-    }
+    typealias RouteClass = RouteBitratePolicy.Route
 
     private(set) var routeClass: RouteClass = .unknown
 

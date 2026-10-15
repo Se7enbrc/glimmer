@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import Foundation
 import os
 @testable import Glimmer
@@ -59,6 +60,11 @@ final class InputRecordingBackend: StreamingBackend {
     var inputResult: Int32 {
         get { result.withLock { $0 } }
         set { result.withLock { $0 = newValue } }
+    }
+    private let touchUpFailure = OSAllocatedUnfairLock(initialState: Int32(0))
+    var touchUpResult: Int32 {
+        get { touchUpFailure.withLock { $0 } }
+        set { touchUpFailure.withLock { $0 = newValue } }
     }
     private let stoppedControllerSends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
     var controllersAtStop: [ControllerSend] { stoppedControllerSends.withLock { $0 } }
@@ -155,6 +161,7 @@ final class InputRecordingBackend: StreamingBackend {
         num: UInt8, mask: UInt16, type: UInt8,
         supportedButtons: UInt32, caps: UInt16
     ) -> Int32 {
+        onInput()
         guard inputResult == 0 else { return inputResult }
         controllerOrder.withLock { $0.append("arrival") }
         return 0
@@ -163,6 +170,7 @@ final class InputRecordingBackend: StreamingBackend {
         num: UInt8, eventType: UInt8, touchpadIndex: UInt8,
         pointerId: UInt32, x: Float, y: Float, pressure: Float
     ) -> Int32 {
+        if eventType == UInt8(StreamProtocol.LI_TOUCH_EVENT_UP), touchUpResult != 0 { return touchUpResult }
         touchSends.withLock { $0.append(.init(num: num, eventType: eventType, pointerId: pointerId,
                                             x: x, y: y, pressure: pressure)) }
         return 0

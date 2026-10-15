@@ -4,6 +4,7 @@
 // Free pointers map onto the picture; relative capture shares its existing
 // association, linear scaling and cursor-ownership paths in every presentation.
 
+import GlimmerEngine
 import AppKit
 
 extension InputForwarder {
@@ -17,8 +18,12 @@ extension InputForwarder {
 
     /// A free pointer mirrors the picture whenever the current policy permits it.
     var sendsAbsolutePointer: Bool {
-        PointerMapping.usesAbsolutePointer(windowed: isWindowMode, captured: isMouseCaptured,
+        Self.usesAbsolutePointer(windowed: isWindowMode, captured: isMouseCaptured,
                                           fullscreenRelative: fullscreenRelativePointer)
+    }
+
+    nonisolated static func usesAbsolutePointer(windowed: Bool, captured: Bool, fullscreenRelative: Bool) -> Bool {
+        !captured && (windowed || !fullscreenRelative)
     }
 
     /// A presentation change restores its pointer policy without retaining a stale hover latch.
@@ -127,25 +132,13 @@ extension InputForwarder {
         guard isReady, let window, let view = inputView else { return }
         let viewPoint = view.convert(window.mouseLocationOutsideOfEventStream, from: nil)
         guard view.bounds.contains(viewPoint) else { return }
-        guard let point = PointerMapping.streamPoint(
-            viewPoint: viewPoint,
-            viewSize: view.bounds.size,
-            streamPixelSize: streamPixelSize
-        ) else { return }
-        let rc = backend?.sendMousePosition(
-            x: point.x, y: point.y, refW: point.refW, refH: point.refH) ?? -2
-        record("LiSendMousePositionEvent(capture-sync)", rc)
+        inputCore.sendAbsolutePointer(viewPoint: viewPoint, viewSize: view.bounds.size,
+                                      streamPixelSize: streamPixelSize, captureSync: true)
     }
 
     func sendAbsolutePointer(for event: NSEvent, in view: NSView) {
         guard isReady, sendsAbsolutePointer else { return }
-        guard let point = PointerMapping.streamPoint(
-            viewPoint: view.convert(event.locationInWindow, from: nil),
-            viewSize: view.bounds.size,
-            streamPixelSize: streamPixelSize
-        ) else { return }
-        let rc = backend?.sendMousePosition(
-            x: point.x, y: point.y, refW: point.refW, refH: point.refH) ?? -2
-        record("LiSendMousePositionEvent", rc)
+        inputCore.sendAbsolutePointer(viewPoint: view.convert(event.locationInWindow, from: nil),
+                                      viewSize: view.bounds.size, streamPixelSize: streamPixelSize, captureSync: false)
     }
 }

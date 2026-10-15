@@ -156,81 +156,16 @@ not repoint a live feed while a candidate awaits promotion.
 
 ## Hosted release
 
-Keep verification, compilation, signing, packaging and publication as separate
-gated phases.
+Keep verification, compilation, signing and publication as separate phases.
+Three credential-free jobs verify checks, tests and ASan before the unsigned
+build. A fresh signing runner uses pinned trusted-main tooling and validates the
+exact unsigned artifact. Publication validates the signed artifact and retries
+only missing steps; it never replaces accepted bytes.
 
-| Phase        | Gate and credentials                                                                                                               |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Dispatch     | Candidate only on `release-candidate`, promotion only on `main`; full SHA bound to upstream ref.                                   |
-| Approval     | Protected `release` environment, exact two branches, maintainer reviewer, no admin bypass; sole-maintainer self-review allowed.    |
-| Verify/build | Xcode 26.6 on `macos-26`; all hooks with `GLIMMER_SECRET_SCAN_ALL_FILES=1`, `make verify`, warnings fatal. No signing credentials. |
-| Sign         | Existing compiled outputs only; temporary Apple credentials, profiles and keychain.                                                |
-| Package      | Requires signing completion and successful credential cleanup; final DMG/ZIP digests recorded.                                     |
-| Attest       | Pinned `actions/attest`, GitHub OIDC and public Sigstore record for final files; no release credentials.                           |
-| Publish      | Requires packaging/attestation; Sparkle key and scoped content token only.                                                         |
-| Promote      | Release App token and scoped publication token; no Apple signing material or Sparkle private key.                                  |
-
-Runs serialize instead of cancelling each other. Moving a branch stops the next
-protected phase. No PR artifacts or restored caches enter release builds.
-Completion records bind phases to this run/SHA; they are not independent
-attestations.
-
-### Configure release secrets
-
-Store approved material in Doppler project `glimmer`, config `release`, synced
-to the protected GitHub environment.
-
-| Environment secret                                              | Purpose                                                                                     |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `DEVELOPER_ID_P12_BASE64`, `P12_PASSWORD`                       | Existing Developer ID export and password.                                                  |
-| `NOTARY_KEY_BASE64`, `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID`        | Existing notarization API key and identifiers.                                              |
-| `APP_PROVISIONPROFILE_BASE64`, `HELPER_PROVISIONPROFILE_BASE64` | Approved separate app/helper profiles.                                                      |
-| `SPARKLE_ED_PRIVATE_KEY`                                        | Existing update-signing key; never generate a replacement for CI.                           |
-| `RELEASE_CONTENTS_TOKEN`                                        | Expiring fine-grained token for only `glimmer` and `homebrew-glimmer`, Contents read/write. |
-| `GLIMMER_RC_APP_CLIENT_ID`, `GLIMMER_RC_APP_PRIVATE_KEY`        | Also available in `release`; promotion needs Contents and Workflows write.                  |
-
-Do not use repository secrets, unmasked variables, a broad local `gh` token or a
-general Actions ruleset bypass. Change values in Doppler; sync can overwrite
-GitHub-only edits. The workflow needs no Doppler runtime token.
-
-The content token can change all contents in its two repositories, not just feed
-and cask. Its current lifetime is 30 days; remind at day 25, replace with the
-same scope, confirm sync/permissions, then revoke the old token.
-
-### Protect signing material
-
-Obtain explicit maintainer authorization before transferring or replacing any
-signing material.
-
-Prepare/review the workflow first. Never fetch or print cloud secret values for
-debugging, enable Actions debug logging, or upload temporary signing inputs.
-`scripts/ci-release.sh` uses private temporary files and a fresh keychain
-password, then removes both; cleanup failure blocks packaging.
-
-The content token stays in the environment and an HTTPS credential helper, not a
-remote URL or Git config. Tap updates use a fresh checkout. The runner remains
-trusted across all phases; credential timing does not isolate processes. A
-forced kill can bypass traps; hosted VM decommissioning is the final boundary.
-
-### Verify and recover publication
-
-Preserve original assets if any publication step fails.
-
-Attestations cover source/workflow identity, not a SLSA level or full-package
-reproducibility. Use [download verification](VERIFY_DOWNLOAD.md) with
-`--source-digest CANDIDATE_FULL_SHA` for an exact commit. Local direct
-publication creates no hosted attestation.
-
-Appcast and hosted cask commits use GitHub's signed `createCommitOnBranch` API,
-checking the expected head and GitHub signing key. On an uncertain response,
-inspect the remote before retrying; never fall back to an unsigned commit. Local
-cask updates use the maintainer's normal signing method.
-
-If publication succeeds but Homebrew fails, run
-`make brew-bump VERSION=<version>` from current main only when authorized. It
-checksums the published DMG, including promoted candidates. If the feed step
-fails, repair that step without rebuilding or replacing assets. A rerun still
-requires main to match the dispatch SHA. Confirm Pages publishes the new feed.
+Read the [hosted pipeline](RELEASE_PIPELINE.md) for artifact identity,
+environment approvals, credential setup, publication recovery and run-summary
+acceptance. Land release tooling on main before cutting a candidate that depends
+on it.
 
 ## 3. Signing credentials
 

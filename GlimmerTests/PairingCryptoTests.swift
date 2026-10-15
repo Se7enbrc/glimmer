@@ -9,6 +9,7 @@
 //  committed.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 import CryptoKit
@@ -452,18 +453,22 @@ enum EphemeralCryptoIdentity {
 struct PinnedCertStoreTests {
 
     @Test func failedValidationKeepsPreviousPin() throws {
+        let store = try IsolatedStore("pin-replacement")
+        defer { store.remove() }
         let hostID = "pin-replacement-\(UUID().uuidString)"
-        defer { PinnedCertStore.delete(forHostID: hostID) }
-        try PinnedCertStore.store(pem: "old certificate", forHostID: hostID)
+        defer { PinnedCertStore.delete(forHostID: hostID, defaults: store.defaults, base: store.directory) }
+        try PinnedCertStore.store(pem: "old certificate", forHostID: hostID,
+                                  defaults: store.defaults, base: store.directory)
 
         do {
-            try PinnedCertStore.writePEM("new certificate", forHostID: hostID) { prepared in
+            try PinnedCertStore.writePEM("new certificate", forHostID: hostID, base: store.directory) { prepared in
                 #expect(try String(contentsOf: prepared, encoding: .utf8) == "new certificate")
                 throw CocoaError(.fileReadNoPermission)
             }
             Issue.record("Expected prepared pin validation to fail")
         } catch {
-            #expect(PinnedCertStore.load(forHostID: hostID) == "old certificate")
+            #expect(PinnedCertStore.load(forHostID: hostID, defaults: store.defaults,
+                                        base: store.directory) == "old certificate")
         }
     }
 }

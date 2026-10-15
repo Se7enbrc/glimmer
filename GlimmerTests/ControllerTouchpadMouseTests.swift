@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+@testable import GlimmerEngine
 import AppKit
 import GameController
 import Testing
@@ -16,6 +17,7 @@ struct ControllerTouchpadMouseTests {
         let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
         forwarder.isReady = true
+        forwarder.gamepadMask = 1
         forwarder.controllerMouseStates[0] = ControllerMouseState(isMouse: true)
         return (forwarder, backend)
     }
@@ -168,7 +170,10 @@ struct ControllerTouchpadMouseTests {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
         let controller = GCController.withExtendedGamepad()
-        if action == "detach" { forwarder.attach(gamepad: controller) }
+        if action == "detach" {
+            forwarder.gamepadMask = 0
+            forwarder.attach(gamepad: controller)
+        }
         forwarder.forwardTouchpad(slot: 0, primary: (0.2, 0.2), secondary: idle, clicked: true)
         switch action {
         case "toggle": toggle(forwarder)
@@ -228,7 +233,7 @@ struct ControllerTouchpadMouseTests {
         forwarder.isReady = false
         forwarder.forwardTouchpad(slot: 0, primary: (0.3, 0.2), secondary: idle, clicked: true)
         forwarder.isReady = true
-        forwarder.quitChordDwellSlot = 0
+        forwarder.armQuitChordDwell(slot: 0) { (0, InputCore.neutral) }
         forwarder.forwardTouchpad(slot: 0, primary: (0.4, 0.2), secondary: idle, clicked: true)
         let pad = try #require(GCController.withExtendedGamepad().extendedGamepad)
         forwarder.controllerQuitChordProvider = { .l1r1 }
@@ -238,7 +243,7 @@ struct ControllerTouchpadMouseTests {
         forwarder.sendGamepadUpdate(pad: pad, slot: 0) { reads += 1 }
         #expect(reads == 0)
         #expect(backend.touches.isEmpty && backend.mouseMoves.isEmpty && backend.pointer.isEmpty)
-        forwarder.quitChordDwellSlot = nil
+        forwarder.cancelQuitChordDwell()
         _ = forwarder.inputCore.withLock { forwarder.inputCore.chordSlots.remove(0) }
         forwarder.forwardTouchpad(slot: 0, primary: (0.5, 0.2), secondary: idle, clicked: true)
         #expect(backend.pointer.count == 1)

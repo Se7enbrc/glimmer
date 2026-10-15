@@ -7,6 +7,7 @@
 //  The overlay timer's tick and the paced present watchdog's episode steps, called directly.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import QuartzCore
 import Testing
@@ -64,6 +65,25 @@ struct StatsOverlayRefreshTests {
         #expect(reads.rows == 0 && reads.thresholds == 0)
         #expect(overlay.rowViews.isEmpty)
         #expect(overlay.videoSize == .zero)
+    }
+
+    @Test func backdropRectClearsWhenOccludedAndRecoversOnTheNextVisibleTick() {
+        let dec = VideoDecoder()
+        dec.statsOverlayEnabled = true
+        dec.streamWidth = 1_920
+        dec.streamHeight = 1_080
+        let overlay = StatsOverlayLayer()
+        let video = CALayer()
+        video.bounds = CGRect(x: 0, y: 0, width: 1_280, height: 800)
+        overlay.attach(to: video)
+        let banner = StreamBannerLayer(anchor: .bottomCenter, accent: NSColor.systemOrange.cgColor)
+        let refresh = StatsOverlayRefresh()
+        for visible in [true, false, true] {
+            refresh.tick(dec: dec, overlay: overlay, banner: banner, input: nil,
+                         rows: { [.renderFps] }, thresholds: { .default }, visible: visible)
+            #expect(dec.hudBackdropRect.isEmpty == !visible)
+            if visible { #expect(dec.hudBackdropRect == overlay.backdropSampleRect) }
+        }
     }
 
     /// A Settings flip shows on the next tick, without restarting the stream.
@@ -140,7 +160,7 @@ struct PacedPresentWatchdogTests {
         let clock = ScriptedClock()
         let decoder = VideoDecoder()
         decoder.backend = recorder
-        return (StreamSession(backend: recorder, clock: clock.session), decoder, clock)
+        return (StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session), decoder, clock)
     }
 
     private func live(

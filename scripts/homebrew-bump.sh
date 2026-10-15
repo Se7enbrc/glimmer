@@ -21,7 +21,8 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="${1:-$(sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' "$HERE/Glimmer/Version.xcconfig" | tr -d ' ')}"
 RELEASES_REPO="${RELEASES_REPO:-Se7enbrc/glimmer}"
 # A promoted candidate keeps its rc tag, so find the stable release that carries this version.
-TAG="${2:-$(gh release list -R "$RELEASES_REPO" --exclude-drafts --exclude-pre-releases --limit 50 \
+TAG="${2:-$(GH_TOKEN="${RELEASE_READ_TOKEN:-${GH_TOKEN:-}}" gh release list -R "$RELEASES_REPO" \
+    --exclude-drafts --exclude-pre-releases --limit 50 \
 	--json tagName --jq "[.[].tagName | select(. == \"$VERSION\" or startswith(\"$VERSION-rc.\"))][0] // empty" \
 	2>/dev/null || true)}"
 TAG="${TAG:-$VERSION}"
@@ -37,16 +38,22 @@ DMG="Glimmer-$VERSION.dmg"
 python3 "$HERE/scripts/tap_cache.py" "$TAP_DIR" "$TAP_REPO"
 
 # The cask pins a sha256, so the release asset must already be published.
-gh release view "$TAG" -R "$RELEASES_REPO" >/dev/null 2>&1 || {
+GH_TOKEN="${RELEASE_READ_TOKEN:-${GH_TOKEN:-}}" gh release view "$TAG" -R "$RELEASES_REPO" >/dev/null 2>&1 || {
 	echo "ERR: release $VERSION not found on $RELEASES_REPO - publish it first ('make release-publish')" >&2; exit 1; }
-[ "$(gh release view "$TAG" -R "$RELEASES_REPO" --json isPrerelease,isDraft \
+[ "$(GH_TOKEN="${RELEASE_READ_TOKEN:-${GH_TOKEN:-}}" gh release view "$TAG" -R "$RELEASES_REPO" \
+    --json isPrerelease,isDraft \
     --jq '.isPrerelease == false and .isDraft == false')" = true ] || {
     echo "ERR: Homebrew requires a published stable release" >&2; exit 1; }
 
 echo "▶ Downloading $DMG to checksum it..."
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-gh release download "$TAG" -R "$RELEASES_REPO" -p "$DMG" -D "$TMP" --clobber
+GH_TOKEN="${RELEASE_READ_TOKEN:-${GH_TOKEN:-}}" gh release download "$TAG" -R "$RELEASES_REPO" \
+    -p "$DMG" -D "$TMP"
 SHA="$(shasum -a 256 "$TMP/$DMG" | cut -d' ' -f1)"
+if [ "${GITHUB_ACTIONS:-}" = true ]; then
+    [[ "${EXPECTED_DMG_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] && [ "$SHA" = "$EXPECTED_DMG_SHA256" ] || {
+        echo "ERR: published DMG differs from the verified candidate" >&2; exit 1; }
+fi
 echo "  ✓ sha256 $SHA"
 
 if [ -e "$TAP_DIR/.git" ]; then
@@ -73,12 +80,12 @@ $BINARY|" "$TAP_DIR/$CASK"
 
 # Fail loud rather than pushing a cask the seds didn't actually touch (a renamed
 # stanza or reindent would silently no-op the expressions above).
-grep -q "^  version \"$VERSION\"$" "$TAP_DIR/$CASK" && grep -q "^  sha256 \"$SHA\"$" "$TAP_DIR/$CASK" \
+if ! { grep -q "^  version \"$VERSION\"$" "$TAP_DIR/$CASK" && grep -q "^  sha256 \"$SHA\"$" "$TAP_DIR/$CASK" \
 	&& grep -qxF "  url \"https://github.com/$RELEASES_REPO/releases/download/$TAG/Glimmer-#{version}.dmg\"" "$TAP_DIR/$CASK" \
-	&& grep -qxF "$BINARY" "$TAP_DIR/$CASK" || {
-	echo "ERR: $CASK does not carry version $VERSION, that sha256 and the glimmer binary after the rewrite - check its stanza format" >&2
+	&& grep -qxF "$BINARY" "$TAP_DIR/$CASK"; }; then
+	echo "ERR: $CASK failed version, digest, URL or binary validation; check its stanza format" >&2
 	exit 1
-}
+fi
 
 if git -C "$TAP_DIR" diff --quiet -- "$CASK"; then
 	echo "✅ Homebrew cask already current at $VERSION - nothing to push."
