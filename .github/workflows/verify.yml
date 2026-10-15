@@ -91,32 +91,48 @@ jobs:
           xcrun swift --version
           python3 --version
 
+      - name: Select verification Python
+        if: matrix.part == 'checks'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+          architecture: arm64
+
       - name: Prepare verification
         env:
           COVERAGE_KIND: ${{ matrix.coverage }}
+          PART: ${{ matrix.part }}
         run: |
-          if ! command -v swiftlint >/dev/null 2>&1; then
-            brew install swiftlint
+          if [ "$PART" = checks ]; then
+            for tool in swiftlint actionlint pre-commit; do
+              if ! command -v "$tool" >/dev/null 2>&1; then
+                brew install "$tool"
+              fi
+            done
+            scripts/install-ci-scanner.sh
+            swiftlint version
           fi
-          if ! command -v actionlint >/dev/null 2>&1; then
-            brew install actionlint
-          fi
-          if ! command -v pre-commit >/dev/null 2>&1; then
-            brew install pre-commit
-          fi
-          scripts/install-ci-scanner.sh
           if [ "$COVERAGE_KIND" = python ]; then
             python3 -m venv "$RUNNER_TEMP/coverage"
             "$RUNNER_TEMP/coverage/bin/python" -m pip install --quiet --require-hashes \
               --only-binary :all: -r scripts/coverage-requirements.txt
           fi
-          swiftlint version
+          printf 'HOOK_PYTHON=%s\n' "$(python3 -c 'import platform; print(platform.python_version())')" >> "$GITHUB_ENV"
           XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-ci.xcconfig"
           cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
           SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
           GCC_TREAT_WARNINGS_AS_ERRORS = YES
           XCCONFIG
           printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
+
+      - name: Restore hook environments
+        if: matrix.part == 'checks'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key:
+            ${{ runner.os }}-${{ runner.arch }}-hooks-v1-${{ env.HOOK_PYTHON
+            }}-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Pre-commit
         id: precommit
@@ -131,6 +147,17 @@ jobs:
             export PRE_COMMIT_TO_REF="$GITHUB_SHA"
           fi
           pre-commit run --all-files
+
+      - name: Save trusted hook environments
+        if:
+          matrix.part == 'checks' && github.event_name == 'push' && github.ref
+          == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key:
+            ${{ runner.os }}-${{ runner.arch }}-hooks-v1-${{ env.HOOK_PYTHON
+            }}-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Verify
         id: verify
