@@ -37,15 +37,15 @@ struct LauncherGallery: View {
     let model: LauncherModel
     let style: LauncherStyle
     let size: CGSize
-    @ScaledMetric(relativeTo: .body) private var buttonMinimum = 220
-    @ScaledMetric(relativeTo: .body) private var buttonHeight = 44
-    @ScaledMetric(relativeTo: .body) private var coverMinimum = 128
+    @ScaledMetric(relativeTo: .body) private var buttonMinimum: CGFloat = 220
+    @ScaledMetric(relativeTo: .body) private var buttonHeight: CGFloat = 44
+    @ScaledMetric(relativeTo: .body) private var coverMinimum: CGFloat = 128
 
     var body: some View {
         let coverHeight = LauncherGrid.coverHeight(availableHeight: size.height)
-        let minimum = style == .buttons ? buttonMinimum : max(coverMinimum, coverHeight * 0.75)
+        let minimum: CGFloat = style == .buttons ? buttonMinimum : max(coverMinimum, coverHeight * 0.75)
         let count = LauncherGrid.columns(width: size.width, minimum: minimum, count: model.apps.count)
-        let width = style == .buttons ? size.width
+        let width: CGFloat = style == .buttons ? size.width
             : min(size.width, CGFloat(count) * minimum + CGFloat(count - 1) * 12)
         let columns = Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: count)
         LazyVGrid(columns: columns, spacing: 16) {
