@@ -39,8 +39,10 @@ rules to iOS.
   Use `AVSampleBufferDisplayLayer`; no Metal renderer or private receive APIs.
 - ProMotion permission is not a promise of 120 fps. Start real streaming at SDR
   60 fps and stereo; higher modes need sustained hardware measurements.
-- Backgrounding must release input and local resources, never silently quit the
-  game on the PC. No background streaming, polling or telemetry service.
+- Leaving the foreground releases input immediately. A finite background task
+  allows at most 15 seconds to return before local teardown; lock, system
+  expiration or denied execution ends it earlier. Never quit the game on the PC
+  or add an ongoing background streaming, polling or telemetry service.
 - Run `make app`, `make test`, `make check`. See CONTRIBUTING.md for the local
   package override. All Make targets are unsigned and never install the app. Do
   not sign, provision, install, publish or change keychains without permission.

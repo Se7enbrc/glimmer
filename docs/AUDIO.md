@@ -2,9 +2,10 @@
 
 `IOSAudio.platform(environment:)` supplies the public engine `AudioPlatform`
 contract. The caller supplies its measured PC/link environment and constructs
-`AudioDecoder(platform:)`, then passes it to `StreamConnection` as its audio
-sink. The connection's audio configuration starts at stereo. No stream is
-started by the adapter or the current preview UI.
+`AudioDecoder(platform:)`, then passes it to `StreamSession.PreparedMedia` as
+its audio decoder. The connection's audio configuration starts at stereo. The
+launcher starts the shared session; the audio adapter does not initiate a
+stream.
 
 The engine owns Opus decode, buffering, drift correction, render storage and C
 callbacks. Each `AudioOutput` owns one `IOSAudioOutput` graph: engine render
@@ -52,13 +53,11 @@ is removed and the final graph lease is released. Route rebuilds keep the
 session active between graphs. Deactivation failure is logged privately and is
 retried on later cleanup.
 
-The tracked project pins the reviewed audio-engine merge at
-`7891fac58264b211830a0e630e6e4bdb7cc55599`; normal builds resolve that exact
-commit. For local engine development use
-`make app ENGINE_PATH=/absolute/path/to/glimmer`. Lifecycle tests inject
-session/AudioUnit calls; they do not prove playback. Unsigned Simulator/device
-builds, executed hosted tests, and physical speakers plus wired/Bluetooth route
-changes, interruption, media reset, stop/reconnect, sustained audio and power
+The tracked engine revision and local override procedure are documented in
+[CONTRIBUTING.md](../CONTRIBUTING.md). Lifecycle tests inject session/AudioUnit
+calls; they do not prove playback. Unsigned Simulator/device builds, executed
+hosted tests, and physical speakers plus wired/Bluetooth route changes,
+interruption, media reset, stop/reconnect, sustained audio and power
 measurements are separate acceptance evidence.
 
 Apple's
@@ -69,3 +68,13 @@ describe the system lifecycle. The graph uses the engine's render limits and
 reads RemoteIO's
 [maximum render quantum](https://developer.apple.com/library/archive/qa/qa1777/_index.html)
 before initializing processing units.
+
+For missing audio, record a real stream using [diagnostics](DIAGNOSTICS.md) and
+check the PC routing described in [PC setup](HOST_SETUP.md).
+
+RemoteIO may report a zero hardware sample rate before initialization on a real
+iPhone. The adapter then uses the already activated AVAudioSession route rate,
+while preserving a valid explicit RemoteIO rate. A physical-device regression
+test exercises real graph creation, start and render-error status; fixture tests
+cover the zero-rate path. This proves output startup, not audible stream
+content.

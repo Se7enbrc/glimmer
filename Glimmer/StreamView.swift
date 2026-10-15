@@ -49,6 +49,7 @@ final class StreamViewController: GCEventViewController {
         controllerUserInteractionEnabled = true
         view.backgroundColor = .black
         view.addSubview(surface)
+        overlay.overrideUserInterfaceStyle = .dark
         addChild(overlay)
         overlay.view.backgroundColor = .clear
         view.addSubview(overlay.view)
@@ -58,12 +59,12 @@ final class StreamViewController: GCEventViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        updateOrientation(.landscape)
+        updateOrientation()
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        updateOrientation(.landscape)
+        updateOrientation()
         startWhenReady()
     }
 
@@ -89,7 +90,6 @@ final class StreamViewController: GCEventViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         model.stop()
-        updateOrientation(.allButUpsideDown)
     }
 
     private func installInputCapture() {
@@ -117,12 +117,11 @@ final class StreamViewController: GCEventViewController {
         }]
     }
 
-    private func updateOrientation(_ mask: UIInterfaceOrientationMask) {
-        AppDelegate.orientationMask = mask
+    private func updateOrientation() {
         guard let scene = view.window?.windowScene else { return }
         scene.windows.first(where: \.isKeyWindow)?.rootViewController?
             .setNeedsUpdateOfSupportedInterfaceOrientations()
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape)) { error in
             Logger(subsystem: "io.ugfugl.Glimmer", category: "Display")
                 .error("Display rotation failed: \(error.localizedDescription, privacy: .private)")
         }
@@ -133,6 +132,7 @@ final class StreamViewController: GCEventViewController {
 struct StreamControls: View {
     let model: StreamSessionModel
     let close: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -142,26 +142,56 @@ struct StreamControls: View {
         .preferredColorScheme(.dark)
         .safeAreaInset(edge: .top, alignment: .trailing) {
             if model.controlsVisible || model.phase != .streaming {
-                controls
+                VStack(alignment: .trailing, spacing: 0) {
+                    controls
+                    if let format = model.requestedFormat {
+                        Text("Requested: \(format.summary)")
+                            .font(.caption).foregroundStyle(.secondary).padding(.horizontal).padding(.bottom)
+                    }
+                }
             }
+        }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 8) {
+                if let message = model.controllerModeMessage, model.inputFocused {
+                    Text(message).font(.callout).padding(8).glassEffect().allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+                if model.waitingForVideo, model.phase == .streaming {
+                    Label("Waiting for video…", systemImage: "clock")
+                        .font(.callout).padding().glassEffect()
+                }
+            }
+            .padding(.bottom, 8)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.controllerModeMessage)
+        }
+        .opacity(model.dismissWhenStopped ? 0 : 1)
+        .allowsHitTesting(!model.dismissWhenStopped)
+        .accessibilityHidden(model.dismissWhenStopped)
+        .onChange(of: model.phase.isEnded && model.dismissWhenStopped, initial: true) { _, finished in
+            if finished { close() }
         }
     }
 
     private var controls: some View {
-        HStack {
-            if model.phase == .streaming {
-                Button("Resume", systemImage: "play.fill", action: model.resumeInput)
-                    .buttonStyle(.glass)
-                    .accessibilityHint("Returns controller and touch input to the PC.")
-            }
-            Button(model.phase.isEnded ? "Done" : "Disconnect", systemImage: "xmark") {
-                model.stop()
-                Task { await model.waitUntilStopped(); close() }
-            }
-            .buttonStyle(.glass)
-            .disabled(model.phase == .stopping)
-            .accessibilityHint("Disconnects without quitting the game on the PC.")
+        ViewThatFits(in: .horizontal) {
+            HStack { controlActions }
+            VStack(alignment: .trailing) { controlActions }
         }.padding()
+    }
+
+    @ViewBuilder private var controlActions: some View {
+        if model.phase == .streaming {
+            Button("Resume", systemImage: "play.fill", action: model.resumeInput)
+                .buttonStyle(.glass)
+                .accessibilityHint("Returns controller and touch input to the PC.")
+        }
+        Button(model.phase.isEnded ? "Done" : "Disconnect", systemImage: "xmark") {
+            if model.phase.isEnded { close() } else { model.disconnect() }
+        }
+        .buttonStyle(.glass)
+        .disabled(model.phase == .stopping)
+        .accessibilityHint("Disconnects without quitting the game on the PC.")
     }
 
     @ViewBuilder private var status: some View {
@@ -169,17 +199,21 @@ struct StreamControls: View {
         case .idle, .connecting:
             VStack(spacing: 12) {
                 ProgressView()
-                Text("Connecting to \(model.launch.pcName)…")
+                Text(model.waitingForVideo ? "Waiting for video…" : "Connecting to \(model.launch.pcName)…")
                 Text(model.launch.appName).font(.footnote).foregroundStyle(.secondary)
             }
         case .stopping:
             ProgressView("Disconnecting…")
+        case .reconnecting:
+            ProgressView("Reconnecting to \(model.launch.pcName)…")
         case .ended(let message):
             Text(message).multilineTextAlignment(.center).padding(32)
         case .streaming:
             if model.controlsVisible {
                 ScrollView {
                     VStack(spacing: 12) {
+                        Text("Hold Menu for a second and release to switch between gamepad and mouse.")
+                        Text(model.launch.mouseStick.controls)
                         Text("Hold Menu, Options, and both shoulder buttons to disconnect.")
                         Text("Drag to move the pointer. Tap to click.")
                         Text("Use two fingers to scroll or tap for a secondary click.")

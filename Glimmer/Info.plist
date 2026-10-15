@@ -31,6 +31,8 @@
 	</array>
 	<key>GCSupportsControllerUserInteraction</key>
 	<false/>
+	<key>LSSupportsGameMode</key>
+	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBonjourServices</key>
@@ -49,7 +51,6 @@
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
-		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>

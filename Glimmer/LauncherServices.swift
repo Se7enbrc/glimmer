@@ -50,6 +50,7 @@ final class LauncherServices {
     private let identity: IdentityManager
     private let deviceName: String
     private static let savedKey = "ios.savedPCs"
+    private static let lastConnectedKey = "ios.lastConnectedPCID"
 
     init(defaults: UserDefaults = .standard, base: URL, protectedData: ProtectedDataState,
          deviceName: String = UIDevice.current.name) {
@@ -65,6 +66,11 @@ final class LauncherServices {
         guard protectedData.read() else { throw Failure.unavailable }
         guard let data = defaults.data(forKey: Self.savedKey) else { return [] }
         return try JSONDecoder().decode([SavedPC].self, from: data)
+    }
+
+    func lastConnectedPCID() -> String? {
+        guard protectedData.read() else { return nil }
+        return defaults.string(forKey: Self.lastConnectedKey)
     }
 
     func prepare(server: ServerInfo, saved: Bool) async throws -> PreparedPC {
@@ -109,6 +115,7 @@ final class LauncherServices {
         saved.append(SavedPC(server: pc.server))
         saved.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         defaults.set(try JSONEncoder().encode(saved), forKey: Self.savedKey)
+        defaults.set(pc.server.uniqueId, forKey: Self.lastConnectedKey)
         return saved
     }
 

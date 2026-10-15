@@ -10,16 +10,20 @@ struct PairingView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Text("Enter this PIN in Sunshine on \(prompt.name).")
-                    .multilineTextAlignment(.center)
-                Text(prompt.pin).font(.largeTitle.monospacedDigit()).textSelection(.disabled)
-                    .accessibilityLabel("Pairing PIN")
-                    .accessibilityValue(prompt.pin.map(String.init).joined(separator: " "))
-                ProgressView("Waiting for the PC…")
+            ScrollView {
+                VStack(spacing: 24) {
+                    Text("Enter this PIN in Sunshine on \(prompt.name).")
+                        .multilineTextAlignment(.center)
+                    Text(prompt.pin).font(.largeTitle.monospacedDigit()).textSelection(.disabled)
+                        .accessibilityLabel("Pairing PIN")
+                        .accessibilityValue(prompt.pin.map(String.init).joined(separator: " "))
+                    ProgressView("Waiting for the PC…")
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
             }
-            .padding()
             .navigationTitle("Pair with the PC")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", role: .cancel) { cancel() }

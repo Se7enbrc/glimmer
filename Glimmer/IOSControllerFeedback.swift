@@ -28,7 +28,8 @@ final class IOSControllerFeedback: @unchecked Sendable {
                   let engine = device()?.haptics?.createEngine(withLocality: native) else { return nil }
             engine.stoppedHandler = { invalidated("engine stopped (reason \($0.rawValue))") }
             engine.resetHandler = { invalidated("engine reset") }
-            return try IOSControllerMotor.make(calls: IOSNativeHapticEngine(engine).calls(sharpness: sharpness),
+            return try IOSControllerMotor.make(calls: IOSNativeHapticEngine(engine).calls(
+                sharpness: sharpness, invalidated: invalidated),
                                                intensity: intensity)
         }
         let light: (@Sendable (UInt8, UInt8, UInt8) -> Void)? = hasLight ? setLight : nil
@@ -80,6 +81,7 @@ enum IOSControllerMotor {
         let start: @Sendable () throws -> Void
         let player: @Sendable () throws -> Player
         let stop: @Sendable () -> Void
+        var observeCompletion: @Sendable () -> Void = {}
     }
 
     static func make(calls: Calls, intensity: Float) throws -> ControllerMotor {
@@ -90,6 +92,7 @@ enum IOSControllerMotor {
             player = prepared
             try prepared.update(intensity)
             try prepared.start()
+            calls.observeCompletion()
             return ControllerMotor(updateIntensity: prepared.update, stop: {
                 try? prepared.update(0)
                 try? prepared.stop()
@@ -108,7 +111,7 @@ private final class IOSNativeHapticEngine: @unchecked Sendable {
     let engine: CHHapticEngine
     init(_ engine: CHHapticEngine) { self.engine = engine }
 
-    func calls(sharpness: Float) -> IOSControllerMotor.Calls {
+    func calls(sharpness: Float, invalidated: @escaping @Sendable (String) -> Void) -> IOSControllerMotor.Calls {
         IOSControllerMotor.Calls(start: { try self.engine.start() }, player: {
             let event = CHHapticEvent(eventType: .hapticContinuous,
                 parameters: [CHHapticEventParameter(parameterID: .hapticIntensity, value: 1),
@@ -117,7 +120,14 @@ private final class IOSNativeHapticEngine: @unchecked Sendable {
             let native = IOSNativeHapticPlayer(try self.engine.makePlayer(
                 with: CHHapticPattern(events: [event], parameters: [])))
             return IOSControllerMotor.Player(update: native.update, start: native.start, stop: native.stop)
-        }, stop: { self.engine.stop(completionHandler: nil) })
+        }, stop: { self.engine.stop(completionHandler: nil) }, observeCompletion: {
+            // A player can finish while its engine stays alive; retire the shared motor in either case.
+            self.engine.notifyWhenPlayersFinished { error in
+                let code = (error as NSError?)?.code ?? 0
+                invalidated("player finished (code \(code))")
+                return .stopEngine
+            }
+        })
     }
 }
 

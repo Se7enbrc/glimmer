@@ -36,6 +36,21 @@ struct IOSAudioOutputTests {
         #expect(sessionFixture.read { $0.calls.last } == "deactivate")
     }
 
+    @Test func unresolvedRemoteIORateUsesActivatedSessionRate() throws {
+        let fixture = AudioSessionFixture()
+        let session = fixture.makeSession()
+        fixture.observe(session)
+        let units = AudioUnitFixture()
+        units.read { $0.hardwareRate = 0; $0.hardwareChannels = 2 }
+        let lease = try session.acquire(sampleRate: 48_000)
+        let graph = IOSAudioOutput(channels: 2, session: session, lease: lease, calls: units.calls())
+        try graph.configure(format: format())
+        #expect(graph.sampleRate == lease.route.sampleRate)
+        #expect(units.read { $0.formats.dropFirst().allSatisfy { $0.mSampleRate == 44_100 } })
+        #expect(graph.start() == noErr)
+        fixture.close(session)
+    }
+
     @Test func sharedOutputOwnsGraphAndReleasesItWhilePlatformRemainsAlive() throws {
         let sessionFixture = AudioSessionFixture()
         let session = sessionFixture.makeSession()
@@ -108,6 +123,18 @@ struct IOSAudioOutputTests {
         #expect(units.read { $0.created.count } == 6)
         decoder.shutdown()
         #expect(units.read { $0.disposed.count } == 6)
+    }
+
+    @Test func nativeStereoOutputStartsAndRenders() async throws {
+        let session = IOSAudioSession()
+        let lease = try session.acquire(sampleRate: 48_000)
+        defer { session.lock.withLock { session.wantsPlayback = false } }
+        let graph = IOSAudioOutput(channels: 2, session: session, lease: lease)
+        try graph.configure(format: format())
+        #expect(graph.start() == noErr)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(graph.isRunning)
+        #expect(graph.lastRenderError() == noErr)
     }
 
     private func format() throws -> AVAudioFormat {

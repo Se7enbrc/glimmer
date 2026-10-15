@@ -26,8 +26,16 @@ extension IOSControllerCapture {
         var caps: ControllerDescriptor.Capabilities = [.analogTriggers]
         if touchpad(pad) != nil { caps.insert(.touchpad) }
         let kind: ControllerDescriptor.Kind = pad is GCXboxGamepad ? .xbox
-            : pad is GCDualSenseGamepad || pad is GCDualShockGamepad ? .playStation : .unknown
+            : pad is GCDualSenseGamepad || pad is GCDualShockGamepad ? .playStation : glyphKind(pad)
         return ControllerDescriptor(kind: kind, supportedButtons: buttons, capabilities: caps)
+    }
+
+    static func glyphKind(_ pad: GCExtendedGamepad) -> ControllerDescriptor.Kind {
+        let symbols = [pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY].map {
+            $0.unmappedSfSymbolsName?.replacingOccurrences(of: ".fill", with: "")
+        }
+        let playStation = ["xmark.circle", "circle.circle", "square.circle", "triangle.circle"]
+        return symbols == playStation.map(Optional.some) ? .playStation : .unknown
     }
 
     private static func elements(_ pad: GCExtendedGamepad) -> [(GCControllerButtonInput, ControllerButtons)] {

@@ -1,47 +1,74 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import SwiftUI
 
 @MainActor
 struct LauncherView: View {
     static let pcSymbol = "display"
+    private let styleOverride: LauncherStyle?
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var controllers = ControllerMonitor()
     @State private var model: LauncherModel
+    @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
+    @State private var addingPC = false
+    @State private var pendingAddress: String?
+    @State private var showingSettings = false
+    @State private var pendingAddPC = false
+    @State private var pendingPC: HostDiscovery.Discovered?
+    @AppStorage("streamProfile") private var profile: StreamProfile = .native120
+    @AppStorage("controllerMouseStick") private var mouseStick: ControllerMouseStick = .right
 
-    init(model: LauncherModel = .make()) { _model = State(initialValue: model) }
+    init(model: LauncherModel = .make(), style: LauncherStyle? = nil) {
+        _model = State(initialValue: model)
+        styleOverride = style
+    }
 
     var body: some View {
         NavigationStack {
-            List {
-                computers
-                if let name = model.selectedName {
-                    Section(name) {
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        pcHeader
+                        LauncherGallery(model: model, style: styleOverride ?? launcherStyle,
+                                        size: CGSize(width: max(0, geometry.size.width - 48),
+                                                     height: geometry.size.height))
                         if model.busy { ProgressView("Connecting…") }
-                        ForEach(model.apps) { app in
-                            Button(app.name, systemImage: "play.fill") { model.launch(app) }
-                                .disabled(model.busy)
+                        if let message = model.message { Text(message).foregroundStyle(.secondary) }
+                        if model.savedPCs.isEmpty, model.selectedName == nil {
+                            Button("Set up a PC", systemImage: "plus") { showingSettings = true }
+                                .buttonStyle(.glassProminent)
                         }
                     }
-                }
-                if let message = model.message {
-                    Section { Text(message).foregroundStyle(.secondary) }
-                }
-                Section("Controllers") {
-                    if controllers.controllers.isEmpty {
-                        Text("Connect a controller to get started.").foregroundStyle(.secondary)
-                    }
-                    ForEach(controllers.controllers) { controller in
-                        LabeledContent(controller.name,
-                                       value: controller.hasExtendedGamepad ? "Connected" : "Unsupported controls")
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
                 }
             }
-            .navigationTitle("Glimmer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Settings", systemImage: "gearshape") { showingSettings = true }
+                        .disabled(model.busy)
+                }
+            }
         }
         .tint(Color("AccentColor"))
+        .sheet(isPresented: $showingSettings, onDismiss: finishSettings) {
+            GlimmerSettings(profile: $profile, stick: $mouseStick, model: model,
+                addPC: { pendingAddPC = true; showingSettings = false },
+                pairPC: { pendingPC = $0; showingSettings = false })
+        }
+        .onChange(of: profile, initial: true) { _, profile in model.streamProfile = profile }
+        .onChange(of: mouseStick, initial: true) { _, stick in model.mouseStick = stick }
+        .sheet(isPresented: $addingPC, onDismiss: {
+            if let address = pendingAddress {
+                pendingAddress = nil
+                model.select(address: address)
+            }
+        }, content: { AddPCView { pendingAddress = $0 } })
         .sheet(item: Binding(get: { model.pairing }, set: {
             if $0 == nil { model.dismissPairing() }
         })) { prompt in
@@ -65,28 +92,54 @@ struct LauncherView: View {
             for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in updateAvailability() }
     }
 
-    @ViewBuilder private var computers: some View {
-        Section("Your PCs") {
-            ForEach(model.savedPCs) { pc in
-                Button(pc.name, systemImage: Self.pcSymbol) { model.select(pc) }
+    private var pcHeader: some View {
+        HStack(alignment: .top, spacing: 16) {
+            Image(systemName: Self.pcSymbol)
+                .font(.largeTitle)
+                .foregroundStyle(Color("AccentColor"))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                Menu {
+                    ForEach(model.savedPCs) { pc in
+                        Button(pc.name, systemImage: Self.pcSymbol) { model.select(pc) }
+                    }
+                    Button("PC settings", systemImage: "gearshape") { showingSettings = true }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(model.selectedName ?? "Choose a PC").font(.title2).bold()
+                        Image(systemName: "chevron.down").font(.caption)
+                    }
+                    .foregroundStyle(Color.primary)
+                }
+                .disabled(model.busy)
+                if model.selectedName != nil {
+                    Text(profile.summary).font(.subheadline).foregroundStyle(.secondary)
+                } else {
+                    Text("Pair with a PC running Sunshine in Settings.").foregroundStyle(.secondary)
+                }
             }
-            if model.savedPCs.isEmpty { Text("Pair with a PC running Sunshine.").foregroundStyle(.secondary) }
+            Spacer(minLength: 0)
+            if controllers.controllers.contains(where: \.hasExtendedGamepad) {
+                Image(systemName: "gamecontroller").foregroundStyle(.secondary)
+                    .accessibilityLabel("Controller connected")
+            }
         }
-        Section("Nearby PCs") {
-            ForEach(model.discovered) { pc in
-                Button(pc.displayName, systemImage: Self.pcSymbol) { model.select(pc) }
-            }
-            if model.discoveryDenied {
-                Text("Allow local network access in Settings to find the PC.")
-            } else if model.discovered.isEmpty {
-                Text("Open Sunshine on the PC and connect to the same network.").foregroundStyle(.secondary)
-            }
+    }
+
+    private func finishSettings() {
+        if pendingAddPC {
+            pendingAddPC = false
+            addingPC = true
+        } else if let pc = pendingPC {
+            pendingPC = nil
+            model.select(pc)
         }
     }
 
     private func updateAvailability() {
         model.availabilityChanged(active: scenePhase == .active, background: scenePhase == .background,
                                   protectedDataAvailable: UIApplication.shared.isProtectedDataAvailable)
+        model.selectInitialPCIfNeeded()
     }
 }
 

@@ -9,6 +9,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */; };
+		A3D372A8CF7E4C02AC0926B7 /* StreamBackgroundGrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */; };
+		E5079E847C204146BDF540F1 /* LauncherGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D57DEF880324835B4BA487E /* LauncherGallery.swift */; };
+		46257D27DA574232935DD699 /* ControllerMouseSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A49D3096BFB64C23AE91AC56 /* ControllerMouseSettings.swift */; };
 		07F5AD5B787425E258D9C086 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 34245D5D017E137C796AE2AA /* LICENSE */; };
 		10896918E526BAFB88FC984F /* LauncherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C27E8A6F7449606A4E16DB8B /* LauncherView.swift */; };
 		22DF8131531E5ADA1EFDA4C1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 166CD0D8C2DE20211142D277 /* Foundation.framework */; };
@@ -54,6 +58,9 @@
 		0A75FC5D61394A19A155A87D /* IOSControllerFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6958391F13644D4EBE6E2E6D /* IOSControllerFeedbackTests.swift */; };
 		CB8A71DDD3734C7D93110306 /* IOSControllerSensors.swift in Sources */ = {isa = PBXBuildFile; fileRef = E63F8D899AF944BB9D5502AA /* IOSControllerSensors.swift */; };
 		610DFE85BF994F3ABF7A541A /* IOSControllerSensorsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */; };
+		FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */; };
+		00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */; };
+		38C80A9D0A874449A43CE593 /* AddPCView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +74,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherGalleryTests.swift"; sourceTree = "<group>"; };
+		D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamBackgroundGrace.swift"; sourceTree = "<group>"; };
+		6D57DEF880324835B4BA487E /* LauncherGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherGallery.swift"; sourceTree = "<group>"; };
+		A49D3096BFB64C23AE91AC56 /* ControllerMouseSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerMouseSettings.swift; sourceTree = "<group>"; };
 		166CD0D8C2DE20211142D277 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		34245D5D017E137C796AE2AA /* LICENSE */ = {isa = PBXFileReference; includeInIndex = 1; path = LICENSE; sourceTree = "<group>"; };
 		34C1CD2D3621B447D33B3F8C /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -115,6 +126,9 @@
 		6958391F13644D4EBE6E2E6D /* IOSControllerFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerFeedbackTests.swift"; sourceTree = "<group>"; };
 		E63F8D899AF944BB9D5502AA /* IOSControllerSensors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerSensors.swift"; sourceTree = "<group>"; };
 		7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerSensorsTests.swift"; sourceTree = "<group>"; };
+		5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamProfile.swift"; sourceTree = "<group>"; };
+		DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamProfileTests.swift"; sourceTree = "<group>"; };
+		E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AddPCView.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -190,6 +204,8 @@
 				2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */,
 				69AB6019C55BC9409A7FA80F /* LauncherTests.swift */,
 				155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */,
+				DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */,
+				E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */,
 				4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */,
 				9F5102EDB7AD2531AE0663B1 /* ControllerMonitorTests.swift */,
 				198F3AC99E774F7CB79C6798 /* IOSControllerCaptureTests.swift */,
@@ -217,6 +233,7 @@
 			isa = PBXGroup;
 			children = (
 				E3225303E73FF1C74315DDB3 /* PairingView.swift */,
+				E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */,
 				1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */,
 				087279E7E4417E5B10AADB05 /* LauncherServices.swift */,
 				5A97E5B4E562286545BA6412 /* StreamView.swift */,
@@ -225,6 +242,10 @@
 				5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */,
 				449C39977453B76D4D682FFF /* StreamSessionModel.swift */,
 				57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */,
+				5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */,
+				D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */,
+				6D57DEF880324835B4BA487E /* LauncherGallery.swift */,
+				A49D3096BFB64C23AE91AC56 /* ControllerMouseSettings.swift */,
 				36171098F2FC6D807B7809E9 /* ControllerMonitor.swift */,
 				390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */,
 				1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */,
@@ -349,6 +370,8 @@
 				E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */,
 				7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */,
 				F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */,
+				00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */,
+				9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */,
 				BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */,
 				99827218F70ECA345A8EED25 /* ControllerMonitorTests.swift in Sources */,
 				0A34A869941C483784D1C76F /* IOSControllerCaptureTests.swift in Sources */,
@@ -367,6 +390,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CF6514282E3FDE69E7FE6EA8 /* PairingView.swift in Sources */,
+				38C80A9D0A874449A43CE593 /* AddPCView.swift in Sources */,
 				AF9547F4F7817E3F82B8F721 /* LauncherModel.swift in Sources */,
 				83B27EBA9F210DF76B77D772 /* LauncherServices.swift in Sources */,
 				53442F74573A5960DB86B797 /* StreamView.swift in Sources */,
@@ -375,6 +399,10 @@
 				2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */,
 				BFCC9B0DBFB951A6374D2892 /* StreamSessionModel.swift in Sources */,
 				902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */,
+				FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */,
+				A3D372A8CF7E4C02AC0926B7 /* StreamBackgroundGrace.swift in Sources */,
+				E5079E847C204146BDF540F1 /* LauncherGallery.swift in Sources */,
+				46257D27DA574232935DD699 /* ControllerMouseSettings.swift in Sources */,
 				56379B99BE31A1E9E8BAC42F /* ControllerMonitor.swift in Sources */,
 				7C852A7B0A774B1287D2B023 /* IOSControllerCapture+Samples.swift in Sources */,
 				BF51A1858C9E4892B1CD845D /* IOSControllerCapture.swift in Sources */,
@@ -628,7 +656,7 @@
 			repositoryURL = "https://github.com/Se7enbrc/glimmer.git";
 			requirement = {
 				kind = revision;
-				revision = 518a3ceb57ba4a424c4c1791b63f9fbd3751167a;
+				revision = d6f4d88effa59e332e03e03768a6ac4b581427cf;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

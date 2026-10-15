@@ -9,109 +9,150 @@ import UIKit
 @Observable
 final class StreamSessionModel {
     enum Phase: Equatable {
-        case idle, connecting, streaming, stopping, ended(String)
+        case idle, connecting, streaming, reconnecting, stopping, ended(String)
     }
 
     private(set) var phase: Phase = .idle
     private(set) var audioUnavailable = false
     private(set) var connectionPoor = false
+    private(set) var waitingForVideo = false
+    private(set) var requestedFormat: StreamFormat?
+    private(set) var mouseControllers: Set<ControllerRegistration> = []
+    var controllerMouseActive: Bool { !mouseControllers.isEmpty }
+    private(set) var controllerConnected = false
+    private(set) var controllerModeMessage: String?
+    private(set) var dismissWhenStopped = false
+    private let backgroundGrace: StreamBackgroundGrace
     private(set) var canStart = true
     private(set) var controlsVisible = true
     var inputCaptureChanged: ((Bool) -> Void)?
-    var inputFocused: Bool { canStart && phase == .streaming && !controlsVisible }
+    var inputFocused: Bool { canStart && phase == .streaming && !controlsVisible && !captureSuspended }
     var streamInput: StreamInput? { playback?.input }
     nonisolated let launch: StreamLaunch
-    private let makePlayback: @MainActor (StreamLaunch, StreamSurface, AsyncStream<StreamPlayback.Event>.Continuation)
-        -> StreamPlayback
-    private let readIdleTimer: () -> Bool
-    private let writeIdleTimer: (Bool) -> Void
-    private var savedIdleTimer: Bool?
+    private let makePlayback: @MainActor (StreamLaunch, StreamSurface,
+        @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback
     private var playback: StreamPlayback?
-    private var generation: UInt64 = 0
-    private var connectTask: Task<Void, Never>?
+    private var startTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
     private var stopTask: Task<Void, Never>?
-    private var continuation: AsyncStream<StreamPlayback.Event>.Continuation?
+    private var endingMessage: String?
+    private var captureSuspended = false
+    private var controlsRequested = false
+    private var modeNoticeTask: Task<Void, Never>?
 
-    init(launch: StreamLaunch,
+    init(launch: StreamLaunch, backgroundGrace: StreamBackgroundGrace = StreamBackgroundGrace(),
          makePlayback: @escaping @MainActor (StreamLaunch, StreamSurface,
-            AsyncStream<StreamPlayback.Event>.Continuation) -> StreamPlayback = StreamPlayback.make,
-         readIdleTimer: @escaping () -> Bool = { UIApplication.shared.isIdleTimerDisabled },
-         writeIdleTimer: @escaping (Bool) -> Void = { UIApplication.shared.isIdleTimerDisabled = $0 }) {
+            @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback = StreamPlayback.make) {
         self.launch = launch
+        self.backgroundGrace = backgroundGrace
         self.makePlayback = makePlayback
-        self.readIdleTimer = readIdleTimer
-        self.writeIdleTimer = writeIdleTimer
     }
 
     func start(surface: StreamSurface) {
         guard canStart, phase == .idle, stopTask == nil else { return }
-        generation &+= 1
-        let attempt = generation
-        let events = AsyncStream<StreamPlayback.Event>.makeStream()
-        continuation = events.continuation
-        let playback = makePlayback(launch, surface, events.continuation)
+        let playback: StreamPlayback
+        do {
+            playback = try makePlayback(launch, surface) { [weak self] in
+                self?.captureSuspended = true
+                self?.synchronizeInputFocus()
+            }
+        } catch {
+            phase = .ended("Couldn't prepare this display. Close the stream and try again.")
+            return
+        }
         self.playback = playback
+        requestedFormat = playback.format
         phase = .connecting
-        savedIdleTimer = readIdleTimer()
-        writeIdleTimer(true)
+        playback.observeControllers? { [weak self] connected in self?.controllerConnectionChanged(connected) }
         eventTask = Task { [weak self] in
-            for await event in events.stream {
-                guard !Task.isCancelled, let self, self.generation == attempt else { return }
+            for await event in playback.events {
+                guard !Task.isCancelled, let self else { return }
                 self.receive(event)
             }
         }
-        connectTask = Task { [weak self] in
+        startTask = Task { [weak self] in
             do {
-                try await playback.connect()
+                try await playback.start()
             } catch {
-                guard let self, self.generation == attempt else { return }
-                self.stop(message: "Couldn't connect to \(self.launch.pcName). Check Sunshine on the PC and try again.")
+                guard let self, self.phase != .stopping else { return }
+                if self.endingMessage == nil { self.endingMessage = self.connectionFailureMessage }
+                self.complete()
             }
         }
     }
 
     func stop(message: String? = nil) {
-        guard stopTask == nil else { return }
-        let ending = message ?? "Disconnected from \(launch.pcName)."
-        guard let playback else {
-            if phase == .idle { phase = .ended(ending) }
-            return
-        }
-        generation &+= 1
+        guard stopTask == nil, !phase.isEnded else { return }
+        endingMessage = message ?? endingMessage ?? "Disconnected from \(launch.pcName)."
+        guard let playback else { complete(); return }
         phase = .stopping
         synchronizeInputFocus()
-        playback.stopInput?()
-        connectTask?.cancel()
-        connectTask = nil
-        eventTask?.cancel()
-        eventTask = nil
-        continuation?.finish()
-        continuation = nil
-        if let savedIdleTimer { writeIdleTimer(savedIdleTimer); self.savedIdleTimer = nil }
         stopTask = Task {
             await playback.stop()
-            playback.teardown()
-            self.playback = nil
-            phase = .ended(ending)
+            complete()
             stopTask = nil
         }
     }
 
-    func availabilityChanged(active: Bool, background: Bool, protectedDataAvailable: Bool) {
-        canStart = active && protectedDataAvailable
+    func disconnect() {
+        dismissWhenStopped = true
+        stop()
+    }
+
+    private func complete() {
+        backgroundGrace.finish()
+        if phase.isEnded {
+            if let endingMessage { phase = .ended(endingMessage) }
+            return
+        }
+        phase = .ended(endingMessage ?? "Disconnected from \(launch.pcName).")
+        mouseControllers.removeAll()
+        controllerConnected = false
+        modeNoticeTask?.cancel()
+        controllerModeMessage = nil
         synchronizeInputFocus()
-        if background || !protectedDataAvailable { stop() }
+        playback = nil
+        startTask = nil
+        eventTask?.cancel()
+        eventTask = nil
+    }
+
+    private var connectionFailureMessage: String {
+        "Couldn't connect to \(launch.pcName). Check Sunshine on the PC and try again."
+    }
+
+    func availabilityChanged(active: Bool, background: Bool, protectedDataAvailable: Bool) {
+        let returnedInTime = active ? backgroundGrace.returned() : true
+        canStart = active && protectedDataAvailable && returnedInTime
+        synchronizeInputFocus()
+        guard !phase.isEnded, phase != .stopping else { return }
+        playback?.setVisible?(canStart)
+        if !protectedDataAvailable || !returnedInTime { disconnect(); return }
+        if !active {
+            guard playback != nil, phase != .reconnecting else { disconnect(); return }
+            backgroundGrace.prepare { [weak self] in self?.disconnect() }
+            if background { backgroundGrace.leave { [weak self] in self?.disconnect() } }
+        }
     }
 
     func showControls() {
+        controlsRequested = true
         controlsVisible = true
         synchronizeInputFocus()
     }
 
     func resumeInput() {
         guard canStart, phase == .streaming else { return }
+        controlsRequested = false
         controlsVisible = false
+        synchronizeInputFocus()
+    }
+
+    private func controllerConnectionChanged(_ connected: Bool) {
+        guard !phase.isEnded, controllerConnected != connected else { return }
+        controllerConnected = connected
+        if connected, phase == .streaming, !controlsRequested { controlsVisible = false }
+        if !connected { controlsVisible = true }
         synchronizeInputFocus()
     }
 
@@ -124,27 +165,52 @@ final class StreamSessionModel {
 
     func waitUntilStopped() async { await stopTask?.value }
 
-    func receive(_ event: StreamPlayback.Event) {
-        guard phase == .connecting || phase == .streaming else { return }
+    private func receiveInput(_ event: StreamInput.Event) {
         switch event {
-        case .firstFrame(let id):
-            guard playback?.id == id else { return }
+        case .stopRequested: disconnect()
+        case .controllersActive: break
+        case .mouseMode(let controller, let enabled):
+            if enabled { mouseControllers.insert(controller) } else { mouseControllers.remove(controller) }
+            if inputFocused, controllerConnected { showControllerMode(enabled) }
+        }
+    }
+
+    private func showControllerMode(_ enabled: Bool) {
+        modeNoticeTask?.cancel()
+        controllerModeMessage = enabled ? "Mouse mode · \(launch.mouseStick.label) stick" : "Gamepad mode"
+        modeNoticeTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            self?.controllerModeMessage = nil
+        }
+    }
+
+    func receive(_ update: StreamSession.Update) {
+        guard playback?.id == update.sessionID, !phase.isEnded else { return }
+        if case .stopped = update.event { complete(); return }
+        guard phase != .stopping else { return }
+        switch update.event {
+        case .firstFrame, .reconnected:
+            endingMessage = nil
+            captureSuspended = false
             phase = .streaming
+            if controllerConnected, !controlsRequested { controlsVisible = false }
             synchronizeInputFocus()
-        case .connection(let id, let event):
-            guard playback?.id == id else { return }
-            switch event {
-            case .terminated:
-                stop(message: "The connection to \(launch.pcName) ended. Check the PC and reconnect when you're ready.")
-            case .stageFailed:
-                stop(message: "Couldn't connect to \(launch.pcName). Check Sunshine on the PC and try again.")
-            case .connectionPoor(let poor): connectionPoor = poor
-            case .audioFailed: audioUnavailable = true
-            case .hdrMode(let enabled): playback?.setHDR(enabled)
-            case .input(let event):
-                if event == .stopRequested { stop() }
-            case .connected, .stageStarting, .stageComplete: break
-            }
+        case .reconnecting:
+            captureSuspended = true
+            phase = .reconnecting
+            synchronizeInputFocus()
+        case .connectionTerminated:
+            endingMessage = "The connection to \(launch.pcName) ended. Check the PC and reconnect when you're ready."
+            phase = .stopping
+            synchronizeInputFocus()
+        case .stageFailed:
+            endingMessage = connectionFailureMessage
+        case .connectionStatus(let quality): connectionPoor = quality == .poor
+        case .waitingForVideo(let waiting): waitingForVideo = waiting
+        case .audioFailed: audioUnavailable = true
+        case .input(let event): receiveInput(event)
+        case .connectionEstablished, .stageStarting, .stageComplete, .hdrModeChanged, .hdrActive, .log, .stopped:
+            break
         }
     }
 }

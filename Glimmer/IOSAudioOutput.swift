@@ -70,10 +70,13 @@ final class IOSAudioOutput {
         try set(remote, kAudioOutputUnitProperty_EnableIO, scope: kAudioUnitScope_Output, value: UInt32(1))
         let hardware: AudioStreamBasicDescription = try read(remote, kAudioUnitProperty_StreamFormat,
             scope: kAudioUnitScope_Output, initial: AudioStreamBasicDescription())
-        guard hardware.mSampleRate.isFinite, hardware.mSampleRate > 0, hardware.mChannelsPerFrame > 0 else {
+        // RemoteIO can report an unresolved zero rate before initialization on a real iPhone.
+        // The active audio session already supplies the negotiated device rate.
+        let outputRate = hardware.mSampleRate == 0 ? lease.route.sampleRate : hardware.mSampleRate
+        guard outputRate.isFinite, outputRate > 0, hardware.mChannelsPerFrame > 0 else {
             throw AudioOutput.Failure(status: kAudioUnitErr_FormatNotSupported)
         }
-        sampleRate = hardware.mSampleRate
+        sampleRate = outputRate
         channels = min(2, hardware.mChannelsPerFrame)
         let maximum = max(4096, try read(remote, kAudioUnitProperty_MaximumFramesPerSlice, initial: UInt32(0)))
         let resampler = try makeUnit(type: kAudioUnitType_FormatConverter, subtype: kAudioUnitSubType_Varispeed)

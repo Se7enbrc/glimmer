@@ -26,7 +26,7 @@ and offline private-key scans.
 ## Engine dependency
 
 The shared project pins `Se7enbrc/glimmer` to the exact commit
-`410e8280defd936f89e21dab61772faea2acdec7`, including the public connection API,
+`d6f4d88effa59e332e03e03768a6ac4b581427cf`, including the public connection API,
 shared transport, audio output contract, video decoder and display pacing. The
 package lock records the same revision. Update the pin to a full commit SHA,
 never a branch or tag, and never copy engine source here.
@@ -69,12 +69,23 @@ The checked-in `Signing.xcconfig` is intentionally blank. The app’s bundle ID 
 provisioning in Xcode before installing. No signing secrets belong in this repo.
 App Store Connect, distribution profiles and release automation come later.
 
+Debug builds keep the active app awake throughout the launcher and stream.
+Production Release keeps it awake only during a stream. For an optimized local
+development build, add
+`SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) GLIMMER_DEVELOPMENT` on one
+line in the ignored local configuration. Verify production behavior with
+`SWIFT_ACTIVE_COMPILATION_CONDITIONS=''` on the unsigned Release build command.
+Inactive/background scenes always restore auto-lock.
+
 Before accepting UI, inspect light/dark appearance, large Dynamic Type,
 VoiceOver, keyboard focus, iPhone and iPad, both landscape directions, safe-area
-Disconnect button, status/home indicator behavior and portrait restoration after
-streaming. Native UI rendering tests attach PNGs to the test result bundle; CI
-retains those bundles in the `simulator-logs` artifact. Inspect the images
-before claiming visual acceptance.
+Disconnect button, status/home indicator behavior and landscape retention after
+streaming. The whole iPhone app uses both landscape orientations, including the
+launcher, pairing and address entry. iPad declares all orientations for system
+windowing; the app requests landscape without the deprecated fullscreen
+compatibility key. Native UI rendering tests attach PNGs to the test result
+bundle; CI retains those bundles in the `simulator-logs` artifact. Inspect the
+images before claiming visual acceptance.
 
 Plug in Backbone One and another controller: verify initial detection, unplug,
 reconnect and background/return. Follow the fixed [input mapping](docs/INPUT.md)
@@ -87,7 +98,10 @@ The app opts into
 [higher refresh rates](https://developer.apple.com/documentation/bundleresources/information-property-list/cadisableminimumframedurationonphone)
 and declares the
 [extended gamepad profile](https://developer.apple.com/documentation/bundleresources/information-property-list/gcsupportedgamecontrollers).
-It does not advertise complete controller navigation yet.
+It opts into system-managed Game Mode with `LSSupportsGameMode`, following
+[Apple’s Game Mode guidance](https://developer.apple.com/videos/play/wwdc2025/209/).
+The system controls activation; this declaration does not prove it is active. It
+does not advertise complete controller navigation yet.
 
 ## Repository protection
 

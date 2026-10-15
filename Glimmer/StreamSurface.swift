@@ -12,6 +12,7 @@ final class StreamSurface: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .black
+        clipsToBounds = true
         configureDisplayLayer()
         isAccessibilityElement = true
         accessibilityLabel = "Video from the PC"
@@ -38,7 +39,8 @@ final class StreamSurface: UIView {
     }
 
     private func configureDisplayLayer() {
-        displayLayer.videoGravity = .resizeAspect
+        displayLayer.videoGravity = .resizeAspectFill
+        displayLayer.frame = bounds
         displayLayer.backgroundColor = UIColor.black.cgColor
         layer.addSublayer(displayLayer)
     }

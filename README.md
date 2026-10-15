@@ -7,10 +7,32 @@ Sunshine, pairs with a PIN, lists their apps and connects a landscape video and
 stereo audio stream. Physical controllers and simple touch use the shared input
 engine. See the fixed [input mapping](docs/INPUT.md).
 
-The initial stream is H.264, 1920 × 1080 at 60 fps, SDR and 20 Mbps.
-Disconnecting or backgrounding the app stops the local stream and leaves the
-game on the PC. Real-PC playback and physical-device behavior still need
-validation.
+The iPhone launcher, pairing screens and stream use landscape orientation. The
+app opts into iOS Game Mode; the system controls its activation.
+
+The launcher shows the PC, its requested stream settings and its app buttons.
+The last connected PC loads automatically, including after disconnecting. With
+no previous connection, a single paired PC is selected. Use the PC name to
+switch PCs; pairing, quality, controller preferences and diagnostics live in
+Settings. Settings → General offers Buttons or Covers. Both layouts adapt to the
+screen and text size; Covers uses artwork supplied by the PC, with a glyph
+fallback.
+
+Native resolution at 120 fps is the default. Settings also offers 1080p at 60 or
+120 fps. The choice is saved and requests are capped to the attached display's
+refresh capability. All three modes use H.264, SDR, stereo and 20 Mbps for the
+initial device tests. Video fills the screen behind cutouts. A 16:9 stream crops
+at the top and bottom on a wider display; native resolution matches the
+display's aspect ratio. If discovery cannot find the PC, choose Settings → PCs →
+Add PC by address… and enter its IP address or hostname. Pairing and certificate
+verification use the same connection flow. Development builds keep the display
+awake throughout the active app. Release builds do so only during a stream.
+Leaving the app restores ordinary auto-lock; manually locking still stops a
+stream. Disconnecting stops the local stream immediately. Brief app switches
+preserve it for up to 15 seconds, with input released; staying away longer
+disconnects. iOS may end this grace period earlier. Screen lock disconnects
+immediately. All of these actions leave the game running on the PC. Real-PC
+playback and physical-device behavior still need validation.
 
 - Requires iOS or iPadOS 26 or later.
 - Built for physical controllers, including Backbone One.
@@ -19,3 +41,6 @@ validation.
 Want to build or help? Start with [CONTRIBUTING.md](CONTRIBUTING.md). See the
 [engine roadmap](https://github.com/Se7enbrc/glimmer/blob/engine/spm/docs/IOS_ENGINE_ROADMAP.md)
 for what comes next. Free software under [GPLv3](LICENSE).
+
+See [PC setup](docs/HOST_SETUP.md) for Sunshine and native display modes, and
+[diagnostics](docs/DIAGNOSTICS.md) for recording a physical iPhone test.

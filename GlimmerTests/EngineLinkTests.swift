@@ -8,6 +8,32 @@ import Testing
 @testable import Glimmer
 
 struct EngineLinkTests {
+    @Test @MainActor func publicSessionInvalidStartDisposesPreparedNativeMediaOnce() async {
+        let configuration = configuration(width: 0)
+        let video = VideoDecoder(configuration: configuration, displayInfo: { nil })
+        let audio = AudioDecoder(platform: IOSAudio.platform(environment: {
+            StreamSession.audioEnvironment(host: "public-session-test")
+        }))
+        var quiesces = 0
+        var disposals = 0
+        let prepared = StreamSession.PreparedMedia(video: video, audio: audio,
+            quiesce: { quiesces += 1 }, finalDispose: { disposals += 1 })
+        let (session, input) = StreamSession.make(media: prepared, network: unavailableNetwork(),
+                                                hostDisposition: .disconnectOnly)
+        do {
+            try await session.start(appID: 1, configuration: configuration)
+            Issue.record("Invalid dimensions must fail before identity or networking.")
+        } catch StreamConnection.Failure.invalidConfiguration {
+            #expect(quiesces == 1 && disposals == 1)
+        } catch {
+            Issue.record("Expected the public invalid-configuration failure.")
+        }
+        await session.stop()
+        #expect(disposals == 1)
+        #expect(input.registerController(
+            ControllerDescriptor(kind: .unknown, supportedButtons: [], capabilities: [])) == nil)
+    }
+
     @Test func buildsRealEngineRequestWithoutNetworking() {
         let engine = EngineLink()
         #expect(engine.protocolVersion == 14)

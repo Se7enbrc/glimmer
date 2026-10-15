@@ -8,6 +8,87 @@ import Testing
 
 @MainActor
 struct IOSControllerCaptureTests {
+    @Test func stopRequestedByConnectionObserverCannotResumeInput() async {
+        let fixture = ControllerCaptureFixture()
+        let capture = fixture.make()
+        capture.start()
+        capture.observeConnections { connected in
+            if !connected { capture.stop() }
+        }
+        fixture.visible = false
+        capture.setFocused(true)
+        #expect(!fixture.events.contains("focus:true"))
+        #expect(fixture.samples.isEmpty)
+        await fixture.connection.stop()
+    }
+
+    @Test func detachDiscoveredDuringResumeCannotReopenInputBehindTheControls() async {
+        let fixture = ControllerCaptureFixture()
+        let capture = fixture.make()
+        capture.start()
+        capture.observeConnections { connected in
+            if !connected { capture.setFocused(false) }
+        }
+        fixture.visible = false
+        capture.setFocused(true)
+        #expect(!fixture.events.contains("focus:true"))
+        #expect(fixture.samples.isEmpty)
+        capture.stop()
+        await fixture.connection.stop()
+    }
+
+    @Test func attachDiscoveredDuringResumePublishesFocusOnlyOnce() async {
+        let fixture = ControllerCaptureFixture()
+        fixture.visible = false
+        let capture = fixture.make()
+        capture.start()
+        capture.observeConnections { connected in
+            if connected { capture.setFocused(true) }
+        }
+        fixture.visible = true
+        capture.setFocused(true)
+        #expect(fixture.events.filter { $0 == "focus:true" }.count == 1)
+        #expect(fixture.samples.count == 1)
+        capture.stop()
+        await fixture.connection.stop()
+    }
+
+    @Test func connectionObservationReportsInitialHotplugAndStopWithoutRepeatedRefreshes() async {
+        let fixture = ControllerCaptureFixture()
+        let capture = fixture.make()
+        var connected: [Bool] = []
+        capture.start()
+        capture.observeConnections { connected.append($0) }
+        capture.refresh()
+        #expect(connected == [true])
+        fixture.visible = false
+        capture.refresh()
+        fixture.visible = true
+        capture.refresh()
+        #expect(connected == [true, false, true])
+        capture.stop()
+        capture.refresh()
+        #expect(connected == [true, false, true, false])
+        capture.observeConnections { connected.append($0) }
+        #expect(connected.last == false)
+        await fixture.connection.stop()
+    }
+
+    @Test func playStationGlyphsAdvertiseLayoutWithoutInventingCapabilities() throws {
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        let buttons = [pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY]
+        let glyphs = ["xmark.circle", "circle.circle", "square.circle", "triangle.circle"]
+        for (button, glyph) in zip(buttons, glyphs) { button.unmappedSfSymbolsName = glyph }
+        pad.buttonA.sfSymbolsName = "a.circle"
+        let descriptor = IOSControllerCapture.descriptor(controller, pad: pad)
+        #expect(descriptor.kind == .playStation)
+        #expect(descriptor.capabilities == [.analogTriggers])
+        #expect(!descriptor.capabilities.contains(.touchpad))
+        pad.buttonB.unmappedSfSymbolsName = "b.circle"
+        #expect(IOSControllerCapture.descriptor(controller, pad: pad).kind == .unknown)
+    }
+
     @Test func capturePreservesNormalizedAxesAndActualButtons() throws {
         let controller = GCController.withExtendedGamepad()
         let pad = try #require(controller.extendedGamepad)

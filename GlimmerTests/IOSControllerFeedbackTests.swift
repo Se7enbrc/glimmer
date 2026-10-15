@@ -12,7 +12,7 @@ struct IOSControllerFeedbackTests {
         let fixture = MotorFixture()
         var motor: ControllerMotor? = try IOSControllerMotor.make(calls: fixture.calls(), intensity: 0.37)
         weak let retained = motor
-        #expect(fixture.events.withLock { $0 } == ["engine.start", "make", "update", "player.start"])
+        #expect(fixture.events.withLock { $0 } == ["engine.start", "make", "update", "player.start", "observe"])
         #expect(fixture.intensities.withLock { $0 } == [0.37])
         motor = nil
         #expect(retained == nil)
@@ -28,6 +28,7 @@ struct IOSControllerFeedbackTests {
         }
         let events = fixture.events.withLock { $0 }
         #expect(events.last == "engine.stop")
+        #expect(!events.contains("observe"))
         #expect(events.filter { $0 == "engine.stop" }.count == 1)
         #expect(events.contains("player.stop") == (stage == "update" || stage == "player.start"))
     }
@@ -67,6 +68,7 @@ private final class MotorFixture: Sendable {
                 self.intensities.withLock { $0.append(value) }
                 try self.record("update")
             }, start: { try self.record("player.start") }, stop: { try self.record("player.stop") })
-        }, stop: { self.events.withLock { $0.append("engine.stop") } })
+        }, stop: { self.events.withLock { $0.append("engine.stop") } },
+           observeCompletion: { self.events.withLock { $0.append("observe") } })
     }
 }

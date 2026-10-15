@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import GlimmerEngine
+import Observation
+import Synchronization
 import Testing
 import UIKit
 @testable import Glimmer
@@ -9,6 +11,208 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct LauncherTests {
+    @Test func artworkStopsAtStreamAndBackgroundBoundaries() async {
+        let fixture = LauncherFixture()
+        let requests = Mutex(0)
+        fixture.artwork = { _, _ in requests.withLock { $0 += 1 }; return Data() }
+        let model = fixture.model()
+        #expect(await model.artwork(for: fixture.app) == nil)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        #expect(requests.withLock { $0 } == 0)
+        #expect(model.artworkRevision != nil)
+        #expect(await model.artwork(for: fixture.app) == nil)
+        #expect(requests.withLock { $0 } == 1)
+        model.launch(fixture.app)
+        #expect(model.artworkRevision == nil)
+        #expect(await model.artwork(for: fixture.app) == nil)
+        #expect(requests.withLock { $0 } == 1)
+        model.streamClosed()
+        await model.waitUntilStreamClosed()
+        model.availabilityChanged(active: false, background: true, protectedDataAvailable: true)
+        #expect(model.artworkRevision == nil)
+        #expect(await model.artwork(for: fixture.app) == nil)
+        #expect(requests.withLock { $0 } == 1)
+    }
+
+    @Test func artworkFromAnOldSelectionCannotReachNewPC() async throws {
+        let fixture = LauncherFixture()
+        let gate = StreamTestGate()
+        let imageData = try #require(UIGraphicsImageRenderer(size: CGSize(width: 3, height: 4))
+            .image { context in context.fill(CGRect(x: 0, y: 0, width: 3, height: 4)) }.pngData())
+        fixture.artwork = { _, _ in await gate.wait(); return imageData }
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        let revision = model.artworkRevision
+        let image = Task { await model.artwork(for: fixture.app) }
+        await gate.waitUntilEntered()
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        #expect(model.artworkRevision != revision)
+        await gate.release()
+        #expect(await image.value == nil)
+    }
+
+    @Test func singlePairedPCLoadsOnceWithoutAnExtraSelectionStep() async {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.selectInitialPCIfNeeded()
+        #expect(fixture.prepares == 0)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.selectInitialPCIfNeeded()
+        model.selectInitialPCIfNeeded()
+        await model.waitUntilOperationFinishes()
+        model.selectInitialPCIfNeeded()
+        #expect(model.selectedName == "Test PC" && model.apps.count == 1)
+        #expect(fixture.prepares == 1 && fixture.appRequests == 1 && fixture.pairs == 0)
+    }
+
+    @Test func reopeningRestoresLastConnectedAmongMultiplePCs() async {
+        let fixture = LauncherFixture()
+        fixture.additionalPCs = [SavedPC(server: ServerInfo(address: "other.invalid", uniqueId: "other",
+                                                          serverName: "Other PC"))]
+        let first = fixture.model()
+        first.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        first.select(fixture.saved)
+        await first.waitUntilOperationFinishes()
+        let reopened = fixture.model()
+        reopened.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        reopened.selectInitialPCIfNeeded()
+        reopened.selectInitialPCIfNeeded()
+        await reopened.waitUntilOperationFinishes()
+        #expect(reopened.selectedName == "Test PC" && reopened.apps.count == 1)
+        #expect(fixture.prepares == 2 && fixture.appRequests == 2 && fixture.pairs == 0)
+    }
+
+    @Test func unknownRememberedPCDoesNotChooseAnUnrelatedPC() async {
+        let fixture = LauncherFixture()
+        fixture.additionalPCs = [SavedPC(server: ServerInfo(address: "other.invalid", uniqueId: "other",
+                                                          serverName: "Other PC"))]
+        fixture.lastConnectedID = "removed"
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.selectInitialPCIfNeeded()
+        await model.waitUntilOperationFinishes()
+        #expect(fixture.prepares == 0 && model.selectedName == nil)
+    }
+
+    @Test func backgroundDisconnectRefreshesOnlyAfterReturning() async {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        model.launch(fixture.app)
+        model.availabilityChanged(active: false, background: true, protectedDataAvailable: true)
+        model.streamClosed()
+        await model.waitUntilStreamClosed()
+        model.selectInitialPCIfNeeded()
+        #expect(fixture.prepares == 1)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.selectInitialPCIfNeeded()
+        await model.waitUntilOperationFinishes()
+        #expect(fixture.prepares == 2 && model.apps.count == 1)
+        #expect(model.stream == nil)
+    }
+
+    @Test func failedAutomaticRefreshDoesNotLoopOrForgetThePC() async {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        model.launch(fixture.app)
+        fixture.prepareFailure = LauncherServices.Failure.unavailable
+        model.streamClosed()
+        await model.waitUntilStreamClosed()
+        await model.waitUntilOperationFinishes()
+        model.selectInitialPCIfNeeded()
+        await model.waitUntilOperationFinishes()
+        #expect(fixture.prepares == 2 && model.apps.isEmpty && model.message != nil)
+        #expect(fixture.lastConnectedID == fixture.pcID && model.selectedName == "Test PC")
+    }
+
+    @Test func nestedSessionCompletionUpdatesAppLevelStreamActivity() async {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        model.launch(fixture.app)
+        let changes = Mutex(0)
+        withObservationTracking {
+            #expect(model.hasActiveStream)
+        } onChange: {
+            changes.withLock { $0 += 1 }
+        }
+        model.stream?.start(surface: StreamSurface())
+        #expect(model.stream != nil && !model.hasActiveStream)
+        #expect(changes.withLock { $0 } == 1)
+        var disabled = true
+        let activity = AppDisplayActivity(development: false) { disabled = $0 }
+        activity.update(.active, streamActive: model.hasActiveStream)
+        #expect(!disabled)
+    }
+
+    @Test func manualAddressUsesExistingPreparePairAndAppListFlow() async {
+        let fixture = LauncherFixture()
+        fixture.paired = false
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(address: " 192.0.2.50 ")
+        await model.waitUntilOperationFinishes()
+        #expect(fixture.preparedAddress == "192.0.2.50" && fixture.preparedSaved == false)
+        #expect(fixture.prepares == 1 && fixture.pairs == 1 && fixture.appRequests == 1 && fixture.remembers == 1)
+        #expect(model.apps.count == 1)
+    }
+
+    @Test func manualSavedAddressKeepsPinAndInvalidEntryDoesNothing() async {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(address: "https://pc.invalid/path")
+        await model.waitUntilOperationFinishes()
+        #expect(fixture.prepares == 0)
+        model.select(address: "PC.INVALID")
+        await model.waitUntilOperationFinishes()
+        #expect(fixture.preparedSaved == true && fixture.pairs == 0)
+        #expect(fixture.prepares == 1)
+    }
+
+    @Test func nativeResolutionIsTheInitialLaunchDefault() async {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        #expect(model.streamProfile == .native120)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        model.launch(fixture.app)
+        #expect(model.stream?.launch.profile == .native120)
+        model.streamClosed()
+        await model.waitUntilStreamClosed()
+    }
+
+    @Test func launchCapturesProfileBeforeLaterPickerChanges() async {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        model.streamProfile = .native120
+        model.mouseStick = .left
+        model.launch(fixture.app)
+        model.streamProfile = .fullHD60
+        model.mouseStick = .right
+        #expect(model.stream?.launch.profile == .native120)
+        #expect(model.stream?.launch.mouseStick == .left)
+        #expect(fixture.prepares == 1)
+        model.streamClosed()
+        await model.waitUntilStreamClosed()
+    }
+
     @Test func authenticatedPCLoadsAppsAndStartsWithoutAnotherProbe() async {
         let fixture = LauncherFixture()
         let model = fixture.model()
@@ -24,10 +228,9 @@ struct LauncherTests {
         #expect(fixture.prepares == 1)
         model.streamClosed()
         await model.waitUntilStreamClosed()
-        model.launch(fixture.app)
-        #expect(model.stream == nil)
-        model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
+        #expect(model.selectedName == "Test PC" && model.apps.count == 1)
+        #expect(model.message == nil)
         model.launch(fixture.app)
         #expect(model.stream != nil)
         #expect(fixture.prepares == 2)
@@ -38,26 +241,28 @@ struct LauncherTests {
         let gate = StreamTestGate()
         fixture.makeSession = { launch in
             StreamSessionModel(launch: launch, makePlayback: { _, _, _ in
-                StreamPlayback(id: UUID(), connect: {}, stop: { await gate.wait() }, teardown: {},
-                               screenChanged: {}, setHDR: { _ in })
-            }, readIdleTimer: { false }, writeIdleTimer: { _ in })
+                StreamPlayback(id: UUID(), events: AsyncStream { _ in }, start: {},
+                               stop: { await gate.wait() }, screenChanged: {})
+            })
         }
         let model = fixture.model()
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
         model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
         model.launch(fixture.app)
+        #expect(model.hasActiveStream)
         model.stream?.start(surface: StreamSurface())
         model.stream = nil
         model.streamClosed()
         await gate.waitUntilEntered()
+        #expect(model.hasActiveStream)
         model.select(fixture.saved)
         model.launch(fixture.app)
         #expect(model.stream == nil)
         #expect(fixture.prepares == 1)
         await gate.release()
         await model.waitUntilStreamClosed()
-        model.select(fixture.saved)
+        #expect(!model.hasActiveStream)
         await model.waitUntilOperationFinishes()
         #expect(fixture.prepares == 2)
     }
@@ -155,6 +360,34 @@ struct LauncherTests {
         #expect(!FileManager.default.fileExists(atPath: base.appendingPathComponent("Glimmer/Identity").path))
     }
 
+    @Test func successfulPCPreferenceSurvivesServiceRecreation() throws {
+        let fixture = LauncherFixture()
+        let suiteName = "io.ugfugl.Glimmer.last-pc-tests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: base)
+        }
+        let protection = ProtectedDataState(true)
+        let services = LauncherServices(defaults: defaults, base: base, protectedData: protection)
+        #expect(services.lastConnectedPCID() == nil)
+        try PinnedCertStore.store(pem: "test placeholder, never sent to a transport",
+                                 forHostID: fixture.pcID, defaults: defaults, base: base,
+                                 protectedDataAvailable: { true })
+        _ = try services.remember(PreparedPC(network: testLaunch().network, server: fixture.server))
+        let reopened = LauncherServices(defaults: defaults, base: base, protectedData: protection)
+        #expect(reopened.lastConnectedPCID() == fixture.pcID)
+        var unpaired = fixture.server
+        unpaired.uniqueId = "unpaired"
+        #expect(throws: LauncherServices.Failure.self) {
+            try reopened.remember(PreparedPC(network: testLaunch().network, server: unpaired))
+        }
+        #expect(reopened.lastConnectedPCID() == fixture.pcID)
+        protection.update(false)
+        #expect(reopened.lastConnectedPCID() == nil)
+    }
+
     @Test func protectedDataRequiredEvenForMetadata() throws {
         let defaults = try #require(UserDefaults(suiteName: "io.ugfugl.Glimmer.metadata-tests"))
         let services = LauncherServices(defaults: defaults, base: URL(fileURLWithPath: "/unused"),
@@ -165,8 +398,12 @@ struct LauncherTests {
 
 @MainActor
 private final class LauncherFixture {
+    let pcID = UUID().uuidString
     let app = HostApp(id: 1, name: "Game", hdrCapable: false, hidden: false)
     let hidden = HostApp(id: 2, name: "Hidden", hdrCapable: false, hidden: true)
+    var artwork: @Sendable (PreparedPC, Int) async throws -> Data = { _, _ in Data() }
+    var additionalPCs: [SavedPC] = []
+    var lastConnectedID: String?
     var prepares = 0
     var pairs = 0
     var remembers = 0
@@ -177,8 +414,10 @@ private final class LauncherFixture {
     var appGate: StreamTestGate?
     var prepareGate: StreamTestGate?
     var prepareFailure: Error?
+    var preparedAddress: String?
+    var preparedSaved: Bool?
     var server: ServerInfo {
-        var server = ServerInfo(address: "pc.invalid", uniqueId: "test-pc", serverName: "Test PC")
+        var server = ServerInfo(address: "pc.invalid", uniqueId: pcID, serverName: "Test PC")
         server.pairStatus = paired ? .paired : .unpaired
         server.serverCertPEM = paired ? "test placeholder, never sent to a transport" : nil
         return server
@@ -186,12 +425,14 @@ private final class LauncherFixture {
     var saved: SavedPC { SavedPC(server: server) }
 
     func model() -> LauncherModel {
-        LauncherModel(calls: LauncherModel.Calls(savedPCs: { [self] in [saved] },
-            prepare: { [self] _, _ in
+        LauncherModel(calls: LauncherModel.Calls(savedPCs: { [self] in additionalPCs + [saved] },
+            prepare: { [self] server, saved in
                 prepares += 1
+                preparedAddress = server.address
+                preparedSaved = saved
                 if let prepareFailure { throw prepareFailure }
                 await prepareGate?.wait()
-                return PreparedPC(network: testLaunch().network, server: server)
+                return PreparedPC(network: testLaunch().network, server: self.server)
             }, pair: { [self] pc, _ in
                 pairs += 1
                 await pairGate?.wait()
@@ -203,8 +444,13 @@ private final class LauncherFixture {
                 appRequests += 1
                 await appGate?.wait()
                 return [app, hidden]
-            }, remember: { [self] _ in remembers += 1; return [saved] },
-            protectedDataChanged: { _ in }, makeSession: makeSession),
+            }, remember: { [self] pc in
+                remembers += 1
+                lastConnectedID = pc.server.uniqueId
+                return additionalPCs + [saved]
+            },
+            protectedDataChanged: { _ in }, lastConnectedPCID: { [self] in lastConnectedID },
+            artwork: artwork, makeSession: makeSession),
             discoveryEnabled: false)
     }
 }
