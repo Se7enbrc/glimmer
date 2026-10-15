@@ -79,7 +79,9 @@ that inspired Glimmer; it is not the protocol's name.
 
 ## Evidence on Hand
 
-- `README.md`: features and install; `docs/assets/launcher.png`: the launcher.
+- `README.md`: features and install; `docs/assets/launcher-art-*.png`: the
+  launcher art (rendered from the site); `docs/assets/launcher.png`: a real
+  screenshot.
 - `CHANGELOG.md`: every release as plain-language bullets.
 - `docs/PROFILING.md` and per-session telemetry under `~/Library/Logs/Glimmer`
   back the tuning claims.
