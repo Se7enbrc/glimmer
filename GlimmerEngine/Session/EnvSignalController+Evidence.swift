@@ -1,24 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  EnvSignalController+Evidence.swift
-//
-//  The EVIDENCE half of the env-signal layer: the 2 s session-tick feed,
-//  the window fold (gap-counter deltas + worst radio/jitter readings),
-//  the window classifier and the sustained/hysteresis state machine it
-//  advances, the RECONCILE phase that publishes the shared jitter->headroom
-//  decision, the session-relative RSSI/tx-rate percentiles, and the
-//  session lifecycle. Split out of EnvSignalController.swift (pure move) to
-//  keep each unit under the length limit; see that file for the full
-//  contract, the stored evidence state, and the lock-guarded outputs.
-//
-//  THREADING: everything here runs on the controller's `feedQueue` (StreamSession's 2 s tick posts
-//  there), so the evidence state stays queue-confined. Only the published outputs are touched
-//  under the controller's `lock`, and the reconciler never calls into its consumers holding it.
-//
-
-import GlimmerEngine
 import Foundation
 import Synchronization
 
@@ -26,12 +8,20 @@ extension EnvSignalController {
 
     // MARK: - Feed (one 2 s session tick)
 
-    /// One tick from StreamSession's present-metric timer. Samples the route and the radio on
-    /// `feedQueue`, so the main actor never waits on CoreWLAN. No-op between sessions.
-    func observeStreamTick() {
-        guard let probe = routeProbe else { return }
-        feedQueue.async { [self] in
-            observeCaptureTick(route: probe.current(), wifi: radio.sample())
+    /// Native sampling stays off the main actor; retired sessions cannot publish late evidence.
+    package func observeStreamTick() {
+        observationLock.withLock {
+            guard let id = observationID else { return }
+            let source = observations
+            feedQueue.async { [self] in
+                guard observationLock.withLock({ observationID == id }) else { return }
+                let route = source?.route()
+                let wifi = source?.wifi()
+                observationLock.withLock {
+                    guard observationID == id else { return }
+                    observeCaptureTick(route: route, wifi: wifi)
+                }
+            }
         }
     }
 
@@ -81,12 +71,8 @@ extension EnvSignalController {
         }
     }
 
-    /// Fold this tick's gap-counter deltas + radio readings into the current
-    /// window. Gap deltas come off the always-live per-socket counters the
-    /// receive paths already maintain - no new hot-path cost anywhere. A
-    /// non-monotonic step (the connect-edge counter reset of a mid-session
-    /// reconnect) re-arms the baseline instead of folding a wrapped delta -
-    /// one quiet-looking tick beats a fabricated 2^64-gap "evidence" window.
+    /// Fold existing receive counters without hot-path work. A reconnect counter reset re-arms
+    /// the baseline rather than turning unsigned wraparound into fabricated gap evidence.
     private func foldTickIntoWindow(wifi: WiFiSnapshot?) {
         let counters = TelemetryCounters.shared
         let totals = GapTotals(net50: counters.videoGapOver50msTotal.value,
@@ -123,11 +109,8 @@ extension EnvSignalController {
         }
     }
 
-    /// Close one ~2s window: classify it (degraded / severe / quiet /
-    /// neutral), advance the runs, and move the state one step when a run
-    /// satisfies the sustained contract: escalate thresholds high, relax
-    /// thresholds lower, a neutral dead band that resets BOTH runs. A window
-    /// with no video carries no evidence and leaves everything untouched.
+    /// Escalation needs sustained evidence; lower relax thresholds and a neutral dead band reset
+    /// both runs. Windows without video contain no evidence and leave the state untouched.
     func evaluateWindow(link: LinkClass) {
         guard window.videoArrived else { return }
         window.rssiP50 = rssiSessionP50()
@@ -151,10 +134,8 @@ extension EnvSignalController {
         // radio (the window predicates), so the published headroom tracks it.
         let degraded = window.coGap50 || radioDegraded || window.jitterDegraded
         let severe = window.coGap100 || (window.coGap50 && radioDegraded)
-        // Quiet (the relax tier): no >50ms co-gap AND the radio above its
-        // relax lines AND jitter/loss below the relax dead band. Single-socket
-        // gaps don't block quiet - one path stalling alone is that path's own
-        // story, not the link's.
+        // Quiet requires no co-gap, recovered radio and low jitter/loss. One socket stalling alone
+        // is that path’s evidence and does not block link-wide recovery.
         let quiet = !window.coGap50 && !window.coGap100 && radioQuiet && window.jitterQuiet
 
         if degraded {
@@ -183,19 +164,9 @@ extension EnvSignalController {
 
     // MARK: - RECONCILE: publish the shared jitter→headroom decision
 
-    /// Close the window's RECONCILE phase: smooth this window's worst recv-jitter
-    /// (EWMA, weight `jitterBaseEwmaWeight`), map the
-    /// CURRENT link state + smoothed jitter to a desired `headroomLevel`, and
-    /// publish both (plus a bumped `generation` on any change) behind `lock` -
-    /// the same lock-guarded pattern as `stateValue`/`streamLinkValue`.
-    /// Consumers PULL this on their own ticks; the reconciler never calls into
-    /// them and holds only its own lock here.
-    ///
-    /// The desired level is forced to 0 (REST) whenever the link state is CLEAR
-    /// (which a wired route pins), so a clean WIRED link publishes
-    /// `headroomLevel == 0` → pacer depth 1 = byte-identical to
-    /// no-reconciler. Above CLEAR, the smoothed jitter maps through the
-    /// dead-zone/ladder, capped at `maxHeadroomLevel`.
+    /// Publish EWMA jitter and the bounded headroom ladder; consumers pull on existing ticks.
+    /// Clear (including every wired route) forces level0, retaining the depth1 baseline.
+    /// Generation advances only when the level or smoothed jitter changes.
     private func reconcile() {
         // EWMA the worst-jitter of this window (sanitized to a finite,
         // non-negative value) so a single noisy window can't yank the level.
@@ -227,10 +198,8 @@ extension EnvSignalController {
         return min(Self.maxHeadroomLevel, max(0, level))
     }
 
-    /// Publish the REST decision (headroom level 0, smoothed jitter 0) and clear
-    /// the smoothing accumulator. Called at the wired-forces-CLEAR edge and on a
-    /// fresh-session reset so the published decision is at REST the instant the
-    /// link is known clean - never a stale escalation an actuator could pull.
+    /// Reset smoothing and publish level0 at session start or wired recovery, so no actuator
+    /// inherits a prior escalation.
     private func publishRestDecision() {
         reconcileSmoothedJitterMs = 0
         lock.lock()
@@ -280,10 +249,7 @@ extension EnvSignalController {
         return radioSag ? "sustained_radio_sag" : "sustained_jitter_retransmit"
     }
 
-    /// Publish a state change: bump the counter, log the recoverable-state
-    /// NOTICE (quiet - never warn/error for a state the machine recovers
-    /// from), and emit the `env_state` NDJSON event WITH the evidence vector
-    /// so the session is judgeable post-hoc.
+    /// Recoverable transitions log at notice and emit the full evidence vector for later judging.
     private func applyTransition(to next: EnvState, reason: String) {
         let previous: EnvState
         lock.lock()
@@ -350,17 +316,22 @@ extension EnvSignalController {
 
     // MARK: - Session lifecycle
 
-    /// Session start, once the connect edge has latched the host: a fresh route probe, then
-    /// a CLEAR state and empty baselines on `feedQueue` ahead of the first tick.
-    func beginSession() {
-        let probe = StreamRouteProbe()
-        lock.lock()
-        let previous = routeProbeValue
-        routeProbeValue = probe
-        lock.unlock()
+    /// Adopt prepared native observations; reset to CLEAR on the evidence queue before its first tick.
+    package func beginSession(observations source: EnvObservationSource? = nil) {
+        let previous = observationLock.withLock {
+            let previous = observations
+            let id = UUID()
+            observationID = id
+            observations = source
+            feedQueue.async { [self] in
+                observationLock.withLock {
+                    guard observationID == id else { return }
+                    resetForNewSession()
+                }
+            }
+            return previous
+        }
         previous?.stop()
-        probe.start()
-        feedQueue.async { [self] in resetForNewSession() }
     }
 
     /// Reset for a fresh session: state to CLEAR, baselines/window/runs emptied, the transition
@@ -386,18 +357,21 @@ extension EnvSignalController {
         publishRestDecision()
     }
 
-    /// Session end: stop the route probe and withdraw the published decision (generation 0 is
-    /// "never published"), so the next session's pacer starts at REST, not on a stale level.
-    func endSession() {
-        lock.lock()
-        let probe = routeProbeValue
-        routeProbeValue = nil
-        headroomLevelValue = 0
-        smoothedJitterMsValue = 0
-        decisionGeneration = 0
-        pacerHeadroom.publish(level: 0, generation: 0)
-        lock.unlock()
-        probe?.stop()
+    /// Withdraw the decision synchronously; a blocked native sample cannot revive it after stop.
+    package func endSession() {
+        let source = observationLock.withLock {
+            let source = observations
+            observations = nil
+            observationID = nil
+            lock.withLock {
+                headroomLevelValue = 0
+                smoothedJitterMsValue = 0
+                decisionGeneration = 0
+                pacerHeadroom.publish(level: 0, generation: 0)
+            }
+            return source
+        }
+        source?.stop()
     }
 
     private func resetRuns() {

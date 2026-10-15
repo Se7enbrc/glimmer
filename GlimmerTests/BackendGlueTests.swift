@@ -32,10 +32,9 @@ struct BackendGlueTests {
 
     /// With no session left to classify it, a terminate still reaches the UI.
     @Test func eventsReachTheBridgeStreamInOrder() async {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let bridge = StreamBridgeContext(
-            session: session, videoDecoder: VideoDecoder(), audioDecoder: AudioDecoder(),
-            inputForwarder: InputForwarder())
+            session: session, videoDecoder: VideoDecoder(), audioDecoder: AudioDecoder())
         let (stream, continuation) = AsyncStream.makeStream(of: StreamEvent.self)
         bridge.eventContinuation = continuation
         bridge.session = nil
@@ -59,8 +58,9 @@ struct BackendGlueTests {
 
     @Test func bridgePointerResolvesToTheSameBridge() {
         let bridge = StreamBridgeContext(
-            session: StreamSession(backend: InputRecordingBackend()), videoDecoder: VideoDecoder(),
-            audioDecoder: AudioDecoder(), inputForwarder: InputForwarder())
+            session: StreamSession(
+                hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend()), videoDecoder: VideoDecoder(),
+            audioDecoder: AudioDecoder())
         let pointer = Unmanaged.passUnretained(bridge).toOpaque()
         #expect(StreamBridgeContext.from(pointer) === bridge)
         #expect(StreamBridgeContext.from(nil) == nil)
@@ -103,26 +103,49 @@ struct BackendGlueTests {
 }
 
 extension BackendGlueTests {
+    @Test func retiredAttemptCannotApplyQueuedHdrOrFeedbackBeforeSourceSwap() async {
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
+        let decoder = VideoDecoder()
+        let activations = AtomicCounter()
+        var feedback = SessionFeedback()
+        feedback.activated = { _ in activations.increment() }
+        let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
+                                         audioDecoder: AudioDecoder(), feedback: feedback)
+        let backend = NativeBackend()
+        bridge.setEventSource(backend)
+        let events = NativeConnectionEvents(bridge: bridge, backend: backend)
+        events.setHdrMode(true)
+        events.controllersActivated()
+        #expect(activations.value == 1)
+        bridge.beginAttempt(UUID())
+        events.controllersActivated()
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(activations.value == 1)
+        #expect(!decoder.hdrEnabled)
+    }
+
     @Test func obsoleteBackendCannotPublishHdrOrAudioIntoReplacement() async {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let decoder = VideoDecoder()
         let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
-                                         audioDecoder: AudioDecoder(), inputForwarder: InputForwarder())
+                                         audioDecoder: AudioDecoder())
         let old = NativeBackend()
         let replacement = NativeBackend()
-        let events = NativeConnectionEvents(bridge: bridge, backend: old)
         let (stream, continuation) = AsyncStream.makeStream(of: StreamEvent.self)
         bridge.eventContinuation = continuation
         bridge.setEventSource(old)
+        let events = NativeConnectionEvents(bridge: bridge, backend: old)
         events.setHdrMode(true)
         bridge.setEventSource(replacement)
         events.setHdrMode(false)
         events.audioFailed("stale audio")
         events.connectionStarted()
         continuation.finish()
-        var count = 0
-        for await _ in stream { count += 1 }
-        #expect(count == 1)
+        var received: [String] = []
+        for await event in stream { received.append(label(event)) }
+        #expect(received == ["hdr true"])
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }
         }

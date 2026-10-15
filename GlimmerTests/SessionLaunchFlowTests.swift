@@ -56,13 +56,13 @@ struct SessionLaunchFlowTests {
         on sunshine: FakeSunshine, server: ServerInfo, appID: Int = 7,
         prepare: (StreamSession) async -> Void = { _ in }
     ) async throws -> (StreamSession, LaunchResponse) {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let network = sunshine.client(server)
         await session.prepareLaunchFlow(server: server)
         await prepare(session)
         let info = try await session.fetchAndVerifyServerInfo(network: network, pcName: server.serverName)
         let response = try await session.launchWithDeadline(
-            network: network, appID: appID, config: SessionFlow.config, info: info)
+            network: network, appID: appID, config: SessionFlow.config.request, info: info)
         return (session, response)
     }
 
@@ -146,11 +146,11 @@ struct SessionLaunchFlowTests {
 
     @Test func anExpiredLaunchBudgetSendsNothing() async throws {
         let sunshine = FakeSunshine.scripted([:])
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         await session.prepareLaunchFlow(server: SessionFlow.pairedPC())
         await #expect(throws: StreamError.self) {
             _ = try await session.launchWithDeadline(
-                network: sunshine.client(SessionFlow.pairedPC()), appID: 7, config: SessionFlow.config,
+                network: sunshine.client(SessionFlow.pairedPC()), appID: 7, config: SessionFlow.config.request,
                 info: SessionFlow.pairedPC(), deadline: Date())
         }
         #expect(sunshine.requests.isEmpty)

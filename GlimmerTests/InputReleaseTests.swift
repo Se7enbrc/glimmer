@@ -378,7 +378,7 @@ struct InputReleaseTests {
         input.gamepadMask = 1
         input.sendControllerState(slot: 0, buttons: StreamProtocol.A_FLAG,
                                   analog: InputForwarder.neutralControllerAnalog)
-        let session = StreamSession(backend: backend)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: backend)
         await session.adoptInputForReleaseTest(input)
         await session.stop()
         #expect(backend.controllersAtStop.map(\.buttons) == [StreamProtocol.A_FLAG, 0])
@@ -407,8 +407,8 @@ private final class InputReleaseWindow: NSWindow {
 }
 
 private extension StreamSession {
-    func adoptInputForReleaseTest(_ input: InputForwarder) {
+    func adoptInputForReleaseTest(_ input: InputForwarder) async {
         isStreaming = true
-        self.input = input
+        self.input = await SessionInputHooks(input)
     }
 }

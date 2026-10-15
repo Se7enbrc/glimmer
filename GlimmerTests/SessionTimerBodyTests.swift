@@ -160,7 +160,7 @@ struct PacedPresentWatchdogTests {
         let clock = ScriptedClock()
         let decoder = VideoDecoder()
         decoder.backend = recorder
-        return (StreamSession(backend: recorder, clock: clock.session), decoder, clock)
+        return (StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session), decoder, clock)
     }
 
     private func live(

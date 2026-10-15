@@ -57,7 +57,7 @@ verify; some `Logger(` calls put the category on the next line):
 | `Stream.Network.TLS`   | `Glimmer/Stream/ControlTransport.swift`                                           |
 | `Stream.Pacer`         | `GlimmerEngine/Pacing/FramePacer.swift`                                           |
 | `Stream.Pairing`       | `Glimmer/Stream/Pairing.swift`                                                    |
-| `Stream.Session`       | `Glimmer/Stream/StreamSession.swift`                                              |
+| `Stream.Session`       | `GlimmerEngine/Session/StreamSession.swift`                                       |
 | `Stream.Telemetry`     | `TelemetryExporter`, `TelemetryFrameTrace`, `IOReportSampler`, `DisplayTelemetry` |
 | `Stream.VideoDecoder`  | `GlimmerEngine/Video/VideoDecoder.swift` (+ extensions)                           |
 | `Stream.Window`        | `Glimmer/Stream/StreamWindow.swift`                                               |

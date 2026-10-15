@@ -182,7 +182,7 @@ struct SystemServiceSeamTests {
     @Test(.timeLimit(.minutes(1)))
     func quitWithASessionRepliesAfterItStops() async {
         let model = AppModel()
-        model.nativeSession = StreamSession()
+        model.nativeSession = StreamSession(hostDisposition: .cancelOwnedHostSession)
         let delegate = AppDelegate()
         delegate.model = model
         let (events, record) = AsyncStream<String>.makeStream()

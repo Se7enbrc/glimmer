@@ -196,55 +196,42 @@ public struct ServerInfo: Sendable {
 
 // MARK: - Events emitted during a session
 
-package enum StreamEvent: Sendable {
+public enum StreamEvent: Sendable {
     case stageStarting(name: String)
     case stageComplete(name: String)
     case stageFailed(name: String, errorCode: Int32)
     case connectionEstablished
-    /// First decoded/rendered video frame for this session. Ground-truth
-    /// proof the stream is LIVE - frames are flowing - independent of the
-    /// one-shot `.connectionEstablished` edge. The UI promotes
-    /// connecting→streaming on EITHER signal, so a missed/torn established
-    /// edge can never leave the launcher stuck at "Connecting" while video
-    /// is actually on screen. Fired exactly once per session (first frame
-    /// only); idempotent against `.connectionEstablished` having already
-    /// promoted the phase.
+    /// First decoded frame for this transport attempt, proving video is flowing even if the
+    /// connection-established event was missed. Consumers may already have entered the live state.
     case firstFrame
     /// `error` is the last reconnect attempt's failure when an episode gives up, so the launcher can
     /// name the fix (a PC that slept gets the couldn't-reach copy, not "ended unexpectedly").
     case connectionTerminated(errorCode: Int32, error: StreamError? = nil)
-    /// The host closed a LIVE session with a recoverable code (e.g. Sunshine's
-    /// process restarting across a Windows lock / secure-desktop transition, or
-    /// a brief network blip) and we're silently re-establishing underneath the
-    /// frozen last frame. The UI shows "Reconnecting..." over the held frame
-    /// rather than bouncing to the launcher. Paired with `.reconnected` /
-    /// (on give-up) `.connectionTerminated`.
+    /// Existing live-link hold; input remains available while the PC is not producing video.
+    case waitingForVideo(Bool)
+    /// Shared recovery retains the last frame while a replacement transport connects.
+    /// Ends with reconnected or, when recovery gives up, connectionTerminated.
     case reconnecting
     /// A silent reconnect succeeded - the stream resumed in place. The UI
     /// returns to the streaming state; the fresh `.connectionEstablished` /
     /// `.firstFrame` edges also promote the phase, so this is belt-and-braces.
     case reconnected
     case connectionStatus(ConnectionQuality)
-    /// Raised when the *host* signals an HDR-mode change via
-    /// `LiSetHdrMode`. Indicates intent, not effective output state - a host
-    /// can claim HDR on an 8-bit stream and we'll refuse to engage the PQ
-    /// pipeline. Use `.hdrActive` for the effective signal the UI should
-    /// reflect.
+    /// The PC's HDR intent, which can differ from the actual decoded format and output.
+    /// Use hdrActive for the effective presentation state.
     case hdrModeChanged(Bool)
-    /// Raised by the video decoder when the effective HDR-active state
-    /// changes: host enabled HDR AND we have a 10-bit stream AND the Metal
-    /// layer is configured for PQ (HDR10) with EDR. This is the "show the HDR
-    /// chip" signal.
+    /// Effective HDR requires PC intent, a 10-bit stream and an AVSampleBufferDisplayLayer
+    /// configured for PQ with extended dynamic range.
     case hdrActive(Bool)
-    /// Audio receive-start failed (H7): the session came up VIDEO-ONLY (the ping
-    /// keeps the A/V session alive, but no audio flows). Non-fatal - the visual
-    /// stream is unaffected - so it rides the event channel rather than aborting
-    /// the connect. Carries a short reason for the log; the UI keeps streaming.
+    /// Audio receive-start failed while video remains live. The reason is diagnostic;
+    /// consumers keep streaming rather than treating this as a terminal connection failure.
     case audioFailed(String)
     case log(String)
+    case input(StreamInput.Event)
+    case stopped
 }
 
-package enum ConnectionQuality: Sendable {
+public enum ConnectionQuality: Sendable {
     case good, poor
 }
 

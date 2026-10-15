@@ -194,15 +194,18 @@ struct StreamSignalTests {
     @Test func backgroundBeforeDecoderAdoptionReleasesDisplayAssertion() async {
         let decoder = VideoDecoder()
         decoder.setPresentSuppressed(true)
-        let session = StreamSession()
-        let (beforeAdoption, afterAdoption) = await session.checkEarlyBackgroundAdoption(decoder)
+        let native = MacSessionServices()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, audioDecoder: AudioDecoder(),
+            services: native.services(), backend: MacTransport.makeBackend(),
+            makeNetwork: { NetworkClient(server: $0) }, makeBackend: { MacTransport.makeBackend() })
+        let (beforeAdoption, afterAdoption) = await session.checkEarlyBackgroundAdoption(decoder, native: native)
         #expect(!beforeAdoption)
         #expect(afterAdoption)
         decoder.teardown()
     }
 
     @Test func resettingStallLatchesClearsEveryLatch() async {
-        let session = StreamSession()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         await session.setStallLatchesForTesting()
         await session.resetStallLatches()
         #expect(!session.didLogDecodeOnlyStall)
@@ -287,20 +290,17 @@ private extension StreamSession {
 }
 
 extension StreamSession {
-    func checkEarlyBackgroundAdoption(_ decoder: VideoDecoder) -> (Bool, Bool) {
+    func checkEarlyBackgroundAdoption(_ decoder: VideoDecoder, native: MacSessionServices) -> (Bool, Bool) {
         isStreaming = true
-        powerAssertion = ProcessInfo.processInfo.beginActivity(
-            options: Self.sessionActivityOptions(hidden: false),
-            reason: "Testing stream visibility")
+        beginPowerAssertion()
         defer {
-            if let powerAssertion { ProcessInfo.processInfo.endActivity(powerAssertion) }
-            powerAssertion = nil
+            endPowerAssertion()
             videoDecoder = nil
             isStreaming = false
         }
         refreshPowerAssertion()
-        let beforeAdoption = powerAssertionHidden
+        let beforeAdoption = native.isHidden
         adoptVideoDecoder(decoder)
-        return (beforeAdoption, powerAssertionHidden)
+        return (beforeAdoption, native.isHidden)
     }
 }

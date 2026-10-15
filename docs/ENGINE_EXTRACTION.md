@@ -457,6 +457,60 @@ validate registration and ownership generation. `ControllerBatteryCapture`
 supplies a main-actor raw state/level probe. The engine owns existing polling
 and protocol conversion; applications add no sampler timer.
 
+## Slice 9: shared session and native lifecycle ownership
+
+`StreamSession` and its attempt, launch, recovery, watchdog, quality and
+telemetry extensions compile in `GlimmerEngine/Session/`. The Mac app prepares
+presentation/input hooks and activity, wake, logging and route services through
+`MacSessionPresentation`, `MacSessionFeedback`, `MacSessionServices` and
+`MacEnvironment`. It retains its existing windows, HUD, history and native input
+forwarder. There is one session policy implementation and no second input owner
+for the Mac path.
+
+The external entry point is
+`StreamSession.make(media:network:hostDisposition:)`, called on the main actor.
+It returns the session and one stable synchronous `StreamInput`. `PreparedMedia`
+requires the actual `VideoDecoder`, `AudioDecoder`, a native capture-quiesce
+closure and an awaited final-disposal closure. Attach native rendering before
+calling `start(appID:configuration:)`; consume `session.events` from creation.
+Each `Update` contains `sessionID`, `attemptID` and a `StreamEvent`. Lifecycle
+events retain FIFO order and use the existing unbounded stream, with no
+per-frame Task or actor relay. The Mac path allocates only its legacy event
+stream. `waitingForVideo(Bool)` reports existing watchdog hold transitions
+without changing input ownership. Explicit route MTU survives recovery, and
+public startup/recovery preserve the low-level session-key validation contract.
+
+`StreamHostDisposition` is required and immutable. `.disconnectOnly` leaves the
+PC app running on every stop/failure path and never enters cancellation-based
+busy retry. Initial start uses the paired client's cached PC information and
+resumes the same app or launches once. Recovery makes fresh clients with the
+same identity, device name and transport; another nonzero app ends the local
+session. `.cancelOwnedHostSession` retains the Mac's ownership checks, bounded
+cancellation and late-launch cleanup. Diagnostic disconnect reasons do not grant
+host cancellation capability.
+
+Recovery retains media and physical controller registrations. It revokes the old
+input attempt before closing its backend, releases held state and rebinds the
+same handle to the replacement. Battery samples, feedback and decoder callbacks
+retain their originating identity. Final stop is terminal, awaits native
+disposal exactly once, emits `.stopped`, and finishes events. A stop before
+start disposes prepared media without networking. `StreamConnection` remains
+available as the low-level single-attempt compatibility API; it does not gain a
+second recovery policy.
+
+`EnvSignalController` folds the same evidence on the same cadence in the engine.
+`EnvObservationSource` owns optional native route/radio observations; missing
+observations remain unknown. Late samples are rejected after stop or
+replacement, and native probe cleanup is idempotent. Public
+`StreamSession.audioEnvironment(host:)` exposes shared link and smoothed jitter
+evidence to the native audio adapter. No pacing, bitrate, timeout or media
+defaults are retuned by this extraction.
+
+The source/package, Mac, device and Simulator gates, exact-revision hosted
+Verify/CodeQL, optimized boundary audit, and physical stream/performance
+acceptance remain required before this slice is declared complete. Consumer pins
+change only after the reviewed engine revision is published.
+
 ## Ownership map
 
 Complete inventory: **245 Stream files, 4 Models files, all 63 root Swift files,

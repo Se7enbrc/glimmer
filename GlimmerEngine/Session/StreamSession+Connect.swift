@@ -1,33 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamSession+Connect.swift
-//
-//  The BACKEND-FACING half of the start path, shared with the silent-reconnect
-//  driver: building the `BackendStreamConfig` value type from the user-facing
-//  `StreamConfig` + the launch handshake (including the connect-time link
-//  quality gate that picks the bitrate and packet size), and the connect leg
-//  itself - signpost interval, telemetry anchor, Swift-sink attach, and the
-//  startConnection failure cleanup. Split out of StreamSession+Start.swift to
-//  keep each unit under the length limit; both are pure moves, called from the
-//  orchestrating start() there and from StreamSession+Reconnect.swift.
-//
+// Initial startup and recovery share configuration, transport binding and failure cleanup.
+// Measured bitrate and route policies remain unchanged across the native adapter boundary.
 
-import GlimmerEngine
 import Foundation
 import os
 
 extension StreamSession {
 
-    /// Build the value type the backend protocol consumes from the user-facing
-    /// `StreamConfig` + the launch handshake. The actual stream-configuration
-    /// fill (the remoteInputAesKey/Iv copy + the SCM_* handling) lives in
-    /// NativeBackend.startConnection; this just builds the value type.
-    /// gcmKey/gcmKeyId are the 16-byte per-session AES key + IV-id from the
-    /// launch handshake.
-    func makeBackendConfig(
-        config: StreamConfig, launch: LaunchResponse, server: ServerInfo,
+    /// Resolve the existing measured bitrate/route policy and copy launch material into backend values.
+    /// Public callers validate key sizes before this boundary; native launch compatibility is preserved.
+    package func makeBackendConfig(
+        config: StreamRequest, launch: LaunchResponse, server: ServerInfo,
         rtt: RttStats? = nil, rttPreLaunch: Bool = false
     ) -> BackendStreamConfig {
         // Resolve `.auto` from the route we will actually egress on. Without
@@ -38,8 +23,7 @@ extension StreamSession {
         // video packet fragments. An explicit .local/.remote from the caller is
         // honoured as-is; only `.auto` consults the probe.
         let path = config.remoteness == .auto
-            ? MacStreamPath.probe(host: server.address,
-                                  rttPort: UInt16(server.httpsPort), rtt: rtt) : StreamPathProbe()
+            ? services.route(server, rtt) : StreamPathProbe()
         let resolvedRemoteness: Remoteness
         switch config.remoteness {
         case .local, .remote:
@@ -97,14 +81,15 @@ extension StreamSession {
         // One size for the SDP and the receiver, less the 32-byte header when video is encrypted
         // (VideoPacketLayout.packetSize). FEC rebuilds at each block's longest shard, capped at that
         // size plus the RTP header, so a PC that sends shorter shards still recovers cleanly.
+        let routeMTU = suppliedRouteMTU ?? path.mtu
         let resolvedPacketSize = StreamPathMTU.advertisedPacketSize(
             configured: config.packetSize,
             isRemote: resolvedRemoteness == .remote,
-            mtu: path.mtu)
+            mtu: routeMTU)
         // Latch the whole decision for the telemetry config event - the session
         // log doesn't capture anything emitted this early (see LinkGateDecision).
         StreamPathMTU.latchGateDecision(LinkGateDecision(
-            interfaceName: path.interfaceName, mtu: path.mtu, isTunnel: path.isTunnel,
+            interfaceName: path.interfaceName, mtu: routeMTU, isTunnel: path.isTunnel,
             rtt: path.rtt, rttPreLaunch: rttPreLaunch, configuredBitrateKbps: config.bitrateKbps,
             askedBitrateKbps: cappedBitrateKbps, packetSize: resolvedPacketSize))
         return BackendStreamConfig(
@@ -124,17 +109,13 @@ extension StreamSession {
             remoteInputAesIv: [UInt8](launch.gcmKeyId))
     }
 
-    /// Open the connect-flow signpost interval, anchor the connect telemetry,
-    /// attach the native engine's Swift sinks, and start the connection. On
-    /// startConnection failure this cancels the host session and tears the
-    /// session down (so the next attempt isn't blocked) before throwing - the
-    /// caller suppresses its leak-safety defer because stop() already released
-    /// the bridge retain.
-    func connectBackend(
+    /// Attach the media sinks and start this transport attempt. Failure cleanup follows
+    /// the required host disposition; initial failure also joins full local teardown.
+    package func connectBackend(
         serverInfo: ServerInfo,
         launch: LaunchResponse,
         backendConfig: BackendStreamConfig,
-        setup: (StreamWindow, InputForwarder, VideoDecoder),
+        setup: SessionMedia,
         network: NetworkClient,
         duringReconnect: Bool = false,
         deadline: Date? = nil
@@ -175,10 +156,11 @@ extension StreamSession {
             // Check before attaching sinks so teardown cannot regain the decoder.
             try checkAttempt(deadline: deadline)
             if let native = backend as? NativeBackend {
-                bridge?.setEventSource(native)
-                native.attachConnectionEvents(NativeConnectionEvents(bridge: bridge, backend: native))
+                bridge?.setEventSource(native, attempt: attemptID)
+                native.attachConnectionEvents(NativeConnectionEvents(bridge: bridge, backend: native,
+                    feedback: publicInput.map { SessionFeedback.input($0, attempt: attemptID) }))
             }
-            backend.attachVideoSink(setup.2)
+            backend.attachVideoSink(setup.video)
             backend.attachAudioSink(audioDecoder)
 
             // Await the bridge so stop stays responsive during a hanging connect.
@@ -193,19 +175,19 @@ extension StreamSession {
             }
             try checkAttempt(deadline: deadline)
         } catch {
-            // A failed transport must release the PC app we already launched.
+            // A failed transport follows the session-wide host disposition.
             let code: Int32
             if case let StreamError.sessionFailed(failureCode) = error {
                 code = failureCode
             } else {
                 code = -1
             }
-            log.error("startConnection failed with \(code) - cancelling host session")
+            log.error("startConnection failed with \(code)")
             // Reconnect cancels only its failed launch, preserving the frozen frame and event stream
             // while the driver retries. Initial connect failure runs the full teardown.
             if duringReconnect {
                 try checkAttempt(deadline: deadline)
-                try? await network.cancel()
+                if let cancellation = hostDisposition.cancellation { try? await cancellation.cancel(network) }
                 try checkAttempt(deadline: deadline)
                 throw StreamError.sessionFailed(code)
             }
@@ -222,7 +204,7 @@ extension StreamSession {
     /// What a failed initial connect reports: the user's stop (the quit chord,
     /// the close button, Cancel) is a cancel, not a failure. Anything else, the
     /// PC ending it included, keeps the engine's cause so the banner names the fix.
-    static func connectLegError(_ error: Error, stoppedBy cause: DisconnectReason?) -> Error {
+    package static func connectLegError(_ error: Error, stoppedBy cause: DisconnectReason?) -> Error {
         if cause == .userStopped { return CancellationError() }
         return error as? StreamError ?? .sessionFailed(-1)
     }

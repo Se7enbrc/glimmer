@@ -3,7 +3,8 @@
 
 import Foundation
 
-/// One transport attempt. The shell supplies media sinks and owns presentation and reconnect policy.
+/// Low-level, single transport attempt retained for existing consumers.
+/// Use StreamSession for shared recovery, watchdogs and complete media lifetime.
 public actor StreamConnection {
     public nonisolated let id: UUID
     public nonisolated let input: StreamInput

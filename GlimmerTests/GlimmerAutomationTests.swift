@@ -158,7 +158,7 @@ struct GlimmerAutomationTests {
 
     @MainActor @Test func appStatusReadsTheCurrentSessionAndRejectsSnapshotsAfterTeardown() async throws {
         let model = AppModel()
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         model.nativeSession = session
         model.lastLaunchAttempt = (app, pc())
         model.isStreaming = true

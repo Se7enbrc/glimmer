@@ -3,52 +3,70 @@
 
 // Session teardown and launch recovery share the actor's ownership and callback lifetime.
 
-import GlimmerEngine
 import Foundation
-import AppKit
 import os
 
 extension StreamSession {
 
     // MARK: - Teardown
 
-    /// Public teardown entry point. Attributes the teardown to a genuine user
-    /// quit (`.userStopped`) - the public API is the quit hotkey / Cmd-Q /
-    /// window-close path. Internal callers that know a more specific cause go
-    /// through `stop(cause:)` (which this forwards to). `DisconnectReason` is
-    /// an internal type, so it can't appear in a `public` signature's default
-    /// argument; this thin public wrapper keeps the API surface stable.
+    /// End local work according to the required host disposition and await native disposal.
+    /// Internal paths preserve their diagnostic cause; public calls record a user-requested stop.
     public func stop() async {
         await stop(cause: .userStopped)
     }
 
-    /// Tear down the session.
-    ///
-    /// - Parameter cause: why the teardown was initiated. The P2 disconnect-
-    ///   reason latch keeps the FIRST concrete reason, so a host terminate /
-    ///   watchdog / connect-failure already latched at its own site still wins;
-    ///   this only fills in the cause for the otherwise-reason-less teardown
-    ///   paths. Callers pass the specific cause they know:
-    ///     - quit hotkey / Cmd-Q / window close → `.userStopped`
-    ///     - AsyncStream consumer dropped (onTermination) → `.consumerDropped`
-    ///   Making a reason-less teardown of a HEALTHY stream distinguishable
-    ///   from a genuine user quit in the scorecard fixes the prior single
-    ///   default silently attributing a dropped consumer to the user.
-    func stop(cause: DisconnectReason) async {
+    /// Keep the first diagnostic cause and join the sole teardown, including pending native preparation.
+    /// Public prepared media is terminal even before startup; the native package path retains reuse.
+    package func stop(cause: DisconnectReason) async {
+        if publicInput != nil {
+            publicTerminal = true
+            if !isStreaming, !stopInProgress {
+                stopInProgress = true
+                await teardown.run { await self.stopPreparedPublicMedia() }
+                stopInProgress = false
+                return
+            }
+        }
         guard isStreaming || stopInProgress else { return }
         if stopCause == nil { stopCause = cause }
         stopInProgress = true
         isStreaming = false
+        setWaitingForVideo(false)
         initialServerInfoTask?.cancel()
         launchTask?.cancel()
-        await teardown.run { await self.performStop(cause: cause) }
+        let pendingPreparation = mediaPreparation
+        pendingPreparation?.cancel()
+        await teardown.run { await self.performStop(cause: cause, pendingPreparation: pendingPreparation) }
+    }
+
+    private func stopPreparedPublicMedia() async {
+        guard let media = publicMedia else { return }
+        await MainActor.run {
+            media.quiesce()
+            publicInput?.stop()
+            media.video.teardown()
+        }
+        audioDecoder.shutdown()
+        await media.dispose()
+        eventSource.yield(.stopped)
+        eventSource.finish()
+        stopInProgress = false
     }
 
     /// The stop's /cancel deadline: a LAN round trip with margin, and short
     /// enough that a dead link doesn't keep the launcher waiting.
-    static let stopCancelSeconds: TimeInterval = 2
+    package static let stopCancelSeconds: TimeInterval = 2
 
-    private func performStop(cause: DisconnectReason) async {
+    private func performStop(cause: DisconnectReason, pendingPreparation: Task<SessionMedia, Error>?) async {
+        publicInput?.prepareForReplacement(attempt: attemptID)
+        if let pending = pendingPreparation, case .success(let prepared) = await pending.result {
+            // A factory already running owns real native resources even after cancellation.
+            presentation = prepared.presentation
+            input = prepared.input
+            videoDecoder = prepared.video
+        }
+        mediaPreparation = nil
         // Remove the sleep/wake observers + cancel any in-flight wake probe FIRST,
         // so a wake landing mid-teardown can't arm a probe against a dying session
         // (the probe also re-checks the lifecycle flags, but this is the clean cut).
@@ -64,9 +82,7 @@ extension StreamSession {
         // session. The UI side (AppModel's teardown cleanup)
         // finalizes the receipt after the event stream drains, which this
         // stop() strictly happens-before. See SessionReceiptStore.
-        SessionReceiptStore.captureStreamEnd(
-            rttMs: backend.estimatedRtt()?.rttMs,
-            collector: videoDecoder?.statsCollector)
+        services.captureEnd(backend.estimatedRtt()?.rttMs, videoDecoder?.statsCollector)
 
         // P2 DISCONNECT REASON: this teardown path is the generic "session is
         // ending" beat. Latch the caller's `cause` - but the latch keeps the
@@ -99,20 +115,20 @@ extension StreamSession {
 
         // 0. Hide the overlay before closing; stop timers before their RTT reads
         // outlive the connection. Snapshot actor-owned UI refs for MainActor.run.
-        let winForOverlay = self.window
+        publicInput?.prepareForReplacement(attempt: attemptID)
+        let winForOverlay = self.presentation
         let inputForQuiesce = input
         await MainActor.run {
-            self.statsOverlayTimer?.invalidate()
-            self.statsOverlayTimer = nil
+            winForOverlay?.stopStats()
             self.frameWatchdogTimer?.invalidate()
             self.frameWatchdogTimer = nil
             self.presentWatchdogTimer?.invalidate()
             self.presentWatchdogTimer = nil
             self.stopPresentMetricTimer()
-            winForOverlay?.statsOverlay.setVisible(false)
+            winForOverlay?.hideOverlay()
             // Keys, mouse buttons and controller neutral frames must reach the reliable
             // channel before the backend closes; offline obligations remain pending.
-            inputForQuiesce?.inputOwnershipLost(reason: "stream teardown")
+            inputForQuiesce?.quiesce()
             inputForQuiesce?.setReady(false)
         }
 
@@ -124,12 +140,13 @@ extension StreamSession {
 
         // 2. Close the window and release input now, so a dead link can't hold a
         //    frozen full-screen frame and a hidden pointer while /cancel waits.
-        let dec = videoDecoder
-        let win = window
+        let dec = videoDecoder ?? publicMedia?.video
+        let win = presentation
         // Setup may have adopted input while the timer teardown was suspended.
         let inp = input
         await MainActor.run {
             inp?.detach()
+            self.publicInput?.stop()
             dec?.teardown()
             // Close the window last on the MainActor; close() awaits the
             // exit-fullscreen animation before orderOut'ing, then refocuses
@@ -144,7 +161,9 @@ extension StreamSession {
         //    gets its own cleanup without holding the launcher open.
         let net = cleanupNetwork
         await settlePendingLaunch {
-            if let net { await Self.cancelOwnedSession(net) }
+            if let net, let cancellation = self.hostDisposition.cancellation {
+                await Self.cancelOwnedSession(net, cancellation: cancellation)
+            }
         }
         if let net {
             // shutdown() is a no-op now (the control channel is per-request) -
@@ -156,7 +175,7 @@ extension StreamSession {
         network = nil
 
         // Close after teardown so the session log records backend, audio and /cancel outcomes.
-        SessionLogFileSink.stop()
+        services.stopLog()
 
         // 5. Release the bridge. The bridge held weak refs to everything so
         //    nil'ing our own field doesn't drop the retain - the
@@ -169,34 +188,34 @@ extension StreamSession {
         }
         bridgePtr = nil
         await win?.waitForVisualClose()
+        await publicMedia?.dispose()
         // finish() ends AppModel's `for await`, which is how it learns the stream is over, and turns
         // any late yield from a callback thread into a no-op. Clearing the field instead would race them.
-        bridge?.eventContinuation?.finish()
+        if publicInput != nil { eventSource.yield(.stopped) }
+        bridge?.finishEvents()
+        if bridge == nil { eventSource.finish() }
         bridge = nil
 
         // 6. Release the keep-awake assertion taken in start(). Balanced 1:1
         //    with beginActivity; nil-guarded so a second stop() can't double-end.
-        if let assertion = powerAssertion {
-            ProcessInfo.processInfo.endActivity(assertion)
-            powerAssertion = nil
-        }
+        endPowerAssertion()
 
         input = nil
-        window = nil
+        presentation = nil
         videoDecoder = nil
         stopInProgress = false
     }
 
     /// The client stop cancels with. A failed reconnect attempt clears `network`, but the session
     /// may still own a launch on `reconnectServer`, and that game must not be left running.
-    var cleanupNetwork: NetworkClient? {
+    package var cleanupNetwork: NetworkClient? {
         network ?? reconnectServer.map(makeNetwork)
     }
 
-    private static func cancelOwnedSession(_ network: NetworkClient) async {
+    private static func cancelOwnedSession(_ network: NetworkClient, cancellation: HostCancellation) async {
         await network.setRequestDeadline(Date().addingTimeInterval(stopCancelSeconds))
         do {
-            try await network.cancel()
+            try await cancellation.cancel(network)
             Diag.notice("Teardown /cancel succeeded", "Stream")
         } catch {
             Diag.notice("Teardown /cancel failed: \(error, privacy: .private)", "Stream")
@@ -213,10 +232,14 @@ extension StreamSession {
 
     /// Idle host: /launch. Anything else: /cancel + /launch, so the host
     /// renegotiates our config instead of /resume-ing a stale one.
-    func launchWithBusyRecovery(
-        network: NetworkClient, appID: Int, config: StreamConfig, info: ServerInfo, deadline: Date
+    package func launchWithBusyRecovery(
+        network: NetworkClient, appID: Int, config: StreamRequest, info: ServerInfo, deadline: Date
     ) async throws -> LaunchResponse {
         try checkAttempt(deadline: deadline)
+        guard hostDisposition.cancellation != nil else {
+            return try await launchWithoutCancellation(network: network, appID: appID,
+                                                       config: config, info: info, deadline: deadline)
+        }
         try await authorizeOccupancy(info, network: network, deadline: deadline)
         do {
             if info.currentGameID != 0 || info.isBusy {
@@ -233,7 +256,20 @@ extension StreamSession {
         }
     }
 
-    func authorizeOccupancy(_ info: ServerInfo, network: NetworkClient, deadline: Date) async throws {
+    private func launchWithoutCancellation(
+        network: NetworkClient, appID: Int, config: StreamRequest, info: ServerInfo, deadline: Date
+    ) async throws -> LaunchResponse {
+        let client = await network.clientUniqueID
+        try checkAttempt(deadline: deadline)
+        let response = try await launchAndRecordOwnership(client: client, appID: appID) {
+            if info.currentGameID == appID { return try await network.resume(config: config) }
+            return try await network.launch(appID: appID, config: config)
+        }
+        try checkAttempt(deadline: deadline)
+        return response
+    }
+
+    package func authorizeOccupancy(_ info: ServerInfo, network: NetworkClient, deadline: Date) async throws {
         let client = await network.clientUniqueID
         try checkAttempt(deadline: deadline)
         let owner = ownsHostSession && info.currentGameID == hostSessionAppID ? hostSessionClientID : nil
@@ -247,7 +283,7 @@ extension StreamSession {
     }
 
     private func launchHost(
-        network: NetworkClient, appID: Int, config: StreamConfig, deadline: Date
+        network: NetworkClient, appID: Int, config: StreamRequest, deadline: Date
     ) async throws -> LaunchResponse {
         let client = await network.clientUniqueID
         try checkAttempt(deadline: deadline)
@@ -260,7 +296,7 @@ extension StreamSession {
         return response
     }
 
-    func launchAndRecordOwnership(
+    package func launchAndRecordOwnership(
         client: String?, appID: Int, operation: @escaping @Sendable () async throws -> LaunchResponse
     ) async throws -> LaunchResponse {
         // Keep the response alive after cancellation so a late success can be
@@ -290,17 +326,18 @@ extension StreamSession {
     }
 
     /// An old /cancel finishes before a new /launch on that PC, or skips the newer owner entirely.
-    static let launchMutations = HostLaunchMutations()
+    package static let launchMutations = HostLaunchMutations()
 
     private var launchPCKey: String { reconnectServer?.uniqueId ?? "" }
 
-    func settlePendingLaunch(cancel: @escaping @Sendable () async -> Void) async {
+    package func settlePendingLaunch(cancel: @escaping @Sendable () async -> Void) async {
+        guard hostDisposition.cancellation != nil else { return }
         let task = pendingLaunch
         let key = launchPCKey
         let epoch = hostLaunchEpoch
         let settled: Bool
         if let task {
-            settled = await TerminationGate.runBounded(seconds: Self.stopCancelSeconds) {
+            settled = await SessionDeadline.runBounded(seconds: Self.stopCancelSeconds) {
                 _ = try? await self.consumeLaunch(task)
             }
         } else {
@@ -319,22 +356,23 @@ extension StreamSession {
         }
     }
 
-    nonisolated var terminationStopBoundSeconds: TimeInterval {
+    package nonisolated var terminationStopBoundSeconds: TimeInterval {
         // Allow the short ownership wait and /cancel, never the launch timeout.
-        Self.stopCancelSeconds + TerminationGate.stopBoundSeconds
+        Self.stopCancelSeconds + SessionDeadline.stopBoundSeconds
     }
 
-    static func retainsLaunchOwnership(after error: Error) -> Bool {
+    package static func retainsLaunchOwnership(after error: Error) -> Bool {
         if case .hostRefused = error as? StreamError { return false }
         return true
     }
 
     private func cancelThenLaunch(
-        network: NetworkClient, appID: Int, config: StreamConfig, deadline: Date
+        network: NetworkClient, appID: Int, config: StreamRequest, deadline: Date
     ) async throws -> LaunchResponse {
         try checkAttempt(deadline: deadline)
+        guard let cancellation = hostDisposition.cancellation else { throw CancellationError() }
         let start = Date()
-        try await network.cancel()
+        try await cancellation.cancel(network)
         try checkAttempt(deadline: deadline)
         ConnectTimingTelemetry.shared.recordLaunchLeg(cancelMs: Date().timeIntervalSince(start) * 1000)
         try await waitForHostIdle(network: network, deadline: deadline)
@@ -363,11 +401,11 @@ extension StreamSession {
         try checkAttempt(deadline: deadline)
     }
 
-    var isTearingDown: Bool { !isStreaming || stopInProgress }
+    package var isTearingDown: Bool { !isStreaming || stopInProgress }
 
     /// The launch under one wall-clock deadline; a stop() mid-launch cancels it.
-    func launchWithDeadline(
-        network: NetworkClient, appID: Int, config: StreamConfig, info: ServerInfo, deadline: Date? = nil
+    package func launchWithDeadline(
+        network: NetworkClient, appID: Int, config: StreamRequest, info: ServerInfo, deadline: Date? = nil
     ) async throws -> LaunchResponse {
         let end = deadline ?? Date().addingTimeInterval(Self.launchOverallDeadlineSeconds)
         await network.setRequestDeadline(end)

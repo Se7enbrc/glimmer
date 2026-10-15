@@ -18,9 +18,7 @@
 //  StreamSession+PresentTrip.swift.
 //
 
-import GlimmerEngine
 import Foundation
-import AppKit
 import os
 
 extension StreamSession {
@@ -29,16 +27,16 @@ extension StreamSession {
     /// Link-dead trip: a 240Hz link should tick every ~4.17ms; no tick for
     /// this long (~60 missed vsyncs at 240Hz) means the CADisplayLink stopped
     /// (a same-screen HDR/VRR/mode switch that posted no didChangeScreen).
-    static let presentLinkDeadThreshold: Double = 0.25
+    package static let presentLinkDeadThreshold: Double = 0.25
     /// A ticking link with queued frames but no accepted presentation is frozen.
     /// The same window covers sustained renderer refusals that keep emptying the queue;
     /// a full buffer that keeps presenting and a network drought never trip by themselves.
-    static let presentStallThreshold = FramePacer.rendererRefusalWindowSeconds
+    package static let presentStallThreshold = FramePacer.rendererRefusalWindowSeconds
     /// After escalation has run and still no present has resumed within this
     /// long, fall back to direct enqueue (graceful degradation) so we never
     /// hard-freeze. Generous vs the trip thresholds so a transient hiccup that
     /// the cheaper steps fix doesn't disable pacing prematurely.
-    static let presentGiveUpThreshold: Double = 2.0
+    package static let presentGiveUpThreshold: Double = 2.0
     /// After a give-up (stage 3) drops us to direct enqueue, RE-ENABLE pacing
     /// once decode + direct-present have been continuously healthy for this long.
     /// A give-up over a lossy VPN is usually a one-off drought (a flush-to-IDR
@@ -54,10 +52,10 @@ extension StreamSession {
     /// recovery - flush / layer-rebuild / IDR - which covers BOTH modes; it does
     /// not need a one-way latch to direct enqueue. A transient drought costs one
     /// restore cycle and the buttery pacing returns on its own.
-    static let presentPacingReenableHealthySeconds: Double = 5.0
+    package static let presentPacingReenableHealthySeconds: Double = 5.0
     /// Direct-path trip when decode advances but nothing reaches the renderer.
     /// Its threshold is longer than the paced trip; both recover a screen freeze.
-    static let directPresentStallThreshold: Double = 0.4
+    package static let directPresentStallThreshold: Double = 0.4
     // The TICK-DEFICIT trip thresholds (`tickDeficitTripSeconds`,
     // `tickDeficitReleaseRatio`) live in StreamSession+PresentTrip.swift with
     // `evaluatePresentTrip`, their only consumer.
@@ -70,7 +68,7 @@ extension StreamSession {
     /// and then tripped on the pacer's own buffer-priming. 3s spans the priming +
     /// PTS-median convergence so startup no longer cycles disable/re-enable. The
     /// link-dead branch stays active throughout (a truly dead link IS a freeze).
-    static let presentWatchdogGrace: Double = 3.0
+    package static let presentWatchdogGrace: Double = 3.0
 
     /// Install the PRESENT-PATH self-heal watchdog. Runs at 20 Hz on the main
     /// run loop, independent of the decode-output watchdog above. The decode
@@ -85,7 +83,7 @@ extension StreamSession {
     ///   Stage 2 (link dead, no ticks): direct-drain freshest + rebuild link.
     ///   Stage 3 (still stalled past give-up): disable pacing, revert to
     ///           direct enqueue + request an IDR (graceful degradation).
-    func startPresentWatchdog() async {
+    package func startPresentWatchdog() async {
         let dec = videoDecoder
         await MainActor.run {
             self.presentWatchdogTimer?.invalidate()
@@ -123,7 +121,7 @@ extension StreamSession {
     /// One present-watchdog evaluation. MainActor-isolated (the timer body
     /// runs there). Reads the pacer liveness snapshot and escalates recovery.
     @MainActor
-    func tickPresentWatchdog(dec: VideoDecoder) {
+    package func tickPresentWatchdog(dec: VideoDecoder) {
         // Intentional non-presentation is NOT a freeze. When the window is
         // hidden / occluded / backgrounded the present path is deliberately
         // suppressed: frames legitimately stop reaching the screen while decode
@@ -180,7 +178,7 @@ extension StreamSession {
     /// The paced half of one evaluation, over a liveness snapshot: grace, trip,
     /// episode and cluster bookkeeping, then the staged recovery.
     @MainActor
-    func tickPacedPresentWatchdog(dec: VideoDecoder, live: FramePacer.LivenessSnapshot, decodeIdle: Double) {
+    package func tickPacedPresentWatchdog(dec: VideoDecoder, live: FramePacer.LivenessSnapshot, decodeIdle: Double) {
         // Startup grace: suppress the PRESENT-STALL branch while the pacer locks
         // cadence - keyed on TIME since the watchdog armed, not totalReleases==0.
         // The pacer force-releases frame 1 immediately, so a totalReleases-keyed

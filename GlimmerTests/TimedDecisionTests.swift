@@ -176,7 +176,7 @@ struct TimedPresentPathTests {
 
     @Test func aFrozenDirectPresentRecoversOnceThenAgainAfterAFullWindow() {
         let clock = ScriptedClock()
-        let session = StreamSession(backend: recorder, clock: clock.session)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session)
         let frozen = decoder(presenting: false)
         session.tickPresentWatchdog(dec: frozen)
         #expect(session.directPresentStallSince == clock.seconds)
@@ -198,7 +198,7 @@ struct TimedPresentPathTests {
     /// A healthy stream's present metric reaches notice level once a minute, debug in between.
     @Test func aHealthyPresentMetricNoticesOncePerMinute() {
         let clock = ScriptedClock()
-        let session = StreamSession(backend: recorder, clock: clock.session)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session)
         let healthy = decoder(presenting: true)
         session.emitPresentMetric(dec: healthy)
         let first = clock.seconds

@@ -153,7 +153,8 @@ extension AppModel {
                 return
             }
             // The Swift-native engine is the only path.
-            let session = StreamSession(backend: MacTransport.makeBackend(), makeNetwork: makeNetwork)
+            let session = StreamSession(
+                hostDisposition: .cancelOwnedHostSession, backend: MacTransport.makeBackend(), makeNetwork: makeNetwork)
             self.nativeSession = session
             await session.authorizeTakeover(takeoverAuthorized)
             if let launch = cfg.bitrateDecision {
@@ -365,6 +366,7 @@ extension AppModel {
             streamPhase = .idle
             nativeHDRActive = false
             showStreamEnded(code: code, error: error, host: host)
+        case .waitingForVideo: break
         case .reconnecting:
             // The host closed a live session (it likely restarted across a
             // lock/desktop transition) and the engine is silently re-establishing
@@ -393,7 +395,7 @@ extension AppModel {
             // Non-fatal to the visual stream, so stay in the streaming phase;
             // the failure is already logged + counted at the source.
             break
-        case .log: break
+        case .log, .input, .stopped: break
         }
     }
 

@@ -235,7 +235,7 @@ struct StreamReconnectTests {
     @MainActor @Test(arguments: [false, true])
     func lateEstablishedCannotRearmStoppedInput(stopping: Bool) async {
         let backend = NativeBackend()
-        let session = StreamSession(backend: backend)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: backend)
         let input = InputForwarder()
         await session.prepareCallbackTest(input: input, streaming: stopping, stopping: stopping)
         await session.nativeConnectionEstablished(from: backend)
@@ -247,7 +247,7 @@ struct StreamReconnectTests {
     @MainActor @Test func oldBackendCannotMutateTheReplacementConnection() async {
         let old = NativeBackend()
         let current = NativeBackend()
-        let session = StreamSession(backend: current)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: current)
         let input = InputForwarder()
         await session.prepareCallbackTest(input: input)
         await session.nativeConnectionEstablished(from: old)
@@ -263,7 +263,7 @@ struct StreamReconnectTests {
 
     @MainActor @Test func ignoredTerminationCannotPauseReconnectingInput() async {
         let backend = NativeBackend()
-        let session = StreamSession(backend: backend)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: backend)
         let input = InputForwarder()
         input.setReady(true)
         await session.prepareCallbackTest(input: input, reconnecting: true)
@@ -275,7 +275,7 @@ struct StreamReconnectTests {
 
     @MainActor @Test func currentEstablishedArmsLiveInput() async {
         let backend = NativeBackend()
-        let session = StreamSession(backend: backend)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: backend)
         let input = InputForwarder()
         await session.prepareCallbackTest(input: input)
         await session.nativeConnectionEstablished(from: backend)
@@ -293,8 +293,8 @@ struct StreamReconnectTests {
 
 private extension StreamSession {
     func prepareCallbackTest(input: InputForwarder, streaming: Bool = true,
-                             stopping: Bool = false, reconnecting: Bool = false) {
-        self.input = input
+                             stopping: Bool = false, reconnecting: Bool = false) async {
+        self.input = await SessionInputHooks(input)
         isStreaming = streaming
         stopInProgress = stopping
         isReconnecting = reconnecting

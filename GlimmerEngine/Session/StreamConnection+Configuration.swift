@@ -28,7 +28,7 @@ extension StreamConnection {
         }
 
         func backendConfig(launch: LaunchResponse) throws -> BackendStreamConfig {
-            guard launch.gcmKey.count == 16, launch.gcmKeyId.count == 16 else { throw Failure.invalidSessionKey }
+            try launch.validateSessionKey()
             return BackendStreamConfig(width: Int32(request.width), height: Int32(request.height),
                 fps: Int32(request.fps), bitrate: Int32(request.bitrateKbps),
                 packetSize: Int32(StreamPathMTU.advertisedPacketSize(configured: request.packetSize,

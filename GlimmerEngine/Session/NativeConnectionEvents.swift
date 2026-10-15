@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
 import Foundation
 import os
 
@@ -9,17 +8,22 @@ import os
 
 /// Weak bridge/backend references identify this attempt; sessionEvents guards the ordered task tail.
 /// Receive threads yield directly to the Sendable continuation; HDR preserves the main-queue FIFO.
-final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
+package final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
     private static let logCategory = "NativeConnection"
     /// The session this pipeline started for, not whichever is current when a late event fires.
     weak let bridge: StreamBridgeContext?
     weak let backend: NativeBackend?
     // Native callback threads access the task tail only under this lock and never wait on it.
+    private let attempt: UUID
+    private let feedback: SessionFeedback
     private let sessionEvents = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
 
-    init(bridge: StreamBridgeContext? = StreamBridgeContext.current, backend: NativeBackend? = nil) {
+    package init(bridge: StreamBridgeContext? = StreamBridgeContext.current, backend: NativeBackend? = nil,
+                 feedback: SessionFeedback? = nil) {
         self.bridge = bridge
         self.backend = backend
+        self.attempt = bridge?.currentAttempt ?? UUID()
+        self.feedback = feedback ?? bridge?.feedback ?? SessionFeedback()
     }
 
     /// Separate Tasks can reorder establish and terminate; chain this pipeline's actor events.
@@ -33,9 +37,13 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         }
     }
 
-    private var isCurrent: Bool { bridge?.acceptsEvent(from: backend) ?? false }
+    private func emit(_ event: StreamEvent) {
+        bridge?.emit(event, source: backend, attempt: attempt)
+    }
 
-    func stageStarting(_ name: String) {
+    private var isCurrent: Bool { bridge?.acceptsEvent(from: backend, attempt: attempt) ?? false }
+
+    package func stageStarting(_ name: String) {
         guard isCurrent else { return }
         Diag.info("stage starting: \(name)", Self.logCategory)
         // P2 CONNECT-HANDSHAKE breakdown (always-live; off any hot path - a stage
@@ -46,10 +54,10 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         let p2 = TelemetryCounters.shared.p2
         if name == "name resolution" { p2.markRtspStart(now) }
         if name == "ENET_CONNECT" { p2.markEnetStart(now) }
-        bridge?.eventContinuation?.yield(.stageStarting(name: name))
+        emit(.stageStarting(name: name))
     }
 
-    func stageComplete(_ name: String) {
+    package func stageComplete(_ name: String) {
         guard isCurrent else { return }
         Diag.info("stage complete: \(name)", Self.logCategory)
         // P2 CONNECT-HANDSHAKE: the RTSP-done edge bounds the RTSP leg + the start
@@ -58,16 +66,16 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         if name == "RTSP handshake" {
             TelemetryCounters.shared.p2.markRtspDone(TelemetryCounters.monotonicNowNanos())
         }
-        bridge?.eventContinuation?.yield(.stageComplete(name: name))
+        emit(.stageComplete(name: name))
     }
 
-    func stageFailed(_ name: String, code: Int32) {
+    package func stageFailed(_ name: String, code: Int32) {
         guard isCurrent else { return }
         Diag.error("stage FAILED: \(name) (code \(code))", Self.logCategory)
-        bridge?.eventContinuation?.yield(.stageFailed(name: name, errorCode: code))
+        emit(.stageFailed(name: name, errorCode: code))
     }
 
-    func connectionStarted() {
+    package func connectionStarted() {
         guard isCurrent else { return }
         Diag.notice("connection established (native)", Self.logCategory)
         // P2 established edge: bounds the ENet-connect leg, starts the first-frame
@@ -78,12 +86,12 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         // If the continuation is gone at yield time, this established edge fires
         // into the void and the UI's connecting→streaming promotion falls back to
         // .firstFrame; log it so a torn yield is diagnosable (not load-bearing).
-        if bridge?.eventContinuation == nil {
+        if bridge?.eventContinuation == nil, bridge?.publicEvents == nil {
             Diag.error("connection established but event continuation is nil "
                 + "(bridge=\(bridge == nil ? "nil" : "live")) - relying on first-frame fallback "
                 + "to promote streaming", Self.logCategory)
         }
-        bridge?.eventContinuation?.yield(.connectionEstablished)
+        emit(.connectionEstablished)
         // Drive the actor side effect (flip InputForwarder ready,
         // close the ConnectFlow signpost). Best-effort; lossy if torn down.
         if let session = bridge?.session, let backend {
@@ -91,7 +99,7 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         }
     }
 
-    func connectionTerminated(code: Int32) {
+    package func connectionTerminated(code: Int32) {
         guard isCurrent else { return }
         if code == 0 {
             Diag.notice("connection terminated cleanly (native)", Self.logCategory)
@@ -110,33 +118,32 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
         if let session = bridge?.session, let backend {
             enqueueSessionEvent { await session.handleHostTerminate(code: code, from: backend) }
         } else {
-            bridge?.eventContinuation?.yield(.connectionTerminated(errorCode: code))
+            emit(.connectionTerminated(errorCode: code))
         }
     }
 
-    func connectionStatus(poor: Bool) {
+    package func connectionStatus(poor: Bool) {
         guard isCurrent else { return }
         let quality: ConnectionQuality = poor ? .poor : .good
-        bridge?.eventContinuation?.yield(.connectionStatus(quality))
+        emit(.connectionStatus(quality))
     }
 
-    func controllersActivated() {
+    package func controllersActivated() {
         guard isCurrent else { return }
-        ControllerHaptics.shared.streamActivated()
-        if let backend { ControllerMotion.shared.streamActivated(backend: backend) }
+        feedback.activated(backend)
     }
 
-    func controllersDeactivated() {
-        DispatchQueue.main.async { ControllerHaptics.shared.stopAll(reason: "stream teardown") }
-        ControllerMotion.shared.stopAll(reason: "stream teardown")
-    }
-
-    func audioFailed(_ detail: String) {
+    package func controllersDeactivated() {
         guard isCurrent else { return }
-        bridge?.eventContinuation?.yield(.audioFailed(detail))
+        feedback.deactivated()
     }
 
-    func setHdrMode(_ enabled: Bool) {
+    package func audioFailed(_ detail: String) {
+        guard isCurrent else { return }
+        emit(.audioFailed(detail))
+    }
+
+    package func setHdrMode(_ enabled: Bool) {
         guard isCurrent else { return }
         let decoder = bridge?.videoDecoder
         DispatchQueue.main.async { [self] in
@@ -146,7 +153,7 @@ final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendable {
             }
         }
         // Keep the UI edge in the receive-thread FIFO; display updates retain the main-queue hop.
-        bridge?.eventContinuation?.yield(.hdrModeChanged(enabled))
+        emit(.hdrModeChanged(enabled))
     }
 }
 
@@ -161,47 +168,38 @@ extension NativeConnectionEvents {
     /// no-op defaults exist only to keep actuator-less conformers
     /// source-compatible. Lives here, beside the startVideoStage wiring that
     /// feeds it, rather than in the (size-capped) actuator file.
-    func rumble(controller: UInt16, lowFreq: UInt16, highFreq: UInt16) {
+    package func rumble(controller: UInt16, lowFreq: UInt16, highFreq: UInt16) {
         guard isCurrent else { return }
-        ControllerHaptics.shared.setRumble(controllerNumber: controller,
-                                           lowFreq: lowFreq, highFreq: highFreq)
+        feedback.rumble(controller, lowFreq, highFreq)
     }
 
-    func rumbleTriggers(controller: UInt16, left: UInt16, right: UInt16) {
+    package func rumbleTriggers(controller: UInt16, left: UInt16, right: UInt16) {
         guard isCurrent else { return }
-        ControllerHaptics.shared.setTriggerRumble(controllerNumber: controller,
-                                                  left: left, right: right)
+        feedback.triggers(controller, left, right)
     }
 
-    func setControllerLED(controller: UInt16, r: UInt8, g: UInt8, b: UInt8) {
+    package func setControllerLED(controller: UInt16, r: UInt8, g: UInt8, b: UInt8) {
         guard isCurrent else { return }
-        ControllerHaptics.shared.setLight(controllerNumber: controller,
-                                          red: r, green: g, blue: b)
+        feedback.rgb(controller, r, g, b)
     }
 
-    func setPlayerLEDs(controller: UInt16, solid: UInt8, flashing: UInt8) {
+    package func setPlayerLEDs(controller: UInt16, solid: UInt8, flashing: UInt8) {
         guard isCurrent else { return }
-        ControllerHaptics.shared.setPlayerLEDs(controllerNumber: controller,
-                                               solid: solid, flashing: flashing)
+        feedback.player(controller, solid, flashing)
     }
 
-    func setMotionEventState(controller: UInt16, motionType: UInt8, reportRateHz: UInt16) {
+    package func setMotionEventState(controller: UInt16, motionType: UInt8, reportRateHz: UInt16) {
         guard isCurrent else { return }
-        ControllerMotion.shared.setMotionEventState(controllerNumber: controller,
-                                                    motionType: motionType,
-                                                    reportRateHz: reportRateHz)
+        feedback.motion(controller, motionType, reportRateHz)
     }
 
     /// SET_ADAPTIVE_TRIGGERS (0x5503) to the bound pad's OUTPUT report: GameController
     /// has no adaptive-trigger API, so this is the one feedback that must take the
     /// raw-HID path. A no-op when the feature is off or the write is refused.
-    func setAdaptiveTriggers(controller: UInt16, eventFlags: UInt8,
-                             typeLeft: UInt8, typeRight: UInt8,
-                             left: [UInt8], right: [UInt8]) {
+    package func setAdaptiveTriggers(controller: UInt16, eventFlags: UInt8,
+                                     typeLeft: UInt8, typeRight: UInt8,
+                                     left: [UInt8], right: [UInt8]) {
         guard isCurrent else { return }
-        guard let device = DualSenseRouting.shared.device(slot: controller) else { return }
-        DualSenseHID.shared.setAdaptiveTriggers(device: device, eventFlags: eventFlags,
-                                                typeLeft: typeLeft, typeRight: typeRight,
-                                                left: left, right: right)
+        feedback.adaptive(controller, eventFlags, typeLeft, typeRight, left, right)
     }
 }

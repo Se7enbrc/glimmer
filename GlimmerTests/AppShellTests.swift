@@ -256,7 +256,7 @@ struct AppShellTests {
         let route = CommandRouteWait()
         let (_, task) = try await pendingStream(model, route: route)
         model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
-        let session = StreamSession()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         model.nativeSession = session
         model.isStreaming = true
         model.isReconnecting = true
