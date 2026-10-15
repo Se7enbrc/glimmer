@@ -44,8 +44,11 @@ Mini Player keeps background controller input. Keyboard/mouse follow focus.
 
 {% hint style="info" %}
 
-Fullscreen fills the panel around the camera. “Keep picture below the camera” or
-“Use a full-screen Space” selects native fullscreen. Choices stay saved.
+Fullscreen fills the panel around the camera by default, without creating a
+separate desktop. To swipe away and back, turn on “Keep picture below the
+camera” in Settings › Quality, or “Use a full-screen Space” on a display without
+a notch. The next stream opens in its own macOS Space. On a Mac with a notch,
+the picture stays below the camera. Choices stay saved.
 
 {% endhint %}
 
