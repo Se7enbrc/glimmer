@@ -197,3 +197,122 @@ bits would produce guesses. The installed SDK is 27; the documented APIs are
 available on 26, but fixed-versus-Variable readings on the owner's panel and
 Xcode 26.6 remain unverified. No Settings row, one-time tip, preference, or
 display change is shipped.
+
+## Pacing policy and candidate checks
+
+Variable refresh: `FramePacer+FrameRateRange.swift` reads the screen's minimum
+and maximum refresh intervals and current update granularity. The maximum rate
+is the reciprocal of the minimum interval, preserving fractional modes; the
+integer maximum is used only when that interval is unavailable. Without either,
+the link keeps the system default. A variable mode gets a floor of
+`clamp(0.75 × panel max, supported minimum, panel max)`, the panel maximum and a
+preferred rate from measured content, without whole-Hz rounding. For a low
+enough supported minimum, floors are 180/108/90/45 Hz on 240/144/120/60 Hz
+panels. A 48–60 Hz panel gets a 48 Hz floor. The preferred rate changes only
+after a move greater than 10% persists for at least two seconds. A materially
+different destination restarts that dwell. Decode gaps, bursts, PTS resets and
+hide/show restart observation; missing frames do not count as sustained slower
+content. A visible link rebuild preserves the held target within the new panel's
+limits. Changes between fixed and variable modes at the same maximum also
+re-evaluate the range; unchanged capability notifications do not rebind.
+
+Only `CADisplayLink.preferredFrameRateRange` is written; Glimmer never selects a
+display mode or changes the user's refresh setting. Suppression immediately
+clears the hint to [the system default][display-link-range], including on a
+hidden link rebuild. There is no low-rate request left over another app.
+Restoring the hint requires fresh delivery and the two-second dwell, even when
+the target equals the pre-hide target or the window moves during restoration.
+The link remains available for presentation and liveness callbacks. A sustained
+callback rate below 90% of content/preferred rate requests the full callback
+grid for five seconds before retrying, through the same dwell. This fallback
+pins the floor at the panel maximum. Fixed modes keep the full grid to avoid
+divisor throttling.
+
+[display-link-range]:
+  https://developer.apple.com/documentation/quartzcore/cadisplaylink/preferredframeraterange
+
+The deterministic matrix in `FramePacerDisplayTests` and
+`FramePacerContentRateTests` covers these capabilities. Names describe example
+displays; decisions use reported intervals and granularity, never a model name.
+
+| Reported capability                               | Expected hint and pacing                                                  | Live check                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Fixed 60/75/144/165/240/360 Hz                    | Full callback grid; variable path off; evenly spaced repeats              | Moving edges stay even below panel rate                    |
+| Built-in ProMotion, about 24–120 Hz               | 90 Hz floor; content hint through 120 Hz                                  | AC and battery, quiet scene and fast motion                |
+| External Adaptive-Sync, 48–240 Hz                 | 180 Hz floor; content hint through 240 Hz                                 | Brightness stable in stream and after tabbing away         |
+| HDMI 2.1 VRR TV, about 40–120 Hz                  | 90 Hz floor; content hint through 120 Hz                                  | No brightness pulse, flash or blanking                     |
+| Variable 48–144 and 48–60 Hz                      | 108 and 48 Hz floors, bounded by reported maximum                         | No request exceeds the panel maximum                       |
+| Fractional 59.94/119.88/23.976 Hz                 | Fractional bounds/content retained at API precision; no drift retargets   | Long playback has no accumulating beat or drift            |
+| Moves between different rates, variable and fixed | New capability applied, held target clamped; unchanged notices are no-ops | No flash, blanking or display mode change                  |
+| Hide, occlude, background, then return            | Default range while suppressed; restore after fresh two-second dwell      | Other apps regain system-controlled refresh; prompt return |
+
+For each available display, capture equal before/after active, suppressed and
+restored spans. Correlate `present_suppressed`, the “rate hint released” and
+“rate hint” breadcrumbs with `refresh_*_hz`, `pacer_ticks_per_s`,
+`pacer_releases_per_s`, cadence error, late drops and output-to-present tails.
+Check `gpu_power_w` and `package_power_w` for no material steady-state increase.
+Include a hidden display move and a move during the restoration dwell. Callback
+rates are not physical scanout measurements; watch the other app and, where
+available, the display's refresh indicator. The matrix is automated policy and
+cadence coverage, not evidence that these displays have been physically tested.
+
+The owner's 2026.10.8-rc.4 Adaptive session (`2026-10-12T19:32:07Z`) reported
+brightness flicker on a G-Sync-compatible 240 Hz panel: 1,229 rate-hint rows,
+710 between 199 and 203 Hz, with a minimum preferred rate of 58.75 Hz and a 48
+Hz floor. The hysteresis and capability-derived floor target those repeated
+refresh excursions. The owner subsequently localized the flicker to tabbing
+away; releasing the suppressed request addresses that reported trigger. The
+regression trace has zero retargets per minute at a steady 199–203 Hz, and one
+retarget after a sustained 240→190 Hz change has dwelled for two seconds. These
+are deterministic test results, not new panel measurements.
+
+Presentation follows a bounded mean of the last 64 PTS intervals rather than
+assuming every configured capture slot contains a frame. Each gap contributes at
+most twice the existing lower-quartile estimate; the latter still protects loss
+recovery. A two-frame decode burst preserves fractional cadence within the
+existing trim slack. A larger backlog retains immediate catch-up. On variable
+scanouts, the tick owns presentation; submit cannot predict a future scanout
+from a fixed grid. No additional buffering target is introduced.
+
+Before-change evidence, filtering the supplied 2026-10-12 sessions to seconds
+with `pacer_ticks_per_s > 230` and `fps_decoded > 150`:
+
+| Session              | Seconds | Received fps | Rendered fps | Ticks/s | Stale repeats/s | O2P p50 / p95 / p99 (ms) |
+| -------------------- | ------: | -----------: | -----------: | ------: | --------------: | -----------------------: |
+| 2026.10.7, 12:55:09Z |     205 |       194.94 |       194.94 |  240.00 |           45.07 |    0.138 / 4.222 / 5.716 |
+| rc.2, 12:29:07Z      |     327 |       184.97 |       184.87 |  239.99 |           55.11 |    1.193 / 5.170 / 7.833 |
+| rc.3, 13:55:14Z      |      62 |       198.31 |       194.20 |  239.99 |           45.79 |   2.370 / 6.509 / 10.498 |
+
+O2P columns are means of exported percentile fields, not pooled frame
+percentiles. The rc.3 log confirms floor/preferred/maximum all at 240 Hz. These
+callback counts do not measure physical panel scanout or prove repeat bunching
+by themselves.
+
+After-change live validation is still required on the same AV1 Main10 HDR 4K,
+361 Mbps scene, first with the owner's Adaptive setting, then a user-selected
+fixed setting. Compare equal active spans (use decoded/rendered activity, not
+the old `ticks > 230` filter). Expect `refresh_avg_hz` and `pacer_ticks_per_s`
+to stay near the held content target under Adaptive, bounded by the 180 Hz floor
+on the 240 Hz panel, with fewer `present_stale_repeats_per_s`; `fps_rendered`
+and `pacer_releases_per_s` must continue tracking decoded content. The log's
+`FramePacer rate hint` records the applied changes and fallback. Expect zero
+retargets per minute after settling in a steady scene, and one per sustained
+change greater than 10%, after at least two seconds. Stalls and hide/resume must
+not lower the target; floor/preferred must never fall below 180 Hz on this
+panel. Compare `gpu_power_w` and `package_power_w` over equal active spans.
+macOS may quantize or ignore hints; callback fields do not prove physical
+scanout, so confirm brightness stability and motion by eye as well. No
+after-change live capture has been made yet.
+
+On a fixed screen, repeats remain necessary. The repeat gate accounts for
+floating-point subtraction error at exact half-refresh boundaries, without
+changing its half-refresh slack or fixed-grid policy. The matrix checks an 80%
+content rate on every fixed panel for evenly spaced one/two-refresh holds.
+Inspect per-frame present spacing and moving edges for evenly distributed
+one/two-refresh holds. Check `present_cadence_err_ms`, `pacing_depth`,
+`pacing_target_depth` and `lat_output_to_present_*_ms`: no standing extra frame,
+no added wait beyond one content frame. Compare deltas of
+`drops_presentation_late` and `drops_backpressure`, and verify no repeated
+assist/deficit transitions, flashes or blanking. Exercise variable/fixed screen
+moves, hide/resume, a quiet scene, fast motion and a delivery drought. A lower
+repeat count alone is not acceptance.

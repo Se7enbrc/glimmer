@@ -270,11 +270,12 @@ reference values; they are not targets for every display.
 | `pacer_submit_release_total`                                                                             | Direct releases at rest; compare with `drops_backpressure`.                              | A few percent.                             |
 | `drops_presentation_late`                                                                                | Trimmed or overflowed frames.                                                            | 9 in 100 s.                                |
 
-The display link requests panel maximum with the floor at stream FPS. Recorded
-active 240 Hz sessions retain roughly 239–241 ticks/s. A proposal to pace VRR at
-content rate still needs a real VRR panel below maximum refresh, with
-`refresh_avg_hz` following received FPS and output-to-present p99 below one
-vsync.
+Variable-refresh modes use a high supported floor and a measured-content target
+that changes only after sustained evidence. Fixed-mode repeat spacing remains
+bounded by the existing trim policy. Follow the
+[pacing candidate checks](PERFORMANCE_VALIDATION.md#pacing-policy-and-candidate-checks)
+before accepting changed cadence, latency or power. Earlier captures do not
+validate this RC.
 
 ## Audio under full CPU load
 

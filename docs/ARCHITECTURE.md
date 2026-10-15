@@ -190,11 +190,12 @@ app or launch once, without entering the cancel/retry path.
 6. Await native bring-up; callbacks yield stage events during connection.
 7. Install stats, frame, present and two-second session timers.
 
-A new launch always renegotiates; a stopped session is not resumed on another
-link. The frame watchdog requests keyframes after two seconds of decode silence.
-At ten seconds it tears down unless video previously flowed and control ACKs
-remain recent; a remote route may reduce bitrate instead. Hidden decode gates
-suppress inappropriate watchdog recovery.
+The Mac always renegotiates a new launch; disconnect-only clients may resume the
+same PC app under their explicit disposition. The frame watchdog requests
+keyframes after two seconds of decode silence. At ten seconds it tears down
+unless video previously flowed and control ACKs remain recent; a remote route
+may reduce bitrate instead. Hidden decode gates suppress inappropriate watchdog
+recovery.
 
 ### Teardown
 
@@ -394,6 +395,12 @@ verified signature and PIN proof permit pinning. First contact never pins. See
 ## Build pipeline
 
 Build the shared engine target/package and keep app version fields in one place.
+
+The Mac app embeds one source-built `GlimmerEngine.framework`; tests link the
+same framework without embedding another copy. iOS consumes the Swift package.
+Release signing signs the engine without entitlements before sealing the app.
+Platform adapters stay in their native app targets; packet, audio-render and
+frame processing remain within the engine.
 
 `Glimmer/StreamLib.xcconfig` includes `Version.xcconfig`, pins arm64 and enables
 compiler protections. Release strips path-bearing debug maps for
