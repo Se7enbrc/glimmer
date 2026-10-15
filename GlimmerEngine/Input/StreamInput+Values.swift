@@ -78,6 +78,8 @@ public struct ControllerInputSample: Sendable {
         self.touchpad = touchpad
     }
 
+    package static let triggerPressThreshold: UInt8 = 128
+
     package var analog: GamepadAnalog {
         Self.normalizedAnalog(((leftTrigger, rightTrigger), (leftStickX, leftStickY), (rightStickX, rightStickY)))
     }

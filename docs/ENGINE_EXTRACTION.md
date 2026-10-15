@@ -132,6 +132,14 @@ read-only `HostApp` values (`id`, `name`, `hdrCapable`, `hidden`). The existing
 single pinned mutual-TLS request and hidden-app metadata remain unchanged.
 `StreamFailureCopy.needsSunshineMessage` provides the shared requirement text.
 
+The shared `LauncherArtCache` now owns the existing bounded Mac artwork cache.
+Both shells use `NetworkClient.appAsset(appID:)` through the same pinned client;
+`revision(for:)` accepts public `HostApp` values. Cache keys separate PCs and
+app list revisions, negative entries suppress missing art, and decode/storage
+limits remain unchanged. iOS chooses its Caches directory and requests artwork
+only for visible Covers while foregrounded outside a stream; Buttons add no
+requests.
+
 `PinnedCertStore.load/store/delete` require the shell's explicit defaults,
 Application Support base and protected-data availability closure. Store only an
 authenticated pairing result under its verified PC ID. Protected-data
@@ -468,17 +476,20 @@ forwarder. There is one session policy implementation and no second input owner
 for the Mac path.
 
 The external entry point is
-`StreamSession.make(media:network:hostDisposition:)`, called on the main actor.
-It returns the session and one stable synchronous `StreamInput`. `PreparedMedia`
-requires the actual `VideoDecoder`, `AudioDecoder`, a native capture-quiesce
-closure and an awaited final-disposal closure. Attach native rendering before
-calling `start(appID:configuration:)`; consume `session.events` from creation.
-Each `Update` contains `sessionID`, `attemptID` and a `StreamEvent`. Lifecycle
-events retain FIFO order and use the existing unbounded stream, with no
-per-frame Task or actor relay. The Mac path allocates only its legacy event
-stream. `waitingForVideo(Bool)` reports existing watchdog hold transitions
-without changing input ownership. Explicit route MTU survives recovery, and
-public startup/recovery preserve the low-level session-key validation contract.
+`StreamSession.make(media:network:hostDisposition:diagnosticsDirectory:)`,
+called on the main actor. The optional local diagnostics directory uses the
+existing telemetry opt-in gate and session lifetime; the metrics listener stays
+on loopback. It returns the session and one stable synchronous `StreamInput`.
+`PreparedMedia` requires the actual `VideoDecoder`, `AudioDecoder`, a native
+capture-quiesce closure and an awaited final-disposal closure. Attach native
+rendering before calling `start(appID:configuration:)`; consume `session.events`
+from creation. Each `Update` contains `sessionID`, `attemptID` and a
+`StreamEvent`. Lifecycle events retain FIFO order and use the existing unbounded
+stream, with no per-frame Task or actor relay. The Mac path allocates only its
+legacy event stream. `waitingForVideo(Bool)` reports existing watchdog hold
+transitions without changing input ownership. Explicit route MTU survives
+recovery, and public startup/recovery preserve the low-level session-key
+validation contract.
 
 `StreamHostDisposition` is required and immutable. `.disconnectOnly` leaves the
 PC app running on every stop/failure path and never enters cancellation-based

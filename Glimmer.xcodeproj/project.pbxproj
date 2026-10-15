@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A27101400000000000000002 /* ArtworkAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27101400000000000000001 /* ArtworkAPITests.swift */; };
 		A11020261012000300000001 /* AudioOutput+Silence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11020261012000300000000 /* AudioOutput+Silence.swift */; };
 		D81200000000000000000009 /* ReceiveTimingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000008 /* ReceiveTimingTests.swift */; };
 		D81200000000000000000007 /* ReceiveTimingTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81200000000000000000006 /* ReceiveTimingTelemetry.swift */; };
@@ -657,6 +658,9 @@
 		1FBCB82CDB6644B6B684DC53 /* RouteBitratePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BF97748AD5149368A9FDE11 /* RouteBitratePolicy.swift */; };
 		C8155497DB6E409B93D78556 /* FailureAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 169353BBFAE64367BE1642EB /* FailureAPITests.swift */; };
 		AE7C6C04693646DFA4647961 /* RouteBitratePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D587AB431CFF437B859B1C2D /* RouteBitratePolicyTests.swift */; };
+		2A48F2F26CA64FB481D74255 /* ControllerMouseMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DF214F57A624AA18B39158B /* ControllerMouseMapping.swift */; };
+		967AC9F4B747400BA49F0B70 /* StreamInput+ControllerMouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8C3CBBB7FBF488C9D4A7BB7 /* StreamInput+ControllerMouse.swift */; };
+		BC8110662971491390555EBE /* StreamInputMouseModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C7F0E3662674785B95956E5 /* StreamInputMouseModeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -716,6 +720,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A27101400000000000000001 /* ArtworkAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ArtworkAPITests.swift"; sourceTree = SOURCE_ROOT; };
 		A11020261012000300000000 /* AudioOutput+Silence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioOutput+Silence.swift"; sourceTree = SOURCE_ROOT; };
 		D81200000000000000000008 /* ReceiveTimingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReceiveTimingTests.swift"; sourceTree = "<group>"; };
 		D81200000000000000000006 /* ReceiveTimingTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/ReceiveTimingTelemetry.swift"; sourceTree = SOURCE_ROOT; };
@@ -1227,7 +1232,7 @@
 		D0C520261009000000000001 /* CREDITS.md */ = {isa = PBXFileReference; lastKnownFileType = text; path = "CREDITS.md"; sourceTree = SOURCE_ROOT; };
 		D0C520261009000000000002 /* ThirdPartyNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Glimmer/ThirdPartyNotices.txt"; sourceTree = SOURCE_ROOT; };
 		AC2026101100000000000000B /* LauncherStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherStyle.swift"; sourceTree = "<group>"; };
-		AC2026101100000000000001B /* LauncherArtCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherArtCache.swift"; sourceTree = "<group>"; };
+		AC2026101100000000000001B /* LauncherArtCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/LauncherArtCache.swift"; sourceTree = SOURCE_ROOT; };
 		AC2026101100000000000002B /* LauncherNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherNavigation.swift"; sourceTree = "<group>"; };
 		AC2026101100000000000003B /* LauncherController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherController.swift"; sourceTree = "<group>"; };
 		AC2026101100000000000004B /* ContentView+Covers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Covers.swift"; sourceTree = "<group>"; };
@@ -1368,6 +1373,9 @@
 		2BF97748AD5149368A9FDE11 /* RouteBitratePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/RouteBitratePolicy.swift"; sourceTree = SOURCE_ROOT; };
 		169353BBFAE64367BE1642EB /* FailureAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/FailureAPITests.swift"; sourceTree = SOURCE_ROOT; };
 		D587AB431CFF437B859B1C2D /* RouteBitratePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/RouteBitratePolicyTests.swift"; sourceTree = SOURCE_ROOT; };
+		1DF214F57A624AA18B39158B /* ControllerMouseMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerMouseMapping.swift"; sourceTree = SOURCE_ROOT; };
+		F8C3CBBB7FBF488C9D4A7BB7 /* StreamInput+ControllerMouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/StreamInput+ControllerMouse.swift"; sourceTree = SOURCE_ROOT; };
+		7C7F0E3662674785B95956E5 /* StreamInputMouseModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/StreamInputMouseModeTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1494,7 +1502,6 @@
 				AC2026101100000000000004B /* ContentView+Covers.swift */,
 				AC2026101100000000000003B /* LauncherController.swift */,
 				AC2026101100000000000002B /* LauncherNavigation.swift */,
-				AC2026101100000000000001B /* LauncherArtCache.swift */,
 				AC202610120000000000000B /* PairSheet+Launcher.swift */,
 				AC2026101100000000000000B /* LauncherStyle.swift */,
 				DEC0DE01000000000000000B /* ContentView+Menus.swift */,
@@ -1650,8 +1657,10 @@
 		D2000016 /* GlimmerTests */ = {
 			isa = PBXGroup;
 			children = (
+				7C7F0E3662674785B95956E5 /* StreamInputMouseModeTests.swift */,
 				D587AB431CFF437B859B1C2D /* RouteBitratePolicyTests.swift */,
 				169353BBFAE64367BE1642EB /* FailureAPITests.swift */,
+				A27101400000000000000001 /* ArtworkAPITests.swift */,
 				2DB8AD75E0FA41669989E5FE /* SessionAPITests.swift */,
 				9C77D180F34A4851B5B5BD06 /* SessionPublicLifetimeTests.swift */,
 				02AAAB9983A642C5813D442C /* StreamInputAttemptTests.swift */,
@@ -1873,6 +1882,9 @@
 		E26101210000000000000009 /* GlimmerEngine */ = {
 			isa = PBXGroup;
 			children = (
+				AC2026101100000000000001B /* LauncherArtCache.swift */,
+				F8C3CBBB7FBF488C9D4A7BB7 /* StreamInput+ControllerMouse.swift */,
+				1DF214F57A624AA18B39158B /* ControllerMouseMapping.swift */,
 				2BF97748AD5149368A9FDE11 /* RouteBitratePolicy.swift */,
 				0E57A98F6DCF42DCAAB3022A /* StreamFailure.swift */,
 				2821A48E86CE4FBAACDF2304 /* StreamSession+Public.swift */,
@@ -2324,7 +2336,6 @@
 				AC2026101100000000000004A /* ContentView+Covers.swift in Sources */,
 				AC2026101100000000000003A /* LauncherController.swift in Sources */,
 				AC2026101100000000000002A /* LauncherNavigation.swift in Sources */,
-				AC2026101100000000000001A /* LauncherArtCache.swift in Sources */,
 				AC202610120000000000000A /* PairSheet+Launcher.swift in Sources */,
 				AC2026101100000000000000A /* LauncherStyle.swift in Sources */,
 				DEC0DE01000000000000000A /* ContentView+Menus.swift in Sources */,
@@ -2466,8 +2477,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BC8110662971491390555EBE /* StreamInputMouseModeTests.swift in Sources */,
 				AE7C6C04693646DFA4647961 /* RouteBitratePolicyTests.swift in Sources */,
 				C8155497DB6E409B93D78556 /* FailureAPITests.swift in Sources */,
+				A27101400000000000000002 /* ArtworkAPITests.swift in Sources */,
 				EC003948DEC9480B9FC1708C /* SessionAPITests.swift in Sources */,
 				00AA0F9ED122483BB8ACCB04 /* SessionPublicLifetimeTests.swift in Sources */,
 				38D4AA281504404EA69A7C54 /* StreamInputAttemptTests.swift in Sources */,
@@ -2689,6 +2702,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AC2026101100000000000001A /* LauncherArtCache.swift in Sources */,
+				967AC9F4B747400BA49F0B70 /* StreamInput+ControllerMouse.swift in Sources */,
+				2A48F2F26CA64FB481D74255 /* ControllerMouseMapping.swift in Sources */,
 				1FBCB82CDB6644B6B684DC53 /* RouteBitratePolicy.swift in Sources */,
 				AD7AAC10AE1E470EAF2DA68D /* StreamFailure.swift in Sources */,
 				634F0633281B4BFCAA3D7D09 /* StreamSession+Public.swift in Sources */,

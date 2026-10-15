@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
 import CryptoKit
 import Foundation
 import ImageIO
 
-actor LauncherArtCache {
+public actor LauncherArtCache {
     private let base: URL?
     private let byteLimit: Int
     private var memory: [String: Data] = [:]
@@ -14,19 +13,29 @@ actor LauncherArtCache {
     private var missing: Set<String> = []
     private var generations: [String: Int] = [:]
 
-    init(base: URL? = nil, byteLimit: Int = 64 * 1024 * 1024) {
+    public init(base: URL? = nil, byteLimit: Int = 64 * 1024 * 1024) {
         self.base = base
         self.byteLimit = byteLimit
     }
 
-    static func revision(apps: [LibraryApp]) -> String {
+    public static func revision(for apps: [HostApp]) -> String {
+        revision(apps: apps.map { LibraryApp(id: $0.id, name: $0.name, hdr: $0.hdrCapable, hidden: $0.hidden) })
+    }
+
+    private func cacheDirectory() throws -> URL {
+        let root = try base ?? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                       appropriateFor: nil, create: true)
+        return root.appendingPathComponent("Glimmer/Covers", isDirectory: true)
+    }
+
+    package static func revision(apps: [LibraryApp]) -> String {
         let entries = apps.sorted { $0.id < $1.id }.map {
             "\($0.id):\($0.name.utf8.count):\($0.name):\($0.hdr):\($0.hidden)"
         }
         return digest(entries.joined(separator: ":"))
     }
 
-    static func key(pcID: String, appID: Int, revision: String) -> String {
+    package static func key(pcID: String, appID: Int, revision: String) -> String {
         digest(pcID) + "-" + digest("\(appID):\(revision)")
     }
 
@@ -34,13 +43,13 @@ actor LauncherArtCache {
         SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
-    func image(pcID: String, appID: Int, revision: String,
-               fetch: @Sendable () async throws -> Data) async -> Data? {
+    public func image(pcID: String, appID: Int, revision: String,
+                      fetch: @Sendable () async throws -> Data) async -> Data? {
         guard !Task.isCancelled else { return nil }
         let key = Self.key(pcID: pcID, appID: appID, revision: revision)
         if let data = memory[key] { remember(data, key: key); return data }
         guard !missing.contains(key) else { return nil }
-        let directory = try? URL.supportRoot(base: base).appendingPathComponent("Glimmer/Covers", isDirectory: true)
+        let directory = try? cacheDirectory()
         let file = directory?.appendingPathComponent(key).appendingPathExtension("png")
         if let file, let data = try? Data(contentsOf: file), Self.decode(data) != nil {
             try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
@@ -74,13 +83,13 @@ actor LauncherArtCache {
         return data
     }
 
-    func remove(pcID: String) {
+    package func remove(pcID: String) {
         generations[pcID, default: 0] += 1
         let prefix = Self.digest(pcID) + "-"
         memory = memory.filter { !$0.key.hasPrefix(prefix) }
         recent.removeAll { $0.hasPrefix(prefix) }
         missing = missing.filter { !$0.hasPrefix(prefix) }
-        guard let directory = try? URL.supportRoot(base: base).appendingPathComponent("Glimmer/Covers"),
+        guard let directory = try? cacheDirectory(),
               let files = try? FileManager.default.contentsOfDirectory(at: directory,
                                                                       includingPropertiesForKeys: nil) else { return }
         for file in files where file.lastPathComponent.hasPrefix(prefix) {
@@ -100,7 +109,7 @@ actor LauncherArtCache {
         }
     }
 
-    static func decode(_ data: Data) -> CGImage? {
+    public static func decode(_ data: Data) -> CGImage? {
         guard data.count <= 4 * 1024 * 1024,
               let source = CGImageSourceCreateWithData(data as CFData, nil),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],

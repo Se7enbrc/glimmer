@@ -47,13 +47,16 @@ extension StreamSession {
     }
 
     /// Exactly one synchronous input handle survives every attempt. Stop ends this public session permanently.
-    @MainActor public static func make(media: PreparedMedia, network: NetworkClient, hostDisposition: StreamHostDisposition)
+    /// Local recording also requires the telemetryEnabled preference or GLIMMER_TELEMETRY=1.
+    @MainActor public static func make(media: PreparedMedia, network: NetworkClient, hostDisposition: StreamHostDisposition,
+                                       diagnosticsDirectory: URL? = nil)
         -> (session: StreamSession, input: StreamInput) {
         let events = SessionEventSource()
         _ = events.stream
         let input = StreamInput { events.yield(.input($0)) }
         let session = StreamSession(hostDisposition: hostDisposition, audioDecoder: media.audio,
-            services: SessionServices(), backend: NativeBackend(), makeNetwork: { network.freshClient(for: $0) },
+            services: .recording(directory: diagnosticsDirectory), backend: NativeBackend(),
+            makeNetwork: { network.freshClient(for: $0) },
             makeBackend: { NativeBackend() }, publicMedia: media, publicInput: input, preparedNetwork: network, events: events)
         events.onTermination { [weak session] in Task { await session?.stop(cause: .consumerDropped) } }
         return (session, input)

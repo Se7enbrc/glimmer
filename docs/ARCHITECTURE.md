@@ -137,15 +137,30 @@ route observations through adapters under `Glimmer/EngineAdapters/`.
 `NativeConnectionEvents` retains session identity and ordered main-queue
 delivery; late events cannot reach a replacement backend.
 
-The source package exposes `StreamSession.make(media:network:hostDisposition:)`
-for a complete session with concrete decoders, one stable `StreamInput`, and
-ordered `Update` events carrying session and attempt IDs. The shared actor owns
-launch, recovery, watchdogs and final teardown. The required host disposition
-selects local disconnect or cancellation of the owned PC session; it is separate
-from the diagnostic stop reason. `StreamConnection` remains the low-level,
+The source package exposes
+`StreamSession.make(media:network:hostDisposition:diagnosticsDirectory:)` for a
+complete session with concrete decoders, one stable `StreamInput`, and ordered
+`Update` events carrying session and attempt IDs. The shared actor owns launch,
+recovery, watchdogs and final teardown. The required host disposition selects
+local disconnect or cancellation of the owned PC session; it is separate from
+the diagnostic stop reason. `StreamConnection` remains the low-level,
 one-attempt compatibility API. See [ENGINE_EXTRACTION.md](ENGINE_EXTRACTION.md)
 for the extraction boundaries. Wire values, defaults and measured policy are
 unchanged.
+
+External shells use `VideoDecoder.setPresentSuppressed(_:)` when an attached
+surface is intentionally hidden. It reuses the existing newest-frame retention,
+delayed decode gate, watchdog exclusion and single-keyframe resume behavior.
+
+`LauncherArtCache` shares the bounded PC artwork cache between Mac and iOS. The
+public `appAsset(appID:)` endpoint uses the paired client's existing TLS pin;
+shells own layout, visibility and when artwork fetches are allowed.
+
+The optional diagnostics directory enables the existing local session log and
+telemetry recorder only when the telemetry preference or environment gate is
+also enabled. Public consumers always bind metrics to loopback. Recording starts
+and stops with the session; omitting the directory preserves the default
+behavior.
 
 `NativeBackend` runs the whole bring-up on a dedicated connect thread:
 

@@ -51,6 +51,7 @@ package final class InputCore: @unchecked Sendable {
     package var controllers: [ObjectIdentifier: ControllerSample] = [:]
     package var pendingTouchReleases: [(slot: UInt8, finger: ControllerTouchpadFinger)] = []
     package var touchpadStates: [UInt8: ControllerTouchpadState] = [:]
+    package var controllerMouseMapping = ControllerMouseMapping.standard
     package var controllerMouseStates: [UInt8: ControllerMouseState] = [:]
     package var heldMouseButtons: Set<Int32> = []
     package var mousePollingGeneration: UInt64 = 0

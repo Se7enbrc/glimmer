@@ -27,6 +27,7 @@ public final class StreamInput: @unchecked Sendable {
         let identity: ControllerRegistration
         let descriptor: ControllerDescriptor
         let registeredAt: TimeInterval
+        var acceptEventsAfter: TimeInterval = 0
         var rearm = ControllerRearmState()
         var announced = false
     }
@@ -90,6 +91,7 @@ public final class StreamInput: @unchecked Sendable {
         core.withLock {
             guard registrations[registration.slot]?.identity == registration else { return }
             let slot = registration.slot
+            let wasMouse = core.controllerMouseStates[slot]?.isMouse == true
             haptics.unregister(slot: slot)
             motion.unregister(slot: slot)
             Task { @MainActor [battery] in battery.unregister(slot: slot, token: registration.token) }
@@ -101,6 +103,7 @@ public final class StreamInput: @unchecked Sendable {
             core.current[slot] = nil
             core.updateChord(slot: slot, held: false, invalidate: true)
             registrations[slot] = nil
+            if wasMouse { emit(.mouseMode(registration, enabled: false)) }
             scheduleReconciliation()
         }
     }
@@ -112,7 +115,7 @@ public final class StreamInput: @unchecked Sendable {
         core.withLock {
             defer { scheduleReconciliation() }
             guard !terminal, var state = registrations[registration.slot], state.identity == registration,
-                  capturedAt.isFinite, capturedAt >= state.registeredAt,
+                  capturedAt.isFinite, capturedAt >= state.registeredAt, capturedAt >= state.acceptEventsAfter,
                   capturedAt >= core.snapshot.acceptEventsAfter else { return }
             let accepted = state.rearm.filter(buttons: sample.buttons.rawValue, analog: sample.analog,
                                               touch: sample.touchpad?.sanitized)
