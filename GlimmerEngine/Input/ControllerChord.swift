@@ -41,7 +41,7 @@ package func heldControllerButtons(buttons: Int32, leftTrigger: UInt8, rightTrig
         (StreamProtocol.BACK_FLAG, .create), (StreamProtocol.SPECIAL_FLAG, .ps), (StreamProtocol.MISC_FLAG, .mute)
     ]
     var held = Set(mapping.compactMap { buttons & $0.0 != 0 ? $0.1 : nil })
-    if leftTrigger >= 128 { held.insert(.l2) }
-    if rightTrigger >= 128 { held.insert(.r2) }
+    if leftTrigger >= ControllerInputSample.triggerPressThreshold { held.insert(.l2) }
+    if rightTrigger >= ControllerInputSample.triggerPressThreshold { held.insert(.r2) }
     return held
 }

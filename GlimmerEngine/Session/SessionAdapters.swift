@@ -40,6 +40,20 @@ import Foundation
     package init() {}
 }
 
+extension SessionServices {
+    /// Uses existing gated recorders; public consumers supply a local directory, never a LAN listener.
+    package static func recording(directory: URL?, enabled: Bool = TelemetryGate.isEnabled) -> SessionServices {
+        var services = SessionServices()
+        guard enabled, let directory, directory.isFileURL else { return services }
+        services.startLog = { SessionLogFileSink.startIfEnabled(enabled: true, directory: directory) }
+        services.stopLog = { SessionLogFileSink.stop() }
+        services.makeExporter = { source, name in
+            TelemetryExporter(source: source, serverName: name, outputDirectory: directory, listenOnLAN: false)
+        }
+        return services
+    }
+}
+
 package struct SessionMedia: Sendable {
     package let presentation: SessionPresentation
     package let input: SessionInputHooks

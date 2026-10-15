@@ -89,6 +89,21 @@ final class TelemetryCaptureTests {
 
     // MARK: - Seam
 
+    @Test func publicSessionRecordingRequiresOptInAndLocalDirectory() throws {
+        let source = source()
+        let remote = try #require(URL(string: "https://example.invalid/diagnostics"))
+        for services in [SessionServices.recording(directory: dir, enabled: false),
+                         SessionServices.recording(directory: nil, enabled: true),
+                         SessionServices.recording(directory: remote, enabled: true)] {
+            #expect(services.makeExporter(source, Self.pcName) == nil)
+        }
+        let services = SessionServices.recording(directory: dir, enabled: true)
+        let exporter = try #require(services.makeExporter(source, Self.pcName))
+        #expect(exporter.outputDirectory == dir)
+        #expect(exporter.ndjsonURL == nil && exporter.latestSample == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
+    }
+
     @Test func gatedConstructionKeepsProductionDirectoryAndCounters() throws {
         let made = TelemetryExporter.makeIfEnabled(source: source(), serverName: Self.pcName,
                                                    outputDirectory: MacTelemetryCapture.logsDirectory, enabled: true)
