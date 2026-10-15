@@ -423,6 +423,17 @@ struct SessionSafetyTests {
         }
     }
 
+    @Test func nativeFailureFallbackRemainsUnreachableForNonStreamErrors() {
+        let errors: [Error] = [StreamConnection.Failure.pairingRequired,
+                               StreamConnection.Failure.invalidConfiguration, CancellationError(),
+                               TakeoverRequired(appID: 42)]
+        for error in errors {
+            let failure = AppModel.connectFailure(for: error, hostName: "Tower")
+            #expect(failure.kind == .unreachable)
+            #expect(failure.message == AppModel.unreachableMessage("Tower"))
+        }
+    }
+
     /// Before /launch no request deadline is set, so a request that runs out
     /// its own clock is a PC that never answered, whichever timer wins. Under
     /// the launch deadline the same timeout means the app was slow to start.

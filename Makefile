@@ -478,6 +478,7 @@ check:
 	@echo "▶ Check (workflows + lint --strict + release-tool tests)..."
 	@actionlint
 	@scripts/check-spdx.sh
+	@python3 scripts/check-engine-boundary.py
 	@swiftlint lint --strict --quiet
 	@$(MAKE) test-scripts
 

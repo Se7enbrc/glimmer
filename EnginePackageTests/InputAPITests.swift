@@ -20,6 +20,7 @@ struct InputAPITests {
         let input = connection.input
         let descriptor = ControllerDescriptor(kind: .unknown, supportedButtons: [.a, .menu], capabilities: .analogTriggers)
         let original = try #require(input.registerController(descriptor))
+        input.setControllerMouseMapping(.rightStick)
         input.unregisterController(original)
         let replacement = try #require(input.registerController(descriptor))
         #expect(original.slot == replacement.slot)

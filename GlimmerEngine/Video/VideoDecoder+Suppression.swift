@@ -47,7 +47,7 @@ extension VideoDecoder {
     /// requests one keyframe through the existing recovery path; duplicate visibility notifications
     /// must not repeat either edge. Network-loss recovery remains independent of this gate.
     @MainActor
-    package func setPresentSuppressed(_ suppressed: Bool) {
+    public func setPresentSuppressed(_ suppressed: Bool) {
         presentSuppressedLock.lock()
         let changed = _presentSuppressed != suppressed
         if changed {
