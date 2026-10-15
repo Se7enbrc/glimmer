@@ -17,12 +17,15 @@ struct SessionAPITests {
         var lifecycle: [String] = []
         let media = StreamSession.PreparedMedia(video: video, audio: audio,
             quiesce: { lifecycle.append("quiesce") }, finalDispose: { lifecycle.append("disposed") })
-        let pair = StreamSession.make(media: media, network: unavailableNetwork(), hostDisposition: .disconnectOnly)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let pair = StreamSession.make(media: media, network: unavailableNetwork(), hostDisposition: .disconnectOnly,
+                                      diagnosticsDirectory: directory)
         let events = pair.session.events
         let descriptor = ControllerDescriptor(kind: .unknown, supportedButtons: [.a], capabilities: [])
         _ = try #require(pair.input.registerController(descriptor))
         await pair.session.stop()
         await pair.session.stop()
+        #expect(!FileManager.default.fileExists(atPath: directory.path))
         #expect(lifecycle == ["quiesce", "disposed"])
         #expect(pair.input.registerController(descriptor) == nil)
         await #expect(throws: CancellationError.self) {

@@ -51,18 +51,18 @@ extension InputCore {
         guard snapshot.ready, snapshot.focused else { return controllerMouseStates[slot]?.isMouse ?? false }
         var state = controllerMouseStates[slot] ?? ControllerMouseState()
         let previous = state.buttons
+        let previousAnalog = state.analog
         let toggled = state.update(buttons: buttons, analog: analog, chordHeld: chordHeld, now: now)
         controllerMouseStates[slot] = state
         if toggled || chordHeld {
             mouseTimings[slot] = nil
             updateControllerTouchpadMouse(slot: slot, state: ControllerTouchpadMouseState())
         }
-        let clicksChanged = (buttons ^ previous) & Self.controllerMouseClickFlags != 0
+        let clicksChanged = controllerMouseMapping.clicksChanged(
+            buttons: buttons, previous: previous, analog: analog, oldAnalog: previousAnalog)
         // Surface-only frames must not allocate a button set on every touch sample.
         if (state.isMouse || !state.clicks.isEmpty) && (toggled || chordHeld || clicksChanged) {
-            let clicks = state.isMouse && !chordHeld ? Set(Self.controllerMouseClicks.compactMap {
-                buttons & $0.0 != 0 ? $0.1 : nil
-            }) : []
+            let clicks = state.isMouse && !chordHeld ? controllerMouseMapping.clicks(buttons: buttons, analog: analog) : []
             updateControllerMouseClicks(slot: slot, clicks: clicks)
         }
         if toggled {
@@ -161,7 +161,7 @@ extension InputCore {
         timer.resume()
     }
 
-    // The cubic curve and 50 ms cadence follow Moonlight; right stick scroll is Glimmer's mapping.
+    // The cubic curve and 50 ms cadence follow Moonlight; mapping selects which stick scrolls.
     package static func controllerMouseDelta(_ axis: Int16) -> Int16 {
         let scaled = Double(axis) / 32766 * 4
         let curved = scaled * scaled * scaled
@@ -177,13 +177,15 @@ extension InputCore {
                 InputTimingContext.begin(samples: timing)
             }
             defer { InputTimingContext.end() }
-            let dx = Self.controllerMouseDelta(state.analog.leftStickX)
-            let dy = -Self.controllerMouseDelta(state.analog.leftStickY)
+            let rightPointer = controllerMouseMapping == .rightStick
+            let dx = Self.controllerMouseDelta(rightPointer ? state.analog.rightStickX : state.analog.leftStickX)
+            let dy = -Self.controllerMouseDelta(rightPointer ? state.analog.rightStickY : state.analog.leftStickY)
             if dx != 0 || dy != 0 {
                 record("LiSendMouseMoveEvent(controller)", backend?.sendMouseMove(dx: dx, dy: dy) ?? -2)
             }
-            sendControllerScroll(x: Self.controllerMouseDelta(state.analog.rightStickX),
-                                 y: Self.controllerMouseDelta(state.analog.rightStickY))
+            sendControllerScroll(
+                x: Self.controllerMouseDelta(rightPointer ? state.analog.leftStickX : state.analog.rightStickX),
+                y: Self.controllerMouseDelta(rightPointer ? state.analog.leftStickY : state.analog.rightStickY))
         }
     }
 

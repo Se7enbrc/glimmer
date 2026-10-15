@@ -61,6 +61,10 @@ package enum StreamQuality {
         return min(max(kbps, 5_000), Self.maxBitrateKbps)
     }
 
+    package static func videoFormats(_ formats: VideoFormats, hdr: Bool) -> VideoFormats {
+        hdr ? formats : formats.subtracting(VideoFormats(rawValue: StreamProtocol.VIDEO_FORMAT_MASK_10BIT))
+    }
+
     package static func codecBudgetMultiplier(for formats: VideoFormats) -> Double {
         switch formats.topCodec {
         case .av1:  return 0.80

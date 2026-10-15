@@ -33,8 +33,7 @@ extension AppModel {
     /// ended by choice: no failure banner, no "Stream ended", no last-played stamp.
     /// Only a start() throw counts; a stream that went live ended normally.
     nonisolated static func connectWasCancelled(by error: Error?, cancelRequested: Bool) -> Bool {
-        guard let error else { return false }
-        return cancelRequested || error is CancellationError
+        StreamFailure.connectionWasCancelled(by: error, cancelRequested: cancelRequested)
     }
 
     /// Every surface's words for a PC that never answered: the launcher, the
@@ -57,31 +56,31 @@ extension AppModel {
     ) -> (message: String, kind: StreamErrorKind) {
         let unreachable = (message: unreachableMessage(hostName), kind: StreamErrorKind.unreachable)
         // The control layer always throws StreamError; anything else is most likely a reach failure.
-        guard let streamError = error as? StreamError else { return unreachable }
-        switch streamError {
-        case .hostUnreachable, .truncatedRead:
+        guard error is StreamError else { return unreachable }
+        switch StreamFailure.connection(error) {
+        case .unreachable:
             return unreachable
         // The network layer's own PC-named sentences; the connect path throws no
         // other pairing failure (the pair sheet's steps word their own).
-        case .hostCertChanged(let sentence), .pairingFailed(let sentence):
+        case .pairing(let sentence):
             return (sentence, .pairing)
         case .sunshineNeedsRestart(let sentence):
             return (sentence, .other)
-        case .gameStreamHost:
+        case .sunshineRequired:
             // Sunshine brings its own certificate, so the next step after installing it is pairing.
             return (needsSunshineMessage(hostName), .pairing)
         case .pairingRejected:
             return ("Couldn't pair with \(hostName). Choose Pair Again… to start over.", .pairing)
-        case .streamPortsBlocked(let proto, let port):
+        case .portsBlocked(let proto, let port):
             return ("\(hostName) answered, but the stream couldn't get through. "
                 + "Check that the PC's firewall allows \(proto) \(port).", .other)
         case .hostTimedOut:
             return ("\(hostName) took too long to start the app. Check the PC's screen, then try again.", .other)
-        case .hostRefused(let message, _) where !sentence(message).isEmpty:
+        case .launchRefused(let message):
             return ("\(hostName) couldn't start the app: \(sentence(message))", .other)
-        case .hostRefused, .launchFailed:
+        case .launchFailed:
             return ("\(hostName) couldn't start the app.", .other)
-        case .sessionFailed, .binaryNotFound:
+        case .sessionFailed:
             // In practice the connect leg, after /launch succeeded: the PC is awake.
             return ("\(hostName) answered, but the stream couldn't start. Restart Sunshine on the PC, then try again.",
                     .other)
@@ -89,9 +88,11 @@ extension AppModel {
             return ("Couldn't start the video decoder for \(hostName). Try another codec from the PC's ⋯ menu.", .other)
         case .audioFailed:
             return ("Couldn't start audio for \(hostName). Check this Mac's sound output, then try again.", .other)
-        case .crypto:
+        case .security:
             return ("A security error stopped the connection to \(hostName). "
                 + "Try again, and pair again if it keeps happening.", .other)
+        case .alreadyStarted, .invalidConfiguration, .pairingRequired, .invalidSessionKey, .cancelled, .takeoverRequired:
+            return unreachable
         }
     }
 
@@ -100,22 +101,22 @@ extension AppModel {
     nonisolated static func streamEndedMessage(
         code: Int32, hostName: String, hasReceivedVideo: Bool = false
     ) -> String {
-        switch code {
-        case StreamSession.noVideoTrafficTerminationCode where hasReceivedVideo:
+        switch StreamFailure.termination(code: code, hasReceivedVideo: hasReceivedVideo) {
+        case .videoDidNotResume:
             "\(hostName) didn't start sending video. Try again."
-        case StreamSession.noVideoTrafficTerminationCode:
+        case .noVideoTraffic:
             "No video from \(hostName) reached this Mac. Make sure the PC's firewall allows UDP port 47998."
-        case StreamSession.noVideoFrameTerminationCode:
+        case .noDecodedVideo:
             "Video from \(hostName) arrived but couldn't be decoded. Try another codec from the PC's ⋯ menu."
-        case StreamSession.deadPeerTerminationCode:
+        case .connectionLost:
             "Lost the connection to \(hostName). Check the network, then try again."
-        case StreamSession.protectedContentTerminationCode:
+        case .protectedContent:
             "\(hostName) stopped the stream: the app is showing protected content, which can't be streamed. "
                 + "Close it on the PC, then try again."
-        case StreamSession.frameConversionTerminationCode:
+        case .frameConversion:
             "\(hostName)'s graphics driver couldn't hand frames to the encoder. "
                 + "Update the PC's graphics driver, then try again."
-        default: "Stream to \(hostName) ended unexpectedly."
+        case .unexpected: "Stream to \(hostName) ended unexpectedly."
         }
     }
 
