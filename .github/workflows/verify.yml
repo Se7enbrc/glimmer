@@ -91,6 +91,13 @@ jobs:
           xcrun swift --version
           python3 --version
 
+      - name: Select verification Python
+        if: matrix.part == 'checks'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+          architecture: arm64
+
       - name: Prepare verification
         env:
           COVERAGE_KIND: ${{ matrix.coverage }}
