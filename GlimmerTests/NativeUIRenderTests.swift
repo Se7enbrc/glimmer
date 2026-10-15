@@ -50,10 +50,13 @@ struct NativeUIRenderTests {
 
     @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440)], [false, true])
     func settingsPages(size: CGSize, dark: Bool) async throws {
-        let calls = LauncherModel.Calls(savedPCs: { [] },
+        let saved = SavedPC(server: ServerInfo(address: "pc.invalid", uniqueId: "settings-pc",
+                                               serverName: "Living room gaming PC"))
+        let calls = LauncherModel.Calls(savedPCs: { [saved] },
             prepare: { _, _ in throw CancellationError() }, pair: { pc, _ in pc }, apps: { _ in [] },
             remember: { _ in [] }, protectedDataChanged: { _ in })
         let model = LauncherModel(calls: calls, discoveryEnabled: false)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
         let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
         for page in GlimmerSettings.Page.allCases {
             let style = "\(Int(size.width))-\(dark ? "dark" : "light")"

@@ -18,6 +18,13 @@ Settings. Settings → General offers Buttons or Covers. Both layouts adapt to t
 screen and text size; Covers uses artwork supplied by the PC, with a glyph
 fallback.
 
+To remove a saved pairing, open Settings → PCs, choose Forget… next to the PC,
+and confirm Forget PC. This removes the local pairing and its remembered
+selection; it leaves the game running on the PC. Pair again through discovery or
+Add PC by address…. If Sunshine's identity changed because you reset it, use
+this recovery path instead of accepting a changed certificate automatically.
+Disconnect your stream before forgetting a PC.
+
 Native resolution at 120 fps is the default. Settings also offers 1080p at 60 or
 120 fps. The choice is saved and requests are capped to the attached display's
 refresh capability. All three modes use H.264, SDR, stereo and 20 Mbps for the

@@ -397,13 +397,15 @@ struct LauncherTests {
 }
 
 @MainActor
-private final class LauncherFixture {
+final class LauncherFixture {
     let pcID = UUID().uuidString
     let app = HostApp(id: 1, name: "Game", hdrCapable: false, hidden: false)
     let hidden = HostApp(id: 2, name: "Hidden", hdrCapable: false, hidden: true)
     var artwork: @Sendable (PreparedPC, Int) async throws -> Data = { _, _ in Data() }
     var additionalPCs: [SavedPC] = []
     var lastConnectedID: String?
+    var forgotten: Set<String> = []
+    var forgetFailure: Error?
     var prepares = 0
     var pairs = 0
     var remembers = 0
@@ -423,9 +425,10 @@ private final class LauncherFixture {
         return server
     }
     var saved: SavedPC { SavedPC(server: server) }
+    var storedPCs: [SavedPC] { (additionalPCs + [saved]).filter { !forgotten.contains($0.id) } }
 
     func model() -> LauncherModel {
-        LauncherModel(calls: LauncherModel.Calls(savedPCs: { [self] in additionalPCs + [saved] },
+        LauncherModel(calls: LauncherModel.Calls(savedPCs: { [self] in storedPCs },
             prepare: { [self] server, saved in
                 prepares += 1
                 preparedAddress = server.address
@@ -447,9 +450,16 @@ private final class LauncherFixture {
             }, remember: { [self] pc in
                 remembers += 1
                 lastConnectedID = pc.server.uniqueId
-                return additionalPCs + [saved]
+                forgotten.remove(pc.server.uniqueId)
+                return storedPCs
             },
             protectedDataChanged: { _ in }, lastConnectedPCID: { [self] in lastConnectedID },
+            forget: { [self] id in
+                if let forgetFailure { throw forgetFailure }
+                forgotten.insert(id)
+                if lastConnectedID == id { lastConnectedID = nil }
+                return storedPCs
+            },
             artwork: artwork, makeSession: makeSession),
             discoveryEnabled: false)
     }

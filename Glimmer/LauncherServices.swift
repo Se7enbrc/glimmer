@@ -73,6 +73,19 @@ final class LauncherServices {
         return defaults.string(forKey: Self.lastConnectedKey)
     }
 
+    func forget(_ id: String) throws -> [SavedPC] {
+        let remaining = try savedPCs().filter { $0.id != id }
+        let encoded = try JSONEncoder().encode(remaining)
+        // Keep the PC listed if its trust cannot be removed, so recovery can be retried.
+        try PinnedCertStore.delete(forHostID: id, defaults: defaults, base: base,
+                                   protectedDataAvailable: { protectedData.read() })
+        defaults.set(encoded, forKey: Self.savedKey)
+        if defaults.string(forKey: Self.lastConnectedKey) == id {
+            defaults.removeObject(forKey: Self.lastConnectedKey)
+        }
+        return remaining
+    }
+
     func prepare(server: ServerInfo, saved: Bool) async throws -> PreparedPC {
         guard protectedData.read() else { throw Failure.unavailable }
         var server = server
@@ -131,6 +144,9 @@ final class LauncherServices {
 
 enum LauncherFailureCopy {
     static func message(_ error: Error) -> String {
+        if case LauncherServices.Failure.missingPin = error {
+            return "Glimmer couldn't use its saved pairing. In Settings → PCs, forget the PC and pair again."
+        }
         if error is IdentityStorageError || error is LauncherServices.Failure {
             return "Glimmer couldn't read or save its pairing with the PC. Unlock the device and try again."
         }
@@ -141,7 +157,8 @@ enum LauncherFailureCopy {
         case .pairingRejected, .pairingFailed:
             return "Pairing failed. Check the PIN in Sunshine on the PC and try again."
         case .hostCertChanged:
-            return "The PC's identity has changed. Glimmer kept the saved pairing and didn't connect."
+            return "The PC's identity has changed. If you reset Sunshine, "
+                + "forget the PC in Settings → PCs and pair again."
         case .sunshineNeedsRestart:
             return "Restart Sunshine on the PC, then try connecting again."
         case .gameStreamHost:

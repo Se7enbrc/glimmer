@@ -22,6 +22,9 @@ final class LauncherModel {
     private(set) var discoveryDenied = false
     private(set) var message: String?
     private(set) var pairing: PairingPrompt?
+    private(set) var pendingForget: SavedPC?
+    private(set) var forgetFailure: String?
+    var canForgetPC: Bool { active && session == nil && !busy }
     var stream: StreamSessionModel?
     var streamProfile: StreamProfile = .native120
     var mouseStick: ControllerMouseStick = .right
@@ -37,6 +40,7 @@ final class LauncherModel {
         var remember: (PreparedPC) throws -> [SavedPC]
         var protectedDataChanged: (Bool) -> Void
         var lastConnectedPCID: () -> String? = { nil }
+        var forget: (String) throws -> [SavedPC] = { _ in throw LauncherServices.Failure.unavailable }
         var artwork: @Sendable (PreparedPC, Int) async throws -> Data = { try await $0.network.appAsset(appID: $1) }
         var makeSession: @MainActor (StreamLaunch) -> StreamSessionModel = { StreamSessionModel(launch: $0) }
     }
@@ -62,7 +66,8 @@ final class LauncherModel {
                   apps: { try await $0.network.appList() },
                   remember: { try services.remember($0) },
                   protectedDataChanged: { services.protectedData.update($0) },
-                  lastConnectedPCID: { services.lastConnectedPCID() })
+                  lastConnectedPCID: { services.lastConnectedPCID() },
+                  forget: { try services.forget($0) })
         }
         discoveryEnabled = true
         if services == nil { message = "Glimmer couldn't open its storage. Close the app and try again." }
@@ -91,6 +96,7 @@ final class LauncherModel {
             do { savedPCs = try calls?.savedPCs() ?? [] } catch { showStorageFailure() }
             if session == nil { startDiscovery() }
         } else {
+            pendingForget = nil
             stopDiscovery()
             if background || !protectedDataAvailable {
                 cancelOperation()
@@ -110,6 +116,35 @@ final class LauncherModel {
     }
 
     func select(_ pc: SavedPC) { select(server: pc.server, saved: true) }
+
+    func requestForget(_ pc: SavedPC) {
+        guard canForgetPC, savedPCs.contains(where: { $0.id == pc.id }) else { return }
+        forgetFailure = nil
+        pendingForget = pc
+    }
+
+    func cancelForget() { pendingForget = nil }
+
+    func confirmForget(_ pc: SavedPC) {
+        pendingForget = nil
+        guard canForgetPC, savedPCs.contains(where: { $0.id == pc.id }), let calls else { return }
+        do {
+            let remaining = try calls.forget(pc.id)
+            if selection?.id == pc.id || selected?.server.uniqueId == pc.id {
+                cancelOperation()
+                selected = nil
+                selection = nil
+                selectedName = nil
+                apps = []
+                needsRefresh = false
+                message = nil
+            }
+            savedPCs = remaining
+            forgetFailure = nil
+        } catch {
+            forgetFailure = "Couldn't forget \(pc.name). Unlock the device and try again."
+        }
+    }
 
     func select(address: String) {
         guard let address = PCAddress.parse(address) else { return }

@@ -37,6 +37,9 @@ jobs:
           - language: actions
             runner: ubuntu-latest
             build-mode: none
+          - language: python
+            runner: ubuntu-latest
+            build-mode: none
     defaults:
       run:
         shell: bash
@@ -78,6 +81,7 @@ jobs:
           queries: security-extended
           dependency-caching: false
           trap-caching: false
+          db-location: ${{ runner.temp }}/codeql-databases
 
       - name: Build app
         if: matrix.language == 'swift'
@@ -90,3 +94,9 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
           upload-database: false
+
+      - name: Require complete app Swift extraction
+        if: matrix.language == 'swift'
+        run: |
+          python3 scripts/codeql-coverage.py \
+            --database "$RUNNER_TEMP/codeql-databases/swift"

@@ -23,6 +23,31 @@ build-tool checks. Read full build logs: zero warnings is required.
 `pre-commit install` is an owner setup step; hooks include verified credential
 and offline private-key scans.
 
+CI also compiles the production Release app for a generic iOS device, without
+signing. It runs alongside Simulator verification; the required `iOS` check
+passes only when both succeed. Compile the same production configuration
+locally:
+
+```sh
+make app CONFIG=Release DESTINATION='generic/platform=iOS' \
+  BUILD_FLAGS='SWIFT_ACTIVE_COMPILATION_CONDITIONS='
+```
+
+Simulator CI records line coverage and retains the report and result bundle in
+`simulator-logs`. This establishes a baseline, not a coverage threshold or
+physical-device acceptance. To record coverage locally, choose an unused result
+bundle path:
+
+```sh
+make test TEST_FLAGS='-enableCodeCoverage YES -resultBundlePath build/coverage.xcresult'
+xcrun xccov view --report build/coverage.xcresult
+```
+
+Swift CodeQL must successfully extract every tracked production Swift file in
+`Glimmer/`. The engine dependency is analyzed in its own repository. Python
+build tools and GitHub Actions receive separate analysis jobs. Hosted extraction
+must pass before treating a local script check as analysis evidence.
+
 ## Engine dependency
 
 The shared project pins `Se7enbrc/glimmer` to the exact commit
@@ -86,6 +111,12 @@ windowing; the app requests landscape without the deprecated fullscreen
 compatibility key. Native UI rendering tests attach PNGs to the test result
 bundle; CI retains those bundles in the `simulator-logs` artifact. Inspect the
 images before claiming visual acceptance.
+
+Pairing recovery must preserve other PCs and reject forgetting during a stream
+or while protected data is unavailable. Verify Cancel, successful forgetting,
+and fresh PIN pairing on a real PC. Certificate failures never delete trust or
+start pairing automatically. Cached cover images remain bounded by the shared
+engine cache; its per-PC removal API is not yet public to this client.
 
 Plug in Backbone One and another controller: verify initial detection, unplug,
 reconnect and background/return. Follow the fixed [input mapping](docs/INPUT.md)

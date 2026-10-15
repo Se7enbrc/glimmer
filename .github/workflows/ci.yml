@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   verify:
-    name: iOS
+    name: iOS Simulator
     runs-on: macos-26
     timeout-minutes: 30
     env:
@@ -67,8 +67,19 @@ jobs:
       - name: Test on iPhone Simulator
         run: |
           set -o pipefail
-          make test 2>&1 | tee build/logs/test.log
+          make test TEST_FLAGS='-enableCodeCoverage YES -resultBundlePath build/CI-tests.xcresult' \
+            2>&1 | tee build/logs/test.log
           ! grep -E '(^|[[:space:]])warning:' build/logs/test.log
+
+      - name: Record coverage baseline
+        run: |
+          xcrun xccov view --report --json build/CI-tests.xcresult > build/logs/coverage.json
+          xcrun xccov view --report build/CI-tests.xcresult > build/logs/coverage.txt
+          {
+            printf '### iOS Simulator coverage\n\n```text\n'
+            cat build/logs/coverage.txt
+            printf '\n```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save build logs
         if: always()
@@ -78,5 +89,50 @@ jobs:
           path: |
             build/logs/
             build/DerivedData/Logs/Test/*.xcresult
+            build/CI-tests.xcresult
           if-no-files-found: ignore
           retention-days: 14
+
+  device:
+    name: iOS Release device
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build production app without signing
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build/logs
+          make app CONFIG=Release DESTINATION='generic/platform=iOS' \
+            BUILD_FLAGS='SWIFT_ACTIVE_COMPILATION_CONDITIONS=' 2>&1 | tee build/logs/device.log
+          ! grep -E '(^|[[:space:]])warning:' build/logs/device.log
+
+      - name: Save device build log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: device-build-log
+          path: build/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  gate:
+    name: iOS
+    if: always()
+    needs: [verify, device]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require Simulator and device verification
+        env:
+          SIMULATOR_RESULT: ${{ needs.verify.result }}
+          DEVICE_RESULT: ${{ needs.device.result }}
+        run:
+          test "$SIMULATOR_RESULT" = success && test "$DEVICE_RESULT" = success

@@ -7,6 +7,8 @@ CONFIG ?= Debug
 DESTINATION ?= generic/platform=iOS Simulator
 TEST_DESTINATION ?= platform=iOS Simulator,name=iPhone 17 Pro
 ENGINE_PATH ?=
+TEST_FLAGS ?=
+BUILD_FLAGS ?=
 DERIVED := $(CURDIR)/build/DerivedData
 PROJECT := Glimmer.xcodeproj
 ifneq ($(strip $(ENGINE_PATH)),)
@@ -22,10 +24,10 @@ ifneq ($(strip $(ENGINE_PATH)),)
 endif
 
 app: prepare
-	$(XCODE) -destination '$(DESTINATION)' build
+	$(XCODE) -destination '$(DESTINATION)' $(BUILD_FLAGS) build
 
 test: prepare
-	$(XCODE) -destination '$(TEST_DESTINATION)' -parallel-testing-enabled NO test
+	$(XCODE) -destination '$(TEST_DESTINATION)' -parallel-testing-enabled NO $(TEST_FLAGS) test
 
 check:
 	@actionlint

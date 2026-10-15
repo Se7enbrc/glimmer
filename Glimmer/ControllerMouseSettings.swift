@@ -81,13 +81,33 @@ struct GlimmerSettings: View {
         }
         .navigationTitle(page.title)
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Forget this PC?", isPresented: Binding(
+            get: { model.pendingForget != nil },
+            set: { if !$0 { model.cancelForget() } }
+        ), titleVisibility: .visible, presenting: model.pendingForget) { pc in
+            Button("Forget PC", role: .destructive) { model.confirmForget(pc) }
+            Button("Cancel", role: .cancel) { model.cancelForget() }
+        } message: { pc in
+            Text("Remove the saved pairing with \(pc.name) from this device? You'll need to pair again to connect.")
+        }
     }
 
     @ViewBuilder private var computerSettings: some View {
         if !model.savedPCs.isEmpty {
             Section("Paired PCs") {
-                ForEach(model.savedPCs) { pc in Label(pc.name, systemImage: "display") }
+                ForEach(model.savedPCs) { pc in
+                    HStack {
+                        Label(pc.name, systemImage: "display")
+                        Spacer()
+                        Button("Forget…", role: .destructive) { model.requestForget(pc) }
+                            .accessibilityLabel("Forget \(pc.name)")
+                            .disabled(!model.canForgetPC)
+                    }
+                }
             }
+        }
+        if let failure = model.forgetFailure {
+            Section { Text(failure).foregroundStyle(.red) }
         }
         Section {
             ForEach(model.discovered.filter { nearby in
