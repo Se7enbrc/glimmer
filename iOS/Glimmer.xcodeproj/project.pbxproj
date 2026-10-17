@@ -1,0 +1,677 @@
+// !$*UTF8*$!
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		40E56A34C6B84BFD97F585B0 /* PairingRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */; };
+		9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */; };
+		A3D372A8CF7E4C02AC0926B7 /* StreamBackgroundGrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */; };
+		E5079E847C204146BDF540F1 /* LauncherGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D57DEF880324835B4BA487E /* LauncherGallery.swift */; };
+		46257D27DA574232935DD699 /* ControllerMouseSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A49D3096BFB64C23AE91AC56 /* ControllerMouseSettings.swift */; };
+		07F5AD5B787425E258D9C086 /* LICENSE in Resources */ = {isa = PBXBuildFile; fileRef = 34245D5D017E137C796AE2AA /* LICENSE */; };
+		10896918E526BAFB88FC984F /* LauncherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C27E8A6F7449606A4E16DB8B /* LauncherView.swift */; };
+		22DF8131531E5ADA1EFDA4C1 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 166CD0D8C2DE20211142D277 /* Foundation.framework */; };
+		2A678FFC70962EC04B7D423B /* GlimmerEngine in Frameworks */ = {isa = PBXBuildFile; productRef = CC9F14979956299491D3FB37 /* GlimmerEngine */; };
+		2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */; };
+		348684B76496EAF753290EF6 /* EngineLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC8777C55611710BADD7484 /* EngineLink.swift */; };
+		352C1011524E806B983A697E /* GlimmerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB5FA496B339386824307D80 /* GlimmerApp.swift */; };
+		448039B562D4A381F641CF03 /* AppDeclarationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */; };
+		4F9A1E395BAE1D05802CA568 /* CREDITS.md in Resources */ = {isa = PBXBuildFile; fileRef = 405AF81E78D41E1E222D5991 /* CREDITS.md */; };
+		56379B99BE31A1E9E8BAC42F /* ControllerMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36171098F2FC6D807B7809E9 /* ControllerMonitor.swift */; };
+		76D18FAA5093262D2C6C77E9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4E152D5238E668E8A9E5531F /* AppIcon.icon */; };
+		905D12051FDFAE90C2754C35 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8BE1C1D28CD2715A53E046F6 /* UIKit.framework */; };
+		99827218F70ECA345A8EED25 /* ControllerMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F5102EDB7AD2531AE0663B1 /* ControllerMonitorTests.swift */; };
+		9B411682284F5BB9F00D42D4 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6154BC73A24870CC8B69172D /* GameController.framework */; };
+		9CF0EED6A547E97737DEE09A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 166CD0D8C2DE20211142D277 /* Foundation.framework */; };
+		AC23DF2162C30AAAA9878E27 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 45D50F4C90AB68CB5149E594 /* SwiftUI.framework */; };
+		D24F000A4BCC4C65C8508D0A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FAD2215B8AB2557B667379E3 /* Assets.xcassets */; };
+		670FF5C58DCCB38D0C0F55D6 /* IOSAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = D46ADEF81D9B207FD34CBB22 /* IOSAudio.swift */; };
+		D91A9AB0427148045EC87AC8 /* IOSAudioSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BD79C5F6323A43283399334 /* IOSAudioSession.swift */; };
+		3F860A0B0CF3D204A85B1905 /* IOSAudioSession+Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00048335526E571C8D00BEB /* IOSAudioSession+Notifications.swift */; };
+		8A57E19FAEB7FAD612489EEC /* IOSAudioOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D0443C4EE9DE4BECB00D8B /* IOSAudioOutput.swift */; };
+		542D884924A5B2C317194CD5 /* IOSAudioOutput+Properties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A9450697D192F522AF5030 /* IOSAudioOutput+Properties.swift */; };
+		1A26CF1176BA5F2D37E40F0A /* IOSAudioFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */; };
+		5357DD73479F12579699A792 /* IOSAudioSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */; };
+		FAA9B2DAAD28F9FC05CD2E80 /* IOSAudioOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */; };
+		902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */; };
+		BFCC9B0DBFB951A6374D2892 /* StreamSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 449C39977453B76D4D682FFF /* StreamSessionModel.swift */; };
+		9A28A0B31BBB599B016AAED4 /* StreamSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C92E9EC00985D64D0C1CC7 /* StreamSurface.swift */; };
+		53442F74573A5960DB86B797 /* StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A97E5B4E562286545BA6412 /* StreamView.swift */; };
+		83B27EBA9F210DF76B77D772 /* LauncherServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087279E7E4417E5B10AADB05 /* LauncherServices.swift */; };
+		AF9547F4F7817E3F82B8F721 /* LauncherModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */; };
+		CF6514282E3FDE69E7FE6EA8 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3225303E73FF1C74315DDB3 /* PairingView.swift */; };
+		F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */; };
+		7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69AB6019C55BC9409A7FA80F /* LauncherTests.swift */; };
+		E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */; };
+		2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = F08434884699435EA80067AB /* StreamTouchCapture.swift */; };
+		BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */; };
+		2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */; };
+		BF51A1858C9E4892B1CD845D /* IOSControllerCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */; };
+		7C852A7B0A774B1287D2B023 /* IOSControllerCapture+Samples.swift in Sources */ = {isa = PBXBuildFile; fileRef = 390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */; };
+		0A34A869941C483784D1C76F /* IOSControllerCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 198F3AC99E774F7CB79C6798 /* IOSControllerCaptureTests.swift */; };
+		169D2FE0FC0B48999584D8A7 /* IOSControllerFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1876A69C29C4777911C52EE /* IOSControllerFeedback.swift */; };
+		0A75FC5D61394A19A155A87D /* IOSControllerFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6958391F13644D4EBE6E2E6D /* IOSControllerFeedbackTests.swift */; };
+		CB8A71DDD3734C7D93110306 /* IOSControllerSensors.swift in Sources */ = {isa = PBXBuildFile; fileRef = E63F8D899AF944BB9D5502AA /* IOSControllerSensors.swift */; };
+		610DFE85BF994F3ABF7A541A /* IOSControllerSensorsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */; };
+		FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */; };
+		00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */; };
+		38C80A9D0A874449A43CE593 /* AddPCView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		04301636E0723C20FF6F7FC8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 49E2BD31141729547DDE4FFD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B681FC77EEFBB7565D886601;
+			remoteInfo = Glimmer;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingRecoveryTests.swift; sourceTree = "<group>"; };
+		E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherGalleryTests.swift"; sourceTree = "<group>"; };
+		D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamBackgroundGrace.swift"; sourceTree = "<group>"; };
+		6D57DEF880324835B4BA487E /* LauncherGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherGallery.swift"; sourceTree = "<group>"; };
+		A49D3096BFB64C23AE91AC56 /* ControllerMouseSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControllerMouseSettings.swift; sourceTree = "<group>"; };
+		166CD0D8C2DE20211142D277 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		34245D5D017E137C796AE2AA /* LICENSE */ = {isa = PBXFileReference; includeInIndex = 1; path = LICENSE; sourceTree = "<group>"; };
+		34C1CD2D3621B447D33B3F8C /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		36171098F2FC6D807B7809E9 /* ControllerMonitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ControllerMonitor.swift; sourceTree = "<group>"; };
+		3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDeclarationTests.swift; sourceTree = "<group>"; };
+		3D8BD9F49FCFD5C8571088CE /* Signing.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		405AF81E78D41E1E222D5991 /* CREDITS.md */ = {isa = PBXFileReference; includeInIndex = 1; path = CREDITS.md; sourceTree = "<group>"; };
+		45D50F4C90AB68CB5149E594 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		4E152D5238E668E8A9E5531F /* AppIcon.icon */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		6154BC73A24870CC8B69172D /* GameController.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameController.framework; path = System/Library/Frameworks/GameController.framework; sourceTree = SDKROOT; };
+		6C6D3739822077E944BB55B4 /* GlimmerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GlimmerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7433B1C5C30BE45717AEA2C5 /* Glimmer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glimmer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8BE1C1D28CD2715A53E046F6 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		9F5102EDB7AD2531AE0663B1 /* ControllerMonitorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ControllerMonitorTests.swift; sourceTree = "<group>"; };
+		C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineLinkTests.swift; sourceTree = "<group>"; };
+		C27E8A6F7449606A4E16DB8B /* LauncherView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LauncherView.swift; sourceTree = "<group>"; };
+		CB5FA496B339386824307D80 /* GlimmerApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlimmerApp.swift; sourceTree = "<group>"; };
+		DBDB247C151A5B0F3BCE13B6 /* App.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
+		EDC8777C55611710BADD7484 /* EngineLink.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineLink.swift; sourceTree = "<group>"; };
+		FAD2215B8AB2557B667379E3 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D46ADEF81D9B207FD34CBB22 /* IOSAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudio.swift"; sourceTree = "<group>"; };
+		5BD79C5F6323A43283399334 /* IOSAudioSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioSession.swift"; sourceTree = "<group>"; };
+		B00048335526E571C8D00BEB /* IOSAudioSession+Notifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioSession+Notifications.swift"; sourceTree = "<group>"; };
+		C6D0443C4EE9DE4BECB00D8B /* IOSAudioOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioOutput.swift"; sourceTree = "<group>"; };
+		67A9450697D192F522AF5030 /* IOSAudioOutput+Properties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioOutput+Properties.swift"; sourceTree = "<group>"; };
+		22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioFixtures.swift"; sourceTree = "<group>"; };
+		8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioSessionTests.swift"; sourceTree = "<group>"; };
+		EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioOutputTests.swift"; sourceTree = "<group>"; };
+		57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamPlayback.swift"; sourceTree = "<group>"; };
+		449C39977453B76D4D682FFF /* StreamSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionModel.swift"; sourceTree = "<group>"; };
+		11C92E9EC00985D64D0C1CC7 /* StreamSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSurface.swift"; sourceTree = "<group>"; };
+		5A97E5B4E562286545BA6412 /* StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamView.swift"; sourceTree = "<group>"; };
+		087279E7E4417E5B10AADB05 /* LauncherServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherServices.swift"; sourceTree = "<group>"; };
+		1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherModel.swift"; sourceTree = "<group>"; };
+		E3225303E73FF1C74315DDB3 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairingView.swift"; sourceTree = "<group>"; };
+		155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionTests.swift"; sourceTree = "<group>"; };
+		69AB6019C55BC9409A7FA80F /* LauncherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherTests.swift"; sourceTree = "<group>"; };
+		2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests.swift"; sourceTree = "<group>"; };
+		F08434884699435EA80067AB /* StreamTouchCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCapture.swift"; sourceTree = "<group>"; };
+		4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCaptureTests.swift"; sourceTree = "<group>"; };
+		5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchRecognizers.swift"; sourceTree = "<group>"; };
+		1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerCapture.swift"; sourceTree = "<group>"; };
+		390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerCapture+Samples.swift"; sourceTree = "<group>"; };
+		198F3AC99E774F7CB79C6798 /* IOSControllerCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerCaptureTests.swift"; sourceTree = "<group>"; };
+		C1876A69C29C4777911C52EE /* IOSControllerFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerFeedback.swift"; sourceTree = "<group>"; };
+		6958391F13644D4EBE6E2E6D /* IOSControllerFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerFeedbackTests.swift"; sourceTree = "<group>"; };
+		E63F8D899AF944BB9D5502AA /* IOSControllerSensors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerSensors.swift"; sourceTree = "<group>"; };
+		7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerSensorsTests.swift"; sourceTree = "<group>"; };
+		5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamProfile.swift"; sourceTree = "<group>"; };
+		DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamProfileTests.swift"; sourceTree = "<group>"; };
+		E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AddPCView.swift"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		525B0EDB026BD04425C53A2C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9CF0EED6A547E97737DEE09A /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D6C54CD3BC05613878C0B3E6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22DF8131531E5ADA1EFDA4C1 /* Foundation.framework in Frameworks */,
+				9B411682284F5BB9F00D42D4 /* GameController.framework in Frameworks */,
+				AC23DF2162C30AAAA9878E27 /* SwiftUI.framework in Frameworks */,
+				905D12051FDFAE90C2754C35 /* UIKit.framework in Frameworks */,
+				2A678FFC70962EC04B7D423B /* GlimmerEngine in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0B3385B9A10AECC582EA11AB /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				DBDB247C151A5B0F3BCE13B6 /* App.xcconfig */,
+				3D8BD9F49FCFD5C8571088CE /* Signing.xcconfig */,
+			);
+			name = Config;
+			path = Config;
+			sourceTree = "<group>";
+		};
+		6DA2373E6ECD287E4C49A17B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7433B1C5C30BE45717AEA2C5 /* Glimmer.app */,
+				6C6D3739822077E944BB55B4 /* GlimmerTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		70F6546FA3B66545E2800096 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				166CD0D8C2DE20211142D277 /* Foundation.framework */,
+				6154BC73A24870CC8B69172D /* GameController.framework */,
+				45D50F4C90AB68CB5149E594 /* SwiftUI.framework */,
+				8BE1C1D28CD2715A53E046F6 /* UIKit.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		8F0DF1F033142B391604291F = {
+			isa = PBXGroup;
+			children = (
+				6DA2373E6ECD287E4C49A17B /* Products */,
+				B482507685B00F4A42D044A3 /* Frameworks */,
+				BEC83DE52194C0A67A8F75F5 /* Glimmer */,
+				94A1479D3C65CC3651C769B5 /* GlimmerTests */,
+				0B3385B9A10AECC582EA11AB /* Config */,
+				34245D5D017E137C796AE2AA /* LICENSE */,
+				405AF81E78D41E1E222D5991 /* CREDITS.md */,
+			);
+			sourceTree = "<group>";
+		};
+		94A1479D3C65CC3651C769B5 /* GlimmerTests */ = {
+			isa = PBXGroup;
+			children = (
+				2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */,
+				69AB6019C55BC9409A7FA80F /* LauncherTests.swift */,
+				D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */,
+				155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */,
+				DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */,
+				E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */,
+				4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */,
+				9F5102EDB7AD2531AE0663B1 /* ControllerMonitorTests.swift */,
+				198F3AC99E774F7CB79C6798 /* IOSControllerCaptureTests.swift */,
+				7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */,
+				6958391F13644D4EBE6E2E6D /* IOSControllerFeedbackTests.swift */,
+				EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */,
+				8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */,
+				22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */,
+				C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */,
+				3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */,
+			);
+			name = GlimmerTests;
+			path = GlimmerTests;
+			sourceTree = "<group>";
+		};
+		B482507685B00F4A42D044A3 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				70F6546FA3B66545E2800096 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		BEC83DE52194C0A67A8F75F5 /* Glimmer */ = {
+			isa = PBXGroup;
+			children = (
+				E3225303E73FF1C74315DDB3 /* PairingView.swift */,
+				E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */,
+				1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */,
+				087279E7E4417E5B10AADB05 /* LauncherServices.swift */,
+				5A97E5B4E562286545BA6412 /* StreamView.swift */,
+				11C92E9EC00985D64D0C1CC7 /* StreamSurface.swift */,
+				F08434884699435EA80067AB /* StreamTouchCapture.swift */,
+				5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */,
+				449C39977453B76D4D682FFF /* StreamSessionModel.swift */,
+				57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */,
+				5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */,
+				D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */,
+				6D57DEF880324835B4BA487E /* LauncherGallery.swift */,
+				A49D3096BFB64C23AE91AC56 /* ControllerMouseSettings.swift */,
+				36171098F2FC6D807B7809E9 /* ControllerMonitor.swift */,
+				390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */,
+				1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */,
+				E63F8D899AF944BB9D5502AA /* IOSControllerSensors.swift */,
+				C1876A69C29C4777911C52EE /* IOSControllerFeedback.swift */,
+				67A9450697D192F522AF5030 /* IOSAudioOutput+Properties.swift */,
+				C6D0443C4EE9DE4BECB00D8B /* IOSAudioOutput.swift */,
+				B00048335526E571C8D00BEB /* IOSAudioSession+Notifications.swift */,
+				5BD79C5F6323A43283399334 /* IOSAudioSession.swift */,
+				D46ADEF81D9B207FD34CBB22 /* IOSAudio.swift */,
+				EDC8777C55611710BADD7484 /* EngineLink.swift */,
+				CB5FA496B339386824307D80 /* GlimmerApp.swift */,
+				C27E8A6F7449606A4E16DB8B /* LauncherView.swift */,
+				34C1CD2D3621B447D33B3F8C /* Info.plist */,
+				FAD2215B8AB2557B667379E3 /* Assets.xcassets */,
+				4E152D5238E668E8A9E5531F /* AppIcon.icon */,
+			);
+			name = Glimmer;
+			path = Glimmer;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4D366FCA64D124361CF79023 /* GlimmerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 17DE166E0E223F2E1E5793CD /* Build configuration list for PBXNativeTarget "GlimmerTests" */;
+			buildPhases = (
+				122F970890FB79C176CB09C0 /* Sources */,
+				525B0EDB026BD04425C53A2C /* Frameworks */,
+				0C823DC0D4AB3D47FA13A6A8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8DB8552DD02E623D377892B0 /* PBXTargetDependency */,
+			);
+			name = GlimmerTests;
+			productName = GlimmerTests;
+			productReference = 6C6D3739822077E944BB55B4 /* GlimmerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		B681FC77EEFBB7565D886601 /* Glimmer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 125A38E2E9AA4C1658AD0E6C /* Build configuration list for PBXNativeTarget "Glimmer" */;
+			buildPhases = (
+				764482F249F024A687723CC8 /* Sources */,
+				D6C54CD3BC05613878C0B3E6 /* Frameworks */,
+				5852918B18D728D0ADF1E086 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Glimmer;
+			packageProductDependencies = (
+				CC9F14979956299491D3FB37 /* GlimmerEngine */,
+			);
+			productName = Glimmer;
+			productReference = 7433B1C5C30BE45717AEA2C5 /* Glimmer.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		49E2BD31141729547DDE4FFD /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = 7A8C07F82633535226EB7431 /* Build configuration list for PBXProject "Glimmer" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 8F0DF1F033142B391604291F;
+			minimizedProjectReferenceProxies = 0;
+			packageReferences = (
+				02A630158286122700D1D960 /* XCRemoteSwiftPackageReference "glimmer" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 6DA2373E6ECD287E4C49A17B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B681FC77EEFBB7565D886601 /* Glimmer */,
+				4D366FCA64D124361CF79023 /* GlimmerTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0C823DC0D4AB3D47FA13A6A8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5852918B18D728D0ADF1E086 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D24F000A4BCC4C65C8508D0A /* Assets.xcassets in Resources */,
+				76D18FAA5093262D2C6C77E9 /* AppIcon.icon in Resources */,
+				07F5AD5B787425E258D9C086 /* LICENSE in Resources */,
+				4F9A1E395BAE1D05802CA568 /* CREDITS.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		122F970890FB79C176CB09C0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */,
+				7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */,
+				40E56A34C6B84BFD97F585B0 /* PairingRecoveryTests.swift in Sources */,
+				F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */,
+				00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */,
+				9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */,
+				BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */,
+				99827218F70ECA345A8EED25 /* ControllerMonitorTests.swift in Sources */,
+				0A34A869941C483784D1C76F /* IOSControllerCaptureTests.swift in Sources */,
+				610DFE85BF994F3ABF7A541A /* IOSControllerSensorsTests.swift in Sources */,
+				0A75FC5D61394A19A155A87D /* IOSControllerFeedbackTests.swift in Sources */,
+				FAA9B2DAAD28F9FC05CD2E80 /* IOSAudioOutputTests.swift in Sources */,
+				5357DD73479F12579699A792 /* IOSAudioSessionTests.swift in Sources */,
+				1A26CF1176BA5F2D37E40F0A /* IOSAudioFixtures.swift in Sources */,
+				2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */,
+				448039B562D4A381F641CF03 /* AppDeclarationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		764482F249F024A687723CC8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF6514282E3FDE69E7FE6EA8 /* PairingView.swift in Sources */,
+				38C80A9D0A874449A43CE593 /* AddPCView.swift in Sources */,
+				AF9547F4F7817E3F82B8F721 /* LauncherModel.swift in Sources */,
+				83B27EBA9F210DF76B77D772 /* LauncherServices.swift in Sources */,
+				53442F74573A5960DB86B797 /* StreamView.swift in Sources */,
+				9A28A0B31BBB599B016AAED4 /* StreamSurface.swift in Sources */,
+				2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */,
+				2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */,
+				BFCC9B0DBFB951A6374D2892 /* StreamSessionModel.swift in Sources */,
+				902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */,
+				FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */,
+				A3D372A8CF7E4C02AC0926B7 /* StreamBackgroundGrace.swift in Sources */,
+				E5079E847C204146BDF540F1 /* LauncherGallery.swift in Sources */,
+				46257D27DA574232935DD699 /* ControllerMouseSettings.swift in Sources */,
+				56379B99BE31A1E9E8BAC42F /* ControllerMonitor.swift in Sources */,
+				7C852A7B0A774B1287D2B023 /* IOSControllerCapture+Samples.swift in Sources */,
+				BF51A1858C9E4892B1CD845D /* IOSControllerCapture.swift in Sources */,
+				CB8A71DDD3734C7D93110306 /* IOSControllerSensors.swift in Sources */,
+				169D2FE0FC0B48999584D8A7 /* IOSControllerFeedback.swift in Sources */,
+				542D884924A5B2C317194CD5 /* IOSAudioOutput+Properties.swift in Sources */,
+				8A57E19FAEB7FAD612489EEC /* IOSAudioOutput.swift in Sources */,
+				3F860A0B0CF3D204A85B1905 /* IOSAudioSession+Notifications.swift in Sources */,
+				D91A9AB0427148045EC87AC8 /* IOSAudioSession.swift in Sources */,
+				670FF5C58DCCB38D0C0F55D6 /* IOSAudio.swift in Sources */,
+				348684B76496EAF753290EF6 /* EngineLink.swift in Sources */,
+				352C1011524E806B983A697E /* GlimmerApp.swift in Sources */,
+				10896918E526BAFB88FC984F /* LauncherView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8DB8552DD02E623D377892B0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Glimmer;
+			target = B681FC77EEFBB7565D886601 /* Glimmer */;
+			targetProxy = 04301636E0723C20FF6F7FC8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2E7D155A4A7C9DB0D4E1D20A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				INFOPLIST_FILE = Glimmer/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.iOS;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		6BAF46ECF259CB06717C61CD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = DBDB247C151A5B0F3BCE13B6 /* App.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		6C4A437F43D91819ACFE456B /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = DBDB247C151A5B0F3BCE13B6 /* App.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		9FCC9B61ACA925CBED6417FB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.iOS.Tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Glimmer.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Glimmer";
+			};
+			name = Debug;
+		};
+		EC006F0614839DDBCE4560AB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				INFOPLIST_FILE = Glimmer/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.iOS;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F429682649997214E3D4E809 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.iOS.Tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Glimmer.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Glimmer";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		125A38E2E9AA4C1658AD0E6C /* Build configuration list for PBXNativeTarget "Glimmer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2E7D155A4A7C9DB0D4E1D20A /* Release */,
+				EC006F0614839DDBCE4560AB /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		17DE166E0E223F2E1E5793CD /* Build configuration list for PBXNativeTarget "GlimmerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F429682649997214E3D4E809 /* Release */,
+				9FCC9B61ACA925CBED6417FB /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A8C07F82633535226EB7431 /* Build configuration list for PBXProject "Glimmer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6BAF46ECF259CB06717C61CD /* Debug */,
+				6C4A437F43D91819ACFE456B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		02A630158286122700D1D960 /* XCRemoteSwiftPackageReference "glimmer" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Se7enbrc/glimmer.git";
+			requirement = {
+				kind = revision;
+				revision = d6f4d88effa59e332e03e03768a6ac4b581427cf;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CC9F14979956299491D3FB37 /* GlimmerEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 02A630158286122700D1D960 /* XCRemoteSwiftPackageReference "glimmer" */;
+			productName = GlimmerEngine;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 49E2BD31141729547DDE4FFD /* Project object */;
+}

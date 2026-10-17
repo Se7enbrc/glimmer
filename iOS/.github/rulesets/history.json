@@ -1,0 +1,17 @@
+{
+  "name": "Verified main history",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": ["refs/heads/main"]
+    }
+  },
+  "rules": [
+    {
+      "type": "required_signatures"
+    }
+  ],
+  "bypass_actors": []
+}
