@@ -32,6 +32,7 @@ extension InsettableShape {
 /// Internal so SettingsView's Pair/Stream-now buttons share the treatment.
 struct StreamButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -43,22 +44,23 @@ struct StreamButtonStyle: ButtonStyle {
             .frame(minHeight: 46)
             .background { Capsule().accentSurface() }
             .opacity(isEnabled ? 1.0 : 0.55)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
-            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(Motion.pressedScale(configuration.isPressed, reduceMotion: reduceMotion))
+            .animation(Motion.press(reduceMotion: reduceMotion), value: configuration.isPressed)
     }
 }
 
 /// The launcher's app buttons: each one streams, so each wears the Stream button's violet.
 struct AppTileStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(.white)
             .background { RoundedRectangle(cornerRadius: 14, style: .continuous).accentSurface() }
             .opacity(isEnabled ? 1.0 : 0.55)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
-            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(Motion.pressedScale(configuration.isPressed, reduceMotion: reduceMotion))
+            .animation(Motion.press(reduceMotion: reduceMotion), value: configuration.isPressed)
     }
 }
 
@@ -66,6 +68,7 @@ struct StreamButton: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var isConnecting: Bool = false
+    var launcherFocus: FocusState<LauncherFocus?>.Binding?
 
     /// The success haptic belongs on the actual "we're live" beat - this flag
     /// gives sensoryFeedback a precise connectionEstablished edge, not a tap.
@@ -119,24 +122,28 @@ struct StreamButton: View {
         role == .connecting || role == .reconnecting || role == .waking
     }
 
+    private func activate() {
+        switch role {
+        case .noPC: break                                  // disabled - copy is the affordance
+        case .connect:
+            guard model.selectedReadinessReason == nil else { return }
+            model.streamHeroApp()
+        case .connecting: model.cancelConnect()        // the working exit from a stuck connect
+        case .reconnecting: model.stopStreamFromMenu(source: "the launcher")  // a live stream, so it stops
+        case .liveBackgrounded: model.resumeStreamWindow()
+        case .pairAgain: model.requestPairing(for: model.selectedHost)
+        case .wake:
+            if let host = model.selectedHost { model.wakeHost(host, thenConnect: true) }
+        case .waking:
+            // The working exit from a wake that is taking too long. Drops
+            // our wait only; the tile falls back to offline + Wake and a
+            // fresh Wake starts clean (see AppModel.cancelWake).
+            if let host = model.selectedHost { model.cancelWake(host) }
+        }
+    }
+
     var body: some View {
-        Button {
-            switch role {
-            case .noPC: break                                  // disabled - copy is the affordance
-            case .connect: model.streamHeroApp()
-            case .connecting: model.cancelConnect()        // the working exit from a stuck connect
-            case .reconnecting: model.stopStreamFromMenu(source: "the launcher")  // a live stream, so it stops
-            case .liveBackgrounded: model.resumeStreamWindow()
-            case .pairAgain: model.requestPairing(for: model.selectedHost)
-            case .wake:
-                if let host = model.selectedHost { model.wakeHost(host, thenConnect: true) }
-            case .waking:
-                // The working exit from a wake that is taking too long. Drops
-                // our wait only; the tile falls back to offline + Wake and a
-                // fresh Wake starts clean (see AppModel.cancelWake).
-                if let host = model.selectedHost { model.cancelWake(host) }
-            }
-        } label: {
+        Button(action: activate) {
             HStack(spacing: 10) {
                 switch role {
                 case .noPC:
@@ -203,20 +210,20 @@ struct StreamButton: View {
                     // label swap here would flash inside the 400 ms hold).
                     Image(systemName: "play.fill")
                         .font(.system(size: 16, weight: .semibold))
-                        // Bounce on the live edge (curtain rises). Suppressed
-                        // under Reduce Motion; the success haptic still fires.
-                        .symbolEffect(.bounce, value: reduceMotion ? false : isLive)
                     Text(model.heroActionLabel)
                         .font(.title2.weight(.semibold))
                         .lineLimit(1)
                         .contentTransition(.opacity)
                 }
             }
+            .id(role)
+            .transition(.opacity.animation(Motion.fade))
             .frame(maxWidth: .infinity)
         }
         // Custom style = the hero's accent gradient + glass + soft rim.
         // `.glassProminent` was too saturated; `.glass` near-neutral.
         .buttonStyle(StreamButtonStyle())
+        .modifier(LauncherStateFocus(focus: launcherFocus, activate: activate))
         // ENTER-TO-PLAY: Return fires the hero verb from anywhere in the
         // window (.disabled keeps it a no-op; sheets/alerts own Return while
         // up). The cancel roles bind ⎋ instead - Escape-to-cancel is
@@ -226,7 +233,7 @@ struct StreamButton: View {
         // The cancel roles stay ENABLED - they're the way out.
         .disabled(
             role == .noPC ||
-            (role == .connect && model.isStreaming)
+            (role == .connect && (model.isStreaming || model.selectedReadinessReason != nil))
         )
         // Success haptic on the actual establish edge, not on click.
         .sensoryFeedback(.success, trigger: isLive)
@@ -236,20 +243,19 @@ struct StreamButton: View {
                     Button {
                         model.requestStream(app: app, on: host)
                     } label: {
-                        Label(app.name, systemImage: app.systemImage)
+                        Label { Text(app.name) } icon: { app.icon }
                             .labelStyle(.titleAndIcon)
                     }
                     // Same second-concurrent-session gate as the app tiles.
-                    .disabled(model.isStreaming)
+                    .disabled(model.isStreaming || model.selectedReadinessReason != nil)
                 }
             }
         }
-        .help(guidance.help)
+        .help(model.selectedReadinessReason ?? guidance.help)
         // VoiceOver hint mirrors the sighted-only `.help` so assistive-tech
         // users learn WHY the button is disabled (noPC) or what a click does.
-        .accessibilityHint(guidance.hint)
-        .animation(.snappy(duration: 0.35, extraBounce: reduceMotion ? 0 : 0.1), value: isConnecting)
-        .animation(.snappy(duration: 0.35, extraBounce: reduceMotion ? 0 : 0.1), value: model.isStreaming)
+        .accessibilityHint(model.selectedReadinessReason ?? guidance.hint)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: role)
     }
 
     /// Tooltip and VoiceOver hint for the current role, kept in one place.
@@ -304,5 +310,18 @@ struct StreamButton: View {
         }
         if let selectedName { return "Connecting to \(selectedName)…" }
         return "Connecting…"
+    }
+}
+
+private struct LauncherStateFocus: ViewModifier {
+    let focus: FocusState<LauncherFocus?>.Binding?
+    let activate: () -> Void
+
+    func body(content: Content) -> some View {
+        if let focus {
+            content.modifier(LauncherControlFocus(focus: focus, target: .state, activate: activate))
+        } else {
+            content
+        }
     }
 }

@@ -11,6 +11,7 @@
 //  UserDefaults key is read-only there for one-shot migration.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import os.log
@@ -139,7 +140,8 @@ extension AppModel {
                 // Backfilled from /serverinfo's `<mac>` on every successful
                 // poll/pair (only learnable while the host is online).
                 macAddress: defaults.string(forKey: "hosts.\(i).mac"),
-                wakeOnLAN: defaults.object(forKey: "hosts.\(i).wol") as? Bool ?? true
+                wakeOnLAN: defaults.object(forKey: "hosts.\(i).wol") as? Bool ?? true,
+                launcherStyle: LauncherStyle.load(for: uuid, defaults: defaults)
             ))
         }
 
@@ -416,7 +418,6 @@ extension AppModel {
     }
 
     func selectHost(_ host: Host, defaults: UserDefaults = .standard) {
-        guard !isStreaming else { return }
         // A prior PC's red banner would name the wrong machine after a switch.
         nativeStreamError = nil
         defaults.set(host.id, forKey: "glimmer.selectedHostID")
@@ -453,13 +454,19 @@ extension AppModel {
     /// duplicated, or corrupt record (e.g. left over from the namespace
     /// migration) still ends up gone. Safe to call repeatedly; a no-op once the
     /// host is already clean.
-    func unpair(_ host: Host, defaults: UserDefaults = .standard, supportBase: URL? = nil) {
+    @discardableResult
+    func unpair(_ host: Host, defaults: UserDefaults = .standard,
+                supportBase: URL? = nil) -> Task<Void, Never> {
 
         // --- Unconditional, id-keyed cleanup (runs even if no slot matches) ---
         // File-store + legacy UserDefaults pinned cert.
         PinnedCertStore.delete(forHostID: host.id, defaults: defaults, base: supportBase)
         defaults.removeObject(forKey: "glimmer.lastConnected.\(host.id)")
         HostCodecPreference.forget(hostID: host.id, defaults: defaults)
+        LauncherStyle.forget(pcID: host.id, defaults: defaults)
+        let artCache = supportBase == nil || supportBase == self.supportBase
+            ? launcherArtCache : LauncherArtCache(base: supportBase)
+        let clearingArt = Task { await artCache.remove(pcID: host.id) }
         if defaults.string(forKey: "glimmer.selectedHostID") == host.id {
             defaults.removeObject(forKey: "glimmer.selectedHostID")
         }
@@ -495,5 +502,6 @@ extension AppModel {
         }
 
         loadHosts(defaults: defaults)
+        return clearingArt
     }
 }

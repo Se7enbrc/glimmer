@@ -9,6 +9,7 @@
 //  queue's non-empty clock the present watchdog reads.
 //
 
+@testable import GlimmerEngine
 import CoreMedia
 import Foundation
 import os

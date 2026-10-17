@@ -9,6 +9,7 @@
 //  the stream runs with its window and permissions, never a second instance.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 
@@ -19,7 +20,7 @@ extension GlimmerCLI {
 
     static func stream(_ command: Command, model: AppModel) async -> Int32 {
         guard let host = resolveHost(command.arguments[0], model: model) else { return Exit.notPaired }
-        let live = await probe(host, model: model)
+        let live = await probe(host, model: model, waitUntilIdle: true)
         switch live?.state {
         case .asleep, nil:
             let hint = model.canWake(host) ? " To wake it: glimmer wake \"\(host.displayName)\" --wait" : ""
@@ -35,7 +36,8 @@ extension GlimmerCLI {
             return Exit.usage
         }
         var takeover = command.flags.contains("--force")
-        if !takeover, let occupant = live.flatMap({ AppModel.occupant(of: $0.state) }) {
+        if !takeover,
+           let occupant = live.flatMap({ AppModel.occupant(of: $0.state) }) {
             // Glimmer's own stream may be what keeps the PC busy; it refuses a second one.
             if runningGlimmer() != nil, let reply = await ask([Key.verb: "check", Key.host: host.id], within: .seconds(2)),
                reply[Key.event] == Event.rejected {
@@ -50,7 +52,7 @@ extension GlimmerCLI {
     }
 
     /// The named app, matched as Stream from PC matches it, or the launcher's hero
-    /// target (the probe just selected this PC, so a running app is resumed).
+    /// target (the probe just selected this PC, so its running app is preferred).
     private static func pickApp(_ name: String?, on host: Host, model: AppModel) -> LibraryApp? {
         guard let name else {
             if model.heroTargetApp == nil { printError("Glimmer doesn't know any apps on \(host.displayName).") }
@@ -70,7 +72,8 @@ extension GlimmerCLI {
             printError("\(pc) is running \(occupant). Run again with --force to quit it and start \(app).")
             return false
         }
-        printError("\(pc) is running \(occupant). Quit it and start \(app)? [y/N] ", newline: false)
+        printError("\(pc) is running \(occupant). Unsaved progress may be lost. "
+            + "Quit it and start \(app)? [y/N] ", newline: false)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
         return answer == "y" || answer == "yes"
     }

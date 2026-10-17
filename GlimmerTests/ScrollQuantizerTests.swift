@@ -8,6 +8,7 @@
 //  through untouched; direction changes and finished gestures drop the bank.
 //
 
+@testable import GlimmerEngine
 import Testing
 @testable import Glimmer
 

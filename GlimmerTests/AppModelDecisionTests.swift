@@ -9,6 +9,7 @@
 //  and the session receipt's key and wording. No model, defaults or network.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

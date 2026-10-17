@@ -12,6 +12,7 @@ import CoreMedia
 import Foundation
 import QuartzCore
 import Testing
+@testable import GlimmerEngine
 @testable import Glimmer
 
 // Serialized: the realized-cadence baseline is process-wide tick state.

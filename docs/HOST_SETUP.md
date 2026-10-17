@@ -3,62 +3,53 @@ description: Set up Sunshine and a display that matches your Mac.
 icon: desktop
 ---
 
-# Set up the PC
+# Give your PC a display to stream
 
-Glimmer asks the PC for an **exact** `width × height @ refresh`, whatever you
-pick in **Settings ▸ Quality**. The presets there are _Sharpest_ (your panel's
-own pixel grid), _Balanced_ (half that in each direction), and _Custom_.
-Sunshine can only honor a mode the PC can actually present, so the PC's display
-has to be able to produce every mode you might request. On Windows that means a
-**Virtual Display Driver**; on Linux a current Sunshine that resizes the
-session. Without one, the stream falls back to a wrong size or fails to start.
+1. Install [Sunshine](https://github.com/LizardByte/Sunshine).
+2. Try streaming with your current display.
 
-## Windows: Virtual Display Driver
+| Settings › Quality | Requested size                        |
+| ------------------ | ------------------------------------- |
+| Sharpest           | Mac panel's native pixels.            |
+| Balanced           | Half the width and height.            |
+| Custom             | Your saved resolution and frame rate. |
 
-A headless gaming PC, or one whose real monitor cannot do your Mac's exact mode,
-needs a virtual display that can.
+{% hint style="info" %}
 
-1. **Sunshine.** Install a current release (it manages the VDD per session):
-   <https://github.com/LizardByte/Sunshine>
-2. **Virtual Display Driver.** Install from
-   <https://github.com/VirtualDrivers/Virtual-Display-Driver> (follow its
-   README; it's a signed IDD driver plus a companion app).
-3. **Configure the modes.** Copy [`vddsettings.xml`](vddsettings.xml) to the
-   path your VDD build reads (the companion app shows it, commonly
-   `C:\IddSampleDriver\vdd_settings.xml` or `C:\VirtualDisplayDriver\`). Then:
-   - set `<gpu><friendlyname>` to your GPU exactly as Device Manager ▸ Display
-     adapters shows it;
-   - make sure every resolution and refresh rate you'll pick in Glimmer has a
-     `<resolution>` entry. The sample already covers the common Mac panels plus
-     720p, 1080p, 1440p and 4K at 60, 120 and 240 Hz. **Add a block for anything
-     missing.**
-4. **Let Sunshine drive it.** On a current Sunshine, point it at the virtual
-   display and it enables the VDD on stream start, sets it to the resolution
-   Glimmer asked for, and tears it down on disconnect. If your build doesn't do
-   this automatically, add the VDD project's enable and disable scripts to
-   Sunshine's “Command Preparations”: enable as the “Do Command”, disable as the
-   “Undo Command”.
-5. In Glimmer, pick a resolution and refresh rate that exist in the config
-   above.
+The PC display must support the mode. Glimmer requests it; Sunshine selects it.
+Glimmer does not install display drivers.
 
-## Linux: Sunshine dynamic resize
+{% endhint %}
 
-No VDD needed. A current Sunshine resizes the session to the requested mode on
-connect and restores it on disconnect. Make sure the requested modes are
-actually available to the display server:
+## Windows: virtual display
 
-- **X11**: the mode must exist in `xrandr`. Add any custom Mac mode with
-  `xrandr --newmode` plus `--addmode` (or a modeline in your X config) so
-  Sunshine can switch to it.
-- **Wayland**: resize support depends on the compositor; current Sunshine drives
-  it where the compositor exposes mode-setting.
+1. Install
+   [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver).
+2. Adapt [vddsettings.xml](vddsettings.xml) to your driver's schema.
+3. Set `<gpu><friendlyname>` to the GPU name in Device Manager.
+4. Add your resolution and refresh rate.
+5. Save to the driver's documented settings location.
 
-Prefer this over scripting `xrandr` per stream by hand. Letting Sunshine own the
-resize and the restore means a crashed session doesn't strand your desktop at
-the streaming resolution.
+### Switch modes automatically
 
-## The one rule
+1. Select the display in Sunshine's `output_name`.
+2. Enable a suitable
+   [`dd_configuration_option`](https://docs.lizardbyte.dev/projects/sunshine/latest/md_docs_2configuration.html#dd_configuration_option).
+3. Select automatic resolution and refresh rate in Sunshine.
+4. Start a new stream with a matching Glimmer mode.
 
-Whatever Glimmer requests must exist on the PC. Glimmer accepts any
-`640-7680 × 480-4320 @ 30-240`, so if you stream an unusual mode, add it to the
-VDD config (Windows) or the display server's mode list (Linux) first.
+## Linux: switch modes
+
+1. Add the mode to your display system.
+2. Add
+   [Sunshine preparation commands](https://docs.lizardbyte.dev/projects/sunshine/latest/md_docs_2app__examples.html#changing-resolution-and-refresh-rate).
+3. Add an Undo command to restore the previous mode.
+
+{% hint style="info" %}
+
+Sunshine's `dd_` controls are Windows-only and disabled by default. Stopping
+quits the PC app, allowing Undo commands to run.
+
+{% endhint %}
+
+Next: [pair the PC](GETTING_STARTED.md#3-pair-the-pc).

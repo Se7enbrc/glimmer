@@ -8,6 +8,7 @@
 //  handshake, the Wake and Connect signal, and /cancel, all headless.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 

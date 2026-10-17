@@ -8,6 +8,7 @@
 //  parse, how a PC is found, and how results read and exit.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -115,8 +116,8 @@ struct GlimmerCLITests {
                                                   capturedAt: now), now: now).fullLabel
         }
         #expect(status(.idle, rtt: 3) == "Ready · 3 ms")
-        #expect(status(.streamingApp(name: "A Very Long Game Title Indeed")) == "A Very Long Game Title Indeed running")
-        #expect(status(.streamingUnknownApp(id: 9)) == "App running")
+        #expect(status(.streamingApp(name: "A Very Long Game Title Indeed"), rtt: 3) == "Ready · 3 ms")
+        #expect(status(.streamingUnknownApp(id: 9)) == "Ready")
         #expect(status(.asleep, rtt: 9) == "Asleep")
         #expect(status(.certMismatch) == "Trust needed")
         #expect(ChipPresentation(live: nil).fullLabel == "Checking…")

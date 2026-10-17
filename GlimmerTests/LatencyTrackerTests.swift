@@ -6,6 +6,7 @@
 //  Latency histogram buckets, the in-flight frame map, cadence and trace lines.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -86,14 +87,14 @@ struct LatencyTrackerTests {
     // MARK: - In-flight map
 
     @Test func rtpTimestampZeroIsNeverTracked() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         tracker.recordAssembled(rtpTimestamp: 0, frameIndex: 1,
                                 receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
         #expect(tracker.flushRemainingDrops(nowNanos: 100_000_000_000) == 0)
     }
 
     @Test func aPresentedFrameLeavesTheMapSoItIsNeverCountedAsADrop() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         tracker.recordAssembled(rtpTimestamp: 7, frameIndex: 1,
                                 receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
         tracker.recordAssembled(rtpTimestamp: 8, frameIndex: 2,
@@ -104,7 +105,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func reassemblingTheSameTimestampReplacesTheEntryInsteadOfDuplicatingIt() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         for _ in 0..<3 {
             tracker.recordAssembled(rtpTimestamp: 5, frameIndex: 1,
                                     receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
@@ -113,7 +114,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func theMapNeverHoldsMoreThan256FramesAndEvictsTheOldest() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         for index in 0..<300 {
             let nanos = 1_000_000_000 + UInt64(index)
             tracker.recordAssembled(rtpTimestamp: UInt32(index + 1), frameIndex: Int32(index),
@@ -124,7 +125,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func aFrameOlderThanTwoSecondsIsEvictedWhenTheNextOneArrives() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1,
                                 receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
         tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2,
@@ -137,7 +138,7 @@ struct LatencyTrackerTests {
     // MARK: - Cadence
 
     @Test func cadenceObservesTheGapBetweenAssembledFramesAndSkipsStalls() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         for (index, nanos) in [100_000_000, 110_000_000, 120_000_000, 2_000_000_000].enumerated() {
             tracker.recordAssembled(rtpTimestamp: UInt32(index + 1), frameIndex: Int32(index),
                                     receiveNanos: UInt64(nanos), assembleNanos: UInt64(nanos))
@@ -155,7 +156,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func hostFrameIntervalIsReadBackAsWritten() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         #expect(tracker.hostFrameIntervalMs == 0)
         tracker.hostFrameIntervalMs = 8.33
         #expect(tracker.hostFrameIntervalMs == 8.33)
@@ -164,7 +165,7 @@ struct LatencyTrackerTests {
     // MARK: - IDR round trip
 
     @Test func idrRoundTripKeepsOnlyFiniteNonNegativeValues() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         tracker.recordIdrRoundTrip(frameIndex: 1, roundTripMs: 30)
         tracker.recordIdrRoundTrip(frameIndex: 2, roundTripMs: 0)
         tracker.recordIdrRoundTrip(frameIndex: 3, roundTripMs: -1)
@@ -178,7 +179,7 @@ struct LatencyTrackerTests {
     // MARK: - Composites
 
     @Test func glassToGlassAddsHostEncodeHalfTheRttAndThePipeline() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         let counters = TelemetryCounters.shared
         let previous = counters.rttMs
         defer { counters.setRttMs(previous) }
@@ -196,7 +197,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func inputToPhotonIsConsumedOncePerInputAndNeedsALaterPresent() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         let counters = TelemetryCounters.shared
         let previousRtt = counters.rttMs
         defer { counters.setRttMs(previousRtt) }
@@ -217,7 +218,7 @@ struct LatencyTrackerTests {
     // MARK: - Trace lines
 
     @Test func traceLineListsEveryFieldInOrder() {
-        let tracker = FrameTimingTracker(sessionId: "s1")
+        let tracker = FrameTimingTracker(sessionId: "s1", traceDirectory: .temporaryDirectory)
         let line = tracker.renderTraceLine(FrameTimingTracker.TraceRecord(
             frameIndex: 12, rtpTimestamp: 900, frameBytes: 4096, isIDR: true,
             presentUptimeMs: 1234.5, isResumePresent: true,
@@ -230,7 +231,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func traceLineOmitsMissingStagesZeroBytesAndNonFiniteValues() throws {
-        let tracker = FrameTimingTracker(sessionId: "s1")
+        let tracker = FrameTimingTracker(sessionId: "s1", traceDirectory: .temporaryDirectory)
         let line = tracker.renderTraceLine(FrameTimingTracker.TraceRecord(
             frameIndex: 3, rtpTimestamp: 5, frameBytes: 0, isIDR: false,
             presentUptimeMs: 10, isResumePresent: false,
@@ -243,7 +244,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func dropStubNamesTheFurthestStageTheFrameReached() {
-        let tracker = FrameTimingTracker(sessionId: "s1")
+        let tracker = FrameTimingTracker(sessionId: "s1", traceDirectory: .temporaryDirectory)
         func timing(submit: UInt64, output: UInt64, idr: Bool) -> FrameTimingTracker.Timing {
             var timing = FrameTimingTracker.Timing(
                 frameIndex: 4, receiveNanos: 1, assembleNanos: 2_000_000, frameBytes: 0,
@@ -266,7 +267,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func bookmarkLineCarriesTheRunningTotalAndTheClock() {
-        let tracker = FrameTimingTracker(sessionId: "s1")
+        let tracker = FrameTimingTracker(sessionId: "s1", traceDirectory: .temporaryDirectory)
         #expect(tracker.bookmarkLine(total: 3, uptimeNanos: 1_500_000_000)
             == "{\"session\":\"s1\",\"event\":\"bookmark\",\"bookmark_total\":3,\"t_ms\":1500}")
     }

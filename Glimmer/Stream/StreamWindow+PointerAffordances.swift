@@ -63,7 +63,15 @@ extension StreamWindow {
     /// once per person, not once per launch.
     func showCaptureHintIfBudgetAllows() {
         guard HintBudget.windowCapture.claimShow() else { return }
-        captureHintBanner.setText("Hold Esc to free the pointer")
+        showPointerHint("Hold Esc to free the pointer")
+    }
+
+    func showPointerModeHint(captured: Bool) {
+        showPointerHint(captured ? "Pointer captured" : "Pointer follows the picture")
+    }
+
+    private func showPointerHint(_ text: String) {
+        captureHintBanner.setText(text)
         captureHintBanner.setVisible(true)
         // ~4s all in: 0.2s fade in, 3.6s legible, 0.2s fade out. The
         // generation stamp means a re-capture inside that window re-shows the
@@ -81,5 +89,21 @@ extension StreamWindow {
     func hideCaptureHint() {
         captureHintGeneration &+= 1
         captureHintBanner.setVisible(false)
+    }
+
+    func showControllerMouseMode(_ message: String) {
+        showStreamToast(message, for: 2)
+    }
+
+    // Mode changes replace the teaching toast so transient messages occupy one place.
+    func showStreamToast(_ text: String, for duration: TimeInterval) {
+        leaveHintBanner.setText(text)
+        leaveHintBanner.setVisible(true)
+        streamToastGeneration &+= 1
+        let generation = streamToastGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self, self.streamToastGeneration == generation else { return }
+            self.leaveHintBanner.setVisible(false)
+        }
     }
 }

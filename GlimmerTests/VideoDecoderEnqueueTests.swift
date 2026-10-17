@@ -8,6 +8,7 @@
 //  and what VideoToolbox's output callback does with success and failure.
 //
 
+@testable import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import CoreVideo
@@ -40,13 +41,13 @@ struct VideoDecoderEnqueueTests {
         return unsafeDowncast(value, to: CGColorSpace.self).name
     }
 
-    /// A PQ frame mis-tagged BT.709 is retagged end to end, so macOS engages display HDR.
-    @Test func hdrFrameIsRetaggedAndCarriesThePCsMetadata() throws {
+    /// Untagged Main10 can use the control signal when no colour attribute contradicts it.
+    @Test func untaggedHDRCarriesThePCsMetadata() throws {
         let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265_MAIN10, hostHDR: true)
         defer { decoder.teardown() }
         let metadata = HDRMetadata(mdcv: Data(repeating: 7, count: 24), contentLightLevel: Data([1, 2, 3, 4]))
         decoder.hdrMetadataStore.publish(metadata)
-        let buffer = try makeTaggedPixelBuffer(primaries: kCVImageBufferColorPrimaries_ITU_R_709_2)
+        let buffer = try makeTaggedPixelBuffer()
         CVBufferSetAttachment(buffer, kCVImageBufferPixelAspectRatioKey,
                               [kCVImageBufferPixelAspectRatioHorizontalSpacingKey: 4] as CFDictionary, .shouldPropagate)
 
@@ -62,23 +63,25 @@ struct VideoDecoderEnqueueTests {
                 == metadata.mdcv)
         #expect(CVBufferCopyAttachment(buffer, kCVImageBufferContentLightLevelInfoKey, nil) as? Data
                 == metadata.contentLightLevel)
-        #expect(decoder.lastColorSpaceKey == "itur_2100_PQ")
-        #expect(decoder.didLogFirstPixelBufferProbe)
+        #expect(decoder.resolvedColor.withLock { $0?.isHDR } == true)
+        #expect(decoder.colorProbeState.withLock { $0 != nil })
         #expect(decoder.secondsSinceLastPresentedFrame() < 60)
     }
 
-    /// Untagged 10-bit SDR is BT.2020: primaries and matrix follow, the transfer is left alone.
-    @Test func untaggedTenBitSDRGetsBT2020WithoutPQ() throws {
+    /// Ten bits alone do not imply either BT.2020 primaries or HDR.
+    @Test func untaggedTenBitSDRGetsRec709WithoutPQ() throws {
         let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_AV1_MAIN10)
         defer { decoder.teardown() }
         let buffer = try makeTaggedPixelBuffer()
 
         decoder.enqueueDecodedFrame(buffer, hostPTS: pts)
 
-        #expect(colorSpaceName(buffer) == CGColorSpace.itur_2020)
-        #expect(attachment(buffer, kCVImageBufferColorPrimariesKey) == kCVImageBufferColorPrimaries_ITU_R_2020 as String)
-        #expect(attachment(buffer, kCVImageBufferYCbCrMatrixKey) == kCVImageBufferYCbCrMatrix_ITU_R_2020 as String)
-        #expect(attachment(buffer, kCVImageBufferTransferFunctionKey) == nil)
+        #expect(colorSpaceName(buffer) == CGColorSpace.coreMedia709)
+        #expect(attachment(buffer, kCVImageBufferColorPrimariesKey)
+                == kCVImageBufferColorPrimaries_ITU_R_709_2 as String)
+        #expect(attachment(buffer, kCVImageBufferYCbCrMatrixKey) == kCVImageBufferYCbCrMatrix_ITU_R_709_2 as String)
+        #expect(attachment(buffer, kCVImageBufferTransferFunctionKey)
+                == kCVImageBufferTransferFunction_ITU_R_709_2 as String)
         #expect(CVBufferCopyAttachment(buffer, kCVImageBufferMasteringDisplayColorVolumeKey, nil) == nil)
     }
 
@@ -92,10 +95,11 @@ struct VideoDecoderEnqueueTests {
 
         decoder.enqueueDecodedFrame(buffer, hostPTS: pts)
 
-        #expect(colorSpaceName(buffer) == CGColorSpace.itur_709)
-        #expect(attachment(buffer, kCVImageBufferColorPrimariesKey) == kCVImageBufferColorPrimaries_ITU_R_709_2 as String)
+        #expect(colorSpaceName(buffer) == CGColorSpace.coreMedia709)
+        #expect(attachment(buffer, kCVImageBufferColorPrimariesKey)
+                == kCVImageBufferColorPrimaries_ITU_R_709_2 as String)
         #expect(attachment(buffer, kCVImageBufferTransferFunctionKey) == kCVImageBufferTransferFunction_ITU_R_709_2 as String)
-        #expect(attachment(buffer, kCVImageBufferYCbCrMatrixKey) == nil)
+        #expect(attachment(buffer, kCVImageBufferYCbCrMatrixKey) == kCVImageBufferYCbCrMatrix_ITU_R_709_2 as String)
     }
 
     /// Same-shaped frames reuse one format description; a resolution change builds a new one.

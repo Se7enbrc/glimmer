@@ -9,6 +9,7 @@
 //  trims fire, persists a window mean, and remembers skew per output device.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -75,6 +76,7 @@ struct AudioResamplerHoldTests {
         decoder.resamplerQuietTicks = 199
         decoder.audioMeterLock.unlock()
         decoder.driveResampler(fillMs: 100, targetMs: 100, engaged: true)
+        AudioDiagnostics.queue.sync {}
         let expectedMean = (-100 * 199 - 450) / 200.0
         #expect(abs(AudioDecoder.loadResamplerSkewSeed(key: key) - expectedMean) < 0.1)
     }

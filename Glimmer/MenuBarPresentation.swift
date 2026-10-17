@@ -9,6 +9,7 @@
 //  every rule has a unit test.
 //
 
+import GlimmerEngine
 import Foundation
 
 enum MenuBarIconState: Equatable {
@@ -48,10 +49,13 @@ enum MenuBarPrimaryAction: Equatable {
 }
 
 /// One pad in the Controller card; a nil percent is a pad with no reading.
-struct MenuBarController: Equatable {
+struct MenuBarController: Equatable, Identifiable {
     let name: String
     let percent: Int?
     let charging: Bool
+    var sourceID: String?
+
+    var id: String { sourceID ?? name }
 
     var status: String {
         guard let percent else { return "Connected" }

@@ -19,6 +19,7 @@
 //  because `detach()` and `setReady(_:)` write it from this file.
 //
 
+import GlimmerEngine
 import AppKit
 
 extension InputForwarder {
@@ -36,6 +37,7 @@ extension InputForwarder {
     /// at the correct moment.
     public func attach(to window: NSWindow) {
         self.window = window
+        installInputRecoveryObservers()
 
         // Wrap (or replace) the existing contentView with a StreamInputView so
         // we can intercept events at the responder level. We keep the old
@@ -46,6 +48,10 @@ extension InputForwarder {
         view.translatesAutoresizingMaskIntoConstraints = true
         view.autoresizingMask = [.width, .height]
         view.delegate = self
+        view.onResignFirstResponder = { [weak self] in
+            self?.inputOwnershipLost(reason: "first responder lost", includingControllers: false)
+        }
+        view.onBecomeFirstResponder = { [weak self] in self?.reconcilePhysicalInputs() }
 
         if let existing = window.contentView {
             // Re-parent the existing contentView (which hosts the Metal layer)
@@ -90,7 +96,8 @@ extension InputForwarder {
         }
         let ok = window.makeFirstResponder(view)
         let responder = String(describing: window.firstResponder)
-        log.info("makeFirstResponder(StreamInputView) returned \(ok, privacy: .public); first responder = \(responder, privacy: .public)")
+        let detail = "makeFirstResponder(StreamInputView) returned \(ok); first responder = \(responder)"
+        log.info("\(detail, privacy: .public)")
 
         // Engage captured mouse mode + gesture suppression now that the
         // window is the input target. We track key/resignKey transitions
@@ -100,7 +107,8 @@ extension InputForwarder {
         installFocusObservers(for: window)
         installGestureSuppressionMonitor()
         installCommandKeyUpMonitor()
-        if window.isKeyWindow, !isWindowMode {
+        updateSystemKeyCapture()
+        if window.isKeyWindow, !isWindowMode, fullscreenRelativePointer {
             enterCapturedMode()
         }
         // Window mode grabs the pointer by hover, and the bring-up made the
@@ -109,6 +117,9 @@ extension InputForwarder {
         // under a stationary pointer would otherwise stay ungrabbed until it
         // moved. Inert in full screen and when the pointer is elsewhere.
         captureIfPointerIsOverTheStreamView(reason: "stream window opened under the pointer")
+        reconcilePhysicalInputs()
+        // The window became key before these observers existed; publish capture ownership now.
+        resyncControllers()
     }
 
     public func detach() {
@@ -118,7 +129,7 @@ extension InputForwarder {
         isMiniPlayer = false
         // Raise every held key/button/modifier so a mid-press teardown can't
         // leave the host with phantom-held input.
-        raiseAllHeldInputs(reason: "stream teardown")
+        inputOwnershipLost(reason: "stream teardown")
 
         // Disengage relative-aim mode + remove gesture defaults.
         // `exitCapturedMode()` RE-ASSOCIATES the cursor
@@ -129,6 +140,7 @@ extension InputForwarder {
         // via `setCursorHidden(false)`, so the user is never left with an
         // invisible cursor after teardown.
         exitCapturedMode()
+        GlobalHotKeys.setDisabled(false)
         // An Esc hold can be mid-dwell at teardown. No-op in full screen,
         // where nothing ever arms it.
         cancelEscapeHold()
@@ -140,10 +152,14 @@ extension InputForwarder {
         removeCommandKeyUpMonitor()
         removeDiagnosticMonitors()
         removeFocusObservers()
+        removeInputRecoveryObservers()
+        reconciliationTimer?.invalidate()
+        reconciliationTimer = nil
 
         // The view survives in the closing window during its fade. Stop late
         // cursor updates from selecting its transparent image after teardown.
         inputView?.setTransparentCursorEnabled(false)
+        if let inputView, inputView.hasMarkedText() { inputView.cancelComposition() }
         inputView?.delegate = nil
         inputView = nil
         window = nil
@@ -166,21 +182,34 @@ extension InputForwarder {
     /// callback fires. Inputs queued before this point are dropped (the C
     /// queue is closed and would just return -2).
     public func setReady(_ ready: Bool) {
+        defer { publishInputSnapshot() }
+        inputCore.lock.lock(); defer { inputCore.lock.unlock() }
         let was = isReady
-        if !ready { releaseControllerTouches() }
+        if !ready {
+            releaseControllerTouches()
+            suspendControllerMouse()
+            if let inputView, inputView.hasMarkedText() { inputView.cancelComposition() }
+        }
         isReady = ready
+        if !ready {
+            inputOwnershipLost(reason: "connection lost")
+            releases.releaseAll(connectionLost: true)
+            updateReconciliationTimer()
+        }
         updateControllerBackgroundEvents()
         if ready != was {
             log.info("Input forwarding ready=\(ready, privacy: .public)")
             if ready {
                 initialConnectPending = false
-                // A new session starts with nothing held on the PC, and a key
-                // released during the gap never sent its up: release it all.
+                controllersNeedAnnouncement = true
+                // The release barrier precedes controller arrivals and renewed physical input.
                 raiseAllHeldInputs(reason: "reconnect")
+                reconcilePhysicalInputs()
                 lastCapsLock = NSEvent.modifierFlags.contains(.capsLock)
-                announceControllers()
+                flushPendingReleases()
                 installDiagnosticMonitors()
             } else {
+                controllersNeedAnnouncement = false
                 cancelQuitChordDwell(reason: "connection lost")
                 removeDiagnosticMonitors()
             }

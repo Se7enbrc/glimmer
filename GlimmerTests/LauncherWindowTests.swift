@@ -8,6 +8,7 @@
 //  chip's running wording, and the takeover dialog's title.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import SwiftUI
 import Testing
@@ -92,36 +93,16 @@ struct ConnectBannerActionTests {
     }
 }
 
-struct ReadinessChipRunningLabelTests {
-
-    @Test func appRunningReplacesTheSomeoneElseStreamingWording() {
-        let chip = ChipPresentation.streamingElsewhere(appName: "Helldivers 2")
-        #expect(chip.label == "Helldivers 2 running")
-        #expect(chip.accessibility == "Helldivers 2 is running on this PC")
-    }
-
-    @Test func runningColorIsNeutralNotBlue() {
-        #expect(ChipPresentation.streamingElsewhere(appName: "x").dotColor == Color.secondary)
-    }
-
-    @Test func longNameStillTruncatesInsideTheRunningLabel() {
-        // The chip must stay narrow: truncate to 14 chars (with an ellipsis)
-        // before appending " running", not after - the old code truncated
-        // the same way ahead of its "Streaming " prefix.
-        let chip = ChipPresentation.streamingElsewhere(appName: "A Very Long Game Title Indeed")
-        #expect(chip.label == "A Very Long G… running")
-    }
-
-    @Test func certMismatchIsUnaffectedByTheRunningRewording() {
-        #expect(ChipPresentation.certMismatch.label == "Trust needed")
-        #expect(ChipPresentation.certMismatch.accessibility == ChipPresentation.certMismatch.label)
-        #expect(ChipPresentation.certMismatch.dotColor == Color.orange)
-    }
-
-    @Test func appMissingFromTheCachedListReadsInSentenceCase() {
-        let chip = ChipPresentation.streamingElsewhere(appName: nil)
-        #expect(chip.label == "App running")
-        #expect(chip.accessibility == "An app is running on this PC")
+struct ReadinessChipReadyTests {
+    @Test(arguments: [HostLiveStatus.State.idle, .streamingApp(name: "Helldivers 2"),
+                      .streamingUnknownApp(id: 7)])
+    func reachablePCAlwaysShowsReadyAndLatency(state: HostLiveStatus.State) {
+        let live = HostLiveStatus(hostID: "pc", state: state, rttMs: 12, capturedAt: Date())
+        let chip = ChipPresentation(live: live)
+        #expect(chip == .ready(rttMs: 12))
+        #expect(chip.label == "Ready · 12 ms")
+        #expect(chip.accessibility == "PC ready, round trip 12 milliseconds")
+        #expect(chip.dotColor == Color.green)
     }
 }
 

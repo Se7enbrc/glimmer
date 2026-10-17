@@ -9,6 +9,7 @@
 //  TroubleshootingPane.swift.
 //
 
+import GlimmerEngine
 import AppKit
 import Combine
 import SwiftUI

@@ -10,6 +10,7 @@
 //  that file for the forwarder's stored state.
 //
 
+import GlimmerEngine
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
@@ -32,7 +33,8 @@ extension InputForwarder {
             object: window, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                if self?.isWindowMode == false {
+                self?.updateSystemKeyCapture()
+                if self?.isWindowMode == false, self?.fullscreenRelativePointer == true {
                     self?.enterCapturedMode()
                 }
                 // Window mode grabs on hover, and a Cmd-Tab back moves no
@@ -46,6 +48,7 @@ extension InputForwarder {
                 // GCController's value-changed handler doesn't re-fire for an
                 // input held across the focus loss, so without this a stick
                 // held while Cmd-Tabbing back reads as centered until nudged.
+                self?.reconcilePhysicalInputs()
                 self?.resyncControllers()
             }
         }
@@ -60,7 +63,9 @@ extension InputForwarder {
     }
 
     func windowResignedKey() {
+        GlobalHotKeys.setDisabled(false)
         inputGeneration &+= 1
+        if let inputView, inputView.hasMarkedText() { inputView.cancelComposition() }
         // The physical key-up goes to the newly focused app, so release held
         // input here. Esc's key-up may be lost too, making its timer unsafe.
         raiseAllHeldInputs(reason: "focus loss")
@@ -86,8 +91,7 @@ extension InputForwarder {
         guard !isMouseCaptured, let window, let inputView,
               inputView.window === window, window.isKeyWindow,
               !window.ignoresMouseEvents else { return }
-        mouseResidualX = 0
-        mouseResidualY = 0
+        inputCore.resetPointerMotion()
         // Reset the Cruise inter-batch clock AND the windowed-velocity accums
         // so the first post-focus motion reads a stale dt (>0.1s) and forces
         // gain==1.0 - never a spurious or carried-over boost on resume.
@@ -113,13 +117,13 @@ extension InputForwarder {
             }
         }
         isMouseCaptured = true
-        if captureSysKeys { GlobalHotKeys.setDisabled(true) }
+        updateSystemKeyCapture()
+        if inputView.hasMarkedText() { inputView.cancelComposition() }
         log.info("""
             Mouse capture: relative aim engaged (associate-false; coalescing off; \
             cursor disassociated, visibility owned by StreamWindow)
             """)
-        // Window mode only: report the edge so the window hides the cursor.
-        if isWindowMode { onPointerCaptureChanged?(true) }
+        onPointerCaptureChanged?(true)
     }
 
     /// Restore cursor association and the settings capture changed on focus loss
@@ -127,12 +131,11 @@ extension InputForwarder {
     func exitCapturedMode() {
         guard isMouseCaptured else { return }
         isMouseCaptured = false
+        if isWindowMode { updateSystemKeyCapture() }
         inputView?.resumeMotion()
-        releaseCommandSides()
         // Re-associate: hand cursor control back to the OS so the pointer tracks
         // the device again wherever the user goes after leaving the stream.
         CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
-        GlobalHotKeys.setDisabled(false)
         // Restore the system's prior mouse-coalescing setting (the `true` that
         // pairs with the `false` from enterCapturedMode) so we don't leak our
         // override into other apps after the stream ends. Clear the saved value
@@ -152,8 +155,7 @@ extension InputForwarder {
             Mouse capture: relative aim disengaged (associate-true; coalescing restored; \
             cursor re-associated, visibility owned by StreamWindow)
             """)
-        // Window mode only: report the edge so the window shows the cursor.
-        if isWindowMode { onPointerCaptureChanged?(false) }
+        onPointerCaptureChanged?(false)
     }
 
     func installGestureSuppressionMonitor() {

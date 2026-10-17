@@ -1,120 +1,143 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TroubleshootingPane.swift
-//
-//  Hosts the opt-in raw-HID DualSense control (RawHIDControl), used by
-//  Settings → Input. The Troubleshooting PANE that used to live here - the
-//  controller input test + the log viewer - folded into the always-visible part
-//  of Settings → Diagnostics (one pane instead of two thin ones; the input test
-//  and logs stay reachable by everyone, the telemetry/tuning sections reveal via
-//  the About option-click). Only this shared control remains here; the file name
-//  is kept to avoid an Xcode project-file edit.
-//
+// The Input Monitoring flow is shared by every controller path.
 
 import AppKit
 import Combine
 import SwiftUI
 
-// Module-internal (was private) so Settings → Input can host it alongside the
-// mouse + controller-quit settings.
-/// Opt-in control for the raw-HID DualSense reader. Off by default; turning it
-/// on shows a plain-language explanation BEFORE macOS's "Input Monitoring"
-/// prompt, so that scary system dialog is never a surprise.
+/// Opt-in control for the raw-HID DualSense reader. Turning it on explains the
+/// permission before macOS's Input Monitoring prompt, so that dialog is never a surprise.
 struct RawHIDControl: View {
     @Environment(AppModel.self) private var model
     @State private var showExplain = false
-    /// "Working" = reports are actually arriving. The TCC check
-    /// (IOHIDCheckAccess) can read not-granted even while reports flow, which
-    /// made this say "waiting for permission" when input was clearly working.
-    /// Polled into @State by a timer (NOT a TimelineView wrapping the buttons -
-    /// that recreated the Buttons + their accessibility modifiers every second
-    /// and triggered a SwiftUI view-graph use-after-free). With @State the
-    /// buttons are stable; the view only re-renders when `working` flips.
+    /// Working means reports arrive or macOS says granted; the check alone can lag a grant.
+    /// Polled into @State, not a TimelineView: rebuilding the buttons each tick crashed SwiftUI.
     @State private var working = false
+    @State private var access = InputMonitoring.state
     private let poll = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var currentlyWorking: Bool {
-        DualSenseHID.shared.reportCount > 0 || DualSenseHID.accessGranted
+        DualSenseHID.shared.reportCount > 0 || access == .granted
     }
 
     var body: some View {
         if model.rawHIDControllerEnabled {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Label(working ? "On" : "On, waiting for permission",
-                          systemImage: working ? "checkmark.circle.fill" : "hourglass")
+                    Label(working ? "On" : "On, needs Input Monitoring",
+                          systemImage: working ? "checkmark.circle.fill" : "hand.raised.fill")
                         .foregroundStyle(working ? .green : .secondary)
                     Spacer()
+                    if !working {
+                        Button(InputMonitoring.actionTitle(access)) { InputMonitoring.ask() }
+                            .buttonStyle(.borderedProminent)
+                    }
                     Button("Turn Off") { model.rawHIDControllerEnabled = false }
                 }
-                if !working { permissionCard }
+                if !working {
+                    Text(InputMonitoring.guidance(access))
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .onAppear { working = currentlyWorking }
-            .onReceive(poll) { _ in working = currentlyWorking }
+            .onAppear { refresh() }
+            .onReceive(poll) { _ in refresh() }
         } else {
             Button("Turn On…") { showExplain = true }
                 .alert("Turn on Extra DualSense buttons?", isPresented: $showExplain) {
-                    Button("Turn On") { enable() }
+                    Button(InputMonitoring.state == .denied ? "Open System Settings" : "Turn On") { enable() }
                     Button("Cancel", role: .cancel) {}
                 } message: {
-                    Text(AppModel.rawHIDExplanation)
+                    Text(AppModel.rawHIDExplanation(InputMonitoring.state))
                 }
         }
     }
 
-    /// Friendly "you're one toggle away" card. We don't try to programmatically
-    /// re-request (it silently no-ops once macOS has a stale/denied entry -
-    /// common with unsigned dev builds); we just hand the user straight to the
-    /// right System Settings pane.
-    private var permissionCard: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "gamecontroller")
-                .font(.title3).foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Turn on Input Monitoring").fontWeight(.medium)
-                Text("Turn on Glimmer in System Settings › Privacy & Security › Input Monitoring, "
-                    + "then choose Quit & Reopen when macOS asks.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Open Settings") { Self.registerAndOpen() }
-                .buttonStyle(.borderedProminent)
-        }
-        .padding(12)
-        .background(.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    private func refresh() {
+        access = InputMonitoring.state
+        working = currentlyWorking
     }
 
     private func enable() {
         model.rawHIDControllerEnabled = true
-        // For a never-asked user this prompts and grants; for a denied/stale
-        // entry it no-ops, so the permission card guides them to System Settings.
-        if !DualSenseHID.accessGranted { Self.registerAndOpen() }
+        InputMonitoring.ask()
+    }
+}
+
+/// Input Monitoring, asked one way everywhere. The system prompt only appears while macOS
+/// has no answer, and it carries its own Open System Settings button, so Glimmer opens
+/// System Settings itself only once there is an answer to change.
+enum InputMonitoring {
+    enum State: Equatable { case granted, denied, unknown }
+
+    static var state: State {
+        switch IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) {
+        case kIOHIDAccessTypeGranted: .granted
+        case kIOHIDAccessTypeDenied: .denied
+        default: .unknown
+        }
     }
 
-    /// IOHIDRequestAccess is the ONLY call that adds Glimmer to the Input
-    /// Monitoring list (IOHIDCheckAccess never registers it - confirmed via
-    /// OpenEmu/Karabiner). It also prompts when state is unknown. We then
-    /// deep-link so the user can flip the toggle if it's still off.
-    ///
-    /// `IOHIDRequestAccess` is SYNCHRONOUS and blocks the calling thread for
-    /// ~2s while it presents/resolves the TCC prompt, so we run it off the main
-    /// thread and only hop back to main to open System Settings. This is the
-    /// ONE sanctioned entry point for the permission request + Settings deep
-    /// link - it fires only from this explicit "Open Settings" button, never
-    /// automatically on controller connect.
-    static func registerAndOpen() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let granted = DualSenseHID.requestAccess()
-            // A grant re-opens a running reader; only the manual path needs a relaunch.
-            DispatchQueue.main.async {
-                if granted { DualSenseHID.shared.reopen() } else { openInputMonitoring() }
+    static func actionTitle(_ state: State) -> String {
+        state == .denied ? "Open System Settings" : "Continue"
+    }
+
+    /// A row that is on but still denied is also how a stale entry looks; removing it
+    /// lets the next Continue register this copy of Glimmer again.
+    static func guidance(_ state: State) -> String {
+        state == .denied
+            ? "Turn on Glimmer in Privacy & Security › Input Monitoring. If it's already on, "
+                + "select it, remove it with the minus button, then come back and choose Continue."
+            : "macOS asks once. Glimmer reads only the controller, never the keyboard."
+    }
+
+    enum Step: Equatable { case reopenReaders, openSettings, systemPrompt }
+
+    /// Never System Settings while macOS can still prompt: it would cover the prompt.
+    static func step(for state: State) -> Step {
+        switch state {
+        case .granted: .reopenReaders
+        case .denied: .openSettings
+        case .unknown: .systemPrompt
+        }
+    }
+
+    /// The request blocks its thread while the prompt is up, so it never runs on main.
+    @MainActor static func ask(
+        access: State? = nil,
+        reopen: @escaping @MainActor @Sendable () -> Void = { reopenReaders() },
+        settings: @MainActor () -> Void = { openSettings() },
+        request: @escaping @Sendable () -> Bool = { IOHIDRequestAccess(kIOHIDRequestTypeListenEvent) }
+    ) {
+        switch step(for: access ?? state) {
+        case .reopenReaders: reopen()
+        case .openSettings: settings()
+        case .systemPrompt:
+            DispatchQueue.global(qos: .userInitiated).async {
+                let granted = request()
+                if granted { DispatchQueue.main.async { reopen() } }
             }
         }
     }
 
-    @MainActor static func openInputMonitoring() {
+    /// Readers opened before the grant see nothing until reopened.
+    @MainActor static func reopenReaders() {
+        DualSenseHID.shared.reopen()
+        HIDGamepadManager.shared.reopenAll()
+    }
+
+    @MainActor private static var lastSeen = state
+
+    /// On return to Glimmer, a grant made in System Settings takes effect without a relaunch.
+    @MainActor static func noticeReturn(access: State? = nil, reopen: () -> Void = { reopenReaders() }) {
+        let now = access ?? state
+        defer { lastSeen = now }
+        if now == .granted, lastSeen != .granted { reopen() }
+    }
+
+    @MainActor static func openSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
             NSWorkspace.shared.open(url)
         }

@@ -41,6 +41,7 @@
 //                            receipt, gates ≥ 5 min, writes the blob.
 //
 
+import GlimmerEngine
 import Foundation
 import os
 
@@ -140,16 +141,9 @@ enum SessionReceiptStore {
     /// Capture the always-live end-of-session numbers. Called from
     /// `StreamSession.stop()` (the one engine-side hook) BEFORE the backend
     /// tears down - `estimatedRtt()` dies with the connection, and the
-    /// collector resets on the next session. `receivedBytes` has no accessor
-    /// of its own, so we take the same unfair lock the collector's own
-    /// accessors take - a one-shot read at the teardown edge, never hot path.
+    /// collector resets on the next session.
     static func captureStreamEnd(rttMs: Double?, collector: StatsCollector?, at now: Date = Date()) {
-        var videoBytes: UInt64?
-        if let collector {
-            collector.lock.lock()
-            videoBytes = collector.receivedBytes
-            collector.lock.unlock()
-        }
+        let videoBytes = collector?.receivedBytesSnapshot()
         lock.lock()
         endRttMs = rttMs
         endVideoBytes = videoBytes

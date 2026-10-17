@@ -8,6 +8,7 @@
 //  app. Each one runs the launcher's own entry points, not a copy of them.
 //
 
+import GlimmerEngine
 import AppIntents
 import Foundation
 import Observation
@@ -154,10 +155,27 @@ struct QuitAppOnPCIntent: AppIntent {
     }
 }
 
+struct StopStreamingIntent: AppIntent {
+    static let title: LocalizedStringResource = "Stop Streaming"
+    static let description = IntentDescription("Stops this Mac's stream and quits its app on the PC.")
+
+    @MainActor func perform() async throws -> some IntentResult {
+        try await Self.stop(model: AppModel.forIntent())
+        return .result()
+    }
+
+    @MainActor static func stop(model: AppModel) async throws {
+        let result = await model.stopActiveStream(source: "Shortcuts")
+        guard result == .stopped else { throw PCIntentError.failed(result.message) }
+    }
+}
+
 struct GlimmerShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: StreamIntent(), phrases: ["Stream \(\.$pc) in \(.applicationName)"],
                     shortTitle: "Stream from PC", systemImageName: "play.fill")
+        AppShortcut(intent: StopStreamingIntent(), phrases: ["Stop streaming in \(.applicationName)"],
+                    shortTitle: "Stop Streaming", systemImageName: "stop.fill")
         AppShortcut(intent: WakePCIntent(), phrases: ["Wake \(\.$pc) with \(.applicationName)"],
                     shortTitle: "Wake PC", systemImageName: "power")
     }

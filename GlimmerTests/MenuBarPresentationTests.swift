@@ -8,12 +8,20 @@
 //  readings are worded.
 //
 
+import GlimmerEngine
 import Accessibility
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct MenuBarPresentationTests {
+    @Test func controllerIdentitySurvivesBatteryChangesAndDistinguishesMatchingNames() {
+        let first = MenuBarController(name: "Controller", percent: 80, charging: false, sourceID: "gc:one")
+        let refreshed = MenuBarController(name: "Controller", percent: 79, charging: true, sourceID: "gc:one")
+        let second = MenuBarController(name: "Controller", percent: 80, charging: false, sourceID: "gc:two")
+        #expect(first.id == refreshed.id)
+        #expect(first.id != second.id)
+    }
 
     @Test func iconFollowsThePhaseAndAttentionWins() {
         #expect(MenuBarPresentation.icon(phase: .idle, reconnecting: false, error: nil) == .idle)
@@ -47,7 +55,7 @@ struct MenuBarPresentationTests {
         #expect(action(chip: .asleep, waking: true) == .waking)
         #expect(action(chip: .certMismatch) == .pairAgain)
         #expect(action(.error("x"), chip: .certMismatch) == .pairAgain)
-        #expect(action(chip: .streamingElsewhere(appName: "Elden Ring")) == .stream(app: "Desktop"))
+        #expect(action(chip: .ready(rttMs: nil)) == .stream(app: "Desktop"))
         #expect(action(.streaming) == .backToStream)
     }
 
@@ -76,8 +84,8 @@ struct MenuBarPresentationTests {
                                                   capturedAt: now.addingTimeInterval(-age)), now: now)
         }
         #expect(chip(.idle) == .ready(rttMs: 4))
-        #expect(chip(.streamingApp(name: "Elden Ring")) == .streamingElsewhere(appName: "Elden Ring"))
-        #expect(chip(.streamingUnknownApp(id: 9)) == .streamingElsewhere(appName: nil))
+        #expect(chip(.streamingApp(name: "Elden Ring")) == .ready(rttMs: 4))
+        #expect(chip(.streamingUnknownApp(id: 9)) == .ready(rttMs: 4))
         #expect(chip(.certMismatch) == .certMismatch)
         #expect(chip(.asleep) == .asleep)
         #expect(chip(.asleep, age: HostLiveStatus.stale + 1) == .unknown)

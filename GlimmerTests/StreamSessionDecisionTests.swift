@@ -8,6 +8,7 @@
 //  gate, the backend config mapping and the attempt guard, on a fake backend.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -21,7 +22,7 @@ struct PresentRecoveryLadderTests {
         StreamSession.presentTripLastClearedAt = .nan
         let decoder = VideoDecoder()
         decoder.backend = recorder
-        return (StreamSession(backend: recorder), decoder)
+        return (StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder), decoder)
     }
 
     private func trip(
@@ -172,12 +173,30 @@ struct SessionConnectMappingTests {
         gcmKeyId: Data([1, 2, 3, 4]))
     private let server = ServerInfo(address: "192.0.2.1", uniqueId: "pc", serverName: "Den PC")
 
+    @Test(arguments: [StreamProtocol.VIDEO_FORMAT_H264, StreamProtocol.VIDEO_FORMAT_H265,
+                      StreamProtocol.VIDEO_FORMAT_H265_MAIN10, StreamProtocol.VIDEO_FORMAT_AV1_MAIN8,
+                      StreamProtocol.VIDEO_FORMAT_AV1_MAIN10])
+    func rec709FullReachesTheBackendAndSDP(_ format: Int32) async throws {
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
+        var config = StreamConfig(width: 1920, height: 1080, fps: 60, bitrateKbps: 20_000)
+        config.remoteness = .local
+        let backend = await session.makeBackendConfig(config: config.request, launch: launch, server: server)
+        #expect(backend.colorSpace == 1 && backend.colorRange == 1)
+        let builder = SdpBuilder(config: backend, videoPort: 47998, urlSafeAddr: "192.0.2.1",
+                                 addrFamilyToken: "IPv4", negotiatedVideoFormat: format,
+                                 encryptionFeaturesEnabled: 0)
+        let sdp = try #require(String(data: builder.build(), encoding: .utf8))
+        #expect(sdp.contains("a=x-nv-video[0].encoderCscMode:3 \r\n"))
+        let depth = format & StreamProtocol.VIDEO_FORMAT_MASK_10BIT != 0 ? 1 : 0
+        #expect(sdp.contains("a=x-nv-video[0].dynamicRangeMode:\(depth) \r\n"))
+    }
+
     /// An explicit route is honoured without a probe, and re-latched on every build.
     @Test func explicitRouteSetsPacketSizeAndTheDownshiftTier() async {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         var config = StreamConfig(width: 2560, height: 1440, fps: 120, bitrateKbps: 80_000)
         config.remoteness = .remote
-        let remote = await session.makeBackendConfig(config: config, launch: launch, server: server)
+        let remote = await session.makeBackendConfig(config: config.request, launch: launch, server: server)
         #expect(remote.packetSize == Int32(StreamPathMTU.remotePacketSize))
         #expect(remote.streamingRemotely == StreamProtocol.STREAM_CFG_REMOTE)
         #expect(remote.bitrate == 80_000)
@@ -188,14 +207,14 @@ struct SessionConnectMappingTests {
         #expect(await session.isRemotePathSession)
 
         config.remoteness = .local
-        let local = await session.makeBackendConfig(config: config, launch: launch, server: server)
+        let local = await session.makeBackendConfig(config: config.request, launch: launch, server: server)
         #expect(local.packetSize == 1392)
         #expect(local.streamingRemotely == StreamProtocol.STREAM_CFG_LOCAL)
         #expect(await !session.isRemotePathSession)
     }
 
     @Test func attemptsStopWhenNotStreamingOrPastTheDeadline() async throws {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         await #expect(throws: CancellationError.self) { try await session.checkAttempt() }
         await session.markStreamingForAttemptTest()
         try await session.checkAttempt(deadline: .distantFuture)

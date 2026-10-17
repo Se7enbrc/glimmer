@@ -1,0 +1,510 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+//
+//  VideoDecoder+Decode.swift
+//
+//  Decode pipeline lifecycle (setup/start/stop/cleanup) and frame submission:
+//  the native backend's submit-decode-unit entry, depacketized-frame assembly,
+//  and the path into VideoToolbox. Split out of VideoDecoder.swift to keep each
+//  unit focused; see that file for the decoder's stored state.
+//
+
+import AVFoundation
+import CoreMedia
+import CoreVideo
+import Foundation
+import VideoToolbox
+import os
+
+extension VideoDecoder {
+
+    // MARK: - Lifecycle
+
+    nonisolated func handleSetup(
+        videoFormat: Int32, width: Int32, height: Int32, redrawRate: Int32
+    ) -> Int32 {
+        streamVideoFormat = videoFormat
+        streamWidth = width
+        streamHeight = height
+        streamFps = redrawRate
+
+        // FPS-SCALE the in-flight decode pool now that we know the frame rate. The
+        // bound is a TIME budget (~250ms) / ceiling (~375ms), not a fixed frame
+        // count - a fixed 30/45 is 1s/1.5s of buffered latency at 30fps. Floors of
+        // 15/22 keep enough slots to ride a VPN arrival burst on a low-fps stream.
+        // (See `maxInFlightDecodes` in VideoDecoder.swift for the full rationale.)
+        let fps = max(1, Int(redrawRate))
+        maxInFlightDecodes = max(15, Int(0.25 * Double(fps)))
+        maxInFlightDecodeCeiling = max(22, Int(0.375 * Double(fps)))
+
+        // Verify the codec is HW-decodable. AV1 needs macOS 13+ and Apple
+        // Silicon (M3 family and up on Mac, plus some M2 Pro/Max SKUs).
+        if (videoFormat & StreamProtocol.VIDEO_FORMAT_MASK_H264) != 0 {
+            if !VTIsHardwareDecodeSupported(kCMVideoCodecType_H264) {
+                log.error("No HW H.264 decode")
+                return -1
+            }
+        } else if (videoFormat & StreamProtocol.VIDEO_FORMAT_MASK_H265) != 0 {
+            if !VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) {
+                log.error("No HW HEVC decode")
+                return -1
+            }
+        } else if (videoFormat & StreamProtocol.VIDEO_FORMAT_MASK_AV1) != 0 {
+            if !VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) {
+                log.error("No HW AV1 decode")
+                return -1
+            }
+        } else {
+            log.error("Unknown video format: \(String(videoFormat, radix: 16))")
+            return -1
+        }
+
+        log.info(
+            "Decoder setup: format=\(String(videoFormat, radix: 16)) \(width)x\(height) @ \(redrawRate)fps"
+        )
+        return 0
+    }
+
+    nonisolated func handleStart() {
+        log.info("Stream starting")
+        isStreaming = true
+        // A reconnect reuses this decoder, so keep session totals while
+        // clearing the new connection's windows and decode state.
+        statsCollector.resetForConnection()
+        // Configure the display layer's colorspace + EDR engagement ONCE
+        // at stream start, based on the negotiated stream format. The
+        // AVSampleBufferDisplayLayer takes care of pacing internally - no
+        // display link needed on our side.
+        Task { @MainActor [weak self] in
+            self?.configureLayerColorspace()
+        }
+        reapplySuppressionAtConnect()
+    }
+
+    nonisolated func handleStop() {
+        log.info("Stream stopping")
+        isStreaming = false
+        firstFrameLifecycleGeneration.wrappingAdd(1, ordering: .releasing)
+        // ZOMBIE-SESSION GUARD: on a HOST-INITIATED terminate this stop (via
+        // stopConnection's sink-stop) runs with NO StreamSession.stop() yet -
+        // an engaged hidden-window decode gate would otherwise block the frame
+        // watchdog (the only route to a real stop()) forever. See the helper.
+        clearDecodeGateForConnectionStop()
+    }
+
+    nonisolated func handleCleanup() {
+        log.info("Decoder cleanup")
+        decodeQueue.sync { [weak self] in
+            guard let self else { return }
+            if let session = self.decompressionSession {
+                VTDecompressionSessionInvalidate(session)
+                self.decompressionSession = nil
+                self.releaseOutputCallbackRefcon()
+            }
+            self.formatDescription = nil
+            self.cachedHDRFormatDescription = nil
+            self.spsData = nil
+            self.ppsData = nil
+            self.vpsData = nil
+            // Reset the backlog counter: the session is gone, so no further VT
+            // output callbacks will fire to drain whatever was in flight. This
+            // runs on the serial decodeQueue after any already-queued async
+            // decode block, so the count reflects only frames VT may still be
+            // holding - which invalidate above just discarded.
+            self.inFlightDecodeLock.lock()
+            self.inFlightDecodes = 0
+            self.lastVtDecodeFailed = false
+            self.inFlightDecodeLock.unlock()
+        }
+    }
+
+    // MARK: - Submit
+
+    /// One frame's decode inputs, captured on the receive thread and carried into the async
+    /// decode block as a single value.
+    struct PendingDecode {
+        let pictureData: Data
+        let newSps: Data?
+        let newPps: Data?
+        let newVps: Data?
+        let isIDR: Bool
+        let rtpTimestamp: UInt32
+        let totalLength: Int32
+        /// IDR epoch the frame was fed under; rides VT's frame refcon so a
+        /// failure can be judged stale or current (`armResyncAfterDecodeError`).
+        let epoch: UInt
+        /// Stall-escalation verdict (see `reserveDecodeSlot`): the wedged VT
+        /// session must be REPLACED with this IDR, bypassing the byte-equal
+        /// param-set shortcut - a recovery IDR carries the SAME SPS/PPS, so
+        /// without the force the "rebuild" would no-op straight back into the
+        /// hosed session. false on every normal frame.
+        var forceSessionRecreate: Bool = false
+    }
+
+    /// Receive-thread half of decode: gate, reserve a backlog slot, then hand the frame to the serial
+    /// `decodeQueue` so recvfrom never waits on VideoToolbox. Returns DR_OK unless a sustained stall, a
+    /// post-gate P-frame or an armed resync latch needs the depacketizer to wait for an IDR.
+    nonisolated func decodeAssembledFrame(
+        pictureData: Data, newSps: Data?, newPps: Data?, newVps: Data?,
+        isIDR: Bool, rtpTimestamp: UInt32, totalLength: Int32
+    ) -> Int32 {
+        // ---- Hidden-window decode gate (suppression stage 2 - see the
+        // `_decodeGated` doc in VideoDecoder.swift). While the window has been
+        // hidden past the gate delay we stop feeding AUs to VideoToolbox at
+        // all - decoding 4K120 (~30% CPU) for a pacer that discards every
+        // frame is pure waste. The drop is QUIET: no slot reserved, no counter
+        // (these frames were headed for the suppressed pacer's drop-to-newest
+        // anyway); the depacketizer/RFI bookkeeping upstream keeps flowing
+        // untouched, so the wire never sees the gate.
+        //
+        // ARTIFACT SAFETY - the same invariant as the backlog drop below: a
+        // silent sink-side drop is only safe because nothing non-IDR is fed
+        // after the gap. `.resyncToIdr` returns DR_NEED_IDR exactly once when
+        // the first post-gate frame is a P-frame, driving the depacketizer
+        // into its EXISTING wait-for-IDR recovery gate (requestDecoderRefresh
+        // - the same flush-to-IDR the sustained-stall path uses, IDR request
+        // coalesced by the control channel with the resume edge's resync), so
+        // no reference-broken P-frame can reach VT. A first post-gate frame
+        // that already IS the resync IDR feeds straight through.
+        let epoch: UInt
+        switch decodeGateDisposition(isIDR: isIDR) {
+        case .feed(let fedEpoch):
+            epoch = fedEpoch
+        case .dropQuietly:
+            return StreamProtocol.DR_OK
+        case .resyncToIdr:
+            return StreamProtocol.DR_NEED_IDR
+        }
+
+        // ---- Burst-absorbing decode backlog (see `maxInFlightDecodes`).
+        // Checked + reserved on the receive thread BEFORE we dispatch any work.
+        // The bound is deep enough (~250ms at 120fps) that a transient VPN
+        // arrival burst is absorbed by VT's async pipeline rather than tripping
+        // it - that's the hitch this pass removes.
+        //
+        // ARTIFACT-SAFETY INVARIANT: dropping a not-yet-decoded P-frame here
+        // WITHOUT flushing-to-IDR would orphan the reference chain (the
+        // white/purple corruption fixed in an earlier build), because the depacketizer
+        // already considers this frame DELIVERED - it assembled it off the wire
+        // and handed it to us, so its on-the-wire loss detection
+        // (`depacketizerDetectedFrameLoss`) will NOT see the gap a sink-side drop
+        // creates. So there is no safe SILENT pre-decode drop: the only two
+        // artifact-safe outcomes are (1) reserve the slot and decode the frame,
+        // or (2) drop it AND flush-to-IDR so the depacketizer stops emitting
+        // reference-broken frames until the next real IDR.
+        //
+        // `reserveDecodeSlot()` therefore returns only those two outcomes. It
+        // ABSORBS a burst by reserving past the nominal bound while VT is
+        // actively draining (recent decode output), up to a hard ceiling that
+        // still bounds memory/latency - so a single transient burst NEVER
+        // flushes-to-IDR. It escalates to `.dropAndFlush` only on a GENUINE
+        // sustained stall: the backlog stays at the hard ceiling across a streak
+        // of assembled frames AND VT has produced no output for a stall window.
+        // That `.dropAndFlush` routes DR_NEED_IDR so the VideoSink caller
+        // (VideoRtpReceiver.depacketizerDidAssembleFrame) drives the depacketizer
+        // into wait-for-IDR + one coalesced IDR request - the same self-heal
+        // moonlight does when its bounded decodeUnitQueue overflows
+        // (VideoDepacketizer.c:513-532). We deliberately do NOT also call
+        // `backend?.requestIdrFrame()` here, so an overflow requests exactly one
+        // IDR.
+        var forceSessionRecreate = false
+        switch reserveDecodeSlot(isIDR: isIDR) {
+        case .reserved:
+            break
+        case .reservedForStallRecreate:
+            // The wedged session's slots were abandoned; this IDR must REPLACE
+            // the session, bypassing the byte-equal param-set shortcut (a
+            // recovery IDR carries identical SPS/PPS, so an unforced rebuild
+            // would no-op straight back into the hosed session).
+            forceSessionRecreate = true
+        case .dropAndFlush:
+            TelemetryCounters.shared.backlogOverflowTotal.increment()
+            // This assembled frame is dropped before VT ever sees it - credit a
+            // decoder-side discard so the drops-by-cause split counts it (it
+            // never reaches recordDecodeComplete, the only counter the overlay's
+            // decoder% used to read).
+            statsCollector.recordDecoderDiscard()
+            // INTENTIONAL NON-PRESENTATION ≠ LOSS. When presentation is suppressed
+            // (window backgrounded / occluded / minimized), the present path has
+            // stopped retiring frames, so the backlog overflows even though the
+            // wire is healthy. Treating that like a reference-break and flushing
+            // to IDR is exactly the "rfis/idrs and backflows when the window
+            // isn't focused" bug. Drain the pacer FIFO to the freshest frame so
+            // it can't grow unbounded, then return DR_OK (NOT DR_NEED_IDR): no
+            // wire IDR, no depacketizer wait-for-IDR. The drop is still counted
+            // above as a benign overflow, so telemetry stays measurable. The
+            // single clean-repaint IDR for the whole episode is owned by the
+            // refocus resync in `setPresentSuppressed(false)`.
+            if presentSuppressed {
+                framePacer?.dropToNewest(reason: "suppressed_backlog")
+                return StreamProtocol.DR_OK
+            }
+            return StreamProtocol.DR_NEED_IDR
+        }
+
+        let pending = PendingDecode(
+            pictureData: pictureData, newSps: newSps, newPps: newPps, newVps: newVps,
+            isIDR: isIDR, rtpTimestamp: rtpTimestamp, totalLength: totalLength, epoch: epoch,
+            forceSessionRecreate: forceSessionRecreate)
+
+        decodeQueue.async { [self] in
+            // Teardown gate: stop() may have flipped isStreaming off (and
+            // handleCleanup may be queued behind us) between the receive thread
+            // returning DR_OK and this block running. Skip VT work and DON'T
+            // request an IDR against a backend that's tearing down - just
+            // release the slot we reserved so the counter stays balanced.
+            guard self.isStreaming else {
+                self.releaseInFlightDecode()
+                return
+            }
+            self.runDecodeOnQueue(pending)
+        }
+
+        return StreamProtocol.DR_OK
+    }
+
+    /// The decode-queue half: param-set rebuild when needed, sample build, async VT submit. Each early
+    /// out frees the caller's slot and arms the resync latch; an accepted submit's slot is released by
+    /// the VT output callback.
+    private nonisolated func runDecodeOnQueue(_ pending: PendingDecode) {
+        // New parameter sets, a forced recreate, or an IDR with no live session rebuilds. Decided
+        // here, not on the receive thread, because this queue owns `decompressionSession`.
+        let needsParamRebuild = pending.newSps != nil || pending.newPps != nil || pending.newVps != nil
+            || pending.forceSessionRecreate || (decompressionSession == nil && pending.isIDR)
+        let format = streamVideoFormat
+        let pictureData = pending.pictureData
+
+        if needsParamRebuild,
+           !rebuildParamSetsAndSession(
+                newSps: pending.newSps, newPps: pending.newPps, newVps: pending.newVps,
+                format: format, pictureData: pictureData,
+                forceRecreate: pending.forceSessionRecreate) {
+            abandonUndecodedFrame(pending, failure: "Decode param/session setup failed",
+                                  trigger: "param_rebuild_failed")
+            return
+        }
+
+        guard formatDescription != nil, let session = decompressionSession else {
+            abandonUndecodedFrame(pending, failure: "Decode session missing", trigger: "no_session")
+            return
+        }
+
+        // For H.264/HEVC, the Annex-B start codes need to be rewritten
+        // to AVCC-style length prefixes before we hand to VideoToolbox.
+        // For AV1, VT consumes the raw OBU stream directly per Apple's
+        // AV1 sample-buffer docs.
+        //
+        // `rtpTimestamp` is the host's capture-clock presentation
+        // timestamp in 90kHz units (Limelight.h: "To exactly recover
+        // the RTP timestamp, use something like
+        // CMTimeMake((int64_t)du->rtpTimestamp, 90000);"). We thread it
+        // through the input sample's timing info; VT propagates it to
+        // the output callback so the layer can make stale-frame drop
+        // decisions in the host's clock instead of ours.
+        let preparedSample: CMSampleBuffer?
+        if (format & StreamProtocol.VIDEO_FORMAT_MASK_AV1) != 0 {
+            preparedSample = makeSampleBuffer(
+                rawData: pictureData, rtpTimestamp: pending.rtpTimestamp)
+        } else {
+            let avcc = convertAnnexBToAVCC(pictureData)
+            preparedSample = makeSampleBuffer(rawData: avcc, rtpTimestamp: pending.rtpTimestamp)
+        }
+
+        guard let sample = preparedSample else {
+            abandonUndecodedFrame(pending, failure: "Sample-buffer build failed", trigger: "sample_build_failed")
+            return
+        }
+
+        submitSampleToVT(session: session, sample: sample, pending: pending)
+    }
+
+    /// Abandon a frame that never reached VT: free its slot, count the discard, and arm the resync so
+    /// the next P-frame asks for one IDR instead of every frame sending its own request.
+    private nonisolated func abandonUndecodedFrame(
+        _ pending: PendingDecode, failure: StaticString, trigger: StaticString
+    ) {
+        releaseInFlightDecode()
+        statsCollector.recordDecoderDiscard()
+        guard armResyncAfterDecodeError(epoch: pending.epoch) else { return }
+        log.error("\(failure, privacy: .public) - resyncing to the next IDR")
+        OSSignposter.decode.emitEvent("IDRRequested", "trigger=\(trigger, privacy: .public)")
+    }
+
+    /// Apply newly-arrived parameter sets and (re)build the format description +
+    /// decompression session for the negotiated codec. Runs on the decode queue.
+    /// Returns true on success; on false the caller abandons the frame and arms the resync.
+    private nonisolated func rebuildParamSetsAndSession(
+        newSps: Data?, newPps: Data?, newVps: Data?, format: Int32, pictureData: Data,
+        forceRecreate: Bool = false
+    ) -> Bool {
+        let strippedSps = newSps.map(stripStartCode)
+        let strippedPps = newPps.map(stripStartCode)
+        let strippedVps = newVps.map(stripStartCode)
+
+        // Turbulent HEVC re-sends identical SPS/PPS/VPS on every IDR; the rebuild
+        // is a no-op but its teardown + renderer flush + pacer clearQueue cluster
+        // into hitches, so skip on byte-equal sets. (Inert for AV1: config is OBU.)
+        // `forceRecreate` (the stall escalation) bypasses the shortcut: replacing
+        // the hosed session IS the point, and its params are byte-identical.
+        if !forceRecreate,
+           decompressionSession != nil, formatDescription != nil,
+           newSps == nil || strippedSps == spsData,
+           newPps == nil || strippedPps == ppsData,
+           newVps == nil || strippedVps == vpsData,
+           (format & StreamProtocol.VIDEO_FORMAT_MASK_AV1) == 0 {
+            return true
+        }
+
+        // Capture the prior session/dimensions BEFORE the rebuild tears them down
+        // (the format-description builders nil the session). The cause of the
+        // upcoming create is read off these: no prior session = first create;
+        // changed dims = a real resolution change; same dims = a colorspace/HDR/
+        // profile param-rebuild. The new dims are read back after the rebuild.
+        let hadPriorSession = decompressionSession != nil
+        let priorDims = formatDescription.map(CMVideoFormatDescriptionGetDimensions)
+
+        if let sps = strippedSps { spsData = sps }
+        if let pps = strippedPps { ppsData = pps }
+        if let vps = strippedVps { vpsData = vps }
+
+        let rebuilt: Bool
+        if (format & StreamProtocol.VIDEO_FORMAT_MASK_H264) != 0 {
+            rebuilt = rebuildH264FormatDescription()
+        } else if (format & StreamProtocol.VIDEO_FORMAT_MASK_H265) != 0 {
+            rebuilt = rebuildHEVCFormatDescription()
+        } else if (format & StreamProtocol.VIDEO_FORMAT_MASK_AV1) != 0 {
+            rebuilt = rebuildAV1FormatDescription(obuData: pictureData)
+        } else {
+            rebuilt = false
+        }
+        guard rebuilt else { return false }
+        let cause = Self.sessionCreateCause(hadPriorSession: hadPriorSession, priorDims: priorDims,
+                                            newDims: formatDescription.map(CMVideoFormatDescriptionGetDimensions))
+        guard ensureDecompressionSession(cause: cause) else { return false }
+
+        // STREAM DISCONTINUITY FLUSH. A parameter-set rebuild means the format
+        // genuinely changed mid-stream (resolution / codec profile / colorspace),
+        // not a loss recovery. Any samples still queued in the renderer were built
+        // against the OLD format description; presenting them after the new format
+        // engages can briefly show torn/old-geometry frames. Flush the renderer so
+        // the layer starts clean on the new format. This rebuild is always
+        // triggered by an IDR (the param sets ride the keyframe), so the very next
+        // sample is a clean keyframe in the new format - the flush just guarantees
+        // nothing stale precedes it. `sampleBufferRenderer.flush()` is documented
+        // safe off the main thread, so calling it from the decode queue is fine.
+        // Distinct from loss recovery: no IDR is requested here (the keyframe is
+        // already in hand) and the depacketizer's reference state is untouched.
+        if let renderer = sampleBufferRenderer {
+            renderer.flush()
+            OSSignposter.render.emitEvent("DiscontinuityFlush", "trigger=param_rebuild")
+            TelemetryCounters.shared.discontinuityFlushTotal.increment()
+        }
+        // The pacer's jitter buffer also holds old-format samples; drop them to
+        // the freshest so the new keyframe presents without draining stale
+        // geometry first. No-op if pacing isn't up.
+        framePacer?.clearQueue(reason: "discontinuity")
+        return true
+    }
+
+    /// No prior session is a first create, changed dimensions a resolution change, and the
+    /// same dimensions a colorspace, HDR or profile rebuild.
+    nonisolated static func sessionCreateCause(
+        hadPriorSession: Bool, priorDims: CMVideoDimensions?, newDims: CMVideoDimensions?
+    ) -> SessionCreateCause {
+        guard hadPriorSession else { return .firstCreate }
+        if let priorDims, let newDims, priorDims.width != newDims.width || priorDims.height != newDims.height {
+            return .resolution
+        }
+        return .colorspace
+    }
+
+    /// Submit one ready sample to VideoToolbox for ASYNCHRONOUS decode and book
+    /// the per-frame `DecodeFrame` signpost interval. Runs on the decode queue.
+    /// On an inline VT rejection the output callback will NOT fire, so this
+    /// releases the in-flight slot, closes the abandoned interval, and arms the
+    /// resync. On success the slot is released later by the output callback.
+    private nonisolated func submitSampleToVT(
+        session: VTDecompressionSession, sample: CMSampleBuffer, pending: PendingDecode
+    ) {
+        let isIDR = pending.isIDR
+        let totalLength = pending.totalLength
+        let rtpTimestamp = pending.rtpTimestamp
+        // VT will hand the produced CVPixelBuffer to
+        // `decompressionOutputCallback` (on a VT-internal thread).
+        // _EnableAsynchronousDecompression lets VT pipeline frames
+        // without head-of-line blocking.
+        //
+        // We deliberately do NOT pass _EnableTemporalProcessing here.
+        // Temporal processing tells VT it may reorder frames into
+        // display order - useful for streams with B-frames where the
+        // decoder receives frames in coded order and the renderer
+        // needs them in display order. Sunshine and GFE encode with
+        // zero B-frames (low-latency encode, no reordering possible),
+        // so temporal processing buys us nothing semantic and adds a
+        // one-frame reordering buffer - measurable cost on real-time
+        // game streaming (≈8ms at 120Hz, ≈4ms at 240Hz, end-to-end
+        // photons-to-input). moonlight-qt's vt_avsamplelayer.mm also
+        // omits this flag for the same reason. The realtime hint on
+        // the session itself (set in ensureDecompressionSession via
+        // kVTDecompressionPropertyKey_RealTime = true) is the right
+        // knob; temporal processing was redundant cost on top.
+        let flags: VTDecodeFrameFlags = [._EnableAsynchronousDecompression]
+        var infoFlagsOut = VTDecodeInfoFlags()
+        // Stamp submit-time into the stats collector so the matching output
+        // callback can compute wall-clock decode latency. The collector's FIFO
+        // keeps the start-time bookkeeping out of the C boundary and lets us
+        // bail out gracefully if a frame is silently dropped between submit and
+        // output. The `DecodeFrame` interval opens here; the matching close
+        // fires from the VT output callback (or the abandon path below if VT
+        // rejected the submit synchronously), with strict pairing through the
+        // FIFO even though the callback fires on a different thread.
+        let decodeSignpostID = OSSignposter.decode.makeSignpostID()
+        let decodeIntervalState = OSSignposter.decode.beginInterval(
+            "DecodeFrame",
+            id: decodeSignpostID,
+            "bytes=\(totalLength, privacy: .public) idr=\(isIDR, privacy: .public)")
+        statsCollector.recordDecodeSubmit(intervalState: decodeIntervalState)
+        // Latency telemetry stage t_submit (opt-in; nil = zero cost): stamp the
+        // instant before we hand the frame to VideoToolbox, keyed by the same
+        // rtpTimestamp that becomes the sample's PTS (the only identity VT
+        // propagates to its output callback).
+        FrameTimingTracker.shared?.recordSubmit(rtpTimestamp: rtpTimestamp)
+        let decodeStatus = VTDecompressionSessionDecodeFrame(
+            session,
+            sampleBuffer: sample,
+            flags: flags,
+            frameRefcon: UnsafeMutableRawPointer(bitPattern: pending.epoch),
+            infoFlagsOut: &infoFlagsOut)
+
+        if decodeStatus != noErr {
+            log.error("VTDecompressionSessionDecodeFrame failed: \(decodeStatus)")
+            // -8969 (badDataErr) and -12909 (kVTVideoDecoderBadDataErr) mean the
+            // bitstream is hosed. The output callback will
+            // NOT fire for a synchronously-rejected submit, so release the
+            // in-flight slot here and pop our pending submit timestamp so the
+            // FIFO stays aligned with the output callback's pops. Credit a
+            // decoder-side discard too - VT rejected the frame inline, so it
+            // never reaches recordDecodeComplete and would otherwise undercount.
+            releaseInFlightDecode(vtFailed: true)
+            statsCollector.recordDecoderDiscard()
+            if let abandonedState = statsCollector.recordDecodeAbandoned() {
+                OSSignposter.decode.endInterval(
+                    "DecodeFrame",
+                    abandonedState,
+                    "outcome=abandoned status=\(decodeStatus, privacy: .public)")
+            }
+            // A dead session rejects every later frame, recovery IDRs included, and the byte-equal
+            // param-set shortcut would keep it: drop it so the next IDR builds a fresh one.
+            if decodeStatus == kVTInvalidSessionErr { tearDownDecompressionSession() }
+            // The frame never decoded, so later P-frames would reference a hole:
+            // resync through the depacketizer's wait-for-IDR, not a bare request.
+            noteVtDecodeFailure(epoch: pending.epoch, status: decodeStatus)
+        }
+    }
+
+    // The in-flight decode backlog gate (`DecodeSlotDecision`, `reserveDecodeSlot`
+    // and the matching `releaseInFlightDecode`) lives in
+    // VideoDecoder+Backlog.swift, split out to keep this file under the length
+    // limit.
+}

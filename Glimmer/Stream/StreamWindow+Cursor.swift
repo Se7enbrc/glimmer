@@ -52,14 +52,14 @@ extension StreamWindow {
         if coversNotch, let level = streamingWindowLevel {
             window.level = level
         }
-        if wasAway, coversNotch { returnCover() }
+        if wasAway, coversNotch, !awaitingFirstFrameFadeIn { returnCover() }
         // Before the first frame the cursor and the menu bar stay the user's;
         // the fade-in takes them. The re-hide is latch-safe and the transparent
         // cursor backstops an arrow the WindowServer drew while we were away.
         if !awaitingFirstFrameFadeIn {
             setCursorHidden(true)
             reassertCursorHiddenIfNeeded()
-            applyPresentationOptions(coversNotch: coversNotch)
+            if !wasAway || !coversNotch { applyPresentationOptions(coversNotch: coversNotch) }
         }
         setBackgrounded(false)
     }
@@ -76,6 +76,7 @@ extension StreamWindow {
 
     /// Park the cursor mid-screen and retire motion spanning the warp.
     func warpCursorToCentre(of screen: NSScreen) {
+        guard displayMode == .window || fullscreenRelativePointer else { return }
         StreamCursor.warpToCentre(of: screen)
         (window.contentView as? StreamInputView)?.resetMotion()
     }

@@ -9,6 +9,7 @@
 //  cipher), and the audio receiver and FEC queue that negotiation sets up.
 //
 
+@testable import GlimmerEngine
 import CommonCrypto
 import CryptoKit
 import Foundation
@@ -228,7 +229,7 @@ struct RtspClientTests {
     @Test func videoIsEncryptedOnlyWhenThePcRequiresIt() {
         // Mandatory mode requests control, video and audio (7), and refuses an ANNOUNCE without both.
         #expect(RtspClient.computeEncryptionEnabled(supported: 7, requested: 7) == 7)
-        #expect(RtspClient.computeEncryptionEnabled(supported: 7, requested: 1) & RtspClient.ssEncVideo == 0)
+        #expect(RtspClient.computeEncryptionEnabled(supported: 7, requested: 1) & VideoPacketLayout.ssEncVideo == 0)
     }
 
     // MARK: - Audio decrypt (SS_ENC_AUDIO)
@@ -264,7 +265,7 @@ struct RtspClientTests {
     private static func audioReceiver(sink: NativeAudioSink) -> RtpAudioReceiver {
         RtpAudioReceiver(
             host: "127.0.0.1", audioPort: 48000, pingPayload: [], audioPacketDuration: 5,
-            opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+            opusConfig: SdpScan.defaultOpusConfig, audioConfig: 0,
             audioEncryption: false, aesKey: [], aesIvId: [], sink: sink)
     }
 
@@ -359,7 +360,7 @@ struct RtspClientTests {
             let sink = BlockingAudioSink()
             let receiver = RtpAudioReceiver(
                 host: "127.0.0.1", audioPort: 48000, pingPayload: [], audioPacketDuration: 5,
-                opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+                opusConfig: SdpScan.defaultOpusConfig, audioConfig: 0,
                 audioEncryption: false, aesKey: [], aesIvId: [], sink: sink)
             // Prepare the socket before measuring the initialization/stop overlap.
             try receiver.startPing()
@@ -426,7 +427,7 @@ struct RtspClientTests {
         let sink = RecordingAudioSink()
         let receiver = RtpAudioReceiver(
             host: "127.0.0.1", audioPort: 48000, pingPayload: [],
-            audioPacketDuration: 5, opusConfig: RtspHandshakeResult.defaultOpusConfig,
+            audioPacketDuration: 5, opusConfig: SdpScan.defaultOpusConfig,
             audioConfig: 0, audioEncryption: true, aesKey: Self.key, aesIvId: ivId,
             sink: sink)
         let opus = (0..<length).map { UInt8(truncatingIfNeeded: $0 &* 7) }
@@ -442,7 +443,7 @@ struct RtspClientTests {
         let sink = RecordingAudioSink()
         let receiver = RtpAudioReceiver(
             host: "127.0.0.1", audioPort: 48000, pingPayload: [], audioPacketDuration: 5,
-            opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+            opusConfig: SdpScan.defaultOpusConfig, audioConfig: 0,
             audioEncryption: true, aesKey: Self.key, aesIvId: [UInt8](repeating: 0, count: 16), sink: sink)
         let payload = try #require(Self.hostEncrypt([], seq: 0, keyId: 0))
         let packet = Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: 0,
@@ -456,7 +457,7 @@ struct RtspClientTests {
         let sink = RecordingAudioSink()
         let receiver = RtpAudioReceiver(
             host: "127.0.0.1", audioPort: 48000, pingPayload: [], audioPacketDuration: 5,
-            opusConfig: RtspHandshakeResult.defaultOpusConfig, audioConfig: 0,
+            opusConfig: SdpScan.defaultOpusConfig, audioConfig: 0,
             audioEncryption: true, aesKey: Self.key, aesIvId: [UInt8](repeating: 0, count: 16), sink: sink)
         let malformed = Self.audioDatagram(type: RtpAudioQueue.payloadTypeAudio, sequence: 20_000,
                                            timestamp: 100_000, payload: [UInt8](repeating: 0, count: 16))

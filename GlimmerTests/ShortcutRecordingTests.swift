@@ -8,6 +8,7 @@
 //  shortcut, or a copy of another one, and a controller chord needs two buttons.
 //
 
+import GlimmerEngine
 import AppKit
 import Testing
 @testable import Glimmer

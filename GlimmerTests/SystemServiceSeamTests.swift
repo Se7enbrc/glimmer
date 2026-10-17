@@ -4,6 +4,7 @@
 // Decisions behind system services, with the services stood in: wake notices,
 // Shortcuts streams, display defaults, quitting, paste and the PIN page.
 
+import GlimmerEngine
 import Foundation
 import Testing
 import UserNotifications
@@ -181,7 +182,7 @@ struct SystemServiceSeamTests {
     @Test(.timeLimit(.minutes(1)))
     func quitWithASessionRepliesAfterItStops() async {
         let model = AppModel()
-        model.nativeSession = StreamSession()
+        model.nativeSession = StreamSession(hostDisposition: .cancelOwnedHostSession)
         let delegate = AppDelegate()
         delegate.model = model
         let (events, record) = AsyncStream<String>.makeStream()

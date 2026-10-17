@@ -8,24 +8,11 @@
 //  and the session file), telemetry's name pseudonyms, and the launch-response redactor.
 //
 
+@testable import GlimmerEngine
 import CryptoKit
 import Foundation
 import Testing
 @testable import Glimmer
-
-struct ObjectiveCExceptionGuardTests {
-    @Test func successfulOperationReturnsTrue() {
-        var ran = false
-        #expect(gl_objc_try { ran = true })
-        #expect(ran)
-    }
-
-    @Test func exceptionReturnsFalse() {
-        #expect(!gl_objc_try {
-            NSException(name: .invalidArgumentException, reason: "private test payload", userInfo: nil).raise()
-        })
-    }
-}
 
 struct DiagMessageTests {
 

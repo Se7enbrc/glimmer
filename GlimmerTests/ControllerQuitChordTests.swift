@@ -14,6 +14,7 @@
 //  battery status at LX+52.
 //
 
+import GlimmerEngine
 import Testing
 @testable import Glimmer
 

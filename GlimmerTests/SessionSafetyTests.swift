@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+@testable import GlimmerEngine
 import Foundation
 import Network
 import os
@@ -419,6 +420,17 @@ struct SessionSafetyTests {
             #expect(failure.kind == kind, "\(error)")
             #expect(failure.message == message)
             #expect(!failure.message.contains(" - ") && !failure.message.contains("192.0.2.10"))
+        }
+    }
+
+    @Test func nativeFailureFallbackRemainsUnreachableForNonStreamErrors() {
+        let errors: [Error] = [StreamConnection.Failure.pairingRequired,
+                               StreamConnection.Failure.invalidConfiguration, CancellationError(),
+                               TakeoverRequired(appID: 42)]
+        for error in errors {
+            let failure = AppModel.connectFailure(for: error, hostName: "Tower")
+            #expect(failure.kind == .unreachable)
+            #expect(failure.message == AppModel.unreachableMessage("Tower"))
         }
     }
 

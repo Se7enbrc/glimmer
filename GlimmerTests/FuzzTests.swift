@@ -33,6 +33,7 @@
 //  These are pure-CPU parse calls, so the whole suite finishes in a few seconds.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 import CryptoKit
@@ -297,7 +298,7 @@ struct FuzzTests {
             // reliableSeqIsNewer: total over all 16-bit pairs, but cheap to fuzz.
             let a = UInt16(rng.next() & 0xFFFF)
             let b = UInt16(rng.next() & 0xFFFF)
-            _ = EnetControlChannel.reliableSeqIsNewer(a, than: b)
+            _ = Enet.reliableSeqIsNewer(a, than: b)
         }
     }
 

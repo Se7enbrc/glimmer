@@ -8,12 +8,15 @@
 //  deciding Ready, the running app, Trust needed, or a forgiving Ready on a failed reply.
 //
 
+import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 @MainActor
 struct HostStatusPollerTests {
+
+    init() {}
 
     private let hostID = "poll-\(UUID().uuidString)"
 
@@ -23,6 +26,7 @@ struct HostStatusPollerTests {
                                           manualAddress: nil, apps: apps, lastConnected: nil, serverCertPEM: nil,
                                           appVersion: nil, macAddress: nil)
         model.hostStatusTask?.cancel()
+        model.cancelHostReadiness()
         return model
     }
 
@@ -113,5 +117,114 @@ struct HostStatusPollerTests {
                                                     makeClient: { sunshine.client($0) })
         #expect(result.appListFor == 5 && !result.noPath)
         #expect(sunshine.requests.isEmpty && model.hostLiveStatus == nil)
+    }
+
+    @Test func readinessWaitsForBothIdleSignalsAndStopsAtTheFirstIdleReply() async {
+        let sunshine = FakeSunshine.scripted(["serverinfo": [
+            SessionFlow.serverInfo(state: "SUNSHINE_SERVER_BUSY", game: 0),
+            SessionFlow.serverInfo(state: "SUNSHINE_SERVER_FREE", game: 7), SessionFlow.idle
+        ]])
+        let client = sunshine.client(SessionFlow.pairedPC())
+        var waits: [TimeInterval] = []
+        var busyCount = 0
+        let answer = await AppModel.pollReadiness(
+            until: Date().addingTimeInterval(5),
+            fetch: { try await client.fetchServerInfo(diagnosePinnedFailure: false) },
+            busy: { busyCount += 1 }, sleep: { waits.append($0) })
+        #expect(answer.map(AppModel.isReadyForStream) == true)
+        #expect(sunshine.paths == ["serverinfo", "serverinfo", "serverinfo"])
+        #expect(waits == [0.5, 0.5] && busyCount == 2)
+        await client.shutdown()
+    }
+
+    @Test func readinessTimeoutAndFailedRepliesReleaseTheWait() async {
+        let sunshine = FakeSunshine.scripted(["serverinfo": [
+            .failure(.hostUnreachable("unavailable")), SessionFlow.running(7)
+        ]])
+        let client = sunshine.client(SessionFlow.pairedPC())
+        var now = Date()
+        let deadline = now.addingTimeInterval(1)
+        let answer = await AppModel.pollReadiness(
+            until: deadline, fetch: { try await client.fetchServerInfo(diagnosePinnedFailure: false) },
+            now: { now }, sleep: { now = now.addingTimeInterval($0) })
+        #expect(answer?.currentGameID == 7)
+        #expect(sunshine.paths == ["serverinfo", "serverinfo"])
+        await client.shutdown()
+    }
+
+    @Test func busyWithoutAnAppStillBlocksReadiness() async {
+        let model = model()
+        let sunshine = FakeSunshine { _ in
+            FakeSunshine.xml("<currentgame>0</currentgame><state>SUNSHINE_SERVER_BUSY</state>")
+        }
+        _ = await poll(model, sunshine)
+        #expect(model.hostLiveStatus?.state == .streamingUnknownApp(id: 0))
+    }
+
+    @Test func cancelledReadinessMakesNoRequests() async {
+        let sunshine = FakeSunshine { _ in try SessionFlow.idle.get() }
+        let client = sunshine.client(SessionFlow.pairedPC())
+        let task = Task { @MainActor in
+            await AppModel.pollReadiness(until: Date().addingTimeInterval(5),
+                                         fetch: { try await client.fetchServerInfo(diagnosePinnedFailure: false) })
+        }
+        task.cancel()
+        #expect(await task.value == nil)
+        #expect(sunshine.requests.isEmpty)
+        await client.shutdown()
+    }
+
+    @Test func stoppingDuringReadinessCannotStartTheSessionAfterward() async {
+        let model = model()
+        let gate = AsyncStream<Void>.makeStream()
+        let readiness = Task { for await _ in gate.stream {} }
+        let launch = Task { try await model.waitForStreamReadiness(readiness) }
+        model.menuStopInProgress = true
+        gate.continuation.finish()
+        await #expect(throws: CancellationError.self) { try await launch.value }
+        #expect(model.nativeSession == nil)
+    }
+
+    @Test func readinessReasonIsSharedAndScopedToThePC() async throws {
+        let model = model()
+        let host = try #require(model.selectedHost)
+        let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.idle]])
+        model.makeNetwork = { sunshine.client($0) }
+        model.beginHostReadiness(for: host, afterStream: true)
+        let task = try #require(model.hostPolling.readinessTasks[host.id])
+        model.beginHostReadiness(for: host)
+        #expect(model.hostPolling.readinessTasks[host.id] == task)
+        #expect(model.polledChip(for: host).fullLabel == "Finishing the last stream…")
+        #expect(model.polledChip(for: host).accessibility == "Finishing the last stream…")
+        let other = Glimmer.Host(id: "other", name: "Other PC", customName: nil, localAddress: "192.0.2.20",
+                             manualAddress: nil, apps: [], lastConnected: nil, serverCertPEM: nil,
+                             appVersion: nil, macAddress: nil)
+        #expect(model.readinessReason(for: other) == nil)
+        await task.value
+        #expect(model.selectedReadinessReason == nil)
+        #expect(model.hostPolling.readinessTasks.isEmpty)
+        #expect(sunshine.paths == ["serverinfo"])
+        #expect(model.hostLiveStatus?.state == .idle)
+    }
+
+    @Test func onlyDecodedVideoProvesThePCsVideoPathAcrossLaunches() throws {
+        let model = model()
+        let host = try #require(model.selectedHost)
+        let suite = "video-history-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        model.hostsDefaults = defaults
+        model.handleNativeEvent(.connectionEstablished, host: host)
+        #expect(!model.hasReceivedVideo(from: host))
+        model.handleNativeEvent(.firstFrame, host: host)
+        #expect(model.hasReceivedVideo(from: host))
+        model.hostPolling.videoReceivedFrom.removeAll()
+        #expect(model.hasReceivedVideo(from: host))
+        model.handleNativeEvent(.connectionTerminated(errorCode: -100, error: nil), host: host)
+        #expect(model.nativeStreamError == "Tower didn't start sending video. Try again.")
+        let other = Glimmer.Host(id: "other", name: "Other PC", customName: nil, localAddress: "192.0.2.20",
+                                 manualAddress: nil, apps: [], lastConnected: nil, serverCertPEM: nil,
+                                 appVersion: nil, macAddress: nil)
+        #expect(!model.hasReceivedVideo(from: other))
     }
 }

@@ -18,6 +18,7 @@
 //    * HostStatusPoller.swift - periodic readiness-chip polling Task
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox
@@ -48,7 +49,11 @@ final class AppModel {
     var selectedHost: Host? { didSet { selectionChanged(from: oldValue) } }
 
     // Stream lifecycle
-    var isStreaming = false
+    var isStreaming = false {
+        didSet { launcherController.streamingChanged(isStreaming) }
+    }
+    @ObservationIgnored let launcherController = LauncherController()
+    @ObservationIgnored lazy var launcherArtCache = LauncherArtCache(base: supportBase)
     /// Active native session, retained while streaming.
     @ObservationIgnored var nativeSession: StreamSession?
     /// A command-line launch waiting for its route, before a session exists.
@@ -145,9 +150,7 @@ final class AppModel {
     /// The PC the error is about, which a mid-connect switch can leave unselected.
     var nativeStreamErrorHostID: String?
 
-    enum StreamErrorKind {
-        case unreachable, pairing, other
-    }
+    typealias StreamErrorKind = StreamFailure.Category
 
     /// Effective HDR-active state from the native engine. True only when the
     /// host signalled HDR mode AND the bitstream is 10-bit AND the Metal
@@ -184,6 +187,9 @@ final class AppModel {
     /// dialog to this; confirming calls `stream(app:on:)`, cancelling clears it.
     /// nil = no takeover pending (the common case streams straight through).
     var pendingTakeover: PendingTakeover?
+    @ObservationIgnored var postCommandReply: ([String: String]) -> Void = {
+        CommandChannel.post(CommandChannel.reply, $0)
+    }
     struct PendingTakeover: Equatable {
         let app: LibraryApp
         let host: Host
@@ -199,6 +205,8 @@ final class AppModel {
     var menuDetails: StreamStatsSnapshot?
     var menuBarControllers: [MenuBarController] = []
     var pairSheetShown = false
+    /// True from a controller's first launcher command until focus clears.
+    var launcherControllerNavigating = false
     var pairSheetHost: Host?
     @ObservationIgnored var menuRefreshTimer: Timer?
 
@@ -489,6 +497,7 @@ final class AppModel {
         let tokens = notificationTokens
         for token in tokens { NotificationCenter.default.removeObserver(token) }
         hostStatusTask?.cancel()
+        for task in hostPolling.readinessTasks.values { task.cancel() }
     }
 
     init() {

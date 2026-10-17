@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AppModel+MenuBar.swift
-//
-//  What the menu bar reads and the few actions only it needs: icon state, the
-//  first row, the selected PC as the launcher reads it, the pads, Connection
-//  Details (refreshed while the menu is open), stop, overlay, pairing, takeover.
-//
+// The menu bar reads launcher state and shares its actions with automation.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import GameController
@@ -54,11 +49,12 @@ extension AppModel {
     }
 
     /// Ends the stream at once; the row reads "Stopping…" until cleanup lands.
-    func stopStreamFromMenu(source: String = "the menu bar") {
-        guard let session = nativeSession, !menuStopInProgress else { return }
+    @discardableResult
+    func stopStreamFromMenu(source: String = "the menu bar") -> Task<Void, Never>? {
+        guard let session = nativeSession, !menuStopInProgress else { return nil }
         menuStopInProgress = true
         Diag.notice("Stop Streaming from \(source)", "Stream")
-        Task { await session.stop() }
+        return Task { await session.stop() }
     }
 
     func toggleStatsOverlayFromMenu() {
@@ -110,14 +106,17 @@ extension AppModel {
     private func readMenuBarControllers() -> [MenuBarController] {
         let pads = GCController.controllers().map { controller in
             let name = controller.vendorName ?? "Controller"
+            let sourceID = "gc:\(ObjectIdentifier(controller))"
             if let hid = DualSenseHID.shared.state(for: ObjectIdentifier(controller))?.battery {
-                return MenuBarController(name: name, percent: hid.percent, charging: hid.charging)
+                return MenuBarController(name: name, percent: hid.percent, charging: hid.charging, sourceID: sourceID)
             }
             let reading = controller.battery.flatMap(ControllerBattery.uiReading)
-            return MenuBarController(name: name, percent: reading?.percent, charging: reading?.charging == true)
+            return MenuBarController(name: name, percent: reading?.percent,
+                                     charging: reading?.charging == true, sourceID: sourceID)
         }
         let raw = HIDGamepadManager.shared.devices.values.sorted { $0.id < $1.id }.map {
-            MenuBarController(name: $0.name, percent: $0.batteryPercentage.map(Int.init), charging: false)
+            MenuBarController(name: $0.name, percent: $0.batteryPercentage.map(Int.init),
+                              charging: false, sourceID: "hid:\($0.id)")
         }
         return MenuBarPresentation.controllers(gameController: pads, rawHID: raw)
     }

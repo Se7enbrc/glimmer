@@ -8,6 +8,7 @@
 //  pacing bring-up and fallback, and the RTP clock recovered from a sample's PTS.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreMedia
@@ -160,15 +161,16 @@ struct VideoDecoderLifecycleTests {
     }
 
     /// The next session must start cold: an SDR stream after HDR must not inherit PQ state.
-    @Test func teardownClearsEveryHDRCache() {
+    @Test func teardownClearsEveryHDRCache() throws {
         let decoder = VideoDecoder()
         decoder.attach(to: AVSampleBufferDisplayLayer())
         decoder.hdrEnabled = true
         decoder.hdrMetadataStore.publish(HDRMetadata(mdcv: Data([1]), contentLightLevel: nil))
-        decoder.lastColorSpaceKey = "itur_2100_PQ"
-        decoder.lastColorSpace = CGColorSpace(name: CGColorSpace.itur_2100_PQ)
-        decoder.didLogFirstPixelBufferProbe = true
-        decoder.didConfigureLayerOnce = true
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_H265_MAIN10
+        let buffer = try makeTaggedPixelBuffer()
+        let color = decoder.resolveColorDescription(for: buffer, controlHDR: true)
+        decoder.attachColorAndHDRMetadata(to: buffer, color: color)
+        #expect(decoder.beginColorProbe(buffer, color: color, controlHDR: true) != nil)
         decoder.didFireFirstDecodedFrame = true
         decoder.isStreaming = true
 
@@ -177,8 +179,9 @@ struct VideoDecoderLifecycleTests {
         #expect(!decoder.isStreaming)
         #expect(!decoder.hdrEnabled)
         #expect(decoder.hdrMetadataStore.snapshot == .empty)
-        #expect(decoder.lastColorSpaceKey == nil && decoder.lastColorSpace == nil)
-        #expect(!decoder.didLogFirstPixelBufferProbe && !decoder.didConfigureLayerOnce)
+        #expect(decoder.lastColorSpace == nil)
+        #expect(decoder.resolvedColor.withLock { $0 == nil })
+        #expect(decoder.colorProbeState.withLock { $0 == nil })
         #expect(!decoder.didFireFirstDecodedFrame)
         #expect(decoder.displayLayer == nil && decoder.sampleBufferRenderer == nil)
     }
@@ -199,7 +202,7 @@ struct VideoDecoderLifecycleTests {
         let first = try #require(decoder.framePacer)
         #expect(first.running && first.presentSuppressed)
         #expect(!first.tickDeficit.warmingUp)
-        #expect(decoder.pacingDrivingView === view)
+        #expect(decoder.pacingDisplay != nil)
         #expect(!decoder.reenablePacing(configuredFps: 120))
 
         decoder.disablePacingFallbackToDirect(reason: "test")

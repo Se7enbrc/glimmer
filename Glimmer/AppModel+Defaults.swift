@@ -11,6 +11,7 @@
 //  initializer over there can still reach them.
 //
 
+import GlimmerEngine
 import Foundation
 
 extension AppModel {

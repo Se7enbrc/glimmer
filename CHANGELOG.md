@@ -1,5 +1,94 @@
 # Changelog
 
+## 2026.10.8 - Unreleased
+
+### Features
+
+- Stop the current stream and quit its game on the PC from a `glimmer://stop`
+  link, `glimmer stop` or the Stop Streaming shortcut.
+
+- Smoother motion when the PC can't hold your display's refresh rate. On a
+  variable-refresh display, refresh changes settle before taking effect and stay
+  in a high range to reduce brightness flicker. On a fixed display, repeated
+  frames are spaced evenly. When you switch away, Glimmer leaves the display's
+  refresh rate to macOS.
+
+- Quieter, more consistent transitions across the launcher, stream and settings,
+  including Reduce Motion.
+- Open a stream, wake a PC or ask to quit a PC app with a `glimmer://` link.
+  Quitting still asks before closing the game.
+- The command line can list PCs and apps and report the current stream as
+  versioned JSON for launchers and scripts.
+
+- The full-screen stream slides away when it ends, the way it slid in, instead
+  of fading. Reduce Motion keeps the fade.
+- Steam shows its own logo in the launcher, the menu and the PC list, instead of
+  a generic controller.
+- Hold Menu, Options or Start for a moment, then release it to use the
+  controller as a mouse. On DualSense and DualShock 4, move one finger on the
+  touchpad to point, move two to scroll, and click with one or two fingers for a
+  left or right click. Hold and release again to return to the game.
+- Nintendo controllers send each button in the position of an Xbox controller's
+  by default. “Use Nintendo button layout” in Input settings matches A, B, X and
+  Y by their labels for all Nintendo-layout controllers. Single Joy-Con sides
+  keep their positional layout.
+
+- Choose Buttons or Covers for each PC in its Launcher menu in Settings › PCs.
+  Pairing offers the choice when the PC has apps beyond Desktop and Steam Big
+  Picture. Existing PCs keep Buttons.
+- Use a controller to choose apps and switch PCs in the launcher. The d-pad or
+  left stick moves focus, A or Cross opens the selection, and B or Circle
+  dismisses a dialog. Raw-HID-only controllers don't navigate the launcher yet.
+- Type composed text with macOS input methods and the character viewer. Accents
+  and Option-letter combinations compose while the pointer is free, including in
+  windowed games. Use the capture shortcut (⌃P by default) to send them as keys.
+  Captured controls always use physical keys, even with an input method
+  selected. Committed text stays ahead of the keys typed after it.
+- The capture shortcut (⌃P by default) switches fullscreen between captured game
+  controls and a free pointer. Every app starts captured, including Desktop.
+- The readiness chip shows Ready and latency when the PC is reachable.
+
+### Bug fixes
+
+- After a stream ends, Glimmer briefly waits for the PC to finish before
+  offering another stream. The launcher explains the wait, and command-line
+  launches wait too.
+- If a PC that has streamed video before sends none, the message asks you to try
+  again instead of changing the firewall.
+- Optional diagnostics report GPU power in watts alongside time awake, so
+  low-clock activity is not mistaken for heavy GPU use.
+
+- Returning to a full-screen stream waits for its transition to settle before
+  resuming video. A missed animation callback no longer leaves the window
+  transparent.
+
+- Idle controller mouse mode no longer keeps polling, and hidden stream windows
+  skip stats-overlay updates. Audio avoids repeated device queries while sound
+  is playing.
+
+- Controller capture and input sending have dedicated threads to keep controls
+  responsive when other apps are busy. Optional diagnostics now measure input
+  delays from the device event through network submission.
+
+- Keys and mouse or controller buttons no longer stay held after a slowdown,
+  lost input event or reconnect. Releases recover when the connection returns.
+  Held keys work without Input Monitoring, and pasted text releases held input
+  before it is sent. Controllers keep their type after the PC reconnects.
+
+- Audio recovers from output changes and sleep while keeping spatial playback
+  and native surround sound. Stereo follows the speaker pair selected in macOS.
+
+- Audio has more protection from other work when the Mac is busy. Switching
+  between speakers and headphones no longer holds up incoming sound.
+
+- Stream diagnostics no longer count packets that arrive late from an earlier
+  frame as lost.
+- SDR colour from the PC is no longer oversaturated.
+- Turning on a controller that needs Input Monitoring shows macOS's own
+  permission prompt instead of opening System Settings on top of it. Once you
+  allow it, the controller starts working when you come back to Glimmer, with no
+  relaunch.
+
 ## 2026.10.7 - 2026-10-11
 
 ### Bug fixes

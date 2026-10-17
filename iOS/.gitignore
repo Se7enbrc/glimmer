@@ -1,0 +1,13 @@
+build/
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+.DS_Store
+__pycache__/
+node_modules/
+Config/Signing.local.xcconfig
+*.mobileprovision
+*.provisionprofile
+*.ipa
+*.dSYM/

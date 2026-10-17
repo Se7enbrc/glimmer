@@ -86,6 +86,8 @@ struct ConnectBanner: View {
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(.red)
                     Text(err)
+                        .contentTransition(.opacity)
+                        .animation(Motion.fade, value: err)
                         .textSelection(.enabled)
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.primary)
@@ -125,9 +127,9 @@ struct ConnectBanner: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(Color.red, lineWidth: 1)
                 }
-                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                .transition(Motion.overlayTransition(reduceMotion: reduceMotion))
             }
         }
-        .animation(.snappy(duration: 0.3, extraBounce: reduceMotion ? 0 : 0.1), value: model.nativeStreamError)
+        .animation(Motion.overlay(reduceMotion: reduceMotion), value: model.nativeStreamError != nil)
     }
 }

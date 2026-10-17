@@ -1,0 +1,254 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+
+//
+//  FramePacer+Tick.swift
+//
+//  The CADisplayLink vsync tick (main run loop → pacingQueue). Split out of
+//  FramePacer.swift to keep that file under the length limit; this is the cheap
+//  main-thread link-timing capture that hands the release decision to the serial
+//  pacing queue so nothing on the present path runs on the main actor. See
+//  `installLink` (the bind site) and `releaseDueFrame` (the dispatched release).
+//
+
+import CoreMedia
+import QuartzCore
+import os
+
+extension FramePacer {
+
+    // MARK: - Realized-cadence telemetry state (tick-confined, metric-only)
+
+    /// Previous tick's `targetTimestamp`, so the refresh-window telemetry can
+    /// accumulate the REALIZED callback cadence (deltas of successive targets)
+    /// rather than the nominal `link.duration`, which reads the panel's rated
+    /// interval even while callbacks are being skipped. TICK-THREAD confined:
+    /// `handleTick` is the only reader/writer, and the link fires on exactly one
+    /// run loop at a time (the private tick thread, or `.main` in fallback), so
+    /// the reads/writes are serialized with no lock. Static because an extension
+    /// can't add instance storage; safe process-wide since exactly one pacer
+    /// ticks at a time (one streaming session), and a stale cross-instance value
+    /// just produces one delta the plausibility bounds in `handleTick` discard.
+    nonisolated(unsafe) static var lastTickTargetTimestamp: CFTimeInterval = .nan
+
+    /// Previous `handleTick` WALL-CLOCK entry time (`hostNow`), so a stretched
+    /// realized tick can be split by cause: a wall-clock gap as large as the
+    /// realized stretch means `handleTick` itself ran late (the tick thread was
+    /// DESCHEDULED); an on-time entry against a jumped `targetTimestamp` means
+    /// macOS COALESCED the callback delivery. Tick-thread confined exactly like
+    /// `lastTickTargetTimestamp` (one reader/writer, one run loop at a time); NaN
+    /// until the second tick, suspension-sized after a backgrounded window - the
+    /// same plausibility bounds the realized delta uses exclude both.
+    nonisolated(unsafe) static var lastTickEntryHostTime: CFTimeInterval = .nan
+
+    /// Ceiling for a plausible realized tick delta (seconds). Above this the
+    /// gap is a link suspension (backgrounded window), a rebuild, or a stale
+    /// cross-instance timestamp - not panel cadence - and folding it in would
+    /// poison the window's min-Hz with a nonsense sub-Hz reading. 0.5s sits far
+    /// above the slowest panel idle cadence (ProMotion's 24Hz ≈ 42ms) yet below
+    /// any suspension-scale gap.
+    static let maxRealizedTickDeltaSeconds: Double = 0.5
+
+    // MARK: - Vsync tick (private tick run loop → pacingQueue)
+
+    /// CADisplayLink callback. Fires on the private high-QoS tick run loop (the
+    /// `pacerTickOffMain` default; `.main` in fallback) - moved off `.main` so a
+    /// busy main thread can't STARVE this callback (the governor callback-gap
+    /// that trimmed ~73% of clean-link frame drops). We capture only the cheap
+    /// link timing here, then hand the release decision to the serial pacing
+    /// queue. Every shared touch is lock-guarded (telemetry / liveness / deficit
+    /// service) or tick-thread-confined (`lastTickTargetTimestamp`); the one
+    /// main-only access (`reapplyPreferredRangeIfNeeded`, which reads the NSView)
+    /// is hopped to the main actor below. Nothing here runs on the main actor.
+    func handleTick(_ link: CADisplayLink, generation: UInt64) {
+        handleTick(target: link.targetTimestamp, duration: link.duration, timestamp: link.timestamp, generation: generation)
+    }
+
+    /// The tick on the link's three timing values, so tests can script a tick sequence.
+    /// `target` is when this tick's frame scans out, `duration` the nominal vsync interval,
+    /// `timestamp` the just-passed vsync the callback fired for.
+    func handleTick(target: CFTimeInterval, duration: CFTimeInterval, timestamp: CFTimeInterval,
+                    generation expectedGeneration: UInt64? = nil) {
+        // `duration` is reliably > 0 on a running link; the 1/60 fallback only
+        // guards a degenerate first tick. We deliberately use a constant here
+        // (not the shared cadence estimate) so this pre-lock read touches no
+        // lock-guarded state.
+        let vsyncInterval = duration > 0 ? duration : (1.0 / 60.0)
+
+        // Present-side liveness: stamp that the LINK is alive (on the tick run
+        // loop). This is the clock the watchdog's "link dead" trip gates on - a
+        // stopped link (same-screen HDR/VRR mode switch) freezes this value
+        // even though VT keeps decoding. Cheap: one lock + two stores.
+        //
+        // ALSO accumulate the REALIZED cadence for the display-refresh telemetry
+        // (ProMotion ramp-down detector + callback-miss visibility): deltas of
+        // successive callbacks' targetTimestamps, NOT the nominal `duration` -
+        // the nominal interval reads a constant rated Hz even while callbacks
+        // skip, while a missed callback stretches the realized delta, so the
+        // per-window min/avg/max expose the tick deficit. The refresh-CHANGE
+        // edge stays on the NOMINAL interval (the panel-cadence ramp signal) so
+        // it doesn't fire on every skipped tick. Min/avg/max over the 1Hz
+        // exporter window - all cheap arithmetic under the lock we already take
+        // here. A "refresh changed" signpost is emitted off-lock below so a
+        // profile run marks the ramp edge.
+        //
+        // The realized delta is NaN until the second tick, can step NEGATIVE
+        // across a link rebuild (the new link's targetTimestamp can sit behind
+        // the old one's - that timebase is discontinuous across rebuilds), and
+        // is suspension-sized after a backgrounded window - the bounds below
+        // exclude all three.
+        var emitRefreshChange = false
+        var changedFromHz = 0.0
+        var changedToHz = 0.0
+        lock.lock()
+        guard running, expectedGeneration == nil || expectedGeneration == bindingGeneration else {
+            lock.unlock(); return
+        }
+        let generation = bindingGeneration
+        let realizedInterval = target - Self.lastTickTargetTimestamp
+        Self.lastTickTargetTimestamp = target
+        let hostNow = CFAbsoluteTimeGetCurrent()
+        liveness.lastTickHostTime = hostNow
+        liveness.lastTickTargetMediaTime = target
+        liveness.tickCount &+= 1
+        if realizedInterval.isFinite, realizedInterval > 0,
+           realizedInterval <= Self.maxRealizedTickDeltaSeconds {
+            refreshTelemetry.refreshIntervalSumSeconds += realizedInterval
+            refreshTelemetry.refreshIntervalSamples &+= 1
+            if !refreshTelemetry.refreshIntervalMinSeconds.isFinite || realizedInterval < refreshTelemetry.refreshIntervalMinSeconds {
+                refreshTelemetry.refreshIntervalMinSeconds = realizedInterval
+            }
+            if !refreshTelemetry.refreshIntervalMaxSeconds.isFinite || realizedInterval > refreshTelemetry.refreshIntervalMaxSeconds {
+                refreshTelemetry.refreshIntervalMaxSeconds = realizedInterval
+            }
+        }
+        if vsyncInterval.isFinite, vsyncInterval > 0 {
+            // Refresh-change edge: compare the NOMINAL derived Hz against the
+            // previous tick's. A >1Hz delta (well above vsync-timing noise)
+            // flags a real panel-cadence change - the ProMotion ramp 120↔24, a
+            // 60↔120 switch, etc. - without firing on realized skip noise.
+            if refreshTelemetry.lastRefreshIntervalSeconds.isFinite {
+                let prevHz = 1.0 / refreshTelemetry.lastRefreshIntervalSeconds
+                let nowHz = 1.0 / vsyncInterval
+                if abs(nowHz - prevHz) > 1.0 {
+                    refreshTelemetry.refreshChangedSinceRead = true
+                    emitRefreshChange = true
+                    changedFromHz = prevHz
+                    changedToHz = nowHz
+                }
+            }
+            refreshTelemetry.lastRefreshIntervalSeconds = vsyncInterval
+        }
+        // Tick-deficit service: roll the realized-rate window when due and
+        // advance the deficit / floor-violation / warm-handover machines off
+        // the MEASURED rates (FramePacer+TickDeficit.swift). Cheap - a couple
+        // of compares on most ticks, the full roll at most 4×/s - and it rides
+        // the lock we already hold. Events (engage/disengage/NOTICE) are
+        // emitted off-lock below.
+        let deficitEvents = serviceTickDeficitLocked(now: hostNow)
+        // VRR targets describe the next scanout; nominal duration can remain at panel maximum.
+        let releaseInterval = Self.releaseInterval(
+            variable: variableRefreshEnabled, target: target, timestamp: timestamp, nominal: vsyncInterval)
+        lock.unlock()
+
+        // DIAGNOSTIC tick-miss classifier (metric-only, no behavior change). A
+        // stretched realized tick (>1.5 vsyncs between successive targetTimestamps)
+        // has two opposite causes needing opposite fixes; split them by whether
+        // `handleTick`'s OWN wall-clock entry stretched the same amount:
+        //   - entry gap also >1.5 vsyncs -> the tick thread was DESCHEDULED
+        //     (handleTick ran late; the CPU starved it).
+        //   - entry on time but the vsync delta jumped -> macOS COALESCED the
+        //     callback delivery on a near-static layer.
+        // All values are tick-thread-local; off-lock, only the counter add (its
+        // own lock) crosses threads. Reuses hostNow/realizedInterval/vsyncInterval -
+        // no extra clock read. `entryGap` shares the realized delta's plausibility
+        // bounds (NaN/first-tick + suspension-sized gaps excluded).
+        let entryGap = hostNow - Self.lastTickEntryHostTime
+        Self.lastTickEntryHostTime = hostNow
+        if realizedInterval.isFinite, realizedInterval > 0,
+           realizedInterval <= Self.maxRealizedTickDeltaSeconds,
+           realizedInterval > 1.5 * vsyncInterval {
+            if entryGap.isFinite, entryGap > 0, entryGap <= Self.maxRealizedTickDeltaSeconds,
+               entryGap > 1.5 * vsyncInterval {
+                TelemetryCounters.shared.tickMissDescheduledTotal.increment()
+            } else {
+                TelemetryCounters.shared.tickMissCoalescedTotal.increment()
+            }
+            // FINER split via a DIRECT promptness measure (the entryGap test above
+            // conflates a starved thread with a skipped vsync DELIVERY - both
+            // stretch the gap). `link.timestamp` is the just-passed vsync this
+            // callback fired for, in the same CACurrentMediaTime base; the lag of
+            // `handleTick` behind it separates the two: ran a full frame-or-more
+            // late = thread starved (PREEMPTED, RT not working); ran promptly but
+            // the interval still stretched = the link skipped a vsync (LINKSKIP, RT
+            // working, residual is the display server). One clock read, off-lock.
+            let lag = CACurrentMediaTime() - timestamp
+            if lag.isFinite, lag > vsyncInterval {
+                TelemetryCounters.shared.tickMissPreemptedTotal.increment()
+            } else {
+                TelemetryCounters.shared.tickMissLinkskipTotal.increment()
+            }
+        }
+
+        handleTickDeficitEvents(deficitEvents)
+
+        if emitRefreshChange {
+            OSSignposter.render.emitEvent(
+                "RefreshChanged",
+                "fromHz=\(changedFromHz, privacy: .public) toHz=\(changedToHz, privacy: .public)")
+        }
+
+        // Re-apply checks touch the link and NSView, so hop to main, at most
+        // ~10 Hz. A preferred-rate change still requires a sustained two-second move.
+        let sinceReapply = hostNow - Self.lastReapplyHopHostTime
+        if !Self.lastReapplyHopHostTime.isFinite || sinceReapply >= Self.reapplyHopMinInterval {
+            Self.lastReapplyHopHostTime = hostNow
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isCurrentBinding(generation) else { return }
+                self.reapplyPreferredRangeIfNeeded()
+            }
+        }
+
+        // A frame released now scans out on the next PANEL vsync, which can sit
+        // before `target` when the link runs below the panel's rate.
+        let scanout = timestamp + releaseInterval
+        pacingQueue.async { [weak self] in
+            self?.releaseDueFrame(
+                targetTimestamp: target, vsyncInterval: releaseInterval, tickScanout: scanout, generation: generation)
+        }
+    }
+
+    func isCurrentBinding(_ generation: UInt64) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return running && bindingGeneration == generation
+    }
+
+    /// Min seconds between main-actor re-apply hops; timestamp is tick-thread confined.
+    static let reapplyHopMinInterval: CFTimeInterval = 0.1
+    nonisolated(unsafe) static var lastReapplyHopHostTime: CFTimeInterval = .nan
+
+    // The floor re-apply (`reapplyPreferredRangeIfNeeded`) lives in
+    // FramePacer+FrameRateRange.swift alongside the range builders it calls.
+}
+
+/// `@objc` shim that forwards the CADisplayLink callback into a Swift closure.
+/// CADisplayLink retains its target, so keeping the proxy separate from
+/// `FramePacer` (which `VideoDecoder` retains) avoids a retain cycle and keeps
+/// the selector signature trivial. NOT main-actor: the link fires on whichever
+/// run loop it was added to - the private tick thread by default, `.main` in
+/// fallback - so the callback (and `handleTick`, which it forwards to) must run
+/// off-main. `@unchecked Sendable` because the proxy carries only an immutable
+/// `@Sendable` closure across the bind (main actor) → fire (tick thread) hand-off.
+/// Declared here with the tick handler it forwards to (moved out of
+/// FramePacer.swift for the length limit).
+final class DisplayLinkProxy: NSObject, @unchecked Sendable {
+    private let onTick: @Sendable (CADisplayLink) -> Void
+    init(onTick: @escaping @Sendable (CADisplayLink) -> Void) {
+        self.onTick = onTick
+    }
+    @objc func tick(_ link: CADisplayLink) {
+        onTick(link)
+    }
+}

@@ -7,6 +7,7 @@
 //  App-delegate attach, launch bootstrap, the live host-refresh loop, custom-bitrate auto-tracking, and shutdown. Split out of AppModel.swift to keep each unit focused.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox
@@ -56,7 +57,7 @@ extension AppModel {
         // the new daemon without the user re-toggling anything.
         AWDLHelperManager.shared.reconcileAfterUpdate()
         // Age out old Logs/Glimmer files off the main thread, diagnostics on or off.
-        TelemetryExporter.sweepLogsAtLaunch()
+        TelemetryExporter.sweepLogsAtLaunch(directory: MacTelemetryCapture.logsDirectory)
         log.info("Glimmer stream engine: Swift-native")
         // Seed the Custom fields from the display when Custom is ALREADY the
         // live preset and has no values on record (a preset restored from
@@ -125,6 +126,7 @@ extension AppModel {
                 // the raw-HID feature, offer it now (e.g. they returned to the
                 // launcher after plugging it in mid-stream).
                 self.maybeOfferRawHID()
+                InputMonitoring.noticeReturn()
                 // Cmd-Tab back into Glimmer while a stream is parked in the
                 // background should bring the stream forward - but ONLY for a
                 // keyboard-style reactivation (Cmd-Tab). If the user clicked
@@ -149,26 +151,16 @@ extension AppModel {
         // polling also keeps the menu's Wake vs Stream action current; streams and
         // system or display sleep pause it instead.
 
-        // Proactively offer the raw-HID DualSense feature the moment a
-        // DualSense connects while Glimmer is running (once), rather than
-        // burying it in Settings. The same observers keep `controllerConnected`
-        // live so the controller-permission UI shows/hides as pads come and go.
-        //
-        // Mid-stream invariant: plugging a pad in during a live stream must be
-        // SILENT and NON-BLOCKING. This handler only updates
-        // `controllerConnected` and calls `maybeOfferRawHID()`, which is
-        // `!isStreaming`-gated - so the offer alert never fires mid-stream. Even
-        // the "Enable" path (`enableRawHIDFromPrompt`) is now side-effect-free
-        // (no IOHIDRequestAccess, no NSWorkspace.open), so nothing on this path
-        // can block the present thread or flash a System Settings window. If
-        // raw HID is already enabled + granted, the pad attaches silently via
-        // `ControllerForwarder.retain()` - never from here.
+        // Offer Extra DualSense buttons when a DualSense connects, and keep `controllerConnected`
+        // live. Mid-stream this stays silent: the offer is `!isStreaming`-gated, so nothing here
+        // can prompt, open System Settings or block the present path during a stream.
         notificationTokens.append(nc.addObserver(
             forName: .GCControllerDidConnect, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.controllerConnected = !GCController.controllers().isEmpty
+                self.launcherController.refresh()
                 self.maybeOfferRawHID()
             }
         })
@@ -180,6 +172,7 @@ extension AppModel {
             // hop to the next runloop tick so the registry reflects reality.
             Task { @MainActor in
                 self?.controllerConnected = !GCController.controllers().isEmpty
+                self?.launcherController.refresh()
             }
         })
         observeHostPollingSleep()
@@ -215,6 +208,7 @@ extension AppModel {
     func setHostPollingSleep(system: Bool, sleeping: Bool) {
         if system { hostPolling.systemSleeping = sleeping } else { hostPolling.displaysSleeping = sleeping }
         if sleeping {
+            cancelHostReadiness()
             hostStatusTask?.cancel()
             hostStatusTask = nil
             hostPolling.movedHostSearch?.cancel()

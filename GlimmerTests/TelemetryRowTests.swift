@@ -8,6 +8,7 @@
 //  how host cadence and input latency are attributed, and what the trace keeps.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import QuartzCore
 import Testing
@@ -40,7 +41,7 @@ struct TelemetryRowTests {
     }
 
     @Test func shutdownDropsOnlyExpiredFrames() {
-        let tracker = FrameTimingTracker(sessionId: "test")
+        let tracker = FrameTimingTracker(sessionId: "test", traceDirectory: .temporaryDirectory)
         tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1,
                                 receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
         tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2,
@@ -150,7 +151,7 @@ struct TelemetryRowTests {
     }
 
     @Test func kernelUdpFullSocketCounterIsReadable() {
-        #expect(TelemetryExporter.udpFullSockTotal() != nil)
+        #expect(MacTelemetryCapture.udpFullSockTotal() != nil)
     }
 
     // MARK: - Host cadence (StatsCollector)
@@ -309,7 +310,7 @@ struct TelemetryRowTests {
     /// Input-to-photon's host interval is the stats window's p50, published once a
     /// second; assembled frames' RTP deltas no longer keep a second estimate.
     @Test func hostFrameIntervalHasOneSource() {
-        let tracker = FrameTimingTracker(sessionId: "test")
+        let tracker = FrameTimingTracker(sessionId: "test", traceDirectory: .temporaryDirectory)
         tracker.hostFrameIntervalMs = 1_000.0 / 120.0
         for index in 0..<40 {
             let nanos = UInt64(index + 1) * 16_666_667
@@ -330,7 +331,7 @@ struct TelemetryRowTests {
     }
 
     @Test func dropStubsSkipFramesAssembledWhileTheWindowWasHidden() {
-        let tracker = FrameTimingTracker(sessionId: "test")
+        let tracker = FrameTimingTracker(sessionId: "test", traceDirectory: .temporaryDirectory)
         func timing(_ frame: Int32, hidden: Bool) -> FrameTimingTracker.Timing {
             FrameTimingTracker.Timing(frameIndex: frame, receiveNanos: 1, assembleNanos: 2,
                                       frameBytes: 0, isIDR: false, hostEncodeMs: 0,
@@ -363,7 +364,7 @@ struct TelemetryRowTests {
     }
 
     @Test func bookmarkRowSitsOnTheInputRowsClock() throws {
-        let tracker = FrameTimingTracker(sessionId: "test")
+        let tracker = FrameTimingTracker(sessionId: "test", traceDirectory: .temporaryDirectory)
         let line = tracker.bookmarkLine(total: 3, uptimeNanos: 92_230_141_830_000)
         let row = try #require(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
         #expect(row["event"] as? String == "bookmark")

@@ -9,6 +9,7 @@
 //  The shortcut and chord recorders live in SettingsShortcutRecorders.swift.
 //
 
+import GlimmerEngine
 import SwiftUI
 
 // MARK: - PCs
@@ -74,6 +75,7 @@ struct PCsPane: View {
 }
 
 struct PCTile: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let host: Host
     @Environment(AppModel.self) private var model
 
@@ -92,7 +94,8 @@ struct PCTile: View {
                 } label: {
                     Image(systemName: isDefault ? "star.fill" : "star")
                         .symbolRenderingMode(.hierarchical)
-                        .contentTransition(.symbolEffect(.replace))
+                        .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
+                        .animation(Motion.fade, value: isDefault)
                         .foregroundStyle(isDefault ? Color.yellow : .secondary)
                 }
                 .buttonStyle(.plain)
@@ -131,7 +134,7 @@ struct PCTile: View {
                 // Facts, not buttons: the PC's apps as plain glyphs.
                 HStack(spacing: 8) {
                     ForEach(host.apps.prefix(3)) { app in
-                        Image(systemName: app.systemImage)
+                        app.icon
                             .font(.system(size: 12, weight: .medium))
                             .symbolRenderingMode(.hierarchical)
                             .foregroundStyle(.secondary)
@@ -162,8 +165,10 @@ struct PCTile: View {
 // MARK: - Shortcuts
 
 struct ShortcutsPane: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
     @State private var showChordCapture = false
+    @State private var nintendoPresence = NintendoControllerPresence()
     // Default-ON: no acceleration curve in game, Tracking Speed kept (macOS linear
     // scaling). Key mirrors MouseAccelerationControl.enabledDefaultsKey.
     @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
@@ -268,6 +273,8 @@ struct ShortcutsPane: View {
                 }
             }
 
+            NintendoLayoutSettings(isConnected: nintendoPresence.isConnected)
+
             Section("macOS keys") {
                 Toggle(isOn: $model.captureSysKeys) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -304,6 +311,10 @@ struct ShortcutsPane: View {
             }
         }
         .formStyle(.grouped)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.controllerConnected)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.rawHIDControllerEnabled)
+        .onAppear { nintendoPresence.start() }
+        .onDisappear { nintendoPresence.stop() }
         .sheet(isPresented: $showChordCapture) {
             ChordCaptureSheet().environment(model)
         }

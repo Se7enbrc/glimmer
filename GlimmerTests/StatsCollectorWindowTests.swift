@@ -6,6 +6,7 @@
 //  The stats window: frame rates, host rate, decode EMAs, presents, drops and gaps.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import QuartzCore
 import Testing

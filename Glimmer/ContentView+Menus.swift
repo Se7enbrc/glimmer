@@ -9,6 +9,7 @@
 //  visible menu button. The menu bar item's panel lives in MenuBarPanel.swift.
 //
 
+import GlimmerEngine
 import AppKit
 import SwiftUI
 
@@ -132,6 +133,12 @@ private struct HostContextMenu: ViewModifier {
         // Several surfaces mount this menu; reload at present-time so a
         // change on one is reflected in the other's checkmark.
         .onAppear { codecPref = HostCodecPreference.load(for: host.id) }
+        Picker("Launcher", selection: Binding(
+            get: { model.hosts.first(where: { $0.id == host.id })?.launcherStyle ?? host.launcherStyle },
+            set: { model.setLauncherStyle($0, for: host) })) {
+            ForEach(LauncherStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.menu)
         // Wake on LAN needs the MAC Sunshine reports; without one the switch
         // is off and disabled, and its title and tooltip say why.
         let hasMac = WakeOnLAN.normalizeMac(host.macAddress) != nil
@@ -149,13 +156,14 @@ private struct HostContextMenu: ViewModifier {
             Label("Pair Again…", systemImage: "key")
         }
         .disabled(isStreamingThisPC)
-        // Only while the chip says an app is running; `app` is nil when the PC didn't name it.
-        if !isStreamingThisPC, case .streamingElsewhere(let app) = model.polledChip(for: host) {
+        // Only a fresh reading from this PC can offer a quit.
+        if !isStreamingThisPC, let live = model.hostLiveStatus, HostLiveStatus.isFresh(live, for: host.id),
+           let occupant = AppModel.occupant(of: live.state) {
             Button {
-                quitApp = app
+                quitApp = occupant
                 showQuitConfirm = true
             } label: {
-                Label("Quit \(app ?? "the Running App") on \(host.displayName)…", systemImage: "xmark.circle")
+                Label("Quit \(occupant ?? "the Running App") on \(host.displayName)…", systemImage: "xmark.circle")
             }
         }
         Button(role: .destructive) {

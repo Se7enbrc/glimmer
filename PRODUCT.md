@@ -61,7 +61,7 @@ that inspired Glimmer; it is not the protocol's name.
   PC.
 - No analytics, tracking or third-party network calls. Glimmer talks only to the
   user's PC, the local network for discovery and Wake on LAN, and its update
-  feed.
+  feed and update downloads.
 - The renderer is AVSampleBufferDisplayLayer, not Metal. Fullscreen covers the
   whole screen, notch included, and supports macOS Game Mode; the player changes
   Game Mode in the system Game Overlay.
@@ -79,7 +79,9 @@ that inspired Glimmer; it is not the protocol's name.
 
 ## Evidence on Hand
 
-- `README.md`: features and install; `docs/assets/launcher.png`: the launcher.
+- `README.md`: features and install; `docs/assets/launcher-art-*.png`: the
+  launcher art (rendered from the site); `docs/assets/launcher.png`: a real
+  screenshot.
 - `CHANGELOG.md`: every release as plain-language bullets.
 - `docs/PROFILING.md` and per-session telemetry under `~/Library/Logs/Glimmer`
   back the tuning claims.

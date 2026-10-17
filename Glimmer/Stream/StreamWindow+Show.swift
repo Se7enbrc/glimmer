@@ -10,6 +10,7 @@
 //  to keep each unit focused; see that file for the window's stored state.
 //
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreGraphics
@@ -156,7 +157,7 @@ extension StreamWindow {
                     // Let AppKit finish committing its Space options before taking presentation back.
                     DispatchQueue.main.async { [weak self] in
                         guard let self, !self.didClose, self.window.styleMask.contains(.fullScreen) else { return }
-                        self.applyPresentationOptions(coversNotch: false)
+                        if !self.awaitingFirstFrameFadeIn { self.applyPresentationOptions(coversNotch: false) }
                         Diag.notice("Space presentation: requested=\(NSApp.presentationOptions.rawValue) "
                             + "effective=\(NSApp.currentSystemPresentationOptions.rawValue)", "Stream.Window")
                     }

@@ -7,13 +7,14 @@
 //  Rumble coalescing, motor intensity mapping, trigger rumble and light-bar state through the sinks.
 //
 
+@testable import GlimmerEngine
 import GameController
 import Testing
 @testable import Glimmer
 
 struct ControllerHapticsActuationTests {
 
-    private typealias Motor = (slot: UInt8, locality: GCHapticsLocality, intensity: Float)
+    private typealias Motor = (slot: UInt8, locality: ControllerFeedbackOutput.Locality, intensity: Float)
 
     /// A haptics instance with one controller-less pad on slot 0 and every actuation captured.
     private final class Rig: @unchecked Sendable {
@@ -22,10 +23,12 @@ struct ControllerHapticsActuationTests {
         var lights: [ControllerHaptics.LightColor] = []
 
         init(plan: ControllerHaptics.ActuationPlan = .splitHandles) {
-            let pad = ControllerHaptics.PadHaptics(controller: nil)
-            pad.plan = plan
-            pad.triggersSupported = true
-            haptics.pads[0] = pad
+            haptics.register(slot: 0, output: ControllerFeedbackOutput(localities: [], makeMotor: { _, _, _, _ in nil }))
+            haptics.streamActivated(appActive: true)
+            haptics.queue.sync {
+                haptics.pads[0]?.plan = plan
+                haptics.pads[0]?.triggersSupported = true
+            }
             haptics.motorSink = { [self] slot, locality, intensity in motors.append((slot, locality, intensity)) }
             haptics.lightSink = { [self] _, color in lights.append(color) }
         }
@@ -82,10 +85,13 @@ struct ControllerHapticsActuationTests {
 
     @Test func burstsCoalesceToTheNewestRumbleAndColor() {
         let rig = Rig()
-        rig.haptics.queue.sync { rig.haptics.quiesced = false }
+        rig.haptics.queue.sync { rig.haptics.quiesced = false; rig.haptics.feedbackEnabled = true }
+        // Hold the actuator so the whole burst is queued before any of it runs, as on a busy pad.
+        rig.haptics.queue.suspend()
         for low in [UInt16(1000), 2000, 65535] { rig.haptics.setRumble(controllerNumber: 0, lowFreq: low, highFreq: 0) }
         rig.haptics.setLight(controllerNumber: 0, red: 1, green: 1, blue: 1)
         rig.haptics.setLight(controllerNumber: 0, red: 7, green: 8, blue: 9)
+        rig.haptics.queue.resume()
         rig.haptics.queue.sync {}
         #expect(rig.motors.map(\.intensity) == [1.0, 0.0])
         #expect(rig.lights.count == 1)
@@ -94,6 +100,7 @@ struct ControllerHapticsActuationTests {
 
     @Test func aQuiescedActuatorDropsEveryEvent() {
         let rig = Rig()
+        rig.haptics.stopAll(reason: "test")
         rig.haptics.setRumble(controllerNumber: 0, lowFreq: 65535, highFreq: 65535)
         rig.haptics.setLight(controllerNumber: 0, red: 1, green: 2, blue: 3)
         rig.haptics.queue.sync {}

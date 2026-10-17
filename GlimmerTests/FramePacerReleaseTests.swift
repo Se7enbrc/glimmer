@@ -9,6 +9,7 @@
 //  the submit path's suppression, overflow, warm-handover and cadence rules.
 //
 
+@testable import GlimmerEngine
 import CoreMedia
 import Foundation
 import os
@@ -20,6 +21,7 @@ import Testing
 func makeTestPacer(fps: Int32 = 120, queued: Int = 0) throws -> FramePacer {
     let pacer = FramePacer(stats: StatsCollector(), configuredFps: fps)
     pacer.running = true
+    pacer.displayBound = true
     for index in 0..<queued {
         pacer.queue.append(FramePacer.Entry(
             sampleBuffer: try makeEmptySampleBuffer(), hostPTSSeconds: Double(index) / Double(fps)))

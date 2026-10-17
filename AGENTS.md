@@ -6,9 +6,10 @@ Where the two differ, the stricter rule wins.
 
 ## What Glimmer is
 
-A Mac-native client for [Sunshine](https://github.com/LizardByte/Sunshine):
-Swift 6, Apple Silicon, macOS 26 and later. Socket, decoder, display, audio and
-input all run in one Swift process, with no external player and no C engine.
+Native Mac and iOS clients for
+[Sunshine](https://github.com/LizardByte/Sunshine): Swift 6, Apple Silicon,
+macOS 26 and iOS 26 or later. Socket, decoder, display, audio and input all run
+in one Swift process, with no external player and no C engine.
 
 The bar is one sentence: someone using Glimmer should mistake it for something
 Apple shipped. Everything below follows from it.
@@ -21,18 +22,24 @@ you're changing before you change it. Before UI work, read
 it's for). [docs/PROFILING.md](docs/PROFILING.md) gets the telemetry an engine
 change needs, and [docs/SECURITY.md](docs/SECURITY.md) covers the root helper.
 
-| Path                         | What lives there                                                                             |
-| ---------------------------- | -------------------------------------------------------------------------------------------- |
-| `Glimmer/`                   | The app: SwiftUI and AppKit UI, `AppModel+*`, menu bar, settings, logging (`LogStore.swift`) |
-| `Glimmer/Stream/`            | The stream around the protocol: decode, display, audio playout, input, pairing, telemetry    |
-| `Glimmer/Stream/Native/`     | Sunshine's protocol: RTSP, the ENet control channel, RTP video and audio, FEC                |
-| `Glimmer/Stream/HIDGamepad/` | Raw-HID game controllers and the generated controller database                               |
-| `Glimmer/CLI/`               | The `glimmer` command line, in the app binary                                                |
-| `Glimmer/Models/`            | The PC record and a few settings types                                                       |
-| `helper/`                    | The opt-in root daemon that parks AirDrop's radio during a stream                            |
-| `LoginHelper/`               | The login item                                                                               |
-| `GlimmerTests/`              | Hostless unit tests                                                                          |
-| `scripts/`                   | Build, signing and release tooling the Makefile calls                                        |
+| Path                                                  | What lives there                                                              |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `iOS/`                                                | Native iPhone/iPad app, tests and platform adapters; see `iOS/AGENTS.md`      |
+| `Glimmer/`                                            | Native Mac app: SwiftUI/AppKit UI, `AppModel+*`, menus and settings           |
+| `Glimmer/EngineAdapters/`                             | Prepared Mac media, presentation, telemetry and session adapters              |
+| `Glimmer/Stream/`                                     | Native windows, capture, controller bindings and remaining Mac shell adapters |
+| `Glimmer/Stream/HIDGamepad/`                          | Raw-HID game controllers and the generated controller database                |
+| `GlimmerEngine/Network/`                              | Pairing, TLS/control transport, RTSP, ENet, RTP and FEC                       |
+| `GlimmerEngine/Session/`                              | Canonical session/backend lifecycle, recovery and scalar quality policy       |
+| `GlimmerEngine/Video/`, `Pacing/`, `Audio/`, `Input/` | Shared decode, presentation handoff, audio and synchronous input policy       |
+| `GlimmerEngine/Models/`, `Protocol/`                  | Shared values, neutral failure classification and protocol contracts          |
+| `GlimmerEngine/Diagnostics/`                          | Shared logging, signposts, statistics and telemetry                           |
+| `Glimmer/CLI/`                                        | The `glimmer` command line, in the app binary                                 |
+| `Glimmer/Models/`                                     | Native PC records and settings adapters                                       |
+| `helper/`                                             | Opt-in root daemon that parks AirDrop's radio during a stream                 |
+| `LoginHelper/`                                        | Login item                                                                    |
+| `GlimmerTests/`, `EnginePackageTests/`                | Mac hostless and external shared-package tests                                |
+| `scripts/`                                            | Build, boundary audits, signing and release tooling used by the Makefile      |
 
 ## Protect the bar
 
@@ -53,8 +60,9 @@ tests and makes the app worse is a regression with a green check mark.
 
 ## Setup and commands
 
-Xcode 26.6 or later. Hosted verification, CodeQL and releases all use Xcode 26.6
-on macOS 26. Keep their toolchains aligned; the deployment target is 26.0.
+Xcode 26.6 or later. Hosted verification, Swift CodeQL and releases use Xcode
+26.6 on macOS 26; CodeQL's Python and Actions jobs run on Linux. Keep the Mac
+toolchains aligned; the deployment target is 26.0.
 
 ```bash
 brew install python swiftlint actionlint trufflehog pre-commit
@@ -62,15 +70,20 @@ pre-commit install
 ```
 
 - `make app`: Debug build, unsigned. A compile check.
-- `make test`: the unit tests. Hostless, no PC needed.
+- `make test`: the Mac unit tests. Hostless, no PC needed.
+- `make ios-test`, `make ios-device`: Simulator tests and unsigned Release
+  device build.
+- `make verify-all`: the local checks for both apps; see
+  [ownership](docs/APPLE_REPOSITORY.md).
 - `make verify`: Actionlint, the SPDX notice check, strict SwiftLint,
   release-tool tests, `make test` and protocol fuzz tests under
   AddressSanitizer. This is the gate: hosted Verify runs its three parts
   (`make check`, `make test`, `make test-asan`) as parallel jobs under the
-  required `macOS` check on every `main` commit and every pull request that
-  touches more than documentation (those run `make check` alone), and
-  `make dist` runs it, so nothing is done until it passes there. Locally it does
-  not fail on compiler warnings, so read the build log: there must be none.
+  required `macOS` check, alongside engine and iOS app verification, on every
+  `main` commit and every pull request that touches more than documentation
+  (those run `make check` alone), and `make dist` runs it, so nothing is done
+  until it passes there. Locally it does not fail on compiler warnings, so read
+  the build log: there must be none.
 - `make dev`: tests, then the Release build installed and relaunched. On a Mac
   with a Developer ID it signs and notarizes on the way, as every install does.
 
@@ -88,9 +101,9 @@ earns its own privacy record, so use `make verify` for correctness and
 copies" in CONTRIBUTING.
 
 Never run the publishing or keychain setup targets (`dist`, `release-publish`,
-`brew-bump`, `sparkle-keys`, `creds-init`, `setup-notary`, `codesign-setup`,
-`codesign-teardown`) unless the maintainer asks for that exact thing. They
-publish to users or rewrite signing state.
+`brew-bump`, `rc`, `sparkle-keys`, `creds-init`, `setup-notary`,
+`codesign-setup`, `codesign-teardown`) unless the maintainer asks for that exact
+thing. They publish to users or rewrite signing state.
 
 Signing material lives outside the repo, in
 `~/Library/Keychains/developer-id.keychain-db` and `~/.config/developer-id/`.
@@ -125,12 +138,12 @@ certificates or keys to solve a profile problem.
 
 Each of these gets a pull request sent back.
 
-- **Zero warnings.** Compiler and `swiftlint lint --strict` both; lint covers
-  `Glimmer/`, `GlimmerTests/`, `helper/` and `LoginHelper/`. Fix the cause: no
-  inline `swiftlint:disable` (the generated controller database is the one
-  exception), no raised thresholds, no moving a warning into a helper where the
-  linter can't see it. A 17-way `if` chain becomes a table, not a function with
-  the same 17 branches.
+- **Zero warnings.** Compiler and `swiftlint lint --strict` both; the shared
+  `scripts/lint-swift.sh` checks both apps, the engine, tests and helpers. Fix
+  the cause: no inline `swiftlint:disable` (the generated controller database is
+  the one exception), no raised thresholds, no moving a warning into a helper
+  where the linter can't see it. A 17-way `if` chain becomes a table, not a
+  function with the same 17 branches.
 - **Swift 6, complete strict concurrency.** `@MainActor` for UI, `actor` for
   engine state. `nonisolated(unsafe)` and `@unchecked Sendable` only with a
   comment stating the invariant (CONTRIBUTING, Concurrency).
@@ -174,6 +187,9 @@ Each of these gets a pull request sent back.
 These are settled. A pull request is not the place to reopen them.
 
 - The renderer is `AVSampleBufferDisplayLayer`. Not Metal.
+- Glimmer stays light: real time and fast, but cheap to run. No feature may cost
+  meaningful CPU, GPU or power in steady state; judge cost in watts
+  (`gpu_power_w`, `package_power_w`), not GPU residency.
 - Fullscreen defaults to a borderless window covering the whole panel, notch
   included; a native full-screen Space is opt-in. Preserve saved fullscreen
   preferences. macOS owns the Game Mode toggle; never use private APIs or
@@ -198,26 +214,36 @@ These are settled. A pull request is not the place to reopen them.
 - The deployment target is macOS 26. Anything newer sits behind `#available`,
   and the macOS 26 path must still look finished.
 - No analytics, tracking or third-party network calls. Glimmer talks to the PC,
-  to its local network for discovery and Wake on LAN, and to its update feed.
+  to its local network for discovery and Wake on LAN, and to its update feed and
+  update downloads.
 
 ## Choices that look wrong and aren't
 
 Each one has its reason in a code comment or its commit. Undo one only with new
 numbers or a new platform API, never as cleanup.
 
-- **`Glimmer/Stream/CHelpers.h` is the only non-Swift code**: an Objective-C
-  exception guard. AVAudioEngine can raise an NSException mid device change, and
-  Swift can't catch one. Add no other C or Objective-C.
+- **Audio output uses Swift-controlled AudioToolbox units.** HAL output pulls
+  from a preallocated SPSC PCM ring through varispeed and, on stereo outputs,
+  AUSpatialMixer. Keep callbacks free of locks, allocation and runtime metadata
+  work; graph changes use OSStatus recovery off the render thread. There is no
+  Objective-C exception shim or bridging header.
 - **`DatagramBatch` calls `recvmsg_x` through `dlsym`.** It receives video in
   batches with one syscall, and falls back to `recvfrom` if the symbol is gone.
-- **The FEC kernels in `ReedSolomon.swift` are portable SIMD Swift**, about 2.5×
-  slower than the NEON code they replaced. They only run when packets are lost.
+- **The FEC kernels in `ReedSolomon.swift` are portable SIMD Swift**. They only
+  run when packets are lost.
 - **The control channel turns TLS session resumption off**, so every connection
   re-checks the PC's pinned certificate.
 - **`scripts/sign-bundle.sh` signs inside out.** Never `codesign --deep`: it
   stamps Glimmer's entitlements onto Sparkle's helpers.
 
 ## UI and copy
+
+- **Writing docs:** Lead with what readers do or get; no intros or hedging.
+  Number procedures, one action per step, with copy-paste commands where useful.
+  Keep sections within one screen and lists near five items; split recovery
+  steps. Put detail in hints; move tests, telemetry fields, internals and code
+  paths to developer pages. End each user page with a next-step link; first and
+  last lines must explain purpose and destination.
 
 - Copy is short, plain and specific, like the app's own “Couldn't reach Den PC.
   Make sure it's awake and on the same network.” Sentence case. No em dashes, no
@@ -237,6 +263,8 @@ numbers or a new platform API, never as cleanup.
   `.fixedSize(horizontal: false, vertical: true)`. Never add a flexible frame (a
   `minHeight` floor, `maxWidth: .infinity`, a trailing `Spacer`) outside that.
   Prove a geometry change with the osascript check in CONTRIBUTING.
+- Nothing animates continuously or repeats: motion runs once, on a state change.
+  A looping animation keeps the main thread busy for as long as it is on screen.
 - Run it and look at it before calling it done: empty, one PC, many apps,
   mid-stream, disconnected, light and dark, the smallest and largest window.
   Check VoiceOver labels and keyboard navigation. A UI change comes with before

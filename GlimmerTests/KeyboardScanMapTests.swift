@@ -10,6 +10,7 @@
 //
 
 import Carbon.HIToolbox
+import GlimmerEngine
 import Testing
 @testable import Glimmer
 

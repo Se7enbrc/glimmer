@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import GameController
@@ -339,14 +340,14 @@ struct HIDGamepadTests {
 
         forwarder.controllerQuitChordProvider = { .l1r1 }
         forwarder.pushHID(slot: 3, state: (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG, analog)) { nil }
-        #expect(backend.calls.count == 1)
+        #expect(backend.calls.map(\.buttons) == [StreamProtocol.B_FLAG, 0])
         #expect(forwarder.quitChordDwellSlot == 3)
         forwarder.pushHID(slot: 3, state: (StreamProtocol.LB_FLAG, analog)) { nil }
         #expect(forwarder.quitChordDwellSlot == nil)
-        #expect(backend.calls.count == 2)
+        #expect(backend.calls.map(\.buttons) == [StreamProtocol.B_FLAG, 0, StreamProtocol.LB_FLAG])
         forwarder.isReady = false
         forwarder.pushHID(slot: 3, state: (StreamProtocol.B_FLAG, analog)) { nil }
-        #expect(backend.calls.count == 2)
+        #expect(backend.calls.map(\.buttons) == [StreamProtocol.B_FLAG, 0, StreamProtocol.LB_FLAG])
     }
 
     /// Not Now quiets one pad until relaunch; Don't Ask Again outlives it.
@@ -363,5 +364,15 @@ struct HIDGamepadTests {
         let relaunched = HIDPermissionOffers(defaults: defaults)
         #expect(relaunched.shouldOffer("2DC8:301B"))
         #expect(!relaunched.shouldOffer("0F0D:00C1"))
+    }
+
+    /// Opening System Settings while macOS can still prompt hid the prompt under it.
+    @MainActor @Test func inputMonitoringPromptsBeforeItEverOpensSettings() {
+        #expect(InputMonitoring.step(for: .unknown) == .systemPrompt)
+        #expect(InputMonitoring.step(for: .denied) == .openSettings)
+        #expect(InputMonitoring.step(for: .granted) == .reopenReaders)
+        #expect(InputMonitoring.actionTitle(.denied) == "Open System Settings")
+        #expect(!AppModel.hidPermissionExplanation(.denied).contains("will then ask"))
+        #expect(AppModel.rawHIDExplanation(.unknown).contains("will then ask"))
     }
 }

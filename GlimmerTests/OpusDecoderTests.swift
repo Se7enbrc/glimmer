@@ -4,6 +4,7 @@
 // Real 5 ms CELT packets at Sunshine's settings, with a distinct -12 dBFS tone per channel.
 // Silence, a stall, wrong channel order or a dead channel all change the decoded samples.
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer

@@ -478,7 +478,9 @@ check:
 	@echo "▶ Check (workflows + lint --strict + release-tool tests)..."
 	@actionlint
 	@scripts/check-spdx.sh
-	@swiftlint lint --strict --quiet
+	@python3 scripts/check-engine-boundary.py
+	@python3 scripts/check-ios-boundary.py
+	@scripts/lint-swift.sh lint --strict --quiet
 	@$(MAKE) test-scripts
 
 # Fixture repositories need git's own discovery; a hook's GIT_DIR would aim them at this one.
@@ -594,3 +596,5 @@ disable-telem:
 	@[ -x scripts/telem-client.sh ] && scripts/telem-client.sh disable || true
 	@defaults write io.ugfugl.Glimmer telemetryEnabled -bool NO
 	@echo "  ✓ app telemetry exporter OFF - relaunch Glimmer to pick it up"
+
+include scripts/apple-apps.mk

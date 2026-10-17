@@ -7,6 +7,7 @@
 //  Linear pointer scaling while a stream has focus, through the HID system's IOKit user client.
 //
 
+import GlimmerEngine
 import Foundation
 import IOKit
 import IOKit.hidsystem

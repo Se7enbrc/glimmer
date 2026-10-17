@@ -13,12 +13,15 @@ enum TakeoverDialogCopy {
         "\(occupantApp ?? "Another app") is running on \(hostName)."
     }
 
-    static let message = "It will quit and your stream will start."
+    static let message = "It will quit and your stream will start. Unsaved progress may be lost."
 }
 
 struct MainWindow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
+    @FocusState private var launcherFocus: LauncherFocus?
+    @State private var focusCells: [LauncherFocus] = []
     @State private var showAWDLPrompt = false
     @State private var awdlPromptChecked = false
     /// Lifted out of EmptyPairingState so the sheet survives the swap to
@@ -30,12 +33,31 @@ struct MainWindow: View {
         @Bindable var model = model
         return Group {
             if model.hosts.isEmpty {
-                EmptyPairingState(showPair: $showPair)
+                EmptyPairingState(showPair: $showPair).transition(.opacity.animation(Motion.fade))
             } else {
-                ConnectSurface()
+                ConnectSurface(focus: $launcherFocus).transition(.opacity.animation(Motion.fade))
             }
         }
-        .onAppear { model.setHIDDiscovery(true, for: .launcher) }
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.hosts.isEmpty)
+        .background {
+            LauncherControllerWindow(controller: model.launcherController, handle: navigateLauncher)
+                .frame(width: 0, height: 0)
+        }
+        .onPreferenceChange(LauncherFocusCells.self) { cells in
+            focusCells = cells
+            if let launcherFocus, launcherFocus != .pc, !cells.contains(launcherFocus) {
+                self.launcherFocus = cells.first
+            }
+        }
+        .onChange(of: model.selectedHost?.id) { _, _ in launcherFocus = nil }
+        .onChange(of: launcherFocus) { _, focus in
+            if focus == nil { model.launcherControllerNavigating = false }
+        }
+        .onChange(of: model.launcherStyle) { _, _ in launcherFocus = nil }
+        .onAppear {
+            model.restartHostStatusPolling()
+            model.setHIDDiscovery(true, for: .launcher)
+        }
         .onDisappear { model.setHIDDiscovery(false, for: .launcher) }
         .sheet(isPresented: $showPair) {
             PairSheet().environment(model)
@@ -44,7 +66,9 @@ struct MainWindow: View {
         // maybeOfferRawHID) - explains the feature before macOS's Input
         // Monitoring prompt; declining never re-asks.
         .alert("Turn on Extra DualSense buttons?", isPresented: $model.showRawHIDPrompt) {
-            Button("Turn On") { model.enableRawHIDFromPrompt() }
+            Button(InputMonitoring.state == .denied ? "Open System Settings" : "Turn On") {
+                model.enableRawHIDFromPrompt()
+            }
             // "Not Now" just dismisses - no permanent flag - so a future
             // DualSense connect offers again. Only "Don't Ask Again" answers
             // for good (matches AWDLEnablePrompt's Not Now / Don't ask again
@@ -52,16 +76,16 @@ struct MainWindow: View {
             Button("Not Now", role: .cancel) { model.showRawHIDPrompt = false }
             Button("Don't Ask Again") { model.declineRawHIDPrompt() }
         } message: {
-            Text(AppModel.rawHIDExplanation)
+            Text(AppModel.rawHIDExplanation(InputMonitoring.state))
         }
         // Same explanation and answers for a pad macOS doesn't recognise (generic HID).
         .alert("Use \(model.hidPermissionPadName ?? "this controller") with Glimmer?",
                isPresented: $model.showHIDPermissionPrompt) {
-            Button("Continue") { model.continueHIDPermission() }
+            Button(InputMonitoring.actionTitle(InputMonitoring.state)) { model.continueHIDPermission() }
             Button("Not Now", role: .cancel) { model.dismissHIDPermission() }
             Button("Don't Ask Again") { model.declineHIDPermission() }
         } message: {
-            Text(AppModel.hidPermissionExplanation)
+            Text(AppModel.hidPermissionExplanation(InputMonitoring.state))
         }
         // Wi-Fi stutter protection is offered at first open on every Mac, whatever the
         // route: awdl0 wrecks streams, and a MacBook first opened on Ethernet goes to the
@@ -135,10 +159,41 @@ struct MainWindow: View {
         }
         .navigationTitle("Glimmer")
     }
+
+    private func navigateLauncher(_ command: LauncherCommand) {
+        guard !model.isStreaming else { return }
+        // The controls become focusable a render later, so the first command waits a turn.
+        guard model.launcherControllerNavigating else {
+            model.launcherControllerNavigating = true
+            DispatchQueue.main.async { navigateLauncher(command) }
+            return
+        }
+        let modal = showPair || showAWDLPrompt || model.pairSheetShown || model.showRawHIDPrompt
+            || model.showHIDPermissionPrompt || model.pendingTakeover != nil
+        if command == .dismiss {
+            if modal { model.launcherController.postKey(.dismiss) }
+            return
+        }
+        guard !modal else { return }
+        let apps = model.selectedHost?.apps ?? []
+        let cells = focusCells
+        if command == .activate {
+            if launcherFocus != nil {
+                model.launcherController.postKey(.activate)
+            } else {
+                launcherFocus = cells.first ?? (model.hosts.count > 1 ? .pc : nil)
+            }
+            return
+        }
+        let columns = model.launcherStyle == .covers ? LauncherLayout.columns(appCount: apps.count) : 2
+        launcherFocus = LauncherNavigation.destination(from: launcherFocus, command: command,
+                                                        cells: cells, columns: columns,
+                                                        hasSwitcher: model.hosts.count > 1)
+    }
 }
 
 /// The Stream menu: the launcher's one action in its words, where ⌘? finds it, and the PCs
-/// on ⌘1-⌘9 (nine at most; ⌘0 reads as reset). PCs lock while streaming, since ⌘ stays with the Mac.
+/// on ⌘1-⌘9 (nine at most; ⌘0 reads as reset). Browsing another PC leaves the stream running.
 struct StreamMenu: View {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
@@ -154,7 +209,6 @@ struct StreamMenu: View {
             Toggle(host.displayName, isOn: Binding(
                 get: { model.selectedHost?.id == host.id }, set: { if $0 { model.selectHost(host) } }))
                 .keyboardShortcut(index < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(index + 1)"))) : nil)
-                .disabled(model.isStreaming)
         }
     }
 
@@ -162,7 +216,10 @@ struct StreamMenu: View {
     @ViewBuilder private var primaryItem: some View {
         let host = model.selectedHost
         switch model.menuBarPrimaryAction {
-        case .stream(let app): Button("Stream \(app)") { model.streamHeroApp() }
+        case .stream(let app):
+            Button("Stream \(app)") { model.streamHeroApp() }
+                .disabled(model.selectedReadinessReason != nil)
+                .accessibilityHint(model.selectedReadinessReason ?? "")
         case .wake: Button("Wake and Connect") { if let host { model.wakeHost(host, thenConnect: true) } }
         case .waking: Button("Stop Waiting") { if let host { model.cancelWake(host) } }
         case .pairAgain:
@@ -184,6 +241,8 @@ struct StreamMenu: View {
 // MARK: - Connect surface
 
 private struct ConnectSurface: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let focus: FocusState<LauncherFocus?>.Binding
     @Environment(AppModel.self) private var model
 
     /// The raw connecting edge: `streamPhase` alone, since `isStreaming` flips at
@@ -199,15 +258,7 @@ private struct ConnectSurface: View {
     /// doesn't briefly flash a spinner or change the button.
     @State private var showsConnectingUI = false
 
-    /// True once the stream is established and the fullscreen window is
-    /// taking over - Glimmer's window fades down so the handoff doesn't
-    /// strobe two competing surfaces. NOT true while backgrounded (the
-    /// launcher is the foreground surface then) and NOT during CONNECTING:
-    /// `isStreaming` flips at stream() ENTRY, so without that exemption the
-    /// `!isHandedOff` guard below unmounted the StreamButton for the whole
-    /// handshake - the .connecting capsule was unreachable dead code and a
-    /// stuck connect stranded the user on a dimmed, button-less launcher.
-    /// Handoff (and the dim) now begin at the live edge, as documented.
+    /// The live app owns the controls until it is hidden or reconnecting.
     private var isHandedOff: Bool {
         guard model.isStreaming, !model.nativeStreamBackgrounded else { return false }
         if case .connecting = model.streamPhase { return false }
@@ -232,7 +283,8 @@ private struct ConnectSurface: View {
     private var launchIsOnAButton: Bool {
         guard let attempt = model.lastLaunchAttempt, let host = model.selectedHost,
               attempt.host.id == host.id else { return false }
-        return AppIconsRow.inlineApps(host.apps).contains { $0.id == attempt.app.id }
+        let apps = model.launcherStyle == .covers ? host.apps : AppIconsRow.inlineApps(host.apps)
+        return apps.contains { $0.id == attempt.app.id }
     }
 
     var body: some View {
@@ -242,23 +294,29 @@ private struct ConnectSurface: View {
             // Banner first so it can't be missed. NOT behind the 400 ms hold:
             // errors must surface the instant they exist.
             ConnectBanner()
-            PCHeader(host: model.selectedHost)
+            PCHeader(host: model.selectedHost, focus: focus)
             if let host = model.selectedHost, !host.apps.isEmpty {
-                AppIconsRow(apps: host.apps, host: host, connectingShown: showsConnectingUI)
+                AppIconsRow(apps: host.apps, host: host, focus: focus, connectingShown: showsConnectingUI)
+                    .id(host.id)
+                    .transition(.opacity.animation(Motion.fade))
             }
             if showsStateButton {
-                StreamButton(isConnecting: showsConnectingUI)
+                StreamButton(isConnecting: showsConnectingUI, launcherFocus: focus)
+                    .preference(key: LauncherFocusCells.self, value: [.state])
                     .transition(.opacity)
             }
             ContextFooter()
                 .frame(maxWidth: .infinity)
         }
-        .animation(.snappy(duration: 0.3), value: showsStateButton)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: showsStateButton)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.nativeStreamError != nil)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.selectedHost?.id)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.selectedHost?.apps.count)
         // No trailing Spacer: the window sizes to this column (.windowResizability
         // in GlimmerApp). 532pt of content in 24pt margins is the 580pt window, and
         // must stay in step with GlimmerApp's minWidth, or the window can be dragged.
-        .frame(width: 532)
-        .padding(.horizontal, 24)
+        .frame(width: LauncherLayout.contentWidth)
+        .padding(.horizontal, LauncherLayout.horizontalPadding)
         .padding(.top, 4)
         .padding(.bottom, 18)
         // TAKE THE IDEAL HEIGHT, NOT THE OFFERED ONE. Removing the Spacer was
@@ -270,10 +328,6 @@ private struct ConnectSurface: View {
         // proposes nil height to the column, so every such floor resolves to its
         // own ideal instead of springboarding off the window.
         .fixedSize(horizontal: false, vertical: true)
-        // Hand off to the stream window: dim Glimmer's content so the
-        // fullscreen surface visibly takes over and reverses on disconnect.
-        .opacity(isHandedOff ? 0.4 : 1.0)
-        .animation(.snappy(duration: 0.4), value: isHandedOff)
         // The 400 ms connect threshold. task(id:) restarts on every raw-edge
         // flip: a connect that establishes inside the hold cancels the sleep
         // (no flash); a disconnect mid-hold resets the same way.
@@ -337,6 +391,7 @@ var accentSurfaceGradient: LinearGradient {
 /// one PC), the specs under it and the readiness chip. Right-click for the PC's menu.
 private struct PCHeader: View {
     let host: Host?
+    let focus: FocusState<LauncherFocus?>.Binding
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -359,6 +414,8 @@ private struct PCHeader: View {
 
     private var name: some View {
         Text(host?.displayName ?? "No PC selected")
+            .contentTransition(.opacity)
+            .animation(Motion.fade, value: host?.id)
             .font(.title.weight(.semibold))
             .lineLimit(1)
     }
@@ -390,6 +447,7 @@ private struct PCHeader: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
+        .modifier(LauncherControlFocus(focus: focus, target: .pc))
         .help("Choose a PC")
         .accessibilityLabel("PC")
         .accessibilityValue(host?.displayName ?? "None")
