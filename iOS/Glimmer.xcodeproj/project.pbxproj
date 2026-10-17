@@ -331,7 +331,7 @@
 			mainGroup = 8F0DF1F033142B391604291F;
 			minimizedProjectReferenceProxies = 0;
 			packageReferences = (
-				02A630158286122700D1D960 /* XCRemoteSwiftPackageReference "glimmer" */,
+				02A630158286122700D1D960 /* XCLocalSwiftPackageReference "glimmer" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 6DA2373E6ECD287E4C49A17B /* Products */;
@@ -654,21 +654,17 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		02A630158286122700D1D960 /* XCRemoteSwiftPackageReference "glimmer" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Se7enbrc/glimmer.git";
-			requirement = {
-				kind = revision;
-				revision = d6f4d88effa59e332e03e03768a6ac4b581427cf;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		02A630158286122700D1D960 /* XCLocalSwiftPackageReference "glimmer" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		CC9F14979956299491D3FB37 /* GlimmerEngine */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 02A630158286122700D1D960 /* XCRemoteSwiftPackageReference "glimmer" */;
+			package = 02A630158286122700D1D960 /* XCLocalSwiftPackageReference "glimmer" */;
 			productName = GlimmerEngine;
 		};
 /* End XCSwiftPackageProductDependency section */

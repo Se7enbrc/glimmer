@@ -35,6 +35,13 @@ class SwiftScanScopeTests(unittest.TestCase):
             "scripts/tests/test_release.py", "GlimmerTests/FramePacerTests.swift", "fuzz/rtsp.swift",
             ".github/workflows/verify.yml", "index.html", "website/site.css", "renovate.json"]))
 
+    def test_ios_and_shared_package_changes_run_both_apps(self):
+        for path in ("iOS/Glimmer/IOSAppModel.swift", "iOS/Glimmer.xcodeproj/project.pbxproj",
+                     "iOS/Glimmer.xcodeproj/xcshareddata/xcschemes/Glimmer-iOS.xcscheme",
+                     "iOS/Makefile", "Package.swift", "scripts/apple-apps.mk"):
+            with self.subTest(path=path):
+                self.assertTrue(CHANGED.must_scan([path]))
+
     def test_an_empty_or_blank_list_scans(self):
         self.assertTrue(CHANGED.must_scan([]))
         self.assertTrue(CHANGED.must_scan(["", "  \n"]))

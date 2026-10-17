@@ -95,6 +95,18 @@ local diagnostics directory still requires the telemetry gate and uses loopback
 metrics only. See [engine extraction](ENGINE_EXTRACTION.md) for exact boundaries
 and the [iOS roadmap](IOS_ENGINE_ROADMAP.md) for device acceptance.
 
+### Repository ownership
+
+Both Apple clients live in this repository. The Mac project compiles
+`GlimmerEngine/` as a framework; `iOS/Glimmer.xcodeproj` consumes the root Swift
+package with a relative local reference. Boundary audits enforce source
+membership and reject a separate iOS engine pin. CI builds and tests both apps
+on shared changes. See [the repository guide](APPLE_REPOSITORY.md).
+
+Keep common behavior in shared modules and native lifecycle in app adapters.
+Future tvOS and visionOS targets should consume these same implementations;
+their presence in the repository alone does not establish platform support.
+
 ## The `StreamingBackend` boundary
 
 Keep wire types inside the engine and use Glimmer-owned values at its boundary.

@@ -46,8 +46,8 @@ playback and physical-device behavior still need validation.
 - Streaming uses Sunshine on the PC.
 
 Want to build or help? Start with [CONTRIBUTING.md](CONTRIBUTING.md). See the
-[engine roadmap](https://github.com/Se7enbrc/glimmer/blob/engine/spm/docs/IOS_ENGINE_ROADMAP.md)
-for what comes next. Free software under [GPLv3](LICENSE).
+[engine roadmap](../docs/IOS_ENGINE_ROADMAP.md) for what comes next. Free
+software under [GPLv3](LICENSE).
 
 See [PC setup](docs/HOST_SETUP.md) for Sunshine and native display modes, and
 [diagnostics](docs/DIAGNOSTICS.md) for recording a physical iPhone test.

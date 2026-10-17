@@ -3,9 +3,8 @@
 GlimmerEngine comes from [Glimmer](https://github.com/Se7enbrc/glimmer), GPLv3.
 The engine’s Sunshine protocol implementation includes ports from the Moonlight
 Game Streaming Project’s moonlight-common-c and ENet by Lee Salzman. See
-[Glimmer’s full credits](https://github.com/Se7enbrc/glimmer/blob/engine/spm/CREDITS.md)
-and the notices in the pinned engine source. The app icon is Glimmer’s existing
-icon, used without modification.
+[Glimmer’s full credits](../CREDITS.md) and the notices in the shared engine
+source. The app icon is Glimmer’s existing icon, used without modification.
 
 ## Engine notices
 

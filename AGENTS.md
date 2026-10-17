@@ -6,9 +6,10 @@ Where the two differ, the stricter rule wins.
 
 ## What Glimmer is
 
-A Mac-native client for [Sunshine](https://github.com/LizardByte/Sunshine):
-Swift 6, Apple Silicon, macOS 26 and later. Socket, decoder, display, audio and
-input all run in one Swift process, with no external player and no C engine.
+Native Mac and iOS clients for
+[Sunshine](https://github.com/LizardByte/Sunshine): Swift 6, Apple Silicon,
+macOS 26 and iOS 26 or later. Socket, decoder, display, audio and input all run
+in one Swift process, with no external player and no C engine.
 
 The bar is one sentence: someone using Glimmer should mistake it for something
 Apple shipped. Everything below follows from it.
@@ -23,6 +24,7 @@ change needs, and [docs/SECURITY.md](docs/SECURITY.md) covers the root helper.
 
 | Path                                                  | What lives there                                                              |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `iOS/`                                                | Native iPhone/iPad app, tests and platform adapters; see `iOS/AGENTS.md`      |
 | `Glimmer/`                                            | Native Mac app: SwiftUI/AppKit UI, `AppModel+*`, menus and settings           |
 | `Glimmer/EngineAdapters/`                             | Prepared Mac media, presentation, telemetry and session adapters              |
 | `Glimmer/Stream/`                                     | Native windows, capture, controller bindings and remaining Mac shell adapters |
@@ -68,15 +70,20 @@ pre-commit install
 ```
 
 - `make app`: Debug build, unsigned. A compile check.
-- `make test`: the unit tests. Hostless, no PC needed.
+- `make test`: the Mac unit tests. Hostless, no PC needed.
+- `make ios-test`, `make ios-device`: Simulator tests and unsigned Release
+  device build.
+- `make verify-all`: the local checks for both apps; see
+  [ownership](docs/APPLE_REPOSITORY.md).
 - `make verify`: Actionlint, the SPDX notice check, strict SwiftLint,
   release-tool tests, `make test` and protocol fuzz tests under
   AddressSanitizer. This is the gate: hosted Verify runs its three parts
   (`make check`, `make test`, `make test-asan`) as parallel jobs under the
-  required `macOS` check on every `main` commit and every pull request that
-  touches more than documentation (those run `make check` alone), and
-  `make dist` runs it, so nothing is done until it passes there. Locally it does
-  not fail on compiler warnings, so read the build log: there must be none.
+  required `macOS` check, alongside engine and iOS app verification, on every
+  `main` commit and every pull request that touches more than documentation
+  (those run `make check` alone), and `make dist` runs it, so nothing is done
+  until it passes there. Locally it does not fail on compiler warnings, so read
+  the build log: there must be none.
 - `make dev`: tests, then the Release build installed and relaunched. On a Mac
   with a Developer ID it signs and notarizes on the way, as every install does.
 
@@ -131,12 +138,12 @@ certificates or keys to solve a profile problem.
 
 Each of these gets a pull request sent back.
 
-- **Zero warnings.** Compiler and `swiftlint lint --strict` both; lint covers
-  `Glimmer/`, `GlimmerTests/`, `helper/` and `LoginHelper/`. Fix the cause: no
-  inline `swiftlint:disable` (the generated controller database is the one
-  exception), no raised thresholds, no moving a warning into a helper where the
-  linter can't see it. A 17-way `if` chain becomes a table, not a function with
-  the same 17 branches.
+- **Zero warnings.** Compiler and `swiftlint lint --strict` both; the shared
+  `scripts/lint-swift.sh` checks both apps, the engine, tests and helpers. Fix
+  the cause: no inline `swiftlint:disable` (the generated controller database is
+  the one exception), no raised thresholds, no moving a warning into a helper
+  where the linter can't see it. A 17-way `if` chain becomes a table, not a
+  function with the same 17 branches.
 - **Swift 6, complete strict concurrency.** `@MainActor` for UI, `actor` for
   engine state. `nonisolated(unsafe)` and `@unchecked Sendable` only with a
   comment stating the invariant (CONTRIBUTING, Concurrency).

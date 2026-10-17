@@ -23,7 +23,7 @@ version: 0.0.0
 dependencies:
   codeql/swift-all: '*'
 """
-ROOTS = ("Glimmer", "GlimmerEngine", "LoginHelper", "helper")
+ROOTS = ("Glimmer", "GlimmerEngine", "LoginHelper", "helper", "iOS/Glimmer")
 
 
 def tracked_sources(repo):
@@ -34,7 +34,7 @@ def tracked_sources(repo):
 
 def validate_coverage(expected, output):
     if not expected or any(not any(path.startswith(root + "/") for path in expected) for root in ROOTS):
-        raise ValueError("The tracked Swift source list must include the app, engine and both helpers")
+        raise ValueError("The tracked Swift source list must include both apps, the engine and both helpers")
     rows = list(csv.reader(io.StringIO(output)))
     if any(len(row) != 1 or not row[0] for row in rows):
         raise ValueError("CodeQL returned an invalid extracted-file list")

@@ -1,51 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-# SwiftLint strict, shared Glimmer rules with iOS source roots and 120 columns.
+parent_config: ../.swiftlint-rules.yml
 
 included:
   - Glimmer
   - GlimmerTests
 
 excluded:
-  - third_party
   - build
   - .build
-  - patches
-  - node_modules
-  - docs
 
-disabled_rules:
-  - trailing_whitespace
-  - todo
-
-opt_in_rules:
-  - closure_spacing
-  - empty_count
-  - empty_string
-  - implicit_return
-  # unused_import is an analyzer rule (requires `swiftlint analyze` with
-  # compiler args) - leaving it out of the lint pass.
-  - vertical_whitespace_closing_braces
-  - redundant_nil_coalescing
-  - convenience_type
-  - first_where
-  - last_where
-  - sorted_first_last
-  - toggle_bool
-  - contains_over_first_not_nil
-  - contains_over_filter_count
-  - contains_over_filter_is_empty
-  - empty_collection_literal
-  - flatmap_over_map_reduce
-  - reduce_into
-  - yoda_condition
-  - identical_operands
-  - overridden_super_call
-  - prohibited_super_call
-  - fatal_error_message
-  - force_unwrapping # warning only, see below
-
+# Retain the iOS source's stricter limits.
 line_length:
   warning: 120
   error: 120
@@ -57,10 +23,6 @@ function_body_length:
   warning: 80
   error: 80
 
-function_parameter_count:
-  warning: 7
-  error: 12
-
 type_body_length:
   warning: 600
   error: 600
@@ -68,70 +30,3 @@ type_body_length:
 file_length:
   warning: 600
   error: 600
-
-cyclomatic_complexity:
-  warning: 15
-  error: 120
-
-large_tuple:
-  warning: 3
-  error: 5
-
-nesting:
-  type_level:
-    warning: 3
-  function_level:
-    warning: 5
-
-identifier_name:
-  # C-FFI callbacks use names like `c_start`, `c_decodeAndPlaySample` and we
-  # mirror C constants verbatim (`COLORSPACE_REC_601`). Allow underscores.
-  allowed_symbols: ["_"]
-  validates_start_with_lowercase: warning
-  min_length:
-    warning: 2
-    error: 1
-  max_length:
-    warning: 50
-    error: 80
-  excluded:
-    - id
-    - i
-    - j
-    - k
-    - x
-    - y
-    - z
-    - w
-    - h
-    - r
-    - g
-    - b
-    - a
-    - n # count
-    - s # source/size in low-level byte parsing
-    - d # dest/data in low-level byte parsing
-    - dx
-    - dy
-    - vk # virtual-key
-    - fd # file descriptor
-    - ip # ip address
-    - to
-    - up
-
-type_name:
-  min_length:
-    warning: 3
-    error: 2
-  max_length:
-    warning: 50
-    error: 60
-
-force_unwrapping:
-  severity: warning
-
-force_cast:
-  severity: warning
-
-force_try:
-  severity: warning

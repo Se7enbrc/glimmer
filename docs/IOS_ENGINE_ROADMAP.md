@@ -1,8 +1,8 @@
 # Shared engine and iOS roadmap
 
-Prepare Glimmer's reusable streaming engine for `glimmer-ios`, while keeping
-macOS on the same implementation. The result must let an iPhone with a Backbone
-or another supported controller feel like a dedicated, premium game-streaming
+Prepare Glimmer's reusable streaming engine for the iOS app, while keeping macOS
+on the same implementation. The result must let an iPhone with a Backbone or
+another supported controller feel like a dedicated, premium game-streaming
 device: immediate input, consistent frames, clean audio, full-display video, and
 sustained play without unnecessary heat or battery drain.
 
@@ -84,8 +84,9 @@ Extracting only `NativeBackend` would leave too much duplicated work for iOS.
 ## Framework structure
 
 Create one in-repository `GlimmerEngine` framework target, initially built from
-source by Xcode for macOS, iOS, and iOS Simulator. `glimmer-ios` is the
-consuming application, not a second engine. Keep one source owner for every
+source by Xcode for macOS, iOS, and iOS Simulator. The consumer now lives in
+`iOS/` and references the root Swift package; see
+[repository ownership](APPLE_REPOSITORY.md). Keep one source owner for every
 shared file; do not copy a directory into another repository. The Mac app must
 consume this target before the extraction is considered complete.
 
@@ -399,4 +400,4 @@ Start with Phase 0 and a narrow framework extraction plan. Read
 session, pacing, audio, and input ownership paths. Capture a reproducible Mac
 baseline. Then make the existing Mac app consume the first shared slice, expand
 that boundary incrementally, and prove the iOS media path early. Do not begin by
-copying the Mac app into `glimmer-ios` or redesigning the launcher.
+copying the Mac app into `iOS/` or redesigning the launcher.

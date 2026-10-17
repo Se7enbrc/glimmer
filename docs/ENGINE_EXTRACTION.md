@@ -35,8 +35,9 @@ roadmap/AGENTS references to `recvfrom` describe an older path.
 ## External source package, slice 1 follow-up
 
 `Package.swift` now exposes the existing `GlimmerEngine/` source tree as the
-`GlimmerEngine` library for macOS/iOS 26. The external `glimmer-ios` consumer is
-the distribution need described in the roadmap. The Phase 1 framework decision
+`GlimmerEngine` library for macOS/iOS 26. The iOS consumer now lives under
+`iOS/` and references this root package locally; see
+[repository ownership](APPLE_REPOSITORY.md). The Phase 1 framework decision
 above remains the Mac build path; no Mac make, signing or embedding step
 changes.
 

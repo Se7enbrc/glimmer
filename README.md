@@ -54,3 +54,10 @@ Save before stopping: ending a stream quits its PC app.
 [GPLv3](LICENSE). Copyright © 2026 ugfugl.io. [Credits](CREDITS.md).
 
 Next: [start your first stream](docs/GETTING_STARTED.md).
+
+## Apple clients
+
+This repository contains the Mac app, the [iPhone/iPad app](iOS/README.md), and
+the shared streaming engine. See
+[repository ownership](docs/APPLE_REPOSITORY.md) for development and checks. The
+Homebrew tap and Raycast extension stay in their own repositories.

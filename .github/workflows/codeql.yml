@@ -101,8 +101,9 @@ jobs:
           SWIFT_COMPILATION_MODE = wholemodule
           SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
           GCC_TREAT_WARNINGS_AS_ERRORS = YES
-          SWIFT_EXEC = $(SRCROOT)/scripts/codeql-swiftc.sh
+          OTHER_SWIFT_FLAGS = $(inherited) -package-name GlimmerCodeQL
           XCCONFIG
+          printf 'SWIFT_EXEC = %s/scripts/codeql-swiftc.sh\n' "$GITHUB_WORKSPACE" >> "$XCODE_XCCONFIG_FILE"
           printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
 
       - name: Initialize CodeQL
@@ -128,10 +129,11 @@ jobs:
           # Read versions from files; launching the CodeQL CLI or xcodebuild here costs minutes.
           xcode="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$DEVELOPER_DIR/../version.plist")"
           sdk="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$(xcrun --sdk macosx --show-sdk-path)/System/Library/CoreServices/SystemVersion.plist")"
-          inputs="$CODEQL_VERSION $xcode $sdk $(cat "$XCODE_XCCONFIG_FILE")"
+          ios_sdk="$(xcrun --sdk iphonesimulator --show-sdk-build-version)"
+          inputs="$CODEQL_VERSION $xcode $sdk $ios_sdk $(cat "$XCODE_XCCONFIG_FILE")"
           headers="$(git ls-files -z '*.h' | xargs -0 shasum -a 256)"
           key="$(printf '%s\n%s\n' "$inputs" "$headers" | shasum -a 256 | cut -c1-32)"
-          printf 'key=codeql-swift-frameworks-v1-%s\n' "$key" >> "$GITHUB_OUTPUT"
+          printf 'key=codeql-swift-frameworks-v2-%s\n' "$key" >> "$GITHUB_OUTPUT"
 
       - name: Restore cached framework extraction
         id: restore
@@ -151,15 +153,15 @@ jobs:
           cp -R "$RUNNER_TEMP/swift-framework-traps/." "$trap/"
           du -sh "$trap"
 
-      - name: Build app, login item and privileged helper
+      - name: Build both apps, login item and privileged helper
         if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
         env:
           # Keep package resolution outside the compiler tracer.
           # The compiler wrapper restores tracing for every production target.
           DYLD_INSERT_LIBRARIES: ""
-        run:
-          make app helper-build CONFIG=Debug
-          SWIFTC="$PWD/scripts/codeql-swiftc.sh"
+        run: |
+          make app helper-build CONFIG=Debug SWIFTC="$PWD/scripts/codeql-swiftc.sh"
+          make ios-app CONFIG=Debug
 
       # Only imported modules and their lazily extracted declarations are kept;
       # anything built from this checkout is extracted fresh every run.

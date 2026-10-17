@@ -10,6 +10,10 @@ requesting review.
 [AGENTS.md](https://github.com/Se7enbrc/glimmer/blob/main/AGENTS.md) is binding;
 where it differs from this guide, follow the stricter rule.
 
+Both the Mac and iOS apps live here and build the same engine checkout. Use
+[repository ownership](APPLE_REPOSITORY.md) for paths and cross-platform checks,
+and [iOS contributing](../iOS/CONTRIBUTING.md) for Simulator and device setup.
+
 ## Setup
 
 Use the same Mac toolchain as hosted verification.
