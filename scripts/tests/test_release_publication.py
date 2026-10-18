@@ -64,7 +64,7 @@ class RetryablePublicationTests(unittest.TestCase):
         if args[:2] == ['gh', 'api']:
             return SHA
         if args[:3] == ['gh', 'release', 'create']:
-            self.data = {'id': 1, 'tag_name': TAG, 'draft': True, 'prerelease': True, 'assets': []}
+            self.data = {'id': 1, 'tag_name': args[3], 'draft': True, 'prerelease': True, 'assets': []}
             return ''
         if args[:3] == ['gh', 'release', 'upload']:
             path = Path(args[4])
@@ -109,6 +109,30 @@ class RetryablePublicationTests(unittest.TestCase):
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.assets.iterdir()})
         self.assertFalse(any(call[0] in ('make', 'codesign', 'xcodebuild') for call in self.calls))
         self.assertFalse(any('--clobber' in call for call in self.calls))
+
+    def test_diagnostic_publication_is_manual_only_and_retries_the_same_symbol_assets(self):
+        os.environ['RC_TAG'] = TAG + '-diag'
+        archive = f'Glimmer-{SHORT}-symbols.zip'
+        (self.assets / archive).write_bytes(b'diagnostic symbols')
+        record = {'identity': artifact.identity(), 'sha256': artifact.digest(self.assets / archive),
+                  'images': {'Glimmer': {'uuids': []}, 'GlimmerEngine': {'uuids': []}}}
+        (self.assets / 'symbols.json').write_text(json.dumps(record))
+        receipt = json.loads((self.assets / 'release.json').read_text())
+        receipt['diagnostic_symbols'] = {'archive': archive, **record}
+        (self.assets / 'release.json').write_text(json.dumps(receipt))
+        (self.assets / 'manifest.json').unlink()
+        artifact.seal(self.assets, 'signed')
+        os.environ['SIGNED_MANIFEST'] = artifact.digest(self.assets / 'manifest.json')
+        publication.publish(self.assets)
+        publication.publish(self.assets)
+        self.assertFalse(any(call[:2] == ['git', 'fetch'] for call in self.calls))
+        self.assertFalse(any('scripts/update-appcast.py' in call for call in self.calls))
+        self.assertEqual(sum(call[:3] == ['gh', 'release', 'upload'] for call in self.calls), 5)
+        create = next(call for call in self.calls if call[:3] == ['gh', 'release', 'create'])
+        self.assertIn('Diagnostic', create[create.index('--title') + 1])
+        self.assertIn('manual installation only', (self.root / 'glimmer-publication-state').read_text())
+        with self.assertRaisesRegex(ValueError, 'never enter'):
+            publication.publish_feed(self.assets, receipt, TAG + '-diag')
 
     def test_partial_upload_retries_only_missing_assets(self):
         self.fail_upload = '.zip'
@@ -282,6 +306,26 @@ class PublicationPreparationTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 publication.prepare(self.dist, self.app)
         self.assertFalse(any(call[0][0] == '/pinned-tools/sign_update' for call in self.calls))
+
+    def test_diagnostic_marker_cannot_be_published_under_an_ordinary_tag(self):
+        (self.app / 'Contents/Info.plist').write_bytes(plistlib.dumps(
+            {**self.info, 'GlimmerDiagnosticBuild': 'YES'}))
+        with self.assertRaisesRegex(ValueError, 'diagnostic marker'):
+            publication.prepare(self.dist, self.app)
+        self.assertFalse(any(call[0][0] == '/pinned-tools/sign_update' for call in self.calls))
+
+    def test_diagnostic_preparation_marks_notes_and_carries_symbol_receipt(self):
+        (self.app / 'Contents/Info.plist').write_bytes(plistlib.dumps(
+            {**self.info, 'GlimmerDiagnosticBuild': 'YES'}))
+        symbol_receipt = {'archive': f'Glimmer-{SHORT}-symbols.zip', 'sha256': 'a' * 64}
+        with patch.dict(os.environ, RC_TAG=TAG + '-diag'), \
+                patch.object(publication.release_symbols, 'carry', return_value=symbol_receipt) as carry:
+            publication.prepare(self.dist, self.app)
+        self.assertEqual(carry.call_count, 1)
+        receipt = json.loads((self.dist / 'release.json').read_text())
+        self.assertEqual(receipt['diagnostic_symbols'], symbol_receipt)
+        self.assertIn('manual installation only', (self.dist / 'notes.md').read_text())
+        self.assertIn('symbols-path=', (self.root / 'outputs').read_text())
 
 
 if __name__ == '__main__':

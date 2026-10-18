@@ -12,6 +12,8 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import tarfile
+from release_candidate_kind import parse_tag
+import release_symbols
 
 
 def digest(path):
@@ -26,8 +28,7 @@ def identity(attempt=None):
         raise ValueError('unexpected artifact repository')
     if not re.fullmatch('[0-9a-f]{40}', values['EXPECTED_SHA']):
         raise ValueError('invalid artifact source')
-    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*', values['RC_TAG']):
-        raise ValueError('invalid artifact tag')
+    parse_tag(values['RC_TAG'])
     for key in ('GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'):
         if not re.fullmatch('[1-9][0-9]*', values[key]):
             raise ValueError('invalid artifact run or attempt')
@@ -129,13 +130,19 @@ def main():
             args.root.mkdir(parents=True)
             with tarfile.open(args.root / 'Glimmer.app.tar.gz', 'w:gz', dereference=False) as archive:
                 archive.add(args.app, arcname='Glimmer.app')
+            if parse_tag(os.environ['RC_TAG'])[2]:
+                release_symbols.pack(args.app, args.root, identity())
             seal(args.root, 'unsigned')
         elif args.operation == 'seal':
             seal(args.root, args.kind)
         else:
             manifest = verify(args.root, args.kind, args.manifest or '', args.attempt)
             if args.operation == 'unpack':
-                if set(manifest['hashes']) != {'Glimmer.app.tar.gz'} or args.kind != 'unsigned':
+                expected = {'Glimmer.app.tar.gz'}
+                if parse_tag(os.environ['RC_TAG'])[2]:
+                    expected |= {release_symbols.ARCHIVE, release_symbols.MANIFEST}
+                    release_symbols.validate(args.root, release_symbols.ARCHIVE, identity(args.attempt))
+                if set(manifest['hashes']) != expected or args.kind != 'unsigned':
                     raise ValueError('unexpected unsigned payload')
                 unpack(args.root / 'Glimmer.app.tar.gz', args.destination)
     except (ValueError, OSError, KeyError, TypeError, tarfile.TarError) as error:
