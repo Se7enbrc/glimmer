@@ -68,7 +68,8 @@ struct DiagnosticsPane: View {
                             Text("Performance telemetry").fontWeight(.medium)
                             Text("Exposes per-second stream metrics over a local "
                                 + "Prometheus endpoint and an NDJSON log, plus a "
-                                + "richer per-session diagnostic log. Off by default; "
+                                + "richer per-session diagnostic log. "
+                                + (DiagnosticBuild.isEnabled ? "On by default in this diagnostic build; " : "Off by default; ")
                                 + "carries only performance numbers, never secrets.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)

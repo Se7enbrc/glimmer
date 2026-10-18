@@ -244,6 +244,12 @@ extension TelemetryExporter {
             "\"ts\":\"\(isoFormatter.string(from: Date()))\"",
             "\"session\":\"\(sessionId)\"",
             "\"event\":\"config\"",
+            "\"diagnostics_schema\":1",
+            "\"t_ms\":\(Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000)",
+            "\"diagnostic_build\":\(source.capture.configuration.diagnosticBuild)",
+            "\"app_version\":\"\(TelemetryRenderer.jsonStringEscape(source.capture.configuration.appVersion))\"",
+            "\"build_version\":\"\(TelemetryRenderer.jsonStringEscape(source.capture.configuration.buildVersion))\"",
+            "\"engine_commit\":\"\(TelemetryRenderer.jsonStringEscape(source.capture.configuration.engineCommit))\"",
             "\"build_commit\":\"\(TelemetryRenderer.jsonStringEscape(source.capture.configuration.buildCommit))\"",
             // fullScreen / window - a windowed session presents into a
             // resizable layer, so its present-path numbers must not be judged

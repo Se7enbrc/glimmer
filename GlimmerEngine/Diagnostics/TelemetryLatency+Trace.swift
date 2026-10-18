@@ -93,7 +93,7 @@ extension FrameTimingTracker {
 
     /// One presented frame's identity + size/type + the five stage deltas (ms),
     /// bundled so the trace renderer takes one value instead of nine params.
-    package struct TraceRecord {
+    package struct TraceRecord: Sendable {
 
         package init(
             frameIndex: Int32,
@@ -108,7 +108,8 @@ extension FrameTimingTracker {
             outputToPresent: Double? = nil,
             endToEnd: Double? = nil,
             glassToGlass: Double? = nil,
-            inputToPhoton: Double? = nil
+            inputToPhoton: Double? = nil,
+            attemptID: String? = nil
         ) {
             self.frameIndex = frameIndex
             self.rtpTimestamp = rtpTimestamp
@@ -123,12 +124,14 @@ extension FrameTimingTracker {
             self.endToEnd = endToEnd
             self.glassToGlass = glassToGlass
             self.inputToPhoton = inputToPhoton
+            self.attemptID = attemptID
         }
 
         package let frameIndex: Int32
         package let rtpTimestamp: UInt32
         package let frameBytes: Int32
         package let isIDR: Bool
+        package let attemptID: String?
         /// PRESENT-CLOCK timestamp (monotonic uptime, ms): makes present
         /// intervals - and so the felt-judder metric |present-interval −
         /// content-interval| - computable straight off this file, instead of
@@ -157,6 +160,10 @@ extension FrameTimingTracker {
     /// always do - test `event`'s presence, not `type`'s (the null-`type`
     /// misread that cost a digest correction).
     package func renderTraceLine(_ record: TraceRecord) -> String {
+        Self.renderTraceLine(record, sessionId: sessionId)
+    }
+
+    package static func renderTraceLine(_ record: TraceRecord, sessionId: String) -> String {
         var fields: [String] = []
         fields.append("\"session\":\"\(sessionId)\"")
         fields.append("\"frame\":\(record.frameIndex)")
@@ -184,34 +191,25 @@ extension FrameTimingTracker {
         return "{" + fields.joined(separator: ",") + "}"
     }
 
-    /// Frames-file DROP STUBS (`event:"frame_drop"`) for frames evicted unpresented;
-    /// `stage` is the last stage reached; assemble and eviction times locate the hitch.
-    /// Called off the mapLock.
+    /// Expiry is unresolved bookkeeping, not a measured drop decision. Keep all known stage times.
     package func emitDropStubs(_ evicted: [(rtp: UInt32, timing: Timing)]) {
-        let lines = dropStubLines(
-            evicted, hiddenNow: counters.presentSuppressed || counters.decodeGated,
-            evictMs: Double(now()) / 1_000_000.0)
-        for line in lines { traceWriter.append(line) }
+        let records = expiryRecords(evicted, hiddenNow: counters.presentSuppressed || counters.decodeGated,
+                                    uptimeNanos: now())
+        for record in records { traceWriter.appendStage(record, sessionId: sessionId) }
     }
 
-    /// Stub lines minus DESIGNED drops (hidden window; the suppressed/gated counters
-    /// own those): everything while hidden now, and frames assembled while hidden,
-    /// since eviction trails a gate lift by ~1.5 s.
-    package func dropStubLines(
-        _ evicted: [(rtp: UInt32, timing: Timing)],
-        hiddenNow: Bool,
-        evictMs: Double
-    ) -> [String] {
+    package func dropStubLines(_ evicted: [(rtp: UInt32, timing: Timing)],
+                               hiddenNow: Bool, evictMs: Double) -> [String] {
+        expiryRecords(evicted, hiddenNow: hiddenNow, uptimeNanos: UInt64(evictMs * 1_000_000))
+            .map { Self.renderStageLine($0, sessionId: sessionId) }
+    }
+
+    private func expiryRecords(_ evicted: [(rtp: UInt32, timing: Timing)],
+                               hiddenNow: Bool, uptimeNanos: UInt64) -> [StageRecord] {
         guard !hiddenNow else { return [] }
-        return evicted.filter { !$0.timing.assembledHidden }.map { drop in
-            let stage = drop.timing.outputNanos != 0 ? "decoded"
-                : drop.timing.submitNanos != 0 ? "submitted" : "assembled"
-            return "{\"session\":\"\(sessionId)\",\"event\":\"frame_drop\","
-                + "\"frame\":\(drop.timing.frameIndex),\"rtp\":\(drop.rtp),"
-                + "\"type\":\"\(drop.timing.isIDR ? "idr" : "p")\","
-                + "\"stage\":\"\(stage)\","
-                + "\"t_assemble_ms\":\(TelemetryRenderer.jsonNumber(Double(drop.timing.assembleNanos) / 1_000_000.0)),"
-                + "\"t_evict_ms\":\(TelemetryRenderer.jsonNumber(evictMs))}"
+        return evicted.filter { !$0.timing.assembledHidden }.map {
+            StageRecord(event: .unresolvedExpiry, rtpTimestamp: $0.rtp,
+                        uptimeNanos: uptimeNanos, timing: $0.timing)
         }
     }
 
@@ -220,5 +218,57 @@ extension FrameTimingTracker {
     package func bookmarkLine(total: UInt64, uptimeNanos: UInt64) -> String {
         "{\"session\":\"\(sessionId)\",\"event\":\"bookmark\",\"bookmark_total\":\(total),"
             + "\"t_ms\":\(TelemetryRenderer.jsonNumber(Double(uptimeNanos) / 1_000_000.0))}"
+    }
+
+    package func recordPresent(rtpTimestamp: UInt32, uptimeNanos: UInt64? = nil) {
+        guard rtpTimestamp != 0 else { return }
+        let presentNanos = uptimeNanos ?? now()
+
+        guard let timing = takeTiming(rtpTimestamp: rtpTimestamp) else { return }
+        let hostFrameIntervalMs = self.hostFrameIntervalMs
+
+        // Compute the five sub-stage deltas in ms. A stage timestamp of 0 means
+        // the frame skipped that stage (shouldn't happen for a presented frame,
+        // but guard so a partial entry can't emit a garbage delta).
+        let receiveToAssemble = msBetween(timing.receiveNanos, timing.assembleNanos)
+        let assembleToSubmit = msBetween(timing.assembleNanos, timing.submitNanos)
+        let submitToOutput = msBetween(timing.submitNanos, timing.outputNanos)
+        let outputToPresent = msBetween(timing.outputNanos, presentNanos)
+        let endToEnd = msBetween(timing.receiveNanos, presentNanos)
+
+        let resumePresent = takeResumePresentTag()
+        let warmingUp = isWithinWarmup(presentNanos: presentNanos) || resumePresent
+
+        if !warmingUp {
+            if let value = receiveToAssemble { histograms.receiveToAssemble.observe(value) }
+            if let value = assembleToSubmit { histograms.assembleToSubmit.observe(value) }
+            if let value = outputToPresent { histograms.outputToPresent.observe(value) }
+            if let value = endToEnd { histograms.endToEnd.observe(value) }
+        }
+
+        let glassToGlass = computeGlassToGlass(hostEncodeMs: timing.hostEncodeMs, pipelineMs: endToEnd)
+        if !warmingUp, let value = glassToGlass { histograms.glassToGlass.observe(value) }
+
+        // INPUT-TO-PHOTON estimate (signal 2): client legs + uplink + the wait for
+        // the host's next frame + this frame's glass-to-glass, once per input
+        // stamp (see the Composites split).
+        let inputToPhoton = computeInputToPhoton(
+            presentNanos: presentNanos, glassToGlassMs: glassToGlass, hostFrameIntervalMs: hostFrameIntervalMs)
+        if !warmingUp, let value = inputToPhoton { histograms.inputToPhoton.observe(value) }
+
+        traceWriter.appendFrame(TraceRecord(
+            frameIndex: timing.frameIndex,
+            rtpTimestamp: rtpTimestamp,
+            frameBytes: timing.frameBytes,
+            isIDR: timing.isIDR,
+            presentUptimeMs: Double(presentNanos) / 1_000_000.0,
+            isResumePresent: resumePresent,
+            receiveToAssemble: receiveToAssemble,
+            assembleToSubmit: assembleToSubmit,
+            submitToOutput: submitToOutput,
+            outputToPresent: outputToPresent,
+            endToEnd: endToEnd,
+            glassToGlass: glassToGlass,
+            inputToPhoton: inputToPhoton, attemptID: timing.attemptID), sessionId: sessionId)
     }
 }

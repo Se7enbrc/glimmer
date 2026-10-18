@@ -11,6 +11,7 @@
 @testable import GlimmerEngine
 import Foundation
 import GameController
+import os
 import Testing
 @testable import Glimmer
 
@@ -58,6 +59,29 @@ struct ControllerInputRateTests {
         sampler.setInputEnabled(true, slot: 0)
         #expect(profile.valueChangedHandler == nil)
         #expect(!profile.sensorsActive)
+    }
+
+    @Test func rejectedGyroSampleIsRetriedWhenTheReadingIsUnchanged() throws {
+        let sampler = ControllerMotion()
+        let backend = InputRecordingBackend()
+        let handler = OSAllocatedUnfairLock<(@Sendable (ControllerMotionSample) -> Void)?>(initialState: nil)
+        let sample = ControllerMotionSample(acceleration: .zero, rotation: .zero)
+        let capture = ControllerMotionCapture(hasAcceleration: false, hasRotation: true,
+            read: { sample }, setHandler: { next in handler.withLock { $0 = next } },
+            setSensorsActive: { _ in })
+        sampler.streamActivated(backend: backend)
+        _ = sampler.register(slot: 0, capture: capture, inputEnabled: true)
+        defer { sampler.unregister(slot: 0) }
+        sampler.apply(slot: 0, motionType: UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO), reportRateHz: 100)
+        let submit = try #require(handler.withLock { $0 })
+
+        backend.motionResult = -2
+        submit(sample)
+        #expect(backend.motions.isEmpty)
+        backend.motionResult = 0
+        submit(sample)
+        #expect(backend.motions == [ControllerMotionSend(num: 0,
+            motionType: UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO), x: 0, y: 0, z: 0)])
     }
 
     /// Admitted sample count for a pad reporting every `periodMs` for one second.

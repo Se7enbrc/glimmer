@@ -147,11 +147,11 @@ extension StatsCollector {
     /// matching `recordDecodeComplete` / `recordDecodeAbandoned` can return
     /// it for the caller to close the interval - possibly on a different
     /// thread (the VT output callback fires on VT's own queue).
-    @inlinable package func recordDecodeSubmit(intervalState: OSSignpostIntervalState) {
+    @inlinable package func recordDecodeSubmit(intervalState: OSSignpostIntervalState, identity: DecodeIdentity? = nil) {
         let now = CACurrentMediaTime()
         var evictedForLeakClose: OSSignpostIntervalState?
         lock.lock()
-        submitFifo.append((timestamp: now, state: intervalState))
+        submitFifo.append((timestamp: now, state: intervalState, identity: identity))
         if submitFifo.count > StatsCollector.submitFifoCapacity {
             // Drop the oldest to keep the FIFO bounded. The submit-side opened
             // a "DecodeFrame" interval that a matching `recordDecodeComplete`
@@ -174,18 +174,21 @@ extension StatsCollector {
         }
     }
 
-    /// Close out a decode submit. Returns the matching
-    /// `OSSignpostIntervalState` the caller stamped at submit time so the
-    /// caller can close the `DecodeFrame` interval. Returns nil if the FIFO
-    /// is empty (stray output callback) - caller should skip the
-    /// `endInterval` in that case.
-    @inlinable package func recordDecodeComplete(dropped: Bool) -> OSSignpostIntervalState? {
+    /// Production callbacks match their submit identity even out of order or after eviction.
+    /// Unidentified callers retain FIFO behavior; a missing identity never consumes another frame.
+    @inlinable package func recordDecodeComplete(dropped: Bool, identity: DecodeIdentity? = nil) -> OSSignpostIntervalState? {
         let now = CACurrentMediaTime()
         lock.lock()
         defer { lock.unlock() }
         var poppedState: OSSignpostIntervalState?
-        if !submitFifo.isEmpty {
-            let head = submitFifo.removeFirst()
+        let index: Int?
+        if let identity {
+            index = submitFifo.firstIndex { $0.identity == identity }
+        } else {
+            index = submitFifo.indices.first
+        }
+        if let index {
+            let head = submitFifo.remove(at: index)
             poppedState = head.state
             let elapsed = max(0, now - head.timestamp)
             let split = Self.decodeTimeSplit(
@@ -205,9 +208,9 @@ extension StatsCollector {
         return poppedState
     }
 
-    /// Split one submit-to-callback span: a frame submitted before the previous
-    /// callback queued behind it until then (wait); the rest is VT service time.
-    /// Clamped so a stale or out-of-order anchor never yields a negative part.
+    /// Estimate overlap with the previous callback, not hardware queue or service time.
+    /// Callback delivery and pipelined decoding can overlap; use identity-keyed stage traces
+    /// for attribution. Clamping keeps stale anchors from yielding negative estimates.
     package static func decodeTimeSplit(
         submit: CFTimeInterval, callback: CFTimeInterval, previousCallback: CFTimeInterval
     ) -> (service: Double, wait: Double) {
@@ -227,16 +230,19 @@ extension StatsCollector {
     /// caller can close the `DecodeFrame` interval with an "abandoned"
     /// message - leaving it open would have Instruments draw the interval
     /// running forever in the timeline.
-    @inlinable package func recordDecodeAbandoned() -> OSSignpostIntervalState? {
+    @inlinable package func recordDecodeAbandoned(identity: DecodeIdentity? = nil) -> OSSignpostIntervalState? {
         lock.lock()
         defer { lock.unlock() }
-        // Pop the most-recent (LIFO) submit - that's the one we just stamped
-        // synchronously and which VT rejected inline. We don't credit a
-        // "decoded" or "dropped by decoder" frame because VT never saw it.
+        // Synchronous rejection abandons that exact submit, regardless of earlier callbacks.
+        // Unidentified callers retain the historical most-recent-submit behavior.
         var poppedState: OSSignpostIntervalState?
-        if !submitFifo.isEmpty {
-            poppedState = submitFifo.removeLast().state
+        let index: Int?
+        if let identity {
+            index = submitFifo.firstIndex { $0.identity == identity }
+        } else {
+            index = submitFifo.indices.last
         }
+        if let index { poppedState = submitFifo.remove(at: index).state }
         return poppedState
     }
 

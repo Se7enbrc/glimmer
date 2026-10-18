@@ -17,6 +17,12 @@ import os
 
 extension VideoDecoder {
 
+    struct DecodeReservations {
+        var queued = 0
+        var submitted = 0
+        var total: Int { queued + submitted }
+    }
+
     /// Outcome of a backlog reservation. Only two artifact-safe outcomes exist
     /// (see `decodeAssembledFrame`): reserve + decode, or drop + flush-to-IDR.
     /// There is deliberately no silent-drop case - a sink-side drop without a
@@ -74,7 +80,7 @@ extension VideoDecoder {
     /// the frame (output callback) or on any abandon path. Lock-guarded because
     /// the count is read/written from both the receive thread (reserve) and the
     /// decode queue / VT output-callback thread (release).
-    nonisolated func reserveDecodeSlot(isIDR: Bool) -> DecodeSlotDecision {
+    nonisolated func reserveDecodeSlot(isIDR: Bool, epoch: UInt = 0) -> DecodeSlotDecision {
         // The VT-draining signal: it advances on every decoded output, so a
         // small value means VT is retiring frames. Floored at the gate-lift
         // edge so a long hidden span never reads as a wedge.
@@ -88,6 +94,9 @@ extension VideoDecoder {
         // own failure verdict (a dead session frees every slot), recreates it.
         if isIDR, overBound || lastVtDecodeFailed,
            vtDark >= VideoDecoder.decodeStallEscalateSeconds {
+            decodeReservations.removeAll(keepingCapacity: true)
+            decodeReservations[epoch] = DecodeReservations(queued: 1)
+            latestReservedEpoch = epoch
             inFlightDecodes = 1
             consecutiveBacklogOverflow = 0
             lastVtDecodeFailed = false
@@ -110,6 +119,8 @@ extension VideoDecoder {
 
         // Common case: under the nominal bound. Reserve and clear any streak.
         if !overBound {
+            decodeReservations[epoch, default: DecodeReservations()].queued += 1
+            latestReservedEpoch = epoch
             inFlightDecodes += 1
             consecutiveBacklogOverflow = 0
             inFlightDecodeLock.unlock()
@@ -124,6 +135,8 @@ extension VideoDecoder {
         consecutiveBacklogOverflow += 1
 
         if vtDraining, underCeiling {
+            decodeReservations[epoch, default: DecodeReservations()].queued += 1
+            latestReservedEpoch = epoch
             inFlightDecodes += 1
             let depth = inFlightDecodes
             inFlightDecodeLock.unlock()
@@ -147,14 +160,51 @@ extension VideoDecoder {
         return .dropAndFlush
     }
 
-    /// Retire one reserved frame (VT output callback or an abandon path), flooring
-    /// at 0 so a late callback from a session the escalation abandoned can't
-    /// underflow. `vtFailed` records VT's verdict when this retire carries one.
-    nonisolated func releaseInFlightDecode(vtFailed: Bool? = nil) {
+    /// Move a live queued reservation into VT ownership; superseded work never reaches VT.
+    nonisolated func beginSubmittedDecode(epoch: UInt) -> Bool {
+        inFlightDecodeLock.lock(); defer { inFlightDecodeLock.unlock() }
+        guard var slots = decodeReservations[epoch], slots.queued > 0 else { return false }
+        slots.queued -= 1
+        slots.submitted += 1
+        decodeReservations[epoch] = slots
+        return true
+    }
+
+    nonisolated func hasQueuedDecode(epoch: UInt) -> Bool {
+        inFlightDecodeLock.lock(); defer { inFlightDecodeLock.unlock() }
+        return (decodeReservations[epoch]?.queued ?? 0) > 0
+    }
+
+    /// Retire only the owning epoch and phase; callbacks from abandoned sessions cannot
+    /// consume a replacement frame's slot or overwrite its failure verdict.
+    @discardableResult
+    nonisolated func releaseInFlightDecode(epoch: UInt = 0, submitted: Bool = false,
+                                           vtFailed: Bool? = nil) -> Bool {
+        inFlightDecodeLock.lock(); defer { inFlightDecodeLock.unlock() }
+        guard var slots = decodeReservations[epoch] else { return false }
+        if submitted {
+            guard slots.submitted > 0 else { return false }
+            slots.submitted -= 1
+        } else {
+            guard slots.queued > 0 else { return false }
+            slots.queued -= 1
+        }
+        inFlightDecodes -= 1
+        if slots.total == 0 { decodeReservations.removeValue(forKey: epoch) } else { decodeReservations[epoch] = slots }
+        if let vtFailed, epoch == latestReservedEpoch { lastVtDecodeFailed = vtFailed }
+        return true
+    }
+
+    /// Invalidation abandons VT-owned slots, while later work already queued for decode survives.
+    nonisolated func retireInvalidatedDecodes() {
         inFlightDecodeLock.lock()
-        if inFlightDecodes > 0 { inFlightDecodes -= 1 }
-        if let vtFailed { lastVtDecodeFailed = vtFailed }
+        for (epoch, var slots) in decodeReservations {
+            inFlightDecodes -= slots.submitted
+            slots.submitted = 0
+            if slots.total == 0 { decodeReservations.removeValue(forKey: epoch) } else { decodeReservations[epoch] = slots }
+        }
         inFlightDecodeLock.unlock()
+        statsCollector.dropPendingDecodeSubmits()
     }
 
     /// VT failed a frame fed under `epoch` (callback error, no image, or an

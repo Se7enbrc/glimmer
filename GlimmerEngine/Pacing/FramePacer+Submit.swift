@@ -24,6 +24,7 @@ extension FramePacer {
         lock.lock()
         guard running else {
             lock.unlock()
+            recordDiscardedFrame(sampleBuffer, reason: .stopped)
             return
         }
         rateHintSamples.observe(pts: ptsSeconds, now: CACurrentMediaTime(), interval: presentationIntervalLocked())
@@ -32,21 +33,17 @@ extension FramePacer {
         // Present directly until the rebuilt display link proves a healthy tick rate.
         // Suppression still wins so a hidden layer cannot present.
         if tickDeficit.warmingUp && !presentSuppressed {
+            publishSubmitReleaseLocked(entry, vsyncInterval: nil)
             lock.unlock()
-            presentWarmHandoverFrame(entry)
             return
         }
 
         // At rest a due frame waited for the next tick plus a queue hop: up to a vsync of
         // output_to_present for nothing. The gate still spaces presents one interval apart.
         if let vsync = passthroughVsyncLocked() {
-            let generation = bindingGeneration
+            publishSubmitReleaseLocked(entry, vsyncInterval: vsync)
             lock.unlock()
             TelemetryCounters.shared.pacerSubmitReleaseTotal.increment()
-            // Present on the tick's own queue: from this decoder thread it could reach the layer
-            // ahead of an older frame a late tick has already dequeued.
-            let handoff = SubmitRelease(entry: entry)
-            pacingQueue.async { [weak self] in self?.presentSubmitRelease(handoff.entry, vsyncInterval: vsync, generation: generation) }
             return
         }
 
@@ -77,11 +74,13 @@ extension FramePacer {
         }
         lock.unlock()
 
-        if suppressedDisplaced != nil {
+        if let suppressedDisplaced {
+            recordDiscardedFrame(suppressedDisplaced, reason: .suppressed)
             // Suppression edges are logged; per-submit drops stay quiet.
             TelemetryCounters.shared.suppressedDropTotal.increment(by: 1)
         }
-        if droppedStale != nil {
+        if let droppedStale {
+            recordDiscardedFrame(droppedStale, reason: .overflow)
             // Overflow leaves the decode reference chain intact, so no keyframe is needed.
             stats.recordPresentationLateDrop()
             OSSignposter.render.emitEvent(
@@ -90,10 +89,33 @@ extension FramePacer {
         }
     }
 
-    /// A queued handoff may outlive stop or hide. Hidden streams keep only their newest frame.
-    private func presentSubmitRelease(_ entry: Entry, vsyncInterval: CFTimeInterval, generation: UInt64) {
+    /// Publish while reserving under the lock, so a later frame cannot overtake the handoff.
+    private func publishSubmitReleaseLocked(_ entry: Entry, vsyncInterval: CFTimeInterval?) {
+        assertLockHeld()
+        let handoff = SubmitRelease(entry: entry)
+        let binding = bindingGeneration
+        let presentation = presentationGeneration
+        pacingQueue.async { [weak self] in
+            self?.presentSubmitRelease(handoff.entry, vsyncInterval: vsyncInterval,
+                                       binding: binding, presentation: presentation)
+        }
+    }
+
+    /// A queued handoff may outlive stop, discontinuity or hide; hidden streams keep the newest.
+    private func presentSubmitRelease(_ entry: Entry, vsyncInterval: CFTimeInterval?,
+                                      binding: UInt64, presentation: UInt64) {
         lock.lock()
-        guard running, bindingGeneration == generation else { lock.unlock(); return }
+        guard running, bindingGeneration == binding else {
+            let reason: FrameTimingTracker.PacerDiscardReason = running ? .rebind : .stopped
+            lock.unlock()
+            recordDiscardedFrame(entry.sampleBuffer, reason: reason)
+            return
+        }
+        guard presentationGeneration == presentation else {
+            lock.unlock()
+            recordDiscardedFrame(entry.sampleBuffer, reason: .cleared)
+            return
+        }
         if presentSuppressed {
             if queue.isEmpty { liveness.queueNonEmptySince = CFAbsoluteTimeGetCurrent() }
             Self.insert(entry, into: &queue)
@@ -102,11 +124,15 @@ extension FramePacer {
             queue.removeFirst(discarded)
             lock.unlock()
             TelemetryCounters.shared.suppressedDropTotal.increment(by: UInt64(discarded))
-            withExtendedLifetime(displaced) {}
+            for dropped in displaced { recordDiscardedFrame(dropped.sampleBuffer, reason: .suppressed) }
             return
         }
         lock.unlock()
-        presentGateRelease(entry, vsyncInterval: vsyncInterval)
+        if let vsyncInterval {
+            presentGateRelease(entry, vsyncInterval: vsyncInterval)
+        } else {
+            presentWarmHandoverFrame(entry)
+        }
     }
 
     /// At rest (target 1, nothing queued, ticks owning the release, no gap recovery), decide
@@ -122,6 +148,7 @@ extension FramePacer {
         guard vsync.isFinite, vsync > 0, !inGapRecoveryLocked(now: hostNow) else { return nil }
         let scanout = Self.nextScanout(
             now: CACurrentMediaTime(), lastTickTarget: liveness.lastTickTargetMediaTime, vsync: vsync)
+        guard !cadenceTargetCannotBeClaimedLocked(scanout) else { return nil }
         // The tick gate's test (interval minus half a vsync); a timebase jump is left to the tick.
         let sinceLast = scanout - lastPresentMediaTime
         let remainder = cadenceRemainderLocked(vsyncInterval: vsync)
@@ -198,6 +225,22 @@ extension FramePacer {
             insertAt -= 1
         }
         queue.insert(entry, at: insertAt)
+    }
+
+    func recordPresentationDiscards(_ frames: [CMSampleBuffer], reason: FrameTimingTracker.PacerDiscardReason) {
+        assertLockNotHeld()
+        for frame in frames {
+            stats.recordPresentationLateDrop()
+            recordDiscardedFrame(frame, reason: reason)
+        }
+    }
+
+    /// Record the actual discard after unlocking; expiry is reserved for unresolved frames.
+    func recordDiscardedFrame(_ sampleBuffer: CMSampleBuffer, reason: FrameTimingTracker.PacerDiscardReason) {
+        assertLockNotHeld()
+        guard let tracker = FrameTimingTracker.shared else { return }
+        let rtp = VideoDecoder.rtpTimestamp(from: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+        tracker.recordPacerDiscard(rtpTimestamp: rtp, reason: reason)
     }
 
     // MARK: - Suppression flag (suppression edges)

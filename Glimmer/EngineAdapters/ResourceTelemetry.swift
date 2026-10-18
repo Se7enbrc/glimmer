@@ -86,12 +86,14 @@ enum ResourceTelemetry {
     /// `IOPSCopyPowerSourcesInfo`. All on the exporter's 1Hz queue - never a hot
     /// path.
     static func sample() -> ResourceSnapshot {
-        var snapshot = ResourceSnapshot()
+        let started = DispatchTime.now().uptimeNanoseconds
+        var snapshot = sampleMemory()
         snapshot.threads = sampleThreads()
-        snapshot.physFootprintBytes = sampleFootprint()
         let power = samplePowerSource()
         snapshot.onBattery = power.onBattery
         snapshot.batteryCharging = power.charging
+        snapshot.sampleUptimeMs = Double(started) / 1_000_000
+        snapshot.sampleDurationMs = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
         return snapshot
     }
 
@@ -241,19 +243,8 @@ enum ResourceTelemetry {
         return Int(qosClassesByTier[Int(policy.qos_tier)])
     }
 
-    /// Integer_t count needed to cover ALL of `task_vm_info.phys_footprint` (a
-    /// 64-bit field = 2 units): the count must reach past its END, since covering
-    /// only the low half still reads a partial 0. `resident_size` is the fallback.
-    private static let physFootprintCoverage: Int = {
-        guard let offset = MemoryLayout<task_vm_info_data_t>.offset(of: \.phys_footprint)
-        else { return .max }
-        return (offset + MemoryLayout<UInt64>.size) / MemoryLayout<integer_t>.size
-    }()
-
-    /// Process physical memory footprint (bytes) via `task_vm_info`, falling back
-    /// to `resident_size` on a short count or zero `phys_footprint` so the metric
-    /// isn't a dead 0. nil only on an outright task_info failure.
-    private static func sampleFootprint() -> UInt64? {
+    /// One VM probe keeps footprint and resident/compressed categories distinct, including short SDK payloads.
+    private static func sampleMemory() -> ResourceSnapshot {
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(
             MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
@@ -262,11 +253,29 @@ enum ResourceTelemetry {
                 task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
             }
         }
-        guard result == KERN_SUCCESS else { return nil }
-        let covered = Int(count) >= physFootprintCoverage
-        if covered, info.phys_footprint > 0 { return UInt64(info.phys_footprint) }
-        if info.resident_size > 0 { return UInt64(info.resident_size) }
-        return nil
+        return memorySnapshot(info: info, count: Int(count), result: result)
+    }
+
+    static func memorySnapshot(info: task_vm_info_data_t, count: Int, result: kern_return_t) -> ResourceSnapshot {
+        var snapshot = ResourceSnapshot()
+        snapshot.memoryProbeResult = Int(result)
+        guard result == KERN_SUCCESS else {
+            snapshot.memoryProbeStatus = "failed"
+            return snapshot
+        }
+        func bytes(_ field: KeyPath<task_vm_info_data_t, mach_vm_size_t>) -> UInt64? {
+            guard let offset = MemoryLayout<task_vm_info_data_t>.offset(of: field),
+                  count >= (offset + MemoryLayout<mach_vm_size_t>.size) / MemoryLayout<integer_t>.size
+            else { return nil }
+            return UInt64(info[keyPath: field])
+        }
+        snapshot.physFootprintBytes = bytes(\.phys_footprint)
+        snapshot.residentSizeBytes = bytes(\.resident_size)
+        snapshot.compressedBytes = bytes(\.compressed)
+        snapshot.internalBytes = bytes(\.internal)
+        snapshot.reusableBytes = bytes(\.reusable)
+        snapshot.memoryProbeStatus = snapshot.physFootprintBytes == nil ? "partial" : "ok"
+        return snapshot
     }
 
     /// AC-vs-battery + charging via IOKit power sources. `onBattery` is nil when no

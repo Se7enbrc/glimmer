@@ -23,6 +23,16 @@ struct LogSweepTests {
     private let hour: TimeInterval = 3_600
     private let now = Date()
 
+    @Test func budgetPreservesEvidenceOfPrunedSegments() throws {
+        let dir = try scratchDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try make("telemetry-frames-old.ndjson", in: dir, size: budget + 1, age: day)
+        try make("telemetry-frames-old-manifest.json", in: dir, age: day)
+        try make("telemetry-evidence-session.json", in: dir, age: day)
+        TelemetryExporter.sweepLogsDirectory(dir, log: log)
+        #expect(try names(in: dir) == ["telemetry-frames-old-manifest.json", "telemetry-evidence-session.json"])
+    }
+
     private func scratchDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("LogSweepTests-\(UUID().uuidString)", isDirectory: true)

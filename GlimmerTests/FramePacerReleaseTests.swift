@@ -53,6 +53,68 @@ func recordPresents(_ pacer: FramePacer, accept: Bool = true) -> OSAllocatedUnfa
 struct FramePacerReleaseTests {
     private let interval = 1.0 / 120
 
+    @Test(arguments: [0.0, -1.0 / 240, -1.0 / 120, -2.0])
+    func claimedOrOlderTicksCannotTrimOrReleaseQueuedFrames(offset: Double) throws {
+        let pacer = try makeTestPacer(queued: 4)
+        let original = pacer.queue.map { ObjectIdentifier($0.sampleBuffer) }
+        let presented = recordPresents(pacer)
+        pacer.lastPresentMediaTime = 10
+        pacer.cadenceRemainderSeconds = 0.001
+        let target = 10 + offset
+
+        pacer.releaseDueFrame(targetTimestamp: target, vsyncInterval: interval, tickScanout: target)
+
+        #expect(pacer.queue.map { ObjectIdentifier($0.sampleBuffer) } == original)
+        #expect(presented.withLock { $0.isEmpty })
+        #expect(pacer.stats.presentationLateDropCount() == 0)
+        #expect(pacer.lastPresentMediaTime == 10)
+        #expect(pacer.cadenceRemainderSeconds == 0.001)
+        #expect(pacer.liveness.starvedTickStreak == 0)
+    }
+
+    @Test func resetAcceptsNewClockButRejectsRetiredBindingWork() throws {
+        let pacer = try makeTestPacer(queued: 1)
+        let presented = recordPresents(pacer)
+        pacer.lastPresentMediaTime = 1_000
+        pacer.lock.lock()
+        pacer.resetCadenceBaseLocked()
+        pacer.bindingGeneration = 1
+        pacer.lock.unlock()
+
+        pacer.releaseDueFrame(targetTimestamp: 1_001, vsyncInterval: interval, tickScanout: 1_001, generation: 0)
+        #expect(presented.withLock { $0.isEmpty })
+        #expect(pacer.queue.count == 1)
+        pacer.releaseDueFrame(targetTimestamp: 5, vsyncInterval: interval, tickScanout: 5, generation: 1)
+        #expect(presented.withLock { $0.count } == 1)
+        #expect(pacer.lastPresentMediaTime == 5)
+    }
+
+    @Test(arguments: [Double.nan, .infinity, -.infinity])
+    func invalidTicksCannotEraseScanoutOwnership(target: Double) throws {
+        let pacer = try makeTestPacer(queued: 4)
+        let presented = recordPresents(pacer)
+        pacer.lastPresentMediaTime = 10
+        pacer.lastClaimedScanoutMediaTime = 10
+        pacer.releaseDueFrame(targetTimestamp: target, vsyncInterval: interval, tickScanout: target)
+        #expect(pacer.queue.count == 4)
+        #expect(presented.withLock { $0.isEmpty })
+        #expect(pacer.lastPresentMediaTime == 10)
+        #expect(pacer.lastClaimedScanoutMediaTime == 10)
+        #expect(pacer.stats.presentationLateDropCount() == 0)
+    }
+
+    @Test func deficitBeatAfterPanelScanoutDoesNotWaitForTheNextLinkCallback() throws {
+        let pacer = try makeTestPacer(queued: 2)
+        let presented = recordPresents(pacer)
+        pacer.releaseDueFrame(targetTimestamp: 10.2, vsyncInterval: 0.1, tickScanout: 10.1)
+        #expect(pacer.lastClaimedScanoutMediaTime == 10.1)
+
+        pacer.releaseDueFrame(targetTimestamp: 10.15, vsyncInterval: interval, tickScanout: .nan)
+
+        #expect(presented.withLock { $0.count } == 2)
+        #expect(pacer.lastClaimedScanoutMediaTime == 10.15)
+    }
+
     // MARK: - Present-loop backoff
 
     /// A head more than three intervals late with fresher frames behind it collapses to the
@@ -95,6 +157,41 @@ struct FramePacerReleaseTests {
         #expect(pacer.stats.presentationLateDropCount() == 1)
         #expect(pacer.tickDeficit.tickScanoutMediaTime == 10.05)
         #expect(pacer.liveness.releaseCount == 1)
+    }
+
+    @Test func backoffCannotClaimItsScanoutAgainAfterReseeding() throws {
+        let pacer = try makeTestPacer(queued: 2)
+        let presented = recordPresents(pacer)
+        pacer.lastPresentMediaTime = 10
+        let target = 10.05
+        pacer.releaseDueFrame(targetTimestamp: target, vsyncInterval: interval, tickScanout: target)
+        let fresh = try makeEmptySampleBuffer()
+        pacer.queue.append(FramePacer.Entry(sampleBuffer: fresh, hostPTSSeconds: 1))
+
+        pacer.releaseDueFrame(targetTimestamp: target, vsyncInterval: interval, tickScanout: target)
+
+        #expect(presented.withLock { $0.count } == 1)
+        #expect(pacer.queue.count == 1)
+        #expect(pacer.lastClaimedScanoutMediaTime == target)
+        pacer.releaseDueFrame(targetTimestamp: target + interval, vsyncInterval: interval,
+                              tickScanout: target + interval)
+        #expect(presented.withLock { $0.last } == ObjectIdentifier(fresh))
+        #expect(presented.withLock { $0.count } == 2)
+    }
+
+    @Test func backoffCannotReserveTheSameScanoutFromSubmit() async throws {
+        let pacer = try makeTestPacer(queued: 2)
+        let presented = recordPresents(pacer)
+        let target = CACurrentMediaTime() + 0.5
+        pacer.lastPresentMediaTime = target - 10 * interval
+        pacer.refreshTelemetry.lastRefreshIntervalSeconds = interval
+        pacer.liveness.lastTickTargetMediaTime = target
+        pacer.releaseDueFrame(targetTimestamp: target, vsyncInterval: interval, tickScanout: target)
+        pacer.submit(try makeEmptySampleBuffer(), hostPTS: CMTime(value: 750, timescale: 90_000))
+        await pacer.pacingQueue.drainForTest()
+
+        #expect(presented.withLock { $0.count } == 1)
+        #expect(pacer.queue.count == 1)
     }
 
     /// Gap recovery plays the catch-up through: no backoff, the oldest frame goes first.
@@ -302,14 +399,14 @@ struct FramePacerReleaseTests {
         #expect(visible.stats.presentationLateDropCount() == 1)
     }
 
-    /// During a warm handover a submit presents at once; a refusal is a reject, and a hidden
-    /// window queues instead of presenting.
+    /// Warm handovers release on the presentation queue; hidden windows retain the newest frame.
     @Test(arguments: [true, false])
-    func warmHandoverSubmitPresentsDirectly(accept: Bool) throws {
+    func warmHandoverSubmitUsesPresentationQueue(accept: Bool) async throws {
         let pacer = try makeTestPacer()
         pacer.armWarmHandover()
         let presented = recordPresents(pacer, accept: accept)
         pacer.submit(try makeEmptySampleBuffer(), hostPTS: CMTime(value: 0, timescale: 90_000))
+        await pacer.pacingQueue.drainForTest()
         #expect(presented.withLock { $0.count } == 1)
         #expect(pacer.queue.isEmpty)
         #expect(pacer.liveness.releaseCount == (accept ? 1 : 0))

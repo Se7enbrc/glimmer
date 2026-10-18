@@ -213,6 +213,44 @@ struct SessionReconnectFlowTests {
         #expect(await live.finish() == ["reconnecting", "reconnected"])
     }
 
+    @Test(arguments: [false, true])
+    func stopDuringWatchdogRearmCannotPublishReconnect(stopCompleted: Bool) async throws {
+        let live = await live([:])
+        let presentation = try #require(await live.session.presentation)
+        let armEntered = SafetyTestGate()
+        let armRelease = SafetyTestGate()
+        let closeEntered = SafetyTestGate()
+        let closeRelease = SafetyTestGate()
+        await MainActor.run {
+            presentation.waitForVisualClose = {
+                await closeEntered.open()
+                await closeRelease.wait()
+            }
+        }
+        let attempt = await live.session.prepareReconnectCompletionTest()
+        let reconnects = TelemetryCounters.shared.reconnectTotal.value
+        let completion = Task {
+            await live.session.finishReconnect(attempt: attempt, rearmWatchdog: { _ in
+                await armEntered.open()
+                await armRelease.wait()
+            })
+        }
+        await armEntered.wait()
+        let stopping = Task { await live.session.stop() }
+        await closeEntered.wait()
+        if stopCompleted {
+            await closeRelease.open()
+            await stopping.value
+        }
+        await armRelease.open()
+        await completion.value
+        #expect(TelemetryCounters.shared.reconnectTotal.value == reconnects)
+        #expect(live.session.didLogDecodeOnlyStall)
+        await closeRelease.open()
+        await stopping.value
+        #expect(await live.finish().isEmpty)
+    }
+
     // MARK: - Frame watchdog
 
     /// A connection that never decodes a frame ends ten seconds after the arm, not before, with a
@@ -302,4 +340,11 @@ private extension StreamSession {
     func forgetLiveState() { reachedLiveState = false }
 
     func markRemotePath() { isRemotePathSession = true }
+
+    func prepareReconnectCompletionTest() -> UUID {
+        isReconnecting = true
+        didLogDecodeOnlyStall = true
+        bridge?.beginAttempt(attemptID)
+        return attemptID
+    }
 }

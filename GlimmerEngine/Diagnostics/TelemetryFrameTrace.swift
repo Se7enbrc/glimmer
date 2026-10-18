@@ -1,200 +1,343 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TelemetryFrameTrace.swift
-//
-//  The buffered, off-hot-path NDJSON writer for the per-frame latency trace.
-//  Split out of TelemetryLatency.swift to keep each unit focused (the latency
-//  histograms + the per-frame timing tracker stay there); see TelemetryExporter.
-//  swift for the gate/safety contract.
-//
-//  HOT-PATH SAFETY (load-bearing): the hot path only appends a small pre-rendered
-//  string to an in-memory buffer under a short lock; a ~250ms background timer
-//  drains the buffer to disk in one write. NEVER fsyncs and never writes on the
-//  producing thread - a slow disk can only grow the (bounded) buffer, never stall
-//  decode/pace. The lock is taken ONLY on the telemetry path (off by default).
-//
-
 import Foundation
 import os
 
-// MARK: - Per-frame trace writer (batched, off the hot path)
-
-/// Buffered background NDJSON writer for the per-frame latency trace. The hot
-/// path only appends a small pre-rendered string to an in-memory buffer under a
-/// short lock; a ~250ms background timer drains the buffer to disk in one write.
-/// NEVER fsyncs and never writes on the producing thread - a slow disk can only
-/// grow the (bounded) buffer, never stall decode/pace.
-///
-/// `@unchecked Sendable`: the buffer is lock-guarded; the file handle + timer are
-/// confined to `flushQueue`.
+/// Producers append bounded typed records; formatting, files and manifest state belong to flushQueue.
+/// The buffer lock protects admission, sequence allocation and the two reusable pending buffers.
 package final class FrameTraceWriter: @unchecked Sendable {
-
-    private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Telemetry")
-
-    /// Drain cadence. 250ms batches plenty of frames (15 at 60fps, 60 at 240fps)
-    /// into one write while keeping the on-disk trace within a quarter-second of
-    /// live for a tail.
-    private static let flushInterval: DispatchTimeInterval = .milliseconds(250)
-
-    /// Hard cap on the pending buffer so a wedged disk can't grow it without
-    /// bound. At ~120 bytes/line this is ~1.2MB - far past one flush interval's
-    /// worth of frames; overflow drops the OLDEST pending lines (diagnostic data,
-    /// losing the stalest is the right tradeoff) and is logged once.
-    private static let maxPendingLines = 10_000
-
-    /// SIZE-CAPPED ROLLOVER (C2): past `maxFileBytes` a fresh `-<n>` segment opens; a session keeps
-    /// its first (connect, first IDR, pacer lock-in) plus the newest `maxTraceFiles - 1` (≈384MB).
-    /// The next connect's byte sweep trims this session last, oldest `-<n>` first.
     package static let defaultMaxFileBytes: UInt64 = 96 * 1024 * 1024
-    private let maxFileBytes: UInt64
-    private let directory: URL
     package static let maxTraceFiles = 4
-
+    private static let maxPendingLines = 10_000
+    private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Telemetry")
+    private let directory: URL
+    private let maxFileBytes: UInt64
+    private let maxRetainedSegments: Int
+    private let sessionId: String
+    private let now: @Sendable () -> UInt64
+    private let write: (FileHandle, Data) throws -> Void
     private let flushQueue = DispatchQueue(label: "io.ugfugl.Glimmer.telemetry.frames", qos: .utility)
     private var fileHandle: FileHandle?
     private var flushTimer: DispatchSourceTimer?
-    /// Rollover state (flushQueue-confined): the Logs dir, this session's ISO stamp (the segments'
-    /// shared prefix), the current segment's byte count, the next segment index, and this session's
-    /// segment files oldest-first (for `trimSegments`).
-    private var logDir: URL?
     private var isoStamp = ""
-    private var bytesWritten: UInt64 = 0
-    private var rolloverIndex = 0
-    private var segmentURLs: [URL] = []
+    private var started = false
+    private var stopped = false
+    private var manifest: Manifest
+    private var segmentIndex = 0
 
-    /// Pending lines + their lock. The lock is taken ONLY on the telemetry path
-    /// (which is off by default) - never on the proven decode/pace path when the
-    /// gate is off, because the tracker that calls `append` doesn't exist then.
-    private let bufferLock = os_unfair_lock_t.allocate(capacity: 1)
-    private var pending: [String] = []
-    private var droppedOverflow = false
+    package struct Segment: Codable, Sendable {
+        package var name: String
+        package var index: Int
+        package var firstSequence: UInt64?
+        package var lastSequence: UInt64?
+        package var firstRecordedMs: Double?
+        package var lastRecordedMs: Double?
+        package var records: UInt64 = 0
+        package var bytes: UInt64 = 0
+    }
 
-    package init(directory: URL, maxFileBytes: UInt64 = defaultMaxFileBytes) {
+    package struct Manifest: Codable, Sendable {
+        package var schema = 1
+        package var session: String
+        package var activeAttempt: String?
+        package var startedMs: Double?
+        package var stoppedMs: Double?
+        package var closed = false
+        package var complete = false
+        package var acceptedRecords: UInt64 = 0
+        package var writtenRecords: UInt64 = 0
+        package var overflowRecords: UInt64 = 0
+        package var unwrittenRecords: UInt64 = 0
+        package var writeFailures: UInt64 = 0
+        package var manifestWriteFailures: UInt64 = 0
+        package var prunedRecords: UInt64 = 0
+        package var prunedSegments: UInt64 = 0
+        package var firstPrunedSequence: UInt64?
+        package var lastPrunedSequence: UInt64?
+        package var firstUnwrittenSequence: UInt64?
+        package var lastUnwrittenSequence: UInt64?
+        package var segments: [Segment] = []
+    }
+
+    private enum Record: Sendable {
+        case line(String)
+        case frame(session: String, timing: FrameTimingTracker.TraceRecord)
+        case stage(session: String, timing: FrameTimingTracker.StageRecord)
+
+        func render() -> String {
+            switch self {
+            case .line(let line): return line
+            case .frame(let session, let timing):
+                return FrameTimingTracker.renderTraceLine(timing, sessionId: session)
+            case .stage(let session, let timing):
+                return FrameTimingTracker.renderStageLine(timing, sessionId: session)
+            }
+        }
+    }
+
+    private struct Pending: Sendable {
+        let record: Record
+        let sequence: UInt64
+        let recordedNanos: UInt64
+        let attempt: String?
+    }
+
+    private struct Loss {
+        var records: UInt64 = 0
+        var firstSequence: UInt64?
+        var lastSequence: UInt64?
+        var firstNanos: UInt64?
+        var lastNanos: UInt64?
+
+        mutating func include(_ record: Pending) {
+            if firstSequence == nil { firstSequence = record.sequence; firstNanos = record.recordedNanos }
+            lastSequence = record.sequence
+            lastNanos = record.recordedNanos
+            records &+= 1
+        }
+    }
+
+    private let bufferLock = NSLock()
+    private var pending: [Pending] = []
+    private var spare: [Pending] = []
+    private var oldestIndex = 0
+    private var lost = Loss()
+    private var accepted: UInt64 = 0
+    private var accepting = true
+    private var activeAttempt: String?
+
+    package init(directory: URL, maxFileBytes: UInt64 = defaultMaxFileBytes, sessionId: String = "",
+                 maxRetainedSegments: Int = maxTraceFiles,
+                 now: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
+                 write: @escaping (FileHandle, Data) throws -> Void = { try $0.write(contentsOf: $1) }) {
         self.directory = directory
         self.maxFileBytes = maxFileBytes
-        bufferLock.initialize(to: os_unfair_lock_s())
+        self.maxRetainedSegments = max(2, maxRetainedSegments)
+        self.sessionId = sessionId
+        self.now = now
+        self.write = write
+        manifest = Manifest(session: sessionId)
+        pending.reserveCapacity(Self.maxPendingLines)
+        spare.reserveCapacity(Self.maxPendingLines)
     }
-    deinit { bufferLock.deallocate() }
 
-    /// Open the trace file + arm the flush timer. Mirrors the exporter's NDJSON
-    /// path: `~/Library/Logs/Glimmer/telemetry-frames-<ISO8601>.ndjson`.
+    package var status: Manifest { flushQueue.sync { manifest } }
+
+    package func setAttempt(_ id: UUID) {
+        let value = id.uuidString
+        bufferLock.withLock { activeAttempt = value }
+    }
+
     package func start(isoStamp: String) {
         flushQueue.async { [weak self] in
-            guard let self else { return }
-            let timer = DispatchSource.makeTimerSource(queue: self.flushQueue)
-            timer.schedule(deadline: .now() + Self.flushInterval, repeating: Self.flushInterval,
-                           leeway: .milliseconds(50))
-            timer.setEventHandler { [weak self] in self?.flush() }
-            self.flushTimer = timer
-            timer.resume()
-
-            let dir = self.directory
-            do {
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            } catch {
-                self.log.error(
-                    "Telemetry frames: could not create log dir: \(error.localizedDescription, privacy: .private)")
-                return
-            }
-            self.logDir = dir
+            guard let self, !self.started, !self.stopped else { return }
+            self.started = true
             self.isoStamp = isoStamp
-            self.openSegment()
+            self.manifest.startedMs = Double(self.now()) / 1_000_000
+            do {
+                try FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)
+                self.openSegment()
+            } catch {
+                self.manifest.writeFailures &+= 1
+                self.log.error("Frame trace directory unavailable: \(error.localizedDescription, privacy: .private)")
+            }
+            self.writeManifest()
+            let timer = DispatchSource.makeTimerSource(queue: self.flushQueue)
+            timer.schedule(deadline: .now() + .milliseconds(250), repeating: .milliseconds(250),
+                           leeway: .milliseconds(50))
+            timer.setEventHandler { [weak self] in self?.drain() }
+            self.flushTimer = timer
+            timer.activate()
         }
     }
 
-    /// Open the next trace SEGMENT (`telemetry-frames-<iso>.ndjson` for the first,
-    /// `-<n>.ndjson` after a rollover), reset the byte count, and `trimSegments`.
-    /// flushQueue-only. Logs if the file can't be opened.
-    private func openSegment() {
-        guard let dir = logDir else { return }
-        let suffix = rolloverIndex == 0 ? "" : "-\(rolloverIndex)"
-        let url = dir.appendingPathComponent("telemetry-frames-\(isoStamp)\(suffix).ndjson")
-        FileManager.default.createFile(atPath: url.path, contents: nil)
+    /// Drain a checkpoint without closing producer admission.
+    package func flush() { flushQueue.sync { if !stopped { drain(); writeManifest() } } }
+
+    package func stop() {
+        flushQueue.sync {
+            guard !stopped else { return }
+            stopped = true
+            flushTimer?.cancel()
+            flushTimer = nil
+            drain(stopping: true)
+            do { try fileHandle?.close() } catch { manifest.writeFailures &+= 1 }
+            fileHandle = nil
+            manifest.closed = true
+            manifest.stoppedMs = Double(now()) / 1_000_000
+            writeManifest()
+        }
+    }
+
+    package func append(_ line: String) { append(.line(line), attempt: nil, useActiveAttempt: true) }
+
+    package func appendFrame(_ record: FrameTimingTracker.TraceRecord, sessionId: String) {
+        append(.frame(session: sessionId, timing: record), attempt: record.attemptID)
+    }
+
+    package func appendStage(_ record: FrameTimingTracker.StageRecord, sessionId: String) {
+        append(.stage(session: sessionId, timing: record), attempt: record.attemptID ?? record.timing?.attemptID)
+    }
+
+    private func append(_ record: Record, attempt: String?, useActiveAttempt: Bool = false) {
+        bufferLock.withLock {
+            guard accepting else { return }
+            let stamp = now()
+            accepted &+= 1
+            let item = Pending(record: record, sequence: accepted, recordedNanos: stamp,
+                               attempt: useActiveAttempt ? activeAttempt : attempt)
+            if pending.count < Self.maxPendingLines {
+                pending.append(item)
+            } else {
+                lost.include(pending[oldestIndex])
+                pending[oldestIndex] = item
+                oldestIndex = (oldestIndex + 1) % Self.maxPendingLines
+            }
+        }
+    }
+
+    private func drain(stopping: Bool = false) {
+        var batch = spare
+        spare = []
+        bufferLock.lock()
+        swap(&batch, &pending)
+        let first = oldestIndex
+        let loss = lost
+        manifest.acceptedRecords = accepted
+        manifest.activeAttempt = activeAttempt
+        oldestIndex = 0
+        lost = Loss()
+        if stopping { accepting = false }
+        bufferLock.unlock()
+        defer { batch.removeAll(keepingCapacity: true); spare = batch }
+        manifest.overflowRecords &+= loss.records
+        guard !batch.isEmpty else { return }
+        let orderedFirst = batch[first]
+        let orderedLast = batch[(first + batch.count - 1) % batch.count]
+        guard let fileHandle else { noteUnwritten(batch.count, first: orderedFirst, last: orderedLast); return }
+        var lines: [String] = []
+        lines.reserveCapacity(batch.count + (loss.records > 0 ? 1 : 0))
+        if loss.records > 0 { lines.append(renderLoss(loss)) }
+        for offset in batch.indices { lines.append(render(batch[(first + offset) % batch.count])) }
+        let data = Data((lines.joined(separator: "\n") + "\n").utf8)
         do {
-            fileHandle = try FileHandle(forWritingTo: url)
+            try write(fileHandle, data)
+            manifest.writtenRecords &+= UInt64(batch.count)
+            updateSegment(first: orderedFirst, last: orderedLast, count: batch.count, bytes: data.count)
         } catch {
-            log.error("Telemetry frames: could not open file: \(error.localizedDescription, privacy: .private)")
+            manifest.writeFailures &+= 1
+            noteUnwritten(batch.count, first: orderedFirst, last: orderedLast)
+            log.error("Frame trace write failed: \(error.localizedDescription, privacy: .private)")
+            try? fileHandle.close()
+            self.fileHandle = nil
+            writeManifest()
             return
         }
-        log.notice("Telemetry per-frame trace → \(url.lastPathComponent, privacy: .public)")
-        bytesWritten = 0
-        rolloverIndex += 1
-        segmentURLs.append(url)
-        for stale in Self.trimSegments(&segmentURLs) {
-            try? FileManager.default.removeItem(at: stale)
+        if let segment = manifest.segments.last, segment.bytes >= maxFileBytes {
+            do { try fileHandle.close() } catch { manifest.writeFailures &+= 1 }
+            self.fileHandle = nil
+            openSegment()
+            writeManifest()
         }
     }
 
-    /// Trim this session's segments (oldest-first) to `maxTraceFiles`, keeping
-    /// the first and the newest. Returns the segments to delete.
+    private func render(_ item: Pending) -> String {
+        let line = item.record.render()
+        var metadata = TelemetryRenderer.NDJSONBuilder()
+        metadata.addCount("trace_seq", item.sequence)
+        metadata.add("trace_recorded_ms", Double(item.recordedNanos) / 1_000_000)
+        metadata.addString("trace_session", sessionId)
+        if let attempt = item.attempt { metadata.addString("trace_attempt", attempt) }
+        let tail = metadata.line().dropFirst()
+        return String(line.dropLast()) + (line == "{}" ? "" : ",") + tail
+    }
+
+    private func renderLoss(_ loss: Loss) -> String {
+        var row = TelemetryRenderer.NDJSONBuilder()
+        row.addString("event", "trace_overflow")
+        row.addString("trace_session", sessionId)
+        row.add("t_ms", Double(now()) / 1_000_000)
+        row.addCount("dropped_records", loss.records)
+        row.addCount("first_lost_seq", loss.firstSequence)
+        row.addCount("last_lost_seq", loss.lastSequence)
+        if let stamp = loss.firstNanos { row.add("first_lost_recorded_ms", Double(stamp) / 1_000_000) }
+        if let stamp = loss.lastNanos { row.add("last_lost_recorded_ms", Double(stamp) / 1_000_000) }
+        return row.line()
+    }
+
+    private func noteUnwritten(_ count: Int, first: Pending, last: Pending) {
+        manifest.unwrittenRecords &+= UInt64(count)
+        if manifest.firstUnwrittenSequence == nil { manifest.firstUnwrittenSequence = first.sequence }
+        manifest.lastUnwrittenSequence = last.sequence
+    }
+
+    private func updateSegment(first: Pending, last: Pending, count: Int, bytes: Int) {
+        guard let index = manifest.segments.indices.last else { return }
+        if manifest.segments[index].firstSequence == nil {
+            manifest.segments[index].firstSequence = first.sequence
+            manifest.segments[index].firstRecordedMs = Double(first.recordedNanos) / 1_000_000
+        }
+        manifest.segments[index].lastSequence = last.sequence
+        manifest.segments[index].lastRecordedMs = Double(last.recordedNanos) / 1_000_000
+        manifest.segments[index].records &+= UInt64(count)
+        manifest.segments[index].bytes &+= UInt64(bytes)
+    }
+
+    private func openSegment() {
+        let suffix = segmentIndex == 0 ? "" : "-\(segmentIndex)"
+        let name = "telemetry-frames-\(isoStamp)\(suffix).ndjson"
+        let url = directory.appendingPathComponent(name)
+        guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
+            manifest.writeFailures &+= 1
+            log.error("Frame trace segment could not be created")
+            return
+        }
+        do {
+            fileHandle = try FileHandle(forWritingTo: url)
+            manifest.segments.append(Segment(name: name, index: segmentIndex))
+            segmentIndex += 1
+            while manifest.segments.count > maxRetainedSegments {
+                let stale = manifest.segments.remove(at: 1)
+                manifest.prunedSegments &+= 1
+                manifest.prunedRecords &+= stale.records
+                if manifest.firstPrunedSequence == nil { manifest.firstPrunedSequence = stale.firstSequence }
+                manifest.lastPrunedSequence = stale.lastSequence
+                do {
+                    try FileManager.default.removeItem(at: directory.appendingPathComponent(stale.name))
+                } catch {
+                    try? fileHandle?.close()
+                    fileHandle = nil
+                    throw error
+                }
+            }
+        } catch {
+            manifest.writeFailures &+= 1
+            log.error("Frame trace open failed: \(error.localizedDescription, privacy: .private)")
+        }
+    }
+
+    private func writeManifest() {
+        guard !isoStamp.isEmpty else { return }
+        manifest.complete = manifest.closed && manifest.writeFailures == 0 && manifest.manifestWriteFailures == 0
+            && manifest.overflowRecords == 0 && manifest.unwrittenRecords == 0 && manifest.prunedRecords == 0
+            && manifest.acceptedRecords == manifest.writtenRecords
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        do {
+            try encoder.encode(manifest).write(
+                to: directory.appendingPathComponent("telemetry-frames-\(isoStamp)-manifest.json"), options: .atomic)
+        } catch {
+            manifest.manifestWriteFailures &+= 1
+            manifest.complete = false
+            log.error("Frame trace manifest write failed: \(error.localizedDescription, privacy: .private)")
+        }
+    }
+
     package static func trimSegments(_ segments: inout [URL]) -> [URL] {
         var stale: [URL] = []
         while segments.count > maxTraceFiles { stale.append(segments.remove(at: 1)) }
         return stale
-    }
-
-    /// Close the current segment and open the next - the size-cap rollover.
-    /// flushQueue-only (called from `drainLocked` after a write crosses the cap).
-    private func rollover() {
-        try? fileHandle?.close()
-        fileHandle = nil
-        openSegment()
-    }
-
-    /// Stop the timer, flush whatever is pending, close the file. Synchronous so
-    /// teardown is deterministic.
-    package func stop() {
-        flushQueue.sync { [weak self] in
-            guard let self else { return }
-            self.flushTimer?.cancel()
-            self.flushTimer = nil
-            self.drainLocked()
-            try? self.fileHandle?.close()
-            self.fileHandle = nil
-        }
-    }
-
-    /// Hot-path-side append: push one pre-rendered NDJSON line into the buffer
-    /// under a short lock. No I/O here. Bounded - drops oldest on overflow.
-    package func append(_ line: String) {
-        os_unfair_lock_lock(bufferLock)
-        pending.append(line)
-        if pending.count > Self.maxPendingLines {
-            pending.trimOldestOverflow(maxCount: Self.maxPendingLines)
-            droppedOverflow = true
-        }
-        os_unfair_lock_unlock(bufferLock)
-    }
-
-    /// Background drain: swap out the pending buffer under the lock, then write
-    /// the batch in one go off the lock.
-    private func flush() { drainLocked() }
-
-    private func drainLocked() {
-        os_unfair_lock_lock(bufferLock)
-        let batch = pending
-        pending.removeAll(keepingCapacity: true)
-        let overflowed = droppedOverflow
-        droppedOverflow = false
-        os_unfair_lock_unlock(bufferLock)
-
-        if overflowed {
-            log.error("Telemetry per-frame trace buffer overflowed (disk too slow?) - oldest lines dropped")
-        }
-        guard !batch.isEmpty, let fileHandle else { return }
-        let blob = batch.joined(separator: "\n") + "\n"
-        guard let data = blob.data(using: .utf8) else { return }
-        do {
-            try fileHandle.write(contentsOf: data)
-            bytesWritten &+= UInt64(data.count)
-            // Past the size cap: open a fresh segment (see `trimSegments`). One
-            // rollover per drain, and a batch is one flush interval's frames, so
-            // a segment never overshoots the cap by more than a single batch.
-            if bytesWritten >= maxFileBytes { rollover() }
-        } catch {
-            log.error("Telemetry per-frame trace write failed: \(error.localizedDescription, privacy: .private)")
-        }
     }
 }

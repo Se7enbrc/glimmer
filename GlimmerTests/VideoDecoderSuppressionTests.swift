@@ -173,6 +173,7 @@ struct VideoDecoderSuppressionTests {
         }
         try #require(pacer.queue.count == 2)
         decoder.inFlightDecodes = decoder.maxInFlightDecodeCeiling
+        decoder.decodeReservations[0] = VideoDecoder.DecodeReservations(queued: decoder.maxInFlightDecodeCeiling)
 
         decoder.presentSuppressedLock.lock()
         decoder._presentSuppressed = true

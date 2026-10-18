@@ -137,32 +137,8 @@ extension NativeBackend {
             throw EnetError.interrupted
         }
 
-        // Decoder setup() BEFORE first frame, then start() once.
-        let videoFormat = handshake.negotiatedVideoFormat
-        if checkInterrupted() { throw EnetError.interrupted }
-        let setupResult = sink.setup(
-            videoFormat: videoFormat, width: config.width, height: config.height,
-            redrawRate: config.fps)
-        guard setupResult == 0 else {
-            Diag.error("native backend: video sink setup failed (\(setupResult))", Self.logCategory)
-            events.stageFailed("video stream initialization", code: setupResult)
-            throw StreamError.sessionFailed(setupResult)
-        }
-        sink.start()
-
-        let receiver = makeVideoReceiver(handshake: handshake, config: config, host: host, sink: sink, enet: enet)
-        receiver.onReceiveFailed = { [weak self] in
-            events.connectionTerminated(code: -1)
-            self?.stopConnection()
-        }
-        guard adoptWhileConnecting({ videoReceiver = receiver }) else {
-            // Stop may have cleaned this sink before setup/start finished.
-            // Until adoption succeeds, this stage owns the final cleanup.
-            sink.stop()
-            sink.cleanup()
-            events.stageFailed("video stream initialization", code: -4)
-            throw EnetError.interrupted
-        }
+        let receiver = try prepareVideoReceiver(handshake: handshake, config: config, host: host,
+                                                sink: sink, enet: enet, events: events)
 
         do {
             try await receiver.start()
@@ -182,6 +158,35 @@ extension NativeBackend {
         controlThread.qualityOfService = .userInteractive
         controlThread.name = "Glimmer.enetControl"
         controlThread.start()
+    }
+
+    private func prepareVideoReceiver(
+        handshake: RtspHandshakeResult, config: BackendStreamConfig,
+        host: NWEndpoint.Host, sink: VideoSink, enet: EnetControlChannel, events: any ConnectionEvents
+    ) throws -> VideoRtpReceiver {
+        try withLifecycle {
+            if checkInterrupted() { throw EnetError.interrupted }
+            let result = sink.setup(videoFormat: handshake.negotiatedVideoFormat,
+                                    width: config.width, height: config.height, redrawRate: config.fps)
+            guard result == 0 else {
+                events.stageFailed("video stream initialization", code: result)
+                throw StreamError.sessionFailed(result)
+            }
+            sink.start()
+            let receiver = makeVideoReceiver(handshake: handshake, config: config, host: host, sink: sink, enet: enet)
+            receiver.onReceiveFailed = { [weak self] in
+                events.connectionTerminated(code: -1)
+                self?.stopConnection()
+            }
+            guard adoptWhileConnecting({ videoReceiver = receiver }) else {
+                // A synchronous sink callback may stop during setup/start; finish its cleanup before unlocking.
+                sink.stop()
+                sink.cleanup()
+                events.stageFailed("video stream initialization", code: -4)
+                throw EnetError.interrupted
+            }
+            return receiver
+        }
     }
 
     func wireVideoControl(enet: EnetControlChannel, events: any ConnectionEvents) {
@@ -315,6 +320,7 @@ extension NativeBackend {
             // No early-ping receiver (e.g. no audio sink). Nothing to receive.
             return
         }
+        wireAudioReceiveFailure(receiver, events: events)
         do {
             try receiver.startReceive()
         } catch {
@@ -324,6 +330,17 @@ extension NativeBackend {
             // queryable counter + a non-fatal event (the visual stream is fine).
             TelemetryCounters.shared.audioReceiveFailedTotal.increment()
             events.audioFailed("\(error)")
+        }
+    }
+
+    func wireAudioReceiveFailure(_ receiver: RtpAudioReceiver, events: any ConnectionEvents) {
+        receiver.onReceiveFailed = { [weak self] error in
+            guard let self else { return }
+            self.withLifecycle {
+                guard !self.checkInterrupted() else { return }
+                TelemetryCounters.shared.audioReceiveFailedTotal.increment()
+                events.audioFailed("Audio receive failed (errno \(error)); reconnect to retry")
+            }
         }
     }
 

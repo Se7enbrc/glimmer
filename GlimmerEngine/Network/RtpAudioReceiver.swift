@@ -99,6 +99,10 @@ final class RtpAudioReceiver: @unchecked Sendable {
         }
     }
     let interrupted = ManagedAtomicFlag()
+    let receiveFailure = AudioReceiveFailure()
+    // Installed before startReceive; only the receive queue invokes it.
+    var onReceiveFailed: (@Sendable (Int32) -> Void)?
+    var loggedReceivePressure = false // receive-queue confined
     private let lifecycleLock = NSRecursiveLock()
 
     // `internal` so the RtpAudioReceiver+Telemetry extension can read `queue.stats`
@@ -341,6 +345,9 @@ final class RtpAudioReceiver: @unchecked Sendable {
         lifecycleLock.lock()
         defer { lifecycleLock.unlock() }
         guard !interrupted.isSet else { return }
+        if let error = receiveFailure.failure {
+            throw EnetError.socketFailure("audio receive failed (errno \(error)); reconnect to retry")
+        }
         if receiveStarted { return }
         // The ping side normally started mid-handshake; ensure the socket is open.
         if !pingStarted { try startPing() }
@@ -374,6 +381,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
         lifecycleLock.lock()
         defer { lifecycleLock.unlock() }
         guard interrupted.testAndSet() else { return }
+        receiveFailure.cancel()
         // Preserve the stream-end instant as the next session's idle anchor.
         TelemetryCounters.shared.audioTtf.markStreamEnd()
         pingThread = nil // the dedicated ping thread exits on the interrupted flag

@@ -377,7 +377,9 @@ extension FramePacer {
             // Suppression can retain a stale frame while warm submits go direct.
             // Discard it at the atomic flip so paced release starts on fresh pixels
             // and re-seeds its cadence from the live link's clock.
-            let discarded = queue.count
+            let discarded = queue.map {
+                VideoDecoder.rtpTimestamp(from: CMSampleBufferGetPresentationTimeStamp($0.sampleBuffer))
+            }
             queue.removeAll(keepingCapacity: true)
             tickDeficit.warmingUp = false
             tickDeficit.warmHealthyWindowStreak = 0
@@ -514,13 +516,7 @@ extension FramePacer {
         lock.unlock()
     }
 
-    /// Direct-present one frame during warm-up (called from `submit` on the VT
-    /// decode queue - the same thread the pre-pacer fallback path proves safe).
-    /// Stamps the release liveness clocks: a frame DID reach the renderer, and
-    /// the watchdog must see the flow as healthy while the link primes. A
-    /// renderer refusal counts toward the reject streak - a latched-unready
-    /// renderer during warm-up is the same renderer-refusal wedge class and
-    /// must steer the ladder to the flush, not to link medicine.
+    /// Warm frames share the serial presentation queue; cutover cannot overtake them.
     func presentWarmHandoverFrame(_ entry: Entry) {
         guard let willPresent else { return }
         guard willPresent(entry.sampleBuffer) else {

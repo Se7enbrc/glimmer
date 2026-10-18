@@ -15,6 +15,42 @@ import Testing
 @Suite(.serialized)
 struct LatencyTrackerTests {
 
+    @Test func attemptBoundariesKeepOldIdentityAndRetireRecentHiddenFrames() throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let oldAttempt = UUID(), newAttempt = UUID()
+        let counters = TelemetryCounters()
+        counters.setPresentSuppressed(true)
+        let tracker = FrameTimingTracker(sessionId: "attempts", traceDirectory: directory,
+                                        now: { 1_000_000_100 }, counters: counters, attemptID: oldAttempt)
+        tracker.traceWriter.start(isoStamp: "attempts")
+        tracker.recordAssembled(rtpTimestamp: 90, frameIndex: 1,
+                                receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_001)
+        let capturedAttempt = tracker.attemptForFrame(rtpTimestamp: 90)
+        tracker.beginAttempt(newAttempt)
+        tracker.recordAssembled(rtpTimestamp: 90, frameIndex: 2,
+                                receiveNanos: 1_000_000_010, assembleNanos: 1_000_000_011)
+        tracker.recordCallbackFinished(rtpTimestamp: 90, entryNanos: 1_000_000_020, attemptID: capturedAttempt)
+        #expect(tracker.finishUnresolved(reason: .sessionEnd) == 1)
+        #expect(tracker.finishUnresolved(reason: .sessionEnd) == 0)
+        tracker.traceWriter.stop()
+        let text = try String(contentsOf: directory.appendingPathComponent("telemetry-frames-attempts.ndjson"),
+                              encoding: .utf8)
+        let rows = try text.split(separator: "\n").map {
+            try #require(JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])
+        }
+        #expect(rows.count == 3)
+        #expect(rows[0]["reason"] as? String == "attempt_end")
+        #expect(rows[0]["trace_attempt"] as? String == oldAttempt.uuidString)
+        #expect(rows[0]["assembled_hidden"] as? Bool == true)
+        #expect(rows[1]["event"] as? String == "decode_callback_finished")
+        #expect(rows[1]["trace_attempt"] as? String == oldAttempt.uuidString)
+        #expect(rows[2]["reason"] as? String == "session_end")
+        #expect(rows[2]["trace_attempt"] as? String == newAttempt.uuidString)
+        #expect(rows[2]["frame"] as? Int == 2)
+        #expect(tracker.traceWriter.status.complete)
+    }
+
     // MARK: - Histogram stage
 
     @Test func bucketsAreCumulativeAndTheSumAndCountTrackEveryObservation() {
@@ -154,6 +190,16 @@ struct LatencyTrackerTests {
             #expect(snap.buckets[(bound10 ?? 0) - 1] == 0)
         }
         #expect(tracker.outputCadence.snapshot().count == UInt64.zero)
+    }
+
+    @Test func delayedCallbackRecordingDoesNotRewindTheCadenceAnchor() {
+        let tracker = FrameTimingTracker(sessionId: "reordered", traceDirectory: .temporaryDirectory)
+        tracker.recordOutput(rtpTimestamp: 2, uptimeNanos: 200_000_000)
+        tracker.recordOutput(rtpTimestamp: 1, uptimeNanos: 100_000_000)
+        tracker.recordOutput(rtpTimestamp: 3, uptimeNanos: 300_000_000)
+        let cadence = tracker.outputCadence.snapshot()
+        #expect(cadence.count == 1)
+        #expect(cadence.sumMs == 100)
     }
 
     @Test func hostFrameIntervalIsReadBackAsWritten() {
@@ -341,8 +387,12 @@ struct LatencyTrackerTests {
             (rtp: 3, timing: timing(submit: 5, output: 6, idr: true))
         ], hiddenNow: false, evictMs: 9)
         #expect(lines.count == 3)
-        #expect(lines[0] == "{\"session\":\"s1\",\"event\":\"frame_drop\",\"frame\":4,\"rtp\":1,"
-            + "\"type\":\"p\",\"stage\":\"assembled\",\"t_assemble_ms\":2,\"t_evict_ms\":9}")
+        #expect(lines[0].contains("\"event\":\"frame_expired\""))
+        #expect(lines[0].contains("\"stage\":\"assembled\""))
+        #expect(lines[0].contains("\"t_ms\":9"))
+        #expect(!lines[0].contains("t_output_ms"))
+        #expect(lines[2].contains("t_submit_ms"))
+        #expect(lines[2].contains("t_output_ms"))
         #expect(lines[1].contains("\"stage\":\"submitted\""))
         #expect(lines[2].contains("\"stage\":\"decoded\""))
         #expect(lines[2].contains("\"type\":\"idr\""))

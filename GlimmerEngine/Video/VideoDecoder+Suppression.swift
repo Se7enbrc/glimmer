@@ -48,13 +48,16 @@ extension VideoDecoder {
     /// must not repeat either edge. Network-loss recovery remains independent of this gate.
     @MainActor
     public func setPresentSuppressed(_ suppressed: Bool) {
+        displayLayerLock.lock()
         presentSuppressedLock.lock()
         let changed = _presentSuppressed != suppressed
         if changed {
             _presentSuppressed = suppressed
             presentationGeneration &+= 1
+            rendererSubmissionGeneration &+= 1
         }
         presentSuppressedLock.unlock()
+        displayLayerLock.unlock()
         guard changed else { return }
 
         if suppressed {
@@ -93,7 +96,7 @@ extension VideoDecoder {
             let rendererFailed =
                 displayLayer?.sampleBufferRenderer.status == .failed
             if gateWasEngaged && !rendererFailed {
-                displayLayer?.sampleBufferRenderer.flush()
+                if let renderer = sampleBufferRenderer { flushRenderer(renderer) }
             } else {
                 recoverPresentPath(reason: "present_resync")
             }
@@ -359,9 +362,9 @@ extension VideoDecoder {
                 forName: AVSampleBufferVideoRenderer
                     .requiresFlushToResumeDecodingDidChangeNotification,
                 object: renderer,
-                queue: .main
+                queue: nil
             ) { [weak self] _ in
-                MainActor.assumeIsolated {
+                DispatchQueue.main.async { [weak self] in
                     // Re-read the renderer through the live layer (don't capture
                     // the non-Sendable renderer in this @Sendable closure); the
                     // notification only fires for the renderer we registered on.
@@ -372,7 +375,7 @@ extension VideoDecoder {
                     if self.presentSuppressed {
                         // Hidden: cheap flush only, no IDR (resync owns the IDR).
                         OSSignposter.render.emitEvent("LayerRequiresFlush", "suppressed=true")
-                        renderer.flush()
+                        self.flushRenderer(renderer)
                     } else {
                         OSSignposter.render.emitEvent("LayerRequiresFlush", "suppressed=false")
                         self.recoverPresentPath(reason: "requires_flush")
@@ -384,15 +387,14 @@ extension VideoDecoder {
             nc.addObserver(
                 forName: .AVSampleBufferDisplayLayerFailedToDecode,
                 object: layer,
-                queue: .main
+                queue: nil
             ) { [weak self] note in
-                // Flatten the non-Sendable Notification into a plain String here
-                // (the observer already runs on `.main`), so nothing non-Sendable
-                // crosses into the MainActor.assumeIsolated body.
+                // Renderer notifications may arrive inside enqueue/flush; never wait on main
+                // or re-enter the admission lock from that framework call.
                 let errDesc = (note.userInfo?[
                     AVSampleBufferDisplayLayerFailedToDecodeNotificationErrorKey]
                     as? NSError)?.localizedDescription ?? "unknown"
-                MainActor.assumeIsolated {
+                DispatchQueue.main.async { [weak self] in
                     guard let self, self.attachmentGeneration == generation else { return }
                     self.log.warning(
                         "Layer failedToDecode (\(errDesc, privacy: .private)) - proactive present-path self-heal")

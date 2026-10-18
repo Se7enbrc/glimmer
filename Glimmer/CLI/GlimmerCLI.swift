@@ -11,7 +11,7 @@ import Foundation
 enum GlimmerCLI {
 
     enum Verb: String, Sendable {
-        case pair, list, status, stream, stop, quit, wake, help
+        case pair, list, status, stream, stop, quit, wake, diagnostics, help
     }
 
     /// Exit codes shared by every verb.
@@ -45,7 +45,7 @@ enum GlimmerCLI {
 
     nonisolated private static let arity: [Verb: ClosedRange<Int>] = [
         .status: 0...0, .pair: 1...1, .list: 0...1, .stream: 1...2,
-        .stop: 0...1, .quit: 1...1, .wake: 1...1, .help: 0...1
+        .stop: 0...1, .quit: 1...1, .wake: 1...1, .diagnostics: 3...3, .help: 0...1
     ]
 
     nonisolated static let usage = """
@@ -64,6 +64,8 @@ enum GlimmerCLI {
           stop [<pc>] [--json]           Stop this Mac's stream and quit its app on the PC
           quit <pc>                      Quit the app running on a PC
           wake <pc> [--wait]             Send Wake on LAN, and wait for the PC to answer
+          diagnostics capture <pid> <directory>   Record 15 minutes of System Trace locally
+          diagnostics bundle <session> <directory> Export a session's diagnostic evidence
           help                           Show this help
 
         <pc> is a paired PC's name or address. Run glimmer with no command to open the app.
@@ -140,6 +142,7 @@ enum GlimmerCLI {
         }
         if command.verb == .status { return await status(command) }
         if command.verb == .stop { return await stop(command) }
+        if command.verb == .diagnostics { return await diagnostics(command) }
         // The app's launch order minus the UI. AppModel reads the screen, which
         // registers this process with the window server as Glimmer, so first
         // keep it out of the Dock and Cmd-Tab.
@@ -157,7 +160,7 @@ enum GlimmerCLI {
         case .stream: return await stream(command, model: model)
         case .quit: return await quit(command, model: model)
         case .wake: return await wake(command, model: model)
-        case .status, .stop, .help: return Exit.ok
+        case .status, .stop, .diagnostics, .help: return Exit.ok
         }
     }
 

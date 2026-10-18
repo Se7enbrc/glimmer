@@ -174,24 +174,7 @@ extension StreamSession {
                 break
             }
             if resumed {
-                // The new connection's stats read as never decoded, so its
-                // first-frame allowance starts here instead of at session start.
-                await MainActor.run { self.frameWatchdogArmedAt = self.uptimeSeconds }
-                isReconnecting = false
-                reconnectAttempts = 0
-                // Count the genuine reconnect HERE. The established-edge inference
-                // (markEstablishedReportingReconnect) can't: reconnectInPlace re-runs
-                // connectBackend → anchorTelemetryConnectStart → p2.anchorReconnect(), which
-                // wipes the established memory before the fresh edge fires, so that
-                // path always reads the reconnect as a first connect. This site is
-                // the unambiguous "a drop was silently recovered" signal.
-                TelemetryCounters.shared.reconnectTotal.increment()
-                bridge?.emit(.reconnected)
-                let winForHide = presentation
-                await MainActor.run { winForHide?.showRecovery(nil) }
-                Diag.notice("reconnected - stream resumed in place", "Stream")
-                // Re-arm the stall latches so a later stall logs/recovers fresh.
-                resetStallLatches()
+                await finishReconnect(attempt: attemptID)
                 return
             }
         }
@@ -212,6 +195,28 @@ extension StreamSession {
             "Stream")
         bridge?.emit(.connectionTerminated(errorCode: code, error: lastReconnectError))
         await stop(cause: .hostError)
+    }
+
+    /// Each main-actor suspension can overlap stop or another attempt; publish only the surviving recovery.
+    package func finishReconnect(
+        attempt: UUID,
+        rearmWatchdog: @Sendable (StreamSession) async -> Void = { session in
+            await MainActor.run { session.frameWatchdogArmedAt = session.uptimeSeconds }
+        }
+    ) async {
+        guard isStreaming, !stopInProgress, attempt == attemptID else { return }
+        await rearmWatchdog(self)
+        guard isStreaming, !stopInProgress, attempt == attemptID else { return }
+        isReconnecting = false
+        reconnectAttempts = 0
+        // Connect-start reanchors handshake telemetry, so its established edge cannot count this recovery.
+        TelemetryCounters.shared.reconnectTotal.increment()
+        bridge?.emit(.reconnected, attempt: attempt)
+        let winForHide = presentation
+        await MainActor.run { winForHide?.showRecovery(nil) }
+        guard isStreaming, !stopInProgress, !isReconnecting, attempt == attemptID else { return }
+        Diag.notice("reconnected - stream resumed in place", "Stream")
+        resetStallLatches()
     }
 
     /// What a failed attempt tells the user if the episode gives up. A deadline the PC never answered
@@ -254,6 +259,13 @@ extension StreamSession {
         let fresh = makeBackend()
         self.backend = fresh
         attemptID = UUID()
+        if let tracker = FrameTimingTracker.shared {
+            if let pacer = dec.framePacer {
+                _ = pacer.clearQueue(reason: "telemetry attempt boundary") { tracker.beginAttempt(attemptID) }
+            } else {
+                tracker.beginAttempt(attemptID)
+            }
+        }
         bridge?.beginAttempt(attemptID)
         publicInput?.rebind(to: fresh, attempt: attemptID)
         await MainActor.run {

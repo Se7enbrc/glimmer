@@ -10,11 +10,36 @@
 //
 
 import Foundation
+import Darwin
 import os
 import Testing
 @testable import Glimmer
 
 struct ResourceTelemetryTests {
+
+    @Test func vmProbeKeepsFootprintDistinctFromResidentAndPreservesZeroCompression() throws {
+        var info = task_vm_info_data_t()
+        info.phys_footprint = 120
+        info.resident_size = 300
+        info.compressed = 0
+        info.internal = 80
+        info.reusable = 25
+        let count = MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size
+        let complete = ResourceTelemetry.memorySnapshot(info: info, count: count, result: KERN_SUCCESS)
+        #expect(complete.physFootprintBytes == 120 && complete.residentSizeBytes == 300)
+        #expect(complete.compressedBytes == 0 && complete.internalBytes == 80 && complete.reusableBytes == 25)
+        #expect(complete.memoryProbeStatus == "ok" && complete.memoryProbeResult == 0)
+
+        let offset = try #require(MemoryLayout<task_vm_info_data_t>.offset(of: \.phys_footprint))
+        let partial = ResourceTelemetry.memorySnapshot(info: info,
+            count: (offset + MemoryLayout<integer_t>.size) / MemoryLayout<integer_t>.size, result: KERN_SUCCESS)
+        #expect(partial.physFootprintBytes == nil && partial.residentSizeBytes == 300)
+        #expect(partial.memoryProbeStatus == "partial")
+        let failure = ResourceTelemetry.memorySnapshot(info: info, count: count, result: KERN_FAILURE)
+        #expect(failure.physFootprintBytes == nil && failure.residentSizeBytes == nil)
+        #expect(failure.compressedBytes == nil && failure.internalBytes == nil && failure.reusableBytes == nil)
+        #expect(failure.memoryProbeStatus == "failed" && failure.memoryProbeResult == Int(KERN_FAILURE))
+    }
 
     @Test func gpuPowerUsesItsOwnRailAndChannelUnits() {
         for (unit, value) in [("mJ", 1_380.0), ("uJ", 1_380_000.0), ("nJ", 1_380_000_000.0)] {

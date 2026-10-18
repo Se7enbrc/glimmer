@@ -47,6 +47,33 @@ updates `release-candidate`, pushes the next signed tag and dispatches Release.
 Rerunning prints the existing run. `make rc DRY_RUN=1` previews without changes.
 Deployment approval remains a separate maintainer action.
 
+### Diagnostic candidates
+
+Use `make rc DIAGNOSTIC=1` for an explicitly installed diagnostic candidate, or
+add `DRY_RUN=1` to preview it. Tags use `YYYY.M.MICRO-rc.N-diag`, sharing the
+ordinary candidate sequence. The same **Release** workflow verifies the exact
+commit, builds Release, signs, notarizes and attests the artifacts. Numeric app
+versions and signing entitlements stay unchanged; the signed bundle carries
+`GlimmerDiagnosticBuild=YES`. Ordinary candidates carry `NO`.
+
+Diagnostics publish as clearly marked GitHub prereleases for manual download.
+They never enter the Sparkle appcast, including its RC channel, and cannot be
+promoted to stable or Homebrew. The ordinary `rc` PR label does not request one.
+A new build number and commit are required when switching candidate kind;
+off-feed diagnostic builds still consume their build number.
+
+Additional local telemetry defaults on in diagnostic builds; an explicit saved
+off preference wins for comparison runs. Download the matching symbols ZIP and
+`symbols.json` with the app: their app/engine UUIDs and source identity are
+recorded in the persisted release receipt and artifact manifests. The symbols
+ZIP is attested with the DMG and app ZIP. These are normal notarized builds,
+without debugger-access entitlements. Profiling attachment may still be denied;
+record that limitation rather than re-signing the installed candidate.
+
+After diagnosis, cut and test a new ordinary candidate before promotion. The
+diagnostic tooling must land on main before the candidate cutter will use it,
+just like other release tooling changes.
+
 ### Cut a candidate from a PR label
 
 Add `rc` to an upstream PR to request the same cut after its exact head passes

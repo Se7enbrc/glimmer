@@ -160,6 +160,7 @@ public final class VideoDecoder {
     // Sendable) guards load and store; hot sites snapshot into a local.
     let displayLayerLock = NSLock()
     nonisolated(unsafe) var displayAttachmentGeneration: UInt64 = 0 // Guarded by displayLayerLock.
+    nonisolated(unsafe) var rendererSubmissionGeneration: UInt64 = 0 // Guarded by displayLayerLock.
     nonisolated(unsafe) var _displayLayer: AVSampleBufferDisplayLayer?
     // The layer's renderer, captured with the layer: it is safe off-main, but
     // the layer property that vends it is main-actor only.
@@ -177,6 +178,7 @@ public final class VideoDecoder {
         let renderer = layer?.sampleBufferRenderer
         displayLayerLock.lock(); defer { displayLayerLock.unlock() }
         displayAttachmentGeneration &+= 1
+        rendererSubmissionGeneration &+= 1
         _displayLayer = layer
         _sampleBufferRenderer = renderer
     }
@@ -257,6 +259,9 @@ public final class VideoDecoder {
     /// its bounded decodeUnitQueue overflows (VideoDepacketizer.c:513-532:
     /// flush + LiRequestIdrFrame).
     nonisolated(unsafe) var inFlightDecodes: Int = 0
+    // Epoch buckets distinguish queued work from VT-owned work; all access uses inFlightDecodeLock.
+    nonisolated(unsafe) var decodeReservations: [UInt: DecodeReservations] = [:]
+    nonisolated(unsafe) var latestReservedEpoch: UInt = 0
     let inFlightDecodeLock = NSLock()
     /// Backlog bound - sized to ABSORB a VPN arrival burst, not to gate
     /// steady-state depth. Over a high-loss/high-jitter VPN, frames arrive
@@ -317,17 +322,31 @@ public final class VideoDecoder {
 
     // True when start() has been called but stop() hasn't. We refuse to
     // touch the decode/enqueue path outside that window.
-    nonisolated(unsafe) var isStreaming = false
+    nonisolated let streamingState = Atomic<Bool>(false)
+    nonisolated var isStreaming: Bool {
+        get { streamingState.load(ordering: .acquiring) }
+        set {
+            displayLayerLock.lock(); defer { displayLayerLock.unlock() }
+            if streamingState.exchange(newValue, ordering: .acquiringAndReleasing) != newValue {
+                rendererSubmissionGeneration &+= 1
+            }
+        }
+    }
 
     /// Fires on main after the first decoded image and the existing compositor cushion.
     /// Set before connect; final teardown releases the shell callback.
     public var onFirstDecodedFrame: (() -> Void)?
-    nonisolated(unsafe) var didFireFirstDecodedFrame = false
+    nonisolated let firstDecodedFrameClaimed = Atomic<Bool>(false)
+    nonisolated var didFireFirstDecodedFrame: Bool {
+        get { firstDecodedFrameClaimed.load(ordering: .acquiring) }
+        set { firstDecodedFrameClaimed.store(newValue, ordering: .releasing) }
+    }
     // A live layer replacement must preserve the connection's pending first-frame notification.
     nonisolated let firstFrameLifecycleGeneration = Atomic<UInt64>(0)
 
-    // VT output owns this cache; teardown clears it only after draining every callback.
-    nonisolated(unsafe) var lastColorSpace: CGColorSpace?
+    // Each callback retains its matching colour/space pair after unlocking; teardown drains callbacks first.
+    nonisolated let colorAttachmentCache = OSAllocatedUnfairLock<ColorAttachmentSnapshot?>(initialState: nil)
+    nonisolated var lastColorSpace: CGColorSpace? { colorAttachmentCache.withLock { $0?.colorSpace } }
 
     // Consecutive frames the renderer refused (`isReadyForMoreMediaData` false). Counted, never
     // an IDR trigger: the reference chain is intact. Atomic because the paced present runs on

@@ -9,6 +9,31 @@ import Testing
 
 @MainActor
 struct TelemetryGateTests {
+    @Test func diagnosticDefaultsDoNotPersistOrOverrideAnExplicitOptOut() throws {
+        let name = "DiagnosticDefaults." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        GlimmerApp.registerDefaults(defaults: defaults, diagnosticBuild: true)
+        #expect(TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
+        #expect(TelemetryGate.diagnosticsVisible(defaults: defaults))
+        #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
+        #expect(defaults.persistentDomain(forName: name)?.isEmpty != false)
+        defaults.set(false, forKey: "telemetryEnabled")
+        GlimmerApp.registerDefaults(defaults: defaults, diagnosticBuild: true)
+        #expect(!TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
+        defaults.removeObject(forKey: "telemetryEnabled")
+        GlimmerApp.registerDefaults(defaults: defaults, diagnosticBuild: false)
+        #expect(!TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
+    }
+
+    @Test func diagnosticMarkerRequiresAnExplicitValue() {
+        #expect(DiagnosticBuild.enabled(info: ["GlimmerDiagnosticBuild": "YES"]))
+        #expect(DiagnosticBuild.enabled(info: ["GlimmerDiagnosticBuild": true]))
+        #expect(!DiagnosticBuild.enabled(info: [:]))
+        #expect(!DiagnosticBuild.enabled(info: ["GlimmerDiagnosticBuild": "NO"]))
+        #expect(!DiagnosticBuild.enabled(info: ["GlimmerDiagnosticBuild": "$(GLIMMER_DIAGNOSTIC_BUILD)"]))
+    }
+
     private func withFreshDefaults(_ body: (UserDefaults) throws -> Void) throws {
         let name = "TelemetryGateTests." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: name))

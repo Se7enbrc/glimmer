@@ -24,6 +24,12 @@ same run remain valid when only failed jobs are rerun; future attempts are
 rejected. Compiler warnings fail both Xcode and the standalone helper build. An
 existing candidate release, including a draft, blocks rebuilding that tag.
 
+Tags ending in `-diag` select diagnostic candidates within these same phases,
+not a separate workflow or signing policy. The unsigned build sets
+`GLIMMER_DIAGNOSTIC_BUILD=YES`; the bundle marker must match the tag before
+handoff, after import and during signed-distribution validation. Normal
+candidates set `NO`. Promotion refuses diagnostic tags before publication.
+
 ## Fresh signing runner and artifact identity
 
 The unsigned build has read-only permissions and no environment. It uploads only
@@ -31,6 +37,15 @@ The unsigned build has read-only permissions and no environment. It uploads only
 GitHub assigns an immutable artifact ID; the build reports that ID and the
 manifest's SHA-256 through job outputs. No checkout, scripts, caches or compiler
 outputs outside the bundle cross this boundary.
+
+Diagnostic handoffs additionally contain `Glimmer-symbols.zip` and
+`symbols.json`. The build compares the app and engine dSYM UUIDs with the
+shipped binaries and rejects missing or mismatched symbols. Their hashes and
+source/run/tag identity travel in the unsigned manifest, then the signed receipt
+and manifest. Signing does not extract or execute the symbol archive. Final
+publication includes a versioned symbols ZIP, its UUID map, and the attestation
+covering the ZIP alongside the app assets. Frameworks supplied by third parties
+and system libraries are outside this app/engine symbol set.
 
 An independent job pins `main` for tooling. The build cannot choose the signing
 checkout. After `release` approval, a fresh macOS runner checks out that pinned
@@ -104,6 +119,12 @@ existing assets, including provenance, must have matching digests and completed
 upload state. A retry never replaces them. The appcast update uses the persisted
 signature and ZIP length, and a GitHub-signed compare-and-swap commit. A service
 or authentication error is not treated as an absent release.
+
+Diagnostic publication ends after the GitHub prerelease assets become public. It
+deliberately skips the appcast and Homebrew, so existing stable and RC
+subscribers receive no diagnostic update. Installing the diagnostic download is
+the explicit opt-in. Publication retries reuse its existing app and symbol
+assets; diagnosis never makes those bytes eligible for stable promotion.
 
 Promotion verifies attestations, public asset hashes, source and unchanged
 shipped inputs before minting the tag token. Final tagging uses this job's

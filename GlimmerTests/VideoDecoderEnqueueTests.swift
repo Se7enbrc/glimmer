@@ -14,6 +14,8 @@ import CoreMedia
 import CoreVideo
 import Foundation
 import Testing
+import VideoToolbox
+import os
 @testable import Glimmer
 
 @MainActor
@@ -29,6 +31,104 @@ struct VideoDecoderEnqueueTests {
         decoder.hdrEnabled = hostHDR
         decoder.isStreaming = true
         return decoder
+    }
+
+    enum RendererBoundary: CaseIterable {
+        case stop, restart, hide, hideAndReturn, replacement, flush
+    }
+
+    @Test(arguments: RendererBoundary.allCases)
+    func aPreparedRendererSubmissionCannotCrossALifecycleBoundary(_ boundary: RendererBoundary) throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
+        defer { decoder.teardown() }
+        let prepared = try #require(decoder.rendererSubmission())
+        switch boundary {
+        case .stop: decoder.isStreaming = false
+        case .restart:
+            decoder.isStreaming = false
+            decoder.isStreaming = true
+        case .hide: decoder.setPresentSuppressed(true)
+        case .hideAndReturn:
+            decoder.setPresentSuppressed(true)
+            decoder.setPresentSuppressed(false)
+        case .replacement: decoder.attach(to: AVSampleBufferDisplayLayer())
+        case .flush: decoder.flushRenderer(prepared.renderer)
+        }
+        var enqueued = false
+        #expect(!decoder.performRendererSubmission(prepared, enqueue: { _ in enqueued = true }))
+        #expect(!enqueued)
+        if decoder.isStreaming && !decoder.presentSuppressed {
+            let fresh = try #require(decoder.rendererSubmission())
+            #expect(decoder.performRendererSubmission(fresh, enqueue: { _ in enqueued = true }))
+            #expect(enqueued)
+        }
+    }
+
+    @Test func hiddenDirectPresentationDoesNotReachTheRenderer() throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
+        defer { decoder.teardown() }
+        decoder.setPresentSuppressed(true)
+
+        #expect(!decoder.presentFrame(try VideoDecoderLifecycleTests.readySample()))
+        #expect(decoder.secondsSinceLastPresentedFrame() == .infinity)
+    }
+
+    @Test func concurrentOutputsClaimTheFirstFrameOnlyOnce() async throws {
+        let decoder = VideoDecoder()
+        let claims = OSAllocatedUnfairLock(initialState: 0)
+        let finished = DispatchSemaphore(value: 0)
+        Thread {
+            DispatchQueue.concurrentPerform(iterations: 64) { _ in
+                if decoder.claimFirstDecodedFrame() { claims.withLock { $0 += 1 } }
+            }
+            finished.signal()
+        }.start()
+        try #require(await finished.waitAsync(for: .seconds(5)) == .success)
+        #expect(claims.withLock { $0 } == 1)
+        #expect(decoder.didFireFirstDecodedFrame)
+        decoder.teardown()
+        #expect(decoder.claimFirstDecodedFrame())
+        #expect(!decoder.claimFirstDecodedFrame())
+    }
+
+    @Test func aConcurrentColorChangeCannotReplaceAPreparedFramesColorSpace() async throws {
+        let decoder = VideoDecoder()
+        let sdr = VideoColorDescription(primaries: kCVImageBufferColorPrimaries_ITU_R_709_2 as String,
+                                        transfer: kCVImageBufferTransferFunction_ITU_R_709_2 as String,
+                                        matrix: kCVImageBufferYCbCrMatrix_ITU_R_709_2 as String, range: "video", gamma: nil)
+        let hdr = VideoColorDescription(primaries: kCVImageBufferColorPrimaries_ITU_R_2020 as String,
+                                        transfer: kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ as String,
+                                        matrix: kCVImageBufferYCbCrMatrix_ITU_R_2020 as String, range: "video", gamma: nil)
+        let prepared = DispatchSemaphore(value: 0)
+        let changed = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        Thread {
+            let snapshot = decoder.colorAttachmentSnapshot(for: sdr)
+            prepared.signal()
+            guard changed.wait(timeout: .now() + 5) == .success else {
+                Issue.record("Concurrent colour change did not finish")
+                finished.signal()
+                return
+            }
+            do {
+                let buffer = try makeTaggedPixelBuffer()
+                decoder.attachColorAttachments(snapshot, to: buffer)
+                let attached = try #require(CVBufferCopyAttachment(buffer, kCVImageBufferCGColorSpaceKey, nil))
+                let expected = try #require(sdr.makeColorSpace())
+                let replacement = try #require(hdr.makeColorSpace())
+                #expect(CFEqual(attached, expected))
+                #expect(!CFEqual(attached, replacement))
+            } catch { Issue.record(error) }
+            finished.signal()
+        }.start()
+        defer { changed.signal() }
+        try #require(await prepared.waitAsync(for: .seconds(5)) == .success)
+        let replacement = decoder.colorAttachmentSnapshot(for: hdr)
+        try #require(replacement.colorSpace != nil)
+        changed.signal()
+        try #require(await finished.waitAsync(for: .seconds(5)) == .success)
+        #expect(decoder.colorAttachmentCache.withLock { $0?.color } == hdr)
+        decoder.teardown()
     }
 
     private func attachment(_ buffer: CVPixelBuffer, _ key: CFString) -> String? {
@@ -150,10 +250,11 @@ struct VideoDecoderEnqueueTests {
 
     // MARK: VT output callback
 
-    private func deliver(_ decoder: VideoDecoder, status: OSStatus, image: CVPixelBuffer?, epoch: UInt = 0) {
+    private func deliver(_ decoder: VideoDecoder, status: OSStatus, image: CVPixelBuffer?, epoch: UInt = 0,
+                         flags: VTDecodeInfoFlags = []) {
         VideoDecoder.decompressionOutputCallback(
             Unmanaged.passUnretained(decoder).toOpaque(), UnsafeMutableRawPointer(bitPattern: epoch),
-            status, [], image, pts, .invalid)
+            status, flags, image, pts, .invalid)
     }
 
     /// A failed frame frees its slot and arms one resync; nothing is presented.
@@ -161,6 +262,7 @@ struct VideoDecoderEnqueueTests {
         let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
         defer { decoder.teardown() }
         decoder.inFlightDecodes = 2
+        decoder.decodeReservations[0] = VideoDecoder.DecodeReservations(submitted: 2)
 
         deliver(decoder, status: -12_909, image: nil)
 
@@ -171,10 +273,44 @@ struct VideoDecoderEnqueueTests {
         #expect(decoder.decodeGateDisposition(isIDR: false) == .resyncToIdr)
     }
 
+    @Test func retiredCallbackCannotPublishDecodedProgressOrConsumeARecoverySlot() throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
+        defer { decoder.teardown() }
+        _ = decoder.reserveDecodeSlot(isIDR: false, epoch: 1)
+        #expect(decoder.beginSubmittedDecode(epoch: 1))
+        decoder.lastVtDecodeFailed = true
+        decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 5
+        #expect(decoder.reserveDecodeSlot(isIDR: true, epoch: 2) == .reservedForStallRecreate)
+        let decodedBefore = decoder.statsCollector.lastDecodedFrameTime
+
+        deliver(decoder, status: noErr, image: try makeTaggedPixelBuffer(), epoch: 1)
+
+        #expect(decoder.inFlightDecodeBacklog() == 1)
+        #expect(decoder.statsCollector.lastDecodedFrameTime == decodedBefore)
+        #expect(decoder.secondsSinceLastPresentedFrame() == .infinity)
+        #expect(!decoder.didFireFirstDecodedFrame)
+    }
+
+    @Test func droppedOutputWithAnImageDoesNotPresentOrAdvanceDecodedProgress() throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
+        defer { decoder.teardown() }
+        _ = decoder.reserveDecodeSlot(isIDR: false)
+        #expect(decoder.beginSubmittedDecode(epoch: 0))
+
+        deliver(decoder, status: noErr, image: try makeTaggedPixelBuffer(), flags: .frameDropped)
+
+        #expect(decoder.inFlightDecodeBacklog() == 0)
+        #expect(decoder.statsCollector.decoderDropCount() == 1)
+        #expect(decoder.secondsSinceLastDecodedFrame() == .infinity)
+        #expect(decoder.secondsSinceLastPresentedFrame() == .infinity)
+        #expect(!decoder.didFireFirstDecodedFrame)
+    }
+
     @Test func decodedOutputPresentsAndFiresTheFirstFrameOnce() async throws {
         let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265_MAIN10)
         defer { decoder.teardown() }
         decoder.inFlightDecodes = 1
+        decoder.decodeReservations[0] = VideoDecoder.DecodeReservations(submitted: 1)
         decoder.lastVtDecodeFailed = true
         var fired = 0
         decoder.onFirstDecodedFrame = { fired += 1 }

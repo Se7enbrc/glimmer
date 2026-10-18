@@ -224,7 +224,7 @@ extension RtpAudioQueue {
         let streak = layoutMismatchStreak
         AudioDiagnostics.notice("NativeAudio FEC DISABLED for this session: \(streak) FEC layout "
             + "mismatches in a row (last: \(detail)). Audio continues without FEC: data passes "
-            + "straight through, parity is dropped, lost packets fall to PLC.", Self.cat)
+            + "in sequence, parity is dropped, bounded gaps use PLC.", Self.cat)
     }
 
     // MARK: - Reed-Solomon recovery (completeFecBlock, :399-505)

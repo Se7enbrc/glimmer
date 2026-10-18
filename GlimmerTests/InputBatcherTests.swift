@@ -266,6 +266,60 @@ struct InputBatcherTests {
         #expect(channel.withState { channel.enetSeq } == 3)
     }
 
+    @Test func rejectedGyroNullRetriesUntilAcceptedWithoutAnotherSample() throws {
+        let attempts = AtomicCounter()
+        let channel = try Self.rejectingMotionChannel(attempts: attempts, failures: 3)
+        let batcher = scheduler.makeBatcher(enet: channel, backpressure: { _ in false })
+        defer { batcher.stop() }
+        let gyro = UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO)
+        #expect(batcher.updateMotion(num: 0, motionType: gyro, x: 0, y: 0, z: 0) == 0)
+        for attempt in 1...3 {
+            try scheduler.fire()
+            #expect(attempts.value == attempt)
+            #expect(try Self.sentPayloads(channel).isEmpty)
+            #expect(scheduler.deadline != nil)
+        }
+        try scheduler.fire()
+        #expect(try Self.sentPayloads(channel) == [
+            InputEncoder.controllerMotion(num: 0, motionType: gyro, x: 0, y: 0, z: 0)
+        ])
+        #expect(scheduler.deadline == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func rejectedGyroNullCannotOutliveNewMotionOrStop(stop: Bool) throws {
+        let attempts = AtomicCounter()
+        let channel = try Self.rejectingMotionChannel(attempts: attempts, failures: 1)
+        let batcher = scheduler.makeBatcher(enet: channel, backpressure: { _ in false })
+        defer { batcher.stop() }
+        let gyro = UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO)
+        _ = batcher.updateMotion(num: 0, motionType: gyro, x: 0, y: 0, z: 0)
+        try scheduler.fire()
+        if stop {
+            batcher.stop()
+        } else {
+            _ = batcher.updateMotion(num: 0, motionType: gyro, x: 1, y: 2, z: 3)
+        }
+        // The manual scheduler deliberately delivers a stale callback after stop.
+        try scheduler.fire()
+        #expect(attempts.value == 1)
+        #expect(try Self.sentPayloads(channel).isEmpty)
+        #expect(scheduler.deadline == nil)
+        #expect(channel.withState { channel.enetSeq } == (stop ? 1 : 2))
+    }
+
+    private static func rejectingMotionChannel(attempts: AtomicCounter,
+                                               failures: Int) throws -> EnetControlChannel {
+        let channel = EnetControlChannel(host: "127.0.0.1", port: 9, controlConnectData: 0,
+            crypto: try ControlCrypto(rikey: key), sealControl: { crypto, type, payload, seq in
+                attempts.increment()
+                if attempts.value <= failures { throw EnetError.mtuExceeded }
+                return try crypto.seal(type: type, payload: payload, seq: seq)
+            })
+        EnetFixture.connect(channel)
+        return channel
+    }
+
     @Test func pairsAndReportsKeepTheirOrderBehindMergedMotion() throws {
         let channel = try Self.makeChannel()
         let batcher = scheduler.makeBatcher(enet: channel)

@@ -6,6 +6,15 @@ import Foundation
 import SystemConfiguration
 import Darwin
 
+enum DiagnosticBuild {
+    static var isEnabled: Bool { enabled(info: Bundle.main.infoDictionary ?? [:]) }
+
+    static func enabled(info: [String: Any]) -> Bool {
+        if let value = info["GlimmerDiagnosticBuild"] as? String { return value == "YES" }
+        return info["GlimmerDiagnosticBuild"] as? Bool == true
+    }
+}
+
 // Constructed only after the existing opt-in gate; probes retain their original cadence and ownership.
 enum MacTelemetryCapture {
     static let logsDirectory = FileManager.default.homeDirectoryForCurrentUser
@@ -18,6 +27,10 @@ enum MacTelemetryCapture {
         var config = TelemetryConfiguration()
         config.buildCommit = BuildInfo.commit
         config.buildDate = BuildInfo.date
+        config.engineCommit = BuildInfo.commit
+        config.buildVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        config.appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        config.diagnosticBuild = DiagnosticBuild.isEnabled
         config.clientLabel = clientLabel
         config.fastPingSeconds = UdpPinger.steadyPingIntervalSeconds
         config.relaxedPingSeconds = UdpPinger.relaxedPingIntervalSeconds

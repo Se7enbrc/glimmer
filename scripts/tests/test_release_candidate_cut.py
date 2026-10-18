@@ -18,7 +18,8 @@ VERSION = "2026.10.6"
 BUILD = "20261010"
 RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-publication.yml",
                  "scripts/ci-release.sh", "scripts/install-ci-scanner.sh", "scripts/release-checks.py",
-                 "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py")
+                 "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py",
+                 "scripts/release_candidate_kind.py", "scripts/release_symbols.py")
 REQUIRED = ["macOS", "Analyze (swift)", "Analyze (python)", "Analyze (actions)"]
 
 
@@ -74,6 +75,7 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.check_runs("completed")
         shutil.copy2(SCRIPTS / "release-candidate.py", self.work / "scripts")
         shutil.copy2(SCRIPTS / "release_validation.py", self.work / "scripts")
+        shutil.copy2(SCRIPTS / "release_candidate_kind.py", self.work / "scripts")
         (self.work / "scripts/release-checks.py").write_text(
             f"import os, runpy, sys\nREAL = runpy.run_path({str(SCRIPTS / 'release-checks.py')!r})\n"
             'REPO, REQUIRED = REAL["REPO"], REAL["REQUIRED"]\n'
@@ -313,6 +315,27 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         plan = subprocess.run(["make", "--dry-run", "rc", "DRY_RUN=1"], cwd=SCRIPTS.parent,
                               env=self.env, capture_output=True, text=True, check=True).stdout
         self.assertIn("scripts/release-candidate.py --dry-run", plan)
+
+    def test_diagnostic_cut_shares_numbering_but_never_reuses_opposite_kind(self):
+        self.tag_origin(f"{VERSION}-rc.4")
+        result = self.cut('--diagnostic')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f'rc_tag={VERSION}-rc.5-diag', self.dispatches()[0])
+        self.assertIn(f'{self.sha}\trefs/tags/{VERSION}-rc.5-diag^{{}}', self.remote())
+        self.assertEqual(self.cut('--diagnostic').returncode, 0)
+        self.assertIn('different candidate kind', self.cut().stderr)
+
+    def test_off_feed_diagnostic_build_number_cannot_be_reused(self):
+        self.tag_origin(f'{VERSION}-rc.1-diag', sha=self.sha)
+        (self.work / 'Glimmer/change.txt').write_text('changed source without a build bump')
+        self.sha = self.commit(BUILD)
+        self.git('push', '--quiet', 'origin', 'HEAD:refs/heads/feat/rc')
+        self.assert_refused(self.cut('--diagnostic'), 'must exceed diagnostic candidate')
+
+    def test_diagnostic_make_target_is_explicit(self):
+        plan = subprocess.run(['make', '--dry-run', 'rc', 'DIAGNOSTIC=1', 'DRY_RUN=1'], cwd=SCRIPTS.parent,
+                              env=self.env, capture_output=True, text=True, check=True).stdout
+        self.assertIn('--dry-run --diagnostic', plan)
 
 
 if __name__ == "__main__":

@@ -77,6 +77,28 @@ struct AudioBoundaryTests {
         #expect(decoder.deviceRecoveryStarted == 789)
     }
 
+    @Test(arguments: [false, true])
+    func queuedRateCannotReachAReplacementOutput(reinitialize: Bool) {
+        let fixture = Fixture()
+        let decoder = AudioDecoder(platform: fixture.platform())
+        defer { decoder.shutdown() }
+        #expect(decoder.initialize(audioConfig: AudioConfig.stereo.cValue, opus: Self.opus) == 0)
+        decoder.routeListenerQueue.suspend()
+        decoder.applyVarispeedRate(1.001)
+        if reinitialize {
+            decoder.shutdown()
+            #expect(decoder.initialize(audioConfig: AudioConfig.stereo.cValue, opus: Self.opus) == 0)
+        } else {
+            decoder.handleEngineConfigurationChange()
+        }
+        decoder.routeListenerQueue.resume()
+        decoder.routeListenerQueue.sync {}
+        #expect(fixture.appliedRates.isEmpty)
+        decoder.applyVarispeedRate(1.0002)
+        decoder.routeListenerQueue.sync {}
+        #expect(fixture.appliedRates == [1.0002])
+    }
+
     @Test func shutdownWaitsForAnInFlightRouteChangeAndDisposesReplacement() async throws {
         let fixture = Fixture()
         let decoder = AudioDecoder(platform: fixture.platform())
@@ -139,6 +161,7 @@ struct AudioBoundaryTests {
         private var removedRoutes = 0
         private var removedDevices = 0
         private var disposalCount = 0
+        private var rates: [Float] = []
         private var change: (@Sendable (UInt64) -> Void)?
         private var route: (@Sendable (UInt64) -> Void)?
         var failure: OSStatus? {
@@ -149,6 +172,7 @@ struct AudioBoundaryTests {
         var routeRemoved: Int { lock.withLock { removedRoutes } }
         var devicesRemoved: Int { lock.withLock { removedDevices } }
         var disposals: Int { lock.withLock { disposalCount } }
+        var appliedRates: [Float] { lock.withLock { rates } }
         var deviceChanged: (@Sendable (UInt64) -> Void)? { lock.withLock { change } }
         var routeChanged: (@Sendable (UInt64) -> Void)? { lock.withLock { route } }
 
@@ -160,7 +184,10 @@ struct AudioBoundaryTests {
                     disposed: { self.lock.withLock { self.disposalCount += 1 } })
                 return AudioOutput(storage: adapter.storage, sampleRate: format.sampleRate,
                     channels: format.channelCount, latencyMs: 0, start: { adapter.start(); return noErr },
-                    isRunning: { true }, setRate: { _ in noErr }, lastRenderError: { noErr })
+                    isRunning: { true }, setRate: { rate in
+                        self.lock.withLock { self.rates.append(rate) }
+                        return noErr
+                    }, lastRenderError: { noErr })
             }, sampleRoute: { AudioRoute(label: "test", uid: nil) },
             installRouteListener: { _, _, changed in self.lock.withLock { self.route = changed } },
             removeRouteListener: { _ in self.lock.withLock { self.removedRoutes += 1 } },

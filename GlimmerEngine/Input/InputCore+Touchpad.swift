@@ -55,23 +55,25 @@ extension InputCore {
 
         if touching, !finger.active {
             guard flushReleases() else { return }
+            let pointerId = nextTouchPointerId
+            let rc = backend?.sendControllerTouch(
+                num: slot, eventType: UInt8(StreamProtocol.LI_TOUCH_EVENT_DOWN),
+                touchpadIndex: 0, pointerId: pointerId, x: nx, y: ny, pressure: 1.0) ?? -2
+            record("LiSendControllerTouchEvent2(down)", rc)
+            guard rc == 0 else { return }
             finger.active = true
-            finger.pointerId = nextTouchPointerId
+            finger.pointerId = pointerId
             nextTouchPointerId &+= 1
             if nextTouchPointerId == 0 { nextTouchPointerId = 1 }
             finger.x = nx; finger.y = ny
-            let rc = backend?.sendControllerTouch(
-                num: slot, eventType: UInt8(StreamProtocol.LI_TOUCH_EVENT_DOWN),
-                touchpadIndex: 0, pointerId: finger.pointerId, x: nx, y: ny, pressure: 1.0) ?? -2
-            record("LiSendControllerTouchEvent2(down)", rc)
         } else if touching, finger.active {
             guard flushReleases() else { return }
             if nx != finger.x || ny != finger.y {
-                finger.x = nx; finger.y = ny
                 let rc = backend?.sendControllerTouch(
                     num: slot, eventType: UInt8(StreamProtocol.LI_TOUCH_EVENT_MOVE),
                     touchpadIndex: 0, pointerId: finger.pointerId, x: nx, y: ny, pressure: 1.0) ?? -2
                 record("LiSendControllerTouchEvent2(move)", rc)
+                if rc == 0 { finger.x = nx; finger.y = ny }
             }
         } else if !touching, finger.active {
             endFinger(&finger, slot: slot)

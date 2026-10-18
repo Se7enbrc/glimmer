@@ -20,6 +20,7 @@ import time
 import xml.etree.ElementTree as ET
 
 from release_validation import SPARKLE, validate_feed
+from release_candidate_kind import parse_tag
 
 SCRIPTS = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("release_checks", SCRIPTS / "release-checks.py")
@@ -30,7 +31,8 @@ BRANCH = "release-candidate"
 # Candidate workflows execute before protected tooling takes over, so these must already be reviewed on main.
 RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-publication.yml",
                  "scripts/ci-release.sh", "scripts/install-ci-scanner.sh", "scripts/release-checks.py",
-                 "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py")
+                 "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py",
+                 "scripts/release_candidate_kind.py", "scripts/release_symbols.py")
 POLL_SECONDS = 60
 TIMEOUT_SECONDS = 90 * 60
 
@@ -154,7 +156,34 @@ def reviewed_head():
     return sha, branch
 
 
-def cut(dry_run, ci_sha=None, pr=None):
+def candidate_tag(version, build, sha, tags, diagnostic):
+    candidates = {}
+    for name in tags:
+        try:
+            candidates[name] = parse_tag(name)
+        except ValueError:
+            continue
+    current = []
+    for name, (_, number, is_diagnostic) in candidates.items():
+        if tags[name] == sha:
+            if is_diagnostic != diagnostic:
+                raise ValueError("source already has a different candidate kind; bump the build and commit first")
+            current.append((number, name))
+        elif is_diagnostic:
+            # Off-feed diagnostics still consume a build identity.
+            output(["git", "fetch", "--quiet", "origin", f"refs/tags/{name}"], "cannot read diagnostic source")
+            config = output(["git", "show", f"{tags[name]}:Glimmer/Version.xcconfig"],
+                            "cannot read diagnostic build number")
+            match = re.search(r"^CURRENT_PROJECT_VERSION\s*=\s*([1-9][0-9]*)\s*$", config, re.M)
+            if match is None or int(build) <= int(match[1]):
+                raise ValueError(f"build {build} must exceed diagnostic candidate {name}")
+    if current:
+        return max(current)[1], True
+    number = max((values[1] for values in candidates.values() if values[0] == version), default=0) + 1
+    return f"{version}-rc.{number}{'-diag' if diagnostic else ''}", False
+
+
+def cut(dry_run, ci_sha=None, pr=None, diagnostic=False):
     if ci_sha:
         # CI never checks out the pull request; it reads the candidate commit from history.
         sha, branch = ci_sha, f"pull request #{pr}"
@@ -171,17 +200,12 @@ def cut(dry_run, ci_sha=None, pr=None):
     tags = {ref.removeprefix("refs/tags/"): target for ref, target in remote_refs("refs/tags/*").items()}
     if version in tags:
         raise ValueError(f"{version} already has a final tag; bump MARKETING_VERSION")
-    pattern = re.compile(rf"{re.escape(version)}-rc\.([1-9][0-9]*)")
-    numbers = {int(match[1]): name for name in tags if (match := pattern.fullmatch(name))}
-    current = [number for number, name in numbers.items() if tags[name] == sha]
+    tag, current = candidate_tag(version, build, sha, tags, diagnostic)
     if current:
-        tag = numbers[max(current)]
         if runs := release_runs(sha):
             print(f"{tag} already identifies {sha} and has a Release run.")
             show(runs[0]["url"], dry_run, pr)
             return
-    else:
-        tag = f"{version}-rc.{max(numbers, default=0) + 1}"
     local = output(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}"])
     if local and local != sha:
         raise ValueError(f"tag {tag} already identifies {local[:12]}, not {sha[:12]}; tags are never replaced")
@@ -218,6 +242,7 @@ def cut(dry_run, ci_sha=None, pr=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="print every step without pushing, tagging or dispatching")
+    parser.add_argument("--diagnostic", action="store_true", help="manual-install diagnostic candidate; never promoted")
     parser.add_argument("--ci-sha", help="CI only: the labelled pull request head to cut")
     parser.add_argument("--pr", type=int, help="CI only: the pull request to comment the run on")
     args = parser.parse_args()
@@ -225,7 +250,7 @@ def main():
         parser.error("--ci-sha needs a full commit SHA and --pr")
     os.chdir(SCRIPTS.parent)
     try:
-        cut(args.dry_run, args.ci_sha, args.pr)
+        cut(args.dry_run, args.ci_sha, args.pr, args.diagnostic)
     except (ValueError, KeyError, OSError, ET.ParseError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
         parser.exit(1, f"ERR: {error}\n")
 

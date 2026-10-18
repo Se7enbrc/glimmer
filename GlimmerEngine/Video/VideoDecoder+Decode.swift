@@ -97,11 +97,7 @@ extension VideoDecoder {
         log.info("Decoder cleanup")
         decodeQueue.sync { [weak self] in
             guard let self else { return }
-            if let session = self.decompressionSession {
-                VTDecompressionSessionInvalidate(session)
-                self.decompressionSession = nil
-                self.releaseOutputCallbackRefcon()
-            }
+            self.tearDownDecompressionSession()
             self.formatDescription = nil
             self.cachedHDRFormatDescription = nil
             self.spsData = nil
@@ -114,6 +110,7 @@ extension VideoDecoder {
             // holding - which invalidate above just discarded.
             self.inFlightDecodeLock.lock()
             self.inFlightDecodes = 0
+            self.decodeReservations.removeAll(keepingCapacity: true)
             self.lastVtDecodeFailed = false
             self.inFlightDecodeLock.unlock()
         }
@@ -209,7 +206,7 @@ extension VideoDecoder {
         // `backend?.requestIdrFrame()` here, so an overflow requests exactly one
         // IDR.
         var forceSessionRecreate = false
-        switch reserveDecodeSlot(isIDR: isIDR) {
+        switch reserveDecodeSlot(isIDR: isIDR, epoch: epoch) {
         case .reserved:
             break
         case .reservedForStallRecreate:
@@ -255,7 +252,7 @@ extension VideoDecoder {
             // request an IDR against a backend that's tearing down - just
             // release the slot we reserved so the counter stays balanced.
             guard self.isStreaming else {
-                self.releaseInFlightDecode()
+                self.releaseInFlightDecode(epoch: pending.epoch)
                 return
             }
             self.runDecodeOnQueue(pending)
@@ -268,6 +265,7 @@ extension VideoDecoder {
     /// out frees the caller's slot and arms the resync latch; an accepted submit's slot is released by
     /// the VT output callback.
     private nonisolated func runDecodeOnQueue(_ pending: PendingDecode) {
+        guard hasQueuedDecode(epoch: pending.epoch) else { return }
         // New parameter sets, a forced recreate, or an IDR with no live session rebuilds. Decided
         // here, not on the receive thread, because this queue owns `decompressionSession`.
         let needsParamRebuild = pending.newSps != nil || pending.newPps != nil || pending.newVps != nil
@@ -324,7 +322,7 @@ extension VideoDecoder {
     private nonisolated func abandonUndecodedFrame(
         _ pending: PendingDecode, failure: StaticString, trigger: StaticString
     ) {
-        releaseInFlightDecode()
+        releaseInFlightDecode(epoch: pending.epoch)
         statsCollector.recordDecoderDiscard()
         guard armResyncAfterDecodeError(epoch: pending.epoch) else { return }
         log.error("\(failure, privacy: .public) - resyncing to the next IDR")
@@ -395,15 +393,18 @@ extension VideoDecoder {
         // safe off the main thread, so calling it from the decode queue is fine.
         // Distinct from loss recovery: no IDR is requested here (the keyframe is
         // already in hand) and the depacketizer's reference state is untouched.
-        if let renderer = sampleBufferRenderer {
-            renderer.flush()
+        let renderer = sampleBufferRenderer
+        let flush = {
+            guard let renderer else { return }
+            self.flushRenderer(renderer)
             OSSignposter.render.emitEvent("DiscontinuityFlush", "trigger=param_rebuild")
             TelemetryCounters.shared.discontinuityFlushTotal.increment()
         }
-        // The pacer's jitter buffer also holds old-format samples; drop them to
-        // the freshest so the new keyframe presents without draining stale
-        // geometry first. No-op if pacing isn't up.
-        framePacer?.clearQueue(reason: "discontinuity")
+        if let pacer = framePacer {
+            pacer.clearQueue(reason: "discontinuity", beforeNextPresentation: flush)
+        } else {
+            flush()
+        }
         return true
     }
 
@@ -427,6 +428,8 @@ extension VideoDecoder {
     private nonisolated func submitSampleToVT(
         session: VTDecompressionSession, sample: CMSampleBuffer, pending: PendingDecode
     ) {
+        guard beginSubmittedDecode(epoch: pending.epoch) else { return }
+        let identity = StatsCollector.DecodeIdentity(epoch: pending.epoch, rtpTimestamp: pending.rtpTimestamp)
         let isIDR = pending.isIDR
         let totalLength = pending.totalLength
         let rtpTimestamp = pending.rtpTimestamp
@@ -451,31 +454,31 @@ extension VideoDecoder {
         // knob; temporal processing was redundant cost on top.
         let flags: VTDecodeFrameFlags = [._EnableAsynchronousDecompression]
         var infoFlagsOut = VTDecodeInfoFlags()
-        // Stamp submit-time into the stats collector so the matching output
-        // callback can compute wall-clock decode latency. The collector's FIFO
-        // keeps the start-time bookkeeping out of the C boundary and lets us
-        // bail out gracefully if a frame is silently dropped between submit and
-        // output. The `DecodeFrame` interval opens here; the matching close
-        // fires from the VT output callback (or the abandon path below if VT
-        // rejected the submit synchronously), with strict pairing through the
-        // FIFO even though the callback fires on a different thread.
+        // Pair by IDR epoch and RTP identity: VT callbacks need not arrive in submit order.
+        // A synchronous reject abandons this same identity, leaving older asynchronous work intact.
         let decodeSignpostID = OSSignposter.decode.makeSignpostID()
         let decodeIntervalState = OSSignposter.decode.beginInterval(
             "DecodeFrame",
             id: decodeSignpostID,
             "bytes=\(totalLength, privacy: .public) idr=\(isIDR, privacy: .public)")
-        statsCollector.recordDecodeSubmit(intervalState: decodeIntervalState)
+        statsCollector.recordDecodeSubmit(intervalState: decodeIntervalState, identity: identity)
         // Latency telemetry stage t_submit (opt-in; nil = zero cost): stamp the
         // instant before we hand the frame to VideoToolbox, keyed by the same
         // rtpTimestamp that becomes the sample's PTS (the only identity VT
         // propagates to its output callback).
-        FrameTimingTracker.shared?.recordSubmit(rtpTimestamp: rtpTimestamp)
+        let tracker = FrameTimingTracker.shared
+        let submitNanos = tracker?.recordSubmit(rtpTimestamp: rtpTimestamp)
+        let traceAttempt = tracker?.attemptForFrame(rtpTimestamp: rtpTimestamp)
         let decodeStatus = VTDecompressionSessionDecodeFrame(
             session,
             sampleBuffer: sample,
             flags: flags,
             frameRefcon: UnsafeMutableRawPointer(bitPattern: pending.epoch),
             infoFlagsOut: &infoFlagsOut)
+        if let tracker, let submitNanos {
+            tracker.recordSubmitReturned(rtpTimestamp: rtpTimestamp, beganNanos: submitNanos,
+                                         status: decodeStatus, flags: infoFlagsOut.rawValue, attemptID: traceAttempt)
+        }
 
         if decodeStatus != noErr {
             log.error("VTDecompressionSessionDecodeFrame failed: \(decodeStatus)")
@@ -486,9 +489,9 @@ extension VideoDecoder {
             // FIFO stays aligned with the output callback's pops. Credit a
             // decoder-side discard too - VT rejected the frame inline, so it
             // never reaches recordDecodeComplete and would otherwise undercount.
-            releaseInFlightDecode(vtFailed: true)
+            releaseInFlightDecode(epoch: pending.epoch, submitted: true, vtFailed: true)
             statsCollector.recordDecoderDiscard()
-            if let abandonedState = statsCollector.recordDecodeAbandoned() {
+            if let abandonedState = statsCollector.recordDecodeAbandoned(identity: identity) {
                 OSSignposter.decode.endInterval(
                     "DecodeFrame",
                     abandonedState,

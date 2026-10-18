@@ -98,6 +98,26 @@ struct ControllerHapticsActuationTests {
         #expect(rig.lights.first?.green == 8)
     }
 
+    @Test func queuedActivationCannotReopenFeedbackAfterStop() {
+        let rig = Rig()
+        rig.haptics.queue.suspend()
+        rig.haptics.streamActivated(appActive: true)
+        rig.haptics.stopAll(reason: "stop before activation")
+        rig.haptics.queue.resume()
+        rig.haptics.queue.sync {}
+
+        #expect(rig.haptics.lock.withLock { !rig.haptics.feedbackEnabled })
+        #expect(rig.haptics.queue.sync { rig.haptics.quiesced })
+        rig.haptics.setRumble(controllerNumber: 0, lowFreq: 65535, highFreq: 65535)
+        rig.haptics.queue.sync {}
+        #expect(rig.motors.isEmpty)
+
+        rig.haptics.streamActivated(appActive: true)
+        rig.haptics.queue.sync {}
+        #expect(rig.haptics.lock.withLock { rig.haptics.feedbackEnabled })
+        #expect(rig.haptics.queue.sync { !rig.haptics.quiesced })
+    }
+
     @Test func aQuiescedActuatorDropsEveryEvent() {
         let rig = Rig()
         rig.haptics.stopAll(reason: "test")

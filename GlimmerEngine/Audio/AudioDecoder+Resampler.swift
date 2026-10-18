@@ -221,13 +221,15 @@ extension AudioDecoder {
         max(-Self.resamplerBoundPpm, min(Self.resamplerBoundPpm, ppm))
     }
 
+    /// Caller holds decode admission or the graph gate; queued rates belong only to that output.
     /// AU parameter writes are serialized with teardown on the route queue, outside the meter lock.
     func applyVarispeedRate(_ rate: Float) {
+        let generation = outputGeneration
         routeListenerQueue.async { [weak self] in
             guard let self else { return }
             self.graphChangeLock.lock()
             defer { self.graphChangeLock.unlock() }
-            guard !self.isShutdown, let output = self.halOutput else { return }
+            guard !self.isShutdown, generation == self.outputGeneration, let output = self.halOutput else { return }
             let status = output.setRate(rate)
             if status != noErr { Diag.error("audio varispeed update failed (OSStatus \(status))", "Stream.Audio") }
         }

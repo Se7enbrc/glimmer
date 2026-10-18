@@ -38,7 +38,7 @@ extension FramePacer {
         case floorRecovered(durationSeconds: Double, ticksPerS: Double)
         case floorAssistEngaged(ticksPerS: Double, floorHz: Double, depth: Int)
         case floorAssistDisengaged(reason: String, durationSeconds: Double, releases: UInt64, ticksPerS: Double)
-        case warmHandoverComplete(ticksPerS: Double, discarded: Int)
+        case warmHandoverComplete(ticksPerS: Double, discarded: [UInt32])
     }
 
     // MARK: - Event handling (OFF the lock)
@@ -91,7 +91,10 @@ extension FramePacer {
                 reason: reason, duration: duration, releases: releases, ticksPerS: ticksPerS)
             return true
         case let .warmHandoverComplete(ticksPerS, discarded):
-            for _ in 0..<discarded { stats.recordPresentationLateDrop() }
+            for rtp in discarded {
+                stats.recordPresentationLateDrop()
+                FrameTimingTracker.shared?.recordPacerDiscard(rtpTimestamp: rtp, reason: .recovery)
+            }
             logWarmHandoverComplete(ticksPerS: ticksPerS)
             return true
         }

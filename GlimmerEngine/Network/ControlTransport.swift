@@ -14,6 +14,7 @@ package enum ControlTransport {
         let deadline: Date
         private struct State {
             var cancelled = false
+            var finished = false
             var connection: NWConnection?
         }
         private let state = OSAllocatedUnfairLock(initialState: State())
@@ -32,13 +33,21 @@ package enum ControlTransport {
         /// False when the request was cancelled before its connection existed; it never starts.
         func attach(_ connection: NWConnection) -> Bool {
             state.withLock { state in
-                guard !state.cancelled else { return false }
+                guard !state.cancelled, !state.finished else { return false }
                 state.connection = connection
                 return true
             }
         }
 
         var isCancelled: Bool { state.withLock { $0.cancelled } }
+
+        func detach() -> NWConnection? {
+            state.withLock { state in
+                state.finished = true
+                defer { state.connection = nil }
+                return state.connection
+            }
+        }
     }
 
     /// One control response.
@@ -113,7 +122,7 @@ package enum ControlTransport {
 
     /// One request's connection and reply. Invariant: `reply` and `continuation` are only
     /// touched on `queue`, which runs every connection callback, the backstop, and the start.
-    private final class Exchange: @unchecked Sendable {
+    final class Exchange: @unchecked Sendable {
         let queue = DispatchQueue(label: "io.ugfugl.Glimmer.control", qos: .userInitiated)
         let host: String
         let port: Int
@@ -123,6 +132,7 @@ package enum ControlTransport {
         private let pinRejection = OSAllocatedUnfairLock<String?>(initialState: nil)
         private var reply = ResponseBuffer()
         private var continuation: CheckedContinuation<Response, Error>?
+        private var backstop: DispatchWorkItem?
 
         init(host: String, port: Int, request: Data, lifetime: RequestLifetime) {
             self.host = host
@@ -172,17 +182,29 @@ package enum ControlTransport {
             try await withCheckedThrowingContinuation { continuation in
                 queue.async { [self] in
                     self.continuation = continuation
-                    guard lifetime.attach(connection) else {
+                    guard attach(connection) else {
                         return finish(.failure(CancellationError()), closing: nil)
                     }
-                    connection.stateUpdateHandler = { [self] state in handle(state, on: connection) }
                     connection.start(queue: queue)
-                    let backstop = max(0, lifetime.deadline.timeIntervalSinceNow) + backstopGrace
-                    queue.asyncAfter(deadline: .now() + backstop) { [self] in
-                        finish(.failure(StreamError.hostUnreachable("Control request timed out.")), closing: connection)
-                    }
+                    armBackstop(on: connection)
                 }
             }
+        }
+
+        // Queue-confined, including the offline lifetime tests. run retains this exchange until completion.
+        func attach(_ connection: NWConnection) -> Bool {
+            guard lifetime.attach(connection) else { return false }
+            connection.stateUpdateHandler = { [self] state in handle(state, on: connection) }
+            return true
+        }
+
+        func armBackstop(on connection: NWConnection) {
+            let delay = max(0, lifetime.deadline.timeIntervalSinceNow) + backstopGrace
+            let work = DispatchWorkItem { [weak self, weak connection] in
+                self?.finish(.failure(StreamError.hostUnreachable("Control request timed out.")), closing: connection)
+            }
+            backstop = work
+            queue.asyncAfter(deadline: .now() + delay, execute: work)
         }
 
         private func handle(_ state: NWConnection.State, on connection: NWConnection) {
@@ -233,7 +255,13 @@ package enum ControlTransport {
         }
 
         /// Resumes the caller once; a cancelled request always reports cancellation.
-        private func finish(_ result: Result<Response, Error>, closing connection: NWConnection?) {
+        func finish(_ result: Result<Response, Error>, closing connection: NWConnection?) {
+            backstop?.cancel()
+            backstop = nil
+            let attached = lifetime.detach()
+            attached?.stateUpdateHandler = nil
+            attached?.cancel()
+            connection?.stateUpdateHandler = nil
             connection?.cancel()
             guard let continuation else { return }
             self.continuation = nil

@@ -182,7 +182,7 @@ struct FramePacerTickDeficitTests {
             Issue.record("Expected a warm handover event")
             return
         }
-        #expect(discarded == 1)
+        #expect(discarded.count == 1)
         #expect(pacer.stats.presentationLateDropCount() == 0)
         pacer.handleTickDeficitEvents(events)
         await pacer.pacingQueue.drainForTest()

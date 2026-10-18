@@ -33,7 +33,16 @@ package final class StatsCollector: @unchecked Sendable {
     /// it back to `OSSignposter.endInterval` from the VT output callback,
     /// even though `beginInterval` ran on a different thread. The flat
     /// `removeFirst` pop is O(N) but N ≤ 64, well under a microsecond.
-    var submitFifo: [(timestamp: CFAbsoluteTime, state: OSSignpostIntervalState)] = []
+    package struct DecodeIdentity: Equatable, Sendable {
+        package let epoch: UInt
+        package let rtpTimestamp: UInt32
+        package init(epoch: UInt, rtpTimestamp: UInt32) {
+            self.epoch = epoch
+            self.rtpTimestamp = rtpTimestamp
+        }
+    }
+
+    var submitFifo: [(timestamp: CFAbsoluteTime, state: OSSignpostIntervalState, identity: DecodeIdentity?)] = []
     package static let submitFifoCapacity = 64
 
     /// EMA of decoder wall-clock time, in seconds. `nil` until the first

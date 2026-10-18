@@ -110,6 +110,37 @@ final class TelemetrySinkTests {
             exporter.appendNDJSON("{\"n\":3}")
         }
         #expect(try lines(exporter) == ["{\"n\":1}"])
+        exporter.workQueue.sync { exporter.writeEvidenceManifest() }
+        let receipt = try TelemetryRenderFixtures.row(String(contentsOf:
+            dir.appendingPathComponent("telemetry-evidence-\(exporter.sessionId).json"), encoding: .utf8))
+        #expect(receipt["rows_written"] as? Int == 1)
+        #expect(receipt["rows_failed"] as? Int == 2)
+        #expect(receipt["write_failures"] as? Int == 1)
+        #expect(receipt["report_file"] is NSNull)
+    }
+
+    @Test func stopSealsEvidenceOnceWithTheFinalReport() throws {
+        let exporter = exporter()
+        exporter.workQueue.sync {
+            exporter.openNDJSONFile()
+            exporter.appendNDJSON("{\"session\":\"\(exporter.sessionId)\",\"event\":\"test\"}")
+        }
+        exporter.stop()
+        let url = dir.appendingPathComponent("telemetry-evidence-\(exporter.sessionId).json")
+        let data = try Data(contentsOf: url)
+        let receipt = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(receipt["closed"] as? Bool == true)
+        #expect(receipt["session"] as? String == exporter.sessionId)
+        #expect(receipt["rows_written"] as? Int == 1)
+        #expect(receipt["rows_failed"] as? Int == 0)
+        #expect(receipt["write_failures"] as? Int == 0)
+        let report = try #require(receipt["report_file"] as? String)
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent(report).path))
+        exporter.stop()
+        exporter.recordBookmark()
+        exporter.workQueue.sync { }
+        #expect(exporter.workQueue.sync { exporter.ndjsonRowsFailed } == 0)
+        #expect(try Data(contentsOf: url) == data)
     }
 
     // MARK: - Session report

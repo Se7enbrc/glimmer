@@ -40,6 +40,16 @@ struct FramePacerTickTests {
         #expect(pacer.lastPresentMediaTime == 10 + interval)
     }
 
+    @Test func throttledTickUsesThePanelSlotForSubmitAndDeficitCadence() throws {
+        let pacer = try makeTestPacer(queued: 2)
+        let presented = recordPresents(pacer)
+        tick(pacer, target: 10.2, duration: 0.1, timestamp: 10)
+        #expect(pacer.liveness.lastTickTargetMediaTime == 10.1)
+        #expect(pacer.lastClaimedScanoutMediaTime == 10.1)
+        pacer.releaseDueFrame(targetTimestamp: 10.15, vsyncInterval: interval, tickScanout: .nan)
+        #expect(presented.withLock { $0.count } == 2)
+    }
+
     @Test func earlyTickHoldsTheFrame() throws {
         let pacer = try makeTestPacer(queued: 1)
         let presented = recordPresents(pacer)

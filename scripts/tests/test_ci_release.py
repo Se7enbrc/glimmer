@@ -17,7 +17,7 @@ import unittest
 SCRIPT = Path(__file__).resolve().parents[1] / "ci-release.sh"
 SHA = "a" * 40
 TOOL = r'''
-import json, os, pathlib, stat, subprocess, sys
+import json, os, pathlib, plistlib, stat, subprocess, sys
 name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 record = {"tool": name, "args": args}
@@ -58,6 +58,10 @@ elif name == "make" and args == ["CONFIG=Release", "guard-release-version", "cle
         path.chmod(0o755)
     record["private_exists"] = private.exists()
     record["secret_env_present"] = "P12_PASSWORD" in os.environ
+    config = pathlib.Path(os.environ['XCODE_XCCONFIG_FILE']).read_text()
+    diagnostic = config.rstrip().endswith('GLIMMER_DIAGNOSTIC_BUILD = YES')
+    (app / 'Info.plist').write_bytes(plistlib.dumps({'GlimmerDiagnosticBuild': diagnostic}))
+    record['diagnostic'] = diagnostic
 elif name == "make" and args == ["CONFIG=Release", "dmg", "sparkle-zip"]:
     for suffix in ("dmg", "zip"):
         path = pathlib.Path(f"build/dist/Glimmer-2026.10.6.{suffix}")
@@ -106,6 +110,8 @@ class HostedReleaseTests(unittest.TestCase):
         (self.root / "Glimmer/Version.xcconfig").write_text(
             "MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 400\n")
         shutil.copy2(SCRIPT, self.root / "scripts/ci-release.sh")
+        shutil.copy2(SCRIPT.parent / 'release_candidate_kind.py', self.root / 'scripts')
+        shutil.copy2(SCRIPT.parent / 'release_symbols.py', self.root / 'scripts')
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.runner = self.root / "runner"
@@ -239,6 +245,17 @@ class HostedReleaseTests(unittest.TestCase):
                 else:
                     self.env[key] = previous
         self.assertFalse(any(call["tool"] in ("make", "security") for call in self.calls()))
+
+    def test_diagnostic_build_marker_comes_from_tag_and_promotion_is_rejected(self):
+        self.env['RC_TAG'] += '-diag'
+        self.verified()
+        result = self.run_phase('build')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(next(call['diagnostic'] for call in self.calls() if 'diagnostic' in call))
+        self.env.update(RELEASE_OPERATION='promote', GITHUB_REF='refs/heads/main')
+        result = self.run_phase('check')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('diagnostic candidates cannot be promoted', result.stderr)
 
     def test_failed_verify_cannot_authorize_signing(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)

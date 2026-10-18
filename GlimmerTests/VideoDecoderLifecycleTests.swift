@@ -61,6 +61,7 @@ struct VideoDecoderLifecycleTests {
         decoder.vpsData = Data([3])
         decoder.cachedHDRFormatDescription = try VideoDecoderHDRTests.formatDescription()
         decoder.inFlightDecodes = 3
+        decoder.decodeReservations[0] = VideoDecoder.DecodeReservations(queued: 3)
         decoder.lastVtDecodeFailed = true
 
         decoder.cleanup()
@@ -82,6 +83,54 @@ struct VideoDecoderLifecycleTests {
         #expect(decoder.inFlightDecodeBacklog() == 0)
         #expect(decoder.statsCollector.decoderDropCount() == 1)
         #expect(decoder.decodeGateDisposition(isIDR: false) == .resyncToIdr)
+    }
+
+    @Test func staleDecodeRetirementsCannotConsumeTheRecoveryIdrSlot() {
+        let decoder = VideoDecoder()
+        decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 5
+        #expect(decoder.reserveDecodeSlot(isIDR: false, epoch: 1) == .reserved)
+        #expect(decoder.beginSubmittedDecode(epoch: 1))
+        decoder.lastVtDecodeFailed = true
+        #expect(decoder.reserveDecodeSlot(isIDR: true, epoch: 2) == .reservedForStallRecreate)
+
+        #expect(!decoder.releaseInFlightDecode(epoch: 1, submitted: true, vtFailed: true))
+        #expect(!decoder.releaseInFlightDecode(epoch: 1))
+        #expect(!decoder.beginSubmittedDecode(epoch: 1))
+        #expect(decoder.inFlightDecodeBacklog() == 1)
+        #expect(!decoder.lastVtDecodeFailed)
+        #expect(decoder.beginSubmittedDecode(epoch: 2))
+        #expect(decoder.releaseInFlightDecode(epoch: 2, submitted: true, vtFailed: false))
+        #expect(decoder.inFlightDecodeBacklog() == 0)
+    }
+
+    @Test func invalidationRetiresSubmittedWorkButPreservesQueuedFrames() {
+        let decoder = VideoDecoder()
+        for epoch in [UInt(1), 1, 2] {
+            #expect(decoder.reserveDecodeSlot(isIDR: false, epoch: epoch) == .reserved)
+        }
+        #expect(decoder.beginSubmittedDecode(epoch: 1))
+
+        decoder.retireInvalidatedDecodes()
+
+        #expect(decoder.inFlightDecodeBacklog() == 2)
+        #expect(!decoder.releaseInFlightDecode(epoch: 1, submitted: true))
+        #expect(decoder.releaseInFlightDecode(epoch: 1))
+        #expect(decoder.beginSubmittedDecode(epoch: 2))
+        #expect(decoder.releaseInFlightDecode(epoch: 2, submitted: true))
+        #expect(decoder.inFlightDecodeBacklog() == 0)
+        #expect(decoder.decodeReservations.isEmpty)
+    }
+
+    @Test func anOlderIdrEpochCannotOverwriteTheCurrentDecodeVerdict() {
+        let decoder = VideoDecoder()
+        for epoch in [UInt(1), 2] {
+            #expect(decoder.reserveDecodeSlot(isIDR: false, epoch: epoch) == .reserved)
+            #expect(decoder.beginSubmittedDecode(epoch: epoch))
+        }
+        #expect(decoder.releaseInFlightDecode(epoch: 2, submitted: true, vtFailed: true))
+        #expect(decoder.releaseInFlightDecode(epoch: 1, submitted: true, vtFailed: false))
+        #expect(decoder.lastVtDecodeFailed)
+        #expect(decoder.inFlightDecodeBacklog() == 0)
     }
 
     // MARK: Sink

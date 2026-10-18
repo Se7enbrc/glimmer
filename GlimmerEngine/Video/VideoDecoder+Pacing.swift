@@ -219,7 +219,7 @@ extension VideoDecoder {
         // A synchronous return records the call boundary, not completed screen presentation.
         if let renderer {
             recordRendererRecoveryState(renderer: renderer, phase: .flushBegan)
-            renderer.flush()
+            flushRenderer(renderer)
             recordRendererRecoveryState(renderer: renderer, phase: .flushReturned)
         }
 
@@ -260,6 +260,41 @@ extension VideoDecoder {
     // re-commit the tick-deficit degraded mode drives) lives in
     // VideoDecoder+GovernorRepaint.swift to keep this file under the length limit.
 
+    struct RendererSubmission {
+        let renderer: AVSampleBufferVideoRenderer
+        let generation: UInt64
+    }
+
+    /// The final admission lock orders enqueue against stop, hide, replacement and flush.
+    /// Lock order is displayLayerLock then presentSuppressedLock; never call getters inside enqueue.
+    nonisolated func rendererSubmission() -> RendererSubmission? {
+        displayLayerLock.lock(); defer { displayLayerLock.unlock() }
+        guard isStreaming, !presentSuppressed, let renderer = _sampleBufferRenderer else { return nil }
+        return RendererSubmission(renderer: renderer, generation: rendererSubmissionGeneration)
+    }
+
+    nonisolated func performRendererSubmission(
+        _ submission: RendererSubmission, enqueue: (AVSampleBufferVideoRenderer) -> Void
+    ) -> Bool {
+        displayLayerLock.lock(); defer { displayLayerLock.unlock() }
+        guard submission.generation == rendererSubmissionGeneration,
+              _sampleBufferRenderer === submission.renderer, isStreaming, !presentSuppressed else { return false }
+        enqueue(submission.renderer)
+        return true
+    }
+
+    /// Invalidate prepared submissions before flushing; new frames may follow the returned call.
+    nonisolated func flushRenderer(_ renderer: AVSampleBufferVideoRenderer, keepingDisplayedImage: Bool = false) {
+        displayLayerLock.lock(); defer { displayLayerLock.unlock() }
+        guard _sampleBufferRenderer === renderer else { return }
+        rendererSubmissionGeneration &+= 1
+        if keepingDisplayedImage {
+            renderer.flush(removingDisplayedImage: false) { }
+        } else {
+            renderer.flush()
+        }
+    }
+
     // MARK: - Paced present site
 
     /// Present one paced frame onto the AVSampleBufferDisplayLayer's renderer.
@@ -280,7 +315,8 @@ extension VideoDecoder {
         // Re-check the teardown gate: the pacer's serial queue can race a
         // MainActor teardown that nil'd the layer. Snapshot the renderer into
         // a local so it can't be released mid-enqueue.
-        guard isStreaming, let renderer = sampleBufferRenderer else { return false }
+        guard let submission = rendererSubmission() else { return false }
+        let renderer = submission.renderer
 
         // Drive the macOS 15+ renderer from this background queue; the layer API is deprecated.
         // A latched failure stops rendering until flushed, and rebuilding must stay on main.
@@ -323,19 +359,21 @@ extension VideoDecoder {
             return false
         }
 
-        // Healthy frame - reset the backpressure streak and present.
-        let priorRejections = consecutiveBackpressureDrops.exchange(0, ordering: .relaxed)
+        // A lifecycle rejection must not end an outstanding renderer-backpressure episode.
         // The pacer owns release timing; RTP PTS is not the renderer's Mac host clock.
         // Keep PTS for pacing and telemetry, but display this decoded image when released.
         Self.markForImmediateDisplay(sampleBuffer)
-        renderer.enqueue(sampleBuffer)
+        let tracker = FrameTimingTracker.shared
+        guard performRendererSubmission(submission, enqueue: { $0.enqueue(sampleBuffer) }) else { return false }
+        let enqueueNanos = tracker?.now()
+        let priorRejections = consecutiveBackpressureDrops.exchange(0, ordering: .relaxed)
         sampleHUDBackdrop(sampleBuffer)
 
-        // Record enqueue latency before the additional recovery-state observations.
-        if let tracker = FrameTimingTracker.shared {
+        // Capture enqueue before HUD sampling; later diagnostics retain that boundary.
+        if let tracker {
             let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             let rtpTimestamp = VideoDecoder.rtpTimestamp(from: pts)
-            tracker.recordPresent(rtpTimestamp: rtpTimestamp)
+            tracker.recordPresent(rtpTimestamp: rtpTimestamp, uptimeNanos: enqueueNanos)
             // The last enqueued RTP supplies the video half of the optional AV-skew estimate.
             AudioVideoSkewStore.shared.noteVideoPresented(rtp: rtpTimestamp)
         }

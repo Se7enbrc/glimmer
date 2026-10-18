@@ -25,7 +25,8 @@ extension FramePacer {
     /// stale backlog dropped to get there. Returned by `takeBackoffNewestLocked`.
     struct BackoffBeat {
         let newest: Entry
-        let droppedCount: Int
+        let dropped: [CMSampleBuffer]
+        var droppedCount: Int { dropped.count }
     }
 
     /// The outcome of the per-tick due-gate: the frame to present (nil = nothing
@@ -52,6 +53,7 @@ extension FramePacer {
     /// base from the CURRENT link's clock. This is the prime root-cause fix.
     func resetCadenceBaseLocked() {
         lastPresentMediaTime = .nan
+        lastClaimedScanoutMediaTime = .nan
         cadenceRemainderSeconds = 0
         prevPresentMediaTimeForMetric = .nan
         liveness.lastTickTargetMediaTime = .nan
@@ -88,7 +90,8 @@ extension FramePacer {
     /// clamp, not this path. Returns nil on a normally-paced / jitter-buffered
     /// stream, whose head is never this late. MUTATES queue - caller holds the lock.
     func takeBackoffNewestLocked(targetTimestamp: CFTimeInterval) -> BackoffBeat? {
-        guard queue.count > 1, lastPresentMediaTime.isFinite else { return nil }
+        guard queue.count > 1, lastPresentMediaTime.isFinite,
+              !cadenceTargetCannotBeClaimedLocked(targetTimestamp) else { return nil }
         let sinceLast = targetTimestamp - lastPresentMediaTime
         let backoffThreshold =
             streamFrameIntervalSeconds * FramePacer.presentBackoffLatenessIntervals
@@ -96,15 +99,16 @@ extension FramePacer {
             return nil
         }
         let newest = queue.removeLast()
-        let droppedCount = queue.count
+        let dropped = queue.map(\.sampleBuffer)
         queue.removeAll(keepingCapacity: true)
         // Re-anchor ON the grid, NOT at `targetTimestamp`: parking the base at
         // `targetTimestamp` put it ≈one vsync AHEAD of fresh frames → the due-gate
         // latched not-due → a hard wedge (observed on a lossy wifi link). See
         // `anchorCadenceBaseOnGridLocked`. Clear the streak - we are presenting.
         anchorCadenceBaseOnGridLocked(targetTimestamp: targetTimestamp)
+        lastClaimedScanoutMediaTime = targetTimestamp
         liveness.starvedTickStreak = 0
-        return BackoffBeat(newest: newest, droppedCount: droppedCount)
+        return BackoffBeat(newest: newest, dropped: dropped)
     }
 
     /// Stamp the release liveness clocks + the tick-deficit repaint source after
@@ -147,7 +151,7 @@ extension FramePacer {
     /// from the present queue (reference chain intact), so it requests NO IDR -
     /// see the removed `onSustainedLag` hook on `FramePacer`.
     func presentBackoffAndYield(_ beat: BackoffBeat) {
-        for _ in 0..<beat.droppedCount { stats.recordPresentationLateDrop() }
+        recordPresentationDiscards(beat.dropped, reason: .backoff)
         stats.recordPacingDepth(0)
         OSSignposter.render.emitEvent(
             "PacerBackoffDropToNewest",
@@ -195,6 +199,16 @@ extension FramePacer {
             cadenceRemainderSeconds = 0
         }
         lastPresentMediaTime = timestamp
+        lastClaimedScanoutMediaTime = timestamp
+    }
+
+    /// Reject invalid clocks and scanouts already reserved by an earlier release.
+    /// Only an explicit cadence reset permits a backward clock change.
+    func cadenceTargetCannotBeClaimedLocked(_ target: CFTimeInterval) -> Bool {
+        assertLockHeld()
+        guard target.isFinite else { return true }
+        return lastPresentMediaTime.isFinite && target <= lastPresentMediaTime
+            || lastClaimedScanoutMediaTime.isFinite && target <= lastClaimedScanoutMediaTime
     }
 
     /// Never claim the same scanout timestamp twice. Fractional cadence survives normal
@@ -203,16 +217,15 @@ extension FramePacer {
         targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval, effectiveTarget: Int
     ) -> DueGateResult {
         assertLockHeld()
+        guard !cadenceTargetCannotBeClaimedLocked(targetTimestamp) else {
+            return DueGateResult(toPresent: nil, heldForGrowth: false, forcedOverTarget: false)
+        }
         guard !queue.isEmpty else {
             prevPresentMediaTimeForMetric = .nan
             return DueGateResult(toPresent: nil, heldForGrowth: false, forcedOverTarget: false)
         }
         let remainder = cadenceRemainderLocked(vsyncInterval: vsyncInterval)
         let sinceLast = targetTimestamp - lastPresentMediaTime
-        // A submit can already own this tick, including when more frames queued behind it.
-        if sinceLast == 0 {
-            return DueGateResult(toPresent: nil, heldForGrowth: false, forcedOverTarget: false)
-        }
         let belowTarget = queue.count <= effectiveTarget
         // A two-frame decode burst fits the existing trim slack; draining it early resets
         // phase and bunches repeats. Only a real backlog may bypass cadence.
@@ -249,9 +262,12 @@ extension FramePacer {
     /// frame per tick (one present per vsync), after trimming sustained lag.
     /// `tickScanout` is the panel vsync a tick's release lands on (NaN off-tick).
     func releaseDueFrame(
-        targetTimestamp: CFTimeInterval, vsyncInterval: CFTimeInterval, tickScanout: CFTimeInterval,
+        targetTimestamp requestedTarget: CFTimeInterval, vsyncInterval: CFTimeInterval, tickScanout: CFTimeInterval,
         generation: UInt64? = nil
     ) {
+        // A throttled link predicts its next callback beyond the next panel scanout.
+        // Claim the panel slot so a deficit beat after it can still release on time.
+        let targetTimestamp = tickScanout.isFinite ? tickScanout : requestedTarget
         var toPresent: Entry?
         var trimmed: [CMSampleBuffer] = []
         var sampledDepth = 0
@@ -270,7 +286,8 @@ extension FramePacer {
         // stale-repeat counter while real frames are demonstrably flowing. A tick already queued when
         // the window hid presents nothing and keeps the newest frame for the resume.
         guard running, generation == nil || generation == bindingGeneration,
-              !tickDeficit.warmingUp, !presentSuppressed else {
+              !tickDeficit.warmingUp, !presentSuppressed,
+              !cadenceTargetCannotBeClaimedLocked(targetTimestamp) else {
             lock.unlock()
             return
         }
@@ -334,9 +351,9 @@ extension FramePacer {
             sampledDepth = 0
             tickDeficit.tickScanoutMediaTime = tickScanout
             lock.unlock()
-            // Yield past the due gate and failsafe; this tick's trim rides the beat's drop count.
-            presentBackoffAndYield(BackoffBeat(newest: backoff.newest,
-                                               droppedCount: backoff.droppedCount + trimmed.count))
+            // Keep trim and backoff decisions distinct even when they share one tick.
+            recordPresentationDiscards(trimmed, reason: .trim)
+            presentBackoffAndYield(backoff)
             return
         }
 
@@ -432,9 +449,7 @@ extension FramePacer {
         // Count each trimmed frame as a presentation-late drop (the renderer
         // owns sample lifetime; ARC frees the trimmed buffers when `trimmed`
         // goes out of scope).
-        for _ in trimmed {
-            stats.recordPresentationLateDrop()
-        }
+        recordPresentationDiscards(trimmed, reason: .trim)
         if !trimmed.isEmpty {
             OSSignposter.render.emitEvent(
                 "PacerTrim",

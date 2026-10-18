@@ -67,6 +67,7 @@ extension TelemetryExporter {
             .appendingPathComponent("telemetry-session-\(isoFormatter.string(from: Date())).json")
         do {
             try json.data(using: .utf8)?.write(to: reportURL)
+            sessionReportURL = reportURL
             log.notice("Telemetry session report → \(reportURL.lastPathComponent, privacy: .public)")
             Diag.notice("Telemetry SESSION REPORT written → \(reportURL.lastPathComponent) "
                 + "(duration \(String(format: "%.1f", durationSeconds))s).", Self.logCategory)
@@ -94,12 +95,13 @@ extension TelemetryExporter {
             tracker.traceWriter.append(tracker.bookmarkLine(total: count, uptimeNanos: now.uptimeNanoseconds))
         }
         workQueue.async { [weak self] in
-            guard let self else { return }
+            guard let self, !self.stopped else { return }
             let iso = self.isoFormatter.string(from: date)
             // Explicit event object; `event` + `kind` keys distinguish it from the
             // per-second sample lines so a reader/grep finds bookmarks instantly.
             let line = "{\"ts\":\"\(iso)\",\"session\":\"\(self.sessionId)\","
                 + "\"event\":\"bookmark\",\"kind\":\"felt_bad\","
+                + "\"t_ms\":\(Double(now.uptimeNanoseconds) / 1_000_000),"
                 + String(format: "\"t_connect_s\":%.3f,", sinceConnect)
                 + "\"bookmark_total\":\(count)}"
             self.appendNDJSON(line)
@@ -186,7 +188,7 @@ extension TelemetryExporter {
 
     private func writeEvent(_ fields: [String]) {
         workQueue.async { [weak self] in
-            guard let self else { return }
+            guard let self, !self.stopped else { return }
             let header = "\"ts\":\"\(self.isoFormatter.string(from: Date()))\","
                 + "\"session\":\"\(self.sessionId)\","
             self.appendNDJSON("{" + header + fields.joined(separator: ",") + "}")
@@ -223,14 +225,44 @@ extension TelemetryExporter {
     }
 
     package func appendNDJSON(_ line: String) {
-        guard let fileHandle else { return }
-        guard let data = (line + "\n").data(using: .utf8) else { return }
+        guard let fileHandle, let data = (line + "\n").data(using: .utf8) else {
+            ndjsonRowsFailed &+= 1
+            return
+        }
         do {
             try fileHandle.write(contentsOf: data)
+            ndjsonRowsWritten &+= 1
         } catch {
+            ndjsonRowsFailed &+= 1
+            ndjsonWriteFailures &+= 1
             // A write failure (disk full, file removed) shouldn't take down the
             // stream - drop the line and keep going.
             log.error("Telemetry NDJSON write failed: \(error.localizedDescription, privacy: .private)")
+        }
+    }
+
+    /// A missing or unsuccessful receipt prevents a bundle from claiming a complete capture.
+    package func writeEvidenceManifest() {
+        let config = source.capture.configuration
+        let receipt: [String: Any] = [
+            "schema": 1, "session": sessionId, "closed": true,
+            "build_commit": config.buildCommit, "engine_commit": config.engineCommit,
+            "app_version": config.appVersion, "build_version": config.buildVersion,
+            "diagnostic_build": config.diagnosticBuild,
+            "started_ms": Double(connectInstant.uptimeNanoseconds) / 1_000_000,
+            "stopped_ms": Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000,
+            "metrics_file": ndjsonURL?.lastPathComponent as Any? ?? NSNull(),
+            "report_file": sessionReportURL?.lastPathComponent as Any? ?? NSNull(),
+            "rows_written": ndjsonRowsWritten, "rows_failed": ndjsonRowsFailed,
+            "write_failures": ndjsonWriteFailures,
+            "limits": ["physical_scanout_unobserved", "hardware_decode_execution_unobserved",
+                       "allocation_stacks_require_verified_external_capture"]
+        ]
+        do {
+            let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys, .prettyPrinted])
+            try data.write(to: outputDirectory.appendingPathComponent("telemetry-evidence-\(sessionId).json"), options: .atomic)
+        } catch {
+            log.error("Telemetry evidence receipt failed: \(error.localizedDescription, privacy: .private)")
         }
     }
 }

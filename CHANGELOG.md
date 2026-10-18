@@ -4,6 +4,10 @@
 
 ### Features
 
+- Manual diagnostic builds can record a detailed performance session and export
+  a local evidence bundle that identifies missing or incomplete measurements.
+  These builds are separate from automatic updates.
+
 - Stop the current stream and quit its game on the PC from a `glimmer://stop`
   link, `glimmer stop` or the Stop Streaming shortcut.
 
@@ -49,6 +53,16 @@
 - The readiness chip shows Ready and latency when the PC is reachable.
 
 ### Bug fixes
+
+- Keep decoded frames in order when a delayed display tick overlaps a newly
+  submitted frame. Let the hardware decoder choose its own thread count.
+- Optional diagnostics retain decode timing for discarded frames and identify
+  where the client drops them. Trace formatting runs in the background.
+- Keep old video work from carrying into a replacement stream, and retire
+  decoder backlog correctly when recovery replaces a decode session.
+- Keep audio packets in order when a PC's error-correction layout is
+  incompatible. Temporary audio socket pressure retries; a permanent failure is
+  reported.
 
 - Recover from a temporarily stalled video renderer without asking the PC for an
   unnecessary keyframe. Failed renderers still use the full recovery path.

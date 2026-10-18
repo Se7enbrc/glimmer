@@ -89,8 +89,8 @@ extension FramePacer {
     }
 
     /// True when a real tick's released frame has not yet scanned out at `now`
-    /// (a beat there would present twice in one panel vsync). A lead past 1s
-    /// is a timebase jump, left to the due gate's discontinuity clamp.
+    /// (a beat there would present twice in one panel vsync). A lead past 1s is not trusted;
+    /// a backward clock change still requires the cadence reset used by link recovery.
     static func tickOwnsScanout(now: CFTimeInterval, scanout: CFTimeInterval) -> Bool {
         let lead = scanout - now
         return lead > 0 && lead <= 1.0

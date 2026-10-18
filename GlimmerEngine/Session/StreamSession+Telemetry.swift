@@ -47,7 +47,8 @@ extension StreamSession {
         let rendererProbe: @Sendable () -> RendererPerformanceSource?
         if let prepared = snapshot.0 { rendererProbe = prepared } else { rendererProbe = { nil } }
         let displayMode = snapshot.1
-        let capture = services.makeCapture()
+        var capture = services.makeCapture()
+        capture.configuration.attemptID = attempt
         let source = TelemetrySource(
             videoStats: { [weak decoder] in
                 decoder?.telemetryStatsSnapshot() ?? StreamStatsSnapshot()

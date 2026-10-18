@@ -184,8 +184,10 @@ package final class FramePacer: @unchecked Sendable {
     /// FramePacer+AdaptiveDepth.swift.
     var adaptiveDepth = AdaptiveDepthState()
 
-    /// Actual display-clock time of the last claimed scanout, or NaN before release.
+    /// Cadence base; recovery may anchor it behind the last actual claim.
     var lastPresentMediaTime: CFTimeInterval = .nan
+    /// Monotonic scanout ownership survives recovery re-anchoring, guarded by `lock`.
+    var lastClaimedScanoutMediaTime: CFTimeInterval = .nan
     /// Fractional cadence error carried across scanouts, guarded by `lock`.
     var cadenceRemainderSeconds: CFTimeInterval = 0
 
@@ -273,6 +275,7 @@ package final class FramePacer: @unchecked Sendable {
     /// The view we bound the link to, kept so a screen change can rebind.
     var displayBound = false // Guarded by lock; detached displays cannot arm an assist timer.
     var bindingGeneration: UInt64 = 0 // Guarded by lock; invalidates detached tick and release work.
+    var presentationGeneration: UInt64 = 0 // Guarded by lock; invalidates samples across discontinuities.
     @MainActor var boundDisplay: PacerDisplay?
     /// Identity, refresh capabilities and backing scale distinguish a real move from housekeeping.
     /// Unconditional ProMotion rebinds once reset cadence 785 times in a 12-minute run.
@@ -292,6 +295,7 @@ package final class FramePacer: @unchecked Sendable {
     /// a missed release is a dropped frame the user sees. NEVER the main actor.
     let pacingQueue = DispatchQueue(
         label: "io.ugfugl.Glimmer.video.pacer", qos: .userInteractive)
+    let pacingQueueKey = DispatchSpecificKey<Bool>()
 
     // MARK: - Present tick run loop (off-main, default)
 
@@ -325,6 +329,7 @@ package final class FramePacer: @unchecked Sendable {
         self.configuredFrameIntervalSeconds = interval
         self.ptsDeltas.reserveCapacity(65)
         self.sortedPtsDeltas.reserveCapacity(65)
+        pacingQueue.setSpecific(key: pacingQueueKey, value: true)
     }
 
     /// Clamp a frame-interval estimate to a sane [1ms, 1s] range. A poisoned
@@ -398,6 +403,7 @@ package final class FramePacer: @unchecked Sendable {
         running = false
         displayBound = false
         bindingGeneration &+= 1
+        let discarded = queue.map(\.sampleBuffer)
         queue.removeAll(keepingCapacity: false)
         // Reset liveness so a future restart starts clean (the watchdog reads
         // these; a stale "never ticked" must not survive a restart).
@@ -432,6 +438,8 @@ package final class FramePacer: @unchecked Sendable {
         // (FramePacer+TickDeficit.swift).
         resetTickDeficitStateLocked()
         lock.unlock()
+
+        for frame in discarded { recordDiscardedFrame(frame, reason: .stopped) }
 
         // Cancel the off-tick release timer (if a deficit episode was live).
         // Timer create/cancel is confined to pacingQueue; `deficitModeActive`

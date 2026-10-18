@@ -51,6 +51,7 @@ struct GlimmerCLITests {
     }
 
     @Test func badArgumentsAreUsageErrors() {
+        #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["diagnostics", "capture", "123"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["pair", "tower.local", "--pin", "12a4"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["pair", "tower.local", "--pin"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["pair", "tower.local", "--pin", "١٢٣٤"]) }
@@ -58,6 +59,15 @@ struct GlimmerCLITests {
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["quit"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["wake", "Tower", "Den"]) }
         #expect(throws: GlimmerCLI.UsageError.self) { try GlimmerCLI.parse(["lsit"]) }
+    }
+
+    @Test func diagnosticCommandsRequireExplicitIdentityAndDestination() throws {
+        let capture = try GlimmerCLI.parse(["diagnostics", "capture", "123", "/tmp/capture"])
+        #expect(capture.verb == .diagnostics)
+        #expect(capture.arguments == ["capture", "123", "/tmp/capture"])
+        let bundle = try GlimmerCLI.parse(["diagnostics", "bundle", "0123456789abcdef", "/tmp/evidence"])
+        #expect(bundle.arguments == ["bundle", "0123456789abcdef", "/tmp/evidence"])
+        #expect(GlimmerCLI.isInvocation(["Glimmer", "diagnostics", "capture", "123", "/tmp/capture"]))
     }
 
     @Test func aPCMatchesByNameIdOrAddressIgnoringCase() {

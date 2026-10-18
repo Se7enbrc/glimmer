@@ -15,6 +15,7 @@
 import AVFoundation
 import CoreMedia
 import CoreVideo
+import Dispatch
 import Foundation
 import VideoToolbox
 import os
@@ -89,23 +90,7 @@ extension VideoDecoder {
         }
         self.outputCallbackRefcon = refcon
 
-        // Real-time hint - lets VT prefer latency over throughput. The
-        // capture path on the host already paces frames; we want them out
-        // ASAP. moonlight-qt sets the equivalent via ffmpeg's VT hwaccel
-        // path; we set it directly here.
-        VTSessionSetProperty(
-            session, key: kVTDecompressionPropertyKey_RealTime, value: kCFBooleanTrue)
-        // Disable any power-savings deferrals - every millisecond of decode
-        // latency adds end-to-end input-to-photon latency, which is what we
-        // sell. Available on macOS 10.10+; ignore failures on older OSes.
-        VTSessionSetProperty(
-            session,
-            key: kVTDecompressionPropertyKey_MaximizePowerEfficiency,
-            value: kCFBooleanFalse)
-        // Don't let VT reorder; Sunshine/GFE streams have no B-frames and
-        // we want strictly-monotonic display order.
-        VTSessionSetProperty(
-            session, key: kVTDecompressionPropertyKey_ThreadCount, value: 1 as CFNumber)
+        configureDecompressionSession(session)
 
         self.decompressionSession = session
         // Telemetry (opt-in): a fresh VT session was built - bump the recreate
@@ -148,42 +133,45 @@ extension VideoDecoder {
         }
         decompressionSession = nil
         releaseOutputCallbackRefcon()
+        retireInvalidatedDecodes()
     }
 
     // MARK: - VT output callback → AVSampleBufferDisplayLayer enqueue
 
     nonisolated static let decompressionOutputCallback:
         VTDecompressionOutputCallback = { outputRefCon, frameRefCon, status, infoFlags, imageBuffer, presentationTimeStamp, _ in
+            let callbackEntry = DispatchTime.now().uptimeNanoseconds
             guard let outputRefCon else { return }
             let decoder = Unmanaged<VideoDecoder>.fromOpaque(outputRefCon)
                 .takeUnretainedValue()
-
-            // Retire one in-flight decode: VT delivers exactly one output
-            // callback per accepted submit (success, drop, or error), so this
-            // is the matching decrement for the increment `decodeAssembledFrame`
-            // took before dispatching. Without it the bounded backlog counter
-            // would never drain and we'd wedge at `maxInFlightDecodes`,
-            // permanently dropping + requesting IDRs. Done first, before any
-            // early return below, so every callback path retires its slot.
+            // Retire the accepted submit before any success/failure return so the bounded
+            // decode backlog cannot retain a slot after this callback finishes.
             let failed = status != noErr || imageBuffer == nil
-            decoder.releaseInFlightDecode(vtFailed: failed)
+            let epoch = UInt(bitPattern: frameRefCon)
+            guard decoder.releaseInFlightDecode(epoch: epoch, submitted: true, vtFailed: failed) else { return }
+            let tracker = FrameTimingTracker.shared
+            let rtpTimestamp = VideoDecoder.rtpTimestamp(from: presentationTimeStamp)
+            let traceAttempt = tracker?.attemptForFrame(rtpTimestamp: rtpTimestamp)
+            tracker?.recordOutput(rtpTimestamp: rtpTimestamp, uptimeNanos: callbackEntry,
+                                  status: status, flags: infoFlags.rawValue,
+                                  decoded: status == noErr && imageBuffer != nil && !infoFlags.contains(.frameDropped))
+            defer {
+                tracker?.recordCallbackFinished(rtpTimestamp: rtpTimestamp, entryNanos: callbackEntry,
+                                                attemptID: traceAttempt)
+            }
+
             // A frame VT failed leaves every later P-frame referencing a hole:
             // resync to the next IDR (a no-op if an IDR has been fed since).
             if failed {
-                decoder.noteVtDecodeFailure(epoch: UInt(bitPattern: frameRefCon), status: status)
+                decoder.noteVtDecodeFailure(epoch: epoch, status: status)
             }
 
-            // Stats: every output callback completes one submit, even when
-            // VT reports the frame as dropped (status != noErr or the
-            // FrameDropped info bit). Pop the pending submit timestamp first
-            // so the FIFO stays aligned with submits.
+            // Every live output completes its own submit, including drops and failures.
             let dropped = infoFlags.contains(.frameDropped) || status != noErr || imageBuffer == nil
-            let intervalState = decoder.statsCollector.recordDecodeComplete(dropped: dropped)
+            let intervalState = decoder.statsCollector.recordDecodeComplete(
+                dropped: dropped, identity: StatsCollector.DecodeIdentity(epoch: epoch, rtpTimestamp: rtpTimestamp))
 
-            // Close the `DecodeFrame` interval against the same state the
-            // submit side opened with. The FIFO pairing via the collector
-            // is what lets Instruments draw a clean per-frame interval
-            // even though submit and complete straddle a queue hop.
+            // The callback identity closes its own span even when output arrives out of order.
             if let intervalState {
                 let outcome: StaticString = dropped ? "dropped" : "ok"
                 OSSignposter.decode.endInterval(
@@ -215,17 +203,11 @@ extension VideoDecoder {
                 VideoDecoder.noteCorruptionIfDecodeError(status: status)
             }
 
-            guard status == noErr, let imageBuffer else { return }
+            guard !dropped, let imageBuffer else { return }
             // Stamp the decoded-frame timestamp so the StreamSession
             // watchdog gates on real decode output, not byte reception -
             // see `secondsSinceLastDecodedFrame()` for the rationale.
             decoder.statsCollector.recordDecodedFrame()
-            // Latency telemetry stage t_output (opt-in; nil = zero cost): VT just
-            // produced the frame. Recover the rtpTimestamp key from the PTS VT
-            // propagated (built as CMTimeMake(rtpTimestamp, 90000)).
-            if let tracker = FrameTimingTracker.shared {
-                tracker.recordOutput(rtpTimestamp: VideoDecoder.rtpTimestamp(from: presentationTimeStamp))
-            }
             // Preserve the PC's RTP clock for pacing and telemetry. At release, the
             // renderer displays immediately rather than scheduling against its Mac clock.
             decoder.enqueueDecodedFrame(
@@ -238,14 +220,18 @@ extension VideoDecoder {
             // visible. Firing pre-enqueue meant the fade ramped 0 → ~10%
             // alpha against an empty layer (visible black), reading as
             // a thin letterbox flash before content swapped in.
-            if !decoder.didFireFirstDecodedFrame {
-                decoder.didFireFirstDecodedFrame = true
+            if decoder.claimFirstDecodedFrame() {
                 // P2 CONNECT-HANDSHAKE: stamp the first decoded-frame instant (the
                 // close of the "established → pixels" leg). See DecodeTelemetry.
                 VideoDecoder.noteFirstDecodedFrameTelemetry()
                 decoder.scheduleFirstDecodedFrame()
             }
         }
+
+    /// VT may complete callbacks concurrently; only one may schedule the first-frame notification.
+    nonisolated func claimFirstDecodedFrame() -> Bool {
+        !firstDecodedFrameClaimed.exchange(true, ordering: .acquiringAndReleasing)
+    }
 
     nonisolated func scheduleFirstDecodedFrame() {
         let generation = firstFrameLifecycleGeneration.load(ordering: .acquiring)
@@ -330,6 +316,7 @@ extension VideoDecoder {
 
         guard let sb = sampleBuffer else { return }
         if let pacer = framePacer {
+            FrameTimingTracker.shared?.recordPacerSubmitted(rtpTimestamp: Self.rtpTimestamp(from: hostPTS))
             pacer.submit(sb, hostPTS: hostPTS)
         } else {
             _ = presentFrame(sb)

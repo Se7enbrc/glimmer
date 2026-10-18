@@ -42,7 +42,7 @@ struct FramePacerDeficitEventTests {
                                                 ticksPerS: 116.9),
                   line: "ASSIST disengaged (case-b) after 2468ms - 9 releases during assist, ticks 116.9/s",
                   reconciles: true),
-        EventCase(event: .warmHandoverComplete(ticksPerS: 97.3, discarded: 2),
+        EventCase(event: .warmHandoverComplete(ticksPerS: 97.3, discarded: [1, 2]),
                   line: "rebuilt link healthy at 97.3 ticks/s", reconciles: true)
     ]
 
@@ -62,7 +62,7 @@ struct FramePacerDeficitEventTests {
             $0.category == "Stream.Pacer" && $0.message.contains(testCase.line)
         })
         if case let .warmHandoverComplete(_, discarded) = testCase.event {
-            #expect(pacer.stats.presentationLateDropCount() == UInt64(discarded))
+            #expect(pacer.stats.presentationLateDropCount() == UInt64(discarded.count))
         }
     }
 

@@ -67,8 +67,8 @@ extension FramePacer {
         /// A 240Hz link ticks every ~4.17ms; if this stops advancing the link has
         /// died (a same-screen HDR/VRR/mode switch that posts no didChangeScreen).
         var lastTickHostTime: CFTimeInterval = .nan
-        /// `CADisplayLink.targetTimestamp` of the most recent tick: the vsync grid a submit-time
-        /// release predicts its scanout on. `.nan` until the first tick and across a link rebind.
+        /// Next panel scanout from the latest tick, which may precede a throttled link's target.
+        /// Submit releases predict from this grid; NaN before the first tick and across a rebind.
         var lastTickTargetMediaTime: CFTimeInterval = .nan
         /// A tick's target that tick filled with no frame: stale unless a submit-time release
         /// claims it before the next tick decides. `.nan` when nothing is pending.

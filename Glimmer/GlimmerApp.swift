@@ -64,7 +64,8 @@ struct GlimmerApp: App {
     /// reaches EXISTING users, where a hard-coded `false` fallback only ever
     /// reached fresh installs.
     @MainActor
-    static func registerDefaults(defaults: UserDefaults = .standard) {
+    static func registerDefaults(defaults: UserDefaults = .standard,
+                                 diagnosticBuild: Bool = DiagnosticBuild.isEnabled) {
         defaults.register(defaults: [
             // Default-ON prefs. disableMouseAccelWhileStreaming linearizes the
             // system pointer acceleration while the stream window is focused so
@@ -97,8 +98,8 @@ struct GlimmerApp: App {
             "muteMacWhileStreaming": false,
             "rawHIDControllerEnabled": false,
             "rawHIDPromptAnswered": false,
-            "showDiagnostics": false,
-            "telemetryEnabled": false,
+            "showDiagnostics": diagnosticBuild,
+            "telemetryEnabled": diagnosticBuild,
             // "Show the stream": full screen unless the user picks Window. The
             // registered value keeps the raw read and AppModel's declared
             // default in agreement (see StreamDisplayMode.defaultMode).

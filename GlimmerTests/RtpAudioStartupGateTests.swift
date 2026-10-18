@@ -26,6 +26,72 @@ struct RtpAudioStartupGateTests {
         func firstBytes() -> [UInt8] { lock.lock(); defer { lock.unlock() }; return packets.compactMap(\.first) }
     }
 
+    @Test func incompatibleFecStillRejectsReplayAndConcealsMissingAudio() {
+        let queue = RtpAudioQueue(audioPacketDuration: 5)
+        queue.incompatibleServer = true
+        func feed(_ seq: UInt16) -> RtpaResult {
+            let rtp = RtpAudioQueue.RtpHeader(header: 0x80, packetType: RtpAudioQueue.payloadTypeAudio,
+                                            sequenceNumber: seq, timestamp: UInt32(seq) * 5, ssrc: 1)
+            return queue.addPacket([UInt8](repeating: 1, count: 15), rtp: rtp)
+        }
+        #expect(feed(100) == .handleNow)
+        #expect(feed(100) == .none)
+        #expect(feed(99) == .none)
+        #expect(feed(102) == .packetReady)
+        var packet: [UInt8] = []
+        #expect(queue.getQueuedPacket(into: &packet) == true)
+        #expect(queue.getQueuedPacket(into: &packet) == false)
+        #expect(packet.count == 15)
+        #expect(queue.getQueuedPacket(into: &packet) == nil)
+        #expect(feed(101) == .none)
+        #expect(feed(103) == .handleNow)
+    }
+
+    @Test func incompatibleFecWrapsAndRequiresConfirmationForLargeJumps() {
+        let queue = RtpAudioQueue(audioPacketDuration: 5)
+        queue.incompatibleServer = true
+        func feed(_ seq: UInt16, type: UInt8 = RtpAudioQueue.payloadTypeAudio) -> RtpaResult {
+            let rtp = RtpAudioQueue.RtpHeader(header: 0x80, packetType: type,
+                                            sequenceNumber: seq, timestamp: UInt32(seq) * 5, ssrc: 1)
+            return queue.addPacket([UInt8](repeating: 1, count: 15), rtp: rtp)
+        }
+        #expect(feed(UInt16.max) == .handleNow)
+        #expect(feed(0) == .handleNow)
+        #expect(feed(UInt16.max) == .none)
+        #expect(feed(1000) == .none)
+        #expect(feed(1001, type: RtpAudioQueue.payloadTypeFec) == .none)
+        #expect(feed(1) == .handleNow)
+        #expect(feed(1001) == .none)
+        #expect(feed(1002) == .handleNow)
+        var packet: [UInt8] = []
+        #expect(queue.getQueuedPacket(into: &packet) == nil)
+        #expect(queue.nextRtpSequenceNumber == 1003)
+    }
+
+    @Test func incompatibleFecRetainsEstablishedSequenceAndValidatesRestartCandidates() {
+        let queue = RtpAudioQueue(audioPacketDuration: 5)
+        func feed(_ seq: UInt16) -> RtpaResult {
+            let rtp = RtpAudioQueue.RtpHeader(header: 0x80, packetType: RtpAudioQueue.payloadTypeAudio,
+                                            sequenceNumber: seq, timestamp: UInt32(seq) * 5, ssrc: 1)
+            return queue.addPacket([UInt8](repeating: 1, count: 15), rtp: rtp)
+        }
+        var packet: [UInt8] = []
+        for seq: UInt16 in 0...4 where feed(seq) == .packetReady {
+            while queue.getQueuedPacket(into: &packet) != nil {}
+        }
+        #expect(queue.hasSequenceBaseline)
+        let expected = queue.nextRtpSequenceNumber
+        #expect(!queue.blocks.isEmpty)
+        queue.incompatibleServer = true
+        #expect(!queue.requiresPayloadValidation(sequence: expected))
+        #expect(!queue.requiresPayloadValidation(sequence: expected &- 1))
+        #expect(queue.requiresPayloadValidation(sequence: expected &+ 33))
+        #expect(feed(expected &- 1) == .none)
+        #expect(queue.blocks.isEmpty)
+        #expect(feed(expected) == .handleNow)
+        #expect(queue.nextRtpSequenceNumber == expected &+ 1)
+    }
+
     private static func receiver(_ sink: NativeAudioSink, encrypted: Bool = false) -> RtpAudioReceiver {
         RtpAudioReceiver(host: .ipv4(.loopback), audioPort: 0, pingPayload: [], audioPacketDuration: 5,
                          opusConfig: SdpScan.defaultOpusConfig, audioConfig: 0,

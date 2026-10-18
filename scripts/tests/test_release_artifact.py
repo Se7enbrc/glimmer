@@ -51,6 +51,12 @@ class ReleaseArtifactTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             artifact.verify(self.handoff, 'unsigned', self.manifest, '2')
 
+    def test_diagnostic_tag_is_bound_to_exact_handoff_identity(self):
+        with patch.dict(os.environ, RC_TAG='2026.10.6-rc.1-diag'):
+            self.assertEqual(artifact.identity()['RC_TAG'], '2026.10.6-rc.1-diag')
+            with self.assertRaisesRegex(ValueError, 'identity mismatch'):
+                self.verify()
+
     def test_other_run_source_repository_tag_or_attempt_fails_closed(self):
         for key, value in {'GITHUB_RUN_ID': '13', 'EXPECTED_SHA': 'b' * 40,
                            'GITHUB_REPOSITORY': 'fork/glimmer', 'RC_TAG': '2026.10.6-rc.2'}.items():

@@ -162,8 +162,11 @@ package final class ControllerHaptics: @unchecked Sendable {
     private func activate(appActive: Bool, generation: UInt64) {
         queue.async { [weak self] in
             guard let self else { return }
-            guard self.lock.withLock({ self.generation == generation }) else { return }
-            self.lock.withLock { self.feedbackEnabled = true }
+            guard self.lock.withLock({
+                guard self.generation == generation else { return false }
+                self.feedbackEnabled = true
+                return true
+            }) else { return }
             self.pendingSuspend?.cancel()
             self.pendingSuspend = nil
             self.quiesced = false

@@ -29,6 +29,10 @@ revision. Missing platform measurements remain unavailable, not healthy zeroes.
 
 ## Choose a measurement
 
+For a repeatable, detailed hitch investigation, use a manual diagnostic
+candidate and the capture procedure below. Ordinary release measurements should
+keep the smallest set of probes that answers the question.
+
 Start with the symptom and collect only the evidence you need.
 
 | Symptom                    | First measurement                                           |
@@ -43,6 +47,69 @@ Start with the symptom and collect only the evidence you need.
 Use Release builds on AC power. Hold PC, scene, codec, display, peripherals,
 network, audio cushion, Game Mode, HUD and telemetry settings constant between
 builds. Unit tests do not establish playback latency or audible equivalence.
+
+## A 15-minute diagnostic session
+
+Diagnostic candidates use the normal RC workflow with `make rc DIAGNOSTIC=1`.
+They are signed, notarized, attested GitHub prereleases named `-rc.N-diag`, with
+matching app and engine dSYMs. They never enter a Sparkle feed and cannot be
+promoted to stable. Install only the published artifact; do not rebuild it
+locally.
+
+1. Open the diagnostic app on AC power. Check Settings → Diagnostics: collection
+   defaults on in this build, but an explicit saved opt-out remains respected.
+   Existing LAN metrics export remains a separate preference.
+2. In Terminal, find the running app's PID with `pgrep -x Glimmer`. Use that PID
+   in `glimmer diagnostics capture <pid> ~/Desktop/Glimmer-diag-capture`,
+   choosing a directory that does not exist with at least 30 GiB free. Keep the
+   terminal open through export.
+3. Once `capture-manifest.json` says `recording`, start the usual stream. Press
+   **Control-B** when a hitch occurs. Stream for about 13 minutes, then stop in
+   Glimmer and leave the launcher idle for the final minute.
+4. Wait for capture and export to finish. The recording lasts 15 minutes;
+   scheduling and stack exports can take up to another 20 minutes. A failed
+   attachment or incomplete export is recorded as unavailable evidence.
+5. Find the session ID in the newest `telemetry-evidence-*.json` under
+   `~/Library/Logs/Glimmer`. Run
+   `glimmer diagnostics bundle <session-id> ~/Desktop/Glimmer-diag-capture/session-evidence`
+   before starting another stream. Read its `summary.md` alongside
+   `capture-manifest.json`.
+
+The recording preserves System Trace, waiting/running thread stacks, scheduling
+rows, recording options and before/after VM summaries. The session bundle copies
+and hashes the selected metrics, frame segments, receipt and scorecard. Bookmark
+windows report observations, not inferred causes. Copy the matching published
+symbols ZIP alongside the capture for symbolication.
+
+Capture artifacts are capped at 20 GiB, with a 2 GiB free-space reserve. Stack
+and scheduling exports have separate 2 GiB and 12 GiB limits; parsing has its
+own bounded runtime. Reaching a limit retains the available evidence and reports
+the missing portion instead of calling the capture complete.
+
+### What a diagnostic result can establish
+
+Frame sequence gaps, overflow, pruning, write failures, unclosed captures and
+changing source files make session evidence incomplete. Attempt IDs separate RTP
+timestamp reuse across reconnects. Diagnostic frame retention is 20 × 96 MiB;
+ordinary collection keeps four segments. The next session can prune old traces
+to the 300 MiB directory budget, so bundle the stopped session first. Small
+manifests remain to show what is missing until the normal 14-day age limit.
+
+Verified first/last scheduling and sample rows establish observed time bounds,
+not uninterrupted sampling or a causal stack at every bookmark. VideoToolbox's
+internal hardware execution and physical scanout remain unobserved. VM footprint
+growth alone does not prove a leak; this capture does not record allocation
+stacks. Memory categories overlap and must not be summed.
+
+These probes add overhead. Compare a matched ordinary build for performance
+acceptance; do not treat an instrumented hitch rate as the normal cost. The
+diagnostic workflow retains release security settings and does not add debugger
+entitlements to work around a failed Instruments attachment.
+
+LGTM remains the continuous metrics and trend view. Local captures provide the
+detailed evidence for a particular session; they are not automatically uploaded.
+Raw Instruments traces may include process environment and system context, so
+inspect them before sharing outside the local investigation.
 
 ## Quick start
 
@@ -646,6 +713,40 @@ Choose a template that can test your suspected bottleneck.
 | System Trace       | Locks, syscalls and scheduling stalls.                                  |
 | Network            | Socket throughput, retransmissions and starvation.                      |
 | Audio System Trace | Device/render timing alongside audible checks.                          |
+
+## Attributing decode and pacing delay
+
+Use frame identity (`rtp`) to join boundaries; file order can differ from event
+time when callbacks overlap. None of these events measures physical scanout.
+
+| Frame event                | Meaning                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `decode_output`            | Callback-entry time for a live decode reservation, status and known stage times, even if pacing later discards the frame. |
+| `decode_submit_returned`   | VideoToolbox call duration; a callback may precede this event.                                                            |
+| `decode_callback_finished` | Client callback duration, including bookkeeping and handoff work.                                                         |
+| `pacer_submitted`          | The decoded frame entered the pacing policy.                                                                              |
+| `pacer_discard`            | Explicit discard decision and reason, retaining known stage timestamps.                                                   |
+| `frame_expired`            | Unresolved tracker expiry, not a measured discard time. Replaces the older ambiguous `frame_drop` stub.                   |
+| `trace_overflow`           | Exact number of diagnostic records lost from the bounded pending buffer.                                                  |
+
+Decode histograms now ingest successful completions after startup warm-up,
+including frames subsequently discarded. Presentation histograms still describe
+enqueued frames. The separate `decode_service_ms` and `decode_wait_ms` values
+remain previous-callback overlap estimates, not hardware execution measurements.
+Use the identity-keyed events when attributing a hitch.
+
+`decoder_configuration` records requested hints, property support, setter/read
+statuses and available scalar readback once per decoder session. Thread count
+uses the platform default; an unsupported or unreadable property is not proof of
+an effective value. Compare identical scenes and configurations before claiming
+a decoder performance improvement.
+
+Frame and stage JSON formatting runs on the background trace writer. Producer
+map/counter/buffer locks and histogram work remain synchronous. The writer caps
+pending records at 10,000 and stops accepting them at final drain. Measure its
+cost with the procedure below; extra detail does not establish zero overhead.
+Receive frame timestamps still begin at userspace processing, so per-frame
+kernel arrival and within-batch processing attribution remain incomplete.
 
 ## Comparing telemetry overhead
 

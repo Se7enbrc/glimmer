@@ -14,7 +14,8 @@ extension VideoDecoder {
     /// events preserve visibility without inflating rendered FPS, drops or latency histograms.
     nonisolated func repaintFrameForGovernor(_ sampleBuffer: CMSampleBuffer) {
         // Best effort: the off-tick release path remains responsible for delivering new frames.
-        guard isStreaming, let renderer = sampleBufferRenderer else { return }
+        guard let submission = rendererSubmission() else { return }
+        let renderer = submission.renderer
         guard renderer.status != .failed else {
             recordRendererDecision(.repaintRejectedFailed, sampleBuffer: sampleBuffer)
             return
@@ -34,7 +35,7 @@ extension VideoDecoder {
             return
         }
         Self.markForImmediateDisplay(repaint)
-        renderer.enqueue(repaint)
+        guard performRendererSubmission(submission, enqueue: { $0.enqueue(repaint) }) else { return }
         recordRendererDecision(.repaintEnqueued, sampleBuffer: sampleBuffer)
     }
 

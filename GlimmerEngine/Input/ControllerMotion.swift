@@ -172,9 +172,9 @@ package final class ControllerMotion: @unchecked Sendable {
             // pad would otherwise stream constants.
             if let last = pad.lastSample[idx], last == value { continue }
             guard pad.gates[idx].admit(at: now, rateHz: pad.rates[idx]) else { continue }
-            pad.lastSample[idx] = value
-            _ = backend.sendControllerMotion(num: slot, motionType: motionType,
-                                             x: value.x, y: value.y, z: value.z)
+            let result = backend.sendControllerMotion(num: slot, motionType: motionType,
+                                                      x: value.x, y: value.y, z: value.z)
+            if result == 0 { pad.lastSample[idx] = value }
         }
     }
 

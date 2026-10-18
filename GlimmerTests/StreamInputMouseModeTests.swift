@@ -185,6 +185,51 @@ struct StreamInputMouseModeTests {
         #expect(replacement.pointer == [.button(action: 8, button: 1), .button(action: 7, button: 1)])
     }
 
+    @Test func rejectedTouchDownRetriesBeforeMoveOrRelease() throws {
+        let rig = rig()
+        defer { rig.input.stop() }
+        let registration = try #require(rig.input.registerController(descriptor))
+        let contact = ControllerInputSample(touchpad: .init(
+            primaryX: 0.4, primaryY: 0.4, secondaryX: 0, secondaryY: 0, clicked: false))
+        rig.backend.touchResult = -1
+        submit(rig.input, registration, contact)
+        #expect(rig.backend.touches.isEmpty)
+        #expect(rig.input.core.withLock { rig.input.core.touchpadStates[registration.slot]?.primary.active } == false)
+
+        rig.backend.touchResult = 0
+        submit(rig.input, registration, contact)
+        submit(rig.input, registration, .init(touchpad: .init(
+            primaryX: 0, primaryY: 0, secondaryX: 0, secondaryY: 0, clicked: false)))
+        #expect(rig.backend.touches.map(\.eventType) == [UInt8(StreamProtocol.LI_TOUCH_EVENT_DOWN),
+                                                       UInt8(StreamProtocol.LI_TOUCH_EVENT_UP)])
+        #expect(rig.backend.touches.first?.pointerId == rig.backend.touches.last?.pointerId)
+    }
+
+    @Test func rejectedTouchMoveRetriesUnchangedCoordinatesAndPreservesReleaseBarrier() throws {
+        let rig = rig()
+        defer { rig.input.stop() }
+        let registration = try #require(rig.input.registerController(descriptor))
+        submit(rig.input, registration, .init(touchpad: .init(
+            primaryX: 0.2, primaryY: 0.2, secondaryX: 0, secondaryY: 0, clicked: false)))
+        let moved = ControllerInputSample(touchpad: .init(
+            primaryX: 0.6, primaryY: 0.6, secondaryX: 0, secondaryY: 0, clicked: false))
+        rig.backend.touchResult = -1
+        submit(rig.input, registration, moved)
+        #expect(rig.backend.touches.count == 1)
+        rig.backend.touchResult = 0
+        submit(rig.input, registration, moved)
+        #expect(rig.backend.touches.last?.eventType == UInt8(StreamProtocol.LI_TOUCH_EVENT_MOVE))
+        #expect(rig.backend.touches.last?.x == 0.8)
+        rig.backend.touchUpResult = -1
+        submit(rig.input, registration, .init(touchpad: .init(
+            primaryX: 0, primaryY: 0, secondaryX: 0, secondaryY: 0, clicked: false)))
+        #expect(rig.input.core.withLock { rig.input.core.pendingTouchReleases.count } == 1)
+        rig.backend.touchUpResult = 0
+        rig.input.reconcile()
+        #expect(rig.backend.touches.last?.eventType == UInt8(StreamProtocol.LI_TOUCH_EVENT_UP))
+        #expect(rig.backend.touches.last?.x == 0.8)
+    }
+
     @Test func menuToggleKeepsFailedTouchReleaseAheadOfNewMouseClicks() throws {
         let rig = rig()
         defer { rig.input.stop() }

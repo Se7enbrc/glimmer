@@ -28,6 +28,8 @@ extension RtpAudioReceiver {
             var foreignPeerNoted = false
             while let self, !self.interrupted.isSet {
                 let count = batch.receiveOne(from: sock)
+                let receiveError = count < 0 ? errno : 0
+                guard !self.interrupted.isSet else { break }
                 let received = count > 0 ? batch.datagram(0).length : -1
                 if received >= 0, !batch.isExpectedPeer(at: 0, expected: self.destAddr,
                                                       expectedLength: self.destAddrLen) {
@@ -49,19 +51,33 @@ extension RtpAudioReceiver {
                     // its pendingDrops on the same evidence).
                     self.decodeWorker.enqueue([], count: 0, arrival: DispatchTime.now().uptimeNanoseconds)
                 } else {
-                    let err = errno
-                    if err == EAGAIN || err == EWOULDBLOCK || err == EINTR {
-                        // Poll timeout (100ms of recv silence): same quiet-socket
-                        // proof as above - whatever arrives NEXT is delayed LIVE
-                        // audio (a radio-coalesced clump), not a host backlog,
-                        // and must not be eaten by the startup gate.
-                        self.decodeWorker.enqueue([], count: 0, arrival: DispatchTime.now().uptimeNanoseconds)
-                        continue
-                    }
-                    break // socket closed (stop) or fatal
+                    if !self.handleReceiveError(receiveError) { break }
                 }
             }
         }
+    }
+
+    /// A signal interruption says nothing about backlog; only a receive timeout proves the socket was quiet.
+    func handleReceiveError(_ error: Int32) -> Bool {
+        switch receiveFailure.action(for: error) {
+        case .quiet:
+            decodeWorker.enqueue([], count: 0, arrival: DispatchTime.now().uptimeNanoseconds)
+        case .interrupted:
+            break
+        case .pressure:
+            if !loggedReceivePressure {
+                loggedReceivePressure = true
+                Diag.warn("NativeAudio receive buffer pressure errno \(error) (will keep trying)", Self.cat)
+            }
+            usleep(1_000)
+        case .failed:
+            Diag.error("NativeAudio receive failed errno \(error)", Self.cat)
+            onReceiveFailed?(error)
+            return false
+        case .stopped:
+            return false
+        }
+        return true
     }
 
     func handleDatagram(_ buf: [UInt8], count: Int, arrival: UInt64? = nil) {

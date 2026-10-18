@@ -275,7 +275,7 @@ extension FramePacer {
         liveness.lastReleaseHostTime = CFAbsoluteTimeGetCurrent()
         lock.unlock()
 
-        for _ in stale { stats.recordPresentationLateDrop() }
+        recordPresentationDiscards(stale, reason: .recovery)
         log.warning(
             """
             FramePacer self-heal: direct-drain freshest frame \
@@ -317,11 +317,13 @@ extension FramePacer {
         }
         let newest = queue.removeLast()
         let discarded = queue.count
+        let discardedFrames = queue.map(\.sampleBuffer)
+        let discardReason: FrameTimingTracker.PacerDiscardReason = presentSuppressed ? .suppressed : .recovery
         queue.removeAll(keepingCapacity: true)
         queue.append(newest)
         lock.unlock()
 
-        for _ in 0..<discarded { stats.recordPresentationLateDrop() }
+        recordPresentationDiscards(discardedFrames, reason: discardReason)
         log.info("FramePacer drop-to-newest (\(reason, privacy: .public)) discarded=\(discarded, privacy: .public)")
         OSSignposter.render.emitEvent("PacerDropToNewest", "discarded=\(discarded, privacy: .public)")
         return discarded
@@ -342,7 +344,9 @@ extension FramePacer {
             return 0
         }
         rateHintSamples = RateHintSamples()
+        presentationGeneration &+= 1
         let discarded = queue.count
+        let discardedFrames = queue.map(\.sampleBuffer)
         queue.removeAll(keepingCapacity: true)
         resetCadenceBaseLocked()
         // Drop the last-presented frame too, so a governor repaint after this flush
@@ -351,10 +355,26 @@ extension FramePacer {
         liveness.starvedTickStreak = 0
         lock.unlock()
 
-        for _ in 0..<discarded { stats.recordPresentationLateDrop() }
+        recordPresentationDiscards(discardedFrames, reason: .cleared)
         log.info("FramePacer clear-queue (\(reason, privacy: .public)) discarded=\(discarded, privacy: .public)")
         OSSignposter.render.emitEvent("PacerClearQueue", "discarded=\(discarded, privacy: .public)")
         return discarded
+    }
+
+    /// Finish any in-flight release before flushing, and retire old handoffs at the same boundary.
+    @discardableResult
+    func clearQueue(reason: String, beforeNextPresentation: () -> Void) -> Int {
+        assertLockNotHeld()
+        if DispatchQueue.getSpecific(key: pacingQueueKey) != nil {
+            let discarded = clearQueue(reason: reason)
+            beforeNextPresentation()
+            return discarded
+        }
+        return pacingQueue.sync {
+            let discarded = self.clearQueue(reason: reason)
+            beforeNextPresentation()
+            return discarded
+        }
     }
 
     /// The frozen values a starved / self-heal beat logs after unlocking. `*Ms`

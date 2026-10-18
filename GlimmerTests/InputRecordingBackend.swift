@@ -66,6 +66,16 @@ final class InputRecordingBackend: StreamingBackend {
         get { touchUpFailure.withLock { $0 } }
         set { touchUpFailure.withLock { $0 = newValue } }
     }
+    private let touchFailure = OSAllocatedUnfairLock(initialState: Int32(0))
+    var touchResult: Int32 {
+        get { touchFailure.withLock { $0 } }
+        set { touchFailure.withLock { $0 = newValue } }
+    }
+    private let motionFailure = OSAllocatedUnfairLock(initialState: Int32(0))
+    var motionResult: Int32 {
+        get { motionFailure.withLock { $0 } }
+        set { motionFailure.withLock { $0 = newValue } }
+    }
     private let stoppedControllerSends = OSAllocatedUnfairLock(initialState: [ControllerSend]())
     var controllersAtStop: [ControllerSend] { stoppedControllerSends.withLock { $0 } }
     private let controllerOrder = OSAllocatedUnfairLock(initialState: [String]())
@@ -170,6 +180,7 @@ final class InputRecordingBackend: StreamingBackend {
         num: UInt8, eventType: UInt8, touchpadIndex: UInt8,
         pointerId: UInt32, x: Float, y: Float, pressure: Float
     ) -> Int32 {
+        guard touchResult == 0 else { return touchResult }
         if eventType == UInt8(StreamProtocol.LI_TOUCH_EVENT_UP), touchUpResult != 0 { return touchUpResult }
         touchSends.withLock { $0.append(.init(num: num, eventType: eventType, pointerId: pointerId,
                                             x: x, y: y, pressure: pressure)) }
@@ -178,6 +189,7 @@ final class InputRecordingBackend: StreamingBackend {
     func sendControllerMotion(
         num: UInt8, motionType: UInt8, x: Float, y: Float, z: Float
     ) -> Int32 {
+        guard motionResult == 0 else { return motionResult }
         motionSends.withLock { $0.append(.init(num: num, motionType: motionType, x: x, y: y, z: z)) }
         return 0
     }

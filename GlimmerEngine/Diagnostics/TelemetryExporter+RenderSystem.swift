@@ -130,10 +130,7 @@ extension TelemetryRenderer {
                                     + "- the P-core-tier intent.",
                                     Double(thread.qos), labels: labels)
             }
-            builder.emit("glimmer_process_phys_footprint_bytes",
-                         "Process physical memory footprint, bytes (task_vm_info.phys_footprint, "
-                         + "or resident_size when phys_footprint is unreported).",
-                         resource.physFootprintBytes.map { Double($0) })
+            promResourceMemory(&builder, resource)
             if let onBattery = resource.onBattery {
                 builder.emit("glimmer_power_on_battery",
                              "1 if the Mac is running on battery (unplugged), else 0.",
@@ -186,5 +183,21 @@ extension TelemetryRenderer {
             "glimmer_build_info",
             "Build attribution - commit SHA + build date (value is always 1).",
             labels: [("commit", snap.buildCommit), ("date", snap.buildDate)])
+    }
+    private static func promResourceMemory(_ builder: inout PromBuilder, _ resource: ResourceSnapshot) {
+        builder.emit("glimmer_process_phys_footprint_bytes", "Kernel process physical footprint, bytes.",
+                     resource.physFootprintBytes.map { Double($0) })
+        builder.emit("glimmer_process_resident_size_bytes", "Process resident bytes; not physical footprint.",
+                     resource.residentSizeBytes.map { Double($0) })
+        builder.emit("glimmer_process_compressed_bytes", "Process compressed VM bytes.",
+                     resource.compressedBytes.map { Double($0) })
+        builder.emit("glimmer_process_internal_bytes", "Process internal VM bytes; categories overlap.",
+                     resource.internalBytes.map { Double($0) })
+        builder.emit("glimmer_process_reusable_bytes", "Process reusable VM bytes; categories overlap.",
+                     resource.reusableBytes.map { Double($0) })
+        builder.emit("glimmer_resource_sample_duration_ms", "Elapsed cost of the resource probe, milliseconds.",
+                     resource.sampleDurationMs)
+        builder.emit("glimmer_memory_probe_result", "Mach VM probe result; zero means success.",
+                     resource.memoryProbeResult.map { Double($0) })
     }
 }

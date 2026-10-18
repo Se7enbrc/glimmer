@@ -124,6 +124,21 @@ extension VideoDecoder {
         return (primaries as String, transfer as String, matrix as String)
     }
 
+    // Both retained values are immutable; callbacks may read their own snapshot concurrently.
+    struct ColorAttachmentSnapshot: @unchecked Sendable {
+        let color: VideoColorDescription
+        let colorSpace: CGColorSpace?
+    }
+
+    nonisolated func colorAttachmentSnapshot(for color: VideoColorDescription) -> ColorAttachmentSnapshot {
+        colorAttachmentCache.withLock { cached in
+            if let cached, cached.color == color { return cached }
+            let snapshot = ColorAttachmentSnapshot(color: color, colorSpace: color.makeColorSpace())
+            cached = snapshot
+            return snapshot
+        }
+    }
+
     nonisolated func attachColorAndHDRMetadata(to buffer: CVPixelBuffer, color: VideoColorDescription) {
         let changed = resolvedColor.withLock { previous in
             guard previous != color else { return false }
@@ -131,13 +146,19 @@ extension VideoDecoder {
             return true
         }
         if changed {
-            lastColorSpace = color.makeColorSpace()
             cachedHDRFormatDescription = nil
             noteColorSpaceChangeTelemetry(color.summary)
             Task { @MainActor [weak self] in self?.configureLayerColorspace() }
         }
+        let snapshot = colorAttachmentSnapshot(for: color)
+        attachColorAttachments(snapshot, to: buffer)
+    }
+
+    /// Apply the retained pair, not the cache's latest value from another callback.
+    nonisolated func attachColorAttachments(_ snapshot: ColorAttachmentSnapshot, to buffer: CVPixelBuffer) {
+        let color = snapshot.color
         CVBufferSetAttachments(buffer, color.attachments, .shouldPropagate)
-        if let space = lastColorSpace {
+        if let space = snapshot.colorSpace {
             CVBufferSetAttachment(buffer, kCVImageBufferCGColorSpaceKey, space, .shouldPropagate)
         } else {
             CVBufferRemoveAttachment(buffer, kCVImageBufferCGColorSpaceKey)

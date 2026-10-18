@@ -1,78 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TelemetryLatency.swift
-//
-//  Per-stage video latency breakdown for the opt-in telemetry rig. Captures, per
-//  frame, the monotonic timestamps at the four pipeline stages and turns them
-//  into (a) Prometheus-style HISTOGRAMS (so the exporter emits queryable
-//  p50/p95/p99 per stage via `histogram_quantile`) and (b) a PER-FRAME NDJSON
-//  trace written batched OFF the hot path. See TelemetryExporter.swift for the
-//  gate/safety contract; this file is the latency half of that rig.
-//
-//  STAGES (all captured with a cheap monotonic read - `DispatchTime.now()` wraps
-//  mach_absolute_time):
-//    * t_receive  - last packet of the frame arrived (RtpVideoQueue → the
-//                   depacketizer's `firstPacketReceiveTimeUs`, already captured).
-//    * t_assemble - depacketizer completed the access unit (reassembleFrame, the
-//                   DecodeUnit's `enqueueTimeUs`, already captured).
-//    * t_submit   - handed to VTDecompressionSessionDecodeFrame (VideoDecoder).
-//    * t_output   - VT output callback produced a CVPixelBuffer (VideoDecoder).
-//    * t_present  - renderer.enqueue (FramePacer → VideoDecoder.presentFrame).
-//  Deltas: receive→assemble, assemble→submit, submit→output (decode),
-//  output→present (pacing), and end-to-end receive→present.
-//
-//  HOT-PATH SAFETY + GATING (load-bearing - zero-overhead when OFF):
-//    * `FrameTimingTracker.shared` is nil unless the gate is on. Every stage call
-//      site is `if let tracker = FrameTimingTracker.shared { ... }`, so when OFF the
-//      cost is a single nil-optional load - NO allocation, NO lock, NO map.
-//    * When ON, ONE bounded map (keyed by the frame's rtpTimestamp, which is the
-//      only frame identity that survives the VideoToolbox boundary - frameNumber
-//      is lost once the sample's PTS is all VT propagates to its output callback)
-//      tracks in-flight frames. It is guarded by ONE os_unfair_lock - a new lock,
-//      but NOT a hot-path lock on the proven decode/pace path: the existing
-//      StatsCollector / FramePacer / depacketizer locks are untouched, and this
-//      lock is only taken on the (already off-by-default) telemetry path.
-//    * The map is bounded: stale entries (a dropped / never-presented frame) are
-//      evicted in FIFO insertion order so a leak is impossible.
-//    * The histograms are fixed-bucket atomic counters - a stage record is a
-//      branchless bucket find + one locked add. No per-frame allocation.
-//    * The per-frame NDJSON record is appended to an in-memory buffer and flushed
-//      by a ~250ms background timer - NEVER an fsync (or even a write) on the hot
-//      path.
-//
-//  SECRET-FREE: every value here is a nanosecond delta or a frame index. Nothing
-//  that could carry a secret, key, or host identity.
-//
-//  This file owns the PER-FRAME TRACKER (the bounded in-flight map, the stage
-//  records, and the trace feed). The fixed-bucket histograms it folds into are a
-//  pure move into TelemetryLatencyHistograms.swift, and the per-tick snapshot
-//  value type into TelemetryLatencySnapshot.swift, so each unit stays under the
-//  file-length budget.
-//
+// Per-frame stage timestamps share one bounded identity map. Singleton access is locked
+// even when disabled; enabled producers update counters and append bounded typed records.
+// JSON formatting and file writes run on the trace writer's background queue.
 
 import Foundation
 import os
 
 // MARK: - Per-frame timing tracker
 
-/// The bounded, gate-allocated per-frame timing map + its feeds into the
-/// histograms and the per-frame trace. `shared` is the single gate-checked
-/// instance: it is non-nil ONLY when telemetry is enabled, so the hot-path call
-/// sites pay a single optional load when off (no map, no lock, no allocation).
-///
-/// KEYING - frames are keyed by `rtpTimestamp` (the host's 90kHz capture-clock
-/// PTS). This is the only identity that survives the VideoToolbox boundary: the
-/// frameNumber is dropped once the sample is built, and all VT propagates to its
-/// output callback is the sample's PTS (`CMTimeMake(rtpTimestamp, 90000)`), which
-/// the present path also carries on the CMSampleBuffer. For low-latency game
-/// streaming (no B-frames, strictly-advancing capture clock) the rtpTimestamp is
-/// effectively unique per frame. A rtpTimestamp of 0 (older Sunshine / defensive
-/// path) is treated as "untracked" - those frames simply get no latency record.
-///
-/// `@unchecked Sendable`: the map is guarded by one `os_unfair_lock`; the
-/// histograms + trace writer are themselves Sendable.
+/// The map is lock-guarded; histogram stages and the trace writer synchronize their own state.
+/// RTP timestamps correlate frames across decode and presentation; zero is untracked.
 package final class FrameTimingTracker: @unchecked Sendable {
 
     /// The gate-checked singleton, installed by `start()` iff telemetry is on and
@@ -89,11 +28,12 @@ package final class FrameTimingTracker: @unchecked Sendable {
 
     /// Install a fresh tracker iff the gate is on, and start its trace writer.
     /// Called from the exporter's `start()`. No-op (and nothing installed) when
-    /// off, so `shared` stays nil and the hot path stays zero-cost.
+    /// off; reading `shared` still takes the lifetime-protection lock.
     package static func startIfEnabled(sessionId: String, isoStamp: String,
-                                       directory: URL) {
+                                       directory: URL, attemptID: UUID? = nil, diagnostic: Bool = false) {
         guard TelemetryGate.isEnabled else { return }
-        let tracker = FrameTimingTracker(sessionId: sessionId, traceDirectory: directory)
+        let tracker = FrameTimingTracker(sessionId: sessionId, traceDirectory: directory,
+                                         attemptID: attemptID, diagnostic: diagnostic)
         tracker.traceWriter.start(isoStamp: isoStamp)
         sharedBox.withLock { $0 = tracker }
     }
@@ -105,7 +45,7 @@ package final class FrameTimingTracker: @unchecked Sendable {
             box = nil
             return previous
         }
-        tracker?.flushRemainingDrops()
+        tracker?.finishUnresolved(reason: .sessionEnd)
         tracker?.traceWriter.stop()
     }
 
@@ -130,15 +70,9 @@ package final class FrameTimingTracker: @unchecked Sendable {
     /// episode on the video receive thread (see VideoLossEpisode).
     package let rfiRecoveryMs = LatencyHistograms.Stage(bounds: LatencyHistograms.Stage.glassToGlassBoundsMs)
 
-    /// PIPELINE CADENCE (clump forensics): inter-arrival between CONSECUTIVE
-    /// frames at three boundaries - receive (last packet), assemble
-    /// (depacketizer output), and VT output. At 120fps every stage should tick
-    /// ~8.3ms; mass below ~4ms = frames arriving in clumps, mass above ~12ms =
-    /// the matching starve. Comparing the three locates WHERE clumping is born
-    /// (wire/receive vs depacketizer vs VideoToolbox) - the measured ~14/s
-    /// over-target churn + ~3/s stale beats on a smooth wire (recv jitter
-    /// 0.3ms) made that the open question. Deltas > 1s are treated as content
-    /// gaps and skipped, not cadence.
+    /// Cadence at first processed packet, completed assembly and decoded callback entry.
+    /// Receive timestamps are userspace processing observations, not kernel arrival times.
+    /// Content gaps over one second are excluded from cadence histograms.
     package static let cadenceBoundsMs: [Double] = [
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 20, 25, 33, 50, 66, 132
     ]
@@ -197,7 +131,7 @@ package final class FrameTimingTracker: @unchecked Sendable {
     /// receive + assemble are filled at `recordAssembled` (both are already
     /// captured upstream); submit/output/present fill as the frame advances.
     /// Module-internal so the drop-stub emitter (+Trace.swift) can read it.
-    package struct Timing {
+    package struct Timing: Sendable {
 
         package init(
             frameIndex: Int32,
@@ -240,6 +174,7 @@ package final class FrameTimingTracker: @unchecked Sendable {
         package var assembledHidden = false
         package var submitNanos: UInt64 = 0
         package var outputNanos: UInt64 = 0
+        package var attemptID: String?
     }
 
     /// STARTUP WARMUP GATE (metric honesty - ingestion only). The histograms are
@@ -266,7 +201,7 @@ package final class FrameTimingTracker: @unchecked Sendable {
     /// True while still inside the post-first-present warmup grace (this onset frame
     /// is EXCLUDED from histogram ingestion). Seeds the anchor on the first call.
     /// One short lock on the already-gate-on present path; never the decode/pace path.
-    private func isWithinWarmup(presentNanos: UInt64) -> Bool {
+    func isWithinWarmup(presentNanos: UInt64) -> Bool {
         os_unfair_lock_lock(warmupLock); defer { os_unfair_lock_unlock(warmupLock) }
         if firstPresentNanos == 0 {
             firstPresentNanos = presentNanos
@@ -296,7 +231,7 @@ package final class FrameTimingTracker: @unchecked Sendable {
     package func armResumePresentTag() {
         os_unfair_lock_lock(warmupLock); resumePresentPending = true; os_unfair_lock_unlock(warmupLock)
     }
-    private func takeResumePresentTag() -> Bool {
+    func takeResumePresentTag() -> Bool {
         os_unfair_lock_lock(warmupLock); defer { os_unfair_lock_unlock(warmupLock) }
         let pending = resumePresentPending; resumePresentPending = false
         return pending
@@ -308,6 +243,7 @@ package final class FrameTimingTracker: @unchecked Sendable {
     /// Insertion order of the keys, so eviction drops the STALEST in-flight frame
     /// (a dropped / never-presented frame) when the map exceeds its bound.
     private var insertionOrder: [UInt32] = []
+    private var attemptID: String?
 
     /// Map bound. ~256 in-flight frames is far beyond the real pipeline depth
     /// (decode backlog + pacer queue are each ~tens of frames), so a healthy
@@ -347,6 +283,39 @@ package final class FrameTimingTracker: @unchecked Sendable {
         return remaining.count
     }
 
+    /// Caller drains the previous transport and pacing producers before publishing the new attempt.
+    package func beginAttempt(_ id: UUID) {
+        finishUnresolved(reason: .attemptEnd, nextAttempt: id)
+    }
+
+    /// Session boundaries account every unresolved entry, including recent and intentionally hidden frames.
+    @discardableResult
+    package func finishUnresolved(reason: UnresolvedReason, nextAttempt: UUID? = nil) -> Int {
+        os_unfair_lock_lock(mapLock)
+        let remaining = insertionOrder.compactMap { key in inFlight[key].map { (key, $0) } }
+        insertionOrder.removeAll(keepingCapacity: true)
+        inFlight.removeAll(keepingCapacity: true)
+        if let nextAttempt {
+            attemptID = nextAttempt.uuidString
+            lastReceiveNanos = 0
+            lastAssembleNanos = 0
+            lastOutputNanos = 0
+        }
+        os_unfair_lock_unlock(mapLock)
+        if let nextAttempt { traceWriter.setAttempt(nextAttempt) }
+        let stamp = now()
+        for (rtp, timing) in remaining {
+            traceWriter.appendStage(StageRecord(event: .unresolvedBoundary, rtpTimestamp: rtp,
+                uptimeNanos: stamp, timing: timing, unresolvedReason: reason), sessionId: sessionId)
+        }
+        return remaining.count
+    }
+
+    package func attemptForFrame(rtpTimestamp: UInt32) -> String? {
+        os_unfair_lock_lock(mapLock); defer { os_unfair_lock_unlock(mapLock) }
+        return inFlight[rtpTimestamp]?.attemptID
+    }
+
     /// Stage stamps (submit, output, present) read this uptime clock; tests script it and the counters.
     package let now: @Sendable () -> UInt64
     package let counters: TelemetryCounters
@@ -354,11 +323,15 @@ package final class FrameTimingTracker: @unchecked Sendable {
     /// Internal for tests; the engine only reaches a tracker through `shared`.
     package init(sessionId: String, traceDirectory: URL,
                  now: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
-                 counters: TelemetryCounters = .shared) {
+                 counters: TelemetryCounters = .shared, attemptID: UUID? = nil, diagnostic: Bool = false) {
         self.sessionId = sessionId
         self.now = now
         self.counters = counters
-        self.traceWriter = FrameTraceWriter(directory: traceDirectory)
+        self.attemptID = attemptID?.uuidString
+        self.traceWriter = FrameTraceWriter(directory: traceDirectory, sessionId: sessionId,
+                                            maxRetainedSegments: diagnostic ? 20 : FrameTraceWriter.maxTraceFiles,
+                                            now: now)
+        if let attemptID { traceWriter.setAttempt(attemptID) }
         mapLock.initialize(to: os_unfair_lock_s())
         warmupLock.initialize(to: os_unfair_lock_s())
     }
@@ -366,19 +339,14 @@ package final class FrameTimingTracker: @unchecked Sendable {
 
     // MARK: Stage records (called from the existing hot-path call sites)
 
-    /// Stage t_receive + t_assemble. Called from the depacketizer the instant a
-    /// frame's access unit is complete (VideoRtpReceiver.depacketizerDidAssemble-
-    /// Frame). Both timestamps are ALREADY captured upstream - `receiveNanos` is
-    /// the frame's last/first-packet arrival (`firstPacketReceiveTimeUs`) and
-    /// `assembleNanos` is the reassemble instant (`enqueueTimeUs`) - so this adds
-    /// no new clock read, just a map insert. Establishes the entry the later
-    /// stages look up by rtpTimestamp.
+    /// First processed packet and completed access-unit times, already captured upstream.
+    /// These userspace observations exclude kernel-to-read and earlier copy/decrypt work.
     @inlinable package func recordAssembled(rtpTimestamp: UInt32, frameIndex: Int32,
                                             receiveNanos: UInt64, assembleNanos: UInt64,
                                             frameBytes: Int32 = 0, isIDR: Bool = false,
                                             hostEncodeTenthsMs: UInt16 = 0) {
         guard rtpTimestamp != 0 else { return }
-        let timing = Timing(frameIndex: frameIndex,
+        var timing = Timing(frameIndex: frameIndex,
                             receiveNanos: receiveNanos,
                             assembleNanos: assembleNanos,
                             frameBytes: frameBytes,
@@ -386,6 +354,7 @@ package final class FrameTimingTracker: @unchecked Sendable {
                             hostEncodeMs: Double(hostEncodeTenthsMs) / 10.0,
                             assembledHidden: counters.presentSuppressed || counters.decodeGated)
         os_unfair_lock_lock(mapLock)
+        timing.attemptID = attemptID
         // Cadence deltas for the receive + assemble boundaries (clump
         // forensics). Captured under the map lock we already hold; observed
         // after unlock (the Stage has its own lock).
@@ -436,120 +405,57 @@ package final class FrameTimingTracker: @unchecked Sendable {
         }
     }
 
-    /// Stage t_submit. Called just before VTDecompressionSessionDecodeFrame
-    /// (VideoDecoder.submitSampleToVT) with one cheap monotonic read.
-    @inlinable package func recordSubmit(rtpTimestamp: UInt32) {
-        guard rtpTimestamp != 0 else { return }
-        let now = self.now()
+    /// Stamp before entering VideoToolbox; a callback may arrive before the call returns.
+    @discardableResult
+    package func recordSubmit(rtpTimestamp: UInt32) -> UInt64 {
+        let stamp = now()
+        guard rtpTimestamp != 0 else { return stamp }
         os_unfair_lock_lock(mapLock)
-        if inFlight[rtpTimestamp] != nil {
-            inFlight[rtpTimestamp]?.submitNanos = now
-        }
+        if inFlight[rtpTimestamp] != nil { inFlight[rtpTimestamp]?.submitNanos = stamp }
         os_unfair_lock_unlock(mapLock)
+        return stamp
     }
 
-    /// Stage t_output. Called from the VT output callback (VideoDecoder's
-    /// decompressionOutputCallback) with the recovered rtpTimestamp.
-    @inlinable package func recordOutput(rtpTimestamp: UInt32) {
+    /// Callback entry, before client bookkeeping. Completion timing survives a later pacer discard.
+    package func recordOutput(rtpTimestamp: UInt32, uptimeNanos: UInt64? = nil,
+                              status: Int32 = 0, flags: UInt32 = 0, decoded: Bool = true) {
         guard rtpTimestamp != 0 else { return }
-        let now = self.now()
+        let stamp = uptimeNanos ?? now()
         os_unfair_lock_lock(mapLock)
-        let prevOutput = lastOutputNanos
-        lastOutputNanos = now
-        if inFlight[rtpTimestamp] != nil {
-            inFlight[rtpTimestamp]?.outputNanos = now
+        let previous = lastOutputNanos
+        let duplicate = inFlight[rtpTimestamp]?.outputNanos != 0 && inFlight[rtpTimestamp] != nil
+        if decoded, !duplicate {
+            lastOutputNanos = max(previous, stamp)
+            if inFlight[rtpTimestamp] != nil { inFlight[rtpTimestamp]?.outputNanos = stamp }
         }
+        let timing = inFlight[rtpTimestamp]
         os_unfair_lock_unlock(mapLock)
-        observeCadence(outputCadence, prev: prevOutput, now: now)
-    }
-
-    /// Stage t_present. Called the instant the frame is enqueued to the renderer
-    /// (VideoDecoder.presentFrame). Looks up the entry, computes the five deltas,
-    /// feeds the histograms, appends the per-frame trace line, and EVICTS the
-    /// entry (so a presented frame can never leak).
-    @inlinable package func recordPresent(rtpTimestamp: UInt32) {
-        guard rtpTimestamp != 0 else { return }
-        let presentNanos = self.now()
-
-        os_unfair_lock_lock(mapLock)
-        guard let timing = inFlight.removeValue(forKey: rtpTimestamp) else {
-            os_unfair_lock_unlock(mapLock)
-            return
-        }
-        // Drop the key from the insertion order too (linear, but the array is
-        // bounded at maxInFlight and present is off the proven path).
-        if let idx = insertionOrder.firstIndex(of: rtpTimestamp) {
-            insertionOrder.remove(at: idx)
-        }
-        let hostFrameIntervalMs = hostFrameIntervalP50Ms
-        os_unfair_lock_unlock(mapLock)
-
-        // Compute the five sub-stage deltas in ms. A stage timestamp of 0 means
-        // the frame skipped that stage (shouldn't happen for a presented frame,
-        // but guard so a partial entry can't emit a garbage delta).
-        let receiveToAssemble = msBetween(timing.receiveNanos, timing.assembleNanos)
-        let assembleToSubmit = msBetween(timing.assembleNanos, timing.submitNanos)
-        let submitToOutput = msBetween(timing.submitNanos, timing.outputNanos)
-        let outputToPresent = msBetween(timing.outputNanos, presentNanos)
-        let endToEnd = msBetween(timing.receiveNanos, presentNanos)
-
-        // STARTUP WARMUP GATE (metric honesty, ingestion-only): exclude the first
-        // ~1.25s of presented (onset) frames from the CUMULATIVE histograms so the
-        // encoder-ramp / link-onset chug doesn't stay baked into the session-lifetime
-        // percentiles; the RESUME-PRESENT tag applies the same traced-not-ingested
-        // contract to the first present after un-suppress (designed hold time).
-        let resumePresent = takeResumePresentTag()
-        let warmingUp = isWithinWarmup(presentNanos: presentNanos) || resumePresent
-
-        if !warmingUp {
-            if let value = receiveToAssemble { histograms.receiveToAssemble.observe(value) }
-            if let value = assembleToSubmit { histograms.assembleToSubmit.observe(value) }
-            if let value = submitToOutput { histograms.submitToOutput.observe(value) }
-            if let value = outputToPresent { histograms.outputToPresent.observe(value) }
-            if let value = endToEnd { histograms.endToEnd.observe(value) }
-
-            // DECODE time split by frame type (signal: DECODE): the SAME submit→output
-            // decode delta, routed to the IDR or P histogram by this frame's type so
-            // the slow full-intra IDR decode doesn't blur the fast P-frame distribution
-            // (and an IDR-decode-cost spike on idle-resume stays legible). No extra
-            // clock read - reuses the value already computed above.
-            if let value = submitToOutput {
-                if timing.isIDR { histograms.decodeIDR.observe(value) } else { histograms.decodeP.observe(value) }
+        guard !duplicate else { return }
+        if decoded {
+            observeCadence(outputCadence, prev: previous, now: stamp)
+            if let timing, !timing.assembledHidden, decodeWarmupFinished(at: stamp),
+               let elapsed = msBetween(timing.submitNanos, stamp) {
+                histograms.submitToOutput.observe(elapsed)
+                if timing.isIDR { histograms.decodeIDR.observe(elapsed) } else { histograms.decodeP.observe(elapsed) }
             }
         }
+        traceWriter.appendStage(StageRecord(event: .decodeOutput, rtpTimestamp: rtpTimestamp,
+                                            uptimeNanos: stamp, timing: timing, status: status,
+                                            flags: flags, decoded: decoded), sessionId: sessionId)
+    }
 
-        // GLASS-TO-GLASS (signal 1): host capture+encode + network transit
-        // (~RTT/2) + our pipeline (receive→present == endToEnd). Each leg is
-        // independently optional - we sum only the legs we actually have so a
-        // missing host-encode measurement (repeated frame) or a not-yet-known RTT
-        // degrades the number rather than dropping it. The RTT read is the CURRENT
-        // smoothed value (the host doesn't mark per-frame transit), taken from the
-        // 1Hz-refreshed gauge; one short lock, only on this gate-on path. Computed
-        // even during warmup so the trace carries it; ingested only after warmup.
-        let glassToGlass = computeGlassToGlass(hostEncodeMs: timing.hostEncodeMs, pipelineMs: endToEnd)
-        if !warmingUp, let value = glassToGlass { histograms.glassToGlass.observe(value) }
+    private func decodeWarmupFinished(at stamp: UInt64) -> Bool {
+        os_unfair_lock_lock(warmupLock); defer { os_unfair_lock_unlock(warmupLock) }
+        return firstPresentNanos > 0 && stamp >= firstPresentNanos
+            && stamp - firstPresentNanos >= Self.warmupGraceNanos
+    }
 
-        // INPUT-TO-PHOTON estimate (signal 2): client legs + uplink + the wait for
-        // the host's next frame + this frame's glass-to-glass, once per input
-        // stamp (see the Composites split).
-        let inputToPhoton = computeInputToPhoton(
-            presentNanos: presentNanos, glassToGlassMs: glassToGlass, hostFrameIntervalMs: hostFrameIntervalMs)
-        if !warmingUp, let value = inputToPhoton { histograms.inputToPhoton.observe(value) }
-
-        traceWriter.append(renderTraceLine(TraceRecord(
-            frameIndex: timing.frameIndex,
-            rtpTimestamp: rtpTimestamp,
-            frameBytes: timing.frameBytes,
-            isIDR: timing.isIDR,
-            presentUptimeMs: Double(presentNanos) / 1_000_000.0,
-            isResumePresent: resumePresent,
-            receiveToAssemble: receiveToAssemble,
-            assembleToSubmit: assembleToSubmit,
-            submitToOutput: submitToOutput,
-            outputToPresent: outputToPresent,
-            endToEnd: endToEnd,
-            glassToGlass: glassToGlass,
-            inputToPhoton: inputToPhoton)))
+    /// Retirement is shared by enqueue and explicit discard, so expiry cannot report it twice.
+    func takeTiming(rtpTimestamp: UInt32) -> Timing? {
+        os_unfair_lock_lock(mapLock); defer { os_unfair_lock_unlock(mapLock) }
+        guard let timing = inFlight.removeValue(forKey: rtpTimestamp) else { return nil }
+        if let index = insertionOrder.firstIndex(of: rtpTimestamp) { insertionOrder.remove(at: index) }
+        return timing
     }
 
     /// Record one IDR/RFI ROUND-TRIP observation (signal: IDR-RTT). Called from
@@ -573,7 +479,7 @@ package final class FrameTimingTracker: @unchecked Sendable {
 
     /// Delta in milliseconds between two monotonic-nanosecond stamps, or nil if
     /// either is unset (0) or the delta is negative (clock skew / partial entry).
-    private func msBetween(_ start: UInt64, _ end: UInt64) -> Double? {
+    func msBetween(_ start: UInt64, _ end: UInt64) -> Double? {
         guard start != 0, end != 0, end >= start else { return nil }
         return Double(end &- start) / 1_000_000.0
     }

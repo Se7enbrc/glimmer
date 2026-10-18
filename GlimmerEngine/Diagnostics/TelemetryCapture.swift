@@ -29,6 +29,11 @@ package struct TelemetryConfiguration: Sendable {
 
     package var buildCommit = ""
     package var buildDate = ""
+    package var engineCommit = ""
+    package var buildVersion = ""
+    package var appVersion = ""
+    package var diagnosticBuild = false
+    package var attemptID: UUID?
     package var clientLabel = ""
     package var fastPingSeconds: Double = 0
     package var relaxedPingSeconds: Double = 0

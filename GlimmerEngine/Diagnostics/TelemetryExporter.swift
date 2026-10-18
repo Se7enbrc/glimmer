@@ -180,6 +180,11 @@ package final class TelemetryExporter: @unchecked Sendable {
     // Module-internal (not private) so the NDJSON sink in
     // TelemetryExporter+Sinks.swift owns open/append/close across the split.
     package var fileHandle: FileHandle?
+    package var ndjsonRowsWritten: UInt64 = 0
+    package var ndjsonRowsFailed: UInt64 = 0
+    package var ndjsonWriteFailures: UInt64 = 0
+    package var sessionReportURL: URL?
+    package var stopped = false
 
     package let sessionId: String
     /// The PC's pseudonym for this session (the `host` label), copied onto every snapshot.
@@ -298,7 +303,8 @@ package final class TelemetryExporter: @unchecked Sendable {
             // the exporter's lifecycle, session id, and ISO stamp.
             FrameTimingTracker.startIfEnabled(
                 sessionId: self.sessionId, isoStamp: self.isoFormatter.string(from: Date()),
-                directory: self.outputDirectory)
+                directory: self.outputDirectory, attemptID: self.source.capture.configuration.attemptID,
+                diagnostic: self.source.capture.configuration.diagnosticBuild)
             // One-shot CONFIG/DIAL breadcrumb first, so every session file is
             // self-describing from line 1 (see writeConfigEvent).
             self.writeConfigEvent()
@@ -335,7 +341,8 @@ package final class TelemetryExporter: @unchecked Sendable {
     /// file. Synchronous on `workQueue` so teardown order is deterministic.
     package func stop() {
         workQueue.sync { [weak self] in
-            guard let self else { return }
+            guard let self, !self.stopped else { return }
+            self.stopped = true
             // Clear the engine EVENT sink first: a row posted after this lands
             // in the pre-start pen (cleared at the next connect edge) instead
             // of racing the file close below.
@@ -357,12 +364,16 @@ package final class TelemetryExporter: @unchecked Sendable {
             // latency tracker down so it can read the final cumulative histograms
             // for the session-wide p50/p95/p99. A glanceable scorecard per run.
             self.writeSessionReport()
-            try? self.fileHandle?.close()
+            do {
+                try self.fileHandle?.synchronize()
+                try self.fileHandle?.close()
+            } catch { self.ndjsonWriteFailures &+= 1 }
             self.fileHandle = nil
             // Tear down the latency tracker: clears `FrameTimingTracker.shared`
             // (returning the hot path to zero-cost) and flushes + closes the
             // per-frame trace writer.
             FrameTimingTracker.stop()
+            self.writeEvidenceManifest()
             self.log.notice("Telemetry exporter stopped (session \(self.sessionId, privacy: .public))")
         }
     }
@@ -423,7 +434,7 @@ package final class TelemetryExporter: @unchecked Sendable {
         // each group: rollover segments, then base segments, then 1Hz, oldest-first.
         let bulky = survivors.filter {
             let name = $0.url.lastPathComponent
-            return !name.hasPrefix("glimmer-") && !name.hasPrefix("telemetry-session-")
+            return name.hasPrefix("telemetry-") && name.hasSuffix(".ndjson")
         }
         let family = { (entry: Entry) -> Int in
             let name = entry.url.lastPathComponent

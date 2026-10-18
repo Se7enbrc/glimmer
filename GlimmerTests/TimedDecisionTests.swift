@@ -59,6 +59,117 @@ final class ScriptedClock: Sendable {
 
 struct TimedLatencyTests {
 
+    @Test func decodedTimingSurvivesPacerDiscardAndCountsOnlyOnce() throws {
+        let clock = ScriptedClock()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tracker = FrameTimingTracker(sessionId: "discard", traceDirectory: directory,
+                                         now: clock.now, counters: TelemetryCounters())
+        tracker.traceWriter.start(isoStamp: "test")
+        tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        tracker.recordPresent(rtpTimestamp: 1)
+        clock.advance(.seconds(2))
+        tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos, isIDR: true)
+        let submitted = tracker.recordSubmit(rtpTimestamp: 2)
+        clock.advance(.milliseconds(4))
+        let entry = clock.nanos
+        tracker.recordOutput(rtpTimestamp: 2, uptimeNanos: entry)
+        tracker.recordOutput(rtpTimestamp: 2, uptimeNanos: entry)
+        clock.advance(.milliseconds(20))
+        tracker.recordCallbackFinished(rtpTimestamp: 2, entryNanos: entry)
+        tracker.recordPacerDiscard(rtpTimestamp: 2, reason: .trim)
+        tracker.recordPresent(rtpTimestamp: 2)
+        #expect(tracker.flushRemainingDrops(nowNanos: clock.nanos + 3_000_000_000) == 0)
+        tracker.traceWriter.stop()
+        #expect(tracker.histograms.submitToOutput.snapshot().count == 1)
+        #expect(tracker.histograms.submitToOutput.snapshot().sumMs == 4)
+        #expect(tracker.histograms.decodeIDR.snapshot().count == 1)
+        #expect(tracker.histograms.outputToPresent.snapshot().count == UInt64.zero)
+        let url = directory.appendingPathComponent("telemetry-frames-test.ndjson")
+        let rows = try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map {
+            try #require(JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])
+        }
+        let decoded = try #require(rows.first { $0["event"] as? String == "decode_output" })
+        let discarded = try #require(rows.first { $0["event"] as? String == "pacer_discard" })
+        #expect(decoded["t_ms"] as? Double == Double(entry) / 1_000_000)
+        #expect(discarded["t_output_ms"] as? Double == Double(entry) / 1_000_000)
+        #expect(discarded["t_submit_ms"] as? Double == Double(submitted) / 1_000_000)
+        #expect(discarded["reason"] as? String == "trim")
+        #expect(!rows.contains { $0["event"] as? String == "frame_expired" })
+    }
+
+    @Test func completionBoundariesSurvivePresentedTimingRetirement() throws {
+        let clock = ScriptedClock()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tracker = FrameTimingTracker(sessionId: "retired", traceDirectory: directory,
+                                         now: clock.now, counters: TelemetryCounters())
+        tracker.traceWriter.start(isoStamp: "test")
+        tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        let submitted = tracker.recordSubmit(rtpTimestamp: 1)
+        clock.advance(.milliseconds(3))
+        let entry = clock.nanos
+        tracker.recordOutput(rtpTimestamp: 1, uptimeNanos: entry)
+        tracker.recordPresent(rtpTimestamp: 1)
+        clock.advance(.milliseconds(2))
+        tracker.recordCallbackFinished(rtpTimestamp: 1, entryNanos: entry)
+        clock.advance(.milliseconds(1))
+        tracker.recordSubmitReturned(rtpTimestamp: 1, beganNanos: submitted, status: 0, flags: 0)
+        tracker.traceWriter.stop()
+        let url = directory.appendingPathComponent("telemetry-frames-test.ndjson")
+        let rows = try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map {
+            try #require(JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])
+        }
+        let callback = try #require(rows.first { $0["event"] as? String == "decode_callback_finished" })
+        let returned = try #require(rows.first { $0["event"] as? String == "decode_submit_returned" })
+        #expect(callback["duration_ms"] as? Double == 2)
+        #expect(returned["duration_ms"] as? Double == 6)
+        #expect(callback["rtp"] as? Int == 1)
+        #expect(returned["rtp"] as? Int == 1)
+        #expect(tracker.flushRemainingDrops(nowNanos: clock.nanos + 3_000_000_000) == 0)
+    }
+
+    @Test func enqueueBoundaryExcludesLaterHudAndDiagnosticWork() {
+        let clock = ScriptedClock()
+        let tracker = FrameTimingTracker(sessionId: "enqueue", traceDirectory: .temporaryDirectory,
+                                         now: clock.now, counters: TelemetryCounters())
+        tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        tracker.recordPresent(rtpTimestamp: 1)
+        clock.advance(.seconds(2))
+        tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        tracker.recordSubmit(rtpTimestamp: 2)
+        clock.advance(.milliseconds(3))
+        tracker.recordOutput(rtpTimestamp: 2)
+        clock.advance(.milliseconds(2))
+        let enqueued = clock.nanos
+        clock.advance(.milliseconds(50))
+        tracker.recordPresent(rtpTimestamp: 2, uptimeNanos: enqueued)
+        #expect(tracker.histograms.outputToPresent.snapshot().sumMs == 2)
+        #expect(tracker.histograms.submitToOutput.snapshot().count == 1)
+    }
+
+    @Test func failedDecodeCallbackDoesNotBecomeASuccessfulDecodeObservation() {
+        let clock = ScriptedClock()
+        let tracker = FrameTimingTracker(sessionId: "failure", traceDirectory: .temporaryDirectory,
+                                         now: clock.now, counters: TelemetryCounters())
+        tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        tracker.recordPresent(rtpTimestamp: 1)
+        clock.advance(.seconds(2))
+        tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2, receiveNanos: clock.nanos,
+                                assembleNanos: clock.nanos)
+        tracker.recordSubmit(rtpTimestamp: 2)
+        clock.advance(.milliseconds(4))
+        tracker.recordOutput(rtpTimestamp: 2, status: -1, flags: 2, decoded: false)
+        #expect(tracker.histograms.submitToOutput.snapshot().count == UInt64.zero)
+        #expect(tracker.histograms.decodeP.snapshot().count == UInt64.zero)
+    }
+
     /// Onset frames inside 1.25 s of the first present are traced but kept out of the histograms;
     /// the first one past it lands in every stage, glass-to-glass and input-to-photon.
     @Test func presentsPastTheWarmupFillEveryStage() {

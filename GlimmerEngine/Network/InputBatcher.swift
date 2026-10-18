@@ -371,6 +371,7 @@ final class InputBatcher: @unchecked Sendable {
     /// Re-arms while state is still dirty, as when backpressure held it back.
     private func flushTimerFired() {
         flushArmed = false
+        guard !stopped.load(ordering: .relaxed) else { return }
         flush()
         if hasPendingState { armFlush() }
     }
@@ -437,7 +438,8 @@ final class InputBatcher: @unchecked Sendable {
                 let isGyroNull = motionType == UInt8(StreamProtocol.LI_MOTION_TYPE_GYRO)
                     && s.x == 0 && s.y == 0 && s.z == 0
                 if isGyroNull {
-                    _ = enet.sendInputPacket(plaintext, channel: channel)
+                    // Keep the final stop sample until accepted or superseded by newer motion.
+                    guard enet.sendInputPacket(plaintext, channel: channel) else { continue }
                 } else {
                     _ = enet.sendInputPacketUnreliable(plaintext, channel: channel)
                 }
@@ -447,8 +449,8 @@ final class InputBatcher: @unchecked Sendable {
                 observeInputAge(from: motionStates[idx].stamp, to: drainNow, tracker: latencyTracker,
                                 deliverMs: nil)
                 motionStates[idx].dirty = false
+                motionDirtyCount -= 1
             }
-            motionDirtyCount = 0
         }
     }
 

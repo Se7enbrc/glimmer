@@ -111,7 +111,6 @@ extension FramePacer {
         Self.lastTickTargetTimestamp = target
         let hostNow = CFAbsoluteTimeGetCurrent()
         liveness.lastTickHostTime = hostNow
-        liveness.lastTickTargetMediaTime = target
         liveness.tickCount &+= 1
         if realizedInterval.isFinite, realizedInterval > 0,
            realizedInterval <= Self.maxRealizedTickDeltaSeconds {
@@ -151,6 +150,7 @@ extension FramePacer {
         // VRR targets describe the next scanout; nominal duration can remain at panel maximum.
         let releaseInterval = Self.releaseInterval(
             variable: variableRefreshEnabled, target: target, timestamp: timestamp, nominal: vsyncInterval)
+        liveness.lastTickTargetMediaTime = timestamp + releaseInterval
         lock.unlock()
 
         // DIAGNOSTIC tick-miss classifier (metric-only, no behavior change). A

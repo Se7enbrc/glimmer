@@ -56,6 +56,11 @@ struct AboutPane: View {
                         Text("Stream your gaming PC to this Mac.")
                             .font(.title3)
                             .foregroundStyle(.secondary)
+                        if DiagnosticBuild.isEnabled {
+                            Text("Diagnostic build · performance recording enabled by default")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                         Text("Version \(versionString)")
                             .font(.footnote)
                             .foregroundStyle(.tertiary)

@@ -16,6 +16,41 @@ import Testing
 
 @Suite struct ControlTransportTests {
 
+    enum TerminalOutcome: CaseIterable, Sendable {
+        case success, failure, cancellation
+    }
+
+    @Test(arguments: TerminalOutcome.allCases)
+    func terminalExchangeReleasesItsConnectionAndLongDeadline(_ outcome: TerminalOutcome) {
+        let lifetime = ControlTransport.RequestLifetime(timeout: 300)
+        let connection = NWConnection(host: .ipv4(.loopback), port: 9, using: .tcp)
+        weak var observed: ControlTransport.Exchange?
+        let attached = autoreleasepool {
+            let exchange = ControlTransport.Exchange(host: "127.0.0.1", port: 9,
+                                                      request: Data(), lifetime: lifetime)
+            observed = exchange
+            return exchange.queue.sync {
+                guard exchange.attach(connection) else { return false }
+                exchange.armBackstop(on: connection)
+                switch outcome {
+                case .success:
+                    exchange.finish(.success(.init(status: 200, body: Data())), closing: connection)
+                case .failure:
+                    exchange.finish(.failure(StreamError.hostUnreachable("test failure")), closing: connection)
+                case .cancellation:
+                    lifetime.cancel()
+                    exchange.finish(.failure(CancellationError()), closing: nil)
+                }
+                return true
+            }
+        }
+        #expect(attached)
+        #expect(connection.stateUpdateHandler == nil)
+        #expect(lifetime.detach() == nil)
+        #expect(!lifetime.attach(connection))
+        #expect(observed == nil)
+    }
+
     @Test(arguments: [Int.min, -1, 0, 65_536, Int.max])
     func invalidPortsNeverBecomeAnotherEndpoint(_ port: Int) async throws {
         do {

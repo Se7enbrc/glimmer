@@ -385,14 +385,25 @@ extension TelemetryRenderer {
         if let resource = snap.resource {
             if !resource.threads.isEmpty {
                 let entries = resource.threads.map { thread -> String in
-                    "{\"name\":\"\(jsonStringEscape(resource.threadLabel(thread)))\","
-                        + "\"cpu_percent\":\(jsonNumber(thread.cpuPercent)),"
-                        + "\"qos\":\(thread.qos),"
-                        + "\"qos_label\":\"\(jsonStringEscape(thread.qosLabel))\"}"
+                    var entry = NDJSONBuilder()
+                    entry.addString("name", resource.threadLabel(thread))
+                    entry.addCount("tid", thread.tid == 0 ? nil : thread.tid)
+                    entry.add("cpu_percent", thread.cpuPercent)
+                    entry.addInt("qos", thread.qos)
+                    entry.addString("qos_label", thread.qosLabel)
+                    return entry.line()
                 }
                 builder.addRaw(["\"threads\":[\(entries.joined(separator: ","))]"])
             }
             builder.addCount("phys_footprint_bytes", resource.physFootprintBytes)
+            builder.addCount("resident_size_bytes", resource.residentSizeBytes)
+            builder.addCount("compressed_bytes", resource.compressedBytes)
+            builder.addCount("internal_bytes", resource.internalBytes)
+            builder.addCount("reusable_bytes", resource.reusableBytes)
+            builder.addString("memory_probe_status", resource.memoryProbeStatus)
+            builder.addInt("memory_probe_kr", resource.memoryProbeResult)
+            builder.add("resource_sample_t_ms", resource.sampleUptimeMs)
+            builder.add("resource_sample_duration_ms", resource.sampleDurationMs)
             builder.addBool("on_battery", resource.onBattery)
             builder.addBool("battery_charging", resource.batteryCharging)
         }

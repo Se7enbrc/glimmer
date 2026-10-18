@@ -268,10 +268,8 @@ extension VideoDecoder {
             guard let self else { return }
             if let session = self.decompressionSession {
                 VTDecompressionSessionWaitForAsynchronousFrames(session)
-                VTDecompressionSessionInvalidate(session)
-                self.decompressionSession = nil
-                self.releaseOutputCallbackRefcon()
             }
+            self.tearDownDecompressionSession()
             self.formatDescription = nil
             self.cachedHDRFormatDescription = nil
             self.spsData = nil
@@ -279,7 +277,7 @@ extension VideoDecoder {
             self.vpsData = nil
             // HDR caches: clear so the next session starts cold.
             self.hdrMetadataStore.publish(.empty)
-            self.lastColorSpace = nil
+            self.colorAttachmentCache.withLock { $0 = nil }
             self.resolvedColor.withLock { $0 = nil }
             self.hdrEnabled = false
             self.colorProbeState.withLock { $0 = nil }
@@ -294,7 +292,7 @@ extension VideoDecoder {
         // exit fade imperceptible. macOS 15+ requires going through
         // `sampleBufferRenderer`.
         if let renderer = displayLayer?.sampleBufferRenderer {
-            renderer.flush(removingDisplayedImage: false) { }
+            flushRenderer(renderer, keepingDisplayedImage: true)
         }
 
         // Tear down the proactive layer observers (KVO + failedToDecode) before

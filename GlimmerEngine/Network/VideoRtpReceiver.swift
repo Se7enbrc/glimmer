@@ -52,6 +52,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     private var destAddr = sockaddr_storage()
     private var destAddrLen: socklen_t = 0
     private let interrupted = Atomic<Bool>(false)
+    // Stop joins admitted sink calls; the socket and ping loops remain cancellable without self-joining.
+    private let submissionLock = NSRecursiveLock()
     /// Set before start so a fatal receive error can end the connection instead of leaving frozen video.
     var onReceiveFailed: (@Sendable () -> Void)?
 
@@ -134,6 +136,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
 
     func stop() {
         interrupted.store(true, ordering: .relaxed)
+        submissionLock.lock()
+        submissionLock.unlock()
     }
 
     /// The only close: both loops hold `self` while they use the fd and exit within 100ms of stop(),
@@ -432,7 +436,9 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     // MARK: - VideoDepacketizerDelegate
 
     func depacketizerDidAssembleFrame(_ unit: DecodeUnit) {
-        guard let sink else { return }
+        submissionLock.lock()
+        defer { submissionLock.unlock() }
+        guard !interrupted.load(ordering: .relaxed), let sink else { return }
         let isIDR = unit.frameType == StreamProtocol.FRAME_TYPE_IDR
         // Latency telemetry (opt-in; nil = zero cost). t_receive + t_assemble are
         // both already captured upstream - `receiveTimeUs` is the frame's

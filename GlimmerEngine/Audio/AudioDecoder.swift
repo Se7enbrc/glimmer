@@ -41,7 +41,11 @@ public final class AudioDecoder: @unchecked Sendable {
     var packetSplice = AudioPacketSplice()
     // Graph objects are accessed only while decode admission or the graph gate is held.
     let platform: AudioPlatform
-    var halOutput: AudioOutput?
+    var halOutput: AudioOutput? {
+        didSet { outputGeneration &+= 1 }
+    }
+    // Decode admission or the graph gate protects this revision together with halOutput.
+    var outputGeneration: UInt64 = 0
     var outputGraphNeedsReconnect = false
     var inputFormat: AVAudioFormat?
     var observedRingFrames: UInt64 = 0

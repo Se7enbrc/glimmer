@@ -17,7 +17,8 @@ on:
         required: true
         type: string
       rc_tag:
-        description: Candidate tag, for example 2026.10.6-rc.1
+        description:
+          Candidate tag, for example 2026.10.8-rc.1 or 2026.10.8-rc.1-diag
         required: true
         type: string
       candidate_sha:
@@ -347,6 +348,7 @@ jobs:
         id: package
         run: scripts/ci-release.sh package
       - name: Prepare update signature and publication metadata
+        id: metadata
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
@@ -358,6 +360,7 @@ jobs:
           subject-path: |
             ${{ steps.package.outputs.dmg-path }}
             ${{ steps.package.outputs.zip-path }}
+            ${{ steps.metadata.outputs.symbols-path }}
           push-to-registry: false
           create-storage-record: false
       - name: Bind signed assets and provenance

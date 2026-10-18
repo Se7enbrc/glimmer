@@ -149,6 +149,9 @@ final class RtpAudioQueue {
     var hasSequenceBaseline = false
     var pendingSequenceRestart: UInt16?
     var incompatibleServer = false
+    private var fallbackStarted = false
+    private var fallbackPacket: [UInt8]?
+    private var fallbackMissing = 0
     /// Layout mismatches since the last size-agreeing contact (see `noteLayoutMismatch`).
     var layoutMismatchStreak = 0
     /// The mismatch warning logs once per session, not once per packet.
@@ -214,6 +217,10 @@ final class RtpAudioQueue {
     /// or proposing a larger jump requires the receiver to validate the payload.
     func requiresPayloadValidation(sequence: UInt16) -> Bool {
         guard hasSequenceBaseline else { return true }
+        if incompatibleServer {
+            return !Self.isBefore16(sequence, nextRtpSequenceNumber)
+                && sequence &- nextRtpSequenceNumber > UInt16(Self.maxQueuedBlocks * Self.dataShards)
+        }
         let base = sequence - sequence % UInt16(Self.dataShards)
         return !Self.isBefore16(base, oldestRtpBaseSequenceNumber)
             && base &- oldestRtpBaseSequenceNumber > UInt16(Self.maxQueuedBlocks * Self.dataShards)
@@ -224,13 +231,7 @@ final class RtpAudioQueue {
     /// header. Returns how the receiver should dispatch (RtpaAddPacket, :564-658).
     func addPacket(_ packet: [UInt8], rtp: RtpHeader) -> RtpaResult {
         guard packet.count >= Self.fixedRtpHeaderSize, rtp.header == 0x80 else { return .none }
-        // incompatibleServer shortcut (:565-575): feed data straight through.
-        if incompatibleServer {
-            if rtp.packetType == Self.payloadTypeAudio {
-                return .handleNow
-            }
-            return .none
-        }
+        if incompatibleServer { return addWithoutFec(packet, rtp: rtp) }
 
         guard let block = getFecBlock(packet: packet, rtp: rtp) else {
             return .none
@@ -310,6 +311,16 @@ final class RtpAudioQueue {
 
     /// Reuse the worker's output storage; true means PLC, false means assembled bytes, nil means empty.
     func getQueuedPacket(into out: inout [UInt8]) -> Bool? {
+        if incompatibleServer {
+            if fallbackMissing > 0 {
+                fallbackMissing -= 1
+                return true
+            }
+            guard let packet = fallbackPacket else { return nil }
+            fallbackPacket = nil
+            out = packet
+            return false
+        }
         // Discontinuity path: fill in placeholders for lost packets (:665-700).
         if let head = blocks.first, head.allowDiscontinuity {
             let idx = head.nextDataPacketIndex
@@ -352,6 +363,46 @@ final class RtpAudioQueue {
         }
 
         return nil
+    }
+
+    /// Without parity, sequence order still prevents replay and emits bounded loss concealment.
+    private func addWithoutFec(_ packet: [UInt8], rtp: RtpHeader) -> RtpaResult {
+        guard rtp.packetType == Self.payloadTypeAudio, fallbackPacket == nil else { return .none }
+        guard packet.count > Self.fixedRtpHeaderSize, packet.count <= Self.maxPacketSize else {
+            stats.packetCountInvalid &+= 1
+            return .none
+        }
+        if !fallbackStarted {
+            fallbackStarted = true
+            freeBlocks.append(contentsOf: blocks)
+            blocks.removeAll(keepingCapacity: true)
+            pendingSequenceRestart = nil
+            if !hasSequenceBaseline {
+                hasSequenceBaseline = true
+                nextRtpSequenceNumber = rtp.sequenceNumber
+            }
+        }
+        stats.packetCountAudio &+= 1
+        guard !Self.isBefore16(rtp.sequenceNumber, nextRtpSequenceNumber) else {
+            stats.packetCountOOS &+= 1
+            return .none
+        }
+        let gap = Int(rtp.sequenceNumber &- nextRtpSequenceNumber)
+        let boundedGap = Self.maxQueuedBlocks * Self.dataShards
+        if gap > boundedGap {
+            guard pendingSequenceRestart == rtp.sequenceNumber else {
+                pendingSequenceRestart = rtp.sequenceNumber &+ 1
+                return .none
+            }
+        }
+        pendingSequenceRestart = nil
+        nextRtpSequenceNumber = rtp.sequenceNumber &+ 1
+        oldestRtpBaseSequenceNumber = nextRtpSequenceNumber - nextRtpSequenceNumber % UInt16(Self.dataShards)
+        synchronizing = false
+        guard gap > 0, gap <= boundedGap else { return .handleNow }
+        fallbackMissing = gap
+        fallbackPacket = packet
+        return .packetReady
     }
 
     // MARK: - Ready / give-up logic

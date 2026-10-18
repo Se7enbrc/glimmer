@@ -104,7 +104,7 @@ extension RtpAudioReceiver {
     /// One probe at `due` seconds: report the silence, and say whether to re-arm (false once
     /// audio arrived or the stream stopped). The timer's body; tests call it directly.
     func audioPendingProbeFired(due: Double) -> Bool {
-        guard !interrupted.isSet, !firstRtpReceived.isSet else { return false }
+        guard !interrupted.isSet, !firstRtpReceived.isSet, receiveFailure.failure == nil else { return false }
         let pings = pingsSent.load()
         if due == Self.audioPendingProbeSeconds {
             Diag.warn("NativeAudio no audio RTP \(Int(due))s after "

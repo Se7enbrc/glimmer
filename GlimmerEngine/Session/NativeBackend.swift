@@ -15,6 +15,8 @@ package final class NativeBackend: StreamingBackend, @unchecked Sendable {
     static let logCategory = "NativeConnection"
 
     let stateLock = NSLock()
+    /// Concurrent stops join resource disposal; same-thread callback reentry sees the cleared snapshot.
+    private let teardownLock = NSRecursiveLock()
     var rtspClient: RtspClient?
     var enetChannel: EnetControlChannel?
     var videoReceiver: VideoRtpReceiver?
@@ -74,6 +76,13 @@ package final class NativeBackend: StreamingBackend, @unchecked Sendable {
     func withState<T>(_ body: () -> T) -> T {
         stateLock.lock(); defer { stateLock.unlock() }
         return body()
+    }
+
+    /// Join lifecycle work before reuse; recursive callbacks may stop without holding stateLock.
+    func withLifecycle<T>(_ body: () throws -> T) rethrows -> T {
+        teardownLock.lock()
+        defer { teardownLock.unlock() }
+        return try body()
     }
 
     /// Adoption and the stop snapshot share a lock, so every published resource
@@ -218,6 +227,8 @@ package final class NativeBackend: StreamingBackend, @unchecked Sendable {
     }
 
     package func stopConnection() {
+        teardownLock.lock()
+        defer { teardownLock.unlock() }
         Diag.info("native backend: stopConnection", Self.logCategory)
         stateLock.lock()
         interrupted = true

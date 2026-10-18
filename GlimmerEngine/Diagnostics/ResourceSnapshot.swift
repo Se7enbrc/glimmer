@@ -30,7 +30,7 @@ package struct ThreadResourceSample: Sendable {
     /// Kernel thread id (`thread_identifier_info.thread_id`) - a stable per-thread
     /// label so an unnamed thread is still a distinct, attributable series.
     package var tid: UInt64
-    /// CPU usage, percent of ONE core (so a thread pegging a core reads ~100).
+    /// Kernel decaying CPU estimate, percent of one core; not an exact one-second interval.
     package var cpuPercent: Double
     /// QoS class ordinal (the raw `qos_class_t`): 33 user-interactive, 25
     /// user-initiated, 21 default, 17 utility, 9 background, 0 unspecified. The
@@ -61,10 +61,18 @@ package struct ResourceSnapshot: Sendable {
     /// worth labelling. Capped (see `ResourceTelemetry.maxThreadsEmitted`) so a
     /// transient thread storm can't bloat a scrape - the cap keeps the busiest.
     package var threads: [ThreadResourceSample] = []
-    /// Process physical memory footprint, bytes - `task_vm_info.phys_footprint`
-    /// (the Activity Monitor "Memory" number), or `resident_size` when the kernel
-    /// leaves phys_footprint zero. nil on a probe miss.
+    /// Kernel physical footprint only; never substituted with resident bytes. These VM categories overlap.
     package var physFootprintBytes: UInt64?
+    package var residentSizeBytes: UInt64?
+    package var compressedBytes: UInt64?
+    package var internalBytes: UInt64?
+    package var reusableBytes: UInt64?
+    /// Success, partial SDK payload, or failed Mach probe. Missing fields remain absent.
+    package var memoryProbeStatus: String?
+    package var memoryProbeResult: Int?
+    /// Monotonic start and elapsed cost of the complete resource probe, in milliseconds.
+    package var sampleUptimeMs: Double?
+    package var sampleDurationMs: Double?
     /// True iff the Mac is on battery (the streaming machine unplugged - a power
     /// budget the scheduler may clamp, correlating with a perf dip). nil if the
     /// power source can't be read (e.g. a desktop with no battery → reads AC).
