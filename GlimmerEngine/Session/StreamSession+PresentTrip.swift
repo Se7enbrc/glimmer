@@ -276,11 +276,12 @@ extension StreamSession {
         // re-tripped - re-climbing from stage 1 is how a measured episode rode
         // three trip/half-heal cycles into a ~4.5s outage. Jump straight to the
         // empirically-optimal giveup (direct present, fully re-enabling later).
+        let requestKeyframe = !trip.rendererRejecting || trip.linkDead || trip.tickDeficit
         let clusterEscalate = Self.presentTripsInCluster >= 2
         if stalledFor >= StreamSession.presentGiveUpThreshold || clusterEscalate {
             // Stage 3: the cheaper paced-recovery steps didn't resume presentation,
             // so fall back to direct enqueue transiently AND run the mode-agnostic
-            // freeze recovery (flush / layer-rebuild-if-failed / IDR) - the direct
+            // freeze recovery (flush, rebuild-if-failed, conditional IDR) - the direct
             // path is now WATCHED (see tickDirectPresentWatchdog), so the fallback
             // can never become an unrecovered freeze. This is ALWAYS recoverable:
             // there is no budget and no permanent disable. We unconditionally arm
@@ -291,7 +292,7 @@ extension StreamSession {
                 let reason = clusterEscalate && stalledFor < StreamSession.presentGiveUpThreshold
                     ? "present_stall_giveup_sticky" : "present_stall_giveup"
                 dec.disablePacingFallbackToDirect(reason: reason)
-                dec.recoverPresentPath(reason: reason)
+                dec.recoverPresentPath(reason: reason, requestKeyframe: requestKeyframe)
                 self.presentStallSince = nil
                 // A giveup ENDS the episode - stamp the cluster clear-clock so a
                 // post-re-enable re-trip inside the window continues the cluster
@@ -314,24 +315,15 @@ extension StreamSession {
                 dec.pacingRebuildLink(reason: "link_dead")
             }
         } else if trip.rendererRejecting {
-            // Link ticking, gate RELEASING, renderer REFUSING (the measured
-            // consecutive-reject streak - the renderer-latch wedge). The
-            // cadence/link medicine below is the wrong organ for this class:
-            // in the field the wedge survived forceRelease AND the in-ladder
-            // link rebuild, and only the give-up's renderer flush cured it -
-            // a ~1s felt freeze that these stages could have ended in ~50ms.
-            // Run the mode-agnostic present recovery (flush; rebuild-if-failed;
-            // IDR) directly, KEEPING the pacer. Two attempts before the
-            // stage-3 give-up; bounded cost per attempt is one flush + one
-            // keyframe (8/8 IDR round-trips matched at p50 6ms on the wire),
-            // and a transient flip that cleared just before this ran makes the
-            // recovery a benign clean repaint - never a teardown.
+            // Flush the renderer queue while keeping pacing. Readiness alone does not damage
+            // VT's reference chain, so a fresh decoded image can repaint without an IDR.
+            // A simultaneous link/tick fault or a failed renderer keeps keyframe recovery.
             if self.lastPresentRecoveryStage < 1 {
                 self.lastPresentRecoveryStage = 1
-                dec.recoverPresentPath(reason: "renderer_reject")
+                dec.recoverPresentPath(reason: "renderer_reject", requestKeyframe: requestKeyframe)
             } else if self.lastPresentRecoveryStage < 2 {
                 self.lastPresentRecoveryStage = 2
-                dec.recoverPresentPath(reason: "renderer_reject_persist")
+                dec.recoverPresentPath(reason: "renderer_reject_persist", requestKeyframe: requestKeyframe)
             }
         } else {
             // Link is ticking but the gate is wedged (genuine present freeze on a

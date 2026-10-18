@@ -46,18 +46,49 @@ struct PresentRecoveryLadderTests {
         #expect(session.pacingGiveUpCount == 0)
     }
 
-    /// A refusing renderer gets the flush and keyframe, twice, before the give-up.
-    @Test func refusingRendererGetsTheFlushMedicineTwice() {
+    /// Readiness-only recovery preserves the healthy decode chain through both flush attempts.
+    @Test func refusingRendererFlushesWithoutRequestingKeyframes() {
         let (session, decoder) = makeSession()
         let refusing = trip(stalled: true, rejecting: true)
         session.escalatePresentRecovery(dec: decoder, trip: refusing, stalledFor: 0.3)
         #expect(session.lastPresentRecoveryStage == 1)
-        #expect(recorder.idrRequests == 1)
+        #expect(recorder.idrRequests == 0)
         session.escalatePresentRecovery(dec: decoder, trip: refusing, stalledFor: 0.6)
         #expect(session.lastPresentRecoveryStage == 2)
-        #expect(recorder.idrRequests == 2)
+        #expect(recorder.idrRequests == 0)
         session.escalatePresentRecovery(dec: decoder, trip: refusing, stalledFor: 0.9)
-        #expect(recorder.idrRequests == 2)
+        #expect(recorder.idrRequests == 0)
+    }
+
+    @Test func rendererOnlyGiveUpDoesNotRequestAKeyframe() {
+        let (session, decoder) = makeSession()
+        let refusing = trip(stalled: true, rejecting: true)
+        session.escalatePresentRecovery(
+            dec: decoder, trip: refusing, stalledFor: StreamSession.presentGiveUpThreshold)
+        #expect(session.lastPresentRecoveryStage == 3)
+        #expect(session.pacingGiveUpCount == 1)
+        #expect(recorder.idrRequests == 0)
+    }
+
+    @Test func rendererStarvationAtEmptyQueueDoesNotRequestAKeyframe() {
+        let (session, decoder) = makeSession()
+        let starving = StreamSession.PresentTrip(
+            linkDead: false, presentStalled: false, tickDeficit: false,
+            rendererRejecting: true, rendererStarved: true)
+        session.escalatePresentRecovery(dec: decoder, trip: starving, stalledFor: 0.3)
+        #expect(session.lastPresentRecoveryStage == 1)
+        #expect(recorder.idrRequests == 0)
+    }
+
+    @Test(arguments: [false, true])
+    func mixedTickAndRendererFaultKeepsKeyframeRecovery(giveUp: Bool) {
+        let (session, decoder) = makeSession()
+        let mixed = StreamSession.PresentTrip(
+            linkDead: false, presentStalled: false, tickDeficit: true,
+            rendererRejecting: true, rendererStarved: true)
+        session.escalatePresentRecovery(
+            dec: decoder, trip: mixed, stalledFor: giveUp ? StreamSession.presentGiveUpThreshold : 0.3)
+        #expect(recorder.idrRequests == 1)
     }
 
     @Test func deadLinkGoesStraightToDrainAndRebuild() {

@@ -186,6 +186,12 @@ public final class VideoDecoder {
         return displayAttachmentGeneration
     }
 
+    /// Do not label an old renderer's observation with a replacement layer's generation.
+    nonisolated func attachmentGeneration(for renderer: AVSampleBufferVideoRenderer) -> UInt64? {
+        displayLayerLock.lock(); defer { displayLayerLock.unlock() }
+        return _sampleBufferRenderer === renderer ? displayAttachmentGeneration : nil
+    }
+
     nonisolated let makeSession: SessionFactory
     // Decode session + format desc. Both live on the decode queue.
     nonisolated(unsafe) var decompressionSession: VTDecompressionSession?

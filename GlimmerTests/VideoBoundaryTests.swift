@@ -11,6 +11,20 @@ import Testing
 
 @MainActor
 struct VideoBoundaryTests {
+    @Test func rendererDiagnosticGenerationRejectsReplacedAndDetachedLayers() {
+        let decoder = VideoDecoder()
+        let first = AVSampleBufferDisplayLayer()
+        decoder.attach(to: first)
+        let firstGeneration = decoder.attachmentGeneration(for: first.sampleBufferRenderer)
+        #expect(firstGeneration != nil)
+        let replacement = AVSampleBufferDisplayLayer()
+        decoder.attach(to: replacement)
+        #expect(decoder.attachmentGeneration(for: first.sampleBufferRenderer) == nil)
+        #expect(decoder.attachmentGeneration(for: replacement.sampleBufferRenderer) != firstGeneration)
+        decoder.teardown()
+        #expect(decoder.attachmentGeneration(for: replacement.sampleBufferRenderer) == nil)
+    }
+
     @Test func screenRebindRejectsObsoleteTicksAndUnchangedScreensKeepTheirLink() throws {
         let fixture = DisplayFixture()
         let pacer = FramePacer(stats: StatsCollector(), configuredFps: 120)

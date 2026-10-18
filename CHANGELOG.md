@@ -50,6 +50,9 @@
 
 ### Bug fixes
 
+- Recover from a temporarily stalled video renderer without asking the PC for an
+  unnecessary keyframe. Failed renderers still use the full recovery path.
+
 - After a stream ends, Glimmer briefly waits for the PC to finish before
   offering another stream. The launcher explains the wait, and command-line
   launches wait too.

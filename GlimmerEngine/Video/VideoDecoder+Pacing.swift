@@ -199,40 +199,29 @@ extension VideoDecoder {
         return true
     }
 
-    /// MODE-AGNOSTIC present-path recovery. The single self-heal routine for a
-    /// genuine present freeze (decode healthy, nothing reaching the screen),
-    /// called from BOTH the pacer-stall path and the new direct-path stall - so
-    /// the direct enqueue path is no longer unwatched after a give-up.
-    ///
-    /// Escalation, cheapest first:
-    ///   1. Flush the renderer (clears a soft-stuck queue / requiresFlush latch).
-    ///   2. If the renderer has HARD-latched `.status == .failed` - a 4K240 HDR panel
-    ///      4K240 HDR wedge, which a bare flush does NOT always clear - rebuild
-    ///      the AVSampleBufferDisplayLayer entirely via the wired hook (fresh
-    ///      layer, re-attached overlay, re-applied colorspace) so the failed
-    ///      renderer is replaced rather than uselessly re-flushed forever.
-    ///   3. Request a fresh IDR so the (flushed or rebuilt) renderer repaints
-    ///      from a clean keyframe.
-    ///
-    /// Generalizes the old `requestIdrForPresentStall` and the inline
-    /// renderer-FAILED block in `presentFrame` into one place. MainActor -
-    /// rebuilding the layer touches AppKit. `nonisolated`-callable wrappers exist
-    /// for the pacer/decode-queue FAILED path; see `recoverPresentPathFromRenderQueue`.
+    /// Flush a stalled renderer and replace a failed layer. A readiness-only stall leaves VT's
+    /// reference chain intact, so fresh decoded frames repaint without a host keyframe.
+    /// Actual renderer failure and other recovery callers retain keyframe recovery.
     @MainActor
-    package func recoverPresentPath(reason: String) {
+    package func recoverPresentPath(reason: String, requestKeyframe: Bool = true) {
         let layer = displayLayer
         let renderer = layer?.sampleBufferRenderer
         let failed = renderer?.status == .failed
+        let needsKeyframe = requestKeyframe || failed
         log.notice("""
             Present-path self-heal (\(reason, privacy: .public)) rendererFailed=\(failed, privacy: .public) - \
-            flush\(failed ? "+rebuild" : "")+IDR
+            flush\(failed ? "+rebuild" : "") requestKeyframe=\(needsKeyframe, privacy: .public)
             """)
         OSSignposter.render.emitEvent(
             "PresentPathRecover",
-            "reason=\(reason, privacy: .public) failed=\(failed, privacy: .public)")
+            "reason=\(reason, privacy: .public) failed=\(failed, privacy: .public) keyframe=\(needsKeyframe, privacy: .public)")
 
-        // 1. Flush whatever renderer we currently have.
-        renderer?.flush()
+        // A synchronous return records the call boundary, not completed screen presentation.
+        if let renderer {
+            recordRendererRecoveryState(renderer: renderer, phase: .flushBegan)
+            renderer.flush()
+            recordRendererRecoveryState(renderer: renderer, phase: .flushReturned)
+        }
 
         // 2. If the renderer hard-failed, a flush won't clear it - swap in a
         // fresh layer. The hook re-points us at the new layer + reconfigures
@@ -241,7 +230,8 @@ extension VideoDecoder {
             _ = hook()
         }
 
-        // 3. Repaint from a clean keyframe on the live (flushed or rebuilt) path.
+        // Readiness recovery can repaint from the next already-decoded image.
+        guard needsKeyframe else { return }
         OSSignposter.decode.emitEvent("IDRRequested", "trigger=present_stall")
         backend?.requestIdrFrame()
     }
@@ -322,6 +312,10 @@ extension VideoDecoder {
         if !renderer.isReadyForMoreMediaData {
             recordRendererDecision(.frameRejectedNotReady, sampleBuffer: sampleBuffer)
             let streak = consecutiveBackpressureDrops.add(1, ordering: .relaxed).newValue
+            if streak == 1 {
+                recordRendererBackpressureTransition(
+                    renderer: renderer, sampleBuffer: sampleBuffer, rejectedFrames: streak, recovered: false)
+            }
             statsCollector.recordRendererBackpressureDrop()
             OSSignposter.render.emitEvent(
                 "BackpressureDrop",
@@ -330,33 +324,28 @@ extension VideoDecoder {
         }
 
         // Healthy frame - reset the backpressure streak and present.
-        consecutiveBackpressureDrops.store(0, ordering: .relaxed)
+        let priorRejections = consecutiveBackpressureDrops.exchange(0, ordering: .relaxed)
         // The pacer owns release timing; RTP PTS is not the renderer's Mac host clock.
         // Keep PTS for pacing and telemetry, but display this decoded image when released.
         Self.markForImmediateDisplay(sampleBuffer)
         renderer.enqueue(sampleBuffer)
         sampleHUDBackdrop(sampleBuffer)
 
-        // Latency telemetry stage t_present (opt-in; nil = zero cost): the frame
-        // just reached the renderer. Recover the rtpTimestamp key from the sample
-        // buffer's PTS, look up the in-flight entry, compute the five deltas, feed
-        // the histograms + per-frame trace, and evict. This is the only stage that
-        // mutates the histograms / appends a trace line, all off the proven path.
+        // Record enqueue latency before the additional recovery-state observations.
         if let tracker = FrameTimingTracker.shared {
             let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             let rtpTimestamp = VideoDecoder.rtpTimestamp(from: pts)
             tracker.recordPresent(rtpTimestamp: rtpTimestamp)
-            // AV-skew VIDEO half (`av_skew_ms`): the host-timeline RTP of the
-            // frame that just reached the renderer - the one-word store the
-            // deferred cross-stream derivation needed. Inside the tracker
-            // nil-check so telemetry-off sessions stay zero-cost.
+            // The last enqueued RTP supplies the video half of the optional AV-skew estimate.
             AudioVideoSkewStore.shared.noteVideoPresented(rtp: rtpTimestamp)
         }
 
-        // Stats: one renderer enqueue equals one frame handed to the OS for
-        // v-sync presentation. The OS may still drop it at composite time if
-        // it falls behind, but that's outside our visibility - moonlight-qt's
-        // "rendering FPS" row is defined the same way.
+        if priorRejections > 0 {
+            recordRendererBackpressureTransition(
+                renderer: renderer, sampleBuffer: sampleBuffer, rejectedFrames: priorRejections, recovered: true)
+        }
+
+        // Count handoffs to the OS; compositor drops are measured separately.
         statsCollector.recordRendererEnqueue()
         return true
     }

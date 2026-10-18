@@ -46,4 +46,32 @@ extension VideoDecoder {
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         tracker.recordRendererDecision(decision, rtpTimestamp: Self.rtpTimestamp(from: pts))
     }
+
+    /// Only the first refusal and next accepted frame read these additional framework properties.
+    nonisolated func recordRendererBackpressureTransition(
+        renderer: AVSampleBufferVideoRenderer, sampleBuffer: CMSampleBuffer,
+        rejectedFrames: Int, recovered: Bool
+    ) {
+        guard let tracker = FrameTimingTracker.shared else { return }
+        let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sampleBuffer, createIfNecessary: false) as? [[String: Any]]
+        let immediate = attachments?.first?[kCMSampleAttachmentKey_DisplayImmediately as String] as? Bool ?? false
+        tracker.recordRendererState(.init(
+            phase: recovered ? .backpressureEnded : .backpressureBegan,
+            status: renderer.status.rawValue, ready: recovered,
+            requiresFlush: renderer.requiresFlushToResumeDecoding,
+            generation: attachmentGeneration(for: renderer), rejectedFrames: rejectedFrames,
+            pts: CMSampleBufferGetPresentationTimeStamp(sampleBuffer), displayImmediately: immediate))
+    }
+
+    /// Capture the observed state around a flush call without asserting asynchronous completion.
+    nonisolated func recordRendererRecoveryState(
+        renderer: AVSampleBufferVideoRenderer, phase: FrameTimingTracker.RendererStatePhase
+    ) {
+        guard let tracker = FrameTimingTracker.shared else { return }
+        tracker.recordRendererState(.init(
+            phase: phase, status: renderer.status.rawValue, ready: renderer.isReadyForMoreMediaData,
+            requiresFlush: renderer.requiresFlushToResumeDecoding,
+            generation: attachmentGeneration(for: renderer)))
+    }
 }

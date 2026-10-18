@@ -7,6 +7,7 @@
 //
 
 import GlimmerEngine
+import CoreMedia
 import Foundation
 import Testing
 @testable import Glimmer
@@ -216,6 +217,48 @@ struct LatencyTrackerTests {
     }
 
     // MARK: - Trace lines
+
+    @Test func rendererStatePreservesInvalidTimingAndDoesNotConsumeLatencyFrames() throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tracker = FrameTimingTracker(sessionId: "state", traceDirectory: directory,
+                                        now: { 2_000_000_000 }, counters: TelemetryCounters())
+        tracker.traceWriter.start(isoStamp: "state")
+        tracker.recordAssembled(rtpTimestamp: 900, frameIndex: 10,
+                                receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_001)
+        tracker.recordRendererState(.init(
+            phase: .backpressureBegan, status: 1, ready: false, requiresFlush: true,
+            generation: 3, rejectedFrames: 1, pts: .invalid, displayImmediately: false))
+        tracker.recordRendererState(.init(
+            phase: .backpressureEnded, status: 1, ready: true, requiresFlush: false,
+            generation: 3, rejectedFrames: 50, pts: CMTime(value: 900, timescale: 90_000),
+            displayImmediately: true))
+        tracker.recordRendererState(.init(
+            phase: .flushReturned, status: 1, ready: false, requiresFlush: true, generation: nil))
+        tracker.traceWriter.stop()
+        let trace = try String(contentsOf: directory.appendingPathComponent("telemetry-frames-state.ndjson"),
+                               encoding: .utf8)
+        let rows = try trace.split(separator: "\n").map { line in
+            try #require(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+        }
+        try #require(rows.count == 3)
+        #expect(rows.allSatisfy { $0["event"] as? String == "renderer_state" })
+        #expect(rows.allSatisfy { $0["t_ms"] as? Double == 2000 })
+        #expect(rows[0]["phase"] as? String == "backpressure_began")
+        #expect(rows[0]["pts_numeric"] as? Bool == false)
+        #expect(rows[0]["requires_flush"] as? Bool == true)
+        #expect(rows[1]["pts_numeric"] as? Bool == true)
+        #expect(rows[1]["pts_value"] as? Int == 900)
+        #expect(rows[1]["pts_timescale"] as? Int == 90_000)
+        #expect(rows[1]["rejected_frames"] as? Int == 50)
+        #expect(rows[1]["display_immediately"] as? Bool == true)
+        #expect(rows[2]["phase"] as? String == "flush_returned")
+        #expect(rows[2]["ready"] as? Bool == false)
+        #expect(rows[2]["generation"] == nil)
+        #expect(rows[2]["pts_numeric"] == nil)
+        #expect(tracker.histograms.endToEnd.snapshot().count == UInt64.zero)
+        #expect(tracker.flushRemainingDrops(nowNanos: 4_000_000_000) == 1)
+    }
 
     @Test func rendererDecisionsRetainFrameIdentityWithoutConsumingFramesOrAddingLatency() throws {
         let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)

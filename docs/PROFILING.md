@@ -488,6 +488,24 @@ compare the PC image, decoded image and composited output from the same
 incident; a physical-display-only fault also needs an external recording.
 Current telemetry records timing and state, not those images.
 
+`renderer_state` rows capture the first refusal, the next accepted enqueue, and
+the boundaries of a present-recovery flush call. They carry renderer status,
+readiness, `requires_flush`, attachment generation and the bookmark clock. Frame
+transitions also include rejection count, raw PTS value/timescale/epoch/ flags
+and the observed `display_immediately` attachment. Compare the first rejected
+PTS with the preceding accepted frame in the same trace.
+
+The first-refusal snapshot precedes the normal immediate-display marking, so
+`display_immediately=false` there is expected. `backpressure_ended` means
+enqueue was allowed, not that pixels reached the display. On backpressure
+transitions, `ready` is the enqueue gate's result; the remaining properties are
+sampled adjacently. Flush rows sample readiness directly. `flush_returned` marks
+the API call returning, not asynchronous rendering completion. Missing
+generation means the observed renderer was already detached; missing ending rows
+may also mean teardown or trace overflow. Framework properties are adjacent
+observations, not an atomic framework snapshot. Additional property reads occur
+only at these transitions and only with telemetry enabled.
+
 ### Memory growth
 
 Separate a fresh-process baseline from reconnect history and profiling runs.
@@ -533,11 +551,11 @@ thread from a one-second CPU average:
 
 1. Select the running installed Glimmer PID. Keep the candidate and its
    signature unchanged; do not use `make profile`, which installs another build.
-2. Run a bounded System Trace with a rolling window. Replace `PID` below and use
-   a fresh output name. Run from the repository root. This records the process;
-   it does not launch it.
-3. Bookmark the hitch while still foreground. Stop the recording with Control-C
-   promptly afterward so the preceding minute remains in the window.
+2. Run a bounded, non-windowed System Trace. Replace `PID` below and use a fresh
+   output name. Run from the repository root. This records the process; it does
+   not launch it.
+3. Bookmark the hitch while still foreground. Let the one-minute recording end,
+   or stop it with Control-C after the event.
 4. Verify successful recording and retained thread-state/scheduling data. Match
    receive, pacer and decode threads to the incident; distinguish runnable but
    unscheduled time, blocked waits and active work using available stacks.
@@ -548,7 +566,7 @@ thread from a one-second CPU average:
 
 ```sh
 xcrun xctrace record --template 'System Trace' --attach PID \
-  --time-limit 5m --window 1m \
+  --time-limit 60s \
   --recording-options scripts/hitch-recording-options.json \
   --output "$HOME/Library/Developer/Xcode/Instruments/Glimmer-hitch.trace"
 ```
@@ -559,6 +577,14 @@ Points of Interest. Verify supported options with
 installed Xcode; defaults can omit the wait evidence this investigation needs.
 Unsupported or unavailable probes remain an explicit capture limitation, not a
 clean result.
+
+Validate the exported start/end times and actual rows against the bookmark. One
+Xcode 27 rolling capture saved successfully but its exported range ended before
+the incident; a successful save alone does not establish coverage. Finalization
+can take several minutes and use substantial CPU and memory. Exclude that
+interval from uninstrumented performance comparisons. If the recorder warns that
+requested and configured sampling periods differ, use the configured period when
+interpreting stack coverage.
 
 Full allocation recording answers retained-memory questions, not why a thread
 was waiting. Collect it separately when needed; retain lightweight diagnostics

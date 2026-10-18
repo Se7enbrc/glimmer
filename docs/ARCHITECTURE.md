@@ -274,8 +274,11 @@ Drop bounded work under pressure and recover when the renderer or decoder fails.
 A failed renderer needs a fresh layer, not only a flush, plus an IDR request.
 Honor `isReadyForMoreMediaData`. A continuous refusal over 250 ms can trigger
 recovery; gaps over 250 ms reset that evidence. The 90-rejection fallback
-remains. Hidden windows suppress presentation and later decode;
-audio/network/FEC continue. Uncovering uses wait-for-IDR recovery.
+remains. A readiness-only stall flushes the renderer without requesting a
+keyframe: the already-decoded images and VideoToolbox reference chain remain
+usable. Failed renderers and mixed link/tick recovery retain keyframe recovery.
+Hidden windows suppress presentation and later decode; audio/network/FEC
+continue. Uncovering uses wait-for-IDR recovery.
 
 Probe hardware support at runtime for H.264, HEVC and AV1, including supported
 8/10-bit and 4:4:4 profiles. Apply the per-PC codec preference afterward. Pass

@@ -12,9 +12,66 @@
 //  frame index - nothing that could carry a secret, key, or host identity.
 //
 
+import CoreMedia
 import Foundation
 
 extension FrameTimingTracker {
+
+    package enum RendererStatePhase: String, Sendable {
+        case backpressureBegan = "backpressure_began"
+        case backpressureEnded = "backpressure_ended"
+        case flushBegan = "flush_began"
+        case flushReturned = "flush_returned"
+    }
+
+    package struct RendererState {
+        package let phase: RendererStatePhase
+        package let status: Int
+        package let ready: Bool
+        package let requiresFlush: Bool
+        package let generation: UInt64?
+        package let rejectedFrames: Int?
+        package let pts: CMTime?
+        package let displayImmediately: Bool?
+
+        package init(phase: RendererStatePhase, status: Int, ready: Bool, requiresFlush: Bool,
+                     generation: UInt64?, rejectedFrames: Int? = nil, pts: CMTime? = nil,
+                     displayImmediately: Bool? = nil) {
+            self.phase = phase
+            self.status = status
+            self.ready = ready
+            self.requiresFlush = requiresFlush
+            self.generation = generation
+            self.rejectedFrames = rejectedFrames
+            self.pts = pts
+            self.displayImmediately = displayImmediately
+        }
+    }
+
+    /// Transition-only observations; a flush returning is not proof that pixels reached the display.
+    package func recordRendererState(_ state: RendererState) {
+        var row = TelemetryRenderer.NDJSONBuilder()
+        row.addString("session", sessionId)
+        row.addString("event", "renderer_state")
+        row.addString("phase", state.phase.rawValue)
+        row.add("t_ms", Double(now()) / 1_000_000.0)
+        row.addInt("status", state.status)
+        row.addBool("ready", state.ready)
+        row.addBool("requires_flush", state.requiresFlush)
+        row.addCount("generation", state.generation)
+        row.addInt("rejected_frames", state.rejectedFrames)
+        row.addBool("display_immediately", state.displayImmediately)
+        row.addBool("suppressed", counters.presentSuppressed)
+        row.addBool("decode_gated", counters.decodeGated)
+        if let pts = state.pts {
+            row.addInt("pts_value", Int(pts.value))
+            row.addInt("pts_timescale", Int(pts.timescale))
+            row.addInt("pts_epoch", Int(pts.epoch))
+            row.addInt("pts_flags", Int(pts.flags.rawValue))
+            row.addBool("pts_numeric", pts.isValid && pts.isNumeric)
+        }
+        traceWriter.append(row.line())
+    }
 
     package enum RendererDecision: String, CaseIterable, Sendable {
         case frameRejectedFailed = "frame_rejected_failed"

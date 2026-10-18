@@ -245,6 +245,25 @@ struct VideoDecoderLifecycleTests {
         #expect(rebuilds == 0)
     }
 
+    @Test func readinessRecoveryAcceptsDecodedFrameWithoutAKeyframe() throws {
+        let decoder = VideoDecoder()
+        decoder.attach(to: AVSampleBufferDisplayLayer())
+        defer { decoder.teardown() }
+        let backend = InputRecordingBackend()
+        decoder.setBackend(backend)
+        decoder.isStreaming = true
+        var rebuilds = 0
+        decoder.rebuildDisplayLayerHook = { rebuilds += 1; return nil }
+
+        decoder.recoverPresentPath(reason: "renderer_reject", requestKeyframe: false)
+        let presented = decoder.presentFrame(try Self.readySample())
+
+        #expect(presented)
+        #expect(backend.idrRequests == 0)
+        #expect(rebuilds == 0)
+        #expect(decoder.secondsSinceLastPresentedFrame() < 60)
+    }
+
     // MARK: RTP clock
 
     @Test func rtpTimestampComesBackFromThePTS() {
