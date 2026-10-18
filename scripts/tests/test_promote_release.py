@@ -139,6 +139,12 @@ class CandidatePromotionTests(unittest.TestCase):
             return ""
         raise AssertionError(args)
 
+    def test_diagnostic_candidate_is_rejected_before_network_or_publication(self):
+        with patch.object(PROMOTE, 'command') as command:
+            with self.assertRaisesRegex(ValueError, 'diagnostic candidates cannot be promoted'):
+                PROMOTE.source(TAG + '-diag', SHA)
+            command.assert_not_called()
+
     def test_promotes_same_tag_and_exact_verified_bytes_without_builds_or_signing(self):
         PROMOTE.prepare(TAG, SHA)
         before = {name: (PROMOTE.directory() / name).read_bytes() for name in self.assets}

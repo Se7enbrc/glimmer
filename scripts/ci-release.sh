@@ -59,8 +59,11 @@ check_context() {
         candidate:refs/heads/release-candidate|promote:refs/heads/main) ;;
         *) die "candidate requires release-candidate branch; promotion requires main" ;;
     esac
-    [[ "${RC_TAG:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$ ]] &&
+    [[ "${RC_TAG:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*(-diag)?$ ]] &&
         [ "${RC_TAG%-rc.*}" = "$VERSION" ] || die "invalid candidate tag"
+    if [[ "$RC_TAG" = *-diag ]] && [ "$OPERATION" = promote ]; then
+        die "diagnostic candidates cannot be promoted"
+    fi
     [[ "${EXPECTED_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || die "expected_sha must be a full lowercase commit SHA"
     if [ -n "${TRUSTED_TOOLING_SHA:-}" ]; then
         [[ "$TRUSTED_TOOLING_SHA" =~ ^[0-9a-f]{40}$ ]] || die "invalid trusted tooling SHA"
@@ -236,7 +239,12 @@ case "${1:-}" in
         [ "$OPERATION" = candidate ] || die "promotion never builds"
         rm -f "$BUILT" "$SIGNED" "$PACKAGED" "$ARTIFACTS"
         require_verified
+        export XCODE_XCCONFIG_FILE="${XCODE_XCCONFIG_FILE:-$RUNNER_TEMP/glimmer-release-build.xcconfig}"
+        diagnostic=NO
+        [[ "$RC_TAG" != *-diag ]] || diagnostic=YES
+        printf '\nGLIMMER_DIAGNOSTIC_BUILD = %s\n' "$diagnostic" >> "$XCODE_XCCONFIG_FILE"
         make CONFIG=Release guard-release-version clean app embed-helper
+        python3 scripts/release_candidate_kind.py "$RC_TAG" "$APP"
         check_source
         printf '%s\n' "$EXPECTED_SHA" > "$BUILT"
         ;;
@@ -249,6 +257,7 @@ case "${1:-}" in
         python3 scripts/release_artifact.py unpack "$RUNNER_TEMP/unsigned" \
             --manifest "${UNSIGNED_MANIFEST:-}" --attempt "${UNSIGNED_ATTEMPT:-}" \
             --destination "$ROOT/build/Build/Products/Release"
+        python3 scripts/release_candidate_kind.py "$RC_TAG" "$APP"
         printf '%s\n' "$EXPECTED_SHA" > "$STAMP"
         printf '%s\n' "$EXPECTED_SHA" > "$BUILT"
         ;;

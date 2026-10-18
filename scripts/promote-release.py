@@ -51,6 +51,8 @@ def directory():
 def source(tag, sha):
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("candidate SHA must be a full lowercase commit SHA")
+    if tag.endswith('-diag'):
+        raise ValueError("diagnostic candidates cannot be promoted; cut and test a normal candidate")
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*", tag):
         raise ValueError("invalid candidate tag")
     command(["git", "fetch", "--quiet", "origin", "main", f"refs/tags/{tag}",

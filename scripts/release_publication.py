@@ -17,6 +17,8 @@ import tempfile
 import time
 from release_artifact import digest, identity, seal, verify
 from release_validation import validate_bundle, validate_distribution
+from release_candidate_kind import parse_tag, validate_marker
+import release_symbols
 
 REPO = 'Se7enbrc/glimmer'
 
@@ -38,7 +40,7 @@ def version():
     short, build = values['MARKETING_VERSION'], values['CURRENT_PROJECT_VERSION']
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', short) or not re.fullmatch('[1-9][0-9]*', build):
         raise ValueError('invalid release version')
-    if os.environ['RC_TAG'].rsplit('-rc.', 1)[0] != short:
+    if parse_tag(os.environ['RC_TAG'])[0] != short:
         raise ValueError('release tag differs from source version')
     return short, build
 
@@ -47,6 +49,7 @@ def prepare(root, app):
     short, build = version()
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     validate_bundle(info, short, build)
+    validate_marker(info, os.environ['RC_TAG'])
     source_info = plistlib.loads(source_file('Glimmer/Info.plist').encode())
     if info['SUPublicEDKey'] != source_info['SUPublicEDKey']:
         raise ValueError('bundle update key differs from reviewed source')
@@ -63,9 +66,17 @@ def prepare(root, app):
     (root / 'CHANGELOG.md').write_text(source_file('CHANGELOG.md'))
     notes = command([sys.executable, 'scripts/changelog.py', '--version', short,
                      '--changelog', str(root / 'CHANGELOG.md')], 'release notes missing')
+    if parse_tag(os.environ['RC_TAG'])[2]:
+        notes = ('Diagnostic candidate: manual installation only; not eligible for stable promotion. '
+                 'Additional local telemetry is enabled by default.\n\n' + notes)
     (root / 'notes.md').write_text(notes + f'\nSource: this repo at tag {os.environ["RC_TAG"]} (GPLv3).\n')
     receipt = {'short': short, 'build': build, 'signature': match[1], 'length': match[2],
                'public_key': source_info['SUPublicEDKey']}
+    if parse_tag(os.environ['RC_TAG'])[2]:
+        receipt['diagnostic_symbols'] = release_symbols.carry(
+            Path(os.environ['RUNNER_TEMP']) / 'unsigned', root, short, identity())
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write(f'symbols-path={root / receipt["diagnostic_symbols"]["archive"]}\n')
     (root / 'release.json').write_text(json.dumps(receipt, sort_keys=True) + '\n')
 
 
@@ -86,6 +97,8 @@ def load(root):
     proof = verify(root, 'signed', os.environ['SIGNED_MANIFEST'], os.environ['SIGNED_ATTEMPT'])
     short, build = version()
     expected = {f'Glimmer-{short}.{suffix}' for suffix in ('dmg', 'zip', 'intoto.jsonl')}
+    if parse_tag(os.environ['RC_TAG'])[2]:
+        expected |= {f'Glimmer-{short}-symbols.zip', release_symbols.MANIFEST}
     if set(proof['hashes']) != expected | {'release.json', 'notes.md', 'CHANGELOG.md', 'prerequisites.json'}:
         raise ValueError('signed artifact file set mismatch')
     receipt = json.loads((root / 'release.json').read_text())
@@ -93,6 +106,11 @@ def load(root):
         raise ValueError('signed artifact version mismatch')
     if receipt.get('length') != str((root / f'Glimmer-{short}.zip').stat().st_size):
         raise ValueError('signed artifact length mismatch')
+    if parse_tag(os.environ['RC_TAG'])[2]:
+        archive = f'Glimmer-{short}-symbols.zip'
+        symbols = release_symbols.validate(root, archive, identity(os.environ['SIGNED_ATTEMPT']))
+        if receipt.get('diagnostic_symbols') != {'archive': archive, **symbols}:
+            raise ValueError('diagnostic symbol receipt mismatch')
     return receipt, proof
 
 
@@ -104,7 +122,9 @@ def validate(root):
     with tempfile.TemporaryDirectory() as directory:
         command(['ditto', '-x', '-k', str(zip_path), directory], 'cannot extract signed app')
         app = Path(directory) / 'Glimmer.app'
-        validate_bundle(plistlib.loads((app / 'Contents/Info.plist').read_bytes()), receipt['short'], receipt['build'])
+        info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+        validate_bundle(info, receipt['short'], receipt['build'])
+        validate_marker(info, os.environ['RC_TAG'])
         validate_distribution(str(app))
 
 
@@ -151,20 +171,26 @@ def publish(root):
     if actual != sha:
         raise ValueError('candidate tag moved; nothing published')
     data = release_data(tag)
-    title = f'Glimmer {receipt["short"]} (RC {tag.rsplit(".", 1)[1]})'
+    _, number, diagnostic = parse_tag(tag)
+    title = f'Glimmer {receipt["short"]} (RC {number}{" · Diagnostic" if diagnostic else ""})'
     if data is None:
         command(['gh', 'release', 'create', tag, '-R', REPO, '--draft', '--prerelease', '--latest=false',
                  '--verify-tag', '--title', title, '--notes-file', str(root / 'notes.md')], 'cannot create candidate')
         data = await_release(tag)
     if not data.get('prerelease'):
         raise ValueError('candidate is already stable; use promotion recovery')
-    paths = [root / name for name in proof['hashes'] if name.endswith(('.dmg', '.zip', '.intoto.jsonl'))]
+    paths = [root / name for name in proof['hashes']
+             if name.endswith(('.dmg', '.zip', '.intoto.jsonl')) or name == release_symbols.MANIFEST]
     upload_missing(data, paths, tag)
     if data.get('draft'):
         command(['gh', 'release', 'edit', tag, '-R', REPO, '--draft=false', '--prerelease', '--latest=false'],
                 'cannot publish candidate; retry publication')
     if await_release(tag).get('draft'):
         raise ValueError('candidate is still a draft')
+    if diagnostic:
+        Path(os.environ['RUNNER_TEMP'], 'glimmer-publication-state').write_text(
+            'diagnostic candidate published; manual installation only; no appcast entry')
+        return
     # Record visibility before the feed mutation so a late failure has an honest recovery message.
     Path(os.environ['RUNNER_TEMP'], 'glimmer-publication-state').write_text('candidate published; feed pending')
     publish_feed(root, receipt, tag)
@@ -172,6 +198,8 @@ def publish(root):
 
 
 def publish_feed(root, receipt, tag):
+    if parse_tag(tag)[2]:
+        raise ValueError('diagnostic candidates must never enter the update feed')
     command(['git', 'fetch', '--quiet', 'origin', '+refs/heads/appcast:refs/remotes/origin/appcast'],
             'candidate published; cannot fetch feed')
     head = command(['git', 'rev-parse', 'origin/appcast'], 'cannot resolve feed').strip()

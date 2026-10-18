@@ -490,7 +490,7 @@ test-scripts:
 	$(if $(COVERAGE),@python3 scripts/coverage-report.py python)
 
 rc:
-	@python3 scripts/release-candidate.py $(if $(DRY_RUN),--dry-run)
+	@python3 scripts/release-candidate.py $(if $(DRY_RUN),--dry-run) $(if $(filter 1,$(DIAGNOSTIC)),--diagnostic)
 
 # --- Auto-update publication (Sparkle) -------------------------------------
 

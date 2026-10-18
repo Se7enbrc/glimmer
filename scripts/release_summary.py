@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 from release_artifact import verify
+from release_candidate_kind import parse_tag
 
 REPO = 'Se7enbrc/glimmer'
 BASE = f'https://github.com/{REPO}'
@@ -34,6 +35,7 @@ def duration(start, end):
 
 def report(jobs, release, hashes, build):
     source, tag = os.environ['EXPECTED_SHA'], os.environ['RC_TAG']
+    diagnostic = parse_tag(tag)[2]
     lines = [f'Source: `{source}`. Candidate source: `{os.environ.get("CANDIDATE_SHA") or source}`.',
              f'Trusted main tooling: `{os.environ.get("TRUSTED_TOOLING_SHA", "unavailable")}`.',
              f'RC: `{tag}`. Build: `{build}`. Run: {os.environ["GITHUB_RUN_ID"]}, '
@@ -58,18 +60,22 @@ def report(jobs, release, hashes, build):
         lines += ['', 'Candidate draft exists; uploads may be incomplete. Retry publication only.']
     else:
         channel = 'candidate' if release.get('prerelease') else 'stable release'
-        lines += ['', f'The {channel} is public. Feed or tap may still need repair.']
+        lines += ['', ('Diagnostic candidate is public for manual installation; no appcast or tap update.'
+                      if diagnostic else f'The {channel} is public. Feed or tap may still need repair.')]
     lines += ['', 'Recovery: rerun only failed validation, publication or tap jobs from this run. '
               'They reuse the producing job\'s artifact ID, manifest digest and attempt. '
               'Never rerun build or signing to repair publication. Before compilation has succeeded, '
               'rerun failed jobs; successful verification records from earlier attempts of this run remain valid.',
               'If the source branch moved, tooling left main history, or the 30-day artifact expired, review recovery; '
-              'do not replace assets. A promotion can be dispatched from newly reviewed main with the same '
-              'candidate SHA only if its shipped inputs still match.',
+              'do not replace assets.',
+              ('Diagnostic candidates cannot be promoted. Cut and test a new ordinary candidate.' if diagnostic else
+               'A promotion can be dispatched from newly reviewed main with the same '
+               'candidate SHA only if its shipped inputs still match.'),
               f'[Candidate]({BASE}/releases/tag/{tag}) · '
               f'[Pages deployment]({BASE}/actions/workflows/pages.yml) · '
               '[Public appcast](https://se7enbrc.github.io/glimmer/appcast.xml)',
-              'Check Pages and the public feed even when a later phase failed.']
+              ('Diagnostic candidates deliberately leave the public feed unchanged.' if diagnostic else
+               'Check Pages and the public feed even when a later phase failed.')]
     return '\n'.join(lines) + '\n'
 
 
