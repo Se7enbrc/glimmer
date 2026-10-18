@@ -23,6 +23,22 @@ import os
 
 extension TelemetryExporter {
 
+    /// Bracket the first signpost on the uptime clock; its trace timestamp maps to this bounded interval.
+    package func recordClockAnchor(now: () -> UInt64 = { DispatchTime.now().uptimeNanoseconds }) {
+        guard !stopped, source.capture.configuration.diagnosticBuild else { return }
+        clockAnchorID &+= 1
+        let anchor = clockAnchorID
+        let session = sessionId
+        let before = now()
+        OSSignposter.diagnosticClock.emitEvent("GlimmerClockAnchorBegin",
+            "session=\(session, privacy: .public) anchor_id=\(anchor, privacy: .public) uptime_before_ns=\(before, privacy: .public)")
+        let after = now()
+        OSSignposter.diagnosticClock.emitEvent("GlimmerClockAnchorEnd",
+            "session=\(session, privacy: .public) anchor_id=\(anchor, privacy: .public) uptime_after_ns=\(after, privacy: .public)")
+        appendNDJSON("{\"session\":\"\(sessionId)\",\"event\":\"clock_anchor\",\"anchor_id\":\(anchor),"
+            + "\"t_ms\":\(Double(before) / 1_000_000),\"uptime_before_ns\":\(before),\"uptime_after_ns\":\(after)}")
+    }
+
     // MARK: - Session report (signal 5b) - one-shot scorecard on stop
 
     /// Build + write the one-shot session report next to the NDJSON file:

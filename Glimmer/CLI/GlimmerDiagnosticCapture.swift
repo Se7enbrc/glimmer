@@ -55,6 +55,8 @@ enum GlimmerDiagnosticCapture {
         var status = "preflight"
         var commands: [CommandResult] = []
         var coverage: Coverage?
+        var clockAlignment: ClockAlignment?
+        var preflightClockAlignment: ClockAlignment?
         var freeBytesBefore: Int64?
         var limitations = [
             "VM checkpoints are before and after recording, not automatically before and after streaming.",
@@ -76,19 +78,13 @@ enum GlimmerDiagnosticCapture {
 
     static func run(pid: Int32, output: URL, recordingOptions: URL,
                     runner: Runner = execute,
-                    spaceAvailable: @Sendable (URL) -> Int64? = freeBytes) async throws -> URL {
+                    spaceAvailable: @Sendable (URL) -> Int64? = freeBytes,
+                    progress: @Sendable (String) -> Void = { _ in }) async throws -> URL {
         guard pid > 0, pid != ProcessInfo.processInfo.processIdentifier else {
             throw CaptureError.invalidPID
         }
         let files = FileManager.default
-        guard !files.fileExists(atPath: output.path) else { throw CocoaError(.fileWriteFileExists) }
-        try files.createDirectory(at: output, withIntermediateDirectories: true,
-                                  attributes: [.posixPermissions: 0o700])
-        let options = output.appendingPathComponent("recording-options.json")
-        guard let optionsData = boundedRead(recordingOptions, maximum: 1_048_576) else {
-            throw CocoaError(.fileReadTooLarge)
-        }
-        try privateWrite(optionsData, to: options)
+        let options = try prepareOutput(output, recordingOptions: recordingOptions)
         let manifestURL = output.appendingPathComponent("capture-manifest.json")
         var manifest = Manifest(pid: pid, requestedSeconds: recordingSeconds, started: Date())
         manifest.freeBytesBefore = spaceAvailable(output)
@@ -120,15 +116,24 @@ enum GlimmerDiagnosticCapture {
             return try finish(&manifest, at: manifestURL)
         }
         _ = try await invoke("vmmap-before", "/usr/bin/vmmap", ["-summary", String(pid)], timeout: 60)
-        let before = await captureIdentity(pid: pid, output: output, label: "target-before", runner: runner)
-        manifest.commands.append(before)
-        guard before.succeeded, processIdentity(before.command.stdout) == target else {
+        guard await revalidateIdentity(target, manifest: &manifest, output: output, label: "target-before", runner: runner) else {
             manifest.status = "target_changed_before_recording"
+            return try finish(&manifest, at: manifestURL)
+        }
+        manifest.status = "clock_preflight"
+        try save(manifest, to: manifestURL)
+        guard try await preflightClock(manifest: &manifest, output: output, options: options, runner: runner) else {
+            manifest.status = "clock_preflight_failed"
+            return try finish(&manifest, at: manifestURL)
+        }
+        guard await revalidateIdentity(target, manifest: &manifest, output: output, label: "target-after-preflight", runner: runner) else {
+            manifest.status = "target_changed_during_preflight"
             return try finish(&manifest, at: manifestURL)
         }
         manifest.status = "recording"
         try save(manifest, to: manifestURL)
         let trace = output.appendingPathComponent("system.trace")
+        progress("Clock check passed. Starting the 15-minute recording now.")
         let recording = try await invoke("record", "/usr/bin/xcrun", ["xctrace", "record", "--template",
             "System Trace", "--attach", String(pid), "--time-limit", "15m", "--recording-options", options.path,
             "--output", trace.path], timeout: Double(recordingSeconds + 300))
@@ -136,9 +141,8 @@ enum GlimmerDiagnosticCapture {
             manifest.status = failureStatus(recording)
             return try finish(&manifest, at: manifestURL)
         }
-        let after = await captureIdentity(pid: pid, output: output, label: "target-after", runner: runner)
-        manifest.commands.append(after)
-        guard after.succeeded, processIdentity(after.command.stdout) == target else {
+        progress("Recording finished; exporting and validating the captured evidence.")
+        guard await revalidateIdentity(target, manifest: &manifest, output: output, label: "target-after", runner: runner) else {
             manifest.status = "target_changed_during_recording"
             return try finish(&manifest, at: manifestURL)
         }
@@ -153,6 +157,16 @@ enum GlimmerDiagnosticCapture {
         manifest.coverage = coverage
         return try await exportSamples(manifest: &manifest, manifestURL: manifestURL, output: output,
                                        trace: trace, runner: runner, spaceAvailable: spaceAvailable)
+    }
+
+    private static func prepareOutput(_ output: URL, recordingOptions: URL) throws -> URL {
+        let files = FileManager.default
+        guard !files.fileExists(atPath: output.path) else { throw CocoaError(.fileWriteFileExists) }
+        try files.createDirectory(at: output, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let options = output.appendingPathComponent("recording-options.json")
+        guard let data = boundedRead(recordingOptions, maximum: 1_048_576) else { throw CocoaError(.fileReadTooLarge) }
+        try privateWrite(data, to: options)
+        return options
     }
 
     struct ProcessIdentity: Equatable {
@@ -170,6 +184,13 @@ enum GlimmerDiagnosticCapture {
         guard fields.count == 7, let pid = Int32(fields[0]),
               fields[6].hasSuffix("/Contents/MacOS/Glimmer") else { return nil }
         return ProcessIdentity(pid: pid, start: fields[1...5].joined(separator: " "), executable: String(fields[6]))
+    }
+
+    private static func revalidateIdentity(_ target: ProcessIdentity, manifest: inout Manifest,
+                                           output: URL, label: String, runner: Runner) async -> Bool {
+        let result = await captureIdentity(pid: target.pid, output: output, label: label, runner: runner)
+        manifest.commands.append(result)
+        return result.succeeded && processIdentity(result.command.stdout) == target
     }
 
     private static func captureIdentity(pid: Int32, output: URL, label: String,
@@ -209,13 +230,15 @@ enum GlimmerDiagnosticCapture {
             }
             try save(manifest, to: manifestURL)
         }
+        try await exportClock(manifest: &manifest, output: output, trace: trace, runner: runner)
         let coverage = manifest.coverage
         let samplesCover = coversRequestedWindow(first: coverage?.firstSampleNanos, last: coverage?.lastSampleNanos)
         let scheduleCovers = coversRequestedWindow(first: coverage?.firstSchedulingNanos,
                                                    last: coverage?.lastSchedulingNanos)
         if coverage?.sampleXMLParsed == true, coverage?.schedulingRowsVerified == true,
            samplesCover, scheduleCovers {
-            manifest.status = "observed_row_bounds_verified"
+            manifest.status = manifest.clockAlignment?.status == "bounded_clock_verified"
+                ? "observed_rows_with_bounded_clock_anchors" : "clock_alignment_unverified"
         } else {
             manifest.status = "row_coverage_unverified"
         }

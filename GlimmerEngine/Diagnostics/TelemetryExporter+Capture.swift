@@ -30,6 +30,7 @@ extension TelemetryExporter {
     /// Build one snapshot from live sources, retain it for HTTP scrapes, and
     /// append the NDJSON line. On `workQueue`.
     package func capture(now: DispatchTime = .now()) {
+        recordClockAnchor()
         let stats = source.videoStats()
         let rtt = source.estimatedRtt()
         let health = source.enetHealth()

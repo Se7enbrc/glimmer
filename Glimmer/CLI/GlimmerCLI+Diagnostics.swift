@@ -18,16 +18,19 @@ extension GlimmerCLI {
                     printError("Supply a running Glimmer PID and use the installed app's diagnostic command.")
                     return Exit.usage
                 }
-                printLine("Recording 15 minutes. Exporting scheduling evidence afterward can take up to 20 minutes.")
+                printLine("Keep the stream running for the six-second clock check, followed by a 15-minute recording.")
+                printLine("Scheduling export and analysis afterward may take several more minutes.")
                 printLine("Keep this terminal open. Capture files remain local in \(output.path).")
                 let manifestURL = try await GlimmerDiagnosticCapture.run(pid: pid, output: output,
-                                                                         recordingOptions: options)
+                    recordingOptions: options, progress: { message in
+                        Task { @MainActor in printLine(message) }
+                    })
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
                 let manifest = try decoder.decode(GlimmerDiagnosticCapture.Manifest.self,
                                                    from: Data(contentsOf: manifestURL))
                 printLine("Capture: \(manifest.status). Evidence: \(manifestURL.path)")
-                return manifest.status == "observed_row_bounds_verified" ? Exit.ok : Exit.failed
+                return manifest.status == "observed_rows_with_bounded_clock_anchors" ? Exit.ok : Exit.failed
             case "bundle":
                 let source = MacTelemetryCapture.logsDirectory
                 let manifestURL = try await Task.detached(priority: .utility) {

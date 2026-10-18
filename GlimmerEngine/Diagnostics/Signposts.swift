@@ -9,6 +9,10 @@ import os
 
 extension OSSignposter {
 
+    /// System Trace captures this standard category; custom render categories may be absent.
+    package static let diagnosticClock = OSSignposter(logHandle: OSLog(
+        subsystem: "io.ugfugl.Glimmer", category: .pointsOfInterest))
+
     /// Decode path: submit-into-VT → output callback fire. One interval per
     /// frame, with the bitstream byte count as the begin message and the
     /// outcome (ok / dropped / abandoned) as the end message.

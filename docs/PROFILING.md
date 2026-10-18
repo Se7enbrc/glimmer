@@ -58,14 +58,17 @@ locally.
 
 1. Open the diagnostic app on AC power. Check Settings → Diagnostics: collection
    defaults on in this build, but an explicit saved opt-out remains respected.
-   Existing LAN metrics export remains a separate preference.
+   Existing LAN metrics export remains a separate preference. Start the usual
+   stream.
 2. In Terminal, find the running app's PID with `pgrep -x Glimmer`. Use that PID
    in `glimmer diagnostics capture <pid> ~/Desktop/Glimmer-diag-capture`,
    choosing a directory that does not exist with at least 30 GiB free. Keep the
    terminal open through export.
-3. Once `capture-manifest.json` says `recording`, start the usual stream. Press
-   **Control-B** when a hitch occurs. Stream for about 13 minutes, then stop in
-   Glimmer and leave the launcher idle for the final minute.
+3. The command first checks clock markers with a six-second trace. If that
+   fails, inspect its manifest before spending 15 minutes on an uncorrelated
+   recording. Once the full recording starts, press **Control-B** when a hitch
+   occurs. Play for about 13 minutes, then stop in Glimmer and leave the
+   launcher idle.
 4. Wait for capture and export to finish. The recording lasts 15 minutes;
    scheduling and stack exports can take up to another 20 minutes. A failed
    attachment or incomplete export is recorded as unavailable evidence.
@@ -85,6 +88,15 @@ Capture artifacts are capped at 20 GiB, with a 2 GiB free-space reserve. Stack
 and scheduling exports have separate 2 GiB and 12 GiB limits; parsing has its
 own bounded runtime. Reaching a limit retains the available evidence and reports
 the missing portion instead of calling the capture complete.
+
+Diagnostic builds emit two standard Points of Interest clock markers per
+telemetry tick. Process uptime readings bracket the first marker; exported trace
+timestamps and matching session/anchor IDs produce an explicit offset interval
+in `clock-alignment.json`. Missing markers, incompatible bounds or unknown
+metadata leave alignment unverified. This avoids relying on second-resolution
+wall-clock timestamps or assuming custom signpost categories were recorded. The
+bound applies within observed anchor coverage; gaps and clock discontinuities
+still require inspection.
 
 ### What a diagnostic result can establish
 

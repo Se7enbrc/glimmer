@@ -185,6 +185,7 @@ package final class TelemetryExporter: @unchecked Sendable {
     package var ndjsonWriteFailures: UInt64 = 0
     package var sessionReportURL: URL?
     package var stopped = false
+    package var clockAnchorID: UInt64 = 0
 
     package let sessionId: String
     /// The PC's pseudonym for this session (the `host` label), copied onto every snapshot.

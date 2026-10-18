@@ -30,12 +30,38 @@ final class TelemetrySinkTests {
         try? FileManager.default.removeItem(at: dir)
     }
 
-    private func exporter(in directory: URL? = nil, counters: TelemetryCounters = TelemetryCounters())
+    private func exporter(in directory: URL? = nil, counters: TelemetryCounters = TelemetryCounters(),
+                          diagnostic: Bool = false)
         -> TelemetryExporter {
         TelemetryExporter.captureBaselines = TelemetryExporter.CaptureBaselines()
+        var source = TelemetryListenerTests.source()
+        source.capture.configuration.diagnosticBuild = diagnostic
         return TelemetryExporter(
-            source: TelemetryListenerTests.source(), serverName: "Den PC", outputDirectory: directory ?? dir,
+            source: source, serverName: "Den PC", outputDirectory: directory ?? dir,
             counters: counters, port: 0, listenOnLAN: false)
+    }
+
+    @Test(arguments: [false, true])
+    func clockAnchorsAreDiagnosticOnlyAndBracketEmission(_ diagnostic: Bool) throws {
+        let exporter = exporter(diagnostic: diagnostic)
+        exporter.workQueue.sync {
+            exporter.openNDJSONFile()
+            var readings: [UInt64] = [100, 300]
+            exporter.recordClockAnchor(now: { readings.removeFirst() })
+            exporter.stopped = true
+            exporter.recordClockAnchor(now: { Issue.record("Stopped exporter sampled clock"); return 400 })
+            try? exporter.fileHandle?.close()
+        }
+        let rows = try rows(exporter)
+        #expect(rows.count == (diagnostic ? 1 : 0))
+        if diagnostic {
+            let anchor = try #require(rows.first)
+            #expect(anchor["event"] as? String == "clock_anchor")
+            #expect(anchor["session"] as? String == exporter.sessionId)
+            #expect(anchor["anchor_id"] as? Int == 1)
+            #expect(anchor["uptime_before_ns"] as? Int == 100)
+            #expect(anchor["uptime_after_ns"] as? Int == 300)
+        }
     }
 
     private func lines(_ exporter: TelemetryExporter) throws -> [String] {
