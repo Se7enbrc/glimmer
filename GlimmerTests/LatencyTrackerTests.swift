@@ -217,6 +217,45 @@ struct LatencyTrackerTests {
 
     // MARK: - Trace lines
 
+    @Test func rendererDecisionsRetainFrameIdentityWithoutConsumingFramesOrAddingLatency() throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let counters = TelemetryCounters()
+        let tracker = FrameTimingTracker(sessionId: "decisions", traceDirectory: directory,
+                                        now: { 1_500_000_000 }, counters: counters)
+        tracker.traceWriter.start(isoStamp: "test")
+        tracker.recordAssembled(rtpTimestamp: 900, frameIndex: 10,
+                                receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_001)
+        tracker.recordRendererDecision(.repaintEnqueued, rtpTimestamp: 900)
+        counters.setPresentSuppressed(true)
+        counters.setDecodeGated(true)
+        for decision in FrameTimingTracker.RendererDecision.allCases {
+            tracker.recordRendererDecision(decision, rtpTimestamp: 900)
+        }
+        tracker.traceWriter.stop()
+        let trace = try String(contentsOf: directory.appendingPathComponent("telemetry-frames-test.ndjson"),
+                               encoding: .utf8)
+        let rows = try trace.split(separator: "\n").map { line in
+            try #require(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+        }
+        #expect(rows.count == FrameTimingTracker.RendererDecision.allCases.count + 1)
+        #expect(rows.first?["suppressed"] as? Bool == false)
+        #expect(rows.first?["decode_gated"] as? Bool == false)
+        for (row, decision) in zip(rows.dropFirst(), FrameTimingTracker.RendererDecision.allCases) {
+            #expect(row["session"] as? String == "decisions")
+            #expect(row["event"] as? String == "renderer_decision")
+            #expect(row["decision"] as? String == decision.rawValue)
+            #expect(row["rtp"] as? UInt32 == 900)
+            #expect(row["t_ms"] as? Double == 1500)
+            #expect(row["suppressed"] as? Bool == true)
+            #expect(row["decode_gated"] as? Bool == true)
+            #expect(row["t_present_ms"] == nil)
+        }
+        #expect(tracker.histograms.endToEnd.snapshot().count == UInt64.zero)
+        #expect(tracker.histograms.outputToPresent.snapshot().count == UInt64.zero)
+        #expect(tracker.flushRemainingDrops(nowNanos: 4_000_000_000) == 1)
+    }
+
     @Test func traceLineListsEveryFieldInOrder() {
         let tracker = FrameTimingTracker(sessionId: "s1", traceDirectory: .temporaryDirectory)
         let line = tracker.renderTraceLine(FrameTimingTracker.TraceRecord(

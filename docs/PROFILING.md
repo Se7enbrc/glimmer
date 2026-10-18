@@ -12,6 +12,21 @@ changing engine defaults. For a user bug report, start with
 See [current performance validation](PERFORMANCE_VALIDATION.md) for GPU power,
 kernel receive timing, audio silence, refocus and display-rate investigations.
 
+## One diagnostic contract across clients
+
+`GlimmerEngine/Diagnostics` owns event meanings, units, clocks, session
+identity, serialization and bounded retention. Mac and iOS adapters supply
+platform facts; they must not redefine engine counters or maintain another
+telemetry writer. Test shared record changes in the engine boundary, including
+absent probes.
+
+Both clients use the shared recorder today. External clients still lack public
+bookmark and build-identity inputs; the default configuration leaves identity
+empty. Before claiming cross-client parity, expose these through the shared
+session API and include app revision, resolved engine revision and record schema
+in exported evidence. Do not substitute the app revision for an unknown engine
+revision. Missing platform measurements remain unavailable, not healthy zeroes.
+
 ## Choose a measurement
 
 Start with the symptom and collect only the evidence you need.
@@ -438,6 +453,12 @@ trial for audio and input, and retain listening/bookmark notes.
 Match bookmarks to nearby input and network events using the shared `t_ms`
 clock.
 
+Press Control-B while the stream is still foreground, then switch apps to report
+the problem. Mac bookmarks capture window, layer, overlay and HDR state at the
+key press in the session log (`BOOKMARK context t_ms=…`). The bookmark preserves
+that monotonic time and wall-clock date across the asynchronous session/file
+queues. A later hidden-window sample does not describe the earlier incident.
+
 Input traces can drop rows under disk pressure and prune old segments. Missing
 rows do not prove the PC generated an event, especially for sampled motion or
 input types that are never recorded.
@@ -451,6 +472,98 @@ jq -c --argjson bm "$bm" 'select((.event // "" | startswith("input_"))
     and .t_ms > $bm - 2000 and .t_ms <= $bm)' telemetry-frames-SESSION*.ndjson |
     jq -sc 'sort_by(.t_ms)[]'
 ```
+
+### White bands or other image artifacts
+
+Frame trace `renderer_decision` events identify repaint submissions, failed or
+backpressured submissions, and repaint-copy failures. They include `rtp`,
+`t_ms`, `suppressed` and `decode_gated`. Repaints reuse an image and never count
+as a new rendered frame or latency observation. Match their RTP identity to
+nearby frame rows; missing rows can also mean trace overflow or segment pruning.
+
+`t_present_ms` means the image was handed to `AVSampleBufferVideoRenderer`. It
+does not prove which pixels reached the display. Healthy transport, decode and
+renderer counters cannot rule out a one-frame white band. To locate that fault,
+compare the PC image, decoded image and composited output from the same
+incident; a physical-display-only fault also needs an external recording.
+Current telemetry records timing and state, not those images.
+
+### Memory growth
+
+Separate a fresh-process baseline from reconnect history and profiling runs.
+Compare active-stream and post-stop footprint, then use Allocations generations
+and allocation stacks to identify retained objects. A large footprint alone does
+not establish a leak. Verify that Instruments actually attached and recorded
+allocations; an output trace directory after an attach failure is no evidence of
+a clean heap. Keep instrumented intervals out of baseline CPU and power
+comparisons.
+
+### Wired hitches and local thread stalls
+
+Keep telemetry and frame traces enabled. A wired route does not rule out a
+client stall; profiler overhead also cannot explain incidents recorded before
+profiling began. Correlate the bookmark with every stage before assigning cause.
+
+`receive_gap` rows and `ReceiveGap` signposts identify the receive thread and
+the observation's monotonic `t_ms`, aligned with frame traces. The NDJSON `ts`
+is the writer's time; use `t_ms` when the writer itself was delayed. Reports are
+limited to one per socket per five seconds; `reports_suppressed` counts
+additional qualifying gaps since the preceding report. Unreported gaps after the
+final report are not flushed at stop; retain the per-second histograms too.
+`kind=split delay` means the read interval exceeded 50 ms while neither the
+arrival gap nor queued age individually did; it must not be labeled a local
+stall.
+
+| Evidence                      | What it establishes                                                                                                                                  |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `queued_ms`                   | Time from kernel arrival to return from receive. Large values establish local delay.                                                                 |
+| `kernel_gap_ms`               | Arrival separation for these adjacent timestamped datagrams; keep it alongside local delay.                                                          |
+| `receive_call_ms`             | Wall time from immediately before the current receive syscall to immediately after it. Includes waiting and descheduling, not just kernel execution. |
+| `between_calls_ms`            | Wall time from the previous receive return to the current call, including packet processing and descheduling.                                        |
+| `thread_id`, `StreamBookmark` | Correlation with System Trace threads and the original bookmark time.                                                                                |
+
+Call timings describe the latest receive attempt, including a preceding failed
+attempt or timeout; they do not necessarily sum to the gap between valid peer
+packets. Missing/invalid clocks and failed queue probes are `null`, never zero.
+The two socket paths share this implementation. One extra clock read per receive
+call adds no per-packet app boundary, sampling timer or stack walk.
+
+For the next recurrence, record scheduling history rather than infer a blocked
+thread from a one-second CPU average:
+
+1. Select the running installed Glimmer PID. Keep the candidate and its
+   signature unchanged; do not use `make profile`, which installs another build.
+2. Run a bounded System Trace with a rolling window. Replace `PID` below and use
+   a fresh output name. Run from the repository root. This records the process;
+   it does not launch it.
+3. Bookmark the hitch while still foreground. Stop the recording with Control-C
+   promptly afterward so the preceding minute remains in the window.
+4. Verify successful recording and retained thread-state/scheduling data. Match
+   receive, pacer and decode threads to the incident; distinguish runnable but
+   unscheduled time, blocked waits and active work using available stacks.
+5. Retain the trace, session log, telemetry, frame trace and exact build
+   identity. Record unavailable scheduling/stacks explicitly; a failed
+   attachment proves nothing about the app. Do not change signing or system
+   protections to retry without separate authorization.
+
+```sh
+xcrun xctrace record --template 'System Trace' --attach PID \
+  --time-limit 5m --window 1m \
+  --recording-options scripts/hitch-recording-options.json \
+  --output "$HOME/Library/Developer/Xcode/Instruments/Glimmer-hitch.trace"
+```
+
+The options request waiting-thread, context-switch and kernel stacks alongside
+Points of Interest. Verify supported options with
+`xcrun xctrace record --template 'System Trace' --show-recording-options` on the
+installed Xcode; defaults can omit the wait evidence this investigation needs.
+Unsupported or unavailable probes remain an explicit capture limitation, not a
+clean result.
+
+Full allocation recording answers retained-memory questions, not why a thread
+was waiting. Collect it separately when needed; retain lightweight diagnostics
+throughout both trials. A System Trace is also instrumented: compare the same
+scene without it before claiming normal playback performance or overhead.
 
 ### Wi-Fi gaps
 

@@ -79,7 +79,7 @@ struct FramePacerHandoffTests {
 
 @MainActor
 struct VideoRendererTimingTests {
-    @Test func releasedDecodedImageDisplaysImmediatelyWithoutRetiming() throws {
+    @Test func newFrameAndGovernorRepaintsPreservePTSButCountOnlyNewFrames() throws {
         let decoder = VideoDecoder()
         let layer = AVSampleBufferDisplayLayer()
         decoder.attach(to: layer)
@@ -110,6 +110,11 @@ struct VideoRendererTimingTests {
         #expect(entry[kCMSampleAttachmentKey_DisplayImmediately as String] as? Bool == true)
         #expect(CMSampleBufferGetPresentationTimeStamp(buffer) == hostPTS)
         #expect(CMSampleBufferGetOutputPresentationTimeStamp(buffer) == hostPTS)
+        #expect(CMSampleBufferGetImageBuffer(buffer) === pixelBuffer)
+        #expect(decoder.statsCollector.renderedFrames == 1)
+        for _ in 0..<3 { decoder.repaintFrameForGovernor(buffer) }
+        #expect(decoder.statsCollector.renderedFrames == 1)
+        #expect(CMSampleBufferGetPresentationTimeStamp(buffer) == hostPTS)
         #expect(CMSampleBufferGetImageBuffer(buffer) === pixelBuffer)
     }
 }

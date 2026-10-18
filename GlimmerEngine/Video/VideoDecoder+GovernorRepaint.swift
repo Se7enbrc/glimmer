@@ -1,14 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  VideoDecoder+GovernorRepaint.swift
-//
-//  The governor-repaint hook for the frame pacer's tick-deficit degraded mode
-//  (FramePacer+TickDeficit.swift). Split out of VideoDecoder+API.swift to keep
-//  that file under the length limit; this is the single stats-silent enqueue
-//  path the pacer's `onDeficitRepaint` drives.
-//
+// Repaint the last frame when display callbacks collapse, without counting a new video frame.
 
 import AVFoundation
 import CoreMedia
@@ -16,38 +9,41 @@ import Foundation
 
 extension VideoDecoder {
 
-    /// GOVERNOR REPAINT (tick-deficit degraded mode): re-enqueue a copy of the
-    /// most recently presented frame so the compositor sees a live layer while
-    /// CADisplayLink callbacks are collapsed - the suspected lock-in spiral is
-    /// "our commits stop → the frame-rate governor classifies the layer static
-    /// → holds the throttled rate". Same pixels, so nothing visibly changes.
-    ///
-    /// Deliberately a SECOND, stats-silent enqueue site beside `presentFrame`
-    /// (which is otherwise the single enqueue site): a repaint is NOT a rendered
-    /// frame, and routing it through `presentFrame` would inflate fps_rendered /
-    /// the present-latency stages during exactly the windows where the degraded
-    /// mode's verification contract is renders==received. No drop counting, no
-    /// IDR, no FrameTimingTracker stage - invisible to telemetry by design.
-    /// Called from the pacer's `onDeficitRepaint` on the pacing queue, already
-    /// rate-limited to stream cadence and gated on ≥2 intervals of real-release
-    /// silence (FramePacer.maybeRepaintForGovernor).
+    /// Re-submit the same pixels to keep the compositor active when display ticks collapse.
+    /// The pacer limits repeats to stream cadence after two silent intervals. Separate trace
+    /// events preserve visibility without inflating rendered FPS, drops or latency histograms.
     nonisolated func repaintFrameForGovernor(_ sampleBuffer: CMSampleBuffer) {
-        // Same teardown/readiness gates as presentFrame - a failed or
-        // backpressured renderer drops the repaint silently (best-effort:
-        // the off-tick release path is the load-bearing failsafe; this only
-        // feeds the governor's activity heuristic).
+        // Best effort: the off-tick release path remains responsible for delivering new frames.
         guard isStreaming, let renderer = sampleBufferRenderer else { return }
-        guard renderer.status != .failed, renderer.isReadyForMoreMediaData else { return }
-        // Copy the sample buffer (shares the pixel buffer - no pixel copy) so
-        // the renderer gets a distinct enqueue object rather than the exact
-        // instance it already consumed, and mark it display-immediately so its
-        // already-shown PTS can't read as stale.
+        guard renderer.status != .failed else {
+            recordRendererDecision(.repaintRejectedFailed, sampleBuffer: sampleBuffer)
+            return
+        }
+        guard renderer.isReadyForMoreMediaData else {
+            recordRendererDecision(.repaintRejectedNotReady, sampleBuffer: sampleBuffer)
+            return
+        }
+        // Share the pixels but give the renderer a distinct object. Display-immediately prevents
+        // the already-shown PTS from being treated as stale.
         var copy: CMSampleBuffer?
         let status = CMSampleBufferCreateCopy(
             allocator: kCFAllocatorDefault, sampleBuffer: sampleBuffer,
             sampleBufferOut: &copy)
-        guard status == noErr, let repaint = copy else { return }
+        guard status == noErr, let repaint = copy else {
+            recordRendererDecision(.repaintCopyFailed, sampleBuffer: sampleBuffer)
+            return
+        }
         Self.markForImmediateDisplay(repaint)
         renderer.enqueue(repaint)
+        recordRendererDecision(.repaintEnqueued, sampleBuffer: sampleBuffer)
+    }
+
+    /// The existing bounded frame writer owns I/O; telemetry-off never extracts frame identity.
+    nonisolated func recordRendererDecision(
+        _ decision: FrameTimingTracker.RendererDecision, sampleBuffer: CMSampleBuffer
+    ) {
+        guard let tracker = FrameTimingTracker.shared else { return }
+        let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        tracker.recordRendererDecision(decision, rtpTimestamp: Self.rtpTimestamp(from: pts))
     }
 }

@@ -162,6 +162,20 @@ final class TelemetrySinkTests {
         #expect(counters.bookmarkTotal.value == 2)
     }
 
+    @Test func bookmarkUsesCapturedTimeInsteadOfTheLaterWriteTime() throws {
+        let exporter = exporter()
+        exporter.workQueue.sync { exporter.openNDJSONFile() }
+        defer { exporter.workQueue.sync { try? exporter.fileHandle?.close() } }
+        let time = DispatchTime(uptimeNanoseconds: exporter.connectInstant.uptimeNanoseconds + 1_250_000_000)
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        // The event is queued behind this block; both clocks must survive the asynchronous write.
+        exporter.workQueue.sync { _ = exporter.recordBookmark(at: time, date: date) }
+        let row = try #require(try rows(exporter).first)
+        #expect(row["ts"] as? String == "2023-11-14T22:13:20Z")
+        #expect(row["t_connect_s"] as? Double == 1.25)
+        #expect(row["bookmark_total"] as? Int == 1)
+    }
+
     @Test func liveEventsNeedARunningExporter() {
         TelemetryExporter.resetPreStartEventBuffer()
         var built = false

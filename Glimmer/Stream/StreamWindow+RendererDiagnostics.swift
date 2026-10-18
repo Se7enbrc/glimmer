@@ -7,6 +7,13 @@ import AVFoundation
 import QuartzCore
 
 extension StreamWindow {
+    /// Capture before the session actor hop so tabbing away cannot replace the incident's window state.
+    func logBookmarkContext(at time: DispatchTime, hdrInput: Bool) {
+        let timeMs = Double(time.uptimeNanoseconds) / 1_000_000.0
+        Diag.notice("BOOKMARK context t_ms=\(timeMs) \(rendererDiagnosticSnapshot(hdrInput: hdrInput))",
+                    "Stream.Window")
+    }
+
     func logRendererTransition(_ transition: RendererPathTransition, hdrInput: Bool) {
         Diag.notice("Renderer path: \(transition.summary) \(rendererDiagnosticSnapshot(hdrInput: hdrInput))",
                     "Stream.Window")

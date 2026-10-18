@@ -1,0 +1,11 @@
+{
+  "Time Profiler": {
+    "contextSwitchSampling": true,
+    "highFrequencySampling": false,
+    "recordKernelStacks": true,
+    "recordWaitingThreads": true
+  },
+  "Points of Interest": {
+    "excludeOSLogs": false
+  }
+}

@@ -28,6 +28,8 @@ final class DatagramBatch {
     private let records: UnsafeMutablePointer<Record>
     private let controls: UnsafeMutableRawPointer
     private(set) var readTicks: UInt64 = 0
+    private(set) var readStartedTicks: UInt64 = 0
+    private(set) var previousReadTicks: UInt64 = 0
     private let sources: UnsafeMutablePointer<sockaddr_storage>
 
     init(capacity: Int, stride: Int, receiveBatch: TransportPlatform.ReceiveBatch? = nil) {
@@ -68,6 +70,8 @@ final class DatagramBatch {
                                     control: controls + index * SocketTimestamp.controlSize,
                                     controlLength: socklen_t(SocketTimestamp.controlSize))
         }
+        previousReadTicks = readTicks
+        readStartedTicks = mach_absolute_time()
         let count = receiveX(socket, records, UInt32(capacity), 0)
         readTicks = mach_absolute_time()
         return count
@@ -78,6 +82,8 @@ final class DatagramBatch {
                              msg_namelen: socklen_t(MemoryLayout<sockaddr_storage>.size),
                              msg_iov: iovecs, msg_iovlen: 1, msg_control: controls,
                              msg_controllen: socklen_t(SocketTimestamp.controlSize), msg_flags: 0)
+        previousReadTicks = readTicks
+        readStartedTicks = mach_absolute_time()
         let count = recvmsg(socket, &message, 0)
         readTicks = mach_absolute_time()
         guard count >= 0 else { return -1 }

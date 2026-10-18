@@ -150,6 +150,19 @@ struct RendererTelemetryTests {
         #expect(probe.state.withLock { $0.transitions } == transitions)
     }
 
+    @MainActor @Test func bookmarkCapturesLayerStateBeforeLaterChanges() throws {
+        let stream = StreamWindow()
+        let time = DispatchTime.now()
+        let prefix = "BOOKMARK context t_ms=\(Double(time.uptimeNanoseconds) / 1_000_000.0) "
+        stream.displayLayer.opacity = 0.75
+        stream.logBookmarkContext(at: time, hdrInput: true)
+        stream.displayLayer.opacity = 0.25
+        let message = try #require(LogStore.shared.snapshot().last { $0.message.hasPrefix(prefix) }?.message)
+        #expect(message.contains("video={opacity=0.75"))
+        #expect(message.contains("hdrInput=true"))
+        #expect(!message.contains("video={opacity=0.25"))
+    }
+
     @MainActor @Test func rendererSnapshotIncludesVisibleOverlayTreeAndPublicSafeLayerState() {
         let stream = StreamWindow()
         let video = stream.displayLayer

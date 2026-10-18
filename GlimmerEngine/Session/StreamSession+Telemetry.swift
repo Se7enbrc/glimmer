@@ -115,13 +115,10 @@ extension StreamSession {
         }
     }
 
-    /// Record a "that felt bad" telemetry bookmark (signal 4). Actor-isolated so
-    /// the `onBookmarkHotkey` closure can read the actor-isolated exporter via a
-    /// `Task` hop. No-op when telemetry is off (`telemetryExporter` is nil) - the
-    /// chord is still consumed in the input path, it simply records nothing.
-    package func recordTelemetryBookmark() {
+    /// Preserve the input-time bookmark across the session actor hop; telemetry-off is a no-op.
+    package func recordTelemetryBookmark(at time: DispatchTime = .now(), date: Date = Date()) {
         guard let exporter = telemetryExporter else { return }
-        let marker = exporter.recordBookmark()
+        let marker = exporter.recordBookmark(at: time, date: date)
         audioDecoder.requestOutputDiagnostic(bookmark: marker)
     }
 

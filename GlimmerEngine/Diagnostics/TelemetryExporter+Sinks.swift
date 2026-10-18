@@ -81,12 +81,13 @@ extension TelemetryExporter {
     /// NDJSON (on `workQueue`, like the 1 Hz capture), the frame trace and the Diag
     /// log. Before the NDJSON file opens, its row is dropped; the counter still counts.
     @discardableResult
-    package func recordBookmark() -> UInt64 {
+    package func recordBookmark(at now: DispatchTime = .now(), date: Date = Date()) -> UInt64 {
         counters.bookmarkTotal.increment()
-        let now = DispatchTime.now()
         let sinceConnect =
             Double(now.uptimeNanoseconds &- connectInstant.uptimeNanoseconds) / 1_000_000_000.0
         let count = counters.bookmarkTotal.value
+        OSSignposter.render.emitEvent("StreamBookmark",
+            "count=\(count) t_ms=\(Double(now.uptimeNanoseconds) / 1_000_000)")
         Diag.notice("BOOKMARK #\(count) at t+\(String(format: "%.3f", sinceConnect))s - user flagged jank "
             + "(\"that felt bad\")", Self.logCategory)
         if let tracker = FrameTimingTracker.shared {
@@ -94,7 +95,7 @@ extension TelemetryExporter {
         }
         workQueue.async { [weak self] in
             guard let self else { return }
-            let iso = self.isoFormatter.string(from: Date())
+            let iso = self.isoFormatter.string(from: date)
             // Explicit event object; `event` + `kind` keys distinguish it from the
             // per-second sample lines so a reader/grep finds bookmarks instantly.
             let line = "{\"ts\":\"\(iso)\",\"session\":\"\(self.sessionId)\","

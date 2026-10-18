@@ -129,4 +129,70 @@ struct ReceiveTimingTests {
         #expect(abs((gap.queuedMs ?? 0) - 225) < 0.001)
         #expect(abs((gap.arrivalMs ?? 0) - 225) < 0.001)
     }
+
+    @Test(arguments: [102.0, 600.0])
+    func separatesReceiveCallFromWorkBetweenCalls(startMs: Double) throws {
+        var timing = ReceiveTiming(telemetry: ReceiveTimingTelemetry())
+        #expect(timing.observe(arrival: ticks(100), read: ticks(101)) == nil)
+        let result = timing.observe(arrival: ticks(105), read: ticks(602),
+                                    callStarted: ticks(startMs), previousCallFinished: ticks(101))
+        let gap = try #require(result)
+        #expect(abs((gap.receiveCallMs ?? 0) - (602 - startMs)) < 0.001)
+        #expect(abs((gap.betweenCallsMs ?? 0) - (startMs - 101)) < 0.001)
+        #expect(abs((gap.queuedMs ?? 0) - 497) < 0.001)
+        #expect(gap.kind == "late read")
+    }
+
+    @Test func timeoutBetweenPacketsDoesNotBecomeProcessingTime() throws {
+        var timing = ReceiveTiming(telemetry: ReceiveTimingTelemetry())
+        #expect(timing.observe(arrival: ticks(100), read: ticks(101)) == nil)
+        let result = timing.observe(arrival: ticks(600), read: ticks(602),
+                                    callStarted: ticks(502), previousCallFinished: ticks(501))
+        let gap = try #require(result)
+        #expect(abs(gap.readMs - 501) < 0.001)
+        #expect(abs((gap.receiveCallMs ?? 0) - 100) < 0.001)
+        #expect(abs((gap.betweenCallsMs ?? 0) - 1) < 0.001)
+        #expect(gap.kind == "late arrival")
+    }
+
+    @Test func invalidCallClocksStayUnavailable() throws {
+        var timing = ReceiveTiming(telemetry: ReceiveTimingTelemetry())
+        #expect(timing.observe(arrival: nil, read: ticks(100)) == nil)
+        let result = timing.observe(arrival: nil, read: ticks(300),
+                                    callStarted: ticks(301), previousCallFinished: ticks(302))
+        let gap = try #require(result)
+        #expect(gap.receiveCallMs == nil)
+        #expect(gap.betweenCallsMs == nil)
+        let fields = gap.fields(stream: "video", read: ticks(300), threadID: 42, queuedCount: nil)
+        let row = try TelemetryRenderFixtures.row("{" + fields.joined(separator: ",") + "}")
+        #expect(row["receive_call_ms"] is NSNull)
+        #expect(row["between_calls_ms"] is NSNull)
+        #expect(row["kernel_gap_ms"] is NSNull)
+        #expect(row["queued_count"] is NSNull)
+        #expect(row["event"] as? String == "receive_gap")
+        #expect(row["thread_id"] as? Int == 42)
+        #expect(abs((row["t_ms"] as? Double ?? 0) - 300) < 0.001)
+    }
+
+    @Test func throttledIncidentsRemainCountedInTheNextReport() throws {
+        var timing = ReceiveTiming(telemetry: ReceiveTimingTelemetry())
+        #expect(timing.observe(arrival: nil, read: ticks(100)) == nil)
+        #expect(timing.observe(arrival: nil, read: ticks(200))?.reportsSuppressed == 0)
+        #expect(timing.observe(arrival: nil, read: ticks(300)) == nil)
+        #expect(timing.observe(arrival: nil, read: ticks(400)) == nil)
+        let nextValue = timing.observe(arrival: nil, read: ticks(5_200))
+        let next = try #require(nextValue)
+        #expect(next.reportsSuppressed == 2)
+        #expect(timing.observe(arrival: nil, read: ticks(10_200))?.reportsSuppressed == 0)
+    }
+
+    @Test func thresholdCrossedByCombinedDelaysDoesNotBlameTheReader() throws {
+        var timing = ReceiveTiming(telemetry: ReceiveTimingTelemetry())
+        #expect(timing.observe(arrival: ticks(100), read: ticks(101)) == nil)
+        let value = timing.observe(arrival: ticks(149.5), read: ticks(152))
+        let gap = try #require(value)
+        #expect(gap.kind == "split delay")
+        #expect(abs((gap.queuedMs ?? 0) - 2.5) < 0.001)
+        #expect(abs((gap.arrivalMs ?? 0) - 49.5) < 0.001)
+    }
 }

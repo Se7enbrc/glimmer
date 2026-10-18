@@ -65,7 +65,14 @@ extension StreamSession {
         window.onCloseRequested = { [weak session] in Task { await session?.stop() } }
         input.onMiniPlayerHotkey = { [weak window] in window?.toggleMiniPlayer() }
         input.onStatsHotkey = { [weak decoder] in decoder?.toggleStatsOverlay() }
-        input.onBookmarkHotkey = { [weak session] in Task { await session?.recordTelemetryBookmark() } }
+        input.onBookmarkHotkey = { [weak session, weak window, weak decoder] in
+            let time = DispatchTime.now()
+            let date = Date()
+            if let window, let decoder {
+                window.logBookmarkContext(at: time, hdrInput: decoder.isHDRActive)
+            }
+            Task { await session?.recordTelemetryBookmark(at: time, date: date) }
+        }
         return SessionMedia(presentation: presentation, input: SessionInputHooks(input), video: decoder)
     }
 

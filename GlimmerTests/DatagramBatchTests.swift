@@ -68,6 +68,9 @@ struct DatagramBatchTests {
         for (index, size) in sizes.enumerated() {
             if !batched { #expect(batch.receiveOne(from: receiver) == 1) }
             let slot = batched ? index : 0
+            #expect(batch.readStartedTicks >= queuedAt)
+            #expect(batch.readTicks >= batch.readStartedTicks)
+            #expect(batch.previousReadTicks <= batch.readStartedTicks)
             #expect(batch.isExpectedPeer(at: slot, expected: expected.0, expectedLength: expected.1))
             #expect(!batch.isExpectedPeer(at: slot, expected: other.0, expectedLength: other.1))
             if timestamped {
@@ -95,7 +98,9 @@ struct DatagramBatchTests {
             }
         }
         try #require(sent == 1)
+        let previousRead = batch.readTicks
         #expect((batched ? batch.receive(from: receiver) : batch.receiveOne(from: receiver)) == 1)
+        #expect(batch.previousReadTicks == previousRead)
         #expect(batch.arrivalTicks(at: 0) == nil)
         #expect(batch.datagram(0).length == 1)
     }

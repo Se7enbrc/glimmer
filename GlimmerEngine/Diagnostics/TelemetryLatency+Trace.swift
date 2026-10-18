@@ -16,6 +16,24 @@ import Foundation
 
 extension FrameTimingTracker {
 
+    package enum RendererDecision: String, CaseIterable, Sendable {
+        case frameRejectedFailed = "frame_rejected_failed"
+        case frameRejectedNotReady = "frame_rejected_not_ready"
+        case repaintRejectedFailed = "repaint_rejected_failed"
+        case repaintRejectedNotReady = "repaint_rejected_not_ready"
+        case repaintCopyFailed = "repaint_copy_failed"
+        case repaintEnqueued = "repaint_enqueued"
+    }
+
+    /// Renderer decisions share the bookmark clock but never enter frame-rate or latency histograms.
+    package func recordRendererDecision(_ decision: RendererDecision, rtpTimestamp: UInt32) {
+        let time = Double(now()) / 1_000_000.0
+        traceWriter.append("{\"session\":\"\(sessionId)\",\"event\":\"renderer_decision\","
+            + "\"decision\":\"\(decision.rawValue)\",\"rtp\":\(rtpTimestamp),"
+            + "\"t_ms\":\(TelemetryRenderer.jsonNumber(time)),"
+            + "\"suppressed\":\(counters.presentSuppressed),\"decode_gated\":\(counters.decodeGated)}")
+    }
+
     /// One presented frame's identity + size/type + the five stage deltas (ms),
     /// bundled so the trace renderer takes one value instead of nine params.
     package struct TraceRecord {

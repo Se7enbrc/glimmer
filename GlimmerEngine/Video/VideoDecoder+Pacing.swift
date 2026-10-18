@@ -295,6 +295,7 @@ extension VideoDecoder {
         // Drive the macOS 15+ renderer from this background queue; the layer API is deprecated.
         // A latched failure stops rendering until flushed, and rebuilding must stay on main.
         if renderer.status == .failed {
+            recordRendererDecision(.frameRejectedFailed, sampleBuffer: sampleBuffer)
             // Rebuild a hard-failed renderer because flush cannot clear its
             // latched state; defer AppKit work and repaint from the next IDR.
             let failure = renderer.error as NSError?
@@ -319,6 +320,7 @@ extension VideoDecoder {
         // Readiness reports OS queue capacity; the present watchdog handles sustained refusal.
         // Dropping a decoded image leaves VT's reference chain intact and does not need an IDR.
         if !renderer.isReadyForMoreMediaData {
+            recordRendererDecision(.frameRejectedNotReady, sampleBuffer: sampleBuffer)
             let streak = consecutiveBackpressureDrops.add(1, ordering: .relaxed).newValue
             statsCollector.recordRendererBackpressureDrop()
             OSSignposter.render.emitEvent(
