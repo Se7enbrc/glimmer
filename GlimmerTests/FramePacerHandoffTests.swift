@@ -193,6 +193,103 @@ struct FramePacerHandoffTests {
         #expect(presented.withLock { $0 } == [ObjectIdentifier(first), ObjectIdentifier(second)])
     }
 
+    @Test(arguments: [false, true])
+    func stalledDirectHandoffKeepsOnlyTheNewestPendingFrame(warm: Bool) async throws {
+        let pacer = try makeTestPacer()
+        if warm { pacer.armWarmHandover() }
+        let presented = recordPresents(pacer)
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        pacer.pacingQueue.async {
+            entered.signal()
+            _ = release.wait(timeout: .now() + 5)
+        }
+        defer { release.signal() }
+        try #require(await entered.waitAsync(for: .seconds(2)) == .success)
+        var samples: [WeakSample] = []
+        for index in 0..<256 {
+            try autoreleasepool {
+                let sample = try emptySampleBuffer()
+                samples.append(WeakSample(sample))
+                if !warm {
+                    let target = CACurrentMediaTime() + 10 + Double(index) / 120
+                    pacer.lock.withLock {
+                        pacer.refreshTelemetry.lastRefreshIntervalSeconds = 1.0 / 120
+                        pacer.liveness.lastTickTargetMediaTime = target
+                        pacer.lastPresentMediaTime = target - 1.0 / 120
+                    }
+                }
+                pacer.submit(sample, hostPTS: CMTime(value: Int64(index) * 750, timescale: 90_000))
+            }
+        }
+        #expect(samples.dropLast().allSatisfy { $0.value == nil })
+        let newest = try #require(samples.last?.value)
+        #expect(pacer.stats.presentationLateDropCount() == 255)
+        #expect(pacer.queue.isEmpty)
+        release.signal()
+        await pacer.pacingQueue.drainForTest()
+        #expect(presented.withLock { $0 } == [ObjectIdentifier(newest)])
+    }
+
+    @Test(arguments: [false, true])
+    func retirementReleasesPendingFrameBeforePresentationQueueResumes(stop: Bool) async throws {
+        let pacer = try makeTestPacer()
+        pacer.armWarmHandover()
+        let presented = recordPresents(pacer)
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        pacer.pacingQueue.async {
+            entered.signal()
+            _ = release.wait(timeout: .now() + 5)
+        }
+        defer { release.signal() }
+        try #require(await entered.waitAsync(for: .seconds(2)) == .success)
+        let old = try autoreleasepool {
+            let sample = try emptySampleBuffer()
+            pacer.submit(sample, hostPTS: CMTime(value: 0, timescale: 90_000))
+            return WeakSample(sample)
+        }
+        if stop {
+            pacer.stop()
+            pacer.running = true
+            pacer.armWarmHandover()
+        } else {
+            pacer.clearQueue(reason: "test pending retirement")
+        }
+        #expect(old.value == nil)
+        let newest = try emptySampleBuffer()
+        pacer.submit(newest, hostPTS: CMTime(value: 750, timescale: 90_000))
+        release.signal()
+        await pacer.pacingQueue.drainForTest()
+        #expect(presented.withLock { $0 } == [ObjectIdentifier(newest)])
+    }
+
+    @Test func lateDecodedFrameCannotReplaceANewerPendingHandoff() async throws {
+        let pacer = try makeTestPacer()
+        pacer.armWarmHandover()
+        let presented = recordPresents(pacer)
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        pacer.pacingQueue.async {
+            entered.signal()
+            _ = release.wait(timeout: .now() + 5)
+        }
+        defer { release.signal() }
+        try #require(await entered.waitAsync(for: .seconds(2)) == .success)
+        let newest = try emptySampleBuffer()
+        pacer.submit(newest, hostPTS: CMTime(value: 1500, timescale: 90_000))
+        pacer.submit(try emptySampleBuffer(), hostPTS: CMTime(value: 750, timescale: 90_000))
+        release.signal()
+        await pacer.pacingQueue.drainForTest()
+        #expect(presented.withLock { $0 } == [ObjectIdentifier(newest)])
+        #expect(pacer.stats.presentationLateDropCount() == 1)
+    }
+
+    private final class WeakSample {
+        weak var value: CMSampleBuffer?
+        init(_ sample: CMSampleBuffer) { value = sample }
+    }
+
     private func emptySampleBuffer() throws -> CMSampleBuffer {
         var buffer: CMSampleBuffer?
         CMSampleBufferCreate(

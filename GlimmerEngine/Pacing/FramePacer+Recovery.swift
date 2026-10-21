@@ -345,8 +345,8 @@ extension FramePacer {
         }
         rateHintSamples = RateHintSamples()
         presentationGeneration &+= 1
-        let discarded = queue.count
-        let discardedFrames = queue.map(\.sampleBuffer)
+        let discardedFrames = queue.map(\.sampleBuffer) + retireSubmitReleaseLocked()
+        let discarded = discardedFrames.count
         queue.removeAll(keepingCapacity: true)
         resetCadenceBaseLocked()
         // Drop the last-presented frame too, so a governor repaint after this flush

@@ -33,16 +33,18 @@ extension FramePacer {
         // Present directly until the rebuilt display link proves a healthy tick rate.
         // Suppression still wins so a hidden layer cannot present.
         if tickDeficit.warmingUp && !presentSuppressed {
-            publishSubmitReleaseLocked(entry, vsyncInterval: nil)
+            let displaced = publishSubmitReleaseLocked(entry, vsyncInterval: nil)
             lock.unlock()
+            recordPresentationDiscards(displaced, reason: .overflow)
             return
         }
 
         // At rest a due frame waited for the next tick plus a queue hop: up to a vsync of
         // output_to_present for nothing. The gate still spaces presents one interval apart.
         if let vsync = passthroughVsyncLocked() {
-            publishSubmitReleaseLocked(entry, vsyncInterval: vsync)
+            let displaced = publishSubmitReleaseLocked(entry, vsyncInterval: vsync)
             lock.unlock()
+            recordPresentationDiscards(displaced, reason: .overflow)
             TelemetryCounters.shared.pacerSubmitReleaseTotal.increment()
             return
         }
@@ -89,16 +91,47 @@ extension FramePacer {
         }
     }
 
-    /// Publish while reserving under the lock, so a later frame cannot overtake the handoff.
-    private func publishSubmitReleaseLocked(_ entry: Entry, vsyncInterval: CFTimeInterval?) {
+    struct SubmitRelease {
+        let entry: Entry
+        let vsyncInterval: CFTimeInterval?
+        let binding: UInt64
+        let presentation: UInt64
+    }
+
+    /// Keep the freshest direct handoff while its queue is busy, without retaining a frame per closure.
+    private func publishSubmitReleaseLocked(_ entry: Entry, vsyncInterval: CFTimeInterval?) -> [CMSampleBuffer] {
         assertLockHeld()
-        let handoff = SubmitRelease(entry: entry)
-        let binding = bindingGeneration
-        let presentation = presentationGeneration
-        pacingQueue.async { [weak self] in
-            self?.presentSubmitRelease(handoff.entry, vsyncInterval: vsyncInterval,
-                                       binding: binding, presentation: presentation)
+        if let pending = pendingSubmitRelease, pending.binding == bindingGeneration,
+           pending.presentation == presentationGeneration, Self.precedes(entry, pending.entry) {
+            return [entry.sampleBuffer]
         }
+        let displaced = pendingSubmitRelease.map { [$0.entry.sampleBuffer] } ?? []
+        pendingSubmitRelease = SubmitRelease(entry: entry, vsyncInterval: vsyncInterval,
+                                            binding: bindingGeneration, presentation: presentationGeneration)
+        if !submitReleaseScheduled {
+            submitReleaseScheduled = true
+            pacingQueue.async { [weak self] in self?.drainSubmitRelease() }
+        }
+        return displaced
+    }
+
+    /// Retire ownership immediately; the already-queued wake remains unique across stop/restart.
+    func retireSubmitReleaseLocked() -> [CMSampleBuffer] {
+        assertLockHeld()
+        let discarded = pendingSubmitRelease.map { [$0.entry.sampleBuffer] } ?? []
+        pendingSubmitRelease = nil
+        return discarded
+    }
+
+    private func drainSubmitRelease() {
+        lock.lock()
+        let handoff = pendingSubmitRelease
+        pendingSubmitRelease = nil
+        submitReleaseScheduled = false
+        lock.unlock()
+        guard let handoff else { return }
+        presentSubmitRelease(handoff.entry, vsyncInterval: handoff.vsyncInterval,
+                             binding: handoff.binding, presentation: handoff.presentation)
     }
 
     /// A queued handoff may outlive stop, discontinuity or hide; hidden streams keep the newest.
@@ -211,20 +244,20 @@ extension FramePacer {
 
     static func insert(_ entry: Entry, into queue: inout [Entry]) {
         var insertAt = queue.count
-        while insertAt > 0 {
-            let previous = queue[insertAt - 1]
-            let delta = previous.hostPTSSeconds - entry.hostPTSSeconds
-            guard delta.isFinite else { break }
-            // Compare both sides of wrap before epochs: a late pre-wrap decode
-            // may arrive after the first post-wrap frame, even at session start.
-            if delta > halfTimestampRangeSeconds { break }
-            if delta >= -halfTimestampRangeSeconds {
-                if previous.ptsEpoch < entry.ptsEpoch { break }
-                if previous.ptsEpoch == entry.ptsEpoch && delta <= 0 { break }
-            }
-            insertAt -= 1
-        }
+        while insertAt > 0, precedes(entry, queue[insertAt - 1]) { insertAt -= 1 }
         queue.insert(entry, at: insertAt)
+    }
+
+    private static func precedes(_ entry: Entry, _ previous: Entry) -> Bool {
+        let delta = previous.hostPTSSeconds - entry.hostPTSSeconds
+        guard delta.isFinite else { return false }
+        // Compare both sides of wrap before epochs, including a late pre-wrap decode.
+        if delta > halfTimestampRangeSeconds { return false }
+        if delta >= -halfTimestampRangeSeconds {
+            if previous.ptsEpoch < entry.ptsEpoch { return false }
+            if previous.ptsEpoch == entry.ptsEpoch && delta <= 0 { return false }
+        }
+        return true
     }
 
     func recordPresentationDiscards(_ frames: [CMSampleBuffer], reason: FrameTimingTracker.PacerDiscardReason) {
@@ -279,10 +312,4 @@ extension FramePacer {
             }
         }
     }
-}
-
-/// A release-at-submit frame on its way to the pacing queue. @unchecked: the decoder thread hands
-/// the frame over and never touches it again, so the pacing queue is its only user.
-private struct SubmitRelease: @unchecked Sendable {
-    let entry: FramePacer.Entry
 }

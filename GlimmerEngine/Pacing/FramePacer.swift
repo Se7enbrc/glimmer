@@ -158,6 +158,9 @@ package final class FramePacer: @unchecked Sendable {
     /// Within an epoch, hostPTS sorting handles out-of-order decode; a PTS reset
     /// starts a new epoch so wrapped timestamps cannot move ahead of old frames.
     var queue: [Entry] = []
+    // The lock owns at most one pending direct handoff; queued work captures no sample buffers.
+    var pendingSubmitRelease: SubmitRelease?
+    var submitReleaseScheduled = false
 
     /// Learned stream inter-frame interval in seconds, derived from the median
     /// of recent hostPTS deltas. Seeded from the configured stream fps so the
@@ -403,7 +406,7 @@ package final class FramePacer: @unchecked Sendable {
         running = false
         displayBound = false
         bindingGeneration &+= 1
-        let discarded = queue.map(\.sampleBuffer)
+        let discarded = queue.map(\.sampleBuffer) + retireSubmitReleaseLocked()
         queue.removeAll(keepingCapacity: false)
         // Reset liveness so a future restart starts clean (the watchdog reads
         // these; a stale "never ticked" must not survive a restart).
