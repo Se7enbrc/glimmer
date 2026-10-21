@@ -9,6 +9,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		9D8E655FEF584B17AD847218 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */; };
 		40E56A34C6B84BFD97F585B0 /* PairingRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */; };
 		9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */; };
 		A3D372A8CF7E4C02AC0926B7 /* StreamBackgroundGrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */; };
@@ -75,6 +76,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingRecoveryTests.swift; sourceTree = "<group>"; };
 		E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherGalleryTests.swift"; sourceTree = "<group>"; };
 		D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamBackgroundGrace.swift"; sourceTree = "<group>"; };
@@ -263,6 +265,7 @@
 				CB5FA496B339386824307D80 /* GlimmerApp.swift */,
 				C27E8A6F7449606A4E16DB8B /* LauncherView.swift */,
 				34C1CD2D3621B447D33B3F8C /* Info.plist */,
+				8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */,
 				FAD2215B8AB2557B667379E3 /* Assets.xcassets */,
 				4E152D5238E668E8A9E5531F /* AppIcon.icon */,
 			);
@@ -357,6 +360,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D24F000A4BCC4C65C8508D0A /* Assets.xcassets in Resources */,
+				9D8E655FEF584B17AD847218 /* PrivacyInfo.xcprivacy in Resources */,
 				76D18FAA5093262D2C6C77E9 /* AppIcon.icon in Resources */,
 				07F5AD5B787425E258D9C086 /* LICENSE in Resources */,
 				4F9A1E395BAE1D05802CA568 /* CREDITS.md in Resources */,

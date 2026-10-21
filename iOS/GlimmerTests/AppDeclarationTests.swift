@@ -34,6 +34,30 @@ struct AppDeclarationTests {
         #expect(UIImage(systemName: LauncherView.pcSymbol) != nil)
     }
 
+    @Test func packagedPrivacyManifestCoversAppAndLinkedEngine() throws {
+        let url = try #require(Bundle.main.url(forResource: "PrivacyInfo", withExtension: "xcprivacy"))
+        let manifest = try #require(PropertyListSerialization.propertyList(
+            from: Data(contentsOf: url), format: nil) as? [String: Any])
+        #expect(manifest["NSPrivacyTracking"] as? Bool == false)
+        let trackingDomains = try #require(manifest["NSPrivacyTrackingDomains"] as? [String])
+        #expect(trackingDomains.isEmpty)
+        let collected = try #require(manifest["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
+        #expect(collected.isEmpty)
+        let accessed = try #require(manifest["NSPrivacyAccessedAPITypes"] as? [[String: Any]])
+        var reasons: [String: Set<String>] = [:]
+        for entry in accessed {
+            let category = try #require(entry["NSPrivacyAccessedAPIType"] as? String)
+            let declared = try #require(entry["NSPrivacyAccessedAPITypeReasons"] as? [String])
+            #expect(reasons[category] == nil, "Each required-reason category must be declared once.")
+            reasons[category] = Set(declared)
+        }
+        #expect(reasons == [
+            "NSPrivacyAccessedAPICategoryUserDefaults": ["CA92.1"],
+            "NSPrivacyAccessedAPICategorySystemBootTime": ["35F9.1", "8FFB.1"],
+            "NSPrivacyAccessedAPICategoryFileTimestamp": ["C617.1"]
+        ])
+    }
+
     @Test func onlyTheWindowContainingTheStreamLocksLandscape() throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let menu = UIViewController()

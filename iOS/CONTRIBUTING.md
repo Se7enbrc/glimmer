@@ -82,7 +82,8 @@ DEVELOPMENT_TEAM = YOUR_TEAM_ID
 The checked-in `Signing.xcconfig` is intentionally blank. The app’s bundle ID is
 `io.ugfugl.Glimmer.iOS`; its name is Glimmer. The owner must configure device
 provisioning in Xcode before installing. No signing secrets belong in this repo.
-App Store Connect, distribution profiles and release automation come later.
+For CI beta distribution, follow the [TestFlight guide](docs/TESTFLIGHT.md). Its
+distribution setup is separate from local development provisioning.
 
 Debug builds keep the active app awake throughout the launcher and stream.
 Production Release keeps it awake only during a stream. For an optimized local
