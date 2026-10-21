@@ -177,6 +177,7 @@ struct NativeUIRenderTests {
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
         model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
+        try await waitForLauncherLayout(launcher, window: window)
         try recordPhase(launcher.view, name: "orientation-launcher-before-stream")
         model.launch(fixture.app)
         let stream = try #require(model.stream)
@@ -203,6 +204,7 @@ struct NativeUIRenderTests {
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
         try await waitForOrientation(scene, portrait: true, controller: launcher)
         #expect(launcher.view.bounds.height > launcher.view.bounds.width)
+        try await waitForLauncherLayout(launcher, window: window)
         try recordPhase(launcher.view, name: "orientation-launcher-after-disconnect")
         if let captureError { throw captureError }
     }
@@ -353,6 +355,34 @@ struct NativeUIRenderTests {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
         try #require(condition(), "\(message)")
+    }
+
+    private func waitForLauncherLayout(_ host: UIViewController, window: UIWindow) async throws {
+        for child in host.children { await finishTransition(child) }
+        try await waitForUIState("The launcher's navigation or scroll viewport remained outside the rotated window.") {
+            window.layoutIfNeeded()
+            host.view.layoutIfNeeded()
+            let views = launcherViewports(in: host.view)
+            guard host.view.bounds.size == window.bounds.size,
+                  window.bounds.size == window.windowScene?.effectiveGeometry.coordinateSpace.bounds.size,
+                  views.contains(where: { $0 is UINavigationBar }),
+                  views.contains(where: { $0 is UIScrollView }) else { return false }
+            let checkedViews: [UIView] = [window, host.view] + views
+            return checkedViews.allSatisfy { view in
+                let rect = view.convert(view.bounds, to: window)
+                guard rect.minX >= -1, rect.maxX <= window.bounds.maxX + 1,
+                      rect.minY >= -1, rect.maxY <= window.bounds.maxY + 1 else { return false }
+                guard let shown = view.layer.presentation() else { return true }
+                return shown.bounds == view.layer.bounds && shown.position == view.layer.position &&
+                    CATransform3DEqualToTransform(shown.transform, view.layer.transform)
+            }
+        }
+    }
+
+    private func launcherViewports(in view: UIView) -> [UIView] {
+        guard view.isHidden == false, view.alpha > 0 else { return [] }
+        let own = view is UINavigationBar || view is UIScrollView ? [view] : []
+        return own + view.subviews.flatMap { launcherViewports(in: $0) }
     }
 
     private func waitForOrientation(_ scene: UIWindowScene, portrait: Bool,
