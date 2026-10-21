@@ -4,6 +4,9 @@
 
 ### Features
 
+- On iPhone, use the launcher and Settings in portrait or landscape. Streams
+  stay in landscape, and menus can rotate again after disconnecting.
+
 - Manual diagnostic builds can record a detailed performance session and export
   a local evidence bundle that identifies missing or incomplete measurements.
   These builds are separate from automatic updates.

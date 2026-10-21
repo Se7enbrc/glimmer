@@ -55,12 +55,27 @@ final class AppDisplayActivity {
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    static let orientationMask: UIInterfaceOrientationMask = .landscape
+    static func menuOrientations(for idiom: UIUserInterfaceIdiom) -> UIInterfaceOrientationMask {
+        idiom == .pad ? .all : .allButUpsideDown
+    }
+
+    static func orientationMask(for window: UIWindow?) -> UIInterfaceOrientationMask {
+        if let window, let root = window.rootViewController, containsStream(root, in: window) { return .landscape }
+        return menuOrientations(for: window?.traitCollection.userInterfaceIdiom ?? UIDevice.current.userInterfaceIdiom)
+    }
+
+    private static func containsStream(_ controller: UIViewController, in window: UIWindow) -> Bool {
+        guard !controller.isBeingDismissed else { return false }
+        if let presented = controller.presentedViewController, containsStream(presented, in: window) { return true }
+        if let stream = controller as? StreamViewController,
+           stream.presentationActive, stream.viewIfLoaded?.window === window { return true }
+        return controller.children.contains { containsStream($0, in: window) }
+    }
 
     func application(
         _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
-        Self.orientationMask
+        Self.orientationMask(for: window)
     }
 }

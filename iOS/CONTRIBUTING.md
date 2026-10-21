@@ -94,10 +94,11 @@ Inactive/background scenes always restore auto-lock.
 
 Before accepting UI, inspect light/dark appearance, large Dynamic Type,
 VoiceOver, keyboard focus, iPhone and iPad, both landscape directions, safe-area
-Disconnect button, status/home indicator behavior and landscape retention after
-streaming. The whole iPhone app uses both landscape orientations, including the
-launcher, pairing and address entry. iPad declares all orientations for system
-windowing; the app requests landscape without the deprecated fullscreen
+Disconnect button, status/home indicator behavior and menu rotation after
+streaming. The iPhone launcher, settings, pairing and address entry support
+portrait and both landscape orientations. Streams request landscape while
+presented; dismissing them releases that restriction for their window. iPad
+declares all orientations for system windowing without the deprecated fullscreen
 compatibility key. Native UI rendering tests attach PNGs to the test result
 bundle; CI retains those bundles in the `ios-Simulator-results` artifact.
 Inspect the images before claiming visual acceptance.

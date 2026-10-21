@@ -11,7 +11,8 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NativeUIRenderTests {
-    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440)], [false, true])
+    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440),
+                      CGSize(width: 390, height: 844)], [false, true])
     func launcherAndPairing(size: CGSize, dark: Bool) async throws {
         let launch = testLaunch()
         let server: ServerInfo = {
@@ -72,7 +73,8 @@ struct NativeUIRenderTests {
         if let captureError { throw captureError }
     }
 
-    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440)], [false, true])
+    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440),
+                      CGSize(width: 390, height: 844)], [false, true])
     func settingsPages(size: CGSize, dark: Bool) async throws {
         let saved = SavedPC(server: ServerInfo(address: "pc.invalid", uniqueId: "settings-pc",
                                                serverName: "Living room gaming PC"))
@@ -141,12 +143,68 @@ struct NativeUIRenderTests {
                          name: "launcher-two-buttons-\(style)", size: size, dark: dark)
     }
 
-    @Test func actualSimulatorLauncherStaysLandscape() async throws {
+    @Test func actualSimulatorLauncherSupportsPortrait() async throws {
         let calls = LauncherModel.Calls(savedPCs: { [] },
             prepare: { _, _ in throw CancellationError() }, pair: { pc, _ in pc }, apps: { _ in [] },
             remember: { _ in [] }, protectedDataChanged: { _ in })
         let model = LauncherModel(calls: calls, discoveryEnabled: false)
-        try await record(LauncherView(model: model), name: "launcher-simulator-landscape", size: nil, dark: false)
+        try await record(LauncherView(model: model), name: "launcher-simulator-portrait",
+                         size: nil, dark: false, portrait: true)
+    }
+
+    @Test func actualLauncherAllowsPortraitAfterStreamDismissal() async throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        window.frame = scene.effectiveGeometry.coordinateSpace.bounds
+        let fixture = LauncherFixture()
+        let id = UUID()
+        fixture.makeSession = { launch in
+            StreamSessionModel(launch: launch, makePlayback: { _, _, _ in
+                StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+                               format: StreamFormat(width: 2622, height: 1206, fps: 120),
+                               observeControllers: { $0(true) })
+            })
+        }
+        let model = fixture.model()
+        let launcher = UIHostingController(rootView: LauncherView(model: model))
+        window.rootViewController = launcher
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
+        launcher.setNeedsUpdateOfSupportedInterfaceOrientations()
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        try await waitForOrientation(scene, portrait: true, controller: launcher)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        try recordPhase(launcher.view, name: "orientation-launcher-before-stream")
+        model.launch(fixture.app)
+        let stream = try #require(model.stream)
+        var captureError: Error?
+        do {
+            try await waitForUIState("The launcher's stream cover did not appear.") {
+                launcher.presentedViewController != nil && stream.phase == .connecting
+            }
+            let player = try #require(launcher.presentedViewController)
+            try await waitForOrientation(scene, portrait: false, controller: player)
+            stream.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+            #expect(AppDelegate.orientationMask(for: window) == .landscape)
+            #expect(player.view.bounds.width > player.view.bounds.height)
+            try recordPhase(player.view, name: "orientation-stream-landscape")
+        } catch { captureError = error }
+        stream.disconnect()
+        try await waitForUIState("The launcher's stream cover did not dismiss.") {
+            model.stream == nil && launcher.presentedViewController == nil
+        }
+        await model.waitUntilStreamClosed()
+        #expect(model.hasActiveStream == false)
+        #expect(AppDelegate.orientationMask(for: window).contains(.portrait))
+        // Model a subsequent phone rotation; production must release its lock without a test invalidation.
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        try await waitForOrientation(scene, portrait: true, controller: launcher)
+        #expect(launcher.view.bounds.height > launcher.view.bounds.width)
+        try recordPhase(launcher.view, name: "orientation-launcher-after-disconnect")
+        if let captureError { throw captureError }
     }
 
     @Test(arguments: ["connecting", "streaming", "playing", "waiting", "mouse", "mouse-controls",
@@ -221,14 +279,14 @@ struct NativeUIRenderTests {
     }
 
     private func record<Content: View>(_ content: Content, name: String, size: CGSize?, dark: Bool,
-                                       textSize: DynamicTypeSize = .xxxLarge,
+                                       textSize: DynamicTypeSize = .xxxLarge, portrait: Bool = false,
                                        prepare: (() async -> Void)? = nil) async throws {
         let host = UIHostingController(rootView: content.dynamicTypeSize(textSize))
-        try await recordController(host, name: name, size: size, dark: dark, prepare: prepare)
+        try await recordController(host, name: name, size: size, dark: dark, portrait: portrait, prepare: prepare)
     }
 
     private func recordController(_ host: UIViewController, name: String, size: CGSize?, dark: Bool,
-                                  prepare: (() async -> Void)? = nil) async throws {
+                                  portrait: Bool = false, prepare: (() async -> Void)? = nil) async throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
@@ -239,6 +297,10 @@ struct NativeUIRenderTests {
         if let size { root = FixtureViewportController(content: host, size: size) } else { root = host }
         window.rootViewController = root
         window.makeKeyAndVisible()
+        if portrait {
+            root.setNeedsUpdateOfSupportedInterfaceOrientations()
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        }
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
         root.view.setNeedsLayout()
         root.view.layoutIfNeeded()
@@ -257,7 +319,11 @@ struct NativeUIRenderTests {
             #expect(host.children.allSatisfy { $0.view.bounds.size == expectedSize })
             #expect(host.children.allSatisfy { $0.traitCollection.userInterfaceStyle == .dark })
         }
-        if size == nil {
+        if portrait {
+            #expect(scene.effectiveGeometry.interfaceOrientation == .portrait)
+            #expect(window.bounds.height > window.bounds.width)
+        }
+        if size == nil, host is StreamViewController {
             #expect(scene.effectiveGeometry.interfaceOrientation.isLandscape)
             #expect(window.bounds.width > window.bounds.height)
         }
@@ -271,6 +337,35 @@ struct NativeUIRenderTests {
         let data = try #require(image.pngData())
         #expect(data.count > 1_000)
         Attachment.record(Array(data), named: "\(name)-large-text.png")
+    }
+
+    private func recordPhase(_ view: UIView, name: String) throws {
+        view.layoutIfNeeded()
+        let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
+        var rendered = false
+        let image = renderer.image { _ in rendered = view.drawHierarchy(in: view.bounds, afterScreenUpdates: true) }
+        #expect(rendered)
+        let data = try #require(image.pngData())
+        Attachment.record(Array(data), named: "\(name).png")
+    }
+
+    private func waitForUIState(_ message: String, condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        try #require(condition(), "\(message)")
+    }
+
+    private func waitForOrientation(_ scene: UIWindowScene, portrait: Bool,
+                                    controller: UIViewController) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        func matches() -> Bool {
+            let orientation = scene.effectiveGeometry.interfaceOrientation
+            return portrait ? orientation == .portrait : orientation.isLandscape
+        }
+        while !matches(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        try #require(matches(), "The scene did not reach its requested interface orientation.")
+        await finishTransition(controller)
+        controller.view.layoutIfNeeded()
     }
 
     private func finishTransition(_ host: UIViewController) async {

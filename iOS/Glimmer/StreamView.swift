@@ -27,9 +27,11 @@ struct StreamView: UIViewControllerRepresentable {
 final class StreamViewController: GCEventViewController {
     let model: StreamSessionModel
     let surface = StreamSurface()
+    private(set) var presentationActive = false
     private let overlay: UIHostingController<StreamControls>
     private var touchCapture: StreamTouchCapture?
     private var screenIdentity: ObjectIdentifier?
+    private weak var presentationWindow: UIWindow?
 
     init(model: StreamSessionModel, close: @escaping () -> Void) {
         self.model = model
@@ -59,6 +61,7 @@ final class StreamViewController: GCEventViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        presentationActive = true
         updateOrientation()
     }
 
@@ -89,7 +92,18 @@ final class StreamViewController: GCEventViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        presentationActive = false
         model.stop()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        // Re-evaluate after SwiftUI removes its presentation; a replacement stream keeps its own lock.
+        Task { @MainActor [weak window = presentationWindow] in
+            guard let window, window.isKeyWindow, let scene = window.windowScene else { return }
+            window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: AppDelegate.orientationMask(for: window)))
+        }
     }
 
     private func installInputCapture() {
@@ -118,9 +132,12 @@ final class StreamViewController: GCEventViewController {
     }
 
     private func updateOrientation() {
-        guard let scene = view.window?.windowScene else { return }
-        scene.windows.first(where: \.isKeyWindow)?.rootViewController?
-            .setNeedsUpdateOfSupportedInterfaceOrientations()
+        guard let window = view.window, window.isKeyWindow, let scene = window.windowScene else { return }
+        presentationWindow = window
+        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+        var owner: UIViewController = self
+        while let parent = owner.parent { owner = parent }
+        owner.setNeedsUpdateOfSupportedInterfaceOrientations()
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape)) { error in
             Logger(subsystem: "io.ugfugl.Glimmer", category: "Display")
                 .error("Display rotation failed: \(error.localizedDescription, privacy: .private)")

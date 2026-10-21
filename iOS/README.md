@@ -7,8 +7,9 @@ Sunshine, pairs with a PIN, lists their apps and connects a landscape video and
 stereo audio stream. Physical controllers and simple touch use the shared input
 engine. See the fixed [input mapping](docs/INPUT.md).
 
-The iPhone launcher, pairing screens and stream use landscape orientation. The
-app opts into iOS Game Mode; the system controls its activation.
+Use the iPhone launcher, Settings and pairing screens in portrait or landscape.
+Streams stay in landscape; menus can rotate again after disconnecting. The app
+opts into iOS Game Mode; the system controls its activation.
 
 The launcher shows the PC, its requested stream settings and its app buttons.
 The last connected PC loads automatically, including after disconnecting. With
