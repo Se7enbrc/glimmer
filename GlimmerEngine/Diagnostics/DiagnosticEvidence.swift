@@ -30,9 +30,19 @@ package enum DiagnosticEvidence {
 
     struct Bookmark: Codable {
         let timeMs: Double
+        let total: UInt64?
+        let windowStartMs: Double
+        let windowEndMs: Double
         var counts: [String: Int] = [:]
         var maximumMs: [String: Double] = [:]
         var observations = 0
+
+        init(timeMs: Double, total: UInt64? = nil) {
+            self.timeMs = timeMs
+            self.total = total
+            windowStartMs = max(0, timeMs - 10_000)
+            windowEndMs = timeMs + 2000
+        }
     }
 
     struct Report: Codable {
@@ -108,7 +118,8 @@ package enum DiagnosticEvidence {
         if !report.issues.isEmpty { lines += [""] + report.issues.map { "- \($0)" } }
         lines += ["", "## Observed rows", ""]
         lines += report.counts.sorted { $0.key < $1.key }.map { "- \($0.key): \($0.value)" }
-        lines += ["", "## Bookmark context", "", "Each window is ±2 seconds on the process uptime clock."]
+        lines += ["", "## Bookmark context", "",
+                  "Each window covers 10 seconds before and 2 seconds after the bookmark on the process uptime clock."]
         if report.bookmarks.isEmpty { lines.append("No bookmark was recorded.") }
         for bookmark in report.bookmarks {
             lines += ["", "### \(String(format: "%.3f", bookmark.timeMs)) ms", "",

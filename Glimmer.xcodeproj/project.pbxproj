@@ -668,6 +668,8 @@
 		D1A6202610180000000000B /* GlimmerDiagnosticCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610180000000000F /* GlimmerDiagnosticCapture.swift */; };
 		D1A6202610180000000001B /* GlimmerCLI+Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610180000000001F /* GlimmerCLI+Diagnostics.swift */; };
 		D1A6202610180000000002B /* GlimmerDiagnosticCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610180000000002F /* GlimmerDiagnosticCaptureTests.swift */; };
+		D1A6202610210000000002B /* GlimmerDiagnosticCaptureProcessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610210000000002F /* GlimmerDiagnosticCaptureProcessTests.swift */; };
+		D1A6202610210000000001B /* GlimmerDiagnosticCaptureClockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610210000000001F /* GlimmerDiagnosticCaptureClockTests.swift */; };
 		D1A6202610180000000003B /* DiagnosticEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610180000000003F /* DiagnosticEvidence.swift */; };
 		D1A6202610180000000004B /* DiagnosticEvidence+Files.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610180000000004F /* DiagnosticEvidence+Files.swift */; };
 		D1A6202610180000000005B /* DiagnosticEvidence+Analysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610180000000005F /* DiagnosticEvidence+Analysis.swift */; };
@@ -1398,6 +1400,8 @@
 		D1A6202610180000000000F /* GlimmerDiagnosticCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/CLI/GlimmerDiagnosticCapture.swift"; sourceTree = SOURCE_ROOT; };
 		D1A6202610180000000001F /* GlimmerCLI+Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/CLI/GlimmerCLI+Diagnostics.swift"; sourceTree = SOURCE_ROOT; };
 		D1A6202610180000000002F /* GlimmerDiagnosticCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/GlimmerDiagnosticCaptureTests.swift"; sourceTree = SOURCE_ROOT; };
+		D1A6202610210000000002F /* GlimmerDiagnosticCaptureProcessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/GlimmerDiagnosticCaptureProcessTests.swift"; sourceTree = SOURCE_ROOT; };
+		D1A6202610210000000001F /* GlimmerDiagnosticCaptureClockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/GlimmerDiagnosticCaptureClockTests.swift"; sourceTree = SOURCE_ROOT; };
 		D1A6202610180000000003F /* DiagnosticEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/DiagnosticEvidence.swift"; sourceTree = SOURCE_ROOT; };
 		D1A6202610180000000004F /* DiagnosticEvidence+Files.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/DiagnosticEvidence+Files.swift"; sourceTree = SOURCE_ROOT; };
 		D1A6202610180000000005F /* DiagnosticEvidence+Analysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/DiagnosticEvidence+Analysis.swift"; sourceTree = SOURCE_ROOT; };
@@ -1800,6 +1804,8 @@
 				DA2026100900000000000018 /* TelemetryGateTests.swift */,
 				D1A6202610180000000006F /* DiagnosticEvidenceTests.swift */,
 				D1A6202610180000000002F /* GlimmerDiagnosticCaptureTests.swift */,
+				D1A6202610210000000002F /* GlimmerDiagnosticCaptureProcessTests.swift */,
+				D1A6202610210000000001F /* GlimmerDiagnosticCaptureClockTests.swift */,
 				DA2026100900000000000016 /* RendererTelemetryTests.swift */,
 				C4A400000000000000000101 /* LatencyTrackerTests.swift */,
 				C4A400000000000000000103 /* TelemetryCounterStateTests.swift */,
@@ -2636,6 +2642,8 @@
 				DA2026100900000000000017 /* TelemetryGateTests.swift in Sources */,
 				D1A6202610180000000006B /* DiagnosticEvidenceTests.swift in Sources */,
 				D1A6202610180000000002B /* GlimmerDiagnosticCaptureTests.swift in Sources */,
+				D1A6202610210000000002B /* GlimmerDiagnosticCaptureProcessTests.swift in Sources */,
+				D1A6202610210000000001B /* GlimmerDiagnosticCaptureClockTests.swift in Sources */,
 				DA2026100900000000000015 /* RendererTelemetryTests.swift in Sources */,
 				C4A400000000000000000102 /* LatencyTrackerTests.swift in Sources */,
 				C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */,

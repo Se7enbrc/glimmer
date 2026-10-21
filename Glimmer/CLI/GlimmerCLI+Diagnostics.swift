@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import Foundation
+import Darwin
 import GlimmerEngine
 
 extension GlimmerCLI {
@@ -18,13 +19,10 @@ extension GlimmerCLI {
                     printError("Supply a running Glimmer PID and use the installed app's diagnostic command.")
                     return Exit.usage
                 }
-                printLine("Keep the stream running for the six-second clock check, followed by a 15-minute recording.")
+                printLine("Keep the stream running for the six-second clock check, followed by one 30-second detailed recording.")
                 printLine("Scheduling export and analysis afterward may take several more minutes.")
                 printLine("Keep this terminal open. Capture files remain local in \(output.path).")
-                let manifestURL = try await GlimmerDiagnosticCapture.run(pid: pid, output: output,
-                    recordingOptions: options, progress: { message in
-                        Task { @MainActor in printLine(message) }
-                    })
+                let manifestURL = try await captureWithSignals(pid: pid, output: output, options: options)
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
                 let manifest = try decoder.decode(GlimmerDiagnosticCapture.Manifest.self,
@@ -46,5 +44,28 @@ extension GlimmerCLI {
             printError("Diagnostic operation failed: \(error.localizedDescription)")
             return Exit.failed
         }
+    }
+
+    private static func captureWithSignals(pid: Int32, output: URL, options: URL) async throws -> URL {
+        let task = Task {
+            try await GlimmerDiagnosticCapture.run(pid: pid, output: output, recordingOptions: options,
+                progress: { message in Task { @MainActor in printLine(message) } })
+        }
+        let oldInterrupt = signal(SIGINT, SIG_IGN)
+        let oldTerminate = signal(SIGTERM, SIG_IGN)
+        let sources = [SIGINT, SIGTERM].map { number in
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .global(qos: .utility))
+            source.setEventHandler { task.cancel() }
+            source.resume()
+            return source
+        }
+        defer {
+            for source in sources { source.cancel() }
+            signal(SIGINT, oldInterrupt)
+            signal(SIGTERM, oldTerminate)
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: { task.cancel() }
     }
 }

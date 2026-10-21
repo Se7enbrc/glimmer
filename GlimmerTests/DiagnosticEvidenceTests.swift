@@ -62,10 +62,60 @@ struct DiagnosticEvidenceTests {
         #expect((permissions[.posixPermissions] as? Int).map { $0 & 0o777 } == 0o700)
         let bookmarks = try #require(report["bookmarks"] as? [[String: Any]])
         #expect(bookmarks.count == 1)
+        #expect(bookmarks[0]["window_start_ms"] as? Double == 0)
+        #expect(bookmarks[0]["window_end_ms"] as? Double == 3000)
         #expect((bookmarks[0]["maximum_ms"] as? [String: Double])?["output_to_present_ms"] == 2)
         let summary = try String(contentsOf: output.appendingPathComponent("summary.md"), encoding: .utf8)
         #expect(summary.contains("Physical scanout is unobserved"))
         #expect(summary.contains("no cause is inferred"))
+        #expect(summary.contains("10 seconds before and 2 seconds after"))
+    }
+
+    @Test(arguments: [false, true])
+    func bookmarkCopiesWithDifferentTimestampPrecisionShareOneWindow(legacy: Bool) throws {
+        let context = DiagnosticEvidence.Context(session: session, source: .temporaryDirectory, output: .temporaryDirectory)
+        let identity = legacy ? "" : "\"bookmark_total\":1,"
+        let metrics = try #require(JSONSerialization.jsonObject(with: Data(
+            "{\"event\":\"bookmark\",\(identity)\"t_ms\":207221163.30325}".utf8)) as? [String: Any])
+        let trace = try #require(JSONSerialization.jsonObject(with: Data(
+            "{\"event\":\"bookmark\",\(identity)\"t_ms\":207221163.303}".utf8)) as? [String: Any])
+        DiagnosticEvidence.observe(metrics, frame: false, context: context)
+        DiagnosticEvidence.observe(trace, frame: true, context: context)
+        #expect(context.bookmarks.count == 1)
+        #expect(context.bookmarks.first?.timeMs == 207_221_163.30325)
+        #expect(context.issues.isEmpty)
+        #expect(context.counts["metrics_bookmark"] == 1)
+        #expect(context.counts["trace_bookmark"] == 1)
+    }
+
+    @Test func separateBookmarkIdentitiesArePreservedEvenAtTheSameTimestamp() {
+        let context = DiagnosticEvidence.Context(session: session, source: .temporaryDirectory, output: .temporaryDirectory)
+        for total in UInt64(1)...2 {
+            DiagnosticEvidence.observe(["event": "bookmark", "bookmark_total": total, "t_ms": 1000.0],
+                                       frame: false, context: context)
+        }
+        #expect(context.bookmarks.count == 2)
+        #expect(context.issues.isEmpty)
+    }
+
+    @Test func conflictingBookmarkIdentityMarksEvidenceIncomplete() {
+        let context = DiagnosticEvidence.Context(session: session, source: .temporaryDirectory, output: .temporaryDirectory)
+        for stamp in [1000.0, 2000.0] {
+            DiagnosticEvidence.observe(["event": "bookmark", "bookmark_total": UInt64(1), "t_ms": stamp],
+                                       frame: false, context: context)
+        }
+        #expect(context.issues.contains("Bookmark identity has conflicting timestamps."))
+    }
+
+    @Test(arguments: [(-10_000.001, false), (-10_000.0, true), (-2040.0, true),
+                      (0.0, true), (2000.0, true), (2000.001, false)])
+    func bookmarkWindowIncludesReactionTimeButRemainsBounded(_ offset: Double, _ included: Bool) {
+        let context = DiagnosticEvidence.Context(session: session, source: .temporaryDirectory, output: .temporaryDirectory)
+        context.bookmarks = [DiagnosticEvidence.Bookmark(timeMs: 20_000)]
+        DiagnosticEvidence.observeWindows(["event": "decode_output", "t_ms": 20_000 + offset,
+                                           "submit_to_output_ms": 2.4], frame: true, context: context)
+        #expect(context.bookmarks[0].observations == (included ? 1 : 0))
+        #expect(context.bookmarks[0].maximumMs["submit_to_output_ms"] == (included ? 2.4 : nil))
     }
 
     @Test(arguments: ["missing", "malformed", "sequence", "loss"])

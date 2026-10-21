@@ -16,8 +16,8 @@ struct GlimmerDiagnosticCaptureTests {
     private static let toc = """
         <trace-toc><run number="1"><info><target><process pid="17"/>
         <environment><item key="PRIVATE_ENV" value="omit"/></environment></target><summary>
-        <start-date>2026-10-18T10:00:00Z</start-date><end-date>2026-10-18T10:15:01Z</end-date>
-        <duration>901</duration></summary></info><data>
+        <start-date>2026-10-18T10:00:00Z</start-date><end-date>2026-10-18T10:00:31Z</end-date>
+        <duration>31</duration></summary></info><data>
         <table schema="time-profile" record-waiting-threads="1" needs-kernel-callstack="1" context-switch-sampling="1"/>
         <table schema="time-sample" all-thread-states="YES" sample-rate-micro-seconds="5000"/>
         <table schema="thread-state"/></data></run></trace-toc>
@@ -28,7 +28,7 @@ struct GlimmerDiagnosticCaptureTests {
         <trace-query-result><node><row><\(clock) id="1">1000000</\(clock)>
         <thread><process id="2"><pid id="3">17</pid></process></thread><process ref="2"/></row>
         <row><\(clock) ref="1"/><process ref="2"/></row>
-        <row><\(clock) id="4">900000000000</\(clock)><process ref="2"/></row>
+        <row><\(clock) id="4">30000000000</\(clock)><process ref="2"/></row>
         <row><\(clock) id="5">999000000000</\(clock)><process id="6"><pid>99</pid></process>
         <thread><process ref="2"/></thread></row></node></trace-query-result>
         """
@@ -90,16 +90,17 @@ struct GlimmerDiagnosticCaptureTests {
         #expect(report.status == "observed_rows_with_bounded_clock_anchors")
         #expect(report.coverage?.targetSampleRows == 3 && report.coverage?.targetSchedulingRows == 3)
         #expect(report.coverage?.firstSampleNanos == 1_000_000)
-        #expect(report.coverage?.lastSampleNanos == 900_000_000_000)
+        #expect(report.coverage?.lastSampleNanos == 30_000_000_000)
         #expect(report.coverage?.configuredSamplePeriodsMicroseconds == [5000])
         #expect(try !String(contentsOf: fixture.output.appendingPathComponent("toc.stdout"), encoding: .utf8)
             .contains("PRIVATE_ENV"))
         let commands = calls.withLock { $0 }
         let record = try #require(commands.first { $0.label == "record" })
-        #expect(record.arguments.contains("--attach") && record.arguments.contains("15m"))
-        #expect(!record.arguments.contains("--launch") && record.timeoutSeconds == 1200)
+        #expect(record.arguments.contains("--attach") && record.arguments.contains("30s"))
+        #expect(!record.arguments.contains("--launch") && record.timeoutSeconds == 210)
+        #expect(commands.contains { $0.executable == "/usr/bin/vmmap" } == false)
         let scheduling = try #require(commands.first { $0.label == "thread-state" })
-        #expect(scheduling.maximumOutputBytes == 12 * 1_073_741_824 && scheduling.timeoutSeconds == 600)
+        #expect(scheduling.maximumOutputBytes == 2 * 1_073_741_824 && scheduling.timeoutSeconds == 600)
     }
 
     @Test func failedAttachmentNeverBecomesSuccessfulBecauseAnOutputDirectoryExists() async throws {

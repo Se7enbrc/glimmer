@@ -26,7 +26,7 @@ extension GlimmerDiagnosticCapture {
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                     qualifiedName: String?, attributes: [String: String]) {
             elements += 1
-            if elements % 10_000 == 0, ProcessInfo.processInfo.systemUptime > deadline { parser.abortParsing() }
+            if elements % 10_000 == 0, Task.isCancelled || ProcessInfo.processInfo.systemUptime > deadline { parser.abortParsing() }
             guard name == "sample-time" || name == "start-time", let ref = attributes["ref"].flatMap(UInt64.init) else {
                 return
             }
@@ -65,7 +65,7 @@ extension GlimmerDiagnosticCapture {
         func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
                     qualifiedName: String?, attributes: [String: String]) {
             elements += 1
-            if elements % 10_000 == 0, ProcessInfo.processInfo.systemUptime > deadline { parser.abortParsing() }
+            if elements % 10_000 == 0, Task.isCancelled || ProcessInfo.processInfo.systemUptime > deadline { parser.abortParsing() }
             let parent = path.last
             path.append(name)
             if name == "row" { target = nil; time = nil }

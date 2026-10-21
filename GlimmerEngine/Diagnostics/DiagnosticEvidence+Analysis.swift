@@ -120,11 +120,25 @@ extension DiagnosticEvidence {
         } else if frame && row["rtp"] != nil {
             context.issue("Some frame observations lack a valid attempt identity.")
         }
-        if label == "bookmark", let stamp = time(row, context: context), !context.bookmarks.contains(where: { $0.timeMs == stamp }) {
-            if context.bookmarks.count < 256 {
-                context.bookmarks.append(Bookmark(timeMs: stamp))
-            } else { context.issue("Bookmark limit exceeded.") }
+        if label == "bookmark" { observeBookmark(row, context: context) }
+    }
+
+    static func observeBookmark(_ row: [String: Any], context: Context) {
+        guard let stamp = time(row, context: context) else { return }
+        let total = row["bookmark_total"] as? UInt64
+        if let existing = context.bookmarks.first(where: {
+            if let total { return $0.total == total }
+            return $0.total == nil && abs($0.timeMs - stamp) <= 0.001
+        }) {
+            // Metrics retain full precision; frame rows round the same timestamp to microseconds.
+            if abs(existing.timeMs - stamp) > 0.001 { context.issue("Bookmark identity has conflicting timestamps.") }
+            return
         }
+        guard context.bookmarks.count < 256 else {
+            context.issue("Bookmark limit exceeded.")
+            return
+        }
+        context.bookmarks.append(Bookmark(timeMs: stamp, total: total))
     }
 
     static func observeWindows(_ row: [String: Any], frame: Bool, context: Context) {
@@ -132,7 +146,8 @@ extension DiagnosticEvidence {
         let label = (frame ? "trace_" : "metrics_") + boundedEvent(row, frame: frame, context: context)
         let fields = ["recv_to_assemble_ms", "assemble_to_submit_ms", "submit_to_output_ms",
                       "output_to_present_ms", "end_to_end_ms", "duration_ms"]
-        for index in context.bookmarks.indices where abs(context.bookmarks[index].timeMs - stamp) <= 2000 {
+        for index in context.bookmarks.indices where stamp >= context.bookmarks[index].windowStartMs
+            && stamp <= context.bookmarks[index].windowEndMs {
             context.bookmarks[index].observations += 1
             context.bookmarks[index].counts[label, default: 0] += 1
             for field in fields {

@@ -64,7 +64,7 @@ enum GlimmerCLI {
           stop [<pc>] [--json]           Stop this Mac's stream and quit its app on the PC
           quit <pc>                      Quit the app running on a PC
           wake <pc> [--wait]             Send Wake on LAN, and wait for the PC to answer
-          diagnostics capture <pid> <directory>   Record 15 minutes of System Trace locally
+          diagnostics capture <pid> <directory>   Record 30 seconds of System Trace locally
           diagnostics bundle <session> <directory> Export a session's diagnostic evidence
           help                           Show this help
 

@@ -96,8 +96,8 @@ extension GlimmerDiagnosticCapture {
             guard let event = resolver.event(row, pid: pid, malformed: &alignment.malformedEvents) else { continue }
             let key = event.session + ":" + String(event.id)
             if event.begin {
-                if begins.updateValue(event, forKey: key) != nil { alignment.malformedEvents += 1 }
-            } else if ends.updateValue(event, forKey: key) != nil { alignment.malformedEvents += 1 }
+                if let existing = begins.updateValue(event, forKey: key), existing != event { alignment.malformedEvents += 1 }
+            } else if let existing = ends.updateValue(event, forKey: key), existing != event { alignment.malformedEvents += 1 }
         }
         for (key, begin) in begins {
             guard let end = ends.removeValue(forKey: key) else { alignment.unpairedEvents += 1; continue }
@@ -139,7 +139,7 @@ extension GlimmerDiagnosticCapture {
         alignment.status = "bounded_clock_verified"
     }
 
-    private struct ClockEvent {
+    private struct ClockEvent: Equatable {
         let session: String
         let id: UInt64
         let trace: UInt64
@@ -157,8 +157,27 @@ extension GlimmerDiagnosticCapture {
         }
 
         func values(_ value: XMLElement?) -> [String] {
-            guard let value = resolve(value) else { return [] }
-            return [value.stringValue, value.attribute(forName: "fmt")?.stringValue].compactMap { $0 }
+            guard let value else { return [] }
+            var budget = 4096
+            guard let raw = text(value, depth: 0, budget: &budget) else { return [] }
+            return [raw]
+        }
+
+        func text(_ node: XMLElement, depth: Int, budget: inout Int) -> String? {
+            guard depth < 16, let node = resolve(node) else { return nil }
+            let children = node.children?.compactMap { $0 as? XMLElement } ?? []
+            if children.isEmpty {
+                let raw = node.stringValue ?? ""
+                guard raw.utf8.count <= budget else { return nil }
+                budget -= raw.utf8.count
+                return raw
+            }
+            var result = ""
+            for child in children {
+                guard let part = text(child, depth: depth + 1, budget: &budget) else { return nil }
+                result += part
+            }
+            return result
         }
 
         func child(_ row: XMLElement, _ names: [String]) -> XMLElement? {

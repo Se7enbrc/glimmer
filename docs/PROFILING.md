@@ -59,35 +59,61 @@ locally.
 1. Open the diagnostic app on AC power. Check Settings → Diagnostics: collection
    defaults on in this build, but an explicit saved opt-out remains respected.
    Existing LAN metrics export remains a separate preference. Start the usual
-   stream.
-2. In Terminal, find the running app's PID with `pgrep -x Glimmer`. Use that PID
-   in `glimmer diagnostics capture <pid> ~/Desktop/Glimmer-diag-capture`,
-   choosing a directory that does not exist with at least 30 GiB free. Keep the
-   terminal open through export.
-3. The command first checks clock markers with a six-second trace. If that
-   fails, inspect its manifest before spending 15 minutes on an uncorrelated
-   recording. Once the full recording starts, press **Control-B** when a hitch
-   occurs. Play for about 13 minutes, then stop in Glimmer and leave the
-   launcher idle.
-4. Wait for capture and export to finish. The recording lasts 15 minutes;
-   scheduling and stack exports can take up to another 20 minutes. A failed
-   attachment or incomplete export is recorded as unavailable evidence.
+   stream and keep app telemetry running for the full 15-minute session.
+2. For a detailed window, find the app PID with `pgrep -x Glimmer`, then run
+   `glimmer diagnostics capture <pid> ~/Desktop/Glimmer-diag-capture` with a
+   fresh directory and at least 30 GiB free. Keep the terminal open. Each
+   invocation records only 30 seconds of System Trace, not the whole session.
+3. The command checks clock markers with a six-second trace before the detailed
+   recording. Wait for its start message; press **Control-B** when a hitch
+   occurs. Stack and scheduling exports run afterward. Wait for a verified
+   result before requesting another short window in a new directory. Export
+   intervals are not part of the detailed recording and may themselves add load.
+4. Stop the stream after the longer telemetry session. Do not score pauses
+   caused by attaching or exporting Instruments as ordinary stream behavior. The
+   capture command never runs `vmmap`; inspect memory maps separately while
+   idle, and keep those results outside the scored streaming interval.
 5. Find the session ID in the newest `telemetry-evidence-*.json` under
    `~/Library/Logs/Glimmer`. Run
    `glimmer diagnostics bundle <session-id> ~/Desktop/Glimmer-diag-capture/session-evidence`
-   before starting another stream. Read its `summary.md` alongside
-   `capture-manifest.json`.
+   before starting another stream. Read its `summary.md` alongside the short
+   capture's `capture-manifest.json`.
 
 The recording preserves System Trace, waiting/running thread stacks, scheduling
-rows, recording options and before/after VM summaries. The session bundle copies
-and hashes the selected metrics, frame segments, receipt and scorecard. Bookmark
-windows report observations, not inferred causes. Copy the matching published
-symbols ZIP alongside the capture for symbolication.
+rows and exact recording options. The session bundle copies and hashes selected
+metrics, frame segments, receipt and scorecard. Resource telemetry supplies the
+memory trend. Bookmark windows cover 10 seconds before and 2 seconds after each
+marker, allowing time to react to a hitch. Copies in metrics and frame traces
+share one bookmark identity. Windows report observations, not inferred causes.
+Copy the matching published symbols ZIP alongside the capture for symbolication.
 
-Capture artifacts are capped at 20 GiB, with a 2 GiB free-space reserve. Stack
-and scheduling exports have separate 2 GiB and 12 GiB limits; parsing has its
-own bounded runtime. Reaching a limit retains the available evidence and reports
-the missing portion instead of calling the capture complete.
+The recorder requests a stop at 8 GiB of visible output or less than 4 GiB free.
+These are **soft stop thresholds**, not disk quotas: Instruments can buffer data
+in another service and grow the trace while saving. A previous 15-minute trace
+grew to 52 GiB during finalization and could not be reopened. The recorder now
+uses short windows; it does not claim that polling can bound that service. Stack
+and scheduling exports have separate 1 GiB and 2 GiB stop thresholds. Only
+successfully finalized, parsed, clock-aligned evidence can be verified.
+
+Control-C or SIGTERM cancels the capture task and asks its owned recorder
+process to stop. Cleanup allows up to two minutes for finalization, then
+escalates if necessary; critically low free space can shorten this wait.
+Cancellation, timeouts and budget stops remain explicit failures, even if
+partial files exist. They can leave unreadable traces. Keep earlier verified
+captures; no global Instruments service or target app is terminated by this
+command.
+
+### Rolling-window experiment, not yet validated
+
+The installed `xctrace help record` describes `--window` as retaining events
+from an end-time window, but it provides no byte quota or finalization
+guarantee. A previous rolling capture exported a range ending before the hitch.
+Do not use rolling mode for accepted evidence yet. After approval for a separate
+experiment, compare a 60-second recording with a 10-second window against
+emitted clock anchors, verify that all exported time ranges cover the final 10
+seconds, and measure both temporary and finalized disk usage. Check cancellation
+and reopening too before considering a 15-minute recorder with a 30-second
+window.
 
 Diagnostic builds emit two standard Points of Interest clock markers per
 telemetry tick. Process uptime readings bracket the first marker; exported trace

@@ -17,18 +17,22 @@ extension GlimmerDiagnosticCapture {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
+    @concurrent
     static func execute(_ command: Command) async -> CommandResult {
-        await Task.detached(priority: .utility) { executeBlocking(command) }.value
+        await execute(command, started: { _ in })
     }
 
-    private static func executeBlocking(_ command: Command) -> CommandResult {
-        let started = Date()
+    @concurrent
+    static func execute(_ command: Command, started: @Sendable (Int32) -> Void,
+                        resourceCheck: @Sendable (Command) -> String? = outputLimit) async -> CommandResult {
+        let began = Date()
+        guard !Task.isCancelled else {
+            return CommandResult(command: command, started: began, ended: Date(), exitCode: nil, status: "cancelled")
+        }
         let process = Process()
-        let complete = DispatchSemaphore(value: 0)
         process.executableURL = URL(fileURLWithPath: command.executable)
         process.arguments = command.arguments
         process.standardInput = FileHandle.nullDevice
-        process.terminationHandler = { _ in complete.signal() }
         do {
             let files = FileManager.default
             guard files.createFile(atPath: command.stdout.path, contents: nil, attributes: [.posixPermissions: 0o600]),
@@ -41,25 +45,57 @@ extension GlimmerDiagnosticCapture {
             process.standardOutput = out
             process.standardError = err
             try process.run()
-            let deadline = ProcessInfo.processInfo.systemUptime + command.timeoutSeconds
-            var reason = "completed"
-            while complete.wait(timeout: .now() + 1) == .timedOut {
-                if let limit = outputLimit(command) { reason = limit; break }
-                if ProcessInfo.processInfo.systemUptime >= deadline { reason = "timed_out"; break }
-            }
-            if reason != "completed", process.isRunning {
-                process.interrupt()
-                if complete.wait(timeout: .now() + 10) == .timedOut {
-                    if process.isRunning { kill(process.processIdentifier, SIGKILL) }
-                    _ = complete.wait(timeout: .now() + 10)
-                }
-            }
-            if reason == "completed", let limit = outputLimit(command) { reason = limit }
-            return CommandResult(command: command, started: started, ended: Date(),
-                                 exitCode: process.isRunning ? nil : process.terminationStatus, status: reason)
+            started(process.processIdentifier)
+            let reason = await monitor(process, command: command, resourceCheck: resourceCheck)
+            let forced = reason == "completed" ? false : await stopOwnedProcess(process, command: command)
+            let reaped = !process.isRunning
+            return CommandResult(command: command, started: began, ended: Date(),
+                exitCode: reaped ? process.terminationStatus : nil,
+                status: reaped ? reason : "child_cleanup_unconfirmed", forcedTermination: forced, childExitObserved: reaped)
         } catch {
-            return CommandResult(command: command, started: started, ended: Date(), exitCode: nil,
+            return CommandResult(command: command, started: began, ended: Date(), exitCode: nil,
                                  status: "launch_failed", detail: String(describing: error))
+        }
+    }
+
+    private static func monitor(_ process: Process, command: Command,
+                                resourceCheck: @Sendable (Command) -> String?) async -> String {
+        let deadline = ProcessInfo.processInfo.systemUptime + command.timeoutSeconds
+        var nextBudgetCheck = 0.0
+        while process.isRunning {
+            if Task.isCancelled { return "cancelled" }
+            let now = ProcessInfo.processInfo.systemUptime
+            if now >= nextBudgetCheck {
+                if let limit = resourceCheck(command) { return limit }
+                nextBudgetCheck = now + 1
+            }
+            if now >= deadline { return "timed_out" }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        if Task.isCancelled { return "cancelled" }
+        return resourceCheck(command) ?? "completed"
+    }
+
+    private static func stopOwnedProcess(_ process: Process, command: Command) async -> Bool {
+        guard process.isRunning else { return false }
+        process.interrupt()
+        let deadline = ProcessInfo.processInfo.systemUptime + 120
+        let directory = command.captureDirectory ?? command.stdout.deletingLastPathComponent()
+        while process.isRunning && ProcessInfo.processInfo.systemUptime < deadline {
+            guard let free = freeBytes(at: directory), free >= 2 * 1_073_741_824 else { break }
+            await cleanupPause()
+        }
+        guard process.isRunning else { return false }
+        kill(process.processIdentifier, SIGKILL)
+        let reapDeadline = ProcessInfo.processInfo.systemUptime + 5
+        while process.isRunning && ProcessInfo.processInfo.systemUptime < reapDeadline { await cleanupPause() }
+        return true
+    }
+
+    // Cleanup must still wait for the owned child after the caller's task has been cancelled.
+    private static func cleanupPause() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.25) { continuation.resume() }
         }
     }
 
@@ -73,10 +109,10 @@ extension GlimmerDiagnosticCapture {
         }
         let directory = command.captureDirectory ?? command.stdout.deletingLastPathComponent()
         guard let free = freeBytes(at: directory) else { return "disk_space_unverified" }
-        if free < 2 * 1_073_741_824 { return "disk_reserve" }
+        if free < 4 * 1_073_741_824 { return "disk_reserve" }
         if let directory = command.captureDirectory {
             guard let bytes = captureBytes(directory) else { return "capture_size_unverified" }
-            if bytes > 20 * 1_073_741_824 { return "capture_size_limit" }
+            if bytes > 8 * 1_073_741_824 { return "capture_size_limit" }
         }
         return nil
     }
@@ -93,7 +129,7 @@ extension GlimmerDiagnosticCapture {
             if values.isRegularFile == true {
                 guard let size = values.fileSize else { return nil }
                 total += Int64(size)
-                if total > 20 * 1_073_741_824 { return total }
+                if total > 8 * 1_073_741_824 { return total }
             }
         }
         return total

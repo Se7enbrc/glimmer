@@ -24,6 +24,8 @@ enum GlimmerDiagnosticCapture {
         let exitCode: Int32?
         let status: String
         var detail: String?
+        var forcedTermination = false
+        var childExitObserved = true
         var succeeded: Bool { status == "completed" && exitCode == 0 }
     }
 
@@ -59,20 +61,22 @@ enum GlimmerDiagnosticCapture {
         var preflightClockAlignment: ClockAlignment?
         var freeBytesBefore: Int64?
         var limitations = [
-            "VM checkpoints are before and after recording, not automatically before and after streaming.",
+            "This command records one 30-second detailed window; continuous session telemetry is separate.",
             "Footprint growth is not proof of leaked allocations; allocation stacks are not recorded here.",
             "System Trace changes measurement overhead. GPU utilization and physical scanout are not established.",
             "Observed row endpoints do not prove continuous stack or scheduling coverage.",
             "The raw trace may retain target environment values; only the TOC sidecar is sanitized.",
             "PID identity checks use ps start time at second precision, not a kernel process handle.",
-            "Capture is capped at 20 GiB with 2 GiB free reserve; exceeding either preserves partial evidence."
+            "Output budgets are soft stop thresholds; Instruments services may buffer data outside the output directory.",
+            "Cancellation or budget termination can leave an unreadable trace. Such output is never verified.",
+            "Intrusive VM map inspection is excluded; resource telemetry supplies the stream memory trend."
         ]
     }
 
     enum CaptureError: Error { case invalidPID }
 
     typealias Runner = @Sendable (Command) async -> CommandResult
-    static let recordingSeconds = 900
+    static let recordingSeconds = 30
     static let waitingSamplesTable = "table[@schema='time-profile'][@record-waiting-threads='1']"
         + "[@needs-kernel-callstack='1'][@context-switch-sampling='1']"
 
@@ -80,6 +84,7 @@ enum GlimmerDiagnosticCapture {
                     runner: Runner = execute,
                     spaceAvailable: @Sendable (URL) -> Int64? = freeBytes,
                     progress: @Sendable (String) -> Void = { _ in }) async throws -> URL {
+        try Task.checkCancellation()
         guard pid > 0, pid != ProcessInfo.processInfo.processIdentifier else {
             throw CaptureError.invalidPID
         }
@@ -115,7 +120,6 @@ enum GlimmerDiagnosticCapture {
             manifest.status = preflight.succeeded ? "options_unsupported" : failureStatus(preflight)
             return try finish(&manifest, at: manifestURL)
         }
-        _ = try await invoke("vmmap-before", "/usr/bin/vmmap", ["-summary", String(pid)], timeout: 60)
         guard await revalidateIdentity(target, manifest: &manifest, output: output, label: "target-before", runner: runner) else {
             manifest.status = "target_changed_before_recording"
             return try finish(&manifest, at: manifestURL)
@@ -133,10 +137,10 @@ enum GlimmerDiagnosticCapture {
         manifest.status = "recording"
         try save(manifest, to: manifestURL)
         let trace = output.appendingPathComponent("system.trace")
-        progress("Clock check passed. Starting the 15-minute recording now.")
+        progress("Clock check passed. Starting one 30-second detailed recording now.")
         let recording = try await invoke("record", "/usr/bin/xcrun", ["xctrace", "record", "--template",
-            "System Trace", "--attach", String(pid), "--time-limit", "15m", "--recording-options", options.path,
-            "--output", trace.path], timeout: Double(recordingSeconds + 300))
+            "System Trace", "--attach", String(pid), "--time-limit", "30s", "--recording-options", options.path,
+            "--output", trace.path], timeout: Double(recordingSeconds + 180))
         guard recording.succeeded else {
             manifest.status = failureStatus(recording)
             return try finish(&manifest, at: manifestURL)
@@ -146,7 +150,6 @@ enum GlimmerDiagnosticCapture {
             manifest.status = "target_changed_during_recording"
             return try finish(&manifest, at: manifestURL)
         }
-        _ = try await invoke("vmmap-after", "/usr/bin/vmmap", ["-summary", String(pid)], timeout: 60)
         let toc = try await invoke("toc", "/usr/bin/xcrun", ["xctrace", "export", "--input", trace.path, "--toc"],
                                    timeout: 120, maximum: 4_194_304)
         guard toc.succeeded, let coverage = inspectTOC(toc.command.stdout, pid: pid) else {
@@ -210,18 +213,19 @@ enum GlimmerDiagnosticCapture {
             manifest.status = "target_or_probes_unverified"
             return try finish(&manifest, at: manifestURL)
         }
-        guard let free = spaceAvailable(output), free >= 20 * 1_073_741_824 else {
+        guard let free = spaceAvailable(output), free >= 8 * 1_073_741_824 else {
             manifest.status = "export_insufficient_free_space"
             return try finish(&manifest, at: manifestURL)
         }
         for schema in ["time-profile", "thread-state"] {
+            if Task.isCancelled { return try finish(&manifest, at: manifestURL) }
             guard manifest.coverage?.schemas.contains(schema) == true else { continue }
             let table = schema == "time-profile" ? Self.waitingSamplesTable : "table[@schema='thread-state']"
             let command = Command(label: schema, executable: "/usr/bin/xcrun", arguments: ["xctrace", "export",
                 "--input", trace.path, "--xpath", "/trace-toc/run[@number='1']/data/" + table],
                 timeoutSeconds: 600, stdout: output.appendingPathComponent(schema + ".xml"),
                 stderr: output.appendingPathComponent(schema + ".stderr"),
-                maximumOutputBytes: (schema == "thread-state" ? 12 : 2) * 1_073_741_824,
+                maximumOutputBytes: (schema == "thread-state" ? 2 : 1) * 1_073_741_824,
                 captureDirectory: output)
             let result = await runner(command)
             manifest.commands.append(result)
@@ -230,6 +234,7 @@ enum GlimmerDiagnosticCapture {
             }
             try save(manifest, to: manifestURL)
         }
+        if Task.isCancelled { return try finish(&manifest, at: manifestURL) }
         try await exportClock(manifest: &manifest, output: output, trace: trace, runner: runner)
         let coverage = manifest.coverage
         let samplesCover = coversRequestedWindow(first: coverage?.firstSampleNanos, last: coverage?.lastSampleNanos)
@@ -263,7 +268,7 @@ enum GlimmerDiagnosticCapture {
 
     private static func coversRequestedWindow(first: UInt64?, last: UInt64?) -> Bool {
         guard let first, let last else { return false }
-        return first < 10_000_000_000 && last >= UInt64(recordingSeconds - 10) * 1_000_000_000
+        return first < 3_000_000_000 && last >= UInt64(recordingSeconds - 3) * 1_000_000_000
     }
 
     static func freeBytes(at url: URL) -> Int64? {
@@ -271,6 +276,7 @@ enum GlimmerDiagnosticCapture {
     }
 
     private static func finish(_ manifest: inout Manifest, at url: URL) throws -> URL {
+        if Task.isCancelled { manifest.status = "cancelled" }
         manifest.ended = Date()
         try save(manifest, to: url)
         return url
@@ -298,7 +304,7 @@ enum GlimmerDiagnosticCapture {
         if ["permission", "not authorized", "not permitted", "failed to attach"].contains(where: text.contains) {
             return "permission_or_attachment_failed"
         }
-        return result.status == "timed_out" ? "capture_timed_out" : "capture_failed"
+        return result.status == "completed" ? "capture_failed" : result.status
     }
 
     static func inspectTOC(_ url: URL, pid: Int32) -> Coverage? {
