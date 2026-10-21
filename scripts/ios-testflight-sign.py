@@ -6,7 +6,6 @@
 
 import base64
 from datetime import datetime, timezone
-import hashlib
 import importlib
 import json
 import os
@@ -15,6 +14,7 @@ import plistlib
 import re
 import secrets
 import shutil
+import ssl
 import subprocess
 
 artifact = importlib.import_module('ios-testflight-artifact')
@@ -60,6 +60,19 @@ def export_options(team, fingerprint, profile_id):
             'stripSwiftSymbols': True, 'uploadSymbols': True}
 
 
+def signing_identity(identities, certificate_pems, profile):
+    matches = re.findall(r'\b([A-F0-9]{40}) "Apple Distribution:[^"\n]+"', identities)
+    certificates = re.findall(r'-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----',
+                              certificate_pems, re.S)
+    if len(matches) != 1 or len(certificates) != 1:
+        raise ValueError('exactly one Apple Distribution identity and certificate are required')
+    certificate = ssl.PEM_cert_to_DER_cert(certificates[0])
+    if certificate not in profile['DeveloperCertificates']:
+        raise ValueError('Apple Distribution certificate does not exactly match the profile')
+    # The system fingerprint selects the sole verified identity in Xcode; DER bytes establish membership.
+    return matches[0]
+
+
 def credentials(team):
     root = private_root()
     root.mkdir(mode=0o700)
@@ -78,10 +91,9 @@ def credentials(team):
     run(['security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s',
          '-k', password, str(keychain)])
     identities = run(['security', 'find-identity', '-v', '-p', 'codesigning', str(keychain)]).stdout.decode()
-    matches = re.findall(r'\b([A-F0-9]{40}) "Apple Distribution:[^"\n]+"', identities)
-    allowed = {hashlib.sha1(certificate).hexdigest().upper() for certificate in profile['DeveloperCertificates']}
-    if len(matches) != 1 or matches[0] not in allowed:
-        raise ValueError('exactly one Apple Distribution identity matching the profile is required')
+    certificates = run(['security', 'find-certificate', '-a', '-c', 'Apple Distribution:',
+                        '-p', str(keychain)]).stdout.decode()
+    fingerprint = signing_identity(identities, certificates, profile)
     previous = run(['security', 'list-keychains', '-d', 'user']).stdout.decode()
     previous = re.findall(r'"([^"\n]+)"', previous)
     (root / 'keychains.json').write_text(json.dumps(previous))
@@ -93,7 +105,7 @@ def credentials(team):
         output.write((root / 'profile.mobileprovision').read_bytes())
     installed.chmod(0o600)
     (root / 'installed-profile.txt').write_text(installed.name)
-    return export_options(team, matches[0], profile['UUID'])
+    return export_options(team, fingerprint, profile['UUID'])
 
 
 def cleanup():
@@ -178,6 +190,9 @@ def export(archive, output, expected):
             raise ValueError('export contains an unexpected application')
         verify_signed_app(inspected / 'Payload/Glimmer.app', expected, team)
         receipt = {'schema': 1, 'identity': expected, 'internal_only': True, 'team': team,
+                   'trusted_tooling_sha': os.environ['TRUSTED_TOOLING_SHA'],
+                   'signing_run_id': os.environ['GITHUB_RUN_ID'],
+                   'signing_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
                    'ipa_sha256': artifact.digest(ipas[0]), 'export_options': options,
                    'app_uuids': artifact.uuids(inspected / 'Payload/Glimmer.app/Glimmer')}
         if receipt['app_uuids'] != artifact.uuids(archive / artifact.APP / 'Glimmer'):

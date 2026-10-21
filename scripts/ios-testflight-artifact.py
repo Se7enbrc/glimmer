@@ -34,20 +34,27 @@ def validate_inputs(sha, version, build):
 
 def identity(env=None, attempt=None):
     env = os.environ if env is None else env
-    values = {key: env[key] for key in ('EXPECTED_SHA', 'IOS_VERSION', 'IOS_BUILD_NUMBER',
-                                      'GITHUB_REPOSITORY', 'GITHUB_RUN_ID', 'TRUSTED_TOOLING_SHA')}
-    values['GITHUB_RUN_ATTEMPT'] = attempt or env['GITHUB_RUN_ATTEMPT']
+    values = {key: env[key] for key in ('EXPECTED_SHA', 'IOS_VERSION', 'IOS_BUILD_NUMBER', 'GITHUB_REPOSITORY')}
+    values['GITHUB_RUN_ID'] = env.get('ARCHIVE_RUN_ID') or env['GITHUB_RUN_ID']
+    values['GITHUB_RUN_ATTEMPT'] = attempt or env.get('ARCHIVE_ATTEMPT') or env['GITHUB_RUN_ATTEMPT']
     validate_inputs(values['EXPECTED_SHA'], values['IOS_VERSION'], values['IOS_BUILD_NUMBER'])
     if values['GITHUB_REPOSITORY'] != REPOSITORY:
         raise ValueError('unexpected repository')
-    if not re.fullmatch(r'[0-9a-f]{40}', values['TRUSTED_TOOLING_SHA']):
-        raise ValueError('invalid trusted tooling SHA')
     for key in ('GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'):
         if not re.fullmatch(r'[1-9][0-9]*', values[key]):
             raise ValueError('invalid producing run or attempt')
-    if int(values['GITHUB_RUN_ATTEMPT']) > int(env['GITHUB_RUN_ATTEMPT']):
-        raise ValueError('artifact attempt is in the future')
     return values
+
+
+def require_builder(env=None):
+    env = os.environ if env is None else env
+    ref = env.get('GITHUB_REF', '')
+    default = env.get('DEFAULT_BRANCH', '')
+    workflow = f'{REPOSITORY}/.github/workflows/ios-testflight-build.yml@{ref}'
+    if (env.get('GITHUB_REPOSITORY') != REPOSITORY or env.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
+            or not default or not ref.startswith('refs/heads/') or ref in ('refs/heads/main', f'refs/heads/{default}')
+            or env.get('GITHUB_WORKFLOW_REF') != workflow or env.get('GITHUB_SHA') != env.get('EXPECTED_SHA')):
+        raise ValueError('archive must run on its exact candidate branch commit, never the default branch')
 
 
 def require_dispatch(env=None):

@@ -5,7 +5,9 @@
 
 import copy
 from datetime import datetime, timedelta
+import hashlib
 import importlib
+import io
 import json
 import os
 from pathlib import Path
@@ -15,7 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -91,6 +93,23 @@ class TestFlightTests(unittest.TestCase):
             with patch.object(checks, 'check', side_effect=ValueError('checks not green')):
                 with self.assertRaisesRegex(ValueError, 'checks not green'):
                     cli.gate(self.expected)
+
+    def test_builder_runs_only_its_exact_nondefault_branch_commit(self):
+        env = {**ENV, 'GITHUB_SHA': 'a' * 40, 'GITHUB_REF': 'refs/heads/candidate', 'DEFAULT_BRANCH': 'main',
+               'GITHUB_WORKFLOW_REF': 'Se7enbrc/glimmer/.github/workflows/ios-testflight-build.yml@refs/heads/candidate'}
+        artifact.require_builder(env)
+        for key, value in [('GITHUB_SHA', 'c' * 40), ('GITHUB_REF', 'refs/heads/main'),
+                           ('DEFAULT_BRANCH', 'candidate'), ('DEFAULT_BRANCH', ''),
+                           ('GITHUB_EVENT_NAME', 'pull_request_target')]:
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                artifact.require_builder({**env, key: value})
+
+    def test_producer_identity_is_separate_from_the_protected_workflow_run(self):
+        env = {**ENV, 'ARCHIVE_RUN_ID': '800', 'ARCHIVE_ATTEMPT': '4'}
+        identity = artifact.identity(env)
+        self.assertEqual(identity['GITHUB_RUN_ID'], '800')
+        self.assertEqual(identity['GITHUB_RUN_ATTEMPT'], '4')
+        self.assertNotIn('TRUSTED_TOOLING_SHA', identity)
 
     def test_handoff_roundtrip_preserves_executable_symbols_and_identity(self):
         root = self.fixture()
@@ -175,13 +194,97 @@ class TestFlightTests(unittest.TestCase):
             artifact.unpack(bundle, self.root, 'Payload')
 
     def test_artifact_metadata_binds_source_workflow_run_and_attempt(self):
-        metadata = {'id': 44, 'name': 'ios-unsigned-123-2', 'expired': False,
-                    'workflow_run': {'id': 123, 'head_sha': 'b' * 40}}
+        metadata = {'id': 44, 'name': 'ios-unsigned-123-2', 'expired': False, 'digest': 'sha256:' + 'd' * 64,
+                    'workflow_run': {'id': 123, 'head_sha': 'a' * 40}}
         cli.check_metadata(metadata, self.expected, '44')
         for key, value in [('id', 45), ('name', 'ios-unsigned-123-1'), ('expired', True),
-                           ('workflow_run', {'id': 123, 'head_sha': 'a' * 40})]:
+                           ('workflow_run', {'id': 123, 'head_sha': 'b' * 40}), ('digest', '')]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 cli.check_metadata({**metadata, key: value}, self.expected, '44')
+
+    def download_fixture(self):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, 'w') as output:
+            output.writestr('archive.zip', b'inert archive bytes')
+            output.writestr('manifest.json', b'{"fixture":true}\n')
+        data = stream.getvalue()
+        digest = 'sha256:' + hashlib.sha256(data).hexdigest()
+        metadata = {'id': 44, 'name': 'ios-unsigned-123-2', 'expired': False, 'digest': digest,
+                    'workflow_run': {'id': 123, 'head_sha': 'a' * 40}}
+        return data, digest, metadata
+
+    def fake_download(self, data):
+        def complete(*_arguments, **options):
+            options['stdout'].write(data)
+            options['stdout'].flush()
+            process = Mock(returncode=0)
+            process.poll.return_value = 0
+            return process
+        return complete
+
+    def test_download_rejects_metadata_digest_change_before_fetching_bytes(self):
+        _, digest, metadata = self.download_fixture()
+        metadata['digest'] = 'sha256:' + '0' * 64
+        result = subprocess.CompletedProcess([], 0, stdout=json.dumps(metadata))
+        with patch.dict(os.environ, ARCHIVE_DIGEST=digest):
+            with patch.object(cli.subprocess, 'run', return_value=result):
+                with patch.object(cli.subprocess, 'Popen') as fetch:
+                    with self.assertRaisesRegex(ValueError, 'changed after'):
+                        cli.download('44', self.root / 'payload', self.expected)
+                    fetch.assert_not_called()
+        self.assertFalse((self.root / 'payload').exists())
+
+    def test_download_rejects_zip_byte_mismatch_before_parsing_or_extraction(self):
+        data, digest, metadata = self.download_fixture()
+        result = subprocess.CompletedProcess([], 0, stdout=json.dumps(metadata))
+        with patch.dict(os.environ, ARCHIVE_DIGEST=digest):
+            with patch.object(cli.subprocess, 'run', return_value=result):
+                with patch.object(cli.subprocess, 'Popen', side_effect=self.fake_download(data + b'tampered')):
+                    with patch.object(cli.zipfile, 'ZipFile') as parse:
+                        with self.assertRaisesRegex(ValueError, 'differs from'):
+                            cli.download('44', self.root / 'payload', self.expected)
+                        parse.assert_not_called()
+        self.assertFalse((self.root / 'payload').exists())
+
+    def test_download_verified_outer_zip_roundtrips_exact_payload_bytes(self):
+        data, digest, metadata = self.download_fixture()
+        result = subprocess.CompletedProcess([], 0, stdout=json.dumps(metadata))
+        with patch.dict(os.environ, ARCHIVE_DIGEST=digest):
+            with patch.object(cli.subprocess, 'run', return_value=result):
+                with patch.object(cli.subprocess, 'Popen', side_effect=self.fake_download(data)):
+                    cli.download('44', self.root / 'payload', self.expected)
+        self.assertEqual({p.name for p in (self.root / 'payload').iterdir()}, {'archive.zip', 'manifest.json'})
+        self.assertEqual((self.root / 'payload/archive.zip').read_bytes(), b'inert archive bytes')
+        self.assertEqual((self.root / 'payload/manifest.json').read_bytes(), b'{"fixture":true}\n')
+
+    def test_build_run_requires_workflow_source_repository_success_and_branch(self):
+        run = {'id': 123, 'head_sha': 'a' * 40, 'head_repository': {'full_name': 'Se7enbrc/glimmer'},
+               'event': 'workflow_dispatch', 'path': cli.BUILD_WORKFLOW, 'workflow_id': 17,
+               'status': 'completed', 'conclusion': 'success', 'head_branch': 'candidate', 'run_attempt': 2}
+        cli.check_build_run(run, self.expected, 17, 'main')
+        for key, value in [('id', 124), ('head_sha', 'b' * 40), ('head_repository', {'full_name': 'fork/glimmer'}),
+                           ('event', 'pull_request_target'), ('path', '.github/workflows/other.yml'),
+                           ('workflow_id', 18), ('status', 'in_progress'), ('conclusion', 'failure'),
+                           ('head_branch', 'main'), ('run_attempt', 0)]:
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                cli.check_build_run({**run, key: value}, self.expected, 17, 'main')
+        with self.assertRaises(ValueError):
+            cli.check_build_run(run, self.expected, 17, 'candidate')
+
+    def test_resolve_selects_exact_producing_attempt_and_emits_digest(self):
+        checks = importlib.import_module('release-checks')
+        workflow = {'id': 17, 'path': cli.BUILD_WORKFLOW, 'state': 'active'}
+        run = {'id': 123, 'head_sha': 'a' * 40, 'head_repository': {'full_name': 'Se7enbrc/glimmer'},
+               'event': 'workflow_dispatch', 'path': cli.BUILD_WORKFLOW, 'workflow_id': 17,
+               'status': 'completed', 'conclusion': 'success', 'head_branch': 'candidate', 'run_attempt': 4}
+        metadata = {'id': 44, 'name': 'ios-unsigned-123-4', 'expired': False, 'digest': 'sha256:' + 'd' * 64,
+                    'workflow_run': {'id': 123, 'head_sha': 'a' * 40}}
+        with patch.dict(os.environ, {**ENV, 'DEFAULT_BRANCH': 'main'}, clear=True):
+            with patch.object(checks, 'object_api', side_effect=[workflow, run]):
+                with patch.object(checks, 'api', return_value=[{'artifacts': [metadata]}]):
+                    with patch.object(cli, 'write_outputs') as write:
+                        cli.resolve(self.expected)
+        write.assert_called_once_with(artifact=44, attempt='4', digest='sha256:' + 'd' * 64)
 
     def profile(self):
         team = 'ABCDEFGHIJ'
@@ -254,11 +357,22 @@ class TestFlightTests(unittest.TestCase):
             self.assertNotIn('sensitive', json.dumps(receipt))
 
     def test_workflow_keeps_candidate_code_and_credentials_separate(self):
-        workflow = (Path(__file__).resolve().parents[2] / '.github/workflows/ios-testflight.yml').read_text()
-        build = workflow.split('\n  archive:\n')[1].split('\n  distribute:\n')[0]
+        workflows = Path(__file__).resolve().parents[2] / '.github/workflows'
+        workflow = (workflows / 'ios-testflight.yml').read_text()
+        build = (workflows / 'ios-testflight-build.yml').read_text()
         signing_job = workflow.split('\n  distribute:\n')[1]
         self.assertNotIn('secrets.', build)
         self.assertNotIn('environment:', build)
+        self.assertNotIn('id-token:', build)
+        self.assertNotIn('actions/cache', build)
+        self.assertIn('ref: ${{ github.sha }}', build)
+        self.assertNotIn('ref: ${{ inputs.expected_sha }}', build)
+        self.assertIn("github.ref != 'refs/heads/main'", build)
+        self.assertIn('github.event.repository.default_branch', build)
+        self.assertNotIn('ios-testflight.py archive', workflow)
+        self.assertNotIn('ref: ${{ inputs.expected_sha }}', workflow)
+        self.assertIn('archive_run_id:', workflow)
+        self.assertIn('ios-testflight.py resolve', workflow)
         self.assertIn('environment: ios-testflight', signing_job)
         self.assertIn("github.ref == 'refs/heads/main'", signing_job)
         self.assertIn('ref: main', signing_job)

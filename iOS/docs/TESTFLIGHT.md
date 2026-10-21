@@ -10,15 +10,16 @@ certificates, passwords or provisioning profiles into an issue or chat.
 
 1. Create an iOS app record in App Store Connect for `io.ugfugl.Glimmer.iOS`.
    Use the existing registered identifier; do not create a replacement
-   identifier. Proposed name: **Glimmer**, primary language: **English (U.S.)**,
-   SKU: **glimmer-ios**. Check name availability first.
+   identifier. App Store display name: **Glimmer: Game Streaming**. Suggested
+   primary language: **English (U.S.)**; suggested SKU: **glimmer-ios**.
 2. Prepare Apple Distribution signing and an App Store distribution profile for
    that identifier. Mac Developer ID credentials and development profiles do not
    serve this purpose. Reuse suitable distribution credentials if present; do
    not revoke or replace existing certificates as a troubleshooting step.
-3. Create or authorize App Store Connect API access for uploading this app.
-   Confirm the account's agreements and access are current. Keep upload access
-   separate from Mac notarization credentials.
+3. Authorize App Store Connect API access for uploading this app. An existing
+   approved API key may be reused if its permissions cover this app; use its
+   secure secret-management reference rather than exporting it into chat. Create
+   a new key only if needed. Confirm agreements and access are current.
 4. Configure the protected GitHub `ios-testflight` environment with a maintainer
    reviewer and deployments restricted to `main`. Keep its signing and upload
    values in environment secrets, using the existing approved secret-management
@@ -62,10 +63,16 @@ device or automatically repair account signing state.
 3. Choose the iOS marketing version and an unused, increasing build number.
    Check App Store Connect before dispatching. A retry after Apple accepts an
    upload must not overwrite or silently reuse that build number.
-4. Dispatch **iOS TestFlight** from `main` with those values. Review the
-   unsigned archive's source identity and verification evidence before approving
-   the protected job.
-5. After Apple processes the upload, review its status and compliance questions,
+4. Dispatch **iOS TestFlight Build** on the candidate branch whose HEAD is that
+   exact SHA, with the version and build number. The builder rejects `main` and
+   the repository's default branch. It checks out only its own workflow commit,
+   so candidate code cannot write caches in the default branch's trust scope.
+5. After that build succeeds, dispatch **iOS TestFlight** from `main`. Provide
+   the same source SHA, version and build number, plus the successful build's
+   workflow run ID as `archive_run_id`. The trusted gate selects that run's
+   exact producing attempt and immutable archive artifact. Review its source
+   identity and verification evidence before approving the protected job.
+6. After Apple processes the upload, review its status and compliance questions,
    then add the build to **Internal**. Enter a short **What to Test**
    description covering the actual changes and known limitations.
 
@@ -74,10 +81,12 @@ release. A future public release needs a separate reviewed distribution path.
 
 ## What CI must preserve
 
-The pipeline builds a Release archive without signing credentials or local
-development compilation flags. A fresh protected job validates the artifact,
-signs/exports it and uploads it. It does not run the candidate's scripts with
-distribution credentials or rebuild accepted source in the protected job.
+The candidate-branch workflow builds a Release archive without signing
+credentials or local development compilation flags. The separate main workflow
+does not check out or execute candidate code. Its fresh protected job validates
+the successful build run, workflow, source, repository, producing attempt,
+GitHub artifact digest, manifest and bundle identity before signing/exporting
+and uploading the existing bytes.
 
 Retain the archive, matching dSYMs, source and tooling SHAs, build/version,
 verification evidence, artifact digests and upload result. A successful upload

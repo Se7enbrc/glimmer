@@ -5,6 +5,7 @@
 """Manual, exact-commit TestFlight build, verified handoff and internal-only upload."""
 
 import argparse
+import hashlib
 import importlib
 import json
 import os
@@ -28,8 +29,11 @@ def toolchain():
     return result.stdout.strip()
 
 
-def gate(expected):
-    artifact.require_dispatch()
+BUILD_WORKFLOW = '.github/workflows/ios-testflight-build.yml'
+
+
+def gate(expected, builder=False):
+    artifact.require_builder() if builder else artifact.require_dispatch()
     checks = importlib.import_module('release-checks').check(expected['EXPECTED_SHA'])
     output = Path(os.environ['RUNNER_TEMP']) / 'ios-testflight-checks.json'
     output.write_text(json.dumps(checks, sort_keys=True) + '\n')
@@ -62,8 +66,39 @@ def check_metadata(data, expected, artifact_id):
     run = data.get('workflow_run', {})
     if (str(data.get('id')) != artifact_id or data.get('name') != name or data.get('expired') is not False
             or str(run.get('id')) != expected['GITHUB_RUN_ID']
-            or run.get('head_sha') != expected['TRUSTED_TOOLING_SHA']):
-        raise ValueError('artifact must belong to this main workflow run and producing attempt')
+            or run.get('head_sha') != expected['EXPECTED_SHA']
+            or not re.fullmatch(r'sha256:[0-9a-f]{64}', data.get('digest', ''))):
+        raise ValueError('artifact must belong to the approved source build run and producing attempt')
+
+
+def check_build_run(data, expected, workflow_id, default_branch):
+    if (str(data.get('id')) != expected['GITHUB_RUN_ID'] or data.get('head_sha') != expected['EXPECTED_SHA']
+            or data.get('head_repository', {}).get('full_name') != artifact.REPOSITORY
+            or data.get('event') != 'workflow_dispatch' or data.get('path') != BUILD_WORKFLOW
+            or data.get('workflow_id') != workflow_id or data.get('status') != 'completed'
+            or data.get('conclusion') != 'success' or not default_branch or not data.get('head_branch')
+            or data.get('head_branch') in ('main', default_branch)
+            or not re.fullmatch(r'[1-9][0-9]*', str(data.get('run_attempt', '')))):
+        raise ValueError('archive run must be a successful exact-source candidate-branch build')
+
+
+def resolve(expected):
+    artifact.require_dispatch()
+    checks = importlib.import_module('release-checks')
+    workflow = checks.object_api('actions/workflows/ios-testflight-build.yml')
+    if workflow.get('path') != BUILD_WORKFLOW or workflow.get('state') != 'active':
+        raise ValueError('expected archive workflow is not active')
+    run = checks.object_api(f"actions/runs/{expected['GITHUB_RUN_ID']}")
+    check_build_run(run, expected, workflow['id'], os.environ.get('DEFAULT_BRANCH', ''))
+    expected = {**expected, 'GITHUB_RUN_ATTEMPT': str(run['run_attempt'])}
+    pages = checks.api(f"actions/runs/{expected['GITHUB_RUN_ID']}/artifacts?per_page=100")
+    name = f"ios-unsigned-{expected['GITHUB_RUN_ID']}-{expected['GITHUB_RUN_ATTEMPT']}"
+    matches = [item for page in pages for item in page.get('artifacts', []) if item.get('name') == name]
+    if len(matches) != 1:
+        raise ValueError('exactly one archive artifact is required for the producing attempt')
+    selected = matches[0]
+    check_metadata(selected, expected, str(selected['id']))
+    write_outputs(artifact=selected['id'], attempt=expected['GITHUB_RUN_ATTEMPT'], digest=selected['digest'])
 
 
 def download(artifact_id, payload, expected):
@@ -71,7 +106,10 @@ def download(artifact_id, payload, expected):
         raise ValueError('invalid artifact ID or destination')
     endpoint = f'repos/{artifact.REPOSITORY}/actions/artifacts/{artifact_id}'
     metadata = subprocess.run(['gh', 'api', endpoint], check=True, capture_output=True, text=True, timeout=60)
-    check_metadata(json.loads(metadata.stdout), expected, artifact_id)
+    metadata = json.loads(metadata.stdout)
+    check_metadata(metadata, expected, artifact_id)
+    if metadata['digest'] != os.environ['ARCHIVE_DIGEST']:
+        raise ValueError('artifact changed after the trusted gate selected it')
     with tempfile.TemporaryFile() as output:
         process = subprocess.Popen(['gh', 'api', endpoint + '/zip'], stdout=output, stderr=subprocess.DEVNULL)
         deadline = time.monotonic() + 180
@@ -86,6 +124,10 @@ def download(artifact_id, payload, expected):
             if process.poll() is None:
                 process.kill()
                 process.wait(timeout=10)
+        output.seek(0)
+        actual_digest = hashlib.file_digest(output, 'sha256').hexdigest()
+        if metadata['digest'] != f'sha256:{actual_digest}':
+            raise ValueError('downloaded artifact differs from the GitHub artifact digest')
         output.seek(0)
         with zipfile.ZipFile(output) as bundle:
             entries = bundle.infolist()
@@ -108,7 +150,8 @@ def write_outputs(**values):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('inputs', 'gate', 'archive', 'seal', 'import', 'export', 'upload', 'cleanup'))
+    parser.add_argument('operation', choices=('inputs', 'gate', 'build-gate', 'resolve', 'archive', 'seal',
+                                             'import', 'export', 'upload', 'cleanup'))
     parser.add_argument('--source', type=Path)
     parser.add_argument('--archive', type=Path)
     parser.add_argument('--output', type=Path)
@@ -118,11 +161,14 @@ def main():
             signing.cleanup()
             return
         expected = artifact.identity(attempt=os.environ.get('ARCHIVE_ATTEMPT'))
-        artifact.require_dispatch()
+        builder = args.operation in ('build-gate', 'archive', 'seal')
+        artifact.require_builder() if builder else artifact.require_dispatch()
         if args.operation == 'inputs':
             return
-        if args.operation == 'gate':
-            gate(expected)
+        if args.operation in ('gate', 'build-gate'):
+            gate(expected, builder=builder)
+        elif args.operation == 'resolve':
+            resolve(expected)
         elif args.operation == 'archive':
             archive(args.source.resolve(), args.archive.resolve(), expected)
         elif args.operation == 'seal':
@@ -130,7 +176,7 @@ def main():
             write_outputs(manifest=manifest, attempt=expected['GITHUB_RUN_ATTEMPT'])
         elif args.operation == 'import':
             download(os.environ['ARCHIVE_ARTIFACT_ID'], args.output, expected)
-            artifact.import_archive(args.output, args.archive.parent, expected, os.environ['ARCHIVE_MANIFEST'])
+            artifact.import_archive(args.output, args.archive.parent, expected, artifact.digest(args.output / 'manifest.json'))
         elif args.operation == 'export':
             toolchain()
             signing.export(args.archive, args.output, expected)
