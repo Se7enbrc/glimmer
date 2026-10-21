@@ -312,6 +312,57 @@ struct LauncherTests {
         #expect(fixture.remembers == 1)
     }
 
+    @Test(arguments: [false, true])
+    func cancelledPreparationCannotReplaceASecondPC(waitingForApps: Bool) async {
+        let gate = StreamTestGate()
+        let network = testLaunch().network
+        let first = ServerInfo(address: "first.invalid", uniqueId: "first", serverName: "First PC")
+        var second = first
+        second.address = "second.invalid"
+        second.uniqueId = "second"
+        second.serverName = "Second PC"
+        let saved = [SavedPC(server: first), SavedPC(server: second)]
+        var remembered: [String] = []
+        var requestedApps: [String] = []
+        let model = LauncherModel(calls: .init(savedPCs: { saved }, prepare: { server, _ in
+            if server.uniqueId == "first", !waitingForApps { await gate.wait() }
+            var prepared = server
+            prepared.pairStatus = .paired
+            prepared.serverCertPEM = "test placeholder, never sent to a transport"
+            return PreparedPC(network: network, server: prepared)
+        }, pair: { pc, _ in
+            Issue.record("Both fixtures are already paired.")
+            return pc
+        }, apps: { pc in
+            requestedApps.append(pc.server.uniqueId)
+            if pc.server.uniqueId == "first", waitingForApps { await gate.wait() }
+            return [HostApp(id: pc.server.uniqueId == "first" ? 1 : 2, name: pc.server.serverName,
+                            hdrCapable: false, hidden: false)]
+        }, remember: { pc in
+            remembered.append(pc.server.uniqueId)
+            return saved
+        }, protectedDataChanged: { _ in }), discoveryEnabled: false)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(saved[0])
+        let replacement = Task { @MainActor in
+            await gate.waitUntilEntered()
+            #expect(model.busy)
+            model.cancelOperation()
+            #expect(model.busy == false && model.canForgetPC)
+            model.select(saved[1])
+            await model.waitUntilOperationFinishes()
+            #expect(model.selectedName == "Second PC" && model.apps.map(\.id) == [2])
+            await gate.release()
+        }
+        // No suspension follows select until this captures the first operation; replacement waits on its gate.
+        await model.waitUntilOperationFinishes()
+        await replacement.value
+        #expect(model.busy == false && model.pairing == nil && model.message == nil)
+        #expect(model.selectedName == "Second PC" && model.apps.map(\.id) == [2])
+        #expect(remembered == ["second"])
+        #expect(requestedApps == (waitingForApps ? ["first", "second"] : ["second"]))
+    }
+
     @Test func cancelledPairingCannotPublishAppsOrRememberPC() async {
         let fixture = LauncherFixture()
         fixture.paired = false

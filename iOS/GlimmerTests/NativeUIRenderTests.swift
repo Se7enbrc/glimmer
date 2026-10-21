@@ -48,6 +48,30 @@ struct NativeUIRenderTests {
                          name: "mouse-settings-\(style)", size: size, dark: dark)
     }
 
+    @Test(arguments: [DynamicTypeSize.large, .accessibility3])
+    func connectingLauncherOffersCancellation(textSize: DynamicTypeSize) async throws {
+        let fixture = LauncherFixture()
+        let gate = StreamTestGate()
+        fixture.prepareGate = gate
+        let model = fixture.model()
+        let sizeLabel = textSize.isAccessibilitySize ? "accessibility" : "standard"
+        var captureError: Error?
+        do {
+            try await record(LauncherView(model: model), name: "launcher-connecting-cancel-\(sizeLabel)",
+                             size: CGSize(width: 667, height: 375), dark: false, textSize: textSize, prepare: {
+                model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+                model.select(fixture.saved)
+                await gate.waitUntilEntered()
+                #expect(model.busy && model.selectedName == "Test PC")
+            })
+        } catch { captureError = error }
+        model.cancelOperation()
+        await gate.release()
+        await model.waitUntilOperationFinishes()
+        #expect(model.busy == false && fixture.remembers == 0)
+        if let captureError { throw captureError }
+    }
+
     @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440)], [false, true])
     func settingsPages(size: CGSize, dark: Bool) async throws {
         let saved = SavedPC(server: ServerInfo(address: "pc.invalid", uniqueId: "settings-pc",

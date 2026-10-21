@@ -35,7 +35,12 @@ struct LauncherView: View {
                         LauncherGallery(model: model, style: styleOverride ?? launcherStyle,
                                         size: CGSize(width: max(0, geometry.size.width - 48),
                                                      height: geometry.size.height))
-                        if model.busy { ProgressView("Connecting…") }
+                        if model.busy {
+                            HStack {
+                                ProgressView("Connecting…")
+                                Button("Cancel", role: .cancel, action: model.cancelOperation)
+                            }
+                        }
                         if let message = model.message { Text(message).foregroundStyle(.secondary) }
                         if model.savedPCs.isEmpty, model.selectedName == nil {
                             Button("Set up a PC", systemImage: "plus") { showingSettings = true }

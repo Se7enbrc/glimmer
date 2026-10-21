@@ -112,39 +112,18 @@ extension AppModel {
             forName: NSApplication.didBecomeActiveNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
+            // The notification runs on the main queue; capture the click before a task hop can outlive it.
+            let activation = MainActor.assumeIsolated { Self.captureActivation() }
             Task { @MainActor in
                 guard let self else { return }
                 self.loadHosts()
-                // Refresh the host status poller on activation so the chip
-                // updates within one RTT of the user returning, rather than
-                // waiting out the current 10s interval. This is no longer a
-                // "resume" - polling now runs continuously regardless of focus
-                // (see restartHostStatusPolling); restarting here just resets
-                // the streak and fires an immediate probe for snappy feedback.
                 self.restartHostStatusPolling()
-                // If a DualSense is connected and the user hasn't decided on
-                // the raw-HID feature, offer it now (e.g. they returned to the
-                // launcher after plugging it in mid-stream).
                 self.maybeOfferRawHID()
                 InputMonitoring.noticeReturn()
-                // Cmd-Tab back into Glimmer while a stream is parked in the
-                // background should bring the stream forward - but ONLY for a
-                // keyboard-style reactivation (Cmd-Tab). If the user clicked
-                // the launcher window (or its menu) to reach Settings, leave
-                // them there. StreamWindow.swift deliberately avoids a blanket
-                // didBecomeActive resume for this exact reason; we gate on the
-                // triggering event NOT being a mouse click so the launcher
-                // stays reachable mid-stream.
-                guard self.isStreaming, self.nativeStreamBackgrounded else { return }
-                // Resume on Cmd-Tab, not a window click. currentEvent is nil for both,
-                // so the mouse button is the tell: a click-to-activate still has it down.
-                let evType = NSApp.currentEvent?.type
-                let mouseEvent = evType == .leftMouseDown || evType == .leftMouseUp
-                    || evType == .rightMouseDown || evType == .otherMouseDown
-                let viaClick = mouseEvent || NSEvent.pressedMouseButtons != 0
-                if !viaClick {
-                    self.resumeStreamWindow()
-                }
+                guard activation.shouldResumeStream(
+                    streaming: self.isStreaming, backgrounded: self.nativeStreamBackgrounded,
+                    settingsWindowIsKey: Self.settingsWindowIsKey) else { return }
+                self.resumeStreamWindow()
             }
         })
         // Losing focus must not strand a visible chip on Checking. Hidden-but-awake
@@ -180,6 +159,33 @@ extension AppModel {
         // the auto-offer and seeding `controllerConnected`).
         controllerConnected = !GCController.controllers().isEmpty
         maybeOfferRawHID()
+    }
+
+    struct ActivationContext: Sendable {
+        let viaClick: Bool
+        let settingsWindowWasKey: Bool
+
+        nonisolated init(eventType: NSEvent.EventType?, pressedMouseButtons: Int, settingsWindowIsKey: Bool) {
+            let mouseEvents: Set<NSEvent.EventType> = [
+                .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp
+            ]
+            viaClick = eventType.map { mouseEvents.contains($0) } == true || pressedMouseButtons != 0
+            settingsWindowWasKey = settingsWindowIsKey
+        }
+
+        nonisolated func shouldResumeStream(streaming: Bool, backgrounded: Bool,
+                                            settingsWindowIsKey: Bool) -> Bool {
+            streaming && backgrounded && !viaClick && !settingsWindowWasKey && !settingsWindowIsKey
+        }
+    }
+
+    private static var settingsWindowIsKey: Bool {
+        NSApp.keyWindow?.identifier?.rawValue == "com_apple_SwiftUI_Settings_window"
+    }
+
+    private static func captureActivation() -> ActivationContext {
+        ActivationContext(eventType: NSApp.currentEvent?.type, pressedMouseButtons: NSEvent.pressedMouseButtons,
+                          settingsWindowIsKey: settingsWindowIsKey)
     }
 
     /// Close control exchanges synchronously: Sunshine can retain a half-open TLS

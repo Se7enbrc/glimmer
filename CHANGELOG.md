@@ -54,6 +54,13 @@
 
 ### Bug fixes
 
+- Keep pending video frames bounded if presentation briefly stalls, and release
+  them promptly when the stream stops or resets.
+- Clicking Settings while a stream is in the background keeps Settings in front.
+- On iPhone, cancel a pending PC connection without waiting for it to time out.
+- Diagnostic captures use short, verified recordings and report interrupted
+  exports explicitly. Hitch summaries include the moments before the bookmark.
+
 - Keep decoded frames in order when a delayed display tick overlaps a newly
   submitted frame. Let the hardware decoder choose its own thread count.
 - Optional diagnostics retain decode timing for discarded frames and identify
