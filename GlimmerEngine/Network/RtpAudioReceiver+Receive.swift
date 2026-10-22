@@ -89,7 +89,8 @@ extension RtpAudioReceiver {
 
         guard count >= RtpAudioQueue.fixedRtpHeaderSize, count <= buf.count, buf[0] == 0x80,
               buf[1] == RtpAudioQueue.payloadTypeAudio || buf[1] == RtpAudioQueue.payloadTypeFec else { return }
-        if buf[1] == RtpAudioQueue.payloadTypeAudio, !acceptsAudioPayload(buf, count: count) { return }
+        if buf[1] == RtpAudioQueue.payloadTypeAudio,
+           !acceptsAudioPayload(buf, count: count, arrival: packetArrival) { return }
 
         if !receivedDataFromPeer {
             receivedDataFromPeer = true
@@ -158,7 +159,7 @@ extension RtpAudioReceiver {
                 + "(seq=\(rtp.sequenceNumber) type=\(rtp.packetType) len=\(count))", Self.cat)
         }
 
-        let result = queue.addPacket(packet, rtp: rtp)
+        let result = queue.addPacket(packet, rtp: rtp, arrival: packetArrival)
         // P1 AUDIO receive-quality: fold the queue's cumulative stats into the
         // always-live telemetry totals once per ~1s window (off the per-packet
         // path). Done after addPacket so the window sees this packet's effect.

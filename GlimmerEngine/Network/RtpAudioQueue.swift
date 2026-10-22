@@ -148,6 +148,8 @@ final class RtpAudioQueue {
     var synchronizing = true
     var hasSequenceBaseline = false
     var pendingSequenceRestart: UInt16?
+    private var lastAcceptedAudio: (timestamp: UInt32, ssrc: UInt32, arrival: UInt64)?
+    private var pendingLongRestart: RtpHeader?
     var incompatibleServer = false
     private var fallbackStarted = false
     private var fallbackPacket: [UInt8]?
@@ -215,8 +217,9 @@ final class RtpAudioQueue {
 
     /// A normal reorder stays inside the bounded block queue. Establishing order
     /// or proposing a larger jump requires the receiver to validate the payload.
-    func requiresPayloadValidation(sequence: UInt16) -> Bool {
+    func requiresPayloadValidation(sequence: UInt16, arrival: UInt64 = DispatchTime.now().uptimeNanoseconds) -> Bool {
         guard hasSequenceBaseline else { return true }
+        if Self.isBefore16(sequence, nextRtpSequenceNumber), canReacquireSequence(at: arrival) { return true }
         if incompatibleServer {
             return !Self.isBefore16(sequence, nextRtpSequenceNumber)
                 && sequence &- nextRtpSequenceNumber > UInt16(Self.maxQueuedBlocks * Self.dataShards)
@@ -229,8 +232,17 @@ final class RtpAudioQueue {
     /// Add one received (host-byteswapped) RTP audio/FEC packet.
     /// `packet` is the full datagram bytes; `rtp` is its already-byteswapped
     /// header. Returns how the receiver should dispatch (RtpaAddPacket, :564-658).
-    func addPacket(_ packet: [UInt8], rtp: RtpHeader) -> RtpaResult {
+    func addPacket(_ packet: [UInt8], rtp: RtpHeader,
+                   arrival: UInt64 = DispatchTime.now().uptimeNanoseconds) -> RtpaResult {
         guard packet.count >= Self.fixedRtpHeaderSize, rtp.header == 0x80 else { return .none }
+        let priorSequence = nextRtpSequenceNumber
+        let hadBaseline = hasSequenceBaseline
+        defer {
+            if nextRtpSequenceNumber != priorSequence || (!hadBaseline && hasSequenceBaseline) {
+                noteAcceptedAudio(rtp, arrival: arrival)
+            }
+        }
+        guard reacquireSequenceIfNeeded(rtp, packetSize: packet.count, arrival: arrival) else { return .none }
         if incompatibleServer { return addWithoutFec(packet, rtp: rtp) }
 
         guard let block = getFecBlock(packet: packet, rtp: rtp) else {
@@ -298,6 +310,50 @@ final class RtpAudioQueue {
         }
 
         return queueHasPacketReady() ? .packetReady : .none
+    }
+
+    // A half sequence-space of silence makes the 16-bit old/new comparison ambiguous.
+    private func canReacquireSequence(at arrival: UInt64) -> Bool {
+        guard let last = lastAcceptedAudio, arrival >= last.arrival else { return false }
+        return arrival - last.arrival >= UInt64(0x8000 * audioPacketDuration) * 1_000_000
+    }
+
+    private func noteAcceptedAudio(_ rtp: RtpHeader, arrival: UInt64) {
+        guard rtp.packetType == Self.payloadTypeAudio else { return }
+        if let last = lastAcceptedAudio,
+           rtp.timestamp == last.timestamp || Self.isBefore32(rtp.timestamp, last.timestamp) { return }
+        lastAcceptedAudio = (rtp.timestamp, rtp.ssrc, arrival)
+    }
+
+    /// Only two validated, consecutive data packets with advancing timestamps can replace stale order.
+    /// This runs before either FEC mode's old-packet guard; parity never proposes a new baseline.
+    private func reacquireSequenceIfNeeded(_ rtp: RtpHeader, packetSize: Int, arrival: UInt64) -> Bool {
+        guard rtp.packetType == Self.payloadTypeAudio else { return true }
+        guard Self.isBefore16(rtp.sequenceNumber, nextRtpSequenceNumber), canReacquireSequence(at: arrival) else {
+            pendingLongRestart = nil
+            return true
+        }
+        let maximumSize = Self.maxPacketSize + (incompatibleServer ? 0 : Self.fixedRtpHeaderSize)
+        guard packetSize > Self.fixedRtpHeaderSize, packetSize <= maximumSize,
+              let last = lastAcceptedAudio, rtp.ssrc == last.ssrc,
+              rtp.timestamp != last.timestamp, !Self.isBefore32(rtp.timestamp, last.timestamp) else {
+            pendingLongRestart = nil
+            return false
+        }
+        guard let candidate = pendingLongRestart, rtp.sequenceNumber == candidate.sequenceNumber &+ 1,
+              rtp.timestamp == candidate.timestamp &+ UInt32(audioPacketDuration) else {
+            pendingLongRestart = rtp
+            return false
+        }
+        pendingLongRestart = nil
+        pendingSequenceRestart = nil
+        freeBlocks.append(contentsOf: blocks)
+        blocks.removeAll(keepingCapacity: true)
+        let base = rtp.sequenceNumber - rtp.sequenceNumber % UInt16(Self.dataShards)
+        nextRtpSequenceNumber = incompatibleServer ? rtp.sequenceNumber : base
+        oldestRtpBaseSequenceNumber = base
+        receivedOosData = false
+        return true
     }
 
     /// Drain one ready packet (RtpaGetQueuedPacket, :660-729). Returns assembled
