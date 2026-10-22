@@ -57,25 +57,21 @@ jobs:
           checks='{"part":"checks","target":"check","coverage":"python"}'
           tests='{"part":"tests","target":"test","coverage":"swift"}'
           fuzz='{"part":"fuzz","target":"test-asan","coverage":""}'
-          # The oldest supported macOS runs the tests so its fallback paths execute.
-          # Its image's newest Xcode is 26.3; every other part stays on 26.6.
-          sequoia='{"part":"sequoia","target":"test","coverage":"","runner":"macos-15","xcode":"26.3"}'
-          if [ "$build" = true ]; then parts="[$checks,$tests,$fuzz,$sequoia]"; else parts="[$checks]"; fi
+          if [ "$build" = true ]; then parts="[$checks,$tests,$fuzz]"; else parts="[$checks]"; fi
           printf 'build=%s\nparts=%s\n' "$build" "$parts" >> "$GITHUB_OUTPUT"
 
   # The gate's parts share no build products, so they run side by side.
   verify:
     name: Verify (${{ matrix.part }})
     needs: changes
-    runs-on: ${{ matrix.runner || 'macos-26' }}
+    runs-on: macos-26
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.changes.outputs.parts) }}
     env:
-      DEVELOPER_DIR:
-        /Applications/Xcode_${{ matrix.xcode || '26.6' }}.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       HOMEBREW_NO_AUTO_UPDATE: "1"
     defaults:
       run:
@@ -294,6 +290,63 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # The oldest supported macOS runs the unit tests so its fallback paths execute.
+  # They compile once with the pinned Xcode; macOS 15's image only runs them.
+  sequoia-build:
+    name: Verify (sequoia build)
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the unit tests for macOS 15.7
+        run: |
+          make test-build
+          tar -C build/Build -czf "$RUNNER_TEMP/sequoia-tests.tgz" Products
+
+      - name: Hand the test products to the macOS 15 runner
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sequoia-tests
+          path: ${{ runner.temp }}/sequoia-tests.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  sequoia:
+    name: Verify (sequoia)
+    needs: [changes, sequoia-build]
+    if: needs.changes.outputs.build == 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      # Runs, never compiles: the image's newest Xcode is 26.3.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Receive the test products
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sequoia-tests
+          path: ${{ runner.temp }}
+
+      - name: Run the unit tests on macOS 15
+        run: |
+          sw_vers
+          mkdir -p build/Build
+          tar -C build/Build -xzf "$RUNNER_TEMP/sequoia-tests.tgz"
+          make test-run
+
   fuzz:
     name: libFuzzer
     needs: changes
@@ -313,7 +366,7 @@ jobs:
   # The required check: green only when every part of the gate passed.
   gate:
     name: macOS
-    needs: [changes, verify, engine-ios, ios]
+    needs: [changes, verify, engine-ios, ios, sequoia]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -325,15 +378,18 @@ jobs:
           BUILD: ${{ needs.changes.outputs.build }}
           ENGINE: ${{ needs.engine-ios.result }}
           IOS: ${{ needs.ios.result }}
+          SEQUOIA: ${{ needs.sequoia.result }}
         run: |
           test "$DECIDED" = success
           test "$RESULT" = success
           if [ "$BUILD" = true ]; then
             test "$ENGINE" = success
             test "$IOS" = success
+            test "$SEQUOIA" = success
           elif [ "$BUILD" = false ]; then
             test "$ENGINE" = skipped
             test "$IOS" = skipped
+            test "$SEQUOIA" = skipped
           else
             exit 1
           fi

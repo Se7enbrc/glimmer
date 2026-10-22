@@ -120,7 +120,7 @@ HELPER_BUNDLE := $(GLIMMER_APP_SRC)/Contents/Library/LaunchServices/Glimmer Netw
 .PHONY: all release install reinstall uninstall clean app sign sign-bundle open \
         helper-build embed-helper \
         profile profile-signposts setup-notary notarize notarize-bundle dmg dmg-background sparkle-zip dist preflight \
-        codesign-setup codesign-teardown ensure-signing dev test test-asan \
+        codesign-setup codesign-teardown ensure-signing dev test test-asan test-build test-run \
         creds-init enable-telem disable-telem release-publish sparkle-keys \
         guard-clean-tree guard-release-version appcast-feed check verify test-scripts brew-bump rc
 
@@ -153,6 +153,20 @@ test:
 	  $(if $(COVERAGE),-enableCodeCoverage YES -resultBundlePath $(DERIVED)/coverage/swift/glimmer.xcresult); \
 	  status=$$?; $(if $(COVERAGE),[ $$status -ne 0 ] || python3 scripts/coverage-report.py swift || status=$$?;) \
 	  $(UNREGISTER_BUILDS); exit $$status
+
+# The unit tests built once and run elsewhere: Verify builds them with the pinned
+# Xcode and runs them on the oldest supported macOS, whose image can't compile them.
+test-build:
+	@scripts/generate-build-info.sh
+	xcodebuild build-for-testing -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+	  -xcconfig $(STREAM_XCCONFIG) \
+	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS'
+	@$(UNREGISTER_BUILDS)
+
+test-run:
+	@set -- "$(DERIVED)"/Build/Products/*.xctestrun; test -f "$$1" || { echo "ERR: run make test-build first" >&2; exit 1; }; \
+	  xcodebuild test-without-building -xctestrun "$$1" -destination 'platform=macOS'; \
+	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
 
 # Exercise untrusted protocol input with memory error detection enabled.
 test-asan:
