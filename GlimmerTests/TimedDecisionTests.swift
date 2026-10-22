@@ -306,6 +306,65 @@ struct TimedPresentPathTests {
         #expect(recorder.idrRequests == 2)
     }
 
+    @Test(arguments: [false, true])
+    func neverPresentedDirectPathRetriesAfterGrace(resetStatistics: Bool) {
+        let clock = ScriptedClock()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session)
+        let frozen = decoder(presenting: false)
+        defer { frozen.teardown() }
+        frozen.pacingDisplay = PacerDisplay(makeLink: { _, _ in nil }, screen: {
+            PacerScreen(identity: "test", maximumHz: 120, minimumHz: nil, scale: 1)
+        }, tickOffMain: { false }, prepareTickThread: {})
+        if resetStatistics { frozen.statsCollector.resetForConnection() }
+        frozen.statsCollector.lastPresentTime = 0
+        frozen.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() + 3_600
+        session.presentWatchdogStartedAt = clock.seconds
+        session.pacingDisabledSince = clock.seconds
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == 0)
+        clock.advance(.seconds(10))
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == 0)
+        clock.advance(.milliseconds(500))
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == 1)
+        clock.advance(.milliseconds(500))
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == 2)
+        frozen.statsCollector.lastPresentTime = CACurrentMediaTime() + 3_600
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(session.directPresentStallSince == nil)
+        #expect(recorder.idrRequests == 2)
+        clock.advance(.seconds(10))
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(frozen.framePacer != nil)
+        #expect(session.pacingDisabledSince == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func neverPresentedEvidenceResetsDuringSuppressionOrDecodeDrought(suppressed: Bool) {
+        let clock = ScriptedClock()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder, clock: clock.session)
+        let frozen = decoder(presenting: false)
+        frozen.statsCollector.lastPresentTime = 0
+        session.tickPresentWatchdog(dec: frozen)
+        clock.advance(.seconds(1))
+        if suppressed {
+            frozen.setPresentSuppressed(true)
+        } else {
+            frozen.statsCollector.lastDecodedFrameTime = 0
+        }
+        session.tickPresentWatchdog(dec: frozen)
+        if suppressed { frozen.setPresentSuppressed(false) }
+        frozen.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() + 3_600
+        let recoveries = recorder.idrRequests
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == recoveries)
+        clock.advance(.milliseconds(500))
+        session.tickPresentWatchdog(dec: frozen)
+        #expect(recorder.idrRequests == recoveries + 1)
+    }
+
     /// A healthy stream's present metric reaches notice level once a minute, debug in between.
     @Test func aHealthyPresentMetricNoticesOncePerMinute() {
         let clock = ScriptedClock()

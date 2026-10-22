@@ -242,6 +242,7 @@ extension FramePacer {
         /// The off-tick release timer. Created/cancelled ONLY on `pacingQueue`
         /// (see `reconcileDeficitTimer`), so it needs no lock of its own.
         var deficitTimerGeneration: UInt64?
+        var deficitTimerInterval: Double = .nan
         var deficitTimer: DispatchSourceTimer?
     }
 }

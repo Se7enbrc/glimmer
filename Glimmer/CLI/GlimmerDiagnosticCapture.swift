@@ -26,7 +26,10 @@ enum GlimmerDiagnosticCapture {
         var detail: String?
         var forcedTermination = false
         var childExitObserved = true
-        var succeeded: Bool { status == "completed" && exitCode == 0 }
+        var startedUptimeSeconds: Double?
+        var endedUptimeSeconds: Double?
+        var instrumentationPhase: String?
+        var succeeded: Bool { status == "completed" && exitCode == 0 && childExitObserved && !forcedTermination }
     }
 
     struct Coverage: Codable, Sendable {
@@ -54,12 +57,16 @@ enum GlimmerDiagnosticCapture {
         let requestedSeconds: Int
         let started: Date
         var ended: Date?
+        var startedUptimeSeconds = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+        var endedUptimeSeconds: Double?
         var status = "preflight"
         var commands: [CommandResult] = []
         var coverage: Coverage?
         var clockAlignment: ClockAlignment?
         var preflightClockAlignment: ClockAlignment?
         var freeBytesBefore: Int64?
+        var visibleBytesAtEnd: Int64?
+        var missingEvidence: [String] = []
         var limitations = [
             "This command records one 30-second detailed window; continuous session telemetry is separate.",
             "Footprint growth is not proof of leaked allocations; allocation stacks are not recorded here.",
@@ -69,7 +76,10 @@ enum GlimmerDiagnosticCapture {
             "PID identity checks use ps start time at second precision, not a kernel process handle.",
             "Output budgets are soft stop thresholds; Instruments services may buffer data outside the output directory.",
             "Cancellation or budget termination can leave an unreadable trace. Such output is never verified.",
-            "Intrusive VM map inspection is excluded; resource telemetry supplies the stream memory trend."
+            "Intrusive VM map inspection is excluded; resource telemetry supplies the stream memory trend.",
+            "The capture uptime interval includes parsing and all command overhead; exclude it from baseline scoring.",
+            "Command uptime intervals include attachment, finalization and export overhead.",
+            "Trace-relative clock anchors identify observed recording coverage within those conservative command intervals."
         ]
     }
 
@@ -88,10 +98,29 @@ enum GlimmerDiagnosticCapture {
         guard pid > 0, pid != ProcessInfo.processInfo.processIdentifier else {
             throw CaptureError.invalidPID
         }
-        let files = FileManager.default
-        let options = try prepareOutput(output, recordingOptions: recordingOptions)
-        let manifestURL = output.appendingPathComponent("capture-manifest.json")
         var manifest = Manifest(pid: pid, requestedSeconds: recordingSeconds, started: Date())
+        guard !FileManager.default.fileExists(atPath: output.path) else { throw CocoaError(.fileWriteFileExists) }
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        let manifestURL = output.appendingPathComponent("capture-manifest.json")
+        do {
+            try save(manifest, to: manifestURL)
+            let options = try prepareOptions(output, recordingOptions: recordingOptions)
+            return try await capture(manifest: &manifest, output: output, options: options,
+                                     runner: runner, spaceAvailable: spaceAvailable, progress: progress)
+        } catch {
+            manifest.status = "capture_io_failed"
+            _ = try? finish(&manifest, at: manifestURL)
+            throw error
+        }
+    }
+
+    private static func capture(manifest: inout Manifest, output: URL, options: URL,
+                                runner: Runner, spaceAvailable: @Sendable (URL) -> Int64?,
+                                progress: @Sendable (String) -> Void) async throws -> URL {
+        let files = FileManager.default
+        let pid = manifest.pid
+        let manifestURL = output.appendingPathComponent("capture-manifest.json")
         manifest.freeBytesBefore = spaceAvailable(output)
         guard let free = manifest.freeBytesBefore, free >= 30 * 1_073_741_824 else {
             manifest.status = "insufficient_free_space"
@@ -103,7 +132,7 @@ enum GlimmerDiagnosticCapture {
                 timeoutSeconds: timeout, stdout: output.appendingPathComponent(label + ".stdout"),
                 stderr: output.appendingPathComponent(label + ".stderr"),
                 maximumOutputBytes: maximum, captureDirectory: output)
-            let result = await runner(command)
+            let result = await runCommand(command, runner: runner)
             manifest.commands.append(result)
             try save(manifest, to: manifestURL)
             return result
@@ -145,6 +174,8 @@ enum GlimmerDiagnosticCapture {
             manifest.status = failureStatus(recording)
             return try finish(&manifest, at: manifestURL)
         }
+        manifest.status = "exporting"
+        try save(manifest, to: manifestURL)
         progress("Recording finished; exporting and validating the captured evidence.")
         guard await revalidateIdentity(target, manifest: &manifest, output: output, label: "target-after", runner: runner) else {
             manifest.status = "target_changed_during_recording"
@@ -162,10 +193,7 @@ enum GlimmerDiagnosticCapture {
                                        trace: trace, runner: runner, spaceAvailable: spaceAvailable)
     }
 
-    private static func prepareOutput(_ output: URL, recordingOptions: URL) throws -> URL {
-        let files = FileManager.default
-        guard !files.fileExists(atPath: output.path) else { throw CocoaError(.fileWriteFileExists) }
-        try files.createDirectory(at: output, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    private static func prepareOptions(_ output: URL, recordingOptions: URL) throws -> URL {
         let options = output.appendingPathComponent("recording-options.json")
         guard let data = boundedRead(recordingOptions, maximum: 1_048_576) else { throw CocoaError(.fileReadTooLarge) }
         try privateWrite(data, to: options)
@@ -198,11 +226,11 @@ enum GlimmerDiagnosticCapture {
 
     private static func captureIdentity(pid: Int32, output: URL, label: String,
                                         runner: Runner) async -> CommandResult {
-        await runner(Command(label: label, executable: "/bin/ps",
+        await runCommand(Command(label: label, executable: "/bin/ps",
             arguments: ["-p", String(pid), "-o", "pid=,lstart=,comm="], timeoutSeconds: 10,
             stdout: output.appendingPathComponent(label + ".stdout"),
             stderr: output.appendingPathComponent(label + ".stderr"),
-            maximumOutputBytes: 65_536, captureDirectory: output))
+            maximumOutputBytes: 65_536, captureDirectory: output), runner: runner)
     }
 
     private static func exportSamples(manifest: inout Manifest, manifestURL: URL, output: URL,
@@ -227,11 +255,17 @@ enum GlimmerDiagnosticCapture {
                 stderr: output.appendingPathComponent(schema + ".stderr"),
                 maximumOutputBytes: (schema == "thread-state" ? 2 : 1) * 1_073_741_824,
                 captureDirectory: output)
-            let result = await runner(command)
+            let result = await runCommand(command, runner: runner)
             manifest.commands.append(result)
-            if result.succeeded, let samples = inspectSamples(command.stdout, pid: manifest.pid) {
-                updateCoverage(&manifest, samples: samples, scheduling: schema == "thread-state")
+            guard result.succeeded else {
+                manifest.status = failureStatus(result)
+                return try finish(&manifest, at: manifestURL)
             }
+            guard let samples = inspectSamples(command.stdout, pid: manifest.pid) else {
+                manifest.status = schema + "_xml_unverified"
+                return try finish(&manifest, at: manifestURL)
+            }
+            updateCoverage(&manifest, samples: samples, scheduling: schema == "thread-state")
             try save(manifest, to: manifestURL)
         }
         if Task.isCancelled { return try finish(&manifest, at: manifestURL) }
@@ -242,7 +276,7 @@ enum GlimmerDiagnosticCapture {
                                                    last: coverage?.lastSchedulingNanos)
         if coverage?.sampleXMLParsed == true, coverage?.schedulingRowsVerified == true,
            samplesCover, scheduleCovers {
-            manifest.status = manifest.clockAlignment?.status == "bounded_clock_verified"
+            manifest.status = clockCoversRequestedWindow(manifest.clockAlignment)
                 ? "observed_rows_with_bounded_clock_anchors" : "clock_alignment_unverified"
         } else {
             manifest.status = "row_coverage_unverified"
@@ -276,17 +310,53 @@ enum GlimmerDiagnosticCapture {
     }
 
     private static func finish(_ manifest: inout Manifest, at url: URL) throws -> URL {
+        if manifest.status != "capture_io_failed", let failed = manifest.commands.first(where: { !$0.succeeded }) {
+            manifest.status = failureStatus(failed)
+        }
         if Task.isCancelled { manifest.status = "cancelled" }
         manifest.ended = Date()
+        manifest.visibleBytesAtEnd = captureBytes(url.deletingLastPathComponent())
+        manifest.missingEvidence = missingEvidence(manifest)
+        if manifest.status == "observed_rows_with_bounded_clock_anchors" {
+            if manifest.visibleBytesAtEnd == nil { manifest.status = "capture_size_unverified" }
+            if (manifest.visibleBytesAtEnd ?? 0) > 8 * 1_073_741_824 { manifest.status = "capture_size_limit" }
+            if !manifest.missingEvidence.isEmpty || !manifest.commands.allSatisfy(\.succeeded) {
+                manifest.status = "capture_incomplete"
+            }
+        }
+        manifest.endedUptimeSeconds = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
         try save(manifest, to: url)
         return url
     }
 
+    private static func clockCoversRequestedWindow(_ alignment: ClockAlignment?) -> Bool {
+        guard let alignment, alignment.status == "bounded_clock_verified", alignment.sessions.count == 1 else { return false }
+        return coversRequestedWindow(first: alignment.firstTraceNanos, last: alignment.lastTraceNanos)
+    }
+
+    private static func missingEvidence(_ manifest: Manifest) -> [String] {
+        let coverage = manifest.coverage
+        let requirements: [(Bool, String)] = [
+            (manifest.commands.contains { $0.command.label == "record" && $0.succeeded } && coverage?.targetMatched == true,
+                "Readable finalized detailed recording."),
+            (coverage?.targetMatched == true, "Recorded target identity."),
+            (coverage?.requestedProbesConfigured == true, "Requested waiting-thread and kernel-stack probes."),
+            (coverage?.sampleXMLParsed == true && coversRequestedWindow(first: coverage?.firstSampleNanos,
+                last: coverage?.lastSampleNanos), "Target stack rows spanning the requested window."),
+            (coverage?.schedulingRowsVerified == true && coversRequestedWindow(first: coverage?.firstSchedulingNanos,
+                last: coverage?.lastSchedulingNanos), "Target scheduling rows spanning the requested window."),
+            (clockCoversRequestedWindow(manifest.clockAlignment), "Clock anchors spanning the requested window.")
+        ]
+        return requirements.filter { !$0.0 }.map(\.1)
+    }
+
     private static func save(_ manifest: Manifest, to url: URL) throws {
+        var snapshot = manifest
+        snapshot.missingEvidence = missingEvidence(manifest)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        try privateWrite(encoder.encode(manifest), to: url)
+        try privateWrite(encoder.encode(snapshot), to: url)
     }
 
     static func supportsRequestedOptions(at url: URL) -> Bool {
@@ -297,6 +367,7 @@ enum GlimmerDiagnosticCapture {
     }
 
     private static func failureStatus(_ result: CommandResult) -> String {
+        guard result.status == "completed" else { return result.status }
         let file = try? FileHandle(forReadingFrom: result.command.stderr)
         defer { try? file?.close() }
         let data = (try? file?.read(upToCount: 65_536)) ?? Data()
@@ -304,7 +375,7 @@ enum GlimmerDiagnosticCapture {
         if ["permission", "not authorized", "not permitted", "failed to attach"].contains(where: text.contains) {
             return "permission_or_attachment_failed"
         }
-        return result.status == "completed" ? "capture_failed" : result.status
+        return "capture_failed"
     }
 
     static func inspectTOC(_ url: URL, pid: Int32) -> Coverage? {

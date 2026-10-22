@@ -3,15 +3,7 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  FramePacer+Tick.swift
-//
-//  The CADisplayLink vsync tick (main run loop → pacingQueue). Split out of
-//  FramePacer.swift to keep that file under the length limit; this is the cheap
-//  main-thread link-timing capture that hands the release decision to the serial
-//  pacing queue so nothing on the present path runs on the main actor. See
-//  `installLink` (the bind site) and `releaseDueFrame` (the dispatched release).
-//
+// Capture display timing on the tick thread and release frames on the pacing queue.
 
 import CoreMedia
 import QuartzCore
@@ -211,13 +203,36 @@ extension FramePacer {
             }
         }
 
-        // A frame released now scans out on the next PANEL vsync, which can sit
-        // before `target` when the link runs below the panel's rate.
-        let scanout = timestamp + releaseInterval
-        pacingQueue.async { [weak self] in
-            self?.releaseDueFrame(
-                targetTimestamp: target, vsyncInterval: releaseInterval, tickScanout: scanout, generation: generation)
-        }
+        publishTickRelease(scanout: timestamp + releaseInterval, interval: releaseInterval, generation: generation)
+    }
+
+    struct TickRelease {
+        let scanout: CFTimeInterval
+        let interval: CFTimeInterval
+        let generation: UInt64
+    }
+
+    private func publishTickRelease(scanout: CFTimeInterval, interval: CFTimeInterval, generation: UInt64) {
+        lock.lock()
+        guard running, bindingGeneration == generation else { lock.unlock(); return }
+        pendingTickRelease = TickRelease(scanout: scanout, interval: interval, generation: generation)
+        let schedule = !tickReleaseScheduled
+        tickReleaseScheduled = true
+        lock.unlock()
+        if schedule { pacingQueue.async { [weak self] in self?.releaseLatestTick() } }
+    }
+
+    private func releaseLatestTick() {
+        lock.lock()
+        let tick = pendingTickRelease
+        pendingTickRelease = nil
+        tickReleaseScheduled = false
+        lock.unlock()
+        guard let tick else { return }
+        // Expired callbacks share the next current scanout instead of replaying historical slots.
+        let scanout = Self.nextScanout(now: mediaTime(), lastTickTarget: tick.scanout, vsync: tick.interval)
+        releaseDueFrame(targetTimestamp: scanout, vsyncInterval: tick.interval,
+                        tickScanout: scanout, generation: tick.generation)
     }
 
     func isCurrentBinding(_ generation: UInt64) -> Bool {

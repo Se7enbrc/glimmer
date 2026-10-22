@@ -89,6 +89,7 @@ extension StreamSession {
             self.presentWatchdogTimer?.invalidate()
             self.presentStallSince = nil
             self.directPresentStallSince = nil
+            self.directPresentMissingSince = nil
             self.lastPresentRecoveryStage = 0
             self.pacingDisabledSince = nil
             self.pacingGiveUpCount = 0
@@ -135,6 +136,7 @@ extension StreamSession {
         if dec.presentSuppressed {
             self.presentStallSince = nil
             self.directPresentStallSince = nil
+            self.directPresentMissingSince = nil
             self.lastPresentRecoveryStage = 0
             self.sawLinkSilentLastTick = false
             self.lastWatchdogTotalTicks = 0
@@ -150,7 +152,11 @@ extension StreamSession {
         // while decode pauses), double-counting present_stall_total and resetting
         // the stage-3 give-up clock every drought.
         let decodeIdle = dec.secondsSinceLastDecodedFrame()
-        guard decodeIdle.isFinite else { return }
+        guard decodeIdle.isFinite else {
+            self.directPresentStallSince = nil
+            self.directPresentMissingSince = nil
+            return
+        }
 
         guard let live = dec.pacingLiveness(), live.running else {
             // DIRECT (no-pacer) mode. This branch used to be a blind spot - it
@@ -172,6 +178,7 @@ extension StreamSession {
         }
         // Paced mode is live again - clear any direct-stall episode state.
         self.directPresentStallSince = nil
+        self.directPresentMissingSince = nil
         self.tickPacedPresentWatchdog(dec: dec, live: live, decodeIdle: decodeIdle)
     }
 
@@ -268,39 +275,43 @@ extension StreamSession {
     // freeze) live in StreamSession+PresentTrip.swift to keep this file under the
     // length limit.
 
-    /// Present-path freeze detection in DIRECT (no-pacer) mode. The pacer-side
-    /// branch of `tickPresentWatchdog` reads only the pacer's LivenessSnapshot,
-    /// which is nil here - so without this the direct path had ZERO freeze
-    /// detection (the bug). We gate on the MODE-AGNOSTIC present clock instead:
-    /// decode is healthy (recordDecodedFrame still advancing) but nothing has
-    /// reached the renderer for `directPresentStallThreshold` → the direct
-    /// AVSampleBufferDisplayLayer wedged (typically `.status==.failed`), so
-    /// self-heal regardless of mode (flush / rebuild-if-failed / IDR). Latched on
-    /// `directPresentStallSince` so we fire recovery ONCE per episode, not every
-    /// 50ms tick, and re-arm after recovery so a persistent wedge escalates again.
+    /// Fresh decode must reach the renderer, including when no frame has ever been accepted.
+    /// Startup grace and decode drought reset the bounded first-presentation deadline.
     @MainActor
     private func tickDirectPresentWatchdog(dec: VideoDecoder, decodeIdle: Double) {
         // Decode must be healthy for a present freeze to be the cause; if decode
         // is silent the decode-output watchdog owns recovery.
         guard decodeIdle < StreamSession.directPresentStallThreshold else {
             self.directPresentStallSince = nil
+            self.directPresentMissingSince = nil
             return
         }
+        let now = clock.absolute()
         let sincePresent = dec.secondsSinceLastPresentedFrame()
-        // .infinity = nothing presented yet (handshake / pre-first-frame). Leave
-        // that to the decode-output watchdog; only a STALLED-after-flowing clock
-        // is a freeze.
-        guard sincePresent.isFinite,
-              sincePresent > StreamSession.directPresentStallThreshold else {
+        if sincePresent == .infinity {
+            if let started = presentWatchdogStartedAt, now - started < Self.presentWatchdogGrace {
+                directPresentMissingSince = nil
+                directPresentStallSince = nil
+                return
+            }
+            guard let missingSince = directPresentMissingSince else {
+                directPresentMissingSince = now
+                return
+            }
+            guard now - missingSince >= Self.directPresentStallThreshold else { return }
+        } else {
+            directPresentMissingSince = nil
+        }
+        guard sincePresent > StreamSession.directPresentStallThreshold else {
             // Present clock advancing → healthy direct path. Clear the episode.
             if self.directPresentStallSince != nil {
                 self.log.notice("Direct present path recovered - frames reaching the screen again")
             }
             self.directPresentStallSince = nil
+            self.directPresentMissingSince = nil
             return
         }
 
-        let now = clock.absolute()
         if self.directPresentStallSince == nil {
             self.directPresentStallSince = now
             TelemetryCounters.shared.presentStallTotal.increment()

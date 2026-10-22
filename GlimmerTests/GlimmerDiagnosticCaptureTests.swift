@@ -34,10 +34,10 @@ struct GlimmerDiagnosticCaptureTests {
         """
     }
 
-    private static func clockRows(secondOffset: UInt64 = 1_000_000_000, secondTrace: UInt64 = 2_000_000_000) -> String {
+    private static func clockRows(secondOffset: UInt64 = 1_000_000_000, secondTrace: UInt64 = 2_000_000_000, count: Int = 2) -> String {
         var rows = "<root>"
-        for id in [UInt64(1), 2] {
-            let trace = id == 1 ? 1_000_000_000 : secondTrace
+        for id in UInt64(1)...UInt64(count) {
+            let trace = id == 1 ? 1_000_000_000 : secondTrace + (id - 2) * 1_000_000_000
             let uptime = trace + (id == 1 ? 1_000_000_000 : secondOffset)
             for begin in [true, false] {
                 let event = begin ? "Begin" : "End"
@@ -56,6 +56,26 @@ struct GlimmerDiagnosticCaptureTests {
         return rows + "</root>"
     }
 
+    private static func successfulOutput(_ command: GlimmerDiagnosticCapture.Command, shortClock: Bool = false) -> String {
+        switch command.label {
+        case "target", "target-before", "target-after", "target-after-preflight": return identity
+        case "options": return options
+        case "toc": return toc
+        case "time-profile": return rows(clock: "sample-time")
+        case "thread-state": return rows(clock: "start-time")
+        case "clock-anchors":
+            let preflight = command.stdout.deletingLastPathComponent().lastPathComponent == "clock-preflight"
+            return clockRows(count: preflight || shortClock ? 2 : 29)
+        default: return "fixture"
+        }
+    }
+
+    private func report(_ url: URL) throws -> GlimmerDiagnosticCapture.Manifest {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(GlimmerDiagnosticCapture.Manifest.self, from: Data(contentsOf: url))
+    }
+
     private func fixture() throws -> (base: URL, output: URL, options: URL) {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -71,16 +91,7 @@ struct GlimmerDiagnosticCaptureTests {
         let manifest = try await GlimmerDiagnosticCapture.run(pid: 17, output: fixture.output,
             recordingOptions: fixture.options, runner: { command in
                 calls.withLock { $0.append(command) }
-                let text: String
-                switch command.label {
-                case "target", "target-before", "target-after", "target-after-preflight": text = Self.identity
-                case "options": text = Self.options
-                case "toc": text = Self.toc
-                case "time-profile": text = Self.rows(clock: "sample-time")
-                case "thread-state": text = Self.rows(clock: "start-time")
-                case "clock-anchors": text = Self.clockRows()
-                default: text = "fixture"
-                }
+                let text = Self.successfulOutput(command)
                 try? Data(text.utf8).write(to: command.stdout)
                 return .init(command: command, started: Date(), ended: Date(), exitCode: 0, status: "completed")
             }, spaceAvailable: { _ in 30 * 1_073_741_824 })
@@ -88,6 +99,15 @@ struct GlimmerDiagnosticCaptureTests {
         decoder.dateDecodingStrategy = .iso8601
         let report = try decoder.decode(GlimmerDiagnosticCapture.Manifest.self, from: Data(contentsOf: manifest))
         #expect(report.status == "observed_rows_with_bounded_clock_anchors")
+        #expect(report.missingEvidence.isEmpty)
+        #expect(try #require(report.visibleBytesAtEnd) > 0)
+        for command in report.commands {
+            #expect(try #require(command.startedUptimeSeconds) <= #require(command.endedUptimeSeconds))
+            #expect(try #require(command.startedUptimeSeconds) >= report.startedUptimeSeconds)
+            #expect(try #require(command.endedUptimeSeconds) <= #require(report.endedUptimeSeconds))
+            #expect(command.instrumentationPhase != nil)
+        }
+        #expect(report.commands.first { $0.command.label == "record" }?.instrumentationPhase == "attachment_recording_finalization")
         #expect(report.coverage?.targetSampleRows == 3 && report.coverage?.targetSchedulingRows == 3)
         #expect(report.coverage?.firstSampleNanos == 1_000_000)
         #expect(report.coverage?.lastSampleNanos == 30_000_000_000)
@@ -195,7 +215,7 @@ struct GlimmerDiagnosticCaptureTests {
         try Data(Self.clockRows(secondTrace: 5_000_000_000).utf8).write(to: url)
         #expect(GlimmerDiagnosticCapture.inspectClock(url, pid: 17).status == "clock_alignment_partial")
         try Data(Self.clockRows().replacingOccurrences(of: "ref='p'", with: "ref='missing'").utf8).write(to: url)
-        #expect(GlimmerDiagnosticCapture.inspectClock(url, pid: 17).status == "anchors_malformed")
+        #expect(GlimmerDiagnosticCapture.inspectClock(url, pid: 17).status == "anchor_xml_unverified")
         try Data(Self.clockRows(secondOffset: 2_000_000_000).utf8).write(to: url)
         #expect(GlimmerDiagnosticCapture.inspectClock(url, pid: 17).status == "clock_intervals_disagree")
         try Data(Self.clockRows().replacingOccurrences(of: "GlimmerClockAnchorEnd", with: "OtherEvent").utf8).write(to: url)
@@ -217,5 +237,110 @@ struct GlimmerDiagnosticCaptureTests {
         let row = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as? [String: Any])
         #expect(row["status"] as? String == "clock_preflight_failed")
         #expect(calls.withLock { $0.contains("clock-preflight-record") && !$0.contains("record") })
+    }
+
+    @Test(arguments: ["clock-preflight-record", "record", "toc", "time-profile", "thread-state", "clock-anchors"],
+          ["timed_out", "disk_reserve", "capture_size_limit", "output_limit", "cancelled", "child_cleanup_unconfirmed", "completed"])
+    func interruptedCommandsLeaveExplicitIncompleteEvidence(_ label: String, _ status: String) async throws {
+        let fixture = try fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        let manifest = try await GlimmerDiagnosticCapture.run(pid: 17, output: fixture.output,
+            recordingOptions: fixture.options, runner: { command in
+                let preflight = command.stdout.deletingLastPathComponent().lastPathComponent == "clock-preflight"
+                let fails = command.label == label && !(label == "clock-anchors" && preflight)
+                let text = fails ? "partial output" : Self.successfulOutput(command)
+                try? Data(text.utf8).write(to: command.stdout)
+                return .init(command: command, started: Date(), ended: Date(), exitCode: fails ? 1 : 0,
+                             status: fails ? status : "completed", childExitObserved: status != "child_cleanup_unconfirmed" || !fails)
+            }, spaceAvailable: { _ in 30 * 1_073_741_824 })
+        let result = try report(manifest)
+        #expect(result.status != "observed_rows_with_bounded_clock_anchors")
+        #expect(result.missingEvidence.isEmpty == false)
+        #expect(result.commands.last?.command.label == label && result.commands.last?.status == status)
+        #expect(result.status == (status == "completed" ? "capture_failed" : status))
+        #expect(result.ended != nil)
+    }
+
+    @Test func shortClockCoverageCannotVerifyTheDetailedWindow() async throws {
+        let fixture = try fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        let manifest = try await GlimmerDiagnosticCapture.run(pid: 17, output: fixture.output,
+            recordingOptions: fixture.options, runner: { command in
+                try? Data(Self.successfulOutput(command, shortClock: true).utf8).write(to: command.stdout)
+                return .init(command: command, started: Date(), ended: Date(), exitCode: 0, status: "completed")
+            }, spaceAvailable: { _ in 30 * 1_073_741_824 })
+        let result = try report(manifest)
+        #expect(result.status == "clock_alignment_unverified")
+        #expect(result.clockAlignment?.status == "bounded_clock_verified")
+        #expect(result.missingEvidence == ["Clock anchors spanning the requested window."])
+    }
+
+    @Test func cancellationBetweenCommandsStopsNewWorkAndClosesTheManifest() async throws {
+        let fixture = try fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        let calls = OSAllocatedUnfairLock(initialState: [String]())
+        let task = Task {
+            try await GlimmerDiagnosticCapture.run(pid: 17, output: fixture.output,
+                recordingOptions: fixture.options, runner: { command in
+                    calls.withLock { $0.append(command.label) }
+                    try? Data(Self.successfulOutput(command).utf8).write(to: command.stdout)
+                    if command.label == "record" { withUnsafeCurrentTask { $0?.cancel() } }
+                    return .init(command: command, started: Date(), ended: Date(), exitCode: 0, status: "completed")
+                }, spaceAvailable: { _ in 30 * 1_073_741_824 })
+        }
+        let result = try report(await task.value)
+        #expect(result.status == "cancelled" && result.ended != nil)
+        #expect(calls.withLock { $0.last } == "record")
+        #expect(result.missingEvidence.isEmpty == false)
+    }
+
+    @Test func unreadableOptionsLeaveAnIOFailureReceipt() async throws {
+        let fixture = try fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        try FileManager.default.removeItem(at: fixture.options)
+        await #expect(throws: (any Error).self) {
+            try await GlimmerDiagnosticCapture.run(pid: 17, output: fixture.output, recordingOptions: fixture.options)
+        }
+        let result = try report(fixture.output.appendingPathComponent("capture-manifest.json"))
+        #expect(result.status == "capture_io_failed" && result.ended != nil)
+        #expect(result.commands.isEmpty && result.missingEvidence.isEmpty == false)
+    }
+
+    @Test(arguments: ["time-profile", "thread-state", "clock-anchors"])
+    func truncatedExportsStayPartialEvenAfterAZeroExit(_ label: String) async throws {
+        let fixture = try fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        let manifest = try await GlimmerDiagnosticCapture.run(pid: 17, output: fixture.output,
+            recordingOptions: fixture.options, runner: { command in
+                let preflight = command.stdout.deletingLastPathComponent().lastPathComponent == "clock-preflight"
+                let text = command.label == label && !preflight ? "<trace-query-result><node>" : Self.successfulOutput(command)
+                try? Data(text.utf8).write(to: command.stdout)
+                return .init(command: command, started: Date(), ended: Date(), exitCode: 0, status: "completed")
+            }, spaceAvailable: { _ in 30 * 1_073_741_824 })
+        let result = try report(manifest)
+        #expect(result.status != "observed_rows_with_bounded_clock_anchors")
+        #expect(result.missingEvidence.isEmpty == false)
+        #expect(FileManager.default.fileExists(atPath: fixture.output.appendingPathComponent(label + ".xml").path))
+    }
+
+    @Test func failedManifestWriteLeavesTheLastReceiptExplicitlyUnfinished() async throws {
+        let fixture = try fixture()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fixture.output.path)
+            try? FileManager.default.removeItem(at: fixture.base)
+        }
+        await #expect(throws: (any Error).self) {
+            try await GlimmerDiagnosticCapture.run(pid: 17, output: fixture.output,
+                recordingOptions: fixture.options, runner: { command in
+                    try? Data(Self.successfulOutput(command).utf8).write(to: command.stdout)
+                    if command.label == "record" {
+                        try? FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: fixture.output.path)
+                    }
+                    return .init(command: command, started: Date(), ended: Date(), exitCode: 0, status: "completed")
+                }, spaceAvailable: { _ in 30 * 1_073_741_824 })
+        }
+        let result = try report(fixture.output.appendingPathComponent("capture-manifest.json"))
+        #expect(result.status == "recording" && result.ended == nil)
+        #expect(result.missingEvidence.isEmpty == false)
     }
 }

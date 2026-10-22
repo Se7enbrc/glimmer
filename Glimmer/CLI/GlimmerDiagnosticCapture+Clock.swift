@@ -48,7 +48,7 @@ extension GlimmerDiagnosticCapture {
             "--recording-options", options.path, "--output", trace.path], timeoutSeconds: 186,
             stdout: directory.appendingPathComponent("record.stdout"),
             stderr: directory.appendingPathComponent("record.stderr"), captureDirectory: output)
-        let result = await runner(command)
+        let result = await runCommand(command, runner: runner)
         manifest.commands.append(result)
         guard result.succeeded else { return false }
         try await exportClock(manifest: &manifest, output: directory, trace: trace, runner: runner, captureRoot: output)
@@ -65,7 +65,7 @@ extension GlimmerDiagnosticCapture {
             timeoutSeconds: 120, stdout: output.appendingPathComponent("clock-anchors.xml"),
             stderr: output.appendingPathComponent("clock-anchors.stderr"), maximumOutputBytes: 16_777_216,
             captureDirectory: captureRoot ?? output)
-        let result = await runner(command)
+        let result = await runCommand(command, runner: runner)
         manifest.commands.append(result)
         var alignment = ClockAlignment(pid: manifest.pid)
         if result.succeeded {
@@ -88,9 +88,19 @@ extension GlimmerDiagnosticCapture {
         }
         var ids: [String: XMLElement] = [:]
         for case let element as XMLElement in definitions {
-            if let id = element.attribute(forName: "id")?.stringValue { ids[id] = element }
+            guard let id = element.attribute(forName: "id")?.stringValue else { continue }
+            if let existing = ids[id], existing.xmlString != element.xmlString {
+                alignment.status = "anchor_xml_unverified"
+                return alignment
+            }
+            ids[id] = element
         }
         let resolver = ClockResolver(ids: ids)
+        guard let references = try? document.nodes(forXPath: "//*[@ref]"),
+              references.allSatisfy({ resolver.resolve($0 as? XMLElement) != nil }) else {
+            alignment.status = "anchor_xml_unverified"
+            return alignment
+        }
         var begins: [String: ClockEvent] = [:], ends: [String: ClockEvent] = [:]
         for case let row as XMLElement in rows {
             guard let event = resolver.event(row, pid: pid, malformed: &alignment.malformedEvents) else { continue }
@@ -151,9 +161,13 @@ extension GlimmerDiagnosticCapture {
         let ids: [String: XMLElement]
 
         func resolve(_ value: XMLElement?) -> XMLElement? {
-            guard let value else { return nil }
-            guard let ref = value.attribute(forName: "ref")?.stringValue else { return value }
-            return ids[ref]
+            var current = value
+            for _ in 0..<16 {
+                guard let node = current else { return nil }
+                guard let ref = node.attribute(forName: "ref")?.stringValue else { return node }
+                current = ids[ref]
+            }
+            return nil
         }
 
         func values(_ value: XMLElement?) -> [String] {
@@ -185,7 +199,9 @@ extension GlimmerDiagnosticCapture {
         }
 
         func event(_ row: XMLElement, pid: Int32, malformed: inout Int) -> ClockEvent? {
+            guard let row = resolve(row) else { malformed += 1; return nil }
             let names = values(child(row, ["signpost-name", "name"]))
+            guard !names.isEmpty else { malformed += 1; return nil }
             let begin = names.contains("GlimmerClockAnchorBegin")
             guard begin || names.contains("GlimmerClockAnchorEnd") else { return nil }
             guard let process = resolve(child(row, ["process"])),

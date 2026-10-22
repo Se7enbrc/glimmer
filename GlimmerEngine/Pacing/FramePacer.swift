@@ -160,6 +160,10 @@ package final class FramePacer: @unchecked Sendable {
     var queue: [Entry] = []
     // The lock owns at most one pending direct handoff; queued work captures no sample buffers.
     var pendingSubmitRelease: SubmitRelease?
+    var pendingTickRelease: TickRelease? // Guarded by lock; only the newest pending opportunity survives.
+    var tickReleaseScheduled = false // Guarded by lock.
+    // Clock injection is configured before ticks or submissions begin.
+    var mediaTime: @Sendable () -> CFTimeInterval = { CACurrentMediaTime() }
     var submitReleaseScheduled = false
 
     /// Learned stream inter-frame interval in seconds, derived from the median
@@ -318,6 +322,11 @@ package final class FramePacer: @unchecked Sendable {
         // fully torn down; stop the thread so it can never outlive us. stop()
         // is idempotent (stop() already ran on the normal teardown path).
         pacerTickThread?.stop()
+    }
+
+    // Scheduling stays on pacingQueue; injection lets tests drive beats without wall-clock wakes.
+    var scheduleDeficitTimer: @Sendable (DispatchSourceTimer, Double) -> Void = { timer, interval in
+        timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(1))
     }
 
     // MARK: - Init
