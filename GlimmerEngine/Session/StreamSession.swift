@@ -188,15 +188,14 @@ public actor StreamSession {
     /// not a recoverable interruption. Set on the established edge; never reset on
     /// a reconnect (only a full `stop()` ends the session).
     package var reachedLiveState = false
-    /// True while a reconnect episode is being driven. Makes the frame/present
-    /// watchdogs go quiet (the episode owns the bounded retry/give-up, not the
-    /// watchdog) and makes `handleHostTerminate` ignore re-entrant terminates
-    /// fired by the dead/old backend mid-reconnect.
+    /// The episode owns retries while the frame/present watchdogs stay quiet.
     package var isReconnecting = false
     /// Attempt counter for the current reconnect episode.
     package var reconnectAttempts = 0
     /// The last attempt's classified failure; a give-up hands it to the launcher so the copy names the fix.
     package var lastReconnectError: StreamError?
+    /// A current replacement can terminate while completion is suspended on another executor.
+    package var reconnectTermination: (attempt: UUID, code: Int32)?
     /// The inputs needed to rebuild the connection on a reconnect, captured at
     /// `start()`: the original server (for a fresh NetworkClient), the requested
     /// StreamRequest, and the app id. Nil before a session starts.
