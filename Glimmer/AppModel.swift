@@ -174,6 +174,7 @@ final class AppModel {
     /// or Wi-Fi glyph), independent of the gate-on telemetry probe. Re-pointed from
     /// `selectedHost`'s didSet whenever the route address changes.
     let hostRoute = HostRouteMonitor()
+    let streamRoute = HostRouteMonitor(samplingWiFi: false)
 
     /// Latest reachability + activity snapshot for the selected host. Drives
     /// the launcher's readiness chip ("Ready · 12 ms", "Streaming Helldivers 2",
@@ -484,6 +485,7 @@ final class AppModel {
     var displayInfoRevision: Int = 0
 
     isolated deinit {
+        streamRoute.monitor(address: nil)
         for token in workspaceTokens { NSWorkspace.shared.notificationCenter.removeObserver(token) }
         // Drain NotificationCenter observer tokens we registered with the
         // closure form - without this they outlive the manager and keep the

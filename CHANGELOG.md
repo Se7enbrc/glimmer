@@ -4,6 +4,8 @@
 
 ### Bug fixes
 
+- The menu bar keeps the streaming PC's name and network when another PC is
+  selected.
 - Custom resolution and refresh-rate fields have distinct VoiceOver labels.
 - VoiceOver can read the metrics shown in Stream stats.
 - Pointer shortcut help now describes capture and release in full screen as well

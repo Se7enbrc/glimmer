@@ -26,9 +26,9 @@ extension AppModel {
     }
 
     /// The PC this Mac is streaming from or connecting to; nil when idle.
-    var streamingHostID: String? {
-        isStreaming ? lastLaunchAttempt?.host.id : nil
-    }
+    var streamingHost: Host? { isStreaming ? lastLaunchAttempt?.host : nil }
+
+    var streamingHostID: String? { streamingHost?.id }
 
     /// The launcher's chip for `host` from the poll alone; a reading taken
     /// for another PC is ignored.

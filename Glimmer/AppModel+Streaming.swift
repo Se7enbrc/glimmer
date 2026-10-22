@@ -59,6 +59,7 @@ extension AppModel {
         cancelPendingCommandStream()
         hostPolling.establishedHostID = nil
         lastLaunchAttempt = (app, host)
+        streamRoute.monitor(address: Self.routeAddress(host))
         Self.connectClickedAt = Date()
         ConnectTimingTelemetry.shared.resetForNewSession()
         ConnectTimingTelemetry.shared.anchorClick()
@@ -281,6 +282,7 @@ extension AppModel {
         self.nativeStreamBackgrounded = false
         self.isMiniPlayer = false
         self.nativeSession = nil
+        streamRoute.monitor(address: nil)
         self.menuStopInProgress = false
         self.isReconnecting = false
         self.menuDetails = nil

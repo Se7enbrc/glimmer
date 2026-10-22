@@ -15,7 +15,7 @@ extension AppModel {
     }
 
     var menuBarAccessibilityLabel: String {
-        MenuBarPresentation.accessibilityLabel(state: menuBarIconState, hostName: selectedHost?.displayName)
+        MenuBarPresentation.accessibilityLabel(state: menuBarIconState, hostName: streamingHost?.displayName ?? selectedHost?.displayName)
     }
 
     var menuBarPrimaryAction: MenuBarPrimaryAction {
@@ -34,7 +34,7 @@ extension AppModel {
     }
 
     var menuBarMetrics: [MenuBarMetric] {
-        MenuBarPresentation.metrics(snapshot: menuDetails, link: MenuBarPresentation.linkLabel(hostRoute.routeClass))
+        MenuBarPresentation.metrics(snapshot: menuDetails, link: MenuBarPresentation.linkLabel(streamRoute.routeClass))
     }
 
     /// The header while connecting: the phase's own stage copy.

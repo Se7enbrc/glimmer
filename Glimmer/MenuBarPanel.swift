@@ -139,7 +139,7 @@ struct MenuBarPanel: View {
     }
 
     private var streamCard: some View {
-        card("Stream", trailing: model.selectedHost?.displayName) {
+        card("Stream", trailing: model.streamingHost?.displayName) {
             let metrics = model.menuBarMetrics
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 bigNumber(metrics[2], dot: .accentColor)
@@ -213,7 +213,7 @@ struct MenuBarPanel: View {
 
     /// A first connect can be cancelled; a reconnect is a live stream, so it stops.
     private var connectingCard: some View {
-        card("Stream", trailing: model.selectedHost?.displayName) {
+        card("Stream", trailing: model.streamingHost?.displayName) {
             HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
                 Text(model.menuBarConnectingLine ?? "Connecting…")

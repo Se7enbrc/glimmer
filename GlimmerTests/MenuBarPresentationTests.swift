@@ -15,6 +15,34 @@ import Testing
 @testable import Glimmer
 
 struct MenuBarPresentationTests {
+    @Test @MainActor func liveNameKeepsTheStreamingPCWhenSelectionChanges() throws {
+        let fixture = try FakePCModel("menu-identity", sunshine: .scripted([:]))
+        defer { fixture.remove() }
+        let first = try fixture.pairTower()
+        let model = fixture.model
+        model.lastLaunchAttempt = (first.apps[0], first)
+        model.isStreaming = true
+        model.streamPhase = .streaming
+        let second = Host(id: "second", name: "Second", customName: nil, localAddress: "192.0.2.11",
+                          manualAddress: nil, apps: first.apps, lastConnected: nil, serverCertPEM: nil,
+                          appVersion: nil, macAddress: nil)
+        model.selectedHost = second
+        fixture.settle()
+        model.hostRoute.receiveRoute(.tunnel)
+        model.streamRoute.receiveRoute(.wired)
+        #expect(model.streamingHost?.id == first.id)
+        #expect(model.menuBarAccessibilityLabel == "Glimmer, streaming to Tower")
+        #expect(model.menuBarMetrics.last?.value == "Wired")
+        model.streamRoute.receiveRoute(.wifi)
+        #expect(model.menuBarMetrics.last?.value == "Wi-Fi")
+        #expect(model.hostRoute.routeClass == .tunnel)
+        model.hostLiveStatus = HostLiveStatus(hostID: second.id, state: .idle, rttMs: 8, capturedAt: Date())
+        #expect(model.selectedReadinessChip == .ready(rttMs: 8))
+        model.streamPhase = .connecting(stage: "Connecting to Tower…")
+        #expect(model.selectedReadinessChip == .ready(rttMs: 8))
+        model.isStreaming = false
+    }
+
     @Test func controllerIdentitySurvivesBatteryChangesAndDistinguishesMatchingNames() {
         let first = MenuBarController(name: "Controller", percent: 80, charging: false, sourceID: "gc:one")
         let refreshed = MenuBarController(name: "Controller", percent: 79, charging: true, sourceID: "gc:one")
