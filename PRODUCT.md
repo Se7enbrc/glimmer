@@ -8,8 +8,8 @@ ios
 
 ## Users
 
-People with a Mac and a gaming PC running Sunshine who want to play their PC
-games on the Mac. They use it in two scenes:
+People with a Mac, iPhone or iPad and a gaming PC running Sunshine who want to
+play their PC games on those devices. On the Mac, they use it in two scenes:
 
 - at a desk on Ethernet, with the Mac as the PC's screen;
 - away from the desk, usually on the couch with a MacBook on Wi-Fi.
@@ -51,12 +51,23 @@ that inspired Glimmer; it is not the protocol's name.
 - Install from the Homebrew cask or the notarized DMG; the app updates itself
   with Sparkle.
 
+## iPhone and iPad
+
+The iPhone and iPad app requires iOS or iPadOS 26 or later. It shares the Mac
+app's Swift engine and uses SwiftUI and UIKit for pairing, the launcher and
+streaming. Menus work in portrait or landscape; streaming stays in landscape and
+supports physical controller input. Disconnecting leaves the game running on the
+PC.
+
+Distribution is internal TestFlight only so far, with no App Store release. tvOS
+and visionOS are possible future ports.
+
 ## Capabilities and Constraints
 
 - macOS 15.7 or later, Apple Silicon only. The platform value above is `ios`
   because the schema has no macOS value; it selects Apple HIG native guidance.
-  Glimmer is a Mac app, so the macOS HIG applies and the iPhone-specific
-  guidance (touch targets, tab bars, safe areas, edge swipes) does not.
+  The macOS HIG governs the Mac app; iPhone and iPad guidance (touch targets,
+  tab bars, safe areas, edge swipes) governs the iOS app.
 - Works against a current, unmodified Sunshine. No feature may require a patched
   PC.
 - No analytics, tracking or third-party network calls. Glimmer talks only to the
