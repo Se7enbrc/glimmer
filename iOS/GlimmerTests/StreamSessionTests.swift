@@ -367,6 +367,95 @@ struct StreamSessionTests {
         #expect(fixture.completedStops == 0)
     }
 
+    @Test(arguments: [false, true])
+    func blockedPortSurvivesStartFailureEventOrdering(eventsFirst: Bool) async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        fixture.start = {
+            if eventsFirst {
+                await MainActor.run {
+                    model.receive(fixture.update(.stageFailed(name: "RTSP", errorCode: -1)))
+                    model.receive(fixture.update(.stopped))
+                }
+            }
+            throw StreamError.streamPortsBlocked(proto: "TCP", port: 48010)
+        }
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        if !eventsFirst {
+            model.receive(fixture.update(.stageFailed(name: "RTSP", errorCode: -1)))
+            model.receive(fixture.update(.stopped))
+        }
+        #expect(model.phase == .ended("Test PC answered, but the stream couldn't get through. "
+            + "Check that the PC's firewall allows TCP 48010."))
+    }
+
+    @Test func protectedContentReasonSurvivesStoppedAndLateStartError() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        fixture.start = {
+            await MainActor.run {
+                model.receive(fixture.update(.connectionTerminated(
+                    errorCode: Int32(bitPattern: 0x800E_9302))))
+                model.receive(fixture.update(.stopped))
+            }
+            throw StreamError.sessionFailed(-1)
+        }
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        #expect(model.phase == .ended("Test PC stopped the stream: "
+            + "the app is showing protected content, which can't be streamed. Close it on the PC, then try again."))
+    }
+
+    @Test func exhaustedReconnectRetainsItsConnectionReason() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        model.receive(fixture.update(.firstFrame))
+        model.receive(fixture.update(.reconnecting))
+        model.receive(fixture.update(.connectionTerminated(errorCode: 0,
+            error: .streamPortsBlocked(proto: "TCP", port: 48010))))
+        model.receive(fixture.update(.stopped))
+        #expect(model.phase == .ended("Test PC answered, but the stream couldn't get through. "
+            + "Check that the PC's firewall allows TCP 48010."))
+    }
+
+    @Test func pairingFailureUsesIOSRecoveryAndNamesPC() async {
+        let fixture = PlaybackFixture()
+        fixture.start = { throw StreamConnection.Failure.pairingRequired }
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        #expect(model.phase == .ended("Couldn't use the saved pairing with Test PC. "
+            + "In Settings → PCs, forget the PC and pair again."))
+    }
+
+    @Test func cancelledStartDoesNotSuggestConnectionRecovery() async {
+        let fixture = PlaybackFixture()
+        fixture.start = { throw CancellationError() }
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        #expect(model.phase == .ended("Disconnected from Test PC."))
+    }
+
+    @Test func explicitDisconnectWinsOverLateStartFailure() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        fixture.start = {
+            await MainActor.run {
+                model.receive(fixture.update(.stageFailed(name: "RTSP", errorCode: -1)))
+                model.disconnect()
+            }
+            await model.waitUntilStopped()
+            throw StreamError.streamPortsBlocked(proto: "TCP", port: 48010)
+        }
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        #expect(model.phase == .ended("Disconnected from Test PC."))
+    }
+
     @Test func failedDisplayLayerReplacementRebindsRenderer() {
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 852, height: 393))
         let failedLayer = surface.displayLayer

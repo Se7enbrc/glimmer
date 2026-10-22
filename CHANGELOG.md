@@ -6,6 +6,8 @@
 
 - On iPhone and iPad, a paired PC stays available in Settings even if loading
   its apps fails or is cancelled, so you can still forget it and pair again.
+- Stream failures on iPhone and iPad explain blocked ports, protected content
+  and pairing recovery instead of showing generic connection advice.
 
 ## 2026.10.8 - Unreleased
 

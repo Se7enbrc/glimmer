@@ -42,6 +42,7 @@
 		FAA9B2DAAD28F9FC05CD2E80 /* IOSAudioOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */; };
 		902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */; };
 		BFCC9B0DBFB951A6374D2892 /* StreamSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 449C39977453B76D4D682FFF /* StreamSessionModel.swift */; };
+		D2CF67DA276842128B900E3A /* StreamSessionFailureCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */; };
 		9A28A0B31BBB599B016AAED4 /* StreamSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C92E9EC00985D64D0C1CC7 /* StreamSurface.swift */; };
 		53442F74573A5960DB86B797 /* StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A97E5B4E562286545BA6412 /* StreamView.swift */; };
 		83B27EBA9F210DF76B77D772 /* LauncherServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087279E7E4417E5B10AADB05 /* LauncherServices.swift */; };
@@ -112,6 +113,7 @@
 		EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioOutputTests.swift"; sourceTree = "<group>"; };
 		57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamPlayback.swift"; sourceTree = "<group>"; };
 		449C39977453B76D4D682FFF /* StreamSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionModel.swift"; sourceTree = "<group>"; };
+		E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionFailureCopy.swift"; sourceTree = "<group>"; };
 		11C92E9EC00985D64D0C1CC7 /* StreamSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSurface.swift"; sourceTree = "<group>"; };
 		5A97E5B4E562286545BA6412 /* StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamView.swift"; sourceTree = "<group>"; };
 		087279E7E4417E5B10AADB05 /* LauncherServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherServices.swift"; sourceTree = "<group>"; };
@@ -246,6 +248,7 @@
 				F08434884699435EA80067AB /* StreamTouchCapture.swift */,
 				5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */,
 				449C39977453B76D4D682FFF /* StreamSessionModel.swift */,
+				E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */,
 				57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */,
 				5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */,
 				D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */,
@@ -406,6 +409,7 @@
 				2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */,
 				2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */,
 				BFCC9B0DBFB951A6374D2892 /* StreamSessionModel.swift in Sources */,
+				D2CF67DA276842128B900E3A /* StreamSessionFailureCopy.swift in Sources */,
 				902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */,
 				FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */,
 				A3D372A8CF7E4C02AC0926B7 /* StreamBackgroundGrace.swift in Sources */,
