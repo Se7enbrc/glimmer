@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.10.9 - Unreleased
+
+### Bug fixes
+
+- Pointer shortcut help now describes capture and release in full screen as well
+  as a window.
+
 ## 2026.10.8 - Unreleased
 
 ### Features

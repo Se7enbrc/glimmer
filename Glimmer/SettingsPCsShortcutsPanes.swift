@@ -165,6 +165,9 @@ struct PCTile: View {
 // MARK: - Shortcuts
 
 struct ShortcutsPane: View {
+    static let pointerDetail =
+        "Captures or releases the pointer in a window or full screen."
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
     @State private var showChordCapture = false
@@ -202,10 +205,8 @@ struct ShortcutsPane: View {
                 // stream stats toggle in Quality.
                 HotkeyRow(label: stats, detail: "For this stream only. The next stream follows Settings › Quality.",
                           hotkey: $model.statsHotkey, taken: taken)
-                // Window mode only: in full screen the pointer is hidden for the
-                // whole session, so the chord reaches the PC like any other key.
                 HotkeyRow(label: pointer,
-                          detail: "Takes the pointer from the game or gives it back. In full screen it goes to the game.",
+                          detail: Self.pointerDetail,
                           hotkey: $model.releasePointerHotkey, taken: taken)
                 HotkeyRow(label: mini,
                           detail: "Shrinks the stream to a small window over your other apps, and brings it back.",

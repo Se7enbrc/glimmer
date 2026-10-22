@@ -148,3 +148,11 @@ struct PairAgainSheetTests {
         #expect(PairSheet.title(paired: true, chosen: true, rePairName: "Tower") == "Paired")
     }
 }
+
+@MainActor
+struct PointerShortcutHelpTests {
+    @Test func pointerHelpCoversWindowAndFullScreenCapture() {
+        #expect(ShortcutsPane.pointerDetail ==
+            "Captures or releases the pointer in a window or full screen.")
+    }
+}
