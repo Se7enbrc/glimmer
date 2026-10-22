@@ -60,6 +60,7 @@
 		A10000004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000014 /* Assets.xcassets */; };
 		A10000005 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000017 /* SettingsView.swift */; };
 		A1000009A /* PairSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000009B /* PairSheet.swift */; };
+		5E55105026102200000000B1 /* PairingPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55105026102200000000B2 /* PairingPresentation.swift */; };
 		A100030A /* ContainerMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100030B /* ContainerMigration.swift */; };
 		A100010A /* TroubleshootingPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100010B /* TroubleshootingPane.swift */; };
 		A100011A /* DualSenseHID.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100011B /* DualSenseHID.swift */; };
@@ -434,6 +435,7 @@
 		5E55102026101000000000A1 /* SessionLaunchFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */; };
 		5E55103026101000000000B1 /* GlimmerCLISunshineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */; };
 		5E55103026101000000000A1 /* AppModelSunshineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55103026101000000000A2 /* AppModelSunshineTests.swift */; };
+		5E55105026102200000000A1 /* SettingsAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55105026102200000000A2 /* SettingsAccessibilityTests.swift */; };
 		5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */; };
 		5E551020261010000C1C0001 /* TimedDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E551020261010000C1C0002 /* TimedDecisionTests.swift */; };
 		DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000006 /* PairingFlowTests.swift */; };
@@ -802,6 +804,7 @@
 		A10000016 /* Glimmer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Glimmer.entitlements; sourceTree = "<group>"; };
 		A10000017 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A1000009B /* PairSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairSheet.swift; sourceTree = "<group>"; };
+		5E55105026102200000000B2 /* PairingPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingPresentation.swift; sourceTree = "<group>"; };
 		A100030B /* ContainerMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContainerMigration.swift; sourceTree = "<group>"; };
 		A100010B /* TroubleshootingPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TroubleshootingPane.swift; sourceTree = "<group>"; };
 		A100011B /* DualSenseHID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DualSenseHID.swift; path = Stream/DualSenseHID.swift; sourceTree = "<group>"; };
@@ -1191,6 +1194,7 @@
 		5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLaunchFlowTests.swift; sourceTree = "<group>"; };
 		5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerCLISunshineTests.swift; sourceTree = "<group>"; };
 		5E55103026101000000000A2 /* AppModelSunshineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelSunshineTests.swift; sourceTree = "<group>"; };
+		5E55105026102200000000A2 /* SettingsAccessibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsAccessibilityTests.swift; sourceTree = "<group>"; };
 		5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReconnectFlowTests.swift; sourceTree = "<group>"; };
 		5E551020261010000C1C0002 /* TimedDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedDecisionTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000006 /* PairingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingFlowTests.swift; sourceTree = "<group>"; };
@@ -1535,6 +1539,7 @@
 				A10000012 /* ContentView.swift */,
 				A10000017 /* SettingsView.swift */,
 				A1000009B /* PairSheet.swift */,
+				5E55105026102200000000B2 /* PairingPresentation.swift */,
 				A100030B /* ContainerMigration.swift */,
 				A100010B /* TroubleshootingPane.swift */,
 				A100020B /* DiagnosticsPane.swift */,
@@ -1855,6 +1860,7 @@
 				5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */,
 				5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */,
 				5E55103026101000000000A2 /* AppModelSunshineTests.swift */,
+				5E55105026102200000000A2 /* SettingsAccessibilityTests.swift */,
 				5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */,
 				5E551020261010000C1C0002 /* TimedDecisionTests.swift */,
 				DEC0DE20261010E100000006 /* PairingFlowTests.swift */,
@@ -2397,6 +2403,7 @@
 				A10000002 /* ContentView.swift in Sources */,
 				A10000005 /* SettingsView.swift in Sources */,
 				A1000009A /* PairSheet.swift in Sources */,
+				5E55105026102200000000B1 /* PairingPresentation.swift in Sources */,
 				A100030A /* ContainerMigration.swift in Sources */,
 				A100010A /* TroubleshootingPane.swift in Sources */,
 				A100020A /* DiagnosticsPane.swift in Sources */,
@@ -2703,6 +2710,7 @@
 				5E55102026101000000000A1 /* SessionLaunchFlowTests.swift in Sources */,
 				5E55103026101000000000B1 /* GlimmerCLISunshineTests.swift in Sources */,
 				5E55103026101000000000A1 /* AppModelSunshineTests.swift in Sources */,
+				5E55105026102200000000A1 /* SettingsAccessibilityTests.swift in Sources */,
 				5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */,
 				5E551020261010000C1C0001 /* TimedDecisionTests.swift in Sources */,
 				DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */,

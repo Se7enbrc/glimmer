@@ -106,29 +106,8 @@ struct ReadinessChip: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Resolve the user-facing chip presentation. Priority order matters -
-    /// our own session beats the polled host state (we'd rather show the live
-    /// truth than briefly flash "Asleep" off a stale poller sample).
-    private var presentation: ChipPresentation {
-        if let reason = model.selectedReadinessReason { return .checkingReadiness(reason: reason) }
-        // The CONNECTING phase outranks the in-flight flag: `isStreaming`
-        // flips at stream() ENTRY (the in-flight latch, not the live edge),
-        // so checking it first pulsed a green "Streaming" through the entire
-        // handshake - including connects that never establish. Typed switch:
-        // the String shim reads "Streaming" for the .streaming phase.
-        if case .connecting(let stage) = model.streamPhase {
-            return .connecting(phase: stage)
-        }
-        if model.isStreaming { return .streamingOurs }
-        guard let host = model.selectedHost else { return .noPC }
-
-        // Polled live snapshot → chip state. The host-id guard in
-        // `publishLiveStatus` already scopes it to the selected host.
-        return model.polledChip(for: host)
-    }
-
     var body: some View {
-        let chip = presentation
+        let chip = model.selectedReadinessChip
         // GlassEffectContainer composites adjacent glass elements as ONE
         // floating cluster (Apple's Liquid Glass guidance) instead of
         // stacking independent blur passes into double-blur artefacts.
@@ -151,7 +130,7 @@ struct ReadinessChip: View {
                 .accessibilityHint(chip == .certMismatch ? "Pairs again to trust this PC's new certificate." : "")
             }
         }
-        .animation(Motion.layout(reduceMotion: reduceMotion), value: presentation)
+        .animation(Motion.layout(reduceMotion: reduceMotion), value: model.selectedReadinessChip)
         .animation(Motion.layout(reduceMotion: reduceMotion), value: model.hostRoute.routeClass)
     }
 
@@ -189,5 +168,17 @@ struct ReadinessChip: View {
             return chip.accessibility
         }
         return "\(chip.accessibility), \(route)"
+    }
+}
+
+extension AppModel {
+    var selectedReadinessChip: ChipPresentation {
+        guard let host = selectedHost else { return .noPC }
+        if let reason = selectedReadinessReason { return .checkingReadiness(reason: reason) }
+        if streamingHostID == host.id {
+            if case .connecting(let stage) = streamPhase { return .connecting(phase: stage) }
+            return .streamingOurs
+        }
+        return polledChip(for: host)
     }
 }

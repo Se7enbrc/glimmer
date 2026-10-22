@@ -5,7 +5,7 @@ import AppKit
 import SwiftUI
 
 enum LauncherFocus: Hashable {
-    case app(Int), pc, overflow, state
+    case app(Int), pc, overflow, state, pairing(PairingFocus)
 }
 
 enum LauncherCommand: Equatable {

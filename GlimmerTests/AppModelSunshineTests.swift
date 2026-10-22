@@ -9,6 +9,7 @@
 //
 
 @testable import GlimmerEngine
+import AppKit
 import Foundation
 import Testing
 @testable import Glimmer
@@ -86,6 +87,41 @@ struct FakePCModel {
 struct AppModelSunshineTests {
 
     // MARK: - Pairing
+
+    @Test func anotherPairRequestKeepsThePresentedPCAndAttemptUntilDismissal() throws {
+        let fixture = try FakePCModel("pair-presentation", sunshine: .scripted([:]))
+        defer { fixture.remove() }
+        let first = try fixture.pairTower()
+        let second = Host(id: "second", name: "Second", customName: nil, localAddress: "192.0.2.11",
+                          manualAddress: nil, apps: first.apps, lastConnected: nil, serverCertPEM: nil,
+                          appVersion: nil, macAddress: nil)
+        let model = fixture.model
+        model.requestPairing(for: first)
+        let window = PairingOwnerTestWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
+        model.pairSheetWindow = window
+        let attempt = model.beginPairing(address: AppModel.routeAddress(first))
+        model.pairingPhase = .awaitingPin
+        model.requestPairing(for: second, owner: .settings)
+        #expect(model.pairSheetHost?.id == first.id)
+        #expect(model.pairingAttempt == attempt)
+        #expect(model.pairingPhase == .awaitingPin)
+        #expect(window.focusRequests == 1)
+        model.pairingAttempt = nil
+        model.pairingPhase = .success
+        model.requestPairing(for: second, owner: .settings)
+        #expect(model.pairSheetHost?.id == first.id)
+        model.pairSheetShown = false
+        model.requestPairing(for: second, owner: .settings)
+        #expect(model.pairSheetHost?.id == first.id)
+        model.finishPairingPresentation(owner: .launcher)
+        model.requestPairing(for: second, owner: .settings)
+        #expect(model.pairSheetHost?.id == second.id)
+        #expect(model.pairSheetOwner == .settings)
+        model.finishPairingPresentation(owner: .launcher)
+        #expect(model.pairSheetOwner == .settings)
+        model.finishPairingPresentation(owner: .settings)
+        #expect(!model.pairSheetShown)
+    }
 
     @Test func theRightPinPairsSavesAndPinsThePCWithItsApps() async throws {
         let hostIdentity = try await EphemeralCryptoIdentity.make(bits: 2048)
@@ -328,4 +364,10 @@ struct AppModelSunshineTests {
         #expect(sunshine.requests.isEmpty)
         model.isStreaming = false
     }
+}
+
+@MainActor
+private final class PairingOwnerTestWindow: NSWindow {
+    var focusRequests = 0
+    override func makeKeyAndOrderFront(_ sender: Any?) { focusRequests += 1 }
 }

@@ -16,8 +16,8 @@ import SwiftUI
 // MARK: - Shared per-host menu
 
 /// Actions for a paired host, one item list for the right-click menu and the
-/// visible menu button. Carries its own dialogs, alerts and pair sheet;
-/// needs the AppModel in the environment.
+/// visible menu button. Dialogs stay local; pairing has one shared owner.
+/// Needs the AppModel in the environment.
 private struct HostContextMenu: ViewModifier {
     let host: Host
     /// Turns the content into a menu button instead of adding a right-click menu.
@@ -25,7 +25,7 @@ private struct HostContextMenu: ViewModifier {
     @Environment(AppModel.self) private var model
     @State private var showUnpairConfirm = false
     @State private var showRename = false
-    @State private var showPairAgain = false
+    @Environment(\.pairingOwner) private var pairingOwner
     @State private var draftName = ""
     @State private var codecPref: HostCodecPreference
     /// The app the Quit item named when it was chosen; nil when the PC didn't say.
@@ -105,11 +105,6 @@ private struct HostContextMenu: ViewModifier {
         } message: {
             Text("Glimmer will forget \(host.displayName). You can pair it again at any time.")
         }
-        // Lands on the PIN step; pairing re-pins the PC's certificate. Settings'
-        // PC list has no launcher sheet to hand this to, so it carries its own.
-        .sheet(isPresented: $showPairAgain) {
-            PairSheet(repairing: host).environment(model)
-        }
     }
 
     @ViewBuilder private var items: some View {
@@ -151,7 +146,7 @@ private struct HostContextMenu: ViewModifier {
         .help(hasMac ? "" : AppModel.wakeNoMacMessage(host.displayName))
         Divider()
         Button {
-            showPairAgain = true
+            model.requestPairing(for: host, owner: pairingOwner)
         } label: {
             Label("Pair Again…", systemImage: "key")
         }

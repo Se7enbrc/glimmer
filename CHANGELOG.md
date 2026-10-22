@@ -63,6 +63,17 @@
 
 ### Bug fixes
 
+- Use a controller to open pairing, choose a PC and finish pairing.
+- Opening pairing from another window brings the current pairing flow forward.
+- The menu bar keeps the streaming PC's name and network when another PC is
+  selected.
+- The live stream's mode stays accurate when settings for the next stream
+  change.
+- Custom resolution and refresh-rate fields have distinct VoiceOver labels.
+- VoiceOver can read the metrics shown in Stream stats.
+- Pointer shortcut help now describes capture and release in full screen as well
+  as a window.
+
 - Recover from video decoder stalls without accumulating old frames.
 - Resume audio promptly after a long network interruption.
 - Keep AV1 colours correct when the PC changes between SDR and HDR during a

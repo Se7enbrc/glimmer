@@ -131,7 +131,9 @@ struct MenuBarPanel: View {
                 let action = model.streamErrorAction
                 actionRow(action.title, systemImage: action.systemImage) {
                     model.runStreamErrorAction()
-                    if action == .pairAgain { openLauncher() } else if action == .tryAgain { activate() }
+                    if action == .pairAgain {
+                        if model.pairSheetOwner == .launcher { openLauncher() }
+                    } else if action == .tryAgain { activate() }
                 }
             }
             actionRow("Dismiss", systemImage: "xmark") { model.nativeStreamError = nil }
@@ -139,7 +141,7 @@ struct MenuBarPanel: View {
     }
 
     private var streamCard: some View {
-        card("Stream", trailing: model.selectedHost?.displayName) {
+        card("Stream", trailing: model.streamingHost?.displayName) {
             let metrics = model.menuBarMetrics
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 bigNumber(metrics[2], dot: .accentColor)
@@ -213,7 +215,7 @@ struct MenuBarPanel: View {
 
     /// A first connect can be cancelled; a reconnect is a live stream, so it stops.
     private var connectingCard: some View {
-        card("Stream", trailing: model.selectedHost?.displayName) {
+        card("Stream", trailing: model.streamingHost?.displayName) {
             HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
                 Text(model.menuBarConnectingLine ?? "Connecting…")
@@ -399,10 +401,10 @@ struct MenuBarPanel: View {
         .padding(.horizontal, 4)
     }
 
-    /// The pair sheet lives on the launcher, so open it there.
+    /// A new menu request opens the launcher; an existing flow keeps its window.
     private func pair(_ host: Host?) {
         model.requestPairing(for: host)
-        openLauncher()
+        if model.pairSheetOwner == .launcher { openLauncher() }
     }
 
     private func openLauncher() {

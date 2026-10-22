@@ -8,7 +8,9 @@ import SwiftUI
 @MainActor
 final class LauncherController {
     weak var window: NSWindow?
+    weak var sheetWindow: NSWindow?
     var handle: ((LauncherCommand) -> Void)?
+    var handleSheet: ((LauncherCommand) -> Void)?
     private var streaming = false
     private var testing = false
     private var menuDepth = 0
@@ -37,9 +39,24 @@ final class LauncherController {
 
     func attach(window: NSWindow?) {
         guard self.window !== window else { return }
-        detach()
+        stop()
         self.window = window
-        guard window != nil else { return }
+        observeWindows()
+        refresh()
+    }
+
+    func attachSheet(window: NSWindow?) {
+        guard sheetWindow !== window else { return }
+        stop()
+        sheetWindow = window
+        observeWindows()
+        refresh()
+    }
+
+    func resetInput() { repeats.removeAll() }
+
+    private func observeWindows() {
+        guard observers.isEmpty, window != nil || sheetWindow != nil else { return }
         let center = NotificationCenter.default
         for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
                      NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
@@ -57,15 +74,25 @@ final class LauncherController {
                 }
             })
         }
-        refresh()
     }
 
     func detach() {
+        window = nil
         stop()
+        if sheetWindow == nil { removeObservers() } else { refresh() }
+    }
+
+    func detachSheet() {
+        sheetWindow = nil
+        handleSheet = nil
+        stop()
+        if window == nil { removeObservers() } else { refresh() }
+    }
+
+    private func removeObservers() {
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
         menuDepth = 0
-        window = nil
     }
 
     func streamingChanged(_ streaming: Bool) {
@@ -80,6 +107,9 @@ final class LauncherController {
 
     private var canNavigate: Bool {
         if let navigationEnabled { return navigationEnabled() }
+        if let sheetWindow {
+            return !streaming && !testing && NSApp.isActive && sheetWindow.isVisible && sheetWindow.isKeyWindow
+        }
         guard let window, window.isVisible else { return false }
         return LauncherNavigation.isEnabled(streaming: streaming, testing: testing, active: NSApp.isActive,
                                             launcherKey: window.isKeyWindow,
@@ -153,8 +183,10 @@ final class LauncherController {
             repeats[id] = repeatState
             for command in commands {
                 guard canNavigate else { return }
-                if menuDepth > 0 || window?.attachedSheet != nil {
-                    if menuDepth > 0 || command == .dismiss { postKey(command) }
+                if menuDepth > 0 {
+                    postKey(command)
+                } else if sheetWindow != nil || window?.attachedSheet != nil {
+                    if let handleSheet { handleSheet(command) } else if command == .dismiss { postKey(command) }
                 } else {
                     handle?(command)
                 }
@@ -188,30 +220,41 @@ final class LauncherController {
 struct LauncherControllerWindow: NSViewRepresentable {
     let controller: LauncherController
     let handle: (LauncherCommand) -> Void
+    var isSheet = false
 
     func makeNSView(context: Context) -> WindowReader {
         let view = WindowReader()
         view.controller = controller
-        controller.handle = handle
+        view.isSheet = isSheet
+        if isSheet { controller.handleSheet = handle } else { controller.handle = handle }
         return view
     }
 
     func updateNSView(_ view: WindowReader, context: Context) {
-        controller.handle = handle
-        controller.attach(window: view.window)
+        if isSheet { controller.handleSheet = handle } else { controller.handle = handle }
+        view.attach()
     }
 
     static func dismantleNSView(_ view: WindowReader, coordinator: ()) {
-        view.controller?.detach()
-        view.controller?.handle = nil
+        if view.isSheet {
+            view.controller?.detachSheet()
+        } else {
+            view.controller?.detach()
+            view.controller?.handle = nil
+        }
     }
 
     final class WindowReader: NSView {
         weak var controller: LauncherController?
+        var isSheet = false
+
+        func attach() {
+            if isSheet { controller?.attachSheet(window: window) } else { controller?.attach(window: window) }
+        }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            controller?.attach(window: window)
+            attach()
         }
     }
 }

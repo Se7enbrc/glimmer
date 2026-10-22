@@ -8,6 +8,42 @@ import AppKit
 import QuartzCore
 
 extension StatsOverlayLayer {
+    func updateAccessibleRows(_ rows: [StatsRow], cap: String) {
+        guard let view = displayView else { return }
+        guard isVisible else {
+            view.setAccessibilityChildren([])
+            return
+        }
+        let kinds = Set(rows.map(\.kind))
+        accessibleRows = accessibleRows.filter { kinds.contains($0.key) }
+        let children = rows.map { row in
+            let element = accessibleRows[row.kind] ?? NSAccessibilityElement()
+            element.setAccessibilityRole(.staticText)
+            element.setAccessibilityParent(view)
+            element.setAccessibilityLabel(row.label)
+            element.setAccessibilityValue(row.value)
+            accessibleRows[row.kind] = element
+            return element
+        }
+        if !cap.isEmpty {
+            accessibleCap.setAccessibilityRole(.staticText)
+            accessibleCap.setAccessibilityParent(view)
+            accessibleCap.setAccessibilityLabel(cap)
+        }
+        view.setAccessibilityChildren(children + (cap.isEmpty ? [] : [accessibleCap]))
+        updateAccessibilityFrames()
+    }
+
+    func updateAccessibilityFrames() {
+        guard let root = layer.superlayer else { return }
+        for (kind, element) in accessibleRows {
+            guard let row = rowViews[kind] else { continue }
+            element.setAccessibilityFrameInParentSpace(row.container.convert(row.container.bounds, to: root))
+        }
+        accessibleCap.setAccessibilityFrameInParentSpace(layer.convert(
+            CGRect(x: 0, y: 0, width: layer.bounds.width, height: 12), to: root))
+    }
+
     /// Combine only when both metrics are enabled; Custom can still show either alone.
     static func combinedRows(_ rows: [StatsRow]) -> [StatsRow] {
         guard let codec = rows.first(where: { $0.kind == .codec }),

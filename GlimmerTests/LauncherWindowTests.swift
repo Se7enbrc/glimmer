@@ -138,6 +138,9 @@ struct PairAgainSheetTests {
         model.requestPairing(for: tower)
         #expect(model.pairSheetShown && model.pairSheetHost == tower)
         model.requestPairing(for: nil)
+        #expect(model.pairSheetShown && model.pairSheetHost == tower)
+        model.finishPairingPresentation(owner: .launcher)
+        model.requestPairing(for: nil)
         #expect(model.pairSheetShown && model.pairSheetHost == nil)
     }
 
@@ -146,5 +149,13 @@ struct PairAgainSheetTests {
         #expect(PairSheet.title(paired: false, chosen: true, rePairName: nil) == "Pair a new PC")
         #expect(PairSheet.title(paired: false, chosen: false, rePairName: nil) == "Choose a PC")
         #expect(PairSheet.title(paired: true, chosen: true, rePairName: "Tower") == "Paired")
+    }
+}
+
+@MainActor
+struct PointerShortcutHelpTests {
+    @Test func pointerHelpCoversWindowAndFullScreenCapture() {
+        #expect(ShortcutsPane.pointerDetail ==
+            "Captures or releases the pointer in a window or full screen.")
     }
 }

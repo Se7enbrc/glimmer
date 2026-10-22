@@ -423,7 +423,8 @@ struct QualityPane: View {
                 .menuStyle(.button)
                 .help("Common resolutions")
                 .fixedSize()
-                TextField("", text: $customWidthText)
+                TextField("Width in pixels", text: $customWidthText)
+                    .labelsHidden()
                     .frame(width: 70)
                     .multilineTextAlignment(.trailing)
                     .monospacedDigit()
@@ -433,7 +434,8 @@ struct QualityPane: View {
                     .onChange(of: model.customWidth) { _, value in customWidthText = String(value) }
                     .onSubmit { settleCustomFieldText() }
                 Text("×").foregroundStyle(.secondary)
-                TextField("", text: $customHeightText)
+                TextField("Height in pixels", text: $customHeightText)
+                    .labelsHidden()
                     .frame(width: 70)
                     .multilineTextAlignment(.trailing)
                     .monospacedDigit()
@@ -446,7 +448,8 @@ struct QualityPane: View {
             HStack {
                 Text("Refresh rate")
                 Spacer()
-                TextField("", text: $customFPSText)
+                TextField("Refresh rate in hertz", text: $customFPSText)
+                    .labelsHidden()
                     .frame(width: 60)
                     .multilineTextAlignment(.trailing)
                     .monospacedDigit()

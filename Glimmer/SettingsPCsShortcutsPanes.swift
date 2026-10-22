@@ -16,8 +16,6 @@ import SwiftUI
 
 struct PCsPane: View {
     @Environment(AppModel.self) private var model
-    @State private var showPairSheet = false
-    @State private var initialPairAddress: String = ""
 
     var body: some View {
         ScrollView {
@@ -53,23 +51,13 @@ struct PCsPane: View {
                 // A standard button: the launcher's accent capsule is for the one
                 // thing to do there; in Settings, pairing is one action among many.
                 Button {
-                    initialPairAddress = ""
-                    showPairSheet = true
+                    model.requestPairing(for: nil, owner: .settings)
                 } label: {
                     Label("Pair a PC…", systemImage: "plus")
                 }
                 .padding(.top, 4)
             }
             .padding(20)
-        }
-        .sheet(isPresented: $showPairSheet) {
-            PairSheet(initialAddress: initialPairAddress)
-                .environment(model)
-                // Sheets on macOS 26 read better with the Tahoe glass
-                // backdrop - `.thinMaterial` matches the Settings window
-                // chrome so the PIN tiles' tinted glass layers cleanly on
-                // top instead of stacking against an opaque sheet plate.
-                .presentationBackground(.thinMaterial)
         }
     }
 }
@@ -165,6 +153,9 @@ struct PCTile: View {
 // MARK: - Shortcuts
 
 struct ShortcutsPane: View {
+    static let pointerDetail =
+        "Captures or releases the pointer in a window or full screen."
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
     @State private var showChordCapture = false
@@ -202,10 +193,8 @@ struct ShortcutsPane: View {
                 // stream stats toggle in Quality.
                 HotkeyRow(label: stats, detail: "For this stream only. The next stream follows Settings › Quality.",
                           hotkey: $model.statsHotkey, taken: taken)
-                // Window mode only: in full screen the pointer is hidden for the
-                // whole session, so the chord reaches the PC like any other key.
                 HotkeyRow(label: pointer,
-                          detail: "Takes the pointer from the game or gives it back. In full screen it goes to the game.",
+                          detail: Self.pointerDetail,
                           hotkey: $model.releasePointerHotkey, taken: taken)
                 HotkeyRow(label: mini,
                           detail: "Shrinks the stream to a small window over your other apps, and brings it back.",

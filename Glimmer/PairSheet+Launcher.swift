@@ -6,6 +6,7 @@ import SwiftUI
 
 struct PairLauncherChoice: View {
     let host: Host
+    let focus: FocusState<LauncherFocus?>.Binding
     @Environment(AppModel.self) private var model
 
     private var selection: LauncherStyle {
@@ -31,6 +32,7 @@ struct PairLauncherChoice: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(selection == style ? Color.accentColor : nil)
+                    .pairingFocus(focus, .style(style)) { model.setLauncherStyle(style, for: host) }
                     .accessibilityLabel(style.title)
                     .accessibilityAddTraits(selection == style ? .isSelected : [])
                 }
@@ -64,5 +66,44 @@ struct PairLauncherChoice: View {
                 }
             }
         }
+    }
+}
+
+enum PairingFocus: Hashable {
+    case pc(String), manual, address, continuePairing, help, back, cancel, retry, done, stream
+    case style(LauncherStyle), settings, guide
+}
+
+enum PairingNavigation {
+    static func destination(from focus: LauncherFocus?, command: LauncherCommand,
+                            cells: [LauncherFocus]) -> LauncherFocus? {
+        let direction: LauncherCommand
+        switch command {
+        case .left: direction = .up
+        case .right: direction = .down
+        default: direction = command
+        }
+        return LauncherNavigation.destination(from: focus, command: direction,
+                                              cells: cells, columns: 1, hasSwitcher: false)
+    }
+}
+
+private struct PairingControlFocus: ViewModifier {
+    let focus: FocusState<LauncherFocus?>.Binding
+    let target: PairingFocus
+    let activate: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(LauncherControlFocus(focus: focus, target: .pairing(target), activate: activate))
+            .preference(key: LauncherFocusCells.self, value: isEnabled ? [.pairing(target)] : [])
+    }
+}
+
+extension View {
+    func pairingFocus(_ focus: FocusState<LauncherFocus?>.Binding, _ target: PairingFocus,
+                      activate: @escaping () -> Void) -> some View {
+        modifier(PairingControlFocus(focus: focus, target: target, activate: activate))
     }
 }

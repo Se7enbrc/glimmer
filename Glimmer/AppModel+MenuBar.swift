@@ -15,7 +15,7 @@ extension AppModel {
     }
 
     var menuBarAccessibilityLabel: String {
-        MenuBarPresentation.accessibilityLabel(state: menuBarIconState, hostName: selectedHost?.displayName)
+        MenuBarPresentation.accessibilityLabel(state: menuBarIconState, hostName: streamingHost?.displayName ?? selectedHost?.displayName)
     }
 
     var menuBarPrimaryAction: MenuBarPrimaryAction {
@@ -30,11 +30,14 @@ extension AppModel {
     }
 
     var menuBarModeLine: String {
-        MenuBarPresentation.modeLine(width: effectiveWidth, height: effectiveHeight, fps: effectiveFPS, hdr: nativeHDRActive)
+        guard let resolution = menuResolution, let fps = menuDetails?.configuredFps,
+              fps.isFinite, fps > 0, fps < Double(Int.max) else { return "" }
+        return MenuBarPresentation.modeLine(width: resolution.width, height: resolution.height,
+                                            fps: Int(fps), hdr: nativeHDRActive)
     }
 
     var menuBarMetrics: [MenuBarMetric] {
-        MenuBarPresentation.metrics(snapshot: menuDetails, link: MenuBarPresentation.linkLabel(hostRoute.routeClass))
+        MenuBarPresentation.metrics(snapshot: menuDetails, link: MenuBarPresentation.linkLabel(streamRoute.routeClass))
     }
 
     /// The header while connecting: the phase's own stage copy.
@@ -64,12 +67,6 @@ extension AppModel {
         Task { await session.setStatsOverlay(next) }
     }
 
-    /// Opens the launcher's pair sheet: Pair Again… for `host`, or Pair a PC… for nil.
-    func requestPairing(for host: Host?) {
-        pairSheetHost = host
-        pairSheetShown = true
-    }
-
     /// Refresh Connection Details about once a second while the menu is open.
     func startMenuBarRefresh() {
         stopMenuBarRefresh()
@@ -90,15 +87,32 @@ extension AppModel {
     private func refreshMenuBarDetails() {
         let pads = readMenuBarControllers()
         if pads != menuBarControllers { menuBarControllers = pads }
-        guard isStreaming, let session = nativeSession else { menuDetails = nil; return }
+        guard isStreaming, let session = nativeSession else {
+            menuDetails = nil
+            menuResolution = nil
+            return
+        }
         Task { [weak self] in
             let details = await session.menuBarDetails()
-            await MainActor.run {
-                guard let self else { return }
-                self.menuDetails = details?.snapshot
-                if let overlay = details?.overlayShown { self.statsOverlayShown = overlay }
-            }
+            self?.applyMenuBarDetails(details, from: session)
         }
+    }
+
+    func prepareMenuBarDetails(width: Int, height: Int, fps: Int) {
+        menuResolution = (width, height)
+        var initialDetails = StreamStatsSnapshot()
+        initialDetails.configuredFps = Double(fps)
+        menuDetails = initialDetails
+    }
+
+    typealias LiveMenuDetails = (snapshot: StreamStatsSnapshot, overlayShown: Bool,
+                                resolution: (width: Int, height: Int))
+
+    func applyMenuBarDetails(_ details: LiveMenuDetails?, from session: StreamSession) {
+        guard isStreaming, nativeSession === session else { return }
+        menuDetails = details?.snapshot
+        menuResolution = details?.resolution
+        if let overlay = details?.overlayShown { statsOverlayShown = overlay }
     }
 
     /// Every pad the Mac sees, with a battery reading where one exists. Reads
