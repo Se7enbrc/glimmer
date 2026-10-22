@@ -12,24 +12,19 @@ extension NSScreen {
     }
 }
 
-// Observations arrived in macOS 26. On 15, each pass reads and re-arms tracking together,
-// so no change can slip in between.
+// Observations directly on macOS 26, in the caller's task. On 15, each pass reads and
+// re-arms tracking together, so no change can slip in between.
 @MainActor
-func observedValues<Value: Sendable>(_ read: @escaping @MainActor @Sendable () -> Value) -> AsyncStream<Value> {
-    AsyncStream { continuation in
-        let task = Task { @MainActor in
-            if #available(macOS 26, *) {
-                for await value in Observations(read) { continuation.yield(value) }
-            } else {
-                while !Task.isCancelled {
-                    await withCheckedContinuation { (changed: CheckedContinuation<Void, Never>) in
-                        continuation.yield(withObservationTracking(read) { changed.resume() })
-                    }
-                }
-            }
-            continuation.finish()
+func forEachObservedValue<Value: Sendable>(_ read: @escaping @MainActor @Sendable () -> Value,
+                                           perform body: (Value) -> Void) async {
+    if #available(macOS 26, *) {
+        for await value in Observations(read) { body(value) }
+        return
+    }
+    while !Task.isCancelled {
+        await withCheckedContinuation { (changed: CheckedContinuation<Void, Never>) in
+            body(withObservationTracking(read) { changed.resume() })
         }
-        continuation.onTermination = { _ in task.cancel() }
     }
 }
 

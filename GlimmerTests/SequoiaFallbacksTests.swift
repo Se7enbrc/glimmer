@@ -28,9 +28,12 @@ private final class Counter {
 @MainActor
 struct SequoiaFallbacksTests {
 
-    @Test func observedValuesDeliversTheCurrentValueThenEachChange() async {
+    @Test func forEachObservedValueDeliversTheCurrentValueThenEachChange() async {
         let counter = Counter()
-        var iterator = observedValues { counter.value }.makeAsyncIterator()
+        let (values, sink) = AsyncStream<Int>.makeStream()
+        let watching = Task { await forEachObservedValue({ counter.value }, perform: { sink.yield($0) }) }
+        defer { watching.cancel() }
+        var iterator = values.makeAsyncIterator()
         #expect(await iterator.next() == 0)
         counter.value = 1
         #expect(await iterator.next() == 1)
