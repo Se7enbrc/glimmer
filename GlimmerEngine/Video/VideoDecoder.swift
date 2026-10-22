@@ -83,10 +83,12 @@ public final class VideoDecoder {
         }
     }
 
-    /// Whether the PC signalled HDR mode. Written by `setHDR(enabled:)` and teardown, read by the VT
-    /// output callback for the untagged fallback colorspace: a one-frame-stale Bool is harmless, and
-    /// its load and store are atomic on every supported architecture.
-    nonisolated(unsafe) internal var hdrEnabled: Bool = false
+    // The control fallback is independent of metadata; atomic access synchronizes main and VT threads.
+    private nonisolated let controlHDR = Atomic<Bool>(false)
+    nonisolated var hdrEnabled: Bool {
+        get { controlHDR.load(ordering: .relaxed) }
+        set { controlHDR.store(newValue, ordering: .relaxed) }
+    }
 
     /// The resolved input uses PQ or HLG. Display output also requires current EDR headroom.
     public internal(set) var isHDRActive: Bool = false
