@@ -392,6 +392,8 @@ struct MenuBarPanel: View {
             .glassButtonStyle()
             .buttonBorderShape(.circle)
             .menuIndicator(.hidden)
+            // A bordered Menu on macOS 15 takes every point offered; glass already hugs its icon.
+            .fixedSize()
         }
         .controlSize(.small)
         .padding(.horizontal, 4)

@@ -146,6 +146,9 @@ struct MainWindow: View {
             // on the trailing edge (a hidden title bar has no title to push it there).
             if #available(macOS 26, *) {
                 ToolbarSpacer(.flexible)
+            } else {
+                // macOS 15 has no ToolbarSpacer; a flexible Spacer item gives the same push.
+                ToolbarItem { Spacer() }
             }
             ToolbarItem(placement: .automatic) {
                 Button {
