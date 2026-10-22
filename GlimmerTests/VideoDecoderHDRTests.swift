@@ -471,7 +471,7 @@ struct VideoDecoderColorTransitionTests {
         decoder.colorProbeLog = { message, _ in rows.append(message.text) }
         let layer = AVSampleBufferDisplayLayer()
         decoder.attach(to: layer)
-        layer.resetDynamicRange()
+        layer.setDynamicRange(high: false)
         defer { decoder.teardown() }
         let buffer = try makeTaggedPixelBuffer(primaries: bt2020, transfer: pq)
         let color = decoder.resolveColorDescription(for: buffer, controlHDR: false)

@@ -110,9 +110,9 @@ struct VideoBoundaryTests {
         let probe = try #require(decoder.beginColorProbe(pixels, color: color, controlHDR: true))
         let task = try #require(decoder.finishColorProbe(probe, pixelBuffer: pixels))
         let replacement = AVSampleBufferDisplayLayer()
-        replacement.resetDynamicRange()
+        replacement.setDynamicRange(high: false)
         decoder.attach(to: replacement)
-        replacement.resetDynamicRange()
+        replacement.setDynamicRange(high: false)
         logs = 0
         await task.value
         #expect(replacement.dynamicRangeLabel == "standard")
@@ -130,7 +130,7 @@ struct VideoBoundaryTests {
         try #require(color.isHDR)
         decoder.resolvedColor.withLock { $0 = color }
         let replacement = AVSampleBufferDisplayLayer()
-        replacement.resetDynamicRange()
+        replacement.setDynamicRange(high: false)
         decoder.attach(to: replacement)
         #expect(replacement.dynamicRangeLabel == hdrRangeLabel)
         #expect(decoder.isHDRActive)

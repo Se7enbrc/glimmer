@@ -20,16 +20,6 @@ let hdrRangeLabel: String = {
     return "edr"
 }()
 
-extension CALayer {
-    func resetDynamicRange() {
-        if #available(macOS 26, *) {
-            preferredDynamicRange = .standard
-        } else {
-            wantsExtendedDynamicRangeContent = false
-        }
-    }
-}
-
 @MainActor @Observable
 private final class Counter {
     var value = 0
@@ -57,14 +47,9 @@ struct SequoiaFallbacksTests {
 
     @Test func dynamicRangeLabelFollowsTheLayerOptIn() {
         let layer = CALayer()
-        if #available(macOS 26, *) {
-            layer.preferredDynamicRange = .high
-            #expect(layer.dynamicRangeLabel == "high")
-        } else {
-            layer.wantsExtendedDynamicRangeContent = true
-            #expect(layer.dynamicRangeLabel == "edr")
-            layer.wantsExtendedDynamicRangeContent = false
-            #expect(layer.dynamicRangeLabel == "standard")
-        }
+        layer.setDynamicRange(high: true)
+        #expect(layer.dynamicRangeLabel == hdrRangeLabel)
+        layer.setDynamicRange(high: false)
+        #expect(layer.dynamicRangeLabel == "standard")
     }
 }

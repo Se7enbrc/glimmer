@@ -37,8 +37,12 @@ package struct ControllerTouchpadMouseState {
             clickedButton = nil
         }
         clickDown = clicked
-        let point = nextContacts == 3 ? ((primary ?? .zero) + (secondary ?? .zero)) / 2
-            : primary ?? secondary ?? .zero
+        let point: SIMD2<Float>
+        if let primary, let secondary {
+            point = (primary + secondary) / 2
+        } else {
+            point = primary ?? secondary ?? .zero
+        }
         // Rebase on every contact change so landing, lifting and changing gestures never move the pointer.
         guard nextContacts == contacts, nextContacts != 0 else {
             contacts = nextContacts
