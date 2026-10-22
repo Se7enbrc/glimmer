@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.10.8 - Unreleased
+## 2026.10.9 - Unreleased
 
 ### Features
 
@@ -62,6 +62,8 @@
 - The readiness chip shows Ready and latency when the PC is reachable.
 
 ### Bug fixes
+
+- Keep fallback video playback in step when the game's frame rate changes.
 
 - Keep pending video frames bounded if presentation briefly stalls, and release
   them promptly when the stream stops or resets.

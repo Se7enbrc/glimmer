@@ -320,6 +320,11 @@ package final class FramePacer: @unchecked Sendable {
         pacerTickThread?.stop()
     }
 
+    // Scheduling stays on pacingQueue; injection lets tests drive beats without wall-clock wakes.
+    var scheduleDeficitTimer: @Sendable (DispatchSourceTimer, Double) -> Void = { timer, interval in
+        timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(1))
+    }
+
     // MARK: - Init
 
     init(stats: StatsCollector, configuredFps: Int32) {
