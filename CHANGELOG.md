@@ -70,6 +70,8 @@
   recovery.
 - Prevent delayed video frames from briefly replacing a newer image.
 
+- On iPhone and iPad, Native quality rounds the stream size down to even pixels
+  so the PC can encode displays with odd pixel dimensions.
 - Keep pending video frames bounded if presentation briefly stalls, and release
   them promptly when the stream stops or resets.
 - Clicking Settings while a stream is in the background keeps Settings in front.

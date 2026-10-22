@@ -243,12 +243,46 @@ struct SessionReconnectFlowTests {
             await stopping.value
         }
         await armRelease.open()
-        await completion.value
+        _ = await completion.value
         #expect(TelemetryCounters.shared.reconnectTotal.value == reconnects)
         #expect(live.session.didLogDecodeOnlyStall)
         await closeRelease.open()
         await stopping.value
         #expect(await live.finish().isEmpty)
+    }
+
+    @Test(arguments: [1, StreamSession.reconnectAttemptCap])
+    func terminatedReplacementRetriesWithinTheEpisode(failures: Int) async throws {
+        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+                               "cancel": [SessionFlow.cancelled]])
+        let rearms = AtomicCounter()
+        let reconnects = TelemetryCounters.shared.reconnectTotal.value
+        await live.session.runSelfInitiatedReconnect(cause: "test", rearmWatchdog: { session in
+            rearms.increment()
+            if rearms.value <= failures {
+                await session.terminateReplacementDuringRearm(code: StreamSession.deadPeerTerminationCode)
+            }
+        })
+        let exhausted = failures == StreamSession.reconnectAttemptCap
+        #expect(live.supply.backends.count == (exhausted ? failures : failures + 1))
+        #expect(TelemetryCounters.shared.reconnectTotal.value == reconnects + (exhausted ? 0 : 1))
+        let seen = await live.finish().filter { $0 != "other" }
+        #expect(seen == ["reconnecting", exhausted ? "terminated(-1)" : "reconnected"])
+    }
+
+    @Test func terminalReplacementFailureEndsTheEpisodeWithItsOwnCode() async {
+        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+                               "cancel": [SessionFlow.cancelled]])
+        let code = StreamSession.protectedContentTerminationCode
+        let reconnects = TelemetryCounters.shared.reconnectTotal.value
+        await live.session.runSelfInitiatedReconnect(cause: "test", rearmWatchdog: { session in
+            await session.terminateReplacementDuringRearm(code: code)
+        })
+        #expect(live.supply.backends.count == 1)
+        #expect(TelemetryCounters.shared.reconnectTotal.value == reconnects)
+        #expect(await !live.session.isStreaming)
+        let seen = await live.finish().filter { $0 != "other" }
+        #expect(seen == ["reconnecting", "terminated(\(code))"])
     }
 
     // MARK: - Frame watchdog
@@ -335,6 +369,24 @@ private extension StreamSession {
         let backendConfig = makeBackendConfig(config: config, launch: launch, server: server)
         try await connectBackend(serverInfo: server, launch: launch, backendConfig: backendConfig,
             setup: SessionMedia(presentation: presentation, input: input, video: videoDecoder), network: network, duringReconnect: true)
+    }
+
+    func terminateReplacementDuringRearm(code: Int32) async {
+        let replacement = NativeBackend()
+        backend = replacement
+        bridge?.setEventSource(replacement, attempt: attemptID)
+        let events = NativeConnectionEvents(bridge: bridge, backend: replacement)
+        events.connectionStarted()
+        await events.drainSessionEvents()
+        do {
+            let enet = try EnetFixture.channel()
+            replacement.wireVideoControl(enet: enet, events: events)
+            enet.onTerminated?(code)
+            await events.drainSessionEvents()
+            #expect(replacement.withState { replacement.interrupted })
+        } catch {
+            Issue.record("Could not create control channel: \(error)")
+        }
     }
 
     func forgetLiveState() { reachedLiveState = false }
