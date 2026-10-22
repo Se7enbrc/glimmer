@@ -73,11 +73,8 @@ struct InputExtractionBoundaryTests {
         let input = StreamInput(backend: recorder, emit: { _ in })
         defer { input.stop(); backend.stopConnection() }
         _ = input.registerController(.init(kind: .unknown, supportedButtons: .a, capabilities: []))
-        let enet = EnetControlChannel(host: .ipv4(.loopback), port: 0, controlConnectData: 0,
-            crypto: try ControlCrypto(rikey: [UInt8](repeating: 0, count: 16)))
         input.lifecycleQueue.suspend()
-        #expect(backend.wireControllerFeedback(enet: enet,
-            events: TransportConnectionEvents(id: UUID(), input: input, emit: { _, _ in })))
+        #expect(backend.activateControllers(events: TransportConnectionEvents(id: UUID(), input: input, emit: { _, _ in })))
         #expect(recorder.controllerEvents.isEmpty)
         if stopBeforeDrain { input.stop() }
         input.lifecycleQueue.resume()

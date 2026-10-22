@@ -63,6 +63,8 @@
 
 ### Bug fixes
 
+- Apply HDR colour and brightness metadata even when the PC sends it during
+  connection setup.
 - Keep pending video frames bounded if presentation briefly stalls, and release
   them promptly when the stream stops or resets.
 - Clicking Settings while a stream is in the background keeps Settings in front.
