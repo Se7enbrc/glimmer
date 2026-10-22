@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- MTT VDD 25.7.23. Save as C:\VirtualDisplayDriver\vdd_settings.xml. -->
-<!-- 90 modes: upstream reports initialization failures near 90-96 modes. -->
+<!-- 90 modes within the 96-mode budget; see upstream limits in the reference. -->
 <!-- Coverage, omissions and sources: VIRTUAL_DISPLAY_MODES.md. Setup: HOST_SETUP.md. -->
 <vdd_settings>
     <monitors><count>1</count></monitors>
@@ -91,7 +91,7 @@
             <width>2408</width><height>1506</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPhone native. Odd heights are intentional; see the setup guide. -->
+        <!-- iPhone native requests, rounded down to even pixels. -->
         <resolution>
             <width>1334</width><height>750</height>
             <refresh_rate>60</refresh_rate>
@@ -105,7 +105,7 @@
             <refresh_rate>60</refresh_rate>
         </resolution>
         <resolution>
-            <width>2436</width><height>1125</height>
+            <width>2436</width><height>1124</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <resolution>
@@ -113,7 +113,7 @@
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
         <resolution>
-            <width>2556</width><height>1179</height>
+            <width>2556</width><height>1178</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
         <resolution>

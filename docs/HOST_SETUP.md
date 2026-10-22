@@ -92,13 +92,13 @@ set `dd_config_revert_on_disconnect` to `enabled`.
 4. Check Windows Settings → System → Display → Advanced display for the virtual
    display's resolution and refresh rate.
 
-| Client         | Quality choice                    | What the PC receives                                                            |
-| -------------- | --------------------------------- | ------------------------------------------------------------------------------- |
-| Mac            | Sharpest                          | Native display pixels at the display's maximum frame rate.                      |
-| Mac            | Balanced                          | Half the width and height, rounded down to even pixels, at the same frame rate. |
-| Mac            | Custom                            | Your saved size and frame rate. The menu offers 720p, 1080p, 1440p and 4K.      |
-| iPhone or iPad | Native · 120 fps                  | Landscape native pixels, capped to the display's maximum of 60 or 120 fps.      |
-| iPhone or iPad | 1080p · 60 fps or 1080p · 120 fps | 1920 × 1080, capped to the display's maximum.                                   |
+| Client         | Quality choice                    | What the PC receives                                                                            |
+| -------------- | --------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Mac            | Sharpest                          | Native display pixels at the display's maximum frame rate.                                      |
+| Mac            | Balanced                          | Half the width and height, rounded down to even pixels, at the same frame rate.                 |
+| Mac            | Custom                            | Your saved size and frame rate. The menu offers 720p, 1080p, 1440p and 4K.                      |
+| iPhone or iPad | Native · 120 fps                  | Landscape native pixels rounded down to even, capped to the display's maximum of 60 or 120 fps. |
+| iPhone or iPad | 1080p · 60 fps or 1080p · 120 fps | 1920 × 1080, capped to the display's maximum.                                                   |
 
 {% hint style="info" %}
 
@@ -109,7 +109,7 @@ screen keeps your chosen rate.
 
 The sample covers the
 [listed Apple displays and common custom modes](VIRTUAL_DISPLAY_MODES.md). The
-file stays within a 90-mode budget because upstream reports display
+file contains 90 modes within a 96-mode budget because upstream reports display
 initialization failures with larger lists. Arbitrary Custom values and other
 external displays may need replacement modes or Apollo. iPhone and iPad have no
 half-resolution or Custom choice. A listed mode does not promise that the PC can
@@ -119,22 +119,10 @@ encode it fast enough.
 
 ### If the picture does not start
 
-1. Choose **1080p · 60 fps** on iPhone or iPad, or **Custom, 1920 × 1080, 60
-   fps** on Mac.
-2. Start a new stream.
-3. If that also fails, check that Sunshine's `output_name` still identifies the
-   virtual display and reload the driver after checking the saved file.
-
-{% hint style="warning" %}
-
-For iPhone 11 Pro, iPhone 14 Pro, iPhone 15, iPhone 15 Pro and iPhone 16, start
-with **1080p · 60 fps**. Their native requests have odd heights, which some PC
-encoders reject. The sample includes the exact native modes, but a display file
-cannot fix encoder rejection. Apollo has the same limitation. A 16:9 stream can
-crop on an iPhone; Native preserves the screen's proportions when encoding
-works.
-
-{% endhint %}
+1. Check that Sunshine's `output_name` still identifies the virtual display.
+2. Check the saved XML file and use **Reload Driver**.
+3. Start a new stream. If it still fails, check Sunshine's Troubleshooting →
+   Logs for the display or encoder error.
 
 ## Or use Apollo
 

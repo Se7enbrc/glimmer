@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 
 SAMPLE = Path(__file__).resolve().parents[2] / "docs/vddsettings.xml"
 COMMON_RATES = (60, 120, 240)
-MAX_MODES = 90  # Stay below upstream's reported 96-mode boundary; see the reference.
+MAX_MODES = 96  # Upstream's reported working boundary; see the reference.
 # QualityCalculator.effectiveValuesForPreset and StreamQuality.hidpiSize/encodableSize.
 # Native width/height, actual Balanced width/height, display rates (including fixed modes).
 MAC_MODES = (
@@ -23,15 +23,15 @@ MAC_MODES = (
     (6016, 3384, 3008, 1692, (48, 50, 60)), # Pro Display XDR.
     (2408, 1506, 2408, 1506, (60,)),      # Neo: half width is below 1280.
 )
-# StreamProfile.resolve sends landscape nativeBounds unchanged, including odd heights.
+# StreamProfile.resolve rounds landscape nativeBounds down with StreamQuality.encodableSize.
 # 120 fps profiles cap to the screen maximum; 60 covers shared sizes and capped screens.
 MOBILE_MODES = (
     (1334, 750, (60,)),          # SE 2/3.
     (1792, 828, (60,)),          # 11.
     (2340, 1080, (60,)),         # 12/13 mini.
-    (2436, 1125, (60,)),         # 11 Pro.
+    (2436, 1124, (60,)),         # 11 Pro.
     (2532, 1170, (60, 120)),     # 12/12 Pro/13/13 Pro/14/16e/17e.
-    (2556, 1179, (60, 120)),     # 14 Pro/15/15 Pro/16.
+    (2556, 1178, (60, 120)),     # 14 Pro/15/15 Pro/16.
     (2622, 1206, (60, 120)),     # 16 Pro/17/17 Pro/18 Pro.
     (2688, 1242, (60,)),         # 11 Pro Max.
     (2736, 1260, (60, 120)),     # Air.
@@ -75,6 +75,7 @@ class VirtualDisplaySettingsTests(unittest.TestCase):
                 self.assertRegex(child.text or "", r"^[1-9][0-9]*$")
             width, height = int(entry[0].text), int(entry[1].text)
             self.assertTrue(0 < height <= width <= 7680 and height <= 4320)
+            self.assertEqual((width % 2, height % 2), (0, 0))
             self.assertNotIn((width, height), sizes, "duplicate resolution block")
             sizes.add((width, height))
             for rate in entry[2:]:

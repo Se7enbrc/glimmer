@@ -7,11 +7,9 @@ iPhone and iPad. The guide also includes an optional Apollo path without an XML
 file.
 
 In Settings → Quality, **Native · 120 fps** requests this display's landscape
-pixel size, capped to its maximum frame rate. **1080p · 60 fps** and **1080p ·
-120 fps** request 1920 × 1080, also capped to the display. There is no
-half-resolution or Custom choice. The
-[shared guide's recovery steps](../../docs/HOST_SETUP.md#if-the-picture-does-not-start)
-cover iPhones whose odd native heights may be rejected by the PC's encoder.
+pixel size rounded down to even dimensions, capped to its maximum frame rate.
+**1080p · 60 fps** and **1080p · 120 fps** request 1920 × 1080, also capped to
+the display. There is no half-resolution or Custom choice.
 
 ## Audio and controllers
 

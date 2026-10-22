@@ -7,8 +7,9 @@ client code and Apple's display specifications. For installation, follow the
 ## What Glimmer sends
 
 The following rules describe this checkout, checked on 2026-10-22. Panel tables
-below use landscape pixels and hardware maximum refresh rates. Runtime display
-reports remain authoritative.
+below use landscape stream requests and hardware maximum refresh rates. Both
+clients round each requested dimension down to an even number of pixels. Runtime
+display reports remain authoritative.
 
 | Choice                       | Request rule                                                                                                                                                      | Source                                                                                                            |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -16,21 +17,21 @@ reports remain authoritative.
 | Mac Balanced                 | Integer half dimensions when both are at least 1280 × 720; otherwise native. Round the result down to even. Same FPS as Sharpest.                                 | [StreamQuality.swift](../GlimmerEngine/Session/StreamQuality.swift), `hidpiSize`, `encodableSize`                 |
 | Mac Custom                   | Width 640–7680, height 480–4320, integer FPS 30–240. Round dimensions down to even. Full screen preserves FPS; windowed caps to the display, with a 30 fps floor. | [bounds](../GlimmerEngine/Models/StreamSizeBounds.swift), [window cap](../Glimmer/Models/StreamDisplayMode.swift) |
 | Mac common-size menu         | 1280 × 720, 1920 × 1080, 2560 × 1440, 3840 × 2160. These change Custom's size, not its FPS.                                                                       | [CommonResolution](../Glimmer/SettingsGeneralStreamingPanes.swift)                                                |
-| iPhone/iPad Native · 120 fps | `max(nativeBounds)` × `min(nativeBounds)`, with no even rounding; FPS is `min(120, maximumFramesPerSecond)`.                                                      | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift), `resolve`                                              |
+| iPhone/iPad Native · 120 fps | `max(nativeBounds)` × `min(nativeBounds)`, both rounded down to even; FPS is `min(120, maximumFramesPerSecond)`.                                                  | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift), `resolve`                                              |
 | iPhone/iPad 1080p            | 1920 × 1080 at `min(60, maximumFramesPerSecond)` or `min(120, maximumFramesPerSecond)`. No other quality profiles or half-size choice.                            | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift)                                                         |
 
-[StreamConnection.Configuration](../GlimmerEngine/Session/StreamConnection+Configuration.swift)
-does not align iOS dimensions. The shared
+Both clients use
+[StreamQuality.encodableSize](../GlimmerEngine/Session/StreamQuality.swift)
+before creating the stream configuration. The shared
 [launch query](../GlimmerEngine/Network/NetworkClient+Endpoints.swift) sends
 these dimensions and FPS in `mode` and sets `sops=1`, which enables Sunshine's
 automatic resolution selection. It does not change the request to a nearby mode.
 macOS display probing can fall back to a Retina mode or framebuffer size when
 the panel-native flag is unavailable.
 
-The 2436 × 1125 and 2556 × 1179 iPhone modes are intentionally odd. Adding even
-substitutes would not cover the actual request. Some encoders reject these;
-1080p60 is the existing recovery choice. A native-resolution guarantee on every
-iPhone needs a separate client alignment change and physical-device checks.
+A 2436 × 1125 iPhone panel requests **2436 × 1124**. A 2556 × 1179 panel
+requests **2556 × 1178**. The table and XML use these even requests, while the
+linked Apple specifications give the physical panel sizes.
 
 ## Mac displays
 
@@ -60,8 +61,7 @@ Fractional rates such as 59.94 are not selectable as Glimmer FPS.
 Studio Display XDR is capped at 60 Hz on M1, M1 Pro, M1 Max, M1 Ultra, M2 and M3
 Macs. Its Apple specification lists the compatible Mac and iPad models. The
 sample includes both 60 and 120 Hz. MacBook Neo's half size would be 1204 × 753,
-so Balanced retains 2408 × 1506. The extra XML half-size entry is not that
-preset.
+so Balanced retains 2408 × 1506.
 
 ### Macs with separate displays
 
@@ -111,11 +111,11 @@ screen cap. Standard displays are 60 Hz; ProMotion supports up to 120 Hz through
 | [iPhone SE (3rd generation)](https://support.apple.com/en-us/111866), [iPhone SE (2nd generation)](https://support.apple.com/en-us/111882)                                                                                                                                                                                         | 1334 × 750               | 60         |
 | [iPhone 11](https://support.apple.com/en-us/111865)                                                                                                                                                                                                                                                                                | 1792 × 828               | 60         |
 | [iPhone 13 mini](https://support.apple.com/en-us/111873), [iPhone 12 mini](https://support.apple.com/en-us/111877)                                                                                                                                                                                                                 | 2340 × 1080              | 60         |
-| [iPhone 11 Pro](https://support.apple.com/en-us/111879)                                                                                                                                                                                                                                                                            | 2436 × 1125              | 60         |
+| [iPhone 11 Pro](https://support.apple.com/en-us/111879)                                                                                                                                                                                                                                                                            | 2436 × 1124              | 60         |
 | [iPhone 17e](https://support.apple.com/en-us/126470), [iPhone 16e](https://support.apple.com/en-us/122208), [iPhone 14](https://support.apple.com/en-us/111850), [iPhone 13](https://support.apple.com/en-us/111872), [iPhone 12 Pro](https://support.apple.com/en-us/111875), [iPhone 12](https://support.apple.com/en-us/111876) | 2532 × 1170              | 60         |
 | [iPhone 13 Pro](https://support.apple.com/en-us/111871)                                                                                                                                                                                                                                                                            | 2532 × 1170              | 120        |
-| [iPhone 16](https://support.apple.com/en-us/121029), [iPhone 15](https://support.apple.com/en-us/111831)                                                                                                                                                                                                                           | 2556 × 1179              | 60         |
-| [iPhone 15 Pro](https://support.apple.com/en-us/111829), [iPhone 14 Pro](https://support.apple.com/en-us/111849)                                                                                                                                                                                                                   | 2556 × 1179              | 120        |
+| [iPhone 16](https://support.apple.com/en-us/121029), [iPhone 15](https://support.apple.com/en-us/111831)                                                                                                                                                                                                                           | 2556 × 1178              | 60         |
+| [iPhone 15 Pro](https://support.apple.com/en-us/111829), [iPhone 14 Pro](https://support.apple.com/en-us/111849)                                                                                                                                                                                                                   | 2556 × 1178              | 120        |
 | [iPhone 17 Pro](https://support.apple.com/en-us/125090), [iPhone 17](https://support.apple.com/en-us/125089), [iPhone 16 Pro](https://support.apple.com/en-us/121031)                                                                                                                                                              | 2622 × 1206              | 120        |
 | [iPhone 11 Pro Max](https://support.apple.com/en-us/111878)                                                                                                                                                                                                                                                                        | 2688 × 1242              | 60         |
 | [iPhone Air](https://support.apple.com/en-us/125092)                                                                                                                                                                                                                                                                               | 2736 × 1260              | 120        |
@@ -205,8 +205,8 @@ works. In
 [issue 157](https://github.com/VirtualDrivers/Virtual-Display-Driver/issues/157#issuecomment-2796544498),
 a project member reported trouble above roughly 90 modes. These are practical
 reports, not a documented universal Windows limit. Neither issue establishes a
-fix in 25.7.23. This file therefore uses a conservative **90-mode budget**,
-which still needs a Windows installation check.
+fix in 25.7.23. The budget is **96 modes**; this file keeps a conservative **90
+modes**, which still need a Windows installation check.
 
 ### What the budget leaves out
 
