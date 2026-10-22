@@ -95,6 +95,26 @@ def panel_modes(rows, include_half=False):
 
 
 class VirtualDisplaySettingsTests(unittest.TestCase):
+    def test_every_resolution_has_a_device_comment(self):
+        for sample in sorted(SAMPLES.glob("*.xml")):
+            parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+            root = ET.parse(sample, parser=parser).getroot()
+            previous = None
+            for entry in root.find("resolutions"):
+                if entry.tag == "resolution":
+                    with self.subTest(sample=sample.name, width=entry.findtext("width"),
+                                      height=entry.findtext("height")):
+                        self.assertIsNotNone(previous, "missing device comment")
+                        self.assertIs(previous.tag, ET.Comment, "missing device comment")
+                        self.assertEqual(previous.tail, "\n        ", "comment must directly precede the block")
+                        comment = previous.text.strip()
+                        self.assertLessEqual(len(comment.splitlines()), 3)
+                        devices, separator, purpose = comment.partition(": ")
+                        self.assertTrue(separator, "comment must name devices and their purpose")
+                        self.assertRegex(devices, r"MacBook|iMac|Studio Display|Pro Display XDR|iPhone|iPad|external displays")
+                        self.assertRegex(purpose, r"Sharpest|Balanced|Native quality|1080p quality|Custom|optional half")
+                previous = entry
+
     def read_modes(self, sample):
         root = ET.parse(sample).getroot()
         self.assertEqual(root.tag, "vdd_settings")

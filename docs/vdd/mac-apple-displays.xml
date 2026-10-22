@@ -9,18 +9,25 @@
     <!-- Global rates multiply the mode count. Keep empty to stay within budget. -->
     <global />
     <resolutions>
+        <!-- Studio Display and Studio Display XDR. -->
+        <!-- Studio Display (2022), Studio Display (2026); Studio Display XDR: native, Sharpest. -->
         <resolution>
             <width>5120</width><height>2880</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+        <!-- Studio Display (2022), Studio Display (2026); Studio Display XDR: half size, Balanced. -->
         <resolution>
             <width>2560</width><height>1440</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+
+        <!-- Pro Display XDR. -->
+        <!-- Pro Display XDR: native, Sharpest. -->
         <resolution>
             <width>6016</width><height>3384</height>
             <refresh_rate>48</refresh_rate><refresh_rate>50</refresh_rate><refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- Pro Display XDR: half size, Balanced. -->
         <resolution>
             <width>3008</width><height>1692</height>
             <refresh_rate>48</refresh_rate><refresh_rate>50</refresh_rate><refresh_rate>60</refresh_rate>

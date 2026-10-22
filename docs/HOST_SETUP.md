@@ -69,6 +69,9 @@ after Reload Driver, restart the PC before continuing.
 
 ### Combine two files
 
+To add a single device to an existing file, search for its name and copy the
+blocks directly below its matching comments into your `<resolutions>` section.
+
 1. Copy the `<resolution>` blocks from one file into the other's `<resolutions>`
    section, before `</resolutions>`.
 2. Merge blocks with the same width and height, keeping each `<refresh_rate>`

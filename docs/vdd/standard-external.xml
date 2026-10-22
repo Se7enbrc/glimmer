@@ -9,106 +9,147 @@
     <!-- Global rates multiply the mode count. Keep empty to stay within budget. -->
     <global />
     <resolutions>
+        <!-- Shared 1080p quality. Keep 1080p60 first as the preferred display mode. -->
+        <!-- iPhone SE (3rd generation), iPhone SE (2nd generation), iPhone 11, iPhone 13 mini, iPhone 12 mini, iPhone 11 Pro, iPhone 17e, iPhone 16e, iPhone 14, iPhone 13, iPhone 12 Pro, iPhone 12, iPhone 13 Pro, iPhone 16, iPhone 15, iPhone 15 Pro, iPhone 14 Pro, iPhone 17 Pro, iPhone 17, iPhone 16 Pro, iPhone 11 Pro Max, iPhone Air, iPhone 14 Plus, iPhone 12 Pro Max, iPhone 13 Pro Max, iPhone 16 Plus, iPhone 15 Plus, iPhone 15 Pro Max, iPhone 14 Pro Max, iPhone 17 Pro Max, iPhone 16 Pro Max, iPhone 18 Pro, iPhone 18 Pro Max, iPhone Duo;
+        iPad mini (5th generation), iPad (9th generation), iPad (8th generation), iPad Air (3rd generation), iPad mini (A17 Pro), iPad mini (6th generation), iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation), iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch, iPad Pro 11-inch (M5), iPad Pro 11-inch (M4), iPad Air 13-inch (M4), iPad Air 13-inch (M3), iPad Air 13-inch (M2), iPad Pro 12.9-inch (6th generation), iPad Pro 12.9-inch (5th generation), iPad Pro 12.9-inch (4th generation), iPad Pro 12.9-inch (3rd generation), iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): 1080p quality, 60/120 fps capped to the screen maximum.
+        16:9 external displays on Mac: Custom common-size menu. -->
         <resolution>
             <width>1920</width><height>1080</height>
             <refresh_rate>60</refresh_rate><refresh_rate>75</refresh_rate><refresh_rate>100</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate><refresh_rate>165</refresh_rate><refresh_rate>240</refresh_rate>
         </resolution>
+
+        <!-- 16:9 external displays. -->
+        <!-- 16:9 external displays on Mac: Custom common-size menu. -->
         <resolution>
             <width>1280</width><height>720</height>
             <refresh_rate>60</refresh_rate><refresh_rate>75</refresh_rate><refresh_rate>100</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate><refresh_rate>165</refresh_rate><refresh_rate>240</refresh_rate>
         </resolution>
+        <!-- 16:9 external displays on Mac: Custom. -->
         <resolution>
             <width>1600</width><height>900</height>
             <refresh_rate>60</refresh_rate><refresh_rate>75</refresh_rate>
         </resolution>
+        <!-- Studio Display (2022), Studio Display (2026); Studio Display XDR: half size, Balanced.
+        16:9 external displays on Mac: Custom common-size menu. -->
         <resolution>
             <width>2560</width><height>1440</height>
             <refresh_rate>60</refresh_rate><refresh_rate>75</refresh_rate><refresh_rate>100</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate><refresh_rate>165</refresh_rate><refresh_rate>240</refresh_rate>
         </resolution>
+        <!-- 16:9 external displays on Mac: Custom common-size menu. -->
         <resolution>
             <width>3840</width><height>2160</height>
             <refresh_rate>60</refresh_rate><refresh_rate>75</refresh_rate><refresh_rate>100</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate><refresh_rate>165</refresh_rate><refresh_rate>240</refresh_rate>
         </resolution>
+        <!-- Studio Display (2022), Studio Display (2026); Studio Display XDR: native, Sharpest.
+        16:9 external displays on Mac: Custom. -->
         <resolution>
             <width>5120</width><height>2880</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+        <!-- 16:9 external displays on Mac: Custom. -->
         <resolution>
             <width>5760</width><height>3240</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- 16:9 external displays on Mac: Custom. -->
         <resolution>
             <width>7680</width><height>4320</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+
+        <!-- 16:10 external displays. -->
+        <!-- MacBook Air (M1, 2020), MacBook Pro (13-inch, M2, 2022), MacBook Pro (13-inch, M1, 2020): half size, Balanced.
+        16:10 external displays on Mac: Custom. -->
         <resolution>
             <width>1280</width><height>800</height>
             <refresh_rate>60</refresh_rate><refresh_rate>75</refresh_rate>
         </resolution>
+        <!-- 16:10 external displays on Mac: Custom. -->
         <resolution>
             <width>1680</width><height>1050</height>
             <refresh_rate>60</refresh_rate><refresh_rate>75</refresh_rate>
         </resolution>
+        <!-- 16:10 external displays on Mac: Custom. -->
         <resolution>
             <width>1920</width><height>1200</height>
             <refresh_rate>60</refresh_rate><refresh_rate>75</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+        <!-- MacBook Air (M1, 2020), MacBook Pro (13-inch, M2, 2022), MacBook Pro (13-inch, M1, 2020): native, Sharpest.
+        16:10 external displays on Mac: Custom. -->
         <resolution>
             <width>2560</width><height>1600</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate><refresh_rate>165</refresh_rate>
         </resolution>
+        <!-- 16:10 external displays on Mac: Custom. -->
         <resolution>
             <width>2880</width><height>1800</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+        <!-- 16:10 external displays on Mac: Custom. -->
         <resolution>
             <width>3840</width><height>2400</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+        <!-- 16:10 external displays on Mac: Custom. -->
         <resolution>
             <width>5120</width><height>3200</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- 16:10 external displays on Mac: Custom. -->
         <resolution>
             <width>6400</width><height>4000</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+
+        <!-- 21:9 external displays. -->
+        <!-- 21:9 external displays on Mac: Custom. -->
         <resolution>
             <width>2560</width><height>1080</height>
             <refresh_rate>60</refresh_rate><refresh_rate>75</refresh_rate><refresh_rate>100</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate><refresh_rate>165</refresh_rate><refresh_rate>240</refresh_rate>
         </resolution>
+        <!-- 21:9 external displays on Mac: Custom. -->
         <resolution>
             <width>3440</width><height>1440</height>
             <refresh_rate>60</refresh_rate><refresh_rate>75</refresh_rate><refresh_rate>100</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate><refresh_rate>165</refresh_rate><refresh_rate>240</refresh_rate>
         </resolution>
+        <!-- 21:9 external displays on Mac: Custom. -->
         <resolution>
             <width>3840</width><height>1600</height>
             <refresh_rate>60</refresh_rate><refresh_rate>100</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate><refresh_rate>165</refresh_rate>
         </resolution>
+        <!-- 21:9 external displays on Mac: Custom. -->
         <resolution>
             <width>5120</width><height>2160</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+        <!-- 21:9 external displays on Mac: Custom. -->
         <resolution>
             <width>6880</width><height>2880</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- 21:9 external displays on Mac: Custom. -->
         <resolution>
             <width>7680</width><height>3200</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+
+        <!-- 32:9 external displays. -->
+        <!-- 32:9 external displays on Mac: Custom. -->
         <resolution>
             <width>2560</width><height>720</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+        <!-- 32:9 external displays on Mac: Custom. -->
         <resolution>
             <width>3840</width><height>1080</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate>
         </resolution>
+        <!-- 32:9 external displays on Mac: Custom. -->
         <resolution>
             <width>5120</width><height>1440</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate><refresh_rate>165</refresh_rate><refresh_rate>240</refresh_rate>
         </resolution>
+        <!-- 32:9 external displays on Mac: Custom. -->
         <resolution>
             <width>7680</width><height>2160</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate><refresh_rate>144</refresh_rate><refresh_rate>165</refresh_rate><refresh_rate>240</refresh_rate>

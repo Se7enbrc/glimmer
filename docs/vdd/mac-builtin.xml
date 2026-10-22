@@ -9,58 +9,81 @@
     <!-- Global rates multiply the mode count. Keep empty to stay within budget. -->
     <global />
     <resolutions>
+        <!-- MacBook Air and 13-inch MacBook Pro. -->
+        <!-- MacBook Air (M1, 2020), MacBook Pro (13-inch, M2, 2022), MacBook Pro (13-inch, M1, 2020): native, Sharpest. -->
         <resolution>
             <width>2560</width><height>1600</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- MacBook Air (M1, 2020), MacBook Pro (13-inch, M2, 2022), MacBook Pro (13-inch, M1, 2020): half size, Balanced. -->
         <resolution>
             <width>1280</width><height>800</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- MacBook Air (13-inch, M5), MacBook Air (13-inch, M4, 2025), MacBook Air (13-inch, M3, 2024), MacBook Air (M2, 2022): native, Sharpest. -->
         <resolution>
             <width>2560</width><height>1664</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- MacBook Air (13-inch, M5), MacBook Air (13-inch, M4, 2025), MacBook Air (13-inch, M3, 2024), MacBook Air (M2, 2022): half size, Balanced. -->
         <resolution>
             <width>1280</width><height>832</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- MacBook Air (15-inch, M5), MacBook Air (15-inch, M4, 2025), MacBook Air (15-inch, M3, 2024), MacBook Air (15-inch, M2, 2023): native, Sharpest. -->
         <resolution>
             <width>2880</width><height>1864</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- MacBook Air (15-inch, M5), MacBook Air (15-inch, M4, 2025), MacBook Air (15-inch, M3, 2024), MacBook Air (15-inch, M2, 2023): half size, Balanced. -->
         <resolution>
             <width>1440</width><height>932</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+
+        <!-- 14-inch MacBook Pro. -->
+        <!-- MacBook Pro (14-inch, M5 Pro or M5 Max), MacBook Pro (14-inch, M5), MacBook Pro (14-inch, 2024), MacBook Pro (14-inch, Nov 2023), MacBook Pro (14-inch, 2023), MacBook Pro (14-inch, 2021): native, Sharpest. -->
         <resolution>
             <width>3024</width><height>1964</height>
             <refresh_rate>48</refresh_rate><refresh_rate>50</refresh_rate><refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+        <!-- MacBook Pro (14-inch, M5 Pro or M5 Max), MacBook Pro (14-inch, M5), MacBook Pro (14-inch, 2024), MacBook Pro (14-inch, Nov 2023), MacBook Pro (14-inch, 2023), MacBook Pro (14-inch, 2021): half size, Balanced. -->
         <resolution>
             <width>1512</width><height>982</height>
             <refresh_rate>48</refresh_rate><refresh_rate>50</refresh_rate><refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+
+        <!-- 16-inch MacBook Pro. -->
+        <!-- MacBook Pro (16-inch, M5 Pro or M5 Max), MacBook Pro (16-inch, 2024), MacBook Pro (16-inch, Nov 2023), MacBook Pro (16-inch, 2023), MacBook Pro (16-inch, 2021): native, Sharpest. -->
         <resolution>
             <width>3456</width><height>2234</height>
             <refresh_rate>48</refresh_rate><refresh_rate>50</refresh_rate><refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+        <!-- MacBook Pro (16-inch, M5 Pro or M5 Max), MacBook Pro (16-inch, 2024), MacBook Pro (16-inch, Nov 2023), MacBook Pro (16-inch, 2023), MacBook Pro (16-inch, 2021): half size, Balanced. -->
         <resolution>
             <width>1728</width><height>1116</height>
             <refresh_rate>48</refresh_rate><refresh_rate>50</refresh_rate><refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+
+        <!-- iMac. -->
+        <!-- iMac (24-inch, 2024, Four ports), iMac (24-inch, 2024, Two ports), iMac (24-inch, 2023, Four ports), iMac (24-inch, 2023, Two ports), iMac (24-inch, M1, 2021): native, Sharpest. -->
         <resolution>
             <width>4480</width><height>2520</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- iMac (24-inch, 2024, Four ports), iMac (24-inch, 2024, Two ports), iMac (24-inch, 2023, Four ports), iMac (24-inch, 2023, Two ports), iMac (24-inch, M1, 2021): half size, Balanced. -->
         <resolution>
             <width>2240</width><height>1260</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+
+        <!-- MacBook Neo. -->
+        <!-- MacBook Neo: native, Sharpest and Balanced. -->
         <resolution>
             <width>2408</width><height>1506</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- MacBook Neo: optional half size, Custom (Balanced keeps native). -->
         <resolution>
             <width>1204</width><height>752</height>
             <refresh_rate>60</refresh_rate>
