@@ -229,6 +229,33 @@ class TestFlightTests(unittest.TestCase):
         artifact.unpack(bundle, self.root / 'ipa', ('Payload', 'SwiftSupport'))
         self.assertEqual((self.root / 'ipa/Payload/Glimmer.app/unset-mode').stat().st_mode & 0o777, 0o600)
 
+    def test_exported_symbols_must_be_exactly_the_app_uuids(self):
+        uuid = '54A97B0B-4991-30CD-9AE6-6DE03CEC217A'
+        other = '00000000-0000-0000-0000-000000000000'
+        app_uuids = [(uuid, 'arm64')]
+        # The shape Xcode's App Store export produced in delivery run 39840393056.
+        bundle = self.root / 'export.ipa'
+        self.unsafe_zip(bundle, [('Payload/Glimmer.app/Glimmer', stat.S_IFREG | 0o755),
+                                 ('Symbols/', stat.S_IFDIR | 0o755),
+                                 (f'Symbols/{uuid}.symbols', stat.S_IFREG | 0o644)])
+        inspected = self.root / 'ipa'
+        artifact.unpack(bundle, inspected, ('Payload', 'SwiftSupport', 'Symbols'))
+        signing.verify_exported_symbols(inspected, app_uuids)
+        signing.verify_exported_symbols(self.root / 'no-symbols', app_uuids)
+        for app in ([(other, 'arm64')], [(uuid, 'arm64'), (other, 'arm64')]):
+            with self.subTest(app=app), self.assertRaises(ValueError):
+                signing.verify_exported_symbols(inspected, app)
+        symbols = inspected / 'Symbols'
+        for name, make in [('extra.symbols', lambda p: p.write_bytes(b'x')), ('nested', Path.mkdir),
+                           (f'{other}.symbols', lambda p: p.symlink_to(symbols / f'{uuid}.symbols'))]:
+            make(symbols / name)
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                signing.verify_exported_symbols(inspected, app_uuids)
+            (symbols / name).rmdir() if name == 'nested' else (symbols / name).unlink()
+        (symbols / f'{uuid}.symbols').unlink()
+        with self.assertRaises(ValueError):
+            signing.verify_exported_symbols(inspected, app_uuids)
+
     def test_zip_size_budget_and_existing_destination_fail_closed(self):
         bundle = self.root / 'large.zip'
         with zipfile.ZipFile(bundle, 'w') as output:
