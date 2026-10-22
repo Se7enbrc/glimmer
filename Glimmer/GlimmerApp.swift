@@ -247,10 +247,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // A stream started from the menu bar needs the Dock icon; its end
             // may leave nothing to come back to. The first value is launch state.
             Task { [weak self] in
-                var launch = true
-                await forEachObservedValue({ mgr.isStreaming }, perform: { _ in
-                    if launch { launch = false } else { self?.refreshActivationPolicy() }
-                })
+                if #available(macOS 26, *) {
+                    for await _ in Observations({ mgr.isStreaming }).dropFirst() {
+                        self?.refreshActivationPolicy()
+                    }
+                } else {
+                    var launch = true
+                    await forEachTrackedValue({ mgr.isStreaming }, perform: { _ in
+                        if launch { launch = false } else { self?.refreshActivationPolicy() }
+                    })
+                }
             }
         }
 

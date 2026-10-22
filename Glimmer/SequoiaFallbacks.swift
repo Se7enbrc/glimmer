@@ -12,15 +12,10 @@ extension NSScreen {
     }
 }
 
-// Observations directly on macOS 26, in the caller's task. On 15, each pass reads and
-// re-arms tracking together, so no change can slip in between.
+// macOS 15's stand-in for Observations, which callers use directly on 26. Each pass reads
+// and re-arms tracking together, so no change can slip in between.
 @MainActor
-func forEachObservedValue<Value: Sendable>(_ read: @escaping @MainActor @Sendable () -> Value,
-                                           perform body: (Value) -> Void) async {
-    if #available(macOS 26, *) {
-        for await value in Observations(read) { body(value) }
-        return
-    }
+func forEachTrackedValue<Value>(_ read: () -> Value, perform body: (Value) -> Void) async {
     while !Task.isCancelled {
         await withCheckedContinuation { (changed: CheckedContinuation<Void, Never>) in
             body(withObservationTracking(read) { changed.resume() })

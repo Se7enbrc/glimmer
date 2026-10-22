@@ -192,11 +192,18 @@ struct GlimmerShortcuts: AppShortcutsProvider {
         Task {
             await bootstrap(model).value
             var known: Set<PCEntity>?
-            await forEachObservedValue({ Set(model.hosts.map(PCEntity.init)) }, perform: { pcs in
-                guard pcs != known else { return }
-                known = pcs
-                update()
-            })
+            if #available(macOS 26, *) {
+                for await pcs in Observations({ Set(model.hosts.map(PCEntity.init)) }) where pcs != known {
+                    known = pcs
+                    update()
+                }
+            } else {
+                await forEachTrackedValue({ Set(model.hosts.map(PCEntity.init)) }, perform: { pcs in
+                    guard pcs != known else { return }
+                    known = pcs
+                    update()
+                })
+            }
         }
     }
 }
