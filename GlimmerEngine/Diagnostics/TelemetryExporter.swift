@@ -1,52 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TelemetryExporter.swift
-//
-//  Opt-in, zero-overhead-when-off performance telemetry for the native streaming
-//  engine. The point of this rig is to diagnose + tune the pipeline: when enabled
-//  it exposes the full picture - fps triple, decode-time percentiles, present
-//  cadence, recv-jitter, FEC recovery, ENet reliable-stream health, pacing depth,
-//  drops-by-cause, input rate, CPU/threads, plus monotonic event counters and a
-//  sampled latency breakdown - at a 1Hz cadence, with a connect-relative timestamp
-//  + session id so the INITIAL-CONNECTION phase is fully visible.
-//
-//  GATING (default OFF). Enabled by EITHER:
-//    * UserDefaults bool `telemetryEnabled` == true, OR
-//    * environment GLIMMER_TELEMETRY=1.
-//  When OFF, `TelemetryExporter.makeIfEnabled` returns nil and NOTHING is
-//  allocated/started - no listener, no timer, no file, and the snapshot provider
-//  is never invoked, so there is no per-frame and no per-tick cost. The
-//  per-event counters (`TelemetryCounters`) are unconditional integer adds at
-//  already-rare event sites (an IDR request, a lost frame), well under a
-//  microsecond and orders of magnitude below any pacing budget - they cost
-//  nothing measurable whether or not the exporter is running.
-//
-//  SAFETY (load-bearing):
-//    * The HTTP endpoint binds LOOPBACK by default (and only ever when telemetry
-//      is opt-in ENABLED - default OFF ⇒ no listener at all). The LAN bind
-//      (0.0.0.0, IPv4) needs the SECOND opt-in defaults key `telemetryListenLAN`:
-//      it lets a LOCAL monitoring container/pod (one scraping over a host bridge,
-//      where traffic never arrives on loopback) reach `/metrics`, at the cost of
-//      exposing live perf/input-rate telemetry to any LAN host.
-//      No auth is added (auth on a debug-gated metrics port is its own attack
-//      surface, and the data carries no secrets).
-//    * Telemetry contains ONLY performance numbers. NEVER secrets, keys, tokens,
-//      pairing material, or host credentials. The session id is a random opaque
-//      tag, not a host identifier.
-//    * A busy port is tolerated: we log + skip the listener (the NDJSON sink
-//      still runs), and never crash the stream.
-//
-//  TWO SINKS, ONE SNAPSHOT:
-//    1. A tiny HTTP server (Network.framework `NWListener`, port 9847) serving
-//       `GET /metrics` in Prometheus text exposition format.
-//    2. One NDJSON line per ~1s appended to
-//       ~/Library/Logs/Glimmer/telemetry-<ISO8601>.ndjson (dir created).
-//  Both render the SAME `TelemetrySnapshot`, captured once per second on a
-//  dedicated serial queue - the StatsCollector read reuses its existing lock
-//  (no second hot-path lock is added).
-//
+// Opt-in, per-session telemetry: one 1 Hz snapshot feeds loopback HTTP and NDJSON.
+// LAN access needs a second opt-in; telemetry contains performance data, never credentials.
+// The disabled path constructs no exporter, timers, listener or files.
 
 import Foundation
 import Network
@@ -109,7 +66,7 @@ package final class TelemetryExporter: @unchecked Sendable {
 
     package static let port: UInt16 = 9847
     package static let logCategory = "Telemetry"
-    /// Second opt-in (see SAFETY): bind 0.0.0.0 so a monitoring pod can scrape.
+    /// LAN access requires a second opt-in; the default endpoint is loopback-only.
     package static let lanBindDefaultsKey = "telemetryListenLAN"
     /// How long an accepted `/metrics` connection may live before the sweep
     /// cancels it. A scrape is over in milliseconds - even a badly jittered
@@ -167,6 +124,9 @@ package final class TelemetryExporter: @unchecked Sendable {
     /// Single serial queue: capture, listener-connection handling, file append.
     /// Everything mutable is confined here so no extra locks are needed.
     package let workQueue = DispatchQueue(label: "io.ugfugl.Glimmer.telemetry", qos: .utility)
+    private let workQueueKey = DispatchSpecificKey<Bool>()
+    private var listenerStartCompletions: [@Sendable (UInt16?) -> Void] = []
+    private var listenerStartFinished = false
 
     // Module-internal so tests can wait for `.ready` and read the bound port.
     package var listener: NWListener?
@@ -274,21 +234,16 @@ package final class TelemetryExporter: @unchecked Sendable {
         // here (the exporter itself is only constructed on the gate-on path), so
         // its main-queue timer is armed in `start()` and never exists when off.
         self.display = DisplayTelemetry(probe: source.displayProbe)
+        workQueue.setSpecific(key: workQueueKey, value: true)
     }
 
     // MARK: - Lifecycle
 
-    /// Start both sinks. Opens the NDJSON file, binds the all-interfaces listener
-    /// (tolerating a busy port), and arms the 1Hz capture. All on `workQueue`.
-    /// NOTE: the per-session counter reset does NOT happen here anymore - it
-    /// moved to the CONNECT edge (`StreamSession.anchorTelemetryConnectStart`),
-    /// BEFORE the receivers spin up. Resetting here ran AFTER a warm host's
-    /// audio had already latched its TTF, which both wiped the fresh record
-    /// (empty scorecard) and let the pre-reset latch return the PRIOR session's
-    /// values (the chimeric audio_ttf with a byte-identical stale span).
+    /// Start both sinks and samplers on the work queue; a busy port leaves NDJSON running.
+    /// Counter resets belong to the connect edge, before receivers can latch first-frame timings.
     package func start() {
         workQueue.async { [weak self] in
-            guard let self else { return }
+            guard let self, !self.stopped else { return }
             // Reset the process-lifetime IOReport sampler's delta baselines for
             // THIS session - it survives across sessions by design (teardown
             // crash, see IOReportSampler.swift), so without this its first
@@ -338,45 +293,44 @@ package final class TelemetryExporter: @unchecked Sendable {
         }
     }
 
-    /// Stop both sinks. Idempotent. Cancels the timer + listener and closes the
-    /// file. Synchronous on `workQueue` so teardown order is deterministic.
+    /// Synchronous teardown without dispatching back onto an occupied work queue.
+    /// Sampler cancellation never waits for its main-queue event handler.
     package func stop() {
-        workQueue.sync { [weak self] in
-            guard let self, !self.stopped else { return }
-            self.stopped = true
-            // Clear the engine EVENT sink first: a row posted after this lands
-            // in the pre-start pen (cleared at the next connect edge) instead
-            // of racing the file close below.
-            Self.eventSinkBox.withLock { $0 = nil }
-            self.captureTimer?.cancel()
-            self.captureTimer = nil
-            self.rendererTelemetry?.stop()
-            self.rendererTelemetry = nil
-            self.listener?.cancel()
-            self.listener = nil
-            // Sweep still-open /metrics connections (silent/half-open peers
-            // whose receive completion will never fire) - no FD outlives stop.
-            for connection in self.openConnections.values { connection.cancel() }
-            self.openConnections.removeAll()
-            self.connectionSlots = TelemetryConnectionSlots()
-            // Stop the DISPLAY sampler's main-queue timer (idempotent).
-            self.display.stop()
-            // One-shot SESSION REPORT (signal 5b) - written BEFORE tearing the
-            // latency tracker down so it can read the final cumulative histograms
-            // for the session-wide p50/p95/p99. A glanceable scorecard per run.
-            self.writeSessionReport()
-            do {
-                try self.fileHandle?.synchronize()
-                try self.fileHandle?.close()
-            } catch { self.ndjsonWriteFailures &+= 1 }
-            self.fileHandle = nil
-            // Tear down the latency tracker: clears `FrameTimingTracker.shared`
-            // (returning the hot path to zero-cost) and flushes + closes the
-            // per-frame trace writer.
-            FrameTimingTracker.stop()
-            self.writeEvidenceManifest()
-            self.log.notice("Telemetry exporter stopped (session \(self.sessionId, privacy: .public))")
+        if DispatchQueue.getSpecific(key: workQueueKey) != nil {
+            stopOnWorkQueue()
+        } else {
+            workQueue.sync { stopOnWorkQueue() }
         }
+    }
+
+    private func stopOnWorkQueue() {
+        dispatchPrecondition(condition: .onQueue(workQueue))
+        guard !stopped else { return }
+        stopped = true
+        // Clear the event sink before closing the file so later rows go to the pre-start buffer.
+        Self.eventSinkBox.withLock { $0 = nil }
+        captureTimer?.cancel()
+        captureTimer = nil
+        rendererTelemetry?.stop()
+        rendererTelemetry = nil
+        listener?.cancel()
+        listener = nil
+        finishListenerStart(port: nil)
+        // Silent peers may never call their receive completion.
+        for connection in openConnections.values { connection.cancel() }
+        openConnections.removeAll()
+        connectionSlots = TelemetryConnectionSlots()
+        display.stop()
+        // The report needs the final histograms before the tracker is removed.
+        writeSessionReport()
+        do {
+            try fileHandle?.synchronize()
+            try fileHandle?.close()
+        } catch { ndjsonWriteFailures &+= 1 }
+        fileHandle = nil
+        FrameTimingTracker.stop()
+        writeEvidenceManifest()
+        log.notice("Telemetry exporter stopped (session \(self.sessionId, privacy: .public))")
     }
 
     // MARK: - C2 Logs-directory sweep
@@ -479,7 +433,10 @@ package final class TelemetryExporter: @unchecked Sendable {
 
     private func startListener() {
         let params = Self.listenerParameters(listenOnLAN: lanBindEnabled)
-        guard let endpointPort = NWEndpoint.Port(rawValue: listenPort) else { return }
+        guard let endpointPort = NWEndpoint.Port(rawValue: listenPort) else {
+            finishListenerStart(port: nil)
+            return
+        }
         do {
             let newListener = try NWListener(using: params, on: endpointPort)
             newListener.stateUpdateHandler = { [weak self] state in
@@ -496,11 +453,15 @@ package final class TelemetryExporter: @unchecked Sendable {
                         + "NDJSON log continues.", Self.logCategory)
                     self.listener?.cancel()
                     self.listener = nil
+                    self.finishListenerStart(port: nil)
                 case .ready:
                     self.log.notice("""
                         Telemetry HTTP ready on \
                         \(self.lanBindEnabled ? "0.0.0.0" : "127.0.0.1", privacy: .public):\(Self.port)
                         """)
+                    self.finishListenerStart(port: self.listener?.port?.rawValue)
+                case .cancelled:
+                    self.finishListenerStart(port: nil)
                 default:
                     break
                 }
@@ -508,14 +469,35 @@ package final class TelemetryExporter: @unchecked Sendable {
             newListener.newConnectionHandler = { [weak self] connection in
                 self?.handleConnection(connection)
             }
-            newListener.start(queue: workQueue)
             listener = newListener
+            newListener.start(queue: workQueue)
         } catch {
             log.error("""
                 Telemetry: NWListener init failed: \
                 \(error.localizedDescription, privacy: .private) - skipping HTTP, NDJSON continues
                 """)
+            finishListenerStart(port: nil)
         }
+    }
+
+    /// Observe startup on the work queue without replacing Network.framework's installed handler.
+    /// Late observers receive the current port; failed or stopped listeners return nil.
+    package func whenListening(_ completion: @escaping @Sendable (UInt16?) -> Void) {
+        workQueue.async {
+            if self.listenerStartFinished {
+                completion(self.listener?.port?.rawValue)
+            } else {
+                self.listenerStartCompletions.append(completion)
+            }
+        }
+    }
+
+    private func finishListenerStart(port: UInt16?) {
+        guard !listenerStartFinished else { return }
+        listenerStartFinished = true
+        let completions = listenerStartCompletions
+        listenerStartCompletions.removeAll()
+        for completion in completions { completion(port) }
     }
 
     /// Minimal HTTP/1.1 handling: read the request, serve `/metrics` (or 404),
@@ -525,7 +507,7 @@ package final class TelemetryExporter: @unchecked Sendable {
     /// peers never fire the receive completion); closes funnel through `finishConnection`.
     private func handleConnection(_ connection: NWConnection) {
         let key = ObjectIdentifier(connection)
-        guard connectionSlots.reserve(key) else { connection.cancel(); return }
+        guard !stopped, connectionSlots.reserve(key) else { connection.cancel(); return }
         openConnections[key] = connection
         connection.start(queue: workQueue)
         // Receive deadline: still tracked after this long ⇒ swept. The closure
