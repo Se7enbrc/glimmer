@@ -19,13 +19,13 @@ extension RtpAudioReceiver {
     /// Validate ciphertext before it can establish or restart queue order. CBC has
     /// no authentication, but failed padding must never advance the receive cursor.
     /// The normal in-order path still decrypts only once, at the decode hand-off.
-    func acceptsAudioPayload(_ buf: [UInt8], count: Int) -> Bool {
+    func acceptsAudioPayload(_ buf: [UInt8], count: Int, arrival: UInt64) -> Bool {
         let payload = buf[RtpAudioQueue.fixedRtpHeaderSize..<count]
         guard !payload.isEmpty else { return false }
         guard audioEncryption else { return true }
         guard payload.count.isMultiple(of: kCCBlockSizeAES128) else { return false }
         let sequence = UInt16(buf[2]) << 8 | UInt16(buf[3])
-        return !queue.requiresPayloadValidation(sequence: sequence)
+        return !queue.requiresPayloadValidation(sequence: sequence, arrival: arrival)
             || decryptCbc(payload, sequenceNumber: sequence) != nil
     }
 

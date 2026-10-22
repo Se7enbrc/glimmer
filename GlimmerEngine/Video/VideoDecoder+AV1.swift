@@ -15,7 +15,7 @@ extension VideoDecoder {
     /// Subset of AV1 sequence header §5.5.1 fields that the av1C config record
     /// needs. Decoded straight off the bitstream; do not infer from the
     /// negotiated VIDEO_FORMAT_* hint.
-    struct AV1SeqHeader {
+    struct AV1SeqHeader: Equatable {
         let seqProfile: UInt8
         let seqTier: UInt8
         let bitDepth: UInt8      // 8, 10, or 12
@@ -250,7 +250,7 @@ extension VideoDecoder {
         return true
     }
 
-    struct ColorConfig {
+    struct ColorConfig: Equatable {
         let bitDepth: UInt8
         let monochrome: UInt8
         let subsamplingX: UInt8

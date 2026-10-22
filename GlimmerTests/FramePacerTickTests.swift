@@ -12,6 +12,7 @@ import CoreMedia
 import Foundation
 import QuartzCore
 import Testing
+import os
 @testable import GlimmerEngine
 @testable import Glimmer
 
@@ -23,6 +24,8 @@ struct FramePacerTickTests {
     /// One tick on scripted values, with its dispatched release drained.
     private func tick(_ pacer: FramePacer, target: Double, duration: Double? = nil, timestamp: Double? = nil) {
         let duration = duration ?? interval
+        let mediaNow = timestamp ?? target - duration
+        pacer.mediaTime = { mediaNow }
         pacer.handleTick(target: target, duration: duration, timestamp: timestamp ?? target - duration)
         pacer.pacingQueue.sync {}
     }
@@ -111,6 +114,34 @@ struct FramePacerTickTests {
         pacer.running = false
         pacer.pacingQueue.sync { pacer.reconcileDeficitTimer() }
         #expect(pacer.tickDeficit.deficitTimer == nil)
+    }
+
+    @Test func activeDeficitTimerTracksLearnedCadence() throws {
+        let pacer = try makeTestPacer(fps: 60)
+        let schedules = OSAllocatedUnfairLock(initialState: [Double]())
+        pacer.scheduleDeficitTimer = { _, interval in schedules.withLock { $0.append(interval) } }
+        pacer.tickDeficit.deficitModeActive = true
+        pacer.tickDeficit.warmingUp = false
+        try pacer.pacingQueue.sync {
+            pacer.reconcileDeficitTimer()
+            let timer = pacer.tickDeficit.deficitTimer
+            var pts = 0.0
+            for fps in [120.0, 60.0] {
+                for _ in 0..<80 {
+                    pts += 1 / fps
+                    pacer.submit(try makeEmptySampleBuffer(), hostPTS: CMTime(seconds: pts, preferredTimescale: 90_000))
+                }
+                pacer.deficitTimerFired()
+                #expect(abs((schedules.withLock { $0.last } ?? 0) - 1 / fps) < 0.00001)
+                #expect(pacer.tickDeficit.deficitTimer.map { ObjectIdentifier($0) } == timer.map { ObjectIdentifier($0) })
+            }
+            let count = schedules.withLock { $0.count }
+            pacer.deficitTimerFired()
+            #expect(schedules.withLock { $0.count } == count)
+            pacer.running = false
+            pacer.reconcileDeficitTimer()
+            #expect(pacer.tickDeficit.deficitTimer == nil)
+        }
     }
 
     /// With a link the poke anchors one interval behind its target, so that tick releases.

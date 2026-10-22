@@ -33,6 +33,17 @@ struct StreamProfileTests {
         #expect(format.summary == "2622 × 1206 · 120 fps")
     }
 
+    @Test(arguments: [
+        (CGSize(width: 2436, height: 1125), StreamFormat(width: 2436, height: 1124, fps: 60)),
+        (CGSize(width: 1179, height: 2556), StreamFormat(width: 2556, height: 1178, fps: 120)),
+        (CGSize(width: 2557, height: 1179), StreamFormat(width: 2556, height: 1178, fps: 120))
+    ])
+    func nativeRequestsRoundBothDimensionsDownToEven(pixels: CGSize, expected: StreamFormat) throws {
+        let format = try StreamProfile.native120.resolve(nativePixels: pixels,
+                                                         maximumFramesPerSecond: expected.fps)
+        #expect(format == expected)
+    }
+
     @Test func profilesKeepResolutionAndCapPacingToDisplayCapability() throws {
         let pixels = CGSize(width: 1206, height: 2622)
         let baseline = try StreamProfile.fullHD60.resolve(nativePixels: pixels, maximumFramesPerSecond: 120)

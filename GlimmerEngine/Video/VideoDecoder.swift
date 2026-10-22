@@ -83,10 +83,12 @@ public final class VideoDecoder {
         }
     }
 
-    /// Whether the PC signalled HDR mode. Written by `setHDR(enabled:)` and teardown, read by the VT
-    /// output callback for the untagged fallback colorspace: a one-frame-stale Bool is harmless, and
-    /// its load and store are atomic on every supported architecture.
-    nonisolated(unsafe) internal var hdrEnabled: Bool = false
+    // The control fallback is independent of metadata; atomic access synchronizes main and VT threads.
+    private nonisolated let controlHDR = Atomic<Bool>(false)
+    nonisolated var hdrEnabled: Bool {
+        get { controlHDR.load(ordering: .relaxed) }
+        set { controlHDR.store(newValue, ordering: .relaxed) }
+    }
 
     /// The resolved input uses PQ or HLG. Display output also requires current EDR headroom.
     public internal(set) var isHDRActive: Bool = false
@@ -161,6 +163,7 @@ public final class VideoDecoder {
     let displayLayerLock = NSLock()
     nonisolated(unsafe) var displayAttachmentGeneration: UInt64 = 0 // Guarded by displayLayerLock.
     nonisolated(unsafe) var rendererSubmissionGeneration: UInt64 = 0 // Guarded by displayLayerLock.
+    nonisolated(unsafe) var lastAdmittedPTS: CMTime? // Guarded by displayLayerLock.
     nonisolated(unsafe) var _displayLayer: AVSampleBufferDisplayLayer?
     // The layer's renderer, captured with the layer: it is safe off-main, but
     // the layer property that vends it is main-actor only.
@@ -231,6 +234,8 @@ public final class VideoDecoder {
     nonisolated(unsafe) var spsData: Data?
     nonisolated(unsafe) var ppsData: Data?
     nonisolated(unsafe) var vpsData: Data?  // HEVC only
+    // Only the serial decode queue reads or publishes the active AV1 configuration.
+    nonisolated(unsafe) var av1SequenceHeader: AV1SeqHeader?
 
     // The decode queue runs everything VideoToolbox-related serially. The
     // submit callback fires on the native backend's receive thread; we hop here
@@ -262,6 +267,10 @@ public final class VideoDecoder {
     // Epoch buckets distinguish queued work from VT-owned work; all access uses inFlightDecodeLock.
     nonisolated(unsafe) var decodeReservations: [UInt: DecodeReservations] = [:]
     nonisolated(unsafe) var latestReservedEpoch: UInt = 0
+    // Pending payload ownership and its single drain are guarded by inFlightDecodeLock.
+    nonisolated(unsafe) var pendingDecodes: [PendingDecode] = []
+    nonisolated(unsafe) var decodeDrainScheduled = false
+    nonisolated(unsafe) var pendingDecodeTimingReset = false
     let inFlightDecodeLock = NSLock()
     /// Backlog bound - sized to ABSORB a VPN arrival burst, not to gate
     /// steady-state depth. Over a high-loss/high-jitter VPN, frames arrive
@@ -329,6 +338,7 @@ public final class VideoDecoder {
             displayLayerLock.lock(); defer { displayLayerLock.unlock() }
             if streamingState.exchange(newValue, ordering: .acquiringAndReleasing) != newValue {
                 rendererSubmissionGeneration &+= 1
+                lastAdmittedPTS = nil
             }
         }
     }
@@ -375,7 +385,8 @@ public final class VideoDecoder {
     /// The display-clock frame pacer, built on the main actor by `startPacing` and dropped on teardown
     /// or a pacing give-up. VT's output thread reads it per frame, so the slot is locked: an unlocked
     /// load racing main's release could retain a freed pacer.
-    nonisolated let framePacerBox = OSAllocatedUnfairLock<FramePacer?>(initialState: nil)
+    nonisolated let framePacerBox = OSAllocatedUnfairLock(initialState: PresentationRoute(pacer: nil, generation: 0))
+    nonisolated let presentationModeGeneration = Atomic<UInt64>(0)
 
     /// The view whose screen the pacer's CADisplayLink binds to, remembered from
     /// `startPacing` so the present-watchdog's give-up → re-enable path can

@@ -4,14 +4,7 @@
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 // SPDX-FileCopyrightText: 2002-2024 Lee Salzman
 
-//
-//  EnetControlChannel+Handshake.swift
-//
-//  The CONNECT → VERIFY_CONNECT → ACK handshake and the reliable START_A /
-//  START_B sends that follow it - everything establishAndStart() drives to reach
-//  "connected". Split out of EnetControlChannel.swift to keep each unit focused;
-//  see that file for the shared stored state and wire facts.
-//
+// Socket readiness, CONNECT and START_A/B share one absolute handshake deadline.
 
 import Foundation
 import Network
@@ -19,10 +12,8 @@ import Network
 extension EnetControlChannel {
     // MARK: - Public: establish + START_A/B
 
-    /// AGGREGATE wall-clock cap across the whole ENet handshake (CONNECT + START_A
-    /// + START_B). Each stage is 10s-bounded, so without this the worst case was
-    /// ~30s of stacked silence; caps it well under the 30s outer net so a half-dead
-    /// host fails fast. Each stage's timeout is clamped to the time remaining.
+    /// Cap readiness and the whole ENet handshake below the outer backend timeout.
+    /// Each stage's timeout is clamped to the time remaining.
     static let handshakeDeadlineMs = 13_000
     /// Poll interval of the VERIFY_CONNECT and START ACK waits.
     static let handshakePollNanos: UInt64 = 2_000_000
@@ -45,7 +36,7 @@ extension EnetControlChannel {
         // --- ENET_CONNECT stage ---
         stage("ENET_CONNECT")
         do {
-            try await openSocket()
+            try await openSocket(deadline: DispatchTime(uptimeNanoseconds: deadline))
             try queueAndSendConnect()
             try await awaitVerifyConnect(timeoutMs: min(10_000, remainingMs()))
         } catch {
@@ -89,7 +80,9 @@ extension EnetControlChannel {
 
     // MARK: - UDP socket
 
-    func openSocket() async throws {
+    func openSocket(
+        deadline: DispatchTime = .now() + .milliseconds(EnetControlChannel.handshakeDeadlineMs)
+    ) async throws {
         let params = NWParameters.udp
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
             throw EnetError.socketFailure("invalid control port \(port)")
@@ -99,32 +92,68 @@ extension EnetControlChannel {
         // An interrupt() that landed before the store above had nothing to cancel.
         if interrupted.isSet { throw EnetError.interrupted }
 
+        try await awaitSocketReady(
+            deadline: deadline,
+            start: { handler in
+                conn.stateUpdateHandler = handler
+                conn.start(queue: self.queue)
+            }, cancel: { [weak conn] in conn?.cancel() }, receive: { [weak self] in self?.startReceiveLoop() })
+        Diag.info("ENet UDP socket ready → \(host, privacy: .private):\(port)", Self.logCategory)
+    }
+
+    func awaitSocketReady(
+        deadline: DispatchTime,
+        start: (@escaping @Sendable (NWConnection.State) -> Void) -> Void,
+        cancel: @escaping @Sendable () -> Void,
+        receive: @escaping @Sendable () -> Void,
+        schedule: (DispatchTime, @escaping @Sendable () -> Void) -> (@Sendable () -> Void) = { deadline, expire in
+            let timeout = Task {
+                do {
+                    let now = DispatchTime.now().uptimeNanoseconds
+                    let remaining = deadline.uptimeNanoseconds > now ? deadline.uptimeNanoseconds - now : 0
+                    try await Task.sleep(for: .nanoseconds(remaining), clock: .suspending)
+                    expire()
+                } catch { }
+            }
+            return { timeout.cancel() }
+        }
+    ) async throws {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             let resumed = ManagedAtomicFlag()
-            conn.stateUpdateHandler = { [weak self] state in
+            let ready = ManagedAtomicFlag()
+            let cancelTimeout = schedule(deadline) {
+                guard resumed.testAndSet() else { return }
+                cancel()
+                cont.resume(throwing: EnetError.connectTimeout)
+            }
+            start { [weak self] state in
                 switch state {
                 case .ready:
-                    if resumed.testAndSet() { cont.resume() }
-                    self?.startReceiveLoop()
+                    if resumed.testAndSet() {
+                        cancelTimeout()
+                        ready.set()
+                        receive()
+                        cont.resume()
+                    }
                 case .failed(let err):
                     if resumed.testAndSet() {
+                        cancelTimeout()
                         cont.resume(throwing: EnetError.socketFailure("\(err)"))
-                    } else if let self, !self.interrupted.isSet {
-                        // A connected UDP flow that fails (its interface went
-                        // away) never recovers: end the peer now, not at the 10s ACK cutoff.
+                    } else if ready.isSet, let self, !self.interrupted.isSet {
+                        // A connected UDP flow that loses its interface cannot recover.
                         self.declarePeerDead(code: -1,
                             reason: "ENet socket failed (\(err, privacy: .private)); peer is gone")
                     }
                 case .cancelled:
-                    // Only our own interrupt()/close() cancel; never a peer death.
-                    if resumed.testAndSet() { cont.resume(throwing: EnetError.interrupted) }
+                    if resumed.testAndSet() {
+                        cancelTimeout()
+                        cont.resume(throwing: EnetError.interrupted)
+                    }
                 default:
                     break
                 }
             }
-            conn.start(queue: queue)
         }
-        Diag.info("ENet UDP socket ready → \(host, privacy: .private):\(port)", Self.logCategory)
     }
 
     // MARK: - CONNECT (host.c enet_host_connect)

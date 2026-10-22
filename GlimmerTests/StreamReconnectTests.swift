@@ -168,7 +168,7 @@ struct StreamReconnectTests {
         backend.withState { backend.enetChannel = enet }
         if interruptOnly { backend.interruptConnection() } else { backend.stopConnection() }
 
-        #expect(!backend.wireControllerFeedback(enet: enet, events: NativeConnectionEvents()))
+        #expect(!backend.activateControllers(events: NativeConnectionEvents()))
         #expect(enet.onTeardown == nil)
         #expect(enet.onRumble == nil)
         #expect(enet.onSetMotionEvent == nil)
@@ -261,7 +261,7 @@ struct StreamReconnectTests {
         #expect(await session.isStreaming)
     }
 
-    @MainActor @Test func ignoredTerminationCannotPauseReconnectingInput() async {
+    @MainActor @Test func currentTerminationPausesReconnectingInput() async {
         let backend = NativeBackend()
         let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: backend)
         let input = InputForwarder()
@@ -269,8 +269,11 @@ struct StreamReconnectTests {
         await session.prepareCallbackTest(input: input, reconnecting: true)
         await session.handleHostTerminate(code: 0, from: backend)
         await Self.drainMainQueue()
-        #expect(input.isReady)
+        #expect(!input.isReady)
         #expect(await session.isStreaming)
+        let attempt = await session.attemptID
+        #expect(await session.reconnectTermination?.attempt == attempt)
+        #expect(await session.reconnectTermination?.code == 0)
     }
 
     @MainActor @Test func currentEstablishedArmsLiveInput() async {

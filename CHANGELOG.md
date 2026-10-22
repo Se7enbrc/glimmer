@@ -74,6 +74,28 @@
 - Pointer shortcut help now describes capture and release in full screen as well
   as a window.
 
+- Recover from video decoder stalls without accumulating old frames.
+- Resume audio promptly after a long network interruption.
+- Keep AV1 colours correct when the PC changes between SDR and HDR during a
+  stream.
+- Apply HDR colour and brightness metadata even when the PC sends it during
+  connection setup.
+- On iPhone and iPad, a paired PC stays available in Settings even if loading
+  its apps fails or is cancelled, so you can still forget it and pair again.
+- Stream failures on iPhone and iPad explain blocked ports, protected content
+  and pairing recovery instead of showing generic connection advice.
+- Controller input on iPhone and iPad no longer waits for interface work, and
+  callbacks queued before leaving play cannot replay after you resume.
+
+- Keep fallback video playback in step when the game's frame rate changes.
+- Resume after a brief video stall without rapidly displaying queued frames.
+- Keep retrying video recovery when the first frame never reaches the screen.
+- Avoid a backward frame flash when video playback switches into or out of
+  recovery.
+- Prevent delayed video frames from briefly replacing a newer image.
+
+- On iPhone and iPad, Native quality rounds the stream size down to even pixels
+  so the PC can encode displays with odd pixel dimensions.
 - Keep pending video frames bounded if presentation briefly stalls, and release
   them promptly when the stream stops or resets.
 - Clicking Settings while a stream is in the background keeps Settings in front.

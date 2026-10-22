@@ -4,10 +4,113 @@
 import GameController
 import GlimmerEngine
 import Testing
+import Synchronization
 @testable import Glimmer
 
 @MainActor
 struct IOSControllerCaptureTests {
+    @Test func focusedCaptureSubmitsWhileMainThreadIsOccupied() async throws {
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
+        let submissions = Mutex(0)
+        let capture = IOSControllerCapture(calls: .init(
+            register: connection.input.registerController, unregister: connection.input.unregisterController,
+            submit: { _, _, _ in submissions.withLock { $0 += 1 } }, focus: { _ in }),
+            center: NotificationCenter(), readControllers: { [controller] })
+        capture.start()
+        capture.setFocused(true)
+        let handler = try #require(pad.valueChangedHandler)
+        let before = submissions.withLock { $0 }
+        #expect(deliverWhileMainIsOccupied(queue: controller.handlerQueue, pad: pad, handler: handler) == .success)
+        #expect(submissions.withLock { $0 } == before + 1)
+        capture.stop()
+        await connection.stop()
+    }
+
+    private nonisolated func deliverWhileMainIsOccupied(
+        queue: DispatchQueue, pad: GCExtendedGamepad, handler: @escaping GCExtendedGamepadValueChangedHandler
+    ) -> DispatchTimeoutResult {
+        let delivered = DispatchSemaphore(value: 0)
+        // GameController owns callback delivery on this queue; the fixture does not mutate the pad.
+        queue.async(execute: DispatchWorkItem {
+            handler(pad, pad.buttonA)
+            delivered.signal()
+        })
+        // The deadline only escapes a broken main-queue implementation; no sleep orders the test.
+        return delivered.wait(timeout: .now() + 2)
+    }
+
+    @Test func callbacksFromPreviousFocusCannotReplayAfterResume() async throws {
+        let fixture = ControllerCaptureFixture()
+        let pad = try #require(fixture.controller.extendedGamepad)
+        let capture = fixture.make()
+        capture.start()
+        capture.setFocused(true)
+        let obsolete = try #require(pad.valueChangedHandler)
+        capture.setFocused(false)
+        capture.setFocused(true)
+        let before = fixture.samples.count
+        obsolete(pad, pad.buttonA)
+        #expect(fixture.samples.count == before)
+        capture.stop()
+        await fixture.connection.stop()
+    }
+
+    @Test(arguments: ["focus", "detach", "stop"])
+    func queuedCallbacksCannotSurviveOwnershipChanges(transition: String) async throws {
+        let fixture = ControllerCaptureFixture()
+        let pad = try #require(fixture.controller.extendedGamepad)
+        let capture = fixture.make()
+        capture.start()
+        capture.setFocused(true)
+        let handler = try #require(pad.valueChangedHandler)
+        let queue = fixture.controller.handlerQueue
+        try #require(queue !== DispatchQueue.main)
+        var expected = fixture.samples.count
+        let result = deliverAfterTransition(queue: queue, pad: pad, handler: handler) {
+            switch transition {
+            case "focus":
+                capture.setFocused(false)
+                capture.setFocused(true)
+            case "detach":
+                fixture.visible = false
+                capture.refresh()
+                fixture.visible = true
+                capture.refresh()
+            default:
+                capture.stop()
+            }
+            expected = fixture.samples.count
+        }
+        #expect(result == .success)
+        #expect(fixture.samples.count == expected)
+        capture.stop()
+        await fixture.connection.stop()
+    }
+
+    private nonisolated func deliverAfterTransition(
+        queue: DispatchQueue, pad: GCExtendedGamepad, handler: @escaping GCExtendedGamepadValueChangedHandler,
+        transition: () -> Void
+    ) -> DispatchTimeoutResult {
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let delivered = DispatchSemaphore(value: 0)
+        queue.async(execute: DispatchWorkItem {
+            entered.signal()
+            release.wait()
+            handler(pad, pad.buttonA)
+            delivered.signal()
+        })
+        guard entered.wait(timeout: .now() + 2) == .success else {
+            release.signal()
+            return .timedOut
+        }
+        transition()
+        release.signal()
+        return delivered.wait(timeout: .now() + 2)
+    }
+
     @Test func stopRequestedByConnectionObserverCannotResumeInput() async {
         let fixture = ControllerCaptureFixture()
         let capture = fixture.make()
@@ -120,7 +223,7 @@ struct IOSControllerCaptureTests {
         capture.setFocused(true)
         #expect(fixture.events == ["sample", "focus:true"])
         #expect(fixture.samples.last?.buttons.contains(.a) == true)
-        #expect(fixture.controller.handlerQueue === DispatchQueue.main)
+        #expect(fixture.controller.handlerQueue !== DispatchQueue.main)
         capture.setFocused(false)
         #expect(fixture.events.last == "focus:false")
         #expect(fixture.controller.handlerQueue === priorQueue)
@@ -196,9 +299,13 @@ private final class ControllerCaptureFixture {
     var visible = true
     var now: TimeInterval = 100
     var registrations: [ControllerRegistration] = []
-    var samples: [ControllerInputSample] = []
-    var timestamps: [TimeInterval] = []
-    var events: [String] = []
+    private final class Recorded: Sendable {
+        let state = Mutex((samples: [ControllerInputSample](), timestamps: [TimeInterval](), events: [String]()))
+    }
+    private let recorded = Recorded()
+    var samples: [ControllerInputSample] { recorded.state.withLock { $0.samples } }
+    var timestamps: [TimeInterval] { recorded.state.withLock { $0.timestamps } }
+    var events: [String] { recorded.state.withLock { $0.events } }
 
     func make() -> IOSControllerCapture {
         IOSControllerCapture(calls: .init(register: { [self] descriptor in
@@ -206,13 +313,15 @@ private final class ControllerCaptureFixture {
             registrations.append(registration)
             return registration
         }, unregister: { [self] registration in
-            events.append("remove")
+            recorded.state.withLock { $0.events.append("remove") }
             connection.input.unregisterController(registration)
-        }, submit: { [self] _, sample, timestamp in
-            samples.append(sample)
-            timestamps.append(timestamp)
-            events.append("sample")
-        }, focus: { [self] focus in events.append("focus:\(focus)") }), center: center,
+        }, submit: { [recorded] _, sample, timestamp in
+            recorded.state.withLock {
+                $0.samples.append(sample)
+                $0.timestamps.append(timestamp)
+                $0.events.append("sample")
+            }
+        }, focus: { [self] focus in recorded.state.withLock { $0.events.append("focus:\(focus)") } }), center: center,
            readControllers: { [self] in visible ? [controller] : [] }, clock: { [self] in now })
     }
 }

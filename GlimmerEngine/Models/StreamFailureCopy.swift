@@ -5,4 +5,14 @@ public enum StreamFailureCopy {
     public static func needsSunshineMessage(_ pcName: String) -> String {
         "Glimmer needs Sunshine on \(pcName), which is running NVIDIA GameStream."
     }
+
+    public static func portsBlockedMessage(_ pcName: String, proto: String, port: UInt16) -> String {
+        "\(pcName) answered, but the stream couldn't get through. "
+            + "Check that the PC's firewall allows \(proto) \(port)."
+    }
+
+    public static func protectedContentMessage(_ pcName: String) -> String {
+        "\(pcName) stopped the stream: the app is showing protected content, which can't be streamed. "
+            + "Close it on the PC, then try again."
+    }
 }

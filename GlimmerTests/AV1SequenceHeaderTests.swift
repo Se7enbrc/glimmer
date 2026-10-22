@@ -5,12 +5,68 @@ import CoreMedia
 import CoreVideo
 import Foundation
 import Testing
+import VideoToolbox
 
 @testable import GlimmerEngine
 @testable import Glimmer
 
 @MainActor
 struct AV1SequenceHeaderTests {
+    @Test func liveAV1SequenceChangesRefreshColourWithoutRecreatingUnchangedHeaders() async throws {
+        let creates = AtomicCounter()
+        let decoder = VideoDecoder(now: { 1 }, makeSession: { _, _, _, callback in
+            creates.increment()
+            // A software JPEG session keeps the live-session branch testable on Macs without AV1 hardware.
+            // AV1 samples are rejected, but the handle stays live until the format transition invalidates it.
+            var format: CMVideoFormatDescription?
+            let status = CMVideoFormatDescriptionCreate(allocator: kCFAllocatorDefault,
+                codecType: kCMVideoCodecType_JPEG, width: 64, height: 64,
+                extensions: nil, formatDescriptionOut: &format)
+            guard status == noErr, let format else { return (status, nil) }
+            return VideoDecoder.createSession(format, [:], [:], callback)
+        })
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_AV1_MAIN10
+        decoder.streamWidth = 64
+        decoder.streamHeight = 64
+        decoder.isStreaming = true
+        decoder.hdrEnabled = true
+        decoder._decodeGateLiftedAtNanos = 1
+        defer { decoder.teardown() }
+        let transitions = [(hdr: false, creates: 1), (hdr: true, creates: 2), (hdr: true, creates: 2)]
+        for (index, transition) in transitions.enumerated() {
+            let data = Self.idr(hdr: transition.hdr)
+            let primaries = transition.hdr ? kCVImageBufferColorPrimaries_ITU_R_2020
+                : kCVImageBufferColorPrimaries_ITU_R_709_2
+            let transfer = transition.hdr ? kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ
+                : kCVImageBufferTransferFunction_ITU_R_709_2
+            let unit = DecodeUnit(frameNumber: Int32(index + 1), frameType: StreamProtocol.FRAME_TYPE_IDR,
+                fullLength: Int32(data.count), frameHostProcessingLatency: 0,
+                receiveTimeUs: 0, enqueueTimeUs: 0, presentationTimeUs: 0, rtpTimestamp: UInt32(index * 1500),
+                hdrActive: false, colorspace: 0, buffers: [DecodeBuffer(kind: .picData, data: data)])
+            #expect(decoder.submitDecodeUnit(unit) == StreamProtocol.DR_OK)
+            await decoder.decodeQueue.drainForTest()
+            try decoder.decodeQueue.sync {
+                try #require(decoder.decompressionSession != nil)
+                let format = try #require(decoder.formatDescription)
+                #expect(CMFormatDescriptionGetExtension(format,
+                    extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String == transfer as String)
+                let color = decoder.resolveColorDescription(for: try makeTaggedPixelBuffer(), controlHDR: true)
+                #expect(color.primaries == primaries as String)
+                #expect(color.transfer == transfer as String)
+                #expect(color.isHDR == (index > 0))
+                #expect(creates.value == transition.creates)
+            }
+        }
+    }
+
+    // A 64x64 black, 10-bit AV1 keyframe; only its sequence colour declaration differs.
+    private static func idr(hdr: Bool) -> Data {
+        let color: [UInt8] = hdr ? [0x91, 0x00, 0x90] : [0x10, 0x10, 0x10]
+        return Data([0x12, 0x00, 0x0A, 0x0E, 0x02, 0x00, 0x00, 0x05, 0x15, 0x7F, 0xFC, 0x4A, 0xF9, 0x50]
+            + color + [0x40, 0x32, 0x0F, 0x10, 0x00, 0xAD, 0x02, 0x07, 0x1C, 0x30, 0xC1,
+                       0x00, 0x00, 0x03, 0x24, 0xFF, 0xC7, 0x80])
+    }
+
     @Test func parsesSequenceHeaderWithoutDecoderModel() {
         let decoder = VideoDecoder()
         let result = decoder.parseAV1SequenceHeader(Self.sequenceHeader(decoderModel: false))

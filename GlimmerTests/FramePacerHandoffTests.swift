@@ -285,6 +285,25 @@ struct FramePacerHandoffTests {
         #expect(pacer.stats.presentationLateDropCount() == 1)
     }
 
+    @Test func delayedTicksCannotReplayExpiredDisplayOpportunities() throws {
+        let pacer = try makeTestPacer(queued: 2)
+        let presented = recordPresents(pacer)
+        pacer.variableRefreshEnabled = true
+        pacer.mediaTime = { 10.1 }
+        pacer.lastPresentMediaTime = 10 - 1.0 / 120
+        pacer.pacingQueue.sync {
+            for index in 0..<3 {
+                let target = 10 + Double(index) / 120
+                pacer.handleTick(target: target, duration: 1.0 / 120, timestamp: target - 1.0 / 120)
+            }
+        }
+        pacer.pacingQueue.sync {}
+        #expect(presented.withLock { $0.count } == 1)
+        #expect(pacer.lastClaimedScanoutMediaTime >= 10.1)
+        pacer.pacingQueue.sync {}
+        #expect(presented.withLock { $0.count } == 1)
+    }
+
     private final class WeakSample {
         weak var value: CMSampleBuffer?
         init(_ sample: CMSampleBuffer) { value = sample }
