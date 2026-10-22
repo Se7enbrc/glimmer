@@ -126,6 +126,7 @@ extension AppModel {
         beforeStreamStart()
 
         let cfg = nativeStreamConfig(for: host, app: app)
+        prepareMenuBarDetails(width: cfg.width, height: cfg.height, fps: cfg.fps)
         // One line naming how the stream will be shown and what was asked for,
         // so a "why is it 1080p in a window" report answers itself from the log.
         Diag.info("Show the stream: \(cfg.displayMode.displayName.lowercased()) - requesting "
@@ -286,6 +287,7 @@ extension AppModel {
         self.menuStopInProgress = false
         self.isReconnecting = false
         self.menuDetails = nil
+        self.menuResolution = nil
         // Disconnect beat (#3) - surface the "Stream ended" toast on
         // the launcher only when we actually had a live session.
         // Skipping the toast on the connection-failure path (where

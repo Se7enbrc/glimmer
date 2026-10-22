@@ -204,6 +204,7 @@ final class AppModel {
     var menuStopInProgress = false
     var statsOverlayShown = false
     var menuDetails: StreamStatsSnapshot?
+    var menuResolution: (width: Int, height: Int)?
     var menuBarControllers: [MenuBarController] = []
     var pairSheetShown = false
     /// True from a controller's first launcher command until focus clears.

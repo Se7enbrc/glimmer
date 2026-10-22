@@ -43,6 +43,39 @@ struct MenuBarPresentationTests {
         model.isStreaming = false
     }
 
+    @Test @MainActor func liveModeDoesNotFollowNextStreamSettings() {
+        let model = AppModel()
+        var snapshot = StreamStatsSnapshot()
+        snapshot.configuredFps = 60
+        model.menuDetails = snapshot
+        model.menuResolution = (1920, 1080)
+        model.effectiveWidth = 3840
+        model.effectiveHeight = 2160
+        model.effectiveFPS = 120
+        #expect(model.menuBarModeLine == "1080p · 60 Hz")
+    }
+
+    @Test @MainActor func retiredSessionDetailsCannotOverwriteTheCurrentStream() {
+        let model = AppModel()
+        let retired = StreamSession(hostDisposition: .disconnectOnly, backend: InputRecordingBackend())
+        let current = StreamSession(hostDisposition: .disconnectOnly, backend: InputRecordingBackend())
+        model.isStreaming = true
+        model.nativeSession = current
+        var snapshot = StreamStatsSnapshot()
+        snapshot.configuredFps = 60
+        model.applyMenuBarDetails((snapshot, false, (1920, 1080)), from: current)
+        snapshot.configuredFps = 120
+        model.applyMenuBarDetails((snapshot, true, (3840, 2160)), from: retired)
+        #expect(model.menuBarModeLine == "1080p · 60 Hz")
+        #expect(!model.statsOverlayShown)
+        model.applyMenuBarDetails(nil, from: current)
+        #expect(model.menuDetails == nil)
+        #expect(model.menuResolution == nil)
+        model.isStreaming = false
+        model.applyMenuBarDetails((snapshot, true, (3840, 2160)), from: current)
+        #expect(model.menuDetails == nil)
+    }
+
     @Test func controllerIdentitySurvivesBatteryChangesAndDistinguishesMatchingNames() {
         let first = MenuBarController(name: "Controller", percent: 80, charging: false, sourceID: "gc:one")
         let refreshed = MenuBarController(name: "Controller", percent: 79, charging: true, sourceID: "gc:one")
