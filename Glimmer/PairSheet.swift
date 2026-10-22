@@ -19,6 +19,8 @@ import Network
 import SwiftUI
 
 struct PairSheet: View {
+    @FocusState private var controllerFocus: LauncherFocus?
+    @State private var focusCells: [LauncherFocus] = []
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
@@ -72,10 +74,10 @@ struct PairSheet: View {
             if paired {
                 successBody
                 if let pairedHost, LauncherStyle.offersChoice(apps: pairedHost.apps) {
-                    PairLauncherChoice(host: pairedHost)
+                    PairLauncherChoice(host: pairedHost, focus: $controllerFocus)
                 }
             } else if !chosen {
-                HostChooser(selected: { addr, name in
+                HostChooser(focus: $controllerFocus, selected: { addr, name in
                     hostnameOrIP = addr
                     pcName = name
                     chosen = true
@@ -94,6 +96,16 @@ struct PairSheet: View {
         // Float above all other Glimmer windows so the PIN being read off isn't
         // hidden behind the launcher or Settings. Reverts on dismiss.
         .background(FloatingWindowLevel { model.pairSheetWindow = $0 })
+        .background {
+            LauncherControllerWindow(controller: model.launcherController, handle: navigatePairing, isSheet: true)
+                .frame(width: 0, height: 0)
+        }
+        .onPreferenceChange(LauncherFocusCells.self) { cells in
+            guard cells != focusCells else { return }
+            focusCells = cells
+            model.launcherController.resetInput()
+            if let controllerFocus, !cells.contains(controllerFocus) { self.controllerFocus = cells.first }
+        }
         .sensoryFeedback(.success, trigger: paired)
         .onDisappear { cancelPairing() }
     }
@@ -142,6 +154,7 @@ struct PairSheet: View {
             Button("Open Sunshine on This Mac") { model.openSunshinePINPage(forHost: trimmedHost) }
                 .buttonStyle(.link)
                 .font(.footnote)
+                .pairingFocus($controllerFocus, .help) { model.openSunshinePINPage(forHost: trimmedHost) }
             Text("Sunshine uses its own certificate, so your browser asks you to confirm before opening it.")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
@@ -179,39 +192,68 @@ struct PairSheet: View {
             if paired {
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .pairingFocus($controllerFocus, .done) { dismiss() }
                 Spacer()
-                Button("Stream Now") {
-                    selectPairedHost()
-                    model.streamDefaultApp()
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(StreamButtonStyle())
+                Button("Stream Now", action: streamPairedHost)
+                    .pairingFocus($controllerFocus, .stream, activate: streamPairedHost)
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(StreamButtonStyle())
             } else if !chosen {
                 Spacer()
                 Button("Cancel") { cancelPairing(); dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .pairingFocus($controllerFocus, .cancel) { cancelPairing(); dismiss() }
             } else {
                 Spacer()
-                Button("Back") {
-                    cancelPairing()
-                    chosen = false
-                    rePairName = nil
-                    pin = ""
-                }
+                Button("Back", action: backToChooser)
+                    .pairingFocus($controllerFocus, .back, activate: backToChooser)
                 Button("Cancel") { cancelPairing(); dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .pairingFocus($controllerFocus, .cancel) { cancelPairing(); dismiss() }
                 // Pairing starts with the code; a retry gets a fresh one.
                 if pairingFailed {
-                    Button("Try Again") {
-                        pin = model.generatePairingPIN()
-                        startPairing()
-                    }
-                    .buttonStyle(StreamButtonStyle())
-                    .keyboardShortcut(.defaultAction)
+                    Button("Try Again", action: retryPairing)
+                        .pairingFocus($controllerFocus, .retry, activate: retryPairing)
+                        .buttonStyle(StreamButtonStyle())
+                        .keyboardShortcut(.defaultAction)
                 }
             }
         }
+    }
+
+    private func navigatePairing(_ command: LauncherCommand) {
+        if command == .dismiss { cancelPairing(); dismiss(); return }
+        guard model.launcherControllerNavigating else {
+            model.launcherControllerNavigating = true
+            DispatchQueue.main.async { navigatePairing(command) }
+            return
+        }
+        if command == .activate {
+            guard controllerFocus != .pairing(.address) else { return }
+            if controllerFocus == nil { controllerFocus = focusCells.first } else {
+                model.launcherController.postKey(.activate)
+            }
+        } else {
+            controllerFocus = PairingNavigation.destination(from: controllerFocus, command: command, cells: focusCells)
+        }
+    }
+
+    private func streamPairedHost() {
+        selectPairedHost()
+        model.streamDefaultApp()
+        dismiss()
+    }
+
+    private func backToChooser() {
+        cancelPairing()
+        chosen = false
+        rePairName = nil
+        pin = ""
+    }
+
+    private func retryPairing() {
+        pin = model.generatePairingPIN()
+        startPairing()
     }
 
     private func startPairing() {
@@ -248,6 +290,7 @@ struct PairSheet: View {
 /// row (or submitting the manual field) hands the address, and the name when
 /// discovery knew one, back via `selected`, which advances to the PIN step.
 private struct HostChooser: View {
+    let focus: FocusState<LauncherFocus?>.Binding
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let selected: (_ address: String, _ name: String?) -> Void
     @State private var found: [HostDiscovery.Discovered] = []
@@ -320,6 +363,7 @@ private struct HostChooser: View {
                             .glassSurface(in: .rect(cornerRadius: 12))
                         }
                         .buttonStyle(.plain)
+                        .pairingFocus(focus, .pc(host.id)) { selected(host.host, host.displayName) }
                     }
                 }
             }
@@ -332,12 +376,15 @@ private struct HostChooser: View {
                     HStack {
                         TextField("e.g. tower.local or 192.168.1.10", text: $manual)
                             .accessibilityLabel("PC name or address")
+                            .focused(focus, equals: .pairing(.address))
+                            .preference(key: LauncherFocusCells.self, value: [.pairing(.address)])
                             .textFieldStyle(.roundedBorder)
                             .transaction { $0.animation = nil }
                             .disableAutocorrection(true)
                             .onSubmit { submitManual() }
                         Button("Continue") { submitManual() }
                             .buttonStyle(StreamButtonStyle())
+                            .pairingFocus(focus, .continuePairing, activate: submitManual)
                             .disabled(manualAddress == nil)
                     }
                     if manualAddress == nil, !manual.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -355,6 +402,7 @@ private struct HostChooser: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.tint)
+                .pairingFocus(focus, .manual) { showManual = true }
             }
         }
         .animation(Motion.layout(reduceMotion: reduceMotion), value: found.map(\.id))
@@ -390,6 +438,7 @@ private struct HostChooser: View {
             if let url = Self.localNetworkSettings {
                 Link("Open Local Network Settings", destination: url)
                     .font(.callout)
+                    .pairingFocus(focus, .settings) { NSWorkspace.shared.open(url) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -409,6 +458,7 @@ private struct HostChooser: View {
             if let url = Self.hostSetupGuide {
                 Link("Set Up Your PC", destination: url)
                     .font(.footnote)
+                    .pairingFocus(focus, .guide) { NSWorkspace.shared.open(url) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

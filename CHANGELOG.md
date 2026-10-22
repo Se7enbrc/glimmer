@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- Use a controller to open pairing, choose a PC and finish pairing.
 - Opening pairing from another window brings the current pairing flow forward.
 - The menu bar keeps the streaming PC's name and network when another PC is
   selected.

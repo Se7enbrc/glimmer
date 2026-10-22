@@ -3,11 +3,73 @@
 
 import AppKit
 import GameController
+import SwiftUI
 import Testing
 @testable import Glimmer
 
 @MainActor
 struct LauncherControllerTests {
+    @Test func pairingSheetReceivesDirectionsAndActivationAfterNeutralInput() {
+        let sheet = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
+        let window = PairingParentWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
+        window.testSheet = sheet
+        let controller = LauncherController(navigationEnabled: { true }, availableControllers: { [] },
+                                            now: { 1 }, keyWindow: { sheet }, postEvent: { _ in })
+        defer { controller.detach() }
+        controller.attach(window: window)
+        var commands: [LauncherCommand] = []
+        controller.handleSheet = { commands.append($0) }
+        let id = ObjectIdentifier(controller)
+        controller.poll(inputs: [id: .init(activate: true)])
+        #expect(commands.isEmpty)
+        controller.poll(inputs: [id: .init()])
+        controller.poll(inputs: [id: .init(direction: .down)])
+        controller.poll(inputs: [id: .init(activate: true)])
+        #expect(commands == [.down, .activate])
+    }
+
+    @Test func emptyLauncherRegistersItsPairButton() {
+        var cells: [LauncherFocus] = []
+        let view = NSHostingView(rootView: EmptyPairingFocusFixture { cells = $0 }.environment(AppModel()))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 500),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        view.layoutSubtreeIfNeeded()
+        #expect(cells == [.state])
+        #expect(LauncherNavigation.destination(from: nil, command: .down, cells: cells,
+                                               columns: 1, hasSwitcher: false) == .state)
+    }
+
+    @Test func pairingControlsTraverseAndHeldActivationCannotCrossScreens() {
+        let controller = LauncherController(navigationEnabled: { true }, availableControllers: { [] }, now: { 1 })
+        defer { controller.detachSheet() }
+        let window = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
+        controller.attachSheet(window: window)
+        let id = ObjectIdentifier(controller)
+        var cells: [LauncherFocus] = [.pairing(.pc("tower")), .pairing(.manual), .pairing(.cancel)]
+        var focus: LauncherFocus?
+        var activated: [LauncherFocus] = []
+        controller.handleSheet = { command in
+            if command == .activate, let focus { activated.append(focus) }
+            focus = PairingNavigation.destination(from: focus, command: command, cells: cells)
+        }
+        controller.poll(inputs: [id: .init()])
+        controller.poll(inputs: [id: .init(direction: .down)])
+        controller.poll(inputs: [id: .init(activate: true)])
+        #expect(activated == [.pairing(.pc("tower"))])
+        cells = [.pairing(.style(.buttons)), .pairing(.style(.covers)), .pairing(.done), .pairing(.stream)]
+        focus = cells.first
+        controller.resetInput()
+        controller.poll(inputs: [id: .init(activate: true)])
+        #expect(activated.count == 1)
+        for input in [LauncherControllerInput(direction: .right), .init(activate: true),
+                      .init(direction: .down), .init(direction: .right), .init(activate: true)] {
+            controller.poll(inputs: [id: .init()])
+            controller.poll(inputs: [id: input])
+        }
+        #expect(activated == [.pairing(.pc("tower")), .pairing(.style(.covers)), .pairing(.stream)])
+    }
+
     @Test func discoveredControllersSleepAtNeutralRepeatAndReleaseOwnership() throws {
         let pad = GCController.withExtendedGamepad()
         let profile = try #require(pad.extendedGamepad)
@@ -198,5 +260,21 @@ struct LauncherControllerTests {
                                                columns: 0, hasSwitcher: false) == .state)
         #expect(LauncherNavigation.destination(from: .pc, command: .left, cells: cells,
                                                columns: 2, hasSwitcher: true) == .pc)
+    }
+}
+
+@MainActor
+private final class PairingParentWindow: NSWindow {
+    var testSheet: NSWindow?
+    override var attachedSheet: NSWindow? { testSheet }
+}
+
+@MainActor
+private struct EmptyPairingFocusFixture: View {
+    let report: ([LauncherFocus]) -> Void
+    @FocusState private var focus: LauncherFocus?
+
+    var body: some View {
+        EmptyPairingState(focus: $focus).onPreferenceChange(LauncherFocusCells.self, perform: report)
     }
 }

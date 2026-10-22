@@ -237,6 +237,7 @@ struct SpecChipsRow: View {
 // MARK: - Empty pairing state
 
 struct EmptyPairingState: View {
+    let focus: FocusState<LauncherFocus?>.Binding
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -269,6 +270,8 @@ struct EmptyPairingState: View {
             }
             .buttonStyle(StreamButtonStyle())
             .controlSize(.large)
+            .modifier(LauncherControlFocus(focus: focus, target: .state) { model.requestPairing(for: nil) })
+            .preference(key: LauncherFocusCells.self, value: [.state])
         }
         .padding(40)
         .fixedSize(horizontal: false, vertical: true)

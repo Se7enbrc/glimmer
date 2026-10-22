@@ -29,7 +29,7 @@ struct MainWindow: View {
         @Bindable var model = model
         return Group {
             if model.hosts.isEmpty {
-                EmptyPairingState().transition(.opacity.animation(Motion.fade))
+                EmptyPairingState(focus: $launcherFocus).transition(.opacity.animation(Motion.fade))
             } else {
                 ConnectSurface(focus: $launcherFocus).transition(.opacity.animation(Motion.fade))
             }
