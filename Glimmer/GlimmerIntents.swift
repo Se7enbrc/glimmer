@@ -45,7 +45,10 @@ struct PCQuery: EnumerableEntityQuery {
 struct StreamIntent: AppIntent {
     static let title: LocalizedStringResource = "Stream from PC"
     static let description = IntentDescription("Opens Glimmer and streams an app from a paired PC.")
-    static let supportedModes: IntentModes = .foreground
+    @available(macOS 26, *)
+    static var supportedModes: IntentModes { .foreground }
+    // The macOS 15 spelling of the same foreground launch.
+    static let openAppWhenRun = true
 
     @Parameter(title: "PC")
     var pc: PCEntity
@@ -189,7 +192,7 @@ struct GlimmerShortcuts: AppShortcutsProvider {
         Task {
             await bootstrap(model).value
             var known: Set<PCEntity>?
-            for await pcs in Observations({ Set(model.hosts.map(PCEntity.init)) }) where pcs != known {
+            for await pcs in observedValues({ Set(model.hosts.map(PCEntity.init)) }) where pcs != known {
                 known = pcs
                 update()
             }

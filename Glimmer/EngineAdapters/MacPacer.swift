@@ -17,7 +17,7 @@ enum MacPacer {
         }, screen: { [weak view] in
             guard let view else { return PacerScreen(identity: "none", maximumHz: 0, minimumHz: nil, scale: 1) }
             let screen = view.window?.screen
-            return PacerScreen(identity: screen?.cgDirectDisplayID.map { String($0) } ?? "none",
+            return PacerScreen(identity: screen?.displayID.map { String($0) } ?? "none",
                                maximumHz: panelMaxHz(for: view), minimumHz: variableMinimumHz(for: view),
                                scale: Double(screen?.backingScaleFactor ?? 1))
         }, tickOffMain: { UserDefaults.standard.bool(forKey: tickOffMainDefaultsKey) },

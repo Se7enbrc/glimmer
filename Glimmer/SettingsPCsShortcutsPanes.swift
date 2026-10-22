@@ -146,7 +146,7 @@ struct PCTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // Glass tile - each PC card reads as a floating panel against the
         // settings background. The star alone marks the default PC.
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .glassSurface(in: .rect(cornerRadius: 16))
         // Shared right-click menu, the same items as the visible button above
         // and the launcher hero's menu.
         .hostContextMenu(host)

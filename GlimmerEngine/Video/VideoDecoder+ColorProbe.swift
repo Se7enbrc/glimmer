@@ -74,6 +74,8 @@ extension VideoDecoder {
         }
     }
 
+    private var layerDynamicRange: String { displayLayer?.dynamicRangeLabel ?? "absent" }
+
     private func displayHeadroom() -> (current: Double, potential: Double) {
         let display = displayInfo()
         return (display?.currentHeadroom ?? 1, display?.potentialHeadroom ?? 1)
@@ -84,7 +86,7 @@ extension VideoDecoder {
         let outputHDR = VideoColorDescription.hdrDisplayOutput(inputHDR: isHDRActive, currentEDR: values.current)
         colorProbeLog("Colour display transition: after=\(seconds)s currentEDR=\(values.current) "
             + "potentialEDR=\(values.potential) hdrInput=\(isHDRActive) hdrOutput=\(outputHDR) "
-            + "preferredDynamicRange=\(displayLayer?.preferredDynamicRange.rawValue ?? "absent")", false)
+            + "preferredDynamicRange=\(layerDynamicRange)", false)
         if seconds == 5 && isHDRActive && !outputHDR {
             colorProbeLog("HDR input has no EDR headroom: currentEDR=\(values.current) "
                 + "potentialEDR=\(values.potential)", true)
@@ -109,6 +111,6 @@ extension VideoDecoder {
             inputHDR: probe.state.resolved.isHDR, currentEDR: Double(current))
         colorProbeLog("Colour probe display: currentEDR=\(current) potentialEDR=\(potential) "
             + "hdrInput=\(probe.state.resolved.isHDR) hdrOutput=\(outputHDR) "
-            + "preferredDynamicRange=\(displayLayer?.preferredDynamicRange.rawValue ?? "absent")", false)
+            + "preferredDynamicRange=\(layerDynamicRange)", false)
     }
 }

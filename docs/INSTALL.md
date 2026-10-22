@@ -18,7 +18,7 @@
 
 {% hint style="info" %}
 
-Requires [Apple Silicon and macOS 26](REQUIREMENTS.md).
+Requires [Apple Silicon and macOS 15.7 or later](REQUIREMENTS.md).
 [Verify the download](VERIFY_DOWNLOAD.md) for signature checks. The optional
 [Wi-Fi helper](guides/WIFI.md) needs approval; see [Security](SECURITY.md). Both
 installs [update in-app](UPDATES.md).

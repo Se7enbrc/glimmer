@@ -1,6 +1,6 @@
 # Play your PC games on your Mac with Glimmer
 
-Free, now and always. Apple Silicon, macOS 26 or later, and
+Free, now and always. Apple Silicon, macOS 15.7 or later, and
 [Sunshine](https://github.com/LizardByte/Sunshine) on your PC. No account or
 analytics.
 

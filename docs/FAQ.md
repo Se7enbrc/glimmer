@@ -9,7 +9,7 @@ icon: circle-question
 
 | Question                 | Answer                                                                           |
 | ------------------------ | -------------------------------------------------------------------------------- |
-| Intel Mac or GameStream? | No. Use [Apple Silicon, macOS 26 and Sunshine](REQUIREMENTS.md).                 |
+| Intel Mac or GameStream? | No. Use [Apple Silicon, macOS 15.7 and Sunshine](REQUIREMENTS.md).               |
 | Virtual display needed?  | Only for a headless PC or [unsupported display mode](HOST_SETUP.md).             |
 | Tailscale?               | Enter the PC's address. [Wake on LAN](guides/PCS.md) stays on your home network. |
 | Why a Wi-Fi helper?      | It pauses [AirDrop radio interruptions](guides/WIFI.md).                         |

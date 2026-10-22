@@ -57,21 +57,25 @@ jobs:
           checks='{"part":"checks","target":"check","coverage":"python"}'
           tests='{"part":"tests","target":"test","coverage":"swift"}'
           fuzz='{"part":"fuzz","target":"test-asan","coverage":""}'
-          if [ "$build" = true ]; then parts="[$checks,$tests,$fuzz]"; else parts="[$checks]"; fi
+          # The oldest supported macOS runs the tests so its fallback paths execute.
+          # Its image's newest Xcode is 26.3; every other part stays on 26.6.
+          sequoia='{"part":"sequoia","target":"test","coverage":"","runner":"macos-15","xcode":"26.3"}'
+          if [ "$build" = true ]; then parts="[$checks,$tests,$fuzz,$sequoia]"; else parts="[$checks]"; fi
           printf 'build=%s\nparts=%s\n' "$build" "$parts" >> "$GITHUB_OUTPUT"
 
   # The gate's parts share no build products, so they run side by side.
   verify:
     name: Verify (${{ matrix.part }})
     needs: changes
-    runs-on: macos-26
+    runs-on: ${{ matrix.runner || 'macos-26' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.changes.outputs.parts) }}
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      DEVELOPER_DIR:
+        /Applications/Xcode_${{ matrix.xcode || '26.6' }}.app/Contents/Developer
       HOMEBREW_NO_AUTO_UPDATE: "1"
     defaults:
       run:

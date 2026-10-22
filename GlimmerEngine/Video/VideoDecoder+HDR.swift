@@ -10,6 +10,14 @@ import CoreVideo
 import Foundation
 import os
 
+extension CALayer {
+    // macOS 15 has no preferredDynamicRange; its EDR opt-in reports under the same key.
+    package var dynamicRangeLabel: String {
+        if #available(macOS 26, *) { return preferredDynamicRange.rawValue }
+        return wantsExtendedDynamicRangeContent ? "edr" : "standard"
+    }
+}
+
 extension VideoDecoder {
 
     // MARK: - Display-layer configuration
@@ -18,7 +26,11 @@ extension VideoDecoder {
     package func configureLayerColorspace(headroom: (@MainActor () -> (current: Double, potential: Double))? = nil) {
         guard let layer = displayLayer else { return }
         let active = resolvedColor.withLock { $0?.isHDR ?? false }
-        layer.preferredDynamicRange = active ? .high : .standard
+        if #available(macOS 26, *) {
+            layer.preferredDynamicRange = active ? .high : .standard
+        } else {
+            layer.wantsExtendedDynamicRangeContent = active
+        }
         if active != isHDRActive {
             isHDRActive = active
             onHDRActiveChanged?(active)

@@ -53,7 +53,7 @@ that inspired Glimmer; it is not the protocol's name.
 
 ## Capabilities and Constraints
 
-- macOS 26 or later, Apple Silicon only. The platform value above is `ios`
+- macOS 15.7 or later, Apple Silicon only. The platform value above is `ios`
   because the schema has no macOS value; it selects Apple HIG native guidance.
   Glimmer is a Mac app, so the macOS HIG applies and the iPhone-specific
   guidance (touch targets, tab bars, safe areas, edge swipes) does not.

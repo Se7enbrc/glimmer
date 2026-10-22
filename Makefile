@@ -114,7 +114,7 @@ HELPER_SRCS   := helper/Protocol.swift Glimmer/AWDLProcess.swift helper/AWDLSupp
 HELPER_PLIST  := helper/$(HELPER_LABEL).plist
 HELPER_BIN    := $(DERIVED)/$(HELPER_LABEL)
 HELPER_SDK    := $(shell xcrun --sdk macosx --show-sdk-path)
-HELPER_TARGET := arm64-apple-macos26.0
+HELPER_TARGET := arm64-apple-macos15.7
 HELPER_BUNDLE := $(GLIMMER_APP_SRC)/Contents/Library/LaunchServices/Glimmer Network Helper.app
 
 .PHONY: all release install reinstall uninstall clean app sign sign-bundle open \

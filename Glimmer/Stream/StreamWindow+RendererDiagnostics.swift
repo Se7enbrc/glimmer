@@ -21,7 +21,7 @@ extension StreamWindow {
 
     func rendererDiagnosticSnapshot(hdrInput: Bool) -> String {
         let screen = window.screen
-        let displayID = screen?.cgDirectDisplayID.map(String.init) ?? "none"
+        let displayID = screen?.displayID.map(String.init) ?? "none"
         let currentEDR = screen?.maximumExtendedDynamicRangeColorComponentValue ?? 1
         let potentialEDR = screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1
         let hdrOutput = VideoColorDescription.hdrDisplayOutput(inputHDR: hdrInput, currentEDR: Double(currentEDR))
@@ -34,7 +34,7 @@ extension StreamWindow {
         let overlays = rendererVisibleOverlays().joined(separator: ";")
         return "\(windowState) \(cursor) overlays=[\(overlays)] video={\(Self.rendererLayerState(displayLayer))} "
             + "currentEDR=\(currentEDR) potentialEDR=\(potentialEDR) hdrInput=\(hdrInput) hdrOutput=\(hdrOutput) "
-            + "dynamicRange=\(displayLayer.preferredDynamicRange.rawValue) displayID=\(displayID)"
+            + "dynamicRange=\(displayLayer.dynamicRangeLabel) displayID=\(displayID)"
     }
 
     private var rendererFullscreenMode: String {
