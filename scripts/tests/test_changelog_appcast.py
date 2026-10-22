@@ -7,6 +7,7 @@ import contextlib
 import importlib.util
 import io
 from pathlib import Path
+import plistlib
 import sys
 import tempfile
 import unittest
@@ -193,6 +194,14 @@ class AppcastTests(unittest.TestCase):
         code, out, _ = self.run_feed(*RETRY)
         self.assertEqual((code, out), (0, "  = appcast already current\n"))
         self.assertEqual(self.feed.read_text(), FEED)
+
+    def test_new_item_takes_the_app_floor_and_published_items_keep_theirs(self):
+        with (SCRIPTS.parent / "Glimmer/Info.plist").open("rb") as stream:
+            floor = plistlib.load(stream)["LSMinimumSystemVersion"]
+        self.assertEqual(self.run_feed(*NEW)[0], 0)
+        self.assertEqual(self.items()[0].findtext(f"{{{SPARKLE}}}minimumSystemVersion"), floor)
+        self.assertNotEqual(floor, "26.0")
+        self.assertEqual(self.items()[1].findtext(f"{{{SPARKLE}}}minimumSystemVersion"), "26.0")
 
     def test_reused_or_regressing_build_is_refused(self):
         self.assertEqual(self.run_feed("--short-version", "2026.10.6", "--version", "20261008", *NEW[4:])[0], 2)

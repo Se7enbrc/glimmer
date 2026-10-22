@@ -132,7 +132,7 @@ struct ReadinessChip: View {
         // GlassEffectContainer composites adjacent glass elements as ONE
         // floating cluster (Apple's Liquid Glass guidance) instead of
         // stacking independent blur passes into double-blur artefacts.
-        GlassEffectContainer(spacing: 8) {
+        GlassGroup(spacing: 8) {
             HStack(spacing: 8) {
                 Group {
                     // certMismatch is the Trust affordance: a REAL Button, so
@@ -178,7 +178,7 @@ struct ReadinessChip: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .glassEffect(.regular, in: .capsule)
+        .glassSurface(in: .capsule)
     }
 
     /// Chip sentence + route flavour for VoiceOver ("Host ready, round trip

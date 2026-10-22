@@ -18,7 +18,7 @@ extension InsettableShape {
     func accentSurface() -> some View {
         fill(accentSurfaceGradient)
             // Interactive: the native hover and press response a violet control otherwise lacks.
-            .glassEffect(.regular.tint(Color.accentColor.opacity(0.15)).interactive(), in: self)
+            .glassSurface(in: self, tint: Color.accentColor.opacity(0.15), interactive: true)
             .overlay {
                 strokeBorder(LinearGradient(colors: [.white.opacity(0.30), .white.opacity(0.02)],
                                             startPoint: .top, endPoint: .bottom), lineWidth: 1)

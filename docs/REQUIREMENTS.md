@@ -7,7 +7,7 @@ icon: list-check
 
 | Part       | You need                                                                                   |
 | ---------- | ------------------------------------------------------------------------------------------ |
-| Mac        | Apple Silicon, macOS 26 or later.                                                          |
+| Mac        | Apple Silicon, macOS 15.7 or later.                                                        |
 | PC         | Current, unmodified [Sunshine](https://github.com/LizardByte/Sunshine), running and awake. |
 | PC display | Physical or [virtual](HOST_SETUP.md), supporting your chosen mode.                         |
 | Network    | A reachable PC; start on the same network.                                                 |

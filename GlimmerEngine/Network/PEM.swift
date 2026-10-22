@@ -54,9 +54,14 @@ package enum PEM {
         guard let certificate = certificate(certPEM), let key = privateKey(keyPEM) else {
             throw StreamError.crypto("could not parse client certificate or private key")
         }
-        _ = try certificateKey(certificate, context: "client certificate")
+        let certificatePublicKey = try certificateKey(certificate, context: "client certificate")
         try requireStrongRSA(key, context: "client private key")
-        guard let identity = SecIdentityCreate(nil, certificate, key) else {
+        // macOS 15's SecIdentityCreate pairs any key with any certificate, so match them here.
+        guard let publicKey = SecKeyCopyPublicKey(key),
+              let derived = SecKeyCopyExternalRepresentation(publicKey, nil),
+              let expected = SecKeyCopyExternalRepresentation(certificatePublicKey, nil),
+              derived as Data == expected as Data,
+              let identity = SecIdentityCreate(nil, certificate, key) else {
             throw StreamError.crypto("client cert/key mismatch")
         }
         return identity

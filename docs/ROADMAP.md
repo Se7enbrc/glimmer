@@ -25,7 +25,7 @@ Keep proposals within these settled product decisions.
 
 | Area             | Boundary                                                                      |
 | ---------------- | ----------------------------------------------------------------------------- |
-| Mac support      | Apple Silicon, macOS 26 or later; no Intel/older-macOS client.                |
+| Mac support      | Apple Silicon, macOS 15.7 or later; no Intel or older-macOS client.           |
 | PC software      | Current, unmodified Sunshine; no NVIDIA GameStream or patched-PC requirement. |
 | Interface        | SwiftUI/AppKit and system controls; no web views or cross-platform UI.        |
 | Rendering        | `AVSampleBufferDisplayLayer`; no Metal renderer.                              |

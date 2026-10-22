@@ -103,7 +103,11 @@ public actor HostDiscovery {
     }
 
     private func reset() {
-        for browser in browsers { browser.cancel() }
+        // macOS 15 segfaults cancelling a browser that never started; there is nothing to stop.
+        for browser in browsers {
+            if case .setup = browser.state { continue }
+            browser.cancel()
+        }
         browsers.removeAll()
         for resolver in resolvers.values { resolver.cancel() }
         resolvers.removeAll()

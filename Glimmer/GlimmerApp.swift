@@ -120,7 +120,7 @@ struct GlimmerApp: App {
                 .frame(minWidth: LauncherLayout.windowWidth)
                 // Frosted Liquid Glass is the launcher's surface: see-through enough to show
                 // colour behind it, blurred enough that text behind turns to colour.
-                .containerBackground(for: .window) { Color.clear.glassEffect(.regular, in: .rect) }
+                .glassWindowBackground()
         }
         .windowStyle(.hiddenTitleBar)
         // Exactly its content, never draggable bigger: nothing in the launcher grows, so a
@@ -247,8 +247,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // A stream started from the menu bar needs the Dock icon; its end
             // may leave nothing to come back to. The first value is launch state.
             Task { [weak self] in
-                for await _ in Observations({ mgr.isStreaming }).dropFirst() {
-                    self?.refreshActivationPolicy()
+                if #available(macOS 26, *) {
+                    for await _ in Observations({ mgr.isStreaming }).dropFirst() {
+                        self?.refreshActivationPolicy()
+                    }
+                } else {
+                    var launch = true
+                    await forEachTrackedValue({ mgr.isStreaming }, perform: { _ in
+                        if launch { launch = false } else { self?.refreshActivationPolicy() }
+                    })
                 }
             }
         }

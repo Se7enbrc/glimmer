@@ -144,7 +144,12 @@ struct MainWindow: View {
         .toolbar {
             // The PC switcher is the header's name; the toolbar keeps only Settings,
             // on the trailing edge (a hidden title bar has no title to push it there).
-            ToolbarSpacer(.flexible)
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.flexible)
+            } else {
+                // macOS 15 has no ToolbarSpacer; a flexible Spacer item gives the same push.
+                ToolbarItem { Spacer() }
+            }
             ToolbarItem(placement: .automatic) {
                 Button {
                     openSettings()

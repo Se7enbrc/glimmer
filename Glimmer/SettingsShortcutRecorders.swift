@@ -116,12 +116,8 @@ struct HotkeyBadge: View {
                         .padding(.vertical, 4)
                         // Capture state tints the glass with the accent color so it
                         // reads as "live", otherwise it's a neutral glass capsule.
-                        .glassEffect(
-                            isCapturing
-                                ? .regular.interactive().tint(Color.accentColor.opacity(0.22))
-                                : .regular.interactive(),
-                            in: .capsule
-                        )
+                        .glassSurface(in: .capsule, tint: isCapturing ? Color.accentColor.opacity(0.22) : nil,
+                                      interactive: true)
                         .overlay(
                             Capsule().stroke(
                                 isCapturing ? Color.accentColor : Color.clear,

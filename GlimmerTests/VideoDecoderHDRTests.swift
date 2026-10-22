@@ -192,7 +192,7 @@ struct VideoDecoderHDRTests {
         decoder.attachColorAndHDRMetadata(to: hdr,
             color: decoder.resolveColorDescription(for: hdr, controlHDR: true))
         decoder.configureLayerColorspace()
-        #expect(layer.preferredDynamicRange == .high)
+        #expect(layer.dynamicRangeLabel == hdrRangeLabel)
         #expect(decoder.isHDRActive)
         #expect(decoder.hdrMetadataStore.snapshot.mdcv?.count == 24)
 
@@ -201,7 +201,7 @@ struct VideoDecoderHDRTests {
         decoder.attachColorAndHDRMetadata(to: sdr,
             color: decoder.resolveColorDescription(for: sdr, controlHDR: false))
         decoder.configureLayerColorspace()
-        #expect(layer.preferredDynamicRange == .standard)
+        #expect(layer.dynamicRangeLabel == "standard")
         #expect(!decoder.isHDRActive)
         #expect(decoder.hdrMetadataStore.snapshot == .empty)
         #expect(flips == [true, false])
@@ -219,7 +219,7 @@ struct VideoDecoderHDRTests {
 
         decoder.setHDR(enabled: true)
         #expect(decoder.hdrEnabled)
-        #expect(layer.preferredDynamicRange == .standard)
+        #expect(layer.dynamicRangeLabel == "standard")
         #expect(!decoder.isHDRActive)
         #expect(flips.isEmpty)
     }
@@ -388,7 +388,7 @@ struct VideoDecoderColorTransitionTests {
             let layer = AVSampleBufferDisplayLayer()
             decoder.attach(to: layer)
             decoder.configureLayerColorspace()
-            #expect(layer.preferredDynamicRange == (color.isHDR ? .high : .standard))
+            #expect(layer.dynamicRangeLabel == (color.isHDR ? hdrRangeLabel : "standard"))
             #expect(decoder.isHDRActive == color.isHDR)
         }
     }
@@ -471,7 +471,7 @@ struct VideoDecoderColorTransitionTests {
         decoder.colorProbeLog = { message, _ in rows.append(message.text) }
         let layer = AVSampleBufferDisplayLayer()
         decoder.attach(to: layer)
-        layer.preferredDynamicRange = .standard
+        layer.setDynamicRange(high: false)
         defer { decoder.teardown() }
         let buffer = try makeTaggedPixelBuffer(primaries: bt2020, transfer: pq)
         let color = decoder.resolveColorDescription(for: buffer, controlHDR: false)
@@ -480,8 +480,8 @@ struct VideoDecoderColorTransitionTests {
         let task = try #require(decoder.finishColorProbe(probe, pixelBuffer: buffer))
         await task.value
         let row = try #require(rows.last { $0.hasPrefix("Colour probe display:") })
-        #expect(row.contains("preferredDynamicRange=high"))
-        #expect(layer.preferredDynamicRange == .high)
+        #expect(row.contains("preferredDynamicRange=\(hdrRangeLabel)"))
+        #expect(layer.dynamicRangeLabel == hdrRangeLabel)
     }
 
     @Test func hdrTransitionReprobesDisplayHeadroom() async throws {
@@ -511,7 +511,7 @@ struct VideoDecoderColorTransitionTests {
         #expect(warnings == ["HDR input has no EDR headroom: currentEDR=1.0 potentialEDR=4.0"])
         #expect(rows == [0, 1, 3, 5].map {
             "Colour display transition: after=\($0)s currentEDR=1.0 potentialEDR=4.0 "
-                + "hdrInput=true hdrOutput=false preferredDynamicRange=high"
+                + "hdrInput=true hdrOutput=false preferredDynamicRange=\(hdrRangeLabel)"
         })
     }
 

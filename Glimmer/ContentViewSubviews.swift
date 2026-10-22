@@ -212,7 +212,7 @@ struct AppIconsRow: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         // Glass, not violet: it opens a list rather than streaming.
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 14))
+        .glassSurface(in: .rect(cornerRadius: 14), interactive: true)
         .help(model.isStreaming
             ? "Finish the current stream first"
             : "Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")

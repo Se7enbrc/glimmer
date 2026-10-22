@@ -163,9 +163,12 @@ Check the separate app and helper grants when reviewing a signed build.
 | Login helper | Neither audio capability.                                                                                                     |
 
 Enhanced Security version 1 remains selected while version 2's streaming costs
-are unmeasured. Profiles are validated and embedded separately; see
-[Release](RELEASE.md). Glimmer never reads or exports raw head-pose or profile
-data.
+are unmeasured. It is a macOS 26 protection: on macOS 15 the same signed app
+runs with the hardened runtime and library validation, but without the hardened
+heap, read-only loader state or platform restrictions. Pinned TLS, the protocol
+bounds checks and the root helper's approval model are identical on both.
+Profiles are validated and embedded separately; see [Release](RELEASE.md).
+Glimmer never reads or exports raw head-pose or profile data.
 
 The stream window's legacy capture hint does not block ScreenCaptureKit. Your
 stream can appear in screen recordings or shares; Glimmer provides no DRM

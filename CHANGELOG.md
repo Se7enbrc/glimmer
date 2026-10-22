@@ -4,6 +4,10 @@
 
 ### Features
 
+- Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
+  Sequoia, windows and controls use the system's standard materials in place of
+  Liquid Glass.
+
 - iPhone and iPad releases now use the same calendar version as the Mac app.
 
 - On iPhone, use the launcher and Settings in portrait or landscape. Streams

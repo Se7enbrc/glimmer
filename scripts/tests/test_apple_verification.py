@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-"""Exercise the required CI gate: neither Apple consumer may silently disappear."""
+"""Exercise the required CI gate: no Apple consumer or the macOS 15 run may silently disappear."""
 
 import os
 from pathlib import Path
@@ -19,22 +19,22 @@ class AppleVerificationTests(unittest.TestCase):
         match = re.search(r"        run: \|\n((?:          .*\n|\n)+)", source)
         self.assertIsNotNone(match)
         env = dict(os.environ, DECIDED="success", RESULT="success", BUILD="true",
-                   ENGINE="success", IOS="success")
+                   ENGINE="success", IOS="success", SEQUOIA="success")
         env.update(overrides)
         return subprocess.run(["/bin/bash", "-euo", "pipefail", "-c", textwrap.dedent(match[1])],
                               env=env, capture_output=True, timeout=10).returncode
 
     def test_both_apps_must_pass_for_code_changes(self):
         self.assertEqual(self.gate(), 0)
-        for name in ("DECIDED", "RESULT", "ENGINE", "IOS"):
+        for name in ("DECIDED", "RESULT", "ENGINE", "IOS", "SEQUOIA"):
             for result in ("failure", "cancelled", "skipped"):
                 with self.subTest(job=name, result=result):
                     self.assertNotEqual(self.gate(**{name: result}), 0)
 
     def test_docs_skip_requires_successful_checks_and_explicit_skipped_builds(self):
-        skipped = dict(BUILD="false", ENGINE="skipped", IOS="skipped")
+        skipped = dict(BUILD="false", ENGINE="skipped", IOS="skipped", SEQUOIA="skipped")
         self.assertEqual(self.gate(**skipped), 0)
-        for job in ("ENGINE", "IOS"):
+        for job in ("ENGINE", "IOS", "SEQUOIA"):
             self.assertNotEqual(self.gate(**{**skipped, job: "failure"}), 0)
         self.assertNotEqual(self.gate(**skipped, RESULT="failure"), 0)
         self.assertNotEqual(self.gate(**skipped, DECIDED="failure"), 0)

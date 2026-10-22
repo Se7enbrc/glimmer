@@ -161,7 +161,7 @@ struct PairSheet: View {
                 Spacer()
             }
             .padding(12)
-            .glassEffect(.regular, in: .rect(cornerRadius: 10))
+            .glassSurface(in: .rect(cornerRadius: 10))
         }
     }
 
@@ -317,7 +317,7 @@ private struct HostChooser: View {
                             }
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                            .glassSurface(in: .rect(cornerRadius: 12))
                         }
                         .buttonStyle(.plain)
                     }
@@ -445,16 +445,13 @@ private struct PINTiles: View {
     let pin: String
     var body: some View {
         let digits = pin.padding(toLength: 4, withPad: " ", startingAt: 0)
-        GlassEffectContainer(spacing: 10) {
+        GlassGroup(spacing: 10) {
             HStack(spacing: 10) {
                 ForEach(Array(digits.enumerated()), id: \.offset) { _, ch in
                     Text(String(ch).trimmingCharacters(in: .whitespaces))
                         .font(.system(size: 44, weight: .semibold, design: .monospaced))
                         .frame(maxWidth: .infinity, minHeight: 78)
-                        .glassEffect(
-                            .regular.tint(Color.accentColor.opacity(0.12)),
-                            in: .rect(cornerRadius: 14)
-                        )
+                        .glassSurface(in: .rect(cornerRadius: 14), tint: Color.accentColor.opacity(0.12))
                         .allowsHitTesting(false)
                 }
             }
