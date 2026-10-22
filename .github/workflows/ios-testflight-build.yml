@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: iOS TestFlight Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Reviewed candidate branch HEAD with green Verify and CodeQL
+        required: true
+        type: string
+      marketing_version:
+        description: iOS version, for example 0.1.1
+        required: true
+        type: string
+      build_number:
+        description: New increasing Apple build number, for example 3
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  security-events: read
+
+concurrency:
+  group: glimmer-ios-testflight-build-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  EXPECTED_SHA: ${{ inputs.expected_sha }}
+  IOS_VERSION: ${{ inputs.marketing_version }}
+  IOS_BUILD_NUMBER: ${{ inputs.build_number }}
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+jobs:
+  archive:
+    if: >-
+      github.repository == 'Se7enbrc/glimmer' && github.ref != 'refs/heads/main'
+      && github.ref != format('refs/heads/{0}',
+      github.event.repository.default_branch)
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - name: Check out only this candidate workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require candidate context and exact-commit Verify and CodeQL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ios-testflight.py build-gate
+      - name:
+          Archive without distribution credentials or default-branch cache
+          privileges
+        run: |
+          python3 scripts/ios-testflight.py archive \
+            --source "$GITHUB_WORKSPACE" --archive "$RUNNER_TEMP/Glimmer.xcarchive"
+      - name: Seal source identity, archive and matching symbols
+        run: |
+          python3 scripts/ios-testflight.py seal \
+            --archive "$RUNNER_TEMP/Glimmer.xcarchive" --output "$RUNNER_TEMP/ios-unsigned"
+      - name: Persist unsigned archive and symbols for explicit selection
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-unsigned-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-unsigned/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Persist credential-free build evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name:
+            ios-build-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ios-testflight-archive.log
+            ${{ runner.temp }}/ios-testflight-toolchain.txt
+            ${{ runner.temp }}/ios-testflight-checks.json
+          retention-days: 30

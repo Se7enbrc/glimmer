@@ -1,0 +1,171 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description:
+          Reviewed source commit with green Verify and CodeQL (40 lowercase hex
+          characters)
+        required: true
+        type: string
+      archive_run_id:
+        description: Successful candidate-branch iOS TestFlight Build run ID
+        required: true
+        type: string
+      marketing_version:
+        description: iOS version, for example 0.1.1
+        required: true
+        type: string
+      build_number:
+        description:
+          New increasing Apple build number, for example 3 (never reuse an
+          uploaded number)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: glimmer-ios-testflight
+  cancel-in-progress: false
+
+env:
+  EXPECTED_SHA: ${{ inputs.expected_sha }}
+  IOS_VERSION: ${{ inputs.marketing_version }}
+  IOS_BUILD_NUMBER: ${{ inputs.build_number }}
+  ARCHIVE_RUN_ID: ${{ inputs.archive_run_id }}
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  TRUSTED_TOOLING_SHA: ${{ github.sha }}
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+jobs:
+  gate:
+    if:
+      github.repository == 'Se7enbrc/glimmer' && github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 10
+    outputs:
+      artifact: ${{ steps.resolve.outputs.artifact }}
+      attempt: ${{ steps.resolve.outputs.attempt }}
+      digest: ${{ steps.resolve.outputs.digest }}
+    permissions:
+      contents: read
+      actions: read
+      security-events: read
+    steps:
+      - name: Check out the main workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require exact-commit Verify and all CodeQL results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ios-testflight.py gate
+      - name:
+          Select the successful candidate-branch archive by immutable identity
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ios-testflight.py resolve
+
+  distribute:
+    needs: gate
+    if:
+      github.repository == 'Se7enbrc/glimmer' && github.ref == 'refs/heads/main'
+    environment: ios-testflight
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+      security-events: read
+      attestations: write
+      id-token: write
+    env:
+      ARCHIVE_ARTIFACT_ID: ${{ needs.gate.outputs.artifact }}
+      ARCHIVE_DIGEST: ${{ needs.gate.outputs.digest }}
+      ARCHIVE_ATTEMPT: ${{ needs.gate.outputs.attempt }}
+      ACTIONS_STEP_DEBUG:
+        ${{ secrets.ACTIONS_STEP_DEBUG || vars.ACTIONS_STEP_DEBUG }}
+      ACTIONS_RUNNER_DEBUG:
+        ${{ secrets.ACTIONS_RUNNER_DEBUG || vars.ACTIONS_RUNNER_DEBUG }}
+    steps:
+      - name: Check out trusted main tooling only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Pin tooling to this main workflow commit
+        run: |
+          [[ "$TRUSTED_TOOLING_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          git merge-base --is-ancestor "$TRUSTED_TOOLING_SHA" origin/main
+          git checkout --detach "$TRUSTED_TOOLING_SHA"
+      - name: Recheck approved source before accessing Apple credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ios-testflight.py gate
+      - name: Import only the selected candidate archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/ios-testflight.py import \
+            --output "$RUNNER_TEMP/ios-payload" \
+            --archive "$RUNNER_TEMP/ios-import/Glimmer.xcarchive"
+      - name:
+          Export for internal TestFlight without compilation or app execution
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          IOS_DISTRIBUTION_P12_BASE64:
+            ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          IOS_DISTRIBUTION_P12_PASSWORD:
+            ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          IOS_APP_STORE_PROFILE_BASE64:
+            ${{ secrets.IOS_APP_STORE_PROFILE_BASE64 }}
+        run: |
+          python3 scripts/ios-testflight.py export \
+            --archive "$RUNNER_TEMP/ios-import/Glimmer.xcarchive" --output "$RUNNER_TEMP/ios-export"
+      - name: Attest signed bytes and the archive containing matching symbols
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/ios-export/Glimmer.ipa
+            ${{ runner.temp }}/ios-export/receipt.json
+            ${{ runner.temp }}/ios-payload/archive.zip
+            ${{ runner.temp }}/ios-payload/manifest.json
+          push-to-registry: false
+          create-storage-record: false
+      - name: Preserve signed bytes before upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-signed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/ios-export/Glimmer.ipa
+            ${{ runner.temp }}/ios-export/receipt.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload the inspected internal-only build to Apple
+        env:
+          ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run:
+          python3 scripts/ios-testflight.py upload --output
+          "$RUNNER_TEMP/ios-export"
+      - name: Preserve delivery outcome
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-delivery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ios-export/upload.json
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Remove temporary signing and upload credentials
+        if: always()
+        run: python3 scripts/ios-testflight.py cleanup
