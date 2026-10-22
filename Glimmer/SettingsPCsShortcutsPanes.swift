@@ -16,8 +16,6 @@ import SwiftUI
 
 struct PCsPane: View {
     @Environment(AppModel.self) private var model
-    @State private var showPairSheet = false
-    @State private var initialPairAddress: String = ""
 
     var body: some View {
         ScrollView {
@@ -53,23 +51,13 @@ struct PCsPane: View {
                 // A standard button: the launcher's accent capsule is for the one
                 // thing to do there; in Settings, pairing is one action among many.
                 Button {
-                    initialPairAddress = ""
-                    showPairSheet = true
+                    model.requestPairing(for: nil, owner: .settings)
                 } label: {
                     Label("Pair a PC…", systemImage: "plus")
                 }
                 .padding(.top, 4)
             }
             .padding(20)
-        }
-        .sheet(isPresented: $showPairSheet) {
-            PairSheet(initialAddress: initialPairAddress)
-                .environment(model)
-                // Sheets on macOS 26 read better with the Tahoe glass
-                // backdrop - `.thinMaterial` matches the Settings window
-                // chrome so the PIN tiles' tinted glass layers cleanly on
-                // top instead of stacking against an opaque sheet plate.
-                .presentationBackground(.thinMaterial)
         }
     }
 }

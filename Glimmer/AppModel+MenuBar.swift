@@ -67,12 +67,6 @@ extension AppModel {
         Task { await session.setStatsOverlay(next) }
     }
 
-    /// Opens the launcher's pair sheet: Pair Again… for `host`, or Pair a PC… for nil.
-    func requestPairing(for host: Host?) {
-        pairSheetHost = host
-        pairSheetShown = true
-    }
-
     /// Refresh Connection Details about once a second while the menu is open.
     func startMenuBarRefresh() {
         stopMenuBarRefresh()

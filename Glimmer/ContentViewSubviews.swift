@@ -237,9 +237,7 @@ struct SpecChipsRow: View {
 // MARK: - Empty pairing state
 
 struct EmptyPairingState: View {
-    /// Owned by MainWindow so its `.sheet` survives the swap to ConnectSurface
-    /// the moment pairing fills `model.hosts` - see MainWindow.showPair.
-    @Binding var showPair: Bool
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         // No leading/trailing Spacers: they centred this state inside a window
@@ -264,7 +262,7 @@ struct EmptyPairingState: View {
             }
 
             Button {
-                showPair = true
+                model.requestPairing(for: nil)
             } label: {
                 Label("Pair a PC…", systemImage: "plus.circle.fill")
                     .frame(minWidth: 260)

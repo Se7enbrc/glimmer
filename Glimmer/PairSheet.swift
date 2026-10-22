@@ -93,7 +93,7 @@ struct PairSheet: View {
         .frame(width: 480)
         // Float above all other Glimmer windows so the PIN being read off isn't
         // hidden behind the launcher or Settings. Reverts on dismiss.
-        .background(FloatingWindowLevel())
+        .background(FloatingWindowLevel { model.pairSheetWindow = $0 })
         .sensoryFeedback(.success, trigger: paired)
         .onDisappear { cancelPairing() }
     }
@@ -426,13 +426,18 @@ private struct HostChooser: View {
 /// Raises its hosting NSWindow to `.floating` while present so the pairing
 /// sheet stays above the launcher + Settings windows.
 private struct FloatingWindowLevel: NSViewRepresentable {
+    let onWindow: (NSWindow) -> Void
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { view.window?.level = .floating }
+        DispatchQueue.main.async {
+            if let window = view.window { window.level = .floating; onWindow(window) }
+        }
         return view
     }
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { nsView.window?.level = .floating }
+        DispatchQueue.main.async {
+            if let window = nsView.window { window.level = .floating; onWindow(window) }
+        }
     }
 }
 

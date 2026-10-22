@@ -131,7 +131,9 @@ struct MenuBarPanel: View {
                 let action = model.streamErrorAction
                 actionRow(action.title, systemImage: action.systemImage) {
                     model.runStreamErrorAction()
-                    if action == .pairAgain { openLauncher() } else if action == .tryAgain { activate() }
+                    if action == .pairAgain {
+                        if model.pairSheetOwner == .launcher { openLauncher() }
+                    } else if action == .tryAgain { activate() }
                 }
             }
             actionRow("Dismiss", systemImage: "xmark") { model.nativeStreamError = nil }
@@ -399,10 +401,10 @@ struct MenuBarPanel: View {
         .padding(.horizontal, 4)
     }
 
-    /// The pair sheet lives on the launcher, so open it there.
+    /// A new menu request opens the launcher; an existing flow keeps its window.
     private func pair(_ host: Host?) {
         model.requestPairing(for: host)
-        openLauncher()
+        if model.pairSheetOwner == .launcher { openLauncher() }
     }
 
     private func openLauncher() {

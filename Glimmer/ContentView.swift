@@ -24,16 +24,12 @@ struct MainWindow: View {
     @State private var focusCells: [LauncherFocus] = []
     @State private var showAWDLPrompt = false
     @State private var awdlPromptChecked = false
-    /// Lifted out of EmptyPairingState so the sheet survives the swap to
-    /// ConnectSurface the instant pairing fills `model.hosts` - the sheet used
-    /// to hang off the empty state itself and vanish mid-handshake success.
-    @State private var showPair = false
 
     var body: some View {
         @Bindable var model = model
         return Group {
             if model.hosts.isEmpty {
-                EmptyPairingState(showPair: $showPair).transition(.opacity.animation(Motion.fade))
+                EmptyPairingState().transition(.opacity.animation(Motion.fade))
             } else {
                 ConnectSurface(focus: $launcherFocus).transition(.opacity.animation(Motion.fade))
             }
@@ -59,9 +55,6 @@ struct MainWindow: View {
             model.setHIDDiscovery(true, for: .launcher)
         }
         .onDisappear { model.setHIDDiscovery(false, for: .launcher) }
-        .sheet(isPresented: $showPair) {
-            PairSheet().environment(model)
-        }
         // One-time proactive offer when a DualSense is connected (see
         // maybeOfferRawHID) - explains the feature before macOS's Input
         // Monitoring prompt; declining never re-asks.
@@ -93,11 +86,7 @@ struct MainWindow: View {
         .sheet(isPresented: $showAWDLPrompt) {
             AWDLEnablePrompt(manager: AWDLHelperManager.shared)
         }
-        // Pair a PC… from the menu bar, and Pair Again… from the menu bar, the
-        // Stream button, the banner and the Trust needed chip land here.
-        .sheet(isPresented: $model.pairSheetShown) {
-            PairSheet(repairing: model.pairSheetHost).environment(model)
-        }
+        .modifier(PairingPresentation(owner: .launcher))
         .task {
             guard !awdlPromptChecked else { return }
             awdlPromptChecked = true
@@ -173,7 +162,7 @@ struct MainWindow: View {
             DispatchQueue.main.async { navigateLauncher(command) }
             return
         }
-        let modal = showPair || showAWDLPrompt || model.pairSheetShown || model.showRawHIDPrompt
+        let modal = showAWDLPrompt || model.pairSheetShown || model.showRawHIDPrompt
             || model.showHIDPermissionPrompt || model.pendingTakeover != nil
         if command == .dismiss {
             if modal { model.launcherController.postKey(.dismiss) }
@@ -230,7 +219,7 @@ struct StreamMenu: View {
         case .pairAgain:
             Button("Pair Again…") {
                 model.requestPairing(for: host)
-                openWindow(id: "main")
+                if model.pairSheetOwner == .launcher { openWindow(id: "main") }
             }
         case .cancelConnection: Button("Cancel Connection") { model.cancelConnect() }
         case .backToStream:

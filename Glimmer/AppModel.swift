@@ -207,6 +207,8 @@ final class AppModel {
     var menuResolution: (width: Int, height: Int)?
     var menuBarControllers: [MenuBarController] = []
     var pairSheetShown = false
+    var pairSheetOwner: PairingPresentationOwner?
+    @ObservationIgnored weak var pairSheetWindow: NSWindow?
     /// True from a controller's first launcher command until focus clears.
     var launcherControllerNavigating = false
     var pairSheetHost: Host?

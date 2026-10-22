@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- Opening pairing from another window brings the current pairing flow forward.
 - The menu bar keeps the streaming PC's name and network when another PC is
   selected.
 - The live stream's mode stays accurate when settings for the next stream

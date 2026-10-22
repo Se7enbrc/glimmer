@@ -138,6 +138,9 @@ struct PairAgainSheetTests {
         model.requestPairing(for: tower)
         #expect(model.pairSheetShown && model.pairSheetHost == tower)
         model.requestPairing(for: nil)
+        #expect(model.pairSheetShown && model.pairSheetHost == tower)
+        model.finishPairingPresentation(owner: .launcher)
+        model.requestPairing(for: nil)
         #expect(model.pairSheetShown && model.pairSheetHost == nil)
     }
 
