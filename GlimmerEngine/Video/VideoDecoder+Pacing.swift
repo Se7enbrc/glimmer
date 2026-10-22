@@ -263,14 +263,29 @@ extension VideoDecoder {
     }
 
     nonisolated func performRendererSubmission(
-        _ submission: RendererSubmission, enqueue: (AVSampleBufferVideoRenderer) -> Void
+        _ submission: RendererSubmission, sampleBuffer: CMSampleBuffer? = nil, repainting: Bool = false,
+        enqueue: (AVSampleBufferVideoRenderer) -> Void
     ) -> Bool {
         displayLayerLock.lock(); defer { displayLayerLock.unlock() }
         guard submission.generation == rendererSubmissionGeneration,
               submission.modeGeneration == presentationModeGeneration.load(ordering: .acquiring),
               _sampleBufferRenderer === submission.renderer, isStreaming, !presentSuppressed else { return false }
+        let pts = sampleBuffer.map { CMSampleBufferGetPresentationTimeStamp($0) }
+        if let pts, !presentationTimestampIsAdmissible(pts, repainting: repainting) { return false }
         enqueue(submission.renderer)
+        if let pts, pts.isNumeric, !repainting { lastAdmittedPTS = pts }
         return true
+    }
+
+    /// The caller holds displayLayerLock; only accepted images advance the ordering watermark.
+    private nonisolated func presentationTimestampIsAdmissible(_ pts: CMTime, repainting: Bool) -> Bool {
+        guard pts.isNumeric else { return true }
+        guard let previous = lastAdmittedPTS else { return !repainting }
+        if repainting { return CMTimeCompare(pts, previous) == 0 }
+        if pts.epoch != previous.epoch { return pts.epoch > previous.epoch }
+        // RTP wraps at 32 bits; a small positive modular step is forward even across zero.
+        let delta = Self.rtpTimestamp(from: pts) &- Self.rtpTimestamp(from: previous)
+        return Int32(bitPattern: delta) > 0
     }
 
     /// Invalidate prepared submissions before flushing; new frames may follow the returned call.
@@ -343,7 +358,7 @@ extension VideoDecoder {
         // Keep PTS for pacing and telemetry, but display this decoded image when released.
         Self.markForImmediateDisplay(sampleBuffer)
         let tracker = FrameTimingTracker.shared
-        guard performRendererSubmission(submission, enqueue: { $0.enqueue(sampleBuffer) }) else { return false }
+        guard performRendererSubmission(submission, sampleBuffer: sampleBuffer, enqueue: { $0.enqueue(sampleBuffer) }) else { return false }
         let enqueueNanos = tracker?.now()
         let priorRejections = consecutiveBackpressureDrops.exchange(0, ordering: .relaxed)
         sampleHUDBackdrop(sampleBuffer)

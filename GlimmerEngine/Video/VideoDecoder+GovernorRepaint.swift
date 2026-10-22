@@ -35,7 +35,8 @@ extension VideoDecoder {
             return
         }
         Self.markForImmediateDisplay(repaint)
-        guard performRendererSubmission(submission, enqueue: { $0.enqueue(repaint) }) else { return }
+        guard performRendererSubmission(submission, sampleBuffer: repaint, repainting: true,
+                                        enqueue: { $0.enqueue(repaint) }) else { return }
         recordRendererDecision(.repaintEnqueued, sampleBuffer: sampleBuffer)
     }
 

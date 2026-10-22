@@ -161,6 +161,7 @@ public final class VideoDecoder {
     let displayLayerLock = NSLock()
     nonisolated(unsafe) var displayAttachmentGeneration: UInt64 = 0 // Guarded by displayLayerLock.
     nonisolated(unsafe) var rendererSubmissionGeneration: UInt64 = 0 // Guarded by displayLayerLock.
+    nonisolated(unsafe) var lastAdmittedPTS: CMTime? // Guarded by displayLayerLock.
     nonisolated(unsafe) var _displayLayer: AVSampleBufferDisplayLayer?
     // The layer's renderer, captured with the layer: it is safe off-main, but
     // the layer property that vends it is main-actor only.
@@ -329,6 +330,7 @@ public final class VideoDecoder {
             displayLayerLock.lock(); defer { displayLayerLock.unlock() }
             if streamingState.exchange(newValue, ordering: .acquiringAndReleasing) != newValue {
                 rendererSubmissionGeneration &+= 1
+                lastAdmittedPTS = nil
             }
         }
     }

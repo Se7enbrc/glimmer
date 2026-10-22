@@ -95,6 +95,116 @@ struct VideoDecoderEnqueueTests {
         #expect(!extractedPresentation(try VideoDecoderLifecycleTests.readySample()))
     }
 
+    enum PresentationPath: CaseIterable {
+        case tick, submit, warm, direct
+    }
+
+    @Test(arguments: PresentationPath.allCases)
+    func rendererAdmissionRejectsOlderFramesAcrossCompletedSubmissions(path: PresentationPath) throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
+        defer { decoder.teardown() }
+        let pacer = try makeTestPacer()
+        let clock = ScriptedClock()
+        pacer.mediaTime = { clock.seconds }
+        let accepted = OSAllocatedUnfairLock(initialState: [Int64]())
+        let present: @Sendable (CMSampleBuffer) -> Bool = { sample in
+            guard let submission = decoder.rendererSubmission() else { return false }
+            let value = CMSampleBufferGetPresentationTimeStamp(sample).value
+            return decoder.performRendererSubmission(submission, sampleBuffer: sample) { _ in
+                accepted.withLock { $0.append(value) }
+            }
+        }
+        pacer.willPresent = present
+        pacer.variableRefreshEnabled = path == .tick
+        if path == .warm { pacer.armWarmHandover() }
+        for value: Int64 in [1500, 750, 2250] {
+            let sample = try orderedSample(value: value)
+            let target = clock.seconds + 1.0 / 120
+            pacer.pacingQueue.sync {
+                if path == .direct {
+                    _ = present(sample)
+                } else {
+                    pacer.lastPresentMediaTime = target - 1.0 / 120
+                    pacer.liveness.lastTickTargetMediaTime = target
+                    pacer.refreshTelemetry.lastRefreshIntervalSeconds = 1.0 / 120
+                    pacer.submit(sample, hostPTS: CMSampleBufferGetPresentationTimeStamp(sample))
+                    if path == .tick {
+                        pacer.releaseDueFrame(targetTimestamp: target, vsyncInterval: 1.0 / 120, tickScanout: target)
+                    }
+                }
+            }
+            pacer.pacingQueue.sync {}
+            clock.advance(.milliseconds(20))
+        }
+        #expect(accepted.withLock { $0 } == [1500, 2250])
+    }
+
+    @Test func rendererOrderingAcceptsWrapAndNewEpochButRejectsLateOldEpochs() throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
+        defer { decoder.teardown() }
+        let submission = try #require(decoder.rendererSubmission())
+        var accepted: [Int64] = []
+        let values: [(Int64, Int64)] = [(4_294_967_000, 0), (750, 0), (4_294_967_100, 0),
+                                      (0, 1), (1500, 0), (750, 1)]
+        for (value, epoch) in values {
+            let sample = try orderedSample(value: value, epoch: epoch)
+            _ = decoder.performRendererSubmission(submission, sampleBuffer: sample) { _ in accepted.append(value) }
+        }
+        #expect(accepted == [4_294_967_000, 750, 0, 750])
+    }
+
+    @Test func rejectedSubmissionsAndGovernorRepaintsPreserveTheAdmissionWatermark() throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
+        defer { decoder.teardown() }
+        let retired = try #require(decoder.rendererSubmission())
+        decoder.flushRenderer(retired.renderer)
+        #expect(!decoder.performRendererSubmission(retired, sampleBuffer: try orderedSample(value: 9000), enqueue: { _ in }))
+        let current = try #require(decoder.rendererSubmission())
+        let frame = try orderedSample(value: 1500)
+        #expect(decoder.performRendererSubmission(current, sampleBuffer: frame, enqueue: { _ in }))
+        #expect(decoder.performRendererSubmission(current, sampleBuffer: frame, repainting: true, enqueue: { _ in }))
+        #expect(!decoder.performRendererSubmission(current, sampleBuffer: frame, enqueue: { _ in }))
+        let newer = try orderedSample(value: 2250)
+        #expect(decoder.performRendererSubmission(current, sampleBuffer: newer, enqueue: { _ in }))
+        #expect(!decoder.performRendererSubmission(current, sampleBuffer: frame, repainting: true, enqueue: { _ in }))
+        decoder.isStreaming = false
+        decoder.isStreaming = true
+        let restarted = try #require(decoder.rendererSubmission())
+        #expect(decoder.performRendererSubmission(restarted, sampleBuffer: frame, enqueue: { _ in }))
+    }
+
+    @Test(arguments: [false, true])
+    func decodedEpochTravelsWithTheImage(paced: Bool) throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
+        defer { decoder.teardown() }
+        let pacer = try makeTestPacer()
+        pacer.variableRefreshEnabled = true
+        if paced { decoder.framePacer = pacer }
+        decoder.enqueueDecodedFrame(try makeTaggedPixelBuffer(), hostPTS: pts, decodeEpoch: 7)
+        if paced {
+            let sample = try #require(pacer.queue.first?.sampleBuffer)
+            #expect(CMSampleBufferGetPresentationTimeStamp(sample).epoch == 7)
+            #expect(VideoDecoder.rtpTimestamp(from: CMSampleBufferGetPresentationTimeStamp(sample)) == 90_000)
+        } else {
+            #expect(decoder.lastAdmittedPTS?.epoch == 7)
+            #expect(decoder.lastAdmittedPTS?.value == 90_000)
+        }
+    }
+
+    private func orderedSample(value: Int64, epoch: Int64 = 0) throws -> CMSampleBuffer {
+        let source = try VideoDecoderLifecycleTests.readySample()
+        var timing = CMSampleTimingInfo(duration: .invalid,
+                                       presentationTimeStamp: CMTime(value: value, timescale: 90_000,
+                                                                    flags: .valid, epoch: epoch),
+                                       decodeTimeStamp: .invalid)
+        var sample: CMSampleBuffer?
+        let status = CMSampleBufferCreateCopyWithNewTiming(allocator: kCFAllocatorDefault,
+                                                          sampleBuffer: source, sampleTimingEntryCount: 1,
+                                                          sampleTimingArray: &timing, sampleBufferOut: &sample)
+        try #require(status == noErr)
+        return try #require(sample)
+    }
+
     @Test func hiddenDirectPresentationDoesNotReachTheRenderer() throws {
         let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
         defer { decoder.teardown() }

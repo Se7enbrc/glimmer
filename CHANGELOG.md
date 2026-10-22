@@ -68,6 +68,7 @@
 - Keep retrying video recovery when the first frame never reaches the screen.
 - Avoid a backward frame flash when video playback switches into or out of
   recovery.
+- Prevent delayed video frames from briefly replacing a newer image.
 
 - Keep pending video frames bounded if presentation briefly stalls, and release
   them promptly when the stream stops or resets.
