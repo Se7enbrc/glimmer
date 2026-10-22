@@ -1,10 +1,11 @@
 # Set up the PC for iPhone and iPad
 
 Follow the [shared PC setup guide](../../docs/HOST_SETUP.md) to install
-Sunshine, copy the [ready-made display modes](../../docs/vddsettings.xml), and
-let Sunshine select the right size and refresh rate. The same file serves Mac,
-iPhone and iPad. The guide also includes an optional Apollo path without an XML
-file.
+Sunshine, copy the [iPhone/iPad display modes](../../docs/vdd/iphone-ipad.xml),
+and let Sunshine select the right size and refresh rate. For a mix of Mac,
+iPhone and iPad, use
+[all-glimmer-clients.xml](../../docs/vdd/all-glimmer-clients.xml) instead. The
+guide also includes an optional Apollo path without an XML file.
 
 In Settings → Quality, **Native · 120 fps** requests this display's landscape
 pixel size rounded down to even dimensions, capped to its maximum frame rate.

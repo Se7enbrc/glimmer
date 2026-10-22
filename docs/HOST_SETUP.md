@@ -6,8 +6,8 @@ icon: desktop
 # Give your PC a display to stream
 
 Set up Sunshine and one virtual display for your Mac, iPhone and iPad. The
-[sample file](vddsettings.xml) includes their display sizes, so changing devices
-does not mean editing the PC's modes again.
+[default sample](vdd/all-glimmer-clients.xml) includes their display sizes, so
+changing devices does not mean editing the PC's modes again.
 
 ## Windows: install Sunshine and the display
 
@@ -28,11 +28,24 @@ needs the manual installation path. Stock Sunshine works with this setup.
 
 {% endhint %}
 
+### Pick your file
+
+Use **all-glimmer-clients.xml** if unsure. Each file is a complete replacement
+for the same driver settings file, with automatic GPU selection.
+
+| Device type                                           | File                                                   | Modes |
+| ----------------------------------------------------- | ------------------------------------------------------ | ----- |
+| Mixed Mac, iPhone and iPad                            | [all-glimmer-clients.xml](vdd/all-glimmer-clients.xml) | 90    |
+| MacBook or iMac built-in display                      | [mac-builtin.xml](vdd/mac-builtin.xml)                 | 26    |
+| Studio Display, Studio Display XDR or Pro Display XDR | [mac-apple-displays.xml](vdd/mac-apple-displays.xml)   | 10    |
+| Standard external display                             | [standard-external.xml](vdd/standard-external.xml)     | 90    |
+| iPhone or iPad, including iPhone Duo                  | [iphone-ipad.xml](vdd/iphone-ipad.xml)                 | 74    |
+
 ### Copy the ready-made modes
 
 1. Stop any active streams.
 2. Back up `C:\VirtualDisplayDriver\vdd_settings.xml`.
-3. Open [vddsettings.xml](vddsettings.xml) and copy the entire file.
+3. Open your chosen file above and copy the entire file.
 4. Replace the contents of `C:\VirtualDisplayDriver\vdd_settings.xml` with the
    sample, saving as UTF-8. Keep the underscore in the PC's filename and make
    sure the editor has not added `.txt`.
@@ -53,6 +66,17 @@ update to 25.7.23 before using this file. If Windows still shows the old modes
 after Reload Driver, restart the PC before continuing.
 
 {% endhint %}
+
+### Combine two files
+
+1. Copy the `<resolution>` blocks from one file into the other's `<resolutions>`
+   section, before `</resolutions>`.
+2. Merge blocks with the same width and height, keeping each `<refresh_rate>`
+   only once for that size.
+3. Count every `<refresh_rate>` as one mode. Remove modes you do not need until
+   the total is **90 or fewer**, then update the header count. Keep `<global />`
+   empty; global rates multiply across every resolution.
+4. Save the combined file as `vdd_settings.xml` and use **Reload Driver**.
 
 ### Let Sunshine switch the display
 
@@ -107,13 +131,13 @@ small. On a 16-inch MacBook Pro, Balanced sends **1728 × 1116**, not 1728
 × 1117. On Mac, Custom in a window caps the frame rate to the display; full
 screen keeps your chosen rate.
 
-The sample covers the
-[listed Apple displays and common custom modes](VIRTUAL_DISPLAY_MODES.md). The
-file contains 90 modes within a 96-mode budget because upstream reports display
-initialization failures with larger lists. Arbitrary Custom values and other
-external displays may need replacement modes or Apollo. iPhone and iPad have no
-half-resolution or Custom choice. A listed mode does not promise that the PC can
-encode it fast enough.
+The files cover the
+[listed Apple displays and selected custom modes](VIRTUAL_DISPLAY_MODES.md).
+Each stays within 90 modes because larger lists can stop the display from
+starting. Arbitrary Custom values and other external displays may need
+replacement modes or Apollo. The iPhone/iPad sample includes half sizes, but
+Glimmer on iPhone and iPad has no half-resolution or Custom choice. A listed
+mode does not promise that the PC can encode it fast enough.
 
 {% endhint %}
 
