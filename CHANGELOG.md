@@ -1,16 +1,5 @@
 # Changelog
 
-## 2026.10.9 - Unreleased
-
-### Fixes
-
-- On iPhone and iPad, a paired PC stays available in Settings even if loading
-  its apps fails or is cancelled, so you can still forget it and pair again.
-- Stream failures on iPhone and iPad explain blocked ports, protected content
-  and pairing recovery instead of showing generic connection advice.
-- Controller input on iPhone and iPad no longer waits for interface work, and
-  callbacks queued before leaving play cannot replay after you resume.
-
 ## 2026.10.8 - Unreleased
 
 ### Features
@@ -73,6 +62,13 @@
 - The readiness chip shows Ready and latency when the PC is reachable.
 
 ### Bug fixes
+
+- On iPhone and iPad, a paired PC stays available in Settings even if loading
+  its apps fails or is cancelled, so you can still forget it and pair again.
+- Stream failures on iPhone and iPad explain blocked ports, protected content
+  and pairing recovery instead of showing generic connection advice.
+- Controller input on iPhone and iPad no longer waits for interface work, and
+  callbacks queued before leaving play cannot replay after you resume.
 
 - Keep pending video frames bounded if presentation briefly stalls, and release
   them promptly when the stream stops or resets.
