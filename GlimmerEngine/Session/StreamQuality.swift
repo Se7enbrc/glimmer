@@ -5,7 +5,7 @@
 import Foundation
 
 /// Shared measured quality math; native display probing and saved preferences belong to the shell.
-package enum StreamQuality {
+public enum StreamQuality {
 
     /// Preserve the measured high-refresh curve and the wire budget before codec/FEC discounts.
     package static let frameRateExponent = 0.75
@@ -115,7 +115,8 @@ package enum StreamQuality {
         return last.ratio
     }
 
-    package static func encodableSize(width: Int, height: Int) -> (width: Int, height: Int) {
+    /// Encoders need even dimensions; round down without exceeding the requested size.
+    public static func encodableSize(width: Int, height: Int) -> (width: Int, height: Int) {
         (width & ~1, height & ~1)
     }
 

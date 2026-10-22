@@ -27,8 +27,10 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
               nativePixels.width < CGFloat(Int32.max), nativePixels.height < CGFloat(Int32.max),
               maximumFramesPerSecond > 0 else { throw Failure.displayUnavailable }
         let native = self == .native120
-        return StreamFormat(width: native ? Int(max(nativePixels.width, nativePixels.height)) : 1920,
-                            height: native ? Int(min(nativePixels.width, nativePixels.height)) : 1080,
+        let size = StreamQuality.encodableSize(
+            width: native ? Int(max(nativePixels.width, nativePixels.height)) : 1920,
+            height: native ? Int(min(nativePixels.width, nativePixels.height)) : 1080)
+        return StreamFormat(width: size.width, height: size.height,
                             fps: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond))
     }
 }
