@@ -20,6 +20,8 @@ public final class StatsOverlayLayer {
     static let coreKinds: [StatsRow.Kind] = [.renderFps, .latency, .bitrate]
 
     weak var displayView: NSView?
+    var accessibleRows: [StatsRow.Kind: NSAccessibilityElement] = [:]
+    let accessibleCap = NSAccessibilityElement()
     var videoSize: CGSize = .zero {
         didSet {
             if oldValue != videoSize, let host = layer.superlayer { layoutInHost(host) }
@@ -181,6 +183,7 @@ public final class StatsOverlayLayer {
         if layer.position != position { layer.position = position }
         let transform = CGAffineTransform(scaleX: scale, y: scale)
         if layer.affineTransform() != transform { layer.setAffineTransform(transform) }
+        updateAccessibilityFrames()
         let contentsScale = displayView?.window?.backingScaleFactor ?? host.contentsScale
         if layer.contentsScale != contentsScale {
             layer.contentsScale = contentsScale
@@ -240,6 +243,7 @@ public final class StatsOverlayLayer {
         }
         if let host = layer.superlayer { layoutInHost(host) }
         for sub in rowViews.values { sub.trace?.draw() }
+        updateAccessibleRows(rows, cap: capText)
     }
 
     private func measure(_ row: StatsRow) {
@@ -268,6 +272,7 @@ public final class StatsOverlayLayer {
     public func setVisible(_ visible: Bool) {
         guard visible != isVisible else { return }
         isVisible = visible
+        updateAccessibleRows(orderedKinds.compactMap { rowViews[$0]?.lastRender }, cap: capText)
         visibilityGeneration &+= 1
         let generation = visibilityGeneration
         if visible {

@@ -9,6 +9,28 @@ import Testing
 
 @MainActor
 struct StatsOverlayVisibilityTests {
+    @Test func visibleMetricsExposeStableAccessibilityChildrenAndHideWithTheHUD() throws {
+        let view = DisplayContainerView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
+        view.wantsLayer = true
+        let video = try #require(view.layer)
+        let overlay = StatsOverlayLayer()
+        overlay.displayView = view
+        overlay.attach(to: video)
+        var snapshot = StreamStatsSnapshot()
+        snapshot.rttMs = 3.5
+        overlay.update(snapshot: snapshot, enabled: [.latency], targetFps: 60)
+        #expect((view.accessibilityChildren() ?? []).isEmpty)
+        overlay.setVisible(true)
+        let child = try #require(view.accessibilityChildren()?.first as? NSAccessibilityElement)
+        #expect(child.accessibilityLabel() == "Latency")
+        #expect(child.accessibilityValue() as? String == "3.50 ms")
+        snapshot.rttMs = 4.5
+        overlay.update(snapshot: snapshot, enabled: [.latency], targetFps: 60)
+        #expect(view.accessibilityChildren()?.first as? NSAccessibilityElement === child)
+        #expect(child.accessibilityValue() as? String == "4.50 ms")
+        overlay.setVisible(false)
+        #expect((view.accessibilityChildren() ?? []).isEmpty)
+    }
 
     @Test func visibilityUsesAnExplicitFadeAndInkChangesNeverSnapshotLiveValues() throws {
         let overlay = StatsOverlayLayer()

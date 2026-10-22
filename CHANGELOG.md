@@ -5,6 +5,7 @@
 ### Bug fixes
 
 - Custom resolution and refresh-rate fields have distinct VoiceOver labels.
+- VoiceOver can read the metrics shown in Stream stats.
 - Pointer shortcut help now describes capture and release in full screen as well
   as a window.
 
