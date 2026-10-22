@@ -160,6 +160,10 @@ package final class FramePacer: @unchecked Sendable {
     var queue: [Entry] = []
     // The lock owns at most one pending direct handoff; queued work captures no sample buffers.
     var pendingSubmitRelease: SubmitRelease?
+    var pendingTickRelease: TickRelease? // Guarded by lock; only the newest pending opportunity survives.
+    var tickReleaseScheduled = false // Guarded by lock.
+    // Clock injection is configured before ticks or submissions begin.
+    var mediaTime: @Sendable () -> CFTimeInterval = { CACurrentMediaTime() }
     var submitReleaseScheduled = false
 
     /// Learned stream inter-frame interval in seconds, derived from the median

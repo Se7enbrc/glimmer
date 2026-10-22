@@ -24,6 +24,8 @@ struct FramePacerTickTests {
     /// One tick on scripted values, with its dispatched release drained.
     private func tick(_ pacer: FramePacer, target: Double, duration: Double? = nil, timestamp: Double? = nil) {
         let duration = duration ?? interval
+        let mediaNow = timestamp ?? target - duration
+        pacer.mediaTime = { mediaNow }
         pacer.handleTick(target: target, duration: duration, timestamp: timestamp ?? target - duration)
         pacer.pacingQueue.sync {}
     }
