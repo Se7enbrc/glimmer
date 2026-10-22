@@ -262,6 +262,10 @@ public final class VideoDecoder {
     // Epoch buckets distinguish queued work from VT-owned work; all access uses inFlightDecodeLock.
     nonisolated(unsafe) var decodeReservations: [UInt: DecodeReservations] = [:]
     nonisolated(unsafe) var latestReservedEpoch: UInt = 0
+    // Pending payload ownership and its single drain are guarded by inFlightDecodeLock.
+    nonisolated(unsafe) var pendingDecodes: [PendingDecode] = []
+    nonisolated(unsafe) var decodeDrainScheduled = false
+    nonisolated(unsafe) var pendingDecodeTimingReset = false
     let inFlightDecodeLock = NSLock()
     /// Backlog bound - sized to ABSORB a VPN arrival burst, not to gate
     /// steady-state depth. Over a high-loss/high-jitter VPN, frames arrive

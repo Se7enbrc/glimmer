@@ -136,6 +136,40 @@ struct VideoDecoderSessionFactoryTests {
         decoder.teardown()
     }
 
+    @Test func repeatedStallRecoveryReleasesSupersededPayloadsWhileQueueIsBlocked() async {
+        let factory = RefusingFactory()
+        let decoder = VideoDecoder(makeSession: factory.make)
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_H264
+        decoder.isStreaming = true
+        decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 5
+        let liveBytes = Mutex<Int>(0)
+        let payloadSize = 64 * 1_024
+        decoder.decodeQueue.suspend()
+        for cycle in 0..<20 {
+            for frame in 0..<decoder.maxInFlightDecodes {
+                let storage = UnsafeMutableRawPointer.allocate(byteCount: payloadSize, alignment: 16)
+                storage.initializeMemory(as: UInt8.self, repeating: 0, count: payloadSize)
+                liveBytes.withLock { $0 += payloadSize }
+                let payload = Data(bytesNoCopy: storage, count: payloadSize,
+                                   deallocator: .custom { @Sendable pointer, count in
+                    pointer.deallocate()
+                    liveBytes.withLock { $0 -= count }
+                })
+                _ = decoder.decodeAssembledFrame(
+                    pictureData: payload, newSps: frame == 0 ? sps : nil, newPps: frame == 0 ? pps : nil,
+                    newVps: nil, isIDR: frame == 0, rtpTimestamp: UInt32(cycle * 100 + frame),
+                    totalLength: Int32(payloadSize))
+            }
+        }
+        #expect(liveBytes.withLock { $0 } <= decoder.maxInFlightDecodes * payloadSize)
+        decoder.decodeQueue.resume()
+        await decoder.decodeQueue.drainForTest()
+        #expect(liveBytes.withLock { $0 } == 0)
+        #expect(factory.calls.count == 1)
+        #expect(decoder.inFlightDecodeBacklog() == 0)
+        decoder.teardown()
+    }
+
     @Test func aRefusedSessionReleasesItsCallbackRetain() throws {
         let factory = RefusingFactory()
         weak var released: VideoDecoder?

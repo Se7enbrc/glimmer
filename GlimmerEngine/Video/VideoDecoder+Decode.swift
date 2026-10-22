@@ -103,13 +103,11 @@ extension VideoDecoder {
             self.spsData = nil
             self.ppsData = nil
             self.vpsData = nil
-            // Reset the backlog counter: the session is gone, so no further VT
-            // output callbacks will fire to drain whatever was in flight. This
-            // runs on the serial decodeQueue after any already-queued async
-            // decode block, so the count reflects only frames VT may still be
-            // holding - which invalidate above just discarded.
+            // Invalidation retires VT ownership; discard any pending batch behind this cleanup too.
             self.inFlightDecodeLock.lock()
             self.inFlightDecodes = 0
+            self.pendingDecodes.removeAll(keepingCapacity: true)
+            self.pendingDecodeTimingReset = false
             self.decodeReservations.removeAll(keepingCapacity: true)
             self.lastVtDecodeFailed = false
             self.inFlightDecodeLock.unlock()
@@ -118,9 +116,8 @@ extension VideoDecoder {
 
     // MARK: - Submit
 
-    /// One frame's decode inputs, captured on the receive thread and carried into the async
-    /// decode block as a single value.
-    struct PendingDecode {
+    /// Payloads stay in the bounded pending queue until the serial decoder takes ownership.
+    struct PendingDecode: Sendable {
         let pictureData: Data
         let newSps: Data?
         let newPps: Data?
@@ -131,11 +128,7 @@ extension VideoDecoder {
         /// IDR epoch the frame was fed under; rides VT's frame refcon so a
         /// failure can be judged stale or current (`armResyncAfterDecodeError`).
         let epoch: UInt
-        /// Stall-escalation verdict (see `reserveDecodeSlot`): the wedged VT
-        /// session must be REPLACED with this IDR, bypassing the byte-equal
-        /// param-set shortcut - a recovery IDR carries the SAME SPS/PPS, so
-        /// without the force the "rebuild" would no-op straight back into the
-        /// hosed session. false on every normal frame.
+        /// Recovery must replace a wedged session even when the IDR repeats identical parameter sets.
         var forceSessionRecreate: Bool = false
     }
 
@@ -245,20 +238,48 @@ extension VideoDecoder {
             isIDR: isIDR, rtpTimestamp: rtpTimestamp, totalLength: totalLength, epoch: epoch,
             forceSessionRecreate: forceSessionRecreate)
 
-        decodeQueue.async { [self] in
-            // Teardown gate: stop() may have flipped isStreaming off (and
-            // handleCleanup may be queued behind us) between the receive thread
-            // returning DR_OK and this block running. Skip VT work and DON'T
-            // request an IDR against a backend that's tearing down - just
-            // release the slot we reserved so the counter stays balanced.
-            guard self.isStreaming else {
-                self.releaseInFlightDecode(epoch: pending.epoch)
-                return
-            }
-            self.runDecodeOnQueue(pending)
-        }
-
+        scheduleDecodeDrain(adding: pending)
         return StreamProtocol.DR_OK
+    }
+
+    nonisolated func scheduleDecodeDrain(adding pending: PendingDecode? = nil) {
+        let scheduleDrain = inFlightDecodeLock.withLock {
+            if let pending {
+                guard (decodeReservations[pending.epoch]?.queued ?? 0) > 0 else { return false }
+                pendingDecodes.append(pending)
+            }
+            guard !decodeDrainScheduled else { return false }
+            decodeDrainScheduled = true
+            return true
+        }
+        if scheduleDrain { decodeQueue.async { [self] in drainPendingDecodes() } }
+    }
+
+    private nonisolated func drainPendingDecodes() {
+        // Yield between bounded batches so lifecycle and control work cannot starve behind a live stream.
+        for _ in 0..<maxInFlightDecodeCeiling {
+            let work = takePendingDecode()
+            if work.resetTimings { statsCollector.dropPendingDecodeSubmits() }
+            guard let pending = work.frame else { return }
+            guard isStreaming else {
+                releaseInFlightDecode(epoch: pending.epoch)
+                continue
+            }
+            runDecodeOnQueue(pending)
+        }
+        decodeQueue.async { [self] in drainPendingDecodes() }
+    }
+
+    private nonisolated func takePendingDecode() -> (frame: PendingDecode?, resetTimings: Bool) {
+        inFlightDecodeLock.withLock {
+            let resetTimings = pendingDecodeTimingReset
+            pendingDecodeTimingReset = false
+            guard !pendingDecodes.isEmpty else {
+                decodeDrainScheduled = false
+                return (nil, resetTimings)
+            }
+            return (pendingDecodes.removeFirst(), resetTimings)
+        }
     }
 
     /// The decode-queue half: param-set rebuild when needed, sample build, async VT submit. Each early

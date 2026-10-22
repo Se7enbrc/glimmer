@@ -1,15 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  VideoDecoder+Backlog.swift
-//
-//  The in-flight decode backlog gate: the two artifact-safe reservation outcomes
-//  (`DecodeSlotDecision`), the burst-absorbing reserve with its sustained-stall
-//  and stall-escalation verdicts, and the matching release the VT output callback
-//  and every abandon path call. Split out of VideoDecoder+Decode.swift to keep
-//  each unit focused; see VideoDecoder.swift for the counter and its lock.
-//
+// Bound decode admission and retire reservations by their owning epoch.
 
 import Foundation
 import VideoToolbox
@@ -50,36 +42,9 @@ extension VideoDecoder {
         case reservedForStallRecreate
     }
 
-    // Internal (not private) so `decodeAssembledFrame` in
-    // VideoDecoder+Decode.swift can call across the split.
-    /// Reserve one in-flight-decode slot for a frame about to be dispatched, or
-    /// decide to drop-and-flush when the backlog is genuinely stalled.
-    ///
-    /// Burst absorption vs sustained-stall escalation:
-    ///   * backlog < `maxInFlightDecodes` → reserve normally; reset the overflow
-    ///     streak (the backlog drained back under the bound).
-    ///   * `maxInFlightDecodes` ≤ backlog < `maxInFlightDecodeCeiling` AND VT is
-    ///     ACTIVELY DRAINING (it produced output within the last
-    ///     `decodeStallWindowSeconds`) → ABSORB: reserve anyway so the VPN burst
-    ///     rides VT's pipeline instead of flushing-to-IDR. A transient burst is
-    ///     never flushed, no matter how deep, as long as VT keeps retiring frames
-    ///     - that's the whole point of the deep bound.
-    ///   * VT has produced NO output for the stall window (genuine VT stall) OR
-    ///     backlog ≥ `maxInFlightDecodeCeiling` (memory/latency ceiling even with
-    ///     absorption) → `.dropAndFlush`.
-    ///   * an IDR after `decodeStallEscalateSeconds` of VT darkness, with a full
-    ///     backlog or VT's last verdict a failure → `.reservedForStallRecreate`.
-    /// The VT-output clock (`secondsSinceLastDecodedFrame`) is the principled
-    /// gate: it cleanly separates "transient burst VT is working through" from
-    /// "VT genuinely stopped." `consecutiveBacklogOverflow` is tracked only for
-    /// the diagnostic log (how long the burst has sat in the overflow zone), not
-    /// as a flush trigger - flushing a deep-but-draining burst would defeat the
-    /// bound bump and reintroduce the hitch.
-    ///
-    /// The matching decrement is `releaseInFlightDecode`, called when VT retires
-    /// the frame (output callback) or on any abandon path. Lock-guarded because
-    /// the count is read/written from both the receive thread (reserve) and the
-    /// decode queue / VT output-callback thread (release).
+    /// Absorb bursts within the existing ceiling while VT drains; stalled work recovers through an IDR.
+    /// Superseded queued payloads must be released with their reservations, even if decodeQueue is blocked.
+    /// Receive, decode and output callbacks share the reservation lock.
     nonisolated func reserveDecodeSlot(isIDR: Bool, epoch: UInt = 0) -> DecodeSlotDecision {
         // The VT-draining signal: it advances on every decoded output, so a
         // small value means VT is retiring frames. Floored at the gate-lift
@@ -94,6 +59,8 @@ extension VideoDecoder {
         // own failure verdict (a dead session frees every slot), recreates it.
         if isIDR, overBound || lastVtDecodeFailed,
            vtDark >= VideoDecoder.decodeStallEscalateSeconds {
+            pendingDecodes.removeAll(keepingCapacity: true)
+            pendingDecodeTimingReset = true
             decodeReservations.removeAll(keepingCapacity: true)
             decodeReservations[epoch] = DecodeReservations(queued: 1)
             latestReservedEpoch = epoch
@@ -101,10 +68,7 @@ extension VideoDecoder {
             consecutiveBacklogOverflow = 0
             lastVtDecodeFailed = false
             inFlightDecodeLock.unlock()
-            // Older submits finish first; drain their stamps before this IDR's decode block.
-            decodeQueue.async { [statsCollector] in
-                statsCollector.dropPendingDecodeSubmits()
-            }
+            scheduleDecodeDrain()
             log.error("""
                 Decode stall ESCALATION (\(backlog) in flight, VT dark \(String(format: "%.1f", vtDark))s) - abandoning wedged \
                 session, forcing recreate with this IDR
