@@ -161,9 +161,11 @@ extension VideoDecoder {
             log.error("CMVideoFormatDescriptionCreate (AV1) failed: \(status)")
             return false
         }
-        self.formatDescription = newFormat
-        self.cachedHDRFormatDescription = nil
+        // Retire old output callbacks before changing the compressed-colour fallback they consult.
         self.tearDownDecompressionSession()
+        self.formatDescription = newFormat
+        self.av1SequenceHeader = parsed
+        self.cachedHDRFormatDescription = nil
         return true
     }
 

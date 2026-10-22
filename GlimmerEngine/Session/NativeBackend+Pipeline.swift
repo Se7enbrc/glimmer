@@ -130,8 +130,7 @@ extension NativeBackend {
             throw StreamError.sessionFailed(-1)
         }
 
-        wireVideoControl(enet: enet, events: events)
-        guard wireControllerFeedback(enet: enet, events: events) else { throw EnetError.interrupted }
+        guard activateControllers(events: events) else { throw EnetError.interrupted }
         if checkInterrupted() {
             enet.interrupt()
             throw EnetError.interrupted
@@ -229,13 +228,9 @@ extension NativeBackend {
             })
     }
 
-    /// Publish teardown and enqueue activation under the stop latch, so a
-    /// stopped channel cannot miss its cleanup or activate controller state.
-    func wireControllerFeedback(enet: EnetControlChannel, events: any ConnectionEvents) -> Bool {
-        adoptWhileConnecting {
-            installControllerFeedback(enet: enet, events: events)
-            events.controllersActivated()
-        }
+    /// Keep controller activation at video startup, under the stop latch.
+    func activateControllers(events: any ConnectionEvents) -> Bool {
+        adoptWhileConnecting { events.controllersActivated() }
     }
 
     private func installControllerFeedback(enet: EnetControlChannel, events: any ConnectionEvents) {
@@ -439,6 +434,9 @@ extension NativeBackend {
             port: handshake.controlPort,
             controlConnectData: handshake.controlConnectData,
             crypto: crypto)
+        // START can carry HDR and feedback; callbacks must be immutable once receiving begins.
+        wireVideoControl(enet: enet, events: events)
+        installControllerFeedback(enet: enet, events: events)
         guard adoptWhileConnecting({ enetChannel = enet }) else {
             events.stageFailed("control stream initialization", code: -4)
             throw EnetError.interrupted

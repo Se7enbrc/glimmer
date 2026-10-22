@@ -33,6 +33,30 @@ struct VideoDecoderEnqueueTests {
         return decoder
     }
 
+    @Test func controlHDRTransitionsAreSafeDuringOutputCallbacks() async throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265_MAIN10)
+        decoder.colorProbeSleep = { _ in throw CancellationError() }
+        decoder.setBackend(InputRecordingBackend())
+        let finished = DispatchSemaphore(value: 0)
+        Thread {
+            let fallback = decoder.hdrEnabled
+            defer { finished.signal() }
+            do {
+                let untagged = try makeTaggedPixelBuffer()
+                #expect(decoder.resolveColorDescription(for: untagged, controlHDR: fallback).isHDR == fallback)
+                for index in 0..<64 {
+                    let buffer = try makeTaggedPixelBuffer()
+                    decoder.enqueueDecodedFrame(buffer, hostPTS: CMTime(value: Int64(index), timescale: 60))
+                }
+            } catch { Issue.record(error) }
+        }.start()
+        for index in 0..<64 { decoder.setHDR(enabled: index.isMultiple(of: 2)) }
+        try #require(await finished.waitAsync(for: .seconds(5)) == .success)
+        await decoder.decodeQueue.drainForTest()
+        #expect(decoder.hdrEnabled == false)
+        decoder.teardown()
+    }
+
     enum RendererBoundary: CaseIterable {
         case stop, restart, hide, hideAndReturn, replacement, flush
     }

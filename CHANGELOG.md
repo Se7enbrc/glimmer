@@ -63,6 +63,12 @@
 
 ### Bug fixes
 
+- Recover from video decoder stalls without accumulating old frames.
+- Resume audio promptly after a long network interruption.
+- Keep AV1 colours correct when the PC changes between SDR and HDR during a
+  stream.
+- Apply HDR colour and brightness metadata even when the PC sends it during
+  connection setup.
 - On iPhone and iPad, a paired PC stays available in Settings even if loading
   its apps fails or is cancelled, so you can still forget it and pair again.
 - Stream failures on iPhone and iPad explain blocked ports, protected content

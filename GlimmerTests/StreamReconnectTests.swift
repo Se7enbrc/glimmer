@@ -168,7 +168,7 @@ struct StreamReconnectTests {
         backend.withState { backend.enetChannel = enet }
         if interruptOnly { backend.interruptConnection() } else { backend.stopConnection() }
 
-        #expect(!backend.wireControllerFeedback(enet: enet, events: NativeConnectionEvents()))
+        #expect(!backend.activateControllers(events: NativeConnectionEvents()))
         #expect(enet.onTeardown == nil)
         #expect(enet.onRumble == nil)
         #expect(enet.onSetMotionEvent == nil)

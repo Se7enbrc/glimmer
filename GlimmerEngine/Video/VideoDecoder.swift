@@ -83,10 +83,12 @@ public final class VideoDecoder {
         }
     }
 
-    /// Whether the PC signalled HDR mode. Written by `setHDR(enabled:)` and teardown, read by the VT
-    /// output callback for the untagged fallback colorspace: a one-frame-stale Bool is harmless, and
-    /// its load and store are atomic on every supported architecture.
-    nonisolated(unsafe) internal var hdrEnabled: Bool = false
+    // The control fallback is independent of metadata; atomic access synchronizes main and VT threads.
+    private nonisolated let controlHDR = Atomic<Bool>(false)
+    nonisolated var hdrEnabled: Bool {
+        get { controlHDR.load(ordering: .relaxed) }
+        set { controlHDR.store(newValue, ordering: .relaxed) }
+    }
 
     /// The resolved input uses PQ or HLG. Display output also requires current EDR headroom.
     public internal(set) var isHDRActive: Bool = false
@@ -232,6 +234,8 @@ public final class VideoDecoder {
     nonisolated(unsafe) var spsData: Data?
     nonisolated(unsafe) var ppsData: Data?
     nonisolated(unsafe) var vpsData: Data?  // HEVC only
+    // Only the serial decode queue reads or publishes the active AV1 configuration.
+    nonisolated(unsafe) var av1SequenceHeader: AV1SeqHeader?
 
     // The decode queue runs everything VideoToolbox-related serially. The
     // submit callback fires on the native backend's receive thread; we hop here
@@ -263,6 +267,10 @@ public final class VideoDecoder {
     // Epoch buckets distinguish queued work from VT-owned work; all access uses inFlightDecodeLock.
     nonisolated(unsafe) var decodeReservations: [UInt: DecodeReservations] = [:]
     nonisolated(unsafe) var latestReservedEpoch: UInt = 0
+    // Pending payload ownership and its single drain are guarded by inFlightDecodeLock.
+    nonisolated(unsafe) var pendingDecodes: [PendingDecode] = []
+    nonisolated(unsafe) var decodeDrainScheduled = false
+    nonisolated(unsafe) var pendingDecodeTimingReset = false
     let inFlightDecodeLock = NSLock()
     /// Backlog bound - sized to ABSORB a VPN arrival burst, not to gate
     /// steady-state depth. Over a high-loss/high-jitter VPN, frames arrive
