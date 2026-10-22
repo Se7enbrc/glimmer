@@ -167,6 +167,18 @@ def verify_signed_app(app, expected, team):
     validate_profile(plistlib.loads(profile.stdout), team)
 
 
+def verify_exported_symbols(inspected, app_uuids):
+    # uploadSymbols adds Symbols/<UUID>.symbols per binary; accept exactly the app's, flat.
+    symbols = inspected / 'Symbols'
+    if not symbols.exists() and not symbols.is_symlink():
+        return
+    entries = [] if symbols.is_symlink() or not symbols.is_dir() else list(symbols.iterdir())
+    expected = {f'{uuid}.symbols' for uuid, _ in app_uuids}
+    if (not entries or any(p.is_symlink() or not p.is_file() for p in entries)
+            or {p.name for p in entries} != expected):
+        raise ValueError('exported symbols must be exactly the app binary UUIDs')
+
+
 def export(archive, output, expected):
     artifact.require_dispatch()
     artifact.validate_archive(archive, expected)
@@ -185,7 +197,7 @@ def export(archive, output, expected):
         if len(ipas) != 1 or ipas[0].name != 'Glimmer.ipa':
             raise ValueError('export must produce exactly Glimmer.ipa')
         inspected = private_root() / 'inspected'
-        artifact.unpack(ipas[0], inspected, ('Payload', 'SwiftSupport'))
+        artifact.unpack(ipas[0], inspected, ('Payload', 'SwiftSupport', 'Symbols'))
         if {p.name for p in (inspected / 'Payload').iterdir()} != {'Glimmer.app'}:
             raise ValueError('export contains an unexpected application')
         verify_signed_app(inspected / 'Payload/Glimmer.app', expected, team)
@@ -197,6 +209,7 @@ def export(archive, output, expected):
                    'app_uuids': artifact.uuids(inspected / 'Payload/Glimmer.app/Glimmer')}
         if receipt['app_uuids'] != artifact.uuids(archive / artifact.APP / 'Glimmer'):
             raise ValueError('export changed app binary identity')
+        verify_exported_symbols(inspected, receipt['app_uuids'])
         (output / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True) + '\n')
     finally:
         cleanup()
