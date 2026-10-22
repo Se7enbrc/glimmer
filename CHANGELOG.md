@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- Custom resolution and refresh-rate fields have distinct VoiceOver labels.
 - Pointer shortcut help now describes capture and release in full screen as well
   as a window.
 

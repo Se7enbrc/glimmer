@@ -432,6 +432,7 @@
 		5E55102026101000000000A1 /* SessionLaunchFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */; };
 		5E55103026101000000000B1 /* GlimmerCLISunshineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */; };
 		5E55103026101000000000A1 /* AppModelSunshineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55103026101000000000A2 /* AppModelSunshineTests.swift */; };
+		5E55105026102200000000A1 /* SettingsAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55105026102200000000A2 /* SettingsAccessibilityTests.swift */; };
 		5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */; };
 		5E551020261010000C1C0001 /* TimedDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E551020261010000C1C0002 /* TimedDecisionTests.swift */; };
 		DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000006 /* PairingFlowTests.swift */; };
@@ -1187,6 +1188,7 @@
 		5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionLaunchFlowTests.swift; sourceTree = "<group>"; };
 		5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerCLISunshineTests.swift; sourceTree = "<group>"; };
 		5E55103026101000000000A2 /* AppModelSunshineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelSunshineTests.swift; sourceTree = "<group>"; };
+		5E55105026102200000000A2 /* SettingsAccessibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsAccessibilityTests.swift; sourceTree = "<group>"; };
 		5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReconnectFlowTests.swift; sourceTree = "<group>"; };
 		5E551020261010000C1C0002 /* TimedDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedDecisionTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000006 /* PairingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingFlowTests.swift; sourceTree = "<group>"; };
@@ -1849,6 +1851,7 @@
 				5E55102026101000000000A2 /* SessionLaunchFlowTests.swift */,
 				5E55103026101000000000B2 /* GlimmerCLISunshineTests.swift */,
 				5E55103026101000000000A2 /* AppModelSunshineTests.swift */,
+				5E55105026102200000000A2 /* SettingsAccessibilityTests.swift */,
 				5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */,
 				5E551020261010000C1C0002 /* TimedDecisionTests.swift */,
 				DEC0DE20261010E100000006 /* PairingFlowTests.swift */,
@@ -2689,6 +2692,7 @@
 				5E55102026101000000000A1 /* SessionLaunchFlowTests.swift in Sources */,
 				5E55103026101000000000B1 /* GlimmerCLISunshineTests.swift in Sources */,
 				5E55103026101000000000A1 /* AppModelSunshineTests.swift in Sources */,
+				5E55105026102200000000A1 /* SettingsAccessibilityTests.swift in Sources */,
 				5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */,
 				5E551020261010000C1C0001 /* TimedDecisionTests.swift in Sources */,
 				DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */,
