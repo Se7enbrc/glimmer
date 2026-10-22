@@ -63,6 +63,8 @@
 
 ### Bug fixes
 
+- Recover from video decoder stalls without accumulating old frames.
+- Resume audio promptly after a long network interruption.
 - Keep AV1 colours correct when the PC changes between SDR and HDR during a
   stream.
 - Apply HDR colour and brightness metadata even when the PC sends it during
