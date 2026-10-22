@@ -128,7 +128,9 @@ encode it fast enough.
 
 [Apollo](https://github.com/ClassicOldSong/Apollo) is a Sunshine fork for
 Windows. Its bundled SudoVDA display matches the client's requested size and
-refresh rate at stream start, without a mode list.
+refresh rate at stream start, without a mode list. Glimmer is built and tested
+against stock Sunshine; Apollo is a separate project that was last updated in
+May 2026 and does not track Sunshine's current releases.
 
 1. Stop Sunshine's service before installing
    [Apollo](https://github.com/ClassicOldSong/Apollo/releases).
