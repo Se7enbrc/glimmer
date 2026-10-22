@@ -95,6 +95,24 @@ uses short windows; it does not claim that polling can bound that service. Stack
 and scheduling exports have separate 1 GiB and 2 GiB stop thresholds. Only
 successfully finalized, parsed, clock-aligned evidence can be verified.
 
+`capture-manifest.json` lists `missingEvidence` even when only partial output
+survives. Verification requires target stack and scheduling rows plus clock
+anchors from one session spanning before 3 seconds through at least 27 seconds.
+Both diagnostic commands return a failure exit status for incomplete evidence;
+the bundle still preserves readable files and explains omissions in
+`summary.md`. If storage prevents the final receipt from being written, the
+command fails; a manifest without `ended` is unfinished and must not be
+accepted.
+
+The capture's `startedUptimeSeconds` and `endedUptimeSeconds` bracket command
+execution and XML analysis. Compare these with telemetry's uptime `t_ms` divided
+by 1,000. Per-command intervals identify preflight, recording with finalization,
+and export; they do not claim the exact attachment or recording start instant.
+Exclude the whole capture interval from ordinary-stream smoothness scoring.
+`visibleBytesAtEnd` measures visible logical file sizes before the final
+manifest write, including partial traces, rather than space buffered by
+Instruments services.
+
 Control-C or SIGTERM cancels the capture task and asks its owned recorder
 process to stop. Cleanup allows up to two minutes for finalization, then
 escalates if necessary; critically low free space can shorten this wait.

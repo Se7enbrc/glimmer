@@ -93,7 +93,7 @@ final class LauncherModel {
         session?.availabilityChanged(active: active, background: background,
                                     protectedDataAvailable: protectedDataAvailable)
         if self.active {
-            do { savedPCs = try calls?.savedPCs() ?? [] } catch { showStorageFailure() }
+            refreshSavedPCs()
             if session == nil { startDiscovery() }
         } else {
             pendingForget = nil
@@ -189,6 +189,7 @@ final class LauncherModel {
                     let pin = String(format: "%04d", Int.random(in: 0...9999))
                     pairing = PairingPrompt(name: pc.server.serverName, pin: pin)
                     pc = try await calls.pair(pc, pin)
+                    refreshSavedPCs()
                     guard isCurrent(attempt) else { return }
                     pairing = nil
                 }
@@ -205,6 +206,7 @@ final class LauncherModel {
                 guard isCurrent(attempt) else { return }
                 pairing = nil
                 busy = false
+                refreshSavedPCs()
                 message = LauncherFailureCopy.message(error)
             }
         }
@@ -268,6 +270,7 @@ final class LauncherModel {
     func cancelOperation() {
         generation &+= 1
         operation?.cancel()
+        refreshSavedPCs()
         pairing = nil
         busy = false
     }
@@ -275,6 +278,10 @@ final class LauncherModel {
     func waitUntilOperationFinishes() async { await operation?.value }
 
     private func isCurrent(_ attempt: UInt64) -> Bool { generation == attempt && !Task.isCancelled }
+
+    private func refreshSavedPCs() {
+        do { savedPCs = try calls?.savedPCs() ?? [] } catch { showStorageFailure() }
+    }
 
     private func showStorageFailure() {
         savedPCs = []

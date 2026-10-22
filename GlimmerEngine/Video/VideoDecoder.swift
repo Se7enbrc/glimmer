@@ -163,6 +163,7 @@ public final class VideoDecoder {
     let displayLayerLock = NSLock()
     nonisolated(unsafe) var displayAttachmentGeneration: UInt64 = 0 // Guarded by displayLayerLock.
     nonisolated(unsafe) var rendererSubmissionGeneration: UInt64 = 0 // Guarded by displayLayerLock.
+    nonisolated(unsafe) var lastAdmittedPTS: CMTime? // Guarded by displayLayerLock.
     nonisolated(unsafe) var _displayLayer: AVSampleBufferDisplayLayer?
     // The layer's renderer, captured with the layer: it is safe off-main, but
     // the layer property that vends it is main-actor only.
@@ -337,6 +338,7 @@ public final class VideoDecoder {
             displayLayerLock.lock(); defer { displayLayerLock.unlock() }
             if streamingState.exchange(newValue, ordering: .acquiringAndReleasing) != newValue {
                 rendererSubmissionGeneration &+= 1
+                lastAdmittedPTS = nil
             }
         }
     }
@@ -383,7 +385,8 @@ public final class VideoDecoder {
     /// The display-clock frame pacer, built on the main actor by `startPacing` and dropped on teardown
     /// or a pacing give-up. VT's output thread reads it per frame, so the slot is locked: an unlocked
     /// load racing main's release could retain a freed pacer.
-    nonisolated let framePacerBox = OSAllocatedUnfairLock<FramePacer?>(initialState: nil)
+    nonisolated let framePacerBox = OSAllocatedUnfairLock(initialState: PresentationRoute(pacer: nil, generation: 0))
+    nonisolated let presentationModeGeneration = Atomic<UInt64>(0)
 
     /// The view whose screen the pacer's CADisplayLink binds to, remembered from
     /// `startPacing` so the present-watchdog's give-up → re-enable path can

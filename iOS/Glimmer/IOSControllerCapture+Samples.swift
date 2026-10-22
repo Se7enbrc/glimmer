@@ -5,7 +5,7 @@ import GameController
 import GlimmerEngine
 
 extension IOSControllerCapture {
-    static func sample(_ pad: GCExtendedGamepad) -> ControllerInputSample {
+    nonisolated static func sample(_ pad: GCExtendedGamepad) -> ControllerInputSample {
         let buttons = elements(pad).reduce(into: ControllerButtons()) { result, pair in
             if pair.0.isPressed { result.insert(pair.1) }
         }
@@ -38,7 +38,9 @@ extension IOSControllerCapture {
         return symbols == playStation.map(Optional.some) ? .playStation : .unknown
     }
 
-    private static func elements(_ pad: GCExtendedGamepad) -> [(GCControllerButtonInput, ControllerButtons)] {
+    private nonisolated static func elements(
+        _ pad: GCExtendedGamepad
+    ) -> [(GCControllerButtonInput, ControllerButtons)] {
         var values: [(GCControllerButtonInput?, ControllerButtons)] = [
             (pad.buttonA, .a), (pad.buttonB, .b), (pad.buttonX, .x), (pad.buttonY, .y),
             (pad.dpad.up, .dpadUp), (pad.dpad.down, .dpadDown),
@@ -52,7 +54,7 @@ extension IOSControllerCapture {
         return values.compactMap { button, flag in button.map { ($0, flag) } }
     }
 
-    private static func touchpad(_ pad: GCExtendedGamepad)
+    private nonisolated static func touchpad(_ pad: GCExtendedGamepad)
         -> (GCControllerDirectionPad, GCControllerDirectionPad, GCControllerButtonInput)? {
         if let dual = pad as? GCDualSenseGamepad {
             return (dual.touchpadPrimary, dual.touchpadSecondary, dual.touchpadButton)

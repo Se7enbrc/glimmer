@@ -180,7 +180,7 @@ extension FramePacer {
         let hostNow = CFAbsoluteTimeGetCurrent()
         guard vsync.isFinite, vsync > 0, !inGapRecoveryLocked(now: hostNow) else { return nil }
         let scanout = Self.nextScanout(
-            now: CACurrentMediaTime(), lastTickTarget: liveness.lastTickTargetMediaTime, vsync: vsync)
+            now: mediaTime(), lastTickTarget: liveness.lastTickTargetMediaTime, vsync: vsync)
         guard !cadenceTargetCannotBeClaimedLocked(scanout) else { return nil }
         // The tick gate's test (interval minus half a vsync); a timebase jump is left to the tick.
         let sinceLast = scanout - lastPresentMediaTime

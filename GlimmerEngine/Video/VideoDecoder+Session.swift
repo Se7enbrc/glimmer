@@ -211,7 +211,7 @@ extension VideoDecoder {
             // Preserve the PC's RTP clock for pacing and telemetry. At release, the
             // renderer displays immediately rather than scheduling against its Mac clock.
             decoder.enqueueDecodedFrame(
-                imageBuffer, hostPTS: presentationTimeStamp)
+                imageBuffer, hostPTS: presentationTimeStamp, decodeEpoch: epoch)
             // First-frame fade-in trigger. Fires once per session AFTER
             // the frame has been pushed to the display layer, with a
             // ~50ms cushion so the OS compositor has had at least two
@@ -248,7 +248,7 @@ extension VideoDecoder {
     /// stamped with the PC's capture-clock `hostPTS` for pacing and telemetry, then hands it to
     /// the frame pacer, or presents it directly while pacing is down.
     nonisolated func enqueueDecodedFrame(
-        _ pixelBuffer: CVPixelBuffer, hostPTS: CMTime
+        _ pixelBuffer: CVPixelBuffer, hostPTS: CMTime, decodeEpoch: UInt = 0
     ) {
         // Discard frames once teardown has flipped isStreaming off. Without
         // this gate, VT decode callbacks already in flight when stop() runs
@@ -294,12 +294,13 @@ extension VideoDecoder {
 
         guard let formatDescription = fmtDesc else { return }
 
-        // Keep the PC's RTP PTS through VT for pacing and telemetry, including invalid PTS.
-        // presentFrame marks the released image display-immediately; this clock is not
-        // the renderer's default Mac host clock and must not schedule its display.
+        // Keep the PC's RTP clock for pacing and telemetry, and the decode epoch for admission.
+        // The renderer displays immediately; these values never schedule against Mac time.
+        var presentationTime = hostPTS
+        presentationTime.epoch = Int64(bitPattern: UInt64(decodeEpoch))
         var timingInfo = CMSampleTimingInfo(
             duration: .invalid,
-            presentationTimeStamp: hostPTS,
+            presentationTimeStamp: presentationTime,
             decodeTimeStamp: .invalid)
 
         var sampleBuffer: CMSampleBuffer?
@@ -315,11 +316,12 @@ extension VideoDecoder {
         }
 
         guard let sb = sampleBuffer else { return }
-        if let pacer = framePacer {
+        let route = presentationRoute()
+        if let pacer = route.pacer {
             FrameTimingTracker.shared?.recordPacerSubmitted(rtpTimestamp: Self.rtpTimestamp(from: hostPTS))
             pacer.submit(sb, hostPTS: hostPTS)
         } else {
-            _ = presentFrame(sb)
+            _ = presentFrame(sb, modeGeneration: route.generation)
         }
     }
 }

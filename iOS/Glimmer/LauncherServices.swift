@@ -106,15 +106,20 @@ final class LauncherServices {
         return PreparedPC(network: network, server: fetched)
     }
 
-    func pair(_ pc: PreparedPC, pin: String) async throws -> PreparedPC {
+    func pair(_ pc: PreparedPC, pin: String,
+              authenticate: @MainActor (PreparedPC, String) async throws -> ServerInfo = { pc, pin in
+                  try await PairingClient(network: pc.network, server: pc.server)
+                      .pair(pin: pin, expectedUniqueId: pc.server.uniqueId)
+              }) async throws -> PreparedPC {
         guard protectedData.read() else { throw Failure.unavailable }
         // A failed pinned connection never authorizes replacement by a fresh pairing.
         guard try loadPin(pc.server.uniqueId) == nil else { throw Failure.missingPin }
-        let paired = try await PairingClient(network: pc.network, server: pc.server)
-            .pair(pin: pin, expectedUniqueId: pc.server.uniqueId)
+        let paired = try await authenticate(pc, pin)
         try Task.checkCancellation()
         guard paired.pairStatus == .paired, let pem = paired.serverCertPEM else { throw Failure.invalidIdentity }
         guard try loadPin(paired.uniqueId) == nil else { throw Failure.missingPin }
+        // Recovery must be available even if the app list or pin write fails afterward.
+        _ = try savePC(paired)
         try PinnedCertStore.store(pem: pem, forHostID: paired.uniqueId, defaults: defaults, base: base,
                                  protectedDataAvailable: { protectedData.read() })
         return PreparedPC(network: pc.network, server: paired)
@@ -124,11 +129,16 @@ final class LauncherServices {
         guard pc.server.pairStatus == .paired, try loadPin(pc.server.uniqueId) != nil else {
             throw Failure.missingPin
         }
-        var saved = try savedPCs().filter { $0.id != pc.server.uniqueId }
-        saved.append(SavedPC(server: pc.server))
+        let saved = try savePC(pc.server)
+        defaults.set(pc.server.uniqueId, forKey: Self.lastConnectedKey)
+        return saved
+    }
+
+    private func savePC(_ server: ServerInfo) throws -> [SavedPC] {
+        var saved = try savedPCs().filter { $0.id != server.uniqueId }
+        saved.append(SavedPC(server: server))
         saved.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         defaults.set(try JSONEncoder().encode(saved), forKey: Self.savedKey)
-        defaults.set(pc.server.uniqueId, forKey: Self.lastConnectedKey)
         return saved
     }
 
