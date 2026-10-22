@@ -1,20 +1,5 @@
 # Changelog
 
-## 2026.10.9 - Unreleased
-
-### Bug fixes
-
-- Use a controller to open pairing, choose a PC and finish pairing.
-- Opening pairing from another window brings the current pairing flow forward.
-- The menu bar keeps the streaming PC's name and network when another PC is
-  selected.
-- The live stream's mode stays accurate when settings for the next stream
-  change.
-- Custom resolution and refresh-rate fields have distinct VoiceOver labels.
-- VoiceOver can read the metrics shown in Stream stats.
-- Pointer shortcut help now describes capture and release in full screen as well
-  as a window.
-
 ## 2026.10.8 - Unreleased
 
 ### Features
@@ -77,6 +62,17 @@
 - The readiness chip shows Ready and latency when the PC is reachable.
 
 ### Bug fixes
+
+- Use a controller to open pairing, choose a PC and finish pairing.
+- Opening pairing from another window brings the current pairing flow forward.
+- The menu bar keeps the streaming PC's name and network when another PC is
+  selected.
+- The live stream's mode stays accurate when settings for the next stream
+  change.
+- Custom resolution and refresh-rate fields have distinct VoiceOver labels.
+- VoiceOver can read the metrics shown in Stream stats.
+- Pointer shortcut help now describes capture and release in full screen as well
+  as a window.
 
 - Keep pending video frames bounded if presentation briefly stalls, and release
   them promptly when the stream stops or resets.
