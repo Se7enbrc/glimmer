@@ -6,38 +6,12 @@ import Testing
 @testable import Glimmer
 
 struct GlimmerDiagnosticCaptureClockTests {
-    // Matches Instruments' nested raw values, shared references and duplicate Points of Interest tables.
-    private static func fixture() -> String {
-        var rows = "<node>"
-        var repeated = "<node>"
-        for index in 0..<4 {
-            let begin = index.isMultiple(of: 2)
-            let trace = UInt64(index / 2 + 1) * 1_000_000_000 + (begin ? 0 : 1000)
-            let uptime = UInt64(index / 2 + 2) * 1_000_000_000 + (begin ? 0 : 500)
-            let prefix = begin ? "before" : "after"
-            let metadata = """
-                <os-log-metadata id="message\(index)"
-                    fmt="session=0123456789abcdef anchor_id=\(index / 2) uptime_\(prefix)_ns=2,000,000,000">
-                <narrative-text>session=</narrative-text><string ref="session"/>
-                <narrative-text> anchor_id=</narrative-text><uint64>\(index / 2)</uint64>
-                <narrative-text> uptime_\(prefix)_ns=</narrative-text><uint64 fmt="2,000,000,000">\(uptime)</uint64>
-                </os-log-metadata>
-                """
-            rows += """
-                <row><event-time id="time\(index)">\(trace)</event-time><process ref="process"/>
-                <signpost-name id="name\(index)">GlimmerClockAnchor\(begin ? "Begin" : "End")</signpost-name>
-                <subsystem ref="subsystem"/><category ref="category"/>\(metadata)</row>
-                """
-            repeated += """
-                <row><event-time ref="time\(index)"/><process ref="process"/><signpost-name ref="name\(index)"/>
-                <subsystem ref="subsystem"/><category ref="category"/><os-log-metadata ref="message\(index)"/></row>
-                """
-        }
-        return """
-            <trace-query-result><definitions><process id="process"><pid>17</pid></process>
-            <string id="session">0123456789abcdef</string><subsystem id="subsystem">io.ugfugl.Glimmer</subsystem>
-            <category id="category">PointsOfInterest</category></definitions>\(rows)</node>\(repeated)</node></trace-query-result>
-            """
+    private final class ResourceBundle {}
+
+    private static func fixture() throws -> String {
+        let url = try #require(Bundle(for: ResourceBundle.self)
+            .url(forResource: "instruments-clock-references", withExtension: "xml"))
+        return try String(contentsOf: url, encoding: .utf8)
     }
 
     private func inspect(_ text: String) throws -> GlimmerDiagnosticCapture.ClockAlignment {
@@ -55,22 +29,58 @@ struct GlimmerDiagnosticCaptureClockTests {
     }
 
     @Test func conflictingDuplicateInvalidatesTheWholeAlignment() throws {
-        let text = Self.fixture().replacingOccurrences(of: "<event-time ref=\"time0\"/>",
+        let text = try Self.fixture().replacingOccurrences(of: "<event-time ref=\"time0\"/>",
                                                        with: "<event-time>1000000100</event-time>")
         let result = try inspect(text)
         #expect(result.status == "anchors_malformed" && result.malformedEvents == 1)
     }
 
     @Test func missingRawReferenceCannotBeReplacedByFormattedMetadata() throws {
-        let text = Self.fixture().replacingOccurrences(of: "<string ref=\"session\"/>",
+        let text = try Self.fixture().replacingOccurrences(of: "<string ref=\"session\"/>",
                                                        with: "<string ref=\"missing\"/>")
             .replacingOccurrences(of: "2,000,000,000", with: "2000000000")
-        #expect(try inspect(text).status == "anchors_malformed")
+        #expect(try inspect(text).status == "anchor_xml_unverified")
     }
 
     @Test func cyclicMetadataReferenceIsRejectedWithoutUnboundedExpansion() throws {
-        let text = Self.fixture().replacingOccurrences(of: "<string id=\"session\">0123456789abcdef</string>",
+        let text = try Self.fixture().replacingOccurrences(of: "<string id=\"session\">0123456789abcdef</string>",
                                                        with: "<string id=\"session\"><string ref=\"session\"/></string>")
+        #expect(try inspect(text).status == "anchors_malformed")
+    }
+
+    @Test(arguments: ["signpost-name", "event-time", "process", "os-log-metadata"])
+    func unresolvedReferencesNeverDisappearAsUnrelatedEvents(_ element: String) throws {
+        let text = try Self.fixture().replacingOccurrences(of: "<\(element) ref=\"", with: "<\(element) ref=\"missing-")
+        #expect(try inspect(text).status == "anchor_xml_unverified")
+    }
+
+    @Test func identicalRepeatedDefinitionsRemainValid() throws {
+        let text = try Self.fixture().replacingOccurrences(of: "</trace-query-result>",
+            with: "<signpost-name id=\"name0\">GlimmerClockAnchorBegin</signpost-name></trace-query-result>")
+        let result = try inspect(text)
+        #expect(result.status == "bounded_clock_verified" && result.anchors.count == 2)
+    }
+
+    @Test func duplicateDefinitionsCannotOverwriteEarlierEvidence() throws {
+        let text = try Self.fixture().replacingOccurrences(of: "</trace-query-result>",
+            with: "<signpost-name id=\"name0\">OtherEvent</signpost-name></trace-query-result>")
+        #expect(try inspect(text).status == "anchor_xml_unverified")
+    }
+
+    @Test func referenceChainsResolveAndCyclesFailClosed() throws {
+        let text = try Self.fixture().replacingOccurrences(of: "<process ref=\"process\"/>",
+            with: "<process ref=\"alias\"/>")
+            .replacingOccurrences(of: "</definitions>", with: "<process id=\"alias\" ref=\"process\"/></definitions>")
+        #expect(try inspect(text).status == "bounded_clock_verified")
+        let cycle = text.replacingOccurrences(of: "id=\"alias\" ref=\"process\"", with: "id=\"alias\" ref=\"alias\"")
+        #expect(try inspect(cycle).status == "anchor_xml_unverified")
+    }
+
+    @Test func undecodableEventNamesCannotBeSilentlySkipped() throws {
+        let text = try Self.fixture().replacingOccurrences(of: "</trace-query-result>", with: """
+            <node><row><signpost-name id="broken"><string ref="broken"/></signpost-name></row></node>
+            </trace-query-result>
+            """)
         #expect(try inspect(text).status == "anchors_malformed")
     }
 }
