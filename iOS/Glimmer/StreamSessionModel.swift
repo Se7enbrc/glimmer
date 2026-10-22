@@ -36,6 +36,9 @@ final class StreamSessionModel {
     private var eventTask: Task<Void, Never>?
     private var stopTask: Task<Void, Never>?
     private var endingMessage: String?
+    private var terminalFailure = false
+    private var stopRequested = false
+    private var hasReceivedVideo = false
     private var captureSuspended = false
     private var controlsRequested = false
     private var modeNoticeTask: Task<Void, Never>?
@@ -74,16 +77,20 @@ final class StreamSessionModel {
             do {
                 try await playback.start()
             } catch {
-                guard let self, self.phase != .stopping else { return }
-                if self.endingMessage == nil { self.endingMessage = self.connectionFailureMessage }
+                guard let self, !self.stopRequested else { return }
+                if !self.terminalFailure {
+                    self.endingMessage = StreamSessionFailureCopy.connection(
+                        StreamFailure.connection(error), pcName: self.launch.pcName)
+                }
                 self.complete()
             }
         }
     }
 
     func stop(message: String? = nil) {
+        stopRequested = true
         guard stopTask == nil, !phase.isEnded else { return }
-        endingMessage = message ?? endingMessage ?? "Disconnected from \(launch.pcName)."
+        endingMessage = message ?? "Disconnected from \(launch.pcName)."
         guard let playback else { complete(); return }
         phase = .stopping
         synchronizeInputFocus()
@@ -118,7 +125,7 @@ final class StreamSessionModel {
     }
 
     private var connectionFailureMessage: String {
-        "Couldn't connect to \(launch.pcName). Check Sunshine on the PC and try again."
+        StreamSessionFailureCopy.connection(.invalidConfiguration, pcName: launch.pcName)
     }
 
     func availabilityChanged(active: Bool, background: Bool, protectedDataAvailable: Bool) {
@@ -163,6 +170,8 @@ final class StreamSessionModel {
 
     func screenChanged() { playback?.screenChanged() }
 
+    func waitUntilStartFinishes() async { await startTask?.value }
+
     func waitUntilStopped() async { await stopTask?.value }
 
     private func receiveInput(_ event: StreamInput.Event) {
@@ -190,7 +199,9 @@ final class StreamSessionModel {
         guard phase != .stopping else { return }
         switch update.event {
         case .firstFrame, .reconnected:
+            hasReceivedVideo = true
             endingMessage = nil
+            terminalFailure = false
             captureSuspended = false
             phase = .streaming
             if controllerConnected, !controlsRequested { controlsVisible = false }
@@ -199,8 +210,15 @@ final class StreamSessionModel {
             captureSuspended = true
             phase = .reconnecting
             synchronizeInputFocus()
-        case .connectionTerminated:
-            endingMessage = "The connection to \(launch.pcName) ended. Check the PC and reconnect when you're ready."
+        case .connectionTerminated(let code, let error):
+            let reason = StreamFailure.termination(code: code, hasReceivedVideo: hasReceivedVideo)
+            terminalFailure = error != nil || reason != .unexpected
+            if let error {
+                endingMessage = StreamSessionFailureCopy.connection(
+                    StreamFailure.connection(error), pcName: launch.pcName)
+            } else {
+                endingMessage = StreamSessionFailureCopy.termination(reason, pcName: launch.pcName)
+            }
             phase = .stopping
             synchronizeInputFocus()
         case .stageFailed:

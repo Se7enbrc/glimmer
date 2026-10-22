@@ -72,8 +72,7 @@ extension AppModel {
         case .pairingRejected:
             return ("Couldn't pair with \(hostName). Choose Pair Again… to start over.", .pairing)
         case .portsBlocked(let proto, let port):
-            return ("\(hostName) answered, but the stream couldn't get through. "
-                + "Check that the PC's firewall allows \(proto) \(port).", .other)
+            return (StreamFailureCopy.portsBlockedMessage(hostName, proto: proto, port: port), .other)
         case .hostTimedOut:
             return ("\(hostName) took too long to start the app. Check the PC's screen, then try again.", .other)
         case .launchRefused(let message):
@@ -111,8 +110,7 @@ extension AppModel {
         case .connectionLost:
             "Lost the connection to \(hostName). Check the network, then try again."
         case .protectedContent:
-            "\(hostName) stopped the stream: the app is showing protected content, which can't be streamed. "
-                + "Close it on the PC, then try again."
+            StreamFailureCopy.protectedContentMessage(hostName)
         case .frameConversion:
             "\(hostName)'s graphics driver couldn't hand frames to the encoder. "
                 + "Update the PC's graphics driver, then try again."

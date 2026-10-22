@@ -171,6 +171,75 @@ struct PairingRecoveryTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func acceptedPairingSurvivesAppListFailureOrCancellation(cancel: Bool) async throws {
+        let suite = "io.ugfugl.Glimmer.pairing-tests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: base)
+        }
+        let services = LauncherServices(defaults: defaults, base: base, protectedData: ProtectedDataState(true))
+        var server = ServerInfo(address: "new.invalid", uniqueId: "new", serverName: "New PC")
+        let unpaired = PreparedPC(network: testLaunch().network, server: server)
+        server.pairStatus = .paired
+        server.serverCertPEM = "authenticated fixture pin"
+        let pairedServer = server
+        let gate = StreamTestGate()
+        let model = LauncherModel(calls: .init(
+            savedPCs: { try services.savedPCs() }, prepare: { _, _ in unpaired },
+            pair: { pc, pin in try await services.pair(pc, pin: pin, authenticate: { _, _ in pairedServer }) },
+            apps: { _ in await gate.wait(); throw StreamError.hostUnreachable("fixture failure") },
+            remember: { try services.remember($0) }, protectedDataChanged: { services.protectedData.update($0) },
+            forget: { try services.forget($0) }), discoveryEnabled: false)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(address: "new.invalid")
+        await gate.waitUntilEntered()
+        #expect(model.savedPCs.map(\.id) == ["new"])
+        if cancel { model.cancelOperation() }
+        await gate.release()
+        await model.waitUntilOperationFinishes()
+        #expect(model.savedPCs.map(\.id) == ["new"])
+        #expect(services.lastConnectedPCID() == nil)
+        let reopened = LauncherServices(defaults: defaults, base: base, protectedData: ProtectedDataState(true))
+        #expect(try reopened.savedPCs().map(\.id) == ["new"])
+        let other = PreparedPC(network: unpaired.network, server: {
+            var value = pairedServer
+            value.uniqueId = "other"
+            return value
+        }())
+        _ = try await reopened.pair(other, pin: "0000", authenticate: { pc, _ in pc.server })
+        let saved = try #require(model.savedPCs.first)
+        model.confirmForget(saved)
+        #expect(try reopened.savedPCs().map(\.id) == ["other"])
+        #expect(try PinnedCertStore.load(forHostID: "new", defaults: defaults, base: base,
+                                        protectedDataAvailable: { true }) == nil)
+        #expect(try PinnedCertStore.load(forHostID: "other", defaults: defaults, base: base,
+                                        protectedDataAvailable: { true }) == pairedServer.serverCertPEM)
+    }
+
+    @Test func invalidRecoveryMetadataPreventsPinInstallation() async throws {
+        let suite = "io.ugfugl.Glimmer.pairing-tests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: base)
+        }
+        defaults.set(Data("invalid".utf8), forKey: "ios.savedPCs")
+        let services = LauncherServices(defaults: defaults, base: base, protectedData: ProtectedDataState(true))
+        var server = ServerInfo(address: "new.invalid", uniqueId: "new", serverName: "New PC")
+        server.pairStatus = .paired
+        server.serverCertPEM = "authenticated fixture pin"
+        let pc = PreparedPC(network: testLaunch().network, server: server)
+        await #expect(throws: (any Error).self) {
+            try await services.pair(pc, pin: "0000", authenticate: { pc, _ in pc.server })
+        }
+        #expect(try PinnedCertStore.load(forHostID: "new", defaults: defaults, base: base,
+                                        protectedDataAvailable: { true }) == nil)
+    }
+
     private func withStorage(_ body: (LauncherServices, UserDefaults, URL, ProtectedDataState) throws -> Void) throws {
         let suite = "io.ugfugl.Glimmer.forget-tests.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))

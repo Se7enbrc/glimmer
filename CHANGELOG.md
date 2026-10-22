@@ -63,6 +63,13 @@
 
 ### Bug fixes
 
+- On iPhone and iPad, a paired PC stays available in Settings even if loading
+  its apps fails or is cancelled, so you can still forget it and pair again.
+- Stream failures on iPhone and iPad explain blocked ports, protected content
+  and pairing recovery instead of showing generic connection advice.
+- Controller input on iPhone and iPad no longer waits for interface work, and
+  callbacks queued before leaving play cannot replay after you resume.
+
 - Keep fallback video playback in step when the game's frame rate changes.
 - Resume after a brief video stall without rapidly displaying queued frames.
 - Keep retrying video recovery when the first frame never reaches the screen.
