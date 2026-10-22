@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 @testable import GlimmerEngine
+@testable import Glimmer
 import CryptoKit
 import Foundation
 import Testing
@@ -175,5 +176,18 @@ struct DiagnosticEvidenceTests {
             try DiagnosticEvidence.bundle(sessionID: session, source: source, output: source)
         }
         #expect(FileManager.default.fileExists(atPath: source.appendingPathComponent("telemetry-test.ndjson").path))
+    }
+    @MainActor @Test(arguments: [false, true])
+    func bundleCommandExitStatusReflectsEvidenceCompleteness(_ incomplete: Bool) async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source"), output = root.appendingPathComponent("bundle")
+        if incomplete {
+            try FileManager.default.removeItem(at: source.appendingPathComponent("telemetry-evidence-\(session).json"))
+        }
+        let command = GlimmerCLI.Command(verb: .diagnostics, arguments: ["bundle", session, output.path])
+        let status = await GlimmerCLI.diagnostics(command, source: source)
+        #expect(status == (incomplete ? GlimmerCLI.Exit.failed : GlimmerCLI.Exit.ok))
+        #expect(try manifest(output)["complete"] as? Bool == !incomplete)
     }
 }

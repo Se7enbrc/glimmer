@@ -17,6 +17,25 @@ extension GlimmerDiagnosticCapture {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
+    static func runCommand(_ command: Command, runner: Runner) async -> CommandResult {
+        let started = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+        var result: CommandResult
+        if Task.isCancelled {
+            result = CommandResult(command: command, started: Date(), ended: Date(), exitCode: nil, status: "cancelled")
+        } else {
+            result = await runner(command)
+        }
+        result.startedUptimeSeconds = started
+        result.endedUptimeSeconds = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+        switch command.label {
+        case "record": result.instrumentationPhase = "attachment_recording_finalization"
+        case "clock-preflight-record": result.instrumentationPhase = "clock_preflight_recording_finalization"
+        case "toc", "time-profile", "thread-state", "clock-anchors": result.instrumentationPhase = "export"
+        default: result.instrumentationPhase = "preflight_or_identity_check"
+        }
+        return result
+    }
+
     @concurrent
     static func execute(_ command: Command) async -> CommandResult {
         await execute(command, started: { _ in })
@@ -28,6 +47,9 @@ extension GlimmerDiagnosticCapture {
         let began = Date()
         guard !Task.isCancelled else {
             return CommandResult(command: command, started: began, ended: Date(), exitCode: nil, status: "cancelled")
+        }
+        if let limit = resourceCheck(command) {
+            return CommandResult(command: command, started: began, ended: Date(), exitCode: nil, status: limit)
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: command.executable)
@@ -117,9 +139,13 @@ extension GlimmerDiagnosticCapture {
         return nil
     }
 
-    private static func captureBytes(_ directory: URL) -> Int64? {
+    static func captureBytes(_ directory: URL) -> Int64? {
+        var enumerationFailed = false
         guard let entries = FileManager.default.enumerator(at: directory,
-            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey], options: []) else { return nil }
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey], options: [], errorHandler: { _, _ in
+                enumerationFailed = true
+                return false
+            }) else { return nil }
         var total: Int64 = 0
         var count = 0
         for case let file as URL in entries {
@@ -128,10 +154,11 @@ extension GlimmerDiagnosticCapture {
                   let values = try? file.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]) else { return nil }
             if values.isRegularFile == true {
                 guard let size = values.fileSize else { return nil }
-                total += Int64(size)
-                if total > 8 * 1_073_741_824 { return total }
+                let (sum, overflow) = total.addingReportingOverflow(Int64(size))
+                guard !overflow else { return nil }
+                total = sum
             }
         }
-        return total
+        return enumerationFailed ? nil : total
     }
 }

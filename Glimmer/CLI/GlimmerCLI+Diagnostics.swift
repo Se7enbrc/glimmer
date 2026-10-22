@@ -6,7 +6,7 @@ import Darwin
 import GlimmerEngine
 
 extension GlimmerCLI {
-    static func diagnostics(_ command: Command) async -> Int32 {
+    static func diagnostics(_ command: Command, source: URL = MacTelemetryCapture.logsDirectory) async -> Int32 {
         let action = command.arguments[0]
         let identity = command.arguments[1]
         let output = URL(fileURLWithPath: (command.arguments[2] as NSString).expandingTildeInPath,
@@ -30,12 +30,17 @@ extension GlimmerCLI {
                 printLine("Capture: \(manifest.status). Evidence: \(manifestURL.path)")
                 return manifest.status == "observed_rows_with_bounded_clock_anchors" ? Exit.ok : Exit.failed
             case "bundle":
-                let source = MacTelemetryCapture.logsDirectory
                 let manifestURL = try await Task.detached(priority: .utility) {
                     try DiagnosticEvidence.bundle(sessionID: identity, source: source, output: output)
                 }.value
-                printLine("Evidence saved: \(manifestURL.path). Read summary.md for coverage and missing evidence.")
-                return Exit.ok
+                struct Completion: Decodable { let complete: Bool }
+                guard let data = GlimmerDiagnosticCapture.boundedRead(manifestURL, maximum: 4_194_304) else {
+                    throw CocoaError(.fileReadTooLarge)
+                }
+                let report = try JSONDecoder().decode(Completion.self, from: data)
+                let status = report.complete ? "complete" : "incomplete"
+                printLine("Evidence \(status): \(manifestURL.path). Read summary.md for missing evidence.")
+                return report.complete ? Exit.ok : Exit.failed
             default:
                 printError("Use “diagnostics capture <pid> <directory>” or “diagnostics bundle <session> <directory>”.")
                 return Exit.usage
