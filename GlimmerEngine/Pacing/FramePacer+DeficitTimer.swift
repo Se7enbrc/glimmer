@@ -3,18 +3,7 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  FramePacer+DeficitTimer.swift
-//
-//  The OFF-TICK release timer that carries the tick-deficit degraded mode (and
-//  the floor-violation assist): the pacingQueue-confined create/cancel
-//  reconcile, the synthetic-vsync beat, and the governor repaint. Split out of
-//  FramePacer+TickDeficit.swift - pure move, same file-split idiom as the rest
-//  of the FramePacer extensions - to keep both units under the length budget;
-//  see that file for the measured-rate state machine that decides WHEN this
-//  timer should be armed, and FramePacer+TickDeficitEvents.swift for the
-//  transition breadcrumbs that trigger the reconcile.
-//
+// The pacing queue owns the fallback timer and reconciles it against learned cadence.
 
 import CoreMedia
 import QuartzCore
@@ -24,10 +13,7 @@ extension FramePacer {
 
     // MARK: - The off-tick release timer (pacingQueue-confined)
 
-    /// Create/cancel the off-tick timer to match the lock-guarded desired state.
-    /// Runs ONLY on `pacingQueue`, so `deficitTimer` itself needs no lock - the
-    /// idempotent reconcile shape means racing engage/disengage transitions
-    /// converge on the latest state instead of double-arming.
+    /// Reconcile on pacingQueue so mode changes and timer beats share one timer owner.
     func reconcileDeficitTimer() {
         lock.lock()
         let want = (tickDeficit.deficitModeActive || tickDeficit.floorAssistActive) && running && displayBound
@@ -38,20 +24,25 @@ extension FramePacer {
             timer.cancel()
             tickDeficit.deficitTimer = nil
             tickDeficit.deficitTimerGeneration = nil
+            tickDeficit.deficitTimerInterval = .nan
         }
         if want, tickDeficit.deficitTimer == nil {
             let timer = DispatchSource.makeTimerSource(queue: pacingQueue)
-            timer.schedule(
-                deadline: .now() + interval, repeating: interval,
-                leeway: .milliseconds(1))
+            scheduleDeficitTimer(timer, interval)
+            tickDeficit.deficitTimerInterval = interval
             timer.setEventHandler { [weak self] in self?.deficitTimerFired(generation: generation) }
             tickDeficit.deficitTimerGeneration = generation
             tickDeficit.deficitTimer = timer
             timer.resume()
+        } else if want, let timer = tickDeficit.deficitTimer,
+                  abs(tickDeficit.deficitTimerInterval - interval) > interval * 0.01 {
+            scheduleDeficitTimer(timer, interval)
+            tickDeficit.deficitTimerInterval = interval
         } else if !want, let timer = tickDeficit.deficitTimer {
             timer.cancel()
             tickDeficit.deficitTimer = nil
             tickDeficit.deficitTimerGeneration = nil
+            tickDeficit.deficitTimerInterval = .nan
         }
     }
 
@@ -86,6 +77,7 @@ extension FramePacer {
         let events = serviceTickDeficitLocked(now: now)
         lock.unlock()
         handleTickDeficitEvents(events)
+        reconcileDeficitTimer()
     }
 
     /// True when a real tick's released frame has not yet scanned out at `now`

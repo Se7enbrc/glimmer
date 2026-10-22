@@ -63,6 +63,13 @@
 
 ### Bug fixes
 
+- Keep fallback video playback in step when the game's frame rate changes.
+- Resume after a brief video stall without rapidly displaying queued frames.
+- Keep retrying video recovery when the first frame never reaches the screen.
+- Avoid a backward frame flash when video playback switches into or out of
+  recovery.
+- Prevent delayed video frames from briefly replacing a newer image.
+
 - On iPhone and iPad, Native quality rounds the stream size down to even pixels
   so the PC can encode displays with odd pixel dimensions.
 - Keep pending video frames bounded if presentation briefly stalls, and release
