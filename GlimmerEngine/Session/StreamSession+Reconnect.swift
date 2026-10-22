@@ -1,28 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamSession+Reconnect.swift
-//
-//  Silent reconnect-as-stall. When the host closes a LIVE session with a
-//  recoverable code - Sunshine's process restarting across a Windows lock /
-//  secure-desktop transition (it returns in ~3s), or a brief network blip -
-//  we DON'T bounce to the launcher and DON'T sit through the watchdog's 10s
-//  freeze-then-teardown. Instead we hold the frozen last frame on screen and
-//  silently re-establish the connection underneath it, resuming in place when
-//  video flows again (matching Moonlight's "hang then resume"). Only on
-//  give-up (attempts/window exhausted) do we tear down for real.
-//
-//  This is possible because the frozen frame survives a connection teardown:
-//  backend.stopConnection() runs the decoder's sink stop()/cleanup() (which
-//  only invalidate the VideoToolbox session + param sets), but NOT
-//  VideoDecoder.teardown() or StreamWindow.close() - so the
-//  AVSampleBufferDisplayLayer keeps its last image until a fresh setup() +
-//  IDR repaints over it. We keep the window, decoder, input forwarder, the
-//  retained bridge, StreamBridgeContext.current, and the event stream alive
-//  across the rebuild; only the backend connection + NetworkClient are
-//  replaced.
-//
+// Rebuild a failed live connection under the retained frame within one bounded recovery episode.
+// Keep native media and input ownership until recovery succeeds or final teardown completes.
 
 import Foundation
 import QuartzCore
@@ -35,7 +15,7 @@ extension StreamSession {
     /// either drives a silent reconnect episode or tears down as before.
     package func handleHostTerminate(code: Int32, from source: NativeBackend? = nil) async {
         guard source == nil || source === backend,
-              isStreaming, !stopInProgress, !isReconnecting else { return }
+              isStreaming, !stopInProgress else { return }
         // The uplink is dead the instant the host closed - pause input so we
         // don't spew sends at a gone backend. It re-arms on the next
         // `.connectionEstablished` (nativeConnectionEstablished → setReady(true)).
@@ -45,16 +25,14 @@ extension StreamSession {
         // reconnect's setReady(true) - see nativeConnectionEstablished.
         DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
 
-        // Recoverable iff we'd already reached a live state AND the cause is one we
-        // can resume from: a host terminate in the recoverable set (server restart /
-        // graceful), or OUR OWN ENet dead-peer self-terminate (-1, the radio-doze /
-        // link-blip case). A terminate before the first live edge is a failed
-        // connect, not an interruption - fall through to the honest teardown so the
-        // launcher shows the failure. The 10s dead-peer envelope is unchanged; this
-        // only chooses silent-reconnect over teardown once it has fired.
-        let recoverableCause = Self.recoverableTerminationCodes.contains(code)
-            || code == Self.deadPeerTerminationCode
-        let recoverable = recoverableCause && reachedLiveState
+        if isReconnecting {
+            if reconnectTermination == nil { reconnectTermination = (attemptID, code) }
+            return
+        }
+
+        // Recovery needs an earlier live connection and a transient termination cause.
+        // Startup failures and terminal PC errors still take the normal teardown path.
+        let recoverable = Self.canRecoverTermination(code) && reachedLiveState
         guard recoverable else {
             bridge?.emit(.connectionTerminated(errorCode: code))
             await stop(cause: code == 0 ? .hostClosedClean : .hostError)
@@ -76,6 +54,10 @@ extension StreamSession {
             }
         }
         await runReconnectEpisode(code: code, cause: Self.reconnectCause(code: code))
+    }
+
+    private static func canRecoverTermination(_ code: Int32) -> Bool {
+        recoverableTerminationCodes.contains(code) || code == deadPeerTerminationCode
     }
 
     /// Whether the PC ended the session on purpose: it answered and no longer
@@ -120,18 +102,25 @@ extension StreamSession {
     /// A reconnect this side chose on a live connection (a bitrate change, a decoder that never decodes
     /// what arrives). The same episode as a host terminate: the frozen frame holds under the banner and
     /// video resumes in place; the first `reconnectInPlace` brings the live connection down itself.
-    package func runSelfInitiatedReconnect(cause: String, bannerText: String = "Reconnecting…") async {
+    package func runSelfInitiatedReconnect(
+        cause: String, bannerText: String = "Reconnecting…",
+        rearmWatchdog: @Sendable (StreamSession) async -> Void = StreamSession.rearmReconnectWatchdog
+    ) async {
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
         publicInput?.prepareForReplacement(attempt: attemptID)
         let inp = input
         DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(false) } }
-        await runReconnectEpisode(code: Self.deadPeerTerminationCode, cause: cause, bannerText: bannerText)
+        await runReconnectEpisode(code: Self.deadPeerTerminationCode, cause: cause,
+                                  bannerText: bannerText, rearmWatchdog: rearmWatchdog)
     }
 
     /// Drive a bounded reconnect episode: hold the frozen frame and retry the
     /// in-place rebuild with a short backoff, then resume (`.reconnected`) or,
     /// once the attempts or the awake-time budget run out, tear down for real.
-    private func runReconnectEpisode(code: Int32, cause: String, bannerText: String = "Reconnecting…") async {
+    private func runReconnectEpisode(
+        code: Int32, cause: String, bannerText: String = "Reconnecting…",
+        rearmWatchdog: @Sendable (StreamSession) async -> Void = StreamSession.rearmReconnectWatchdog
+    ) async {
         isReconnecting = true
         setWaitingForVideo(false)
         reconnectAttempts = 0
@@ -148,6 +137,7 @@ extension StreamSession {
         Diag.notice("Reconnecting in place, holding the last frame: \(cause).", "Stream")
 
         var pcMovedOn = false
+        var terminationCode = code
         while isStreaming, !stopInProgress,
               reconnectAttempts < Self.reconnectAttemptCap, let budgetEnd = budget.deadline() {
             reconnectAttempts += 1
@@ -173,9 +163,11 @@ extension StreamSession {
                 pcMovedOn = true
                 break
             }
-            if resumed {
-                await finishReconnect(attempt: attemptID)
-                return
+            if resumed, await finishReconnect(attempt: attemptID, rearmWatchdog: rearmWatchdog) { return }
+            if let failure = reconnectTermination, failure.attempt == attemptID {
+                terminationCode = failure.code
+                lastReconnectError = nil
+                if !Self.canRecoverTermination(failure.code) { break }
             }
         }
 
@@ -193,20 +185,25 @@ extension StreamSession {
         Diag.error(
             "reconnect exhausted after \(reconnectAttempts) attempt(s) - tearing down",
             "Stream")
-        bridge?.emit(.connectionTerminated(errorCode: code, error: lastReconnectError))
-        await stop(cause: .hostError)
+        bridge?.emit(.connectionTerminated(errorCode: terminationCode, error: lastReconnectError))
+        await stop(cause: terminationCode == 0 ? .hostClosedClean : .hostError)
+    }
+
+    package static func rearmReconnectWatchdog(_ session: StreamSession) async {
+        await MainActor.run { session.frameWatchdogArmedAt = session.uptimeSeconds }
     }
 
     /// Each main-actor suspension can overlap stop or another attempt; publish only the surviving recovery.
+    @discardableResult
     package func finishReconnect(
         attempt: UUID,
-        rearmWatchdog: @Sendable (StreamSession) async -> Void = { session in
-            await MainActor.run { session.frameWatchdogArmedAt = session.uptimeSeconds }
-        }
-    ) async {
-        guard isStreaming, !stopInProgress, attempt == attemptID else { return }
+        rearmWatchdog: @Sendable (StreamSession) async -> Void = StreamSession.rearmReconnectWatchdog
+    ) async -> Bool {
+        guard isStreaming, !stopInProgress, attempt == attemptID,
+              reconnectTermination?.attempt != attempt else { return false }
         await rearmWatchdog(self)
-        guard isStreaming, !stopInProgress, attempt == attemptID else { return }
+        guard isStreaming, !stopInProgress, attempt == attemptID,
+              reconnectTermination?.attempt != attempt else { return false }
         isReconnecting = false
         reconnectAttempts = 0
         // Connect-start reanchors handshake telemetry, so its established edge cannot count this recovery.
@@ -214,9 +211,10 @@ extension StreamSession {
         bridge?.emit(.reconnected, attempt: attempt)
         let winForHide = presentation
         await MainActor.run { winForHide?.showRecovery(nil) }
-        guard isStreaming, !stopInProgress, !isReconnecting, attempt == attemptID else { return }
+        guard isStreaming, !stopInProgress, !isReconnecting, attempt == attemptID else { return true }
         Diag.notice("reconnected - stream resumed in place", "Stream")
         resetStallLatches()
+        return true
     }
 
     /// What a failed attempt tells the user if the episode gives up. A deadline the PC never answered
@@ -259,6 +257,7 @@ extension StreamSession {
         let fresh = makeBackend()
         self.backend = fresh
         attemptID = UUID()
+        reconnectTermination = nil
         if let tracker = FrameTimingTracker.shared {
             if let pacer = dec.framePacer {
                 _ = pacer.clearQueue(reason: "telemetry attempt boundary") { tracker.beginAttempt(attemptID) }

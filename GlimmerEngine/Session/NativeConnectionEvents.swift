@@ -37,6 +37,10 @@ package final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendabl
         }
     }
 
+    func drainSessionEvents() async {
+        await sessionEvents.withLock { $0 }?.value
+    }
+
     private func emit(_ event: StreamEvent) {
         bridge?.emit(event, source: backend, attempt: attempt)
     }
