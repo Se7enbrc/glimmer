@@ -66,6 +66,8 @@
 - Keep fallback video playback in step when the game's frame rate changes.
 - Resume after a brief video stall without rapidly displaying queued frames.
 - Keep retrying video recovery when the first frame never reaches the screen.
+- Avoid a backward frame flash when video playback switches into or out of
+  recovery.
 
 - Keep pending video frames bounded if presentation briefly stalls, and release
   them promptly when the stream stops or resets.

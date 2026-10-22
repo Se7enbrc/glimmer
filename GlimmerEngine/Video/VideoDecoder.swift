@@ -375,7 +375,8 @@ public final class VideoDecoder {
     /// The display-clock frame pacer, built on the main actor by `startPacing` and dropped on teardown
     /// or a pacing give-up. VT's output thread reads it per frame, so the slot is locked: an unlocked
     /// load racing main's release could retain a freed pacer.
-    nonisolated let framePacerBox = OSAllocatedUnfairLock<FramePacer?>(initialState: nil)
+    nonisolated let framePacerBox = OSAllocatedUnfairLock(initialState: PresentationRoute(pacer: nil, generation: 0))
+    nonisolated let presentationModeGeneration = Atomic<UInt64>(0)
 
     /// The view whose screen the pacer's CADisplayLink binds to, remembered from
     /// `startPacing` so the present-watchdog's give-up → re-enable path can

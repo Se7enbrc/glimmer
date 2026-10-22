@@ -64,6 +64,37 @@ struct VideoDecoderEnqueueTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func aRoutedFrameCannotAcquireANewRendererTokenAfterAModeSwitch(toDirect: Bool) throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
+        defer { decoder.teardown() }
+        let pacer = FramePacer(stats: decoder.statsCollector, configuredFps: 120)
+        pacer.armWarmHandover()
+        if toDirect { decoder.framePacer = pacer }
+        let oldRoute = decoder.presentationRoute()
+        let prepared = try #require(decoder.rendererSubmission(modeGeneration: oldRoute.generation))
+        decoder.framePacer = toDirect ? nil : pacer
+        let freshRoute = decoder.presentationRoute()
+        let fresh = try #require(decoder.rendererSubmission(modeGeneration: freshRoute.generation))
+        var accepted = 0
+        #expect(decoder.performRendererSubmission(fresh, enqueue: { _ in accepted += 1 }))
+        #expect(decoder.rendererSubmission(modeGeneration: oldRoute.generation) == nil)
+        #expect(!decoder.performRendererSubmission(prepared, enqueue: { _ in accepted += 1 }))
+        #expect(accepted == 1)
+    }
+
+    @Test func anExtractedPacedFrameRetainsItsOriginalModeGeneration() throws {
+        let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
+        defer { decoder.teardown() }
+        let pacer = FramePacer(stats: decoder.statsCollector, configuredFps: 120)
+        decoder.framePacer = pacer
+        let extractedPresentation = try #require(pacer.willPresent)
+        decoder.framePacer = nil
+        let direct = try #require(decoder.rendererSubmission())
+        #expect(decoder.performRendererSubmission(direct, enqueue: { _ in }))
+        #expect(!extractedPresentation(try VideoDecoderLifecycleTests.readySample()))
+    }
+
     @Test func hiddenDirectPresentationDoesNotReachTheRenderer() throws {
         let decoder = liveDecoder(format: StreamProtocol.VIDEO_FORMAT_H265)
         defer { decoder.teardown() }

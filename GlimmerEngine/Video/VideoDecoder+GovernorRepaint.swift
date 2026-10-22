@@ -12,9 +12,9 @@ extension VideoDecoder {
     /// Re-submit the same pixels to keep the compositor active when display ticks collapse.
     /// The pacer limits repeats to stream cadence after two silent intervals. Separate trace
     /// events preserve visibility without inflating rendered FPS, drops or latency histograms.
-    nonisolated func repaintFrameForGovernor(_ sampleBuffer: CMSampleBuffer) {
+    nonisolated func repaintFrameForGovernor(_ sampleBuffer: CMSampleBuffer, modeGeneration: UInt64? = nil) {
         // Best effort: the off-tick release path remains responsible for delivering new frames.
-        guard let submission = rendererSubmission() else { return }
+        guard let submission = rendererSubmission(modeGeneration: modeGeneration) else { return }
         let renderer = submission.renderer
         guard renderer.status != .failed else {
             recordRendererDecision(.repaintRejectedFailed, sampleBuffer: sampleBuffer)

@@ -315,11 +315,12 @@ extension VideoDecoder {
         }
 
         guard let sb = sampleBuffer else { return }
-        if let pacer = framePacer {
+        let route = presentationRoute()
+        if let pacer = route.pacer {
             FrameTimingTracker.shared?.recordPacerSubmitted(rtpTimestamp: Self.rtpTimestamp(from: hostPTS))
             pacer.submit(sb, hostPTS: hostPTS)
         } else {
-            _ = presentFrame(sb)
+            _ = presentFrame(sb, modeGeneration: route.generation)
         }
     }
 }

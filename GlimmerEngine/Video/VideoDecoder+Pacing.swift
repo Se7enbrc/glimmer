@@ -1,17 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  VideoDecoder+Pacing.swift
-//
-//  The display-clock frame pacer's wiring and the whole present path: pacer
-//  bring-up (`startPacing`) plus its control surface, the single paced present
-//  site (`presentFrame` - the renderer-status and backpressure policy around the
-//  one `renderer.enqueue` call), and the mode-agnostic present-path self-heal the
-//  watchdog escalates through. Split out of VideoDecoder+API.swift and
-//  VideoDecoder+Session.swift to keep each unit focused; see VideoDecoder.swift
-//  for the decoder's stored state.
-//
+// Share renderer admission across paced presentation, direct fallback and recovery.
 
 import AVFoundation
 import CoreMedia
@@ -24,16 +14,34 @@ import os
 extension VideoDecoder {
 
     nonisolated var framePacer: FramePacer? {
-        get { framePacerBox.withLock { $0 } }
+        get { framePacerBox.withLock { $0.pacer } }
         set {
-            // Destruction stops the tick thread, which must never run under the slot lock.
-            let previous = framePacerBox.withLock { pacer in
-                let previous = pacer
-                pacer = newValue
+            let previous = framePacerBox.withLock { route in
+                let previous = route.pacer
+                let generation = route.generation &+ 1
+                newValue?.willPresent = { [weak self] sample in
+                    self?.presentFrame(sample, modeGeneration: generation) ?? false
+                }
+                newValue?.onDeficitRepaint = { [weak self] sample in
+                    self?.repaintFrameForGovernor(sample, modeGeneration: generation)
+                }
+                // Publish invalidation without waiting for an in-flight renderer enqueue on main.
+                presentationModeGeneration.store(generation, ordering: .releasing)
+                route = PresentationRoute(pacer: newValue, generation: generation)
                 return previous
             }
+            // Destruction stops the tick thread, which must never run under the route lock.
             withExtendedLifetime(previous) {}
         }
+    }
+
+    struct PresentationRoute {
+        let pacer: FramePacer?
+        let generation: UInt64
+    }
+
+    nonisolated func presentationRoute() -> PresentationRoute {
+        framePacerBox.withLock { $0 }
     }
 
     /// Bind after attaching the layer and showing its view on the intended display.
@@ -43,37 +51,14 @@ extension VideoDecoder {
 
     // MARK: - Frame pacer bring-up + control surface
 
-    /// Stand up the display-clock frame pacer and bind its CADisplayLink to
-    /// `view`'s screen. Called by StreamSession on the main actor right after
-    /// `StreamWindow.show()` puts the window on a display, so the link is bound
-    /// to the screen the stream actually lives on. `configuredFps` seeds the
-    /// pacer's cadence estimate (it self-corrects from host PTS deltas within
-    /// ~1s, but seeding avoids a startup beat of wrong cadence).
-    ///
-    /// The pacer's `willPresent` hook routes to `presentFrame(_:)` (renderer-
-    /// status + backpressure policy + the single `renderer.enqueue` site), which
-    /// fires on the pacer's dedicated serial queue, never the main actor. The
-    /// pacer no longer has a sustained-lag → IDR hook: a presentation-timing trim
-    /// of an already-decoded frame never requests a keyframe (the reference chain
-    /// is intact), so that escalation path is gone entirely.
+    /// Publish a fresh pacer and its admission generation together before starting its link.
+    /// Re-engagement preserves direct-style release until healthy display ticks return.
     package func startPacing(
         display: PacerDisplay, configuredFps: Int32, warmHandover: Bool
     ) {
         // Build fresh each session so a restart doesn't inherit stale cadence
         // history or a dead link.
         let pacer = FramePacer(stats: statsCollector, configuredFps: configuredFps)
-        pacer.willPresent = { [weak self] sampleBuffer in
-            guard let self else { return false }
-            return self.presentFrame(sampleBuffer)
-        }
-        // Governor-repaint hook (tick-deficit degraded mode): re-commits the
-        // current frame WITHOUT counting a rendered frame - deliberately NOT
-        // routed through presentFrame, whose stats would fake renders>received
-        // during a deficit. See `repaintFrameForGovernor` for the enqueue-site
-        // rationale.
-        pacer.onDeficitRepaint = { [weak self] sampleBuffer in
-            self?.repaintFrameForGovernor(sampleBuffer)
-        }
         // A rebuilt pacer must inherit the decoder's CURRENT suppression state:
         // the pacer-side flag mirrors VideoDecoder's (which outlives a pacer
         // rebuild - see the field doc in FramePacer.swift), but a fresh pacer's
@@ -263,14 +248,18 @@ extension VideoDecoder {
     struct RendererSubmission {
         let renderer: AVSampleBufferVideoRenderer
         let generation: UInt64
+        let modeGeneration: UInt64
     }
 
     /// The final admission lock orders enqueue against stop, hide, replacement and flush.
     /// Lock order is displayLayerLock then presentSuppressedLock; never call getters inside enqueue.
-    nonisolated func rendererSubmission() -> RendererSubmission? {
+    nonisolated func rendererSubmission(modeGeneration: UInt64? = nil) -> RendererSubmission? {
         displayLayerLock.lock(); defer { displayLayerLock.unlock() }
-        guard isStreaming, !presentSuppressed, let renderer = _sampleBufferRenderer else { return nil }
-        return RendererSubmission(renderer: renderer, generation: rendererSubmissionGeneration)
+        let currentMode = presentationModeGeneration.load(ordering: .acquiring)
+        guard isStreaming, !presentSuppressed, let renderer = _sampleBufferRenderer,
+              modeGeneration == nil || modeGeneration == currentMode else { return nil }
+        return RendererSubmission(renderer: renderer, generation: rendererSubmissionGeneration,
+                                  modeGeneration: currentMode)
     }
 
     nonisolated func performRendererSubmission(
@@ -278,6 +267,7 @@ extension VideoDecoder {
     ) -> Bool {
         displayLayerLock.lock(); defer { displayLayerLock.unlock() }
         guard submission.generation == rendererSubmissionGeneration,
+              submission.modeGeneration == presentationModeGeneration.load(ordering: .acquiring),
               _sampleBufferRenderer === submission.renderer, isStreaming, !presentSuppressed else { return false }
         enqueue(submission.renderer)
         return true
@@ -297,25 +287,14 @@ extension VideoDecoder {
 
     // MARK: - Paced present site
 
-    /// Present one paced frame onto the AVSampleBufferDisplayLayer's renderer.
-    /// Invoked by `FramePacer` via its `willPresent` hook on the pacer's
-    /// dedicated serial queue (NOT the main actor) at the moment a frame is due
-    /// for its vsync - or inline from `enqueueDecodedFrame` on the fallback
-    /// path when the pacer isn't running. Returns true if the frame was handed
-    /// to the renderer, false if it was dropped (renderer failed / not ready).
-    ///
-    /// This owns the renderer-status + backpressure policy that used to live
-    /// inline in the VT callback:
-    ///   * renderer.status == .failed → flush + request an IDR (unchanged).
-    ///   * renderer not ready for more media → drop + count (no IDR here; a
-    ///     presentation-timing drop of an already-decoded frame never requests a
-    ///     keyframe - the reference chain is intact).
+    /// Release through one renderer admission gate, retaining the route chosen before queue handoff.
+    /// A readiness refusal drops this decoded image without invalidating VideoToolbox references.
     @discardableResult
-    nonisolated func presentFrame(_ sampleBuffer: CMSampleBuffer) -> Bool {
+    nonisolated func presentFrame(_ sampleBuffer: CMSampleBuffer, modeGeneration: UInt64? = nil) -> Bool {
         // Re-check the teardown gate: the pacer's serial queue can race a
         // MainActor teardown that nil'd the layer. Snapshot the renderer into
         // a local so it can't be released mid-enqueue.
-        guard let submission = rendererSubmission() else { return false }
+        guard let submission = rendererSubmission(modeGeneration: modeGeneration) else { return false }
         let renderer = submission.renderer
 
         // Drive the macOS 15+ renderer from this background queue; the layer API is deprecated.
