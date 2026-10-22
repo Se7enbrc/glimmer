@@ -60,11 +60,13 @@ checks. CodeQL builds both apps and requires successful extraction of every
 tracked production Swift file, including `iOS/Glimmer/`. Lint, credential scans,
 dependency updates and source checks are configured at the root.
 
-Mac and iOS keep separate bundle identifiers and release lifecycles. The Mac
-release workflow, version files and artifacts retain their paths. Internal iOS
-beta distribution follows the [TestFlight guide](../iOS/docs/TESTFLIGHT.md).
-Public App Store release is separate. The Raycast extension and Homebrew tap
-remain separate repositories with their existing distribution roles.
+Mac and iOS keep separate bundle identifiers and release lifecycles. The Mac and
+iOS apps share the CalVer in `Glimmer/Version.xcconfig`; iOS includes that file
+and overrides only its increasing build number in `iOS/Config/App.xcconfig`. The
+Mac release workflow and artifacts retain their paths. Internal iOS beta
+distribution follows the [TestFlight guide](../iOS/docs/TESTFLIGHT.md). Public
+App Store release is separate. The Raycast extension and Homebrew tap remain
+separate repositories with their existing distribution roles.
 
 ## Import provenance
 

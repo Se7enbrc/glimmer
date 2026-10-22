@@ -4,6 +4,8 @@
 
 ### Features
 
+- iPhone and iPad releases now use the same calendar version as the Mac app.
+
 - On iPhone, use the launcher and Settings in portrait or landscape. Streams
   stay in landscape, and menus can rotate again after disconnecting.
 
