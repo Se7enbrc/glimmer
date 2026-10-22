@@ -10,6 +10,6 @@
 // because the build is driven by `make` (which passes -xcconfig), the
 // version is NOT set in project.pbxproj - bump it HERE, build with `make`.
 
-MARKETING_VERSION = 2026.10.8
-CURRENT_PROJECT_VERSION = 20261029
+MARKETING_VERSION = 2026.10.9
+CURRENT_PROJECT_VERSION = 20261030
 GLIMMER_DIAGNOSTIC_BUILD = NO

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.10.9 - Unreleased
+
+### Fixes
+
+- On iPhone and iPad, a paired PC stays available in Settings even if loading
+  its apps fails or is cancelled, so you can still forget it and pair again.
+
 ## 2026.10.8 - Unreleased
 
 ### Features
