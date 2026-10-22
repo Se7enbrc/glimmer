@@ -4,6 +4,7 @@
 
 """Validate and seal the credential-free iOS archive handoff."""
 
+from collections import Counter
 import hashlib
 import json
 import os
@@ -21,6 +22,8 @@ ARCHIVE = 'Glimmer.xcarchive'
 APP = 'Products/Applications/Glimmer.app'
 MAX_BYTES = 4 * 1024**3
 MAX_FILES = 20000
+MAX_REPORTED = 20
+MAX_REPORTED_PATH = 160
 
 
 def validate_inputs(sha, version, build):
@@ -170,22 +173,57 @@ def seal(archive, output, expected):
     return digest(output / 'manifest.json')
 
 
+class UnsafeEntries(ValueError):
+    """Rejection that carries a bounded, escaped report of every offending entry."""
+
+    def __init__(self, report):
+        first = report['violations'][0]
+        super().__init__(f"unsafe or duplicate artifact entry ({report['violation_count']} total): "
+                         f"{first['reason']} {first['path']}")
+        self.report = report
+
+
+def printable(name):
+    return ascii(name)[1:-1][:MAX_REPORTED_PATH]
+
+
+def entry_problem(entry, name, path, mode, prefixes, names):
+    checks = [('noncanonical', str(path) != name or not path.parts), ('absolute', path.is_absolute()),
+              ('traversal', '..' in path.parts), ('backslash', '\\' in name),
+              ('too-long', len(name) > 1024 or len(path.parts) > 40),
+              ('unexpected-root', bool(path.parts) and path.parts[0] not in prefixes),
+              ('duplicate', name in names),
+              ('link-or-special', stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR)),
+              ('directory-mode-on-file', stat.S_ISDIR(mode) and not entry.is_dir()),
+              ('privileged-bits', bool(mode & 0o7000))]
+    return next((reason for reason, failed in checks if failed), None)
+
+
 def safe_entries(bundle, prefix):
     entries = bundle.infolist()
+    prefixes = {prefix} if isinstance(prefix, str) else set(prefix)
     names = set()
+    roots = Counter()
+    violations = []
+    count = 0
     total = 0
     for entry in entries:
         name = entry.filename.rstrip('/') if entry.is_dir() else entry.filename
         path = PurePosixPath(name)
         mode = entry.external_attr >> 16
-        prefixes = {prefix} if isinstance(prefix, str) else set(prefix)
-        if (str(path) != name or path.is_absolute() or '..' in path.parts or '\\' in name
-                or len(name) > 1024 or len(path.parts) > 40 or not path.parts or path.parts[0] not in prefixes
-                or name in names or stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR)
-                or (stat.S_ISDIR(mode) and not entry.is_dir()) or mode & 0o7000):
-            raise ValueError('unsafe or duplicate artifact entry')
+        roots[printable(path.parts[0]) if path.parts else ''] += 1
+        reason = entry_problem(entry, name, path, mode, prefixes, names)
+        if reason:
+            count += 1
+            if len(violations) < MAX_REPORTED:
+                kind = {0: 'unset', stat.S_IFREG: 'file', stat.S_IFDIR: 'dir', stat.S_IFLNK: 'link'}
+                violations.append({'reason': reason, 'path': printable(entry.filename),
+                                   'type': kind.get(stat.S_IFMT(mode), 'special'), 'mode': f'{mode & 0o7777:04o}'})
         names.add(name)
         total += entry.file_size
+    if count:
+        raise UnsafeEntries({'violation_count': count, 'violations': violations,
+                             'roots': dict(roots.most_common(MAX_REPORTED))})
     if not entries or len(entries) > MAX_FILES or total > MAX_BYTES:
         raise ValueError('artifact exceeds its file or size limit')
     return entries

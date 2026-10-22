@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+import warnings
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -167,22 +168,66 @@ class TestFlightTests(unittest.TestCase):
         artifact.unpack(bundle, self.root / 'ipa', 'Payload')
         self.assertEqual((self.root / 'ipa/Payload/Glimmer.app/Glimmer').stat().st_mode & 0o777, 0o755)
 
-    def test_unsafe_zip_entries_are_rejected_before_extraction(self):
-        cases = [('Payload/../escape', stat.S_IFREG | 0o644),
-                 ('/Payload/absolute', stat.S_IFREG | 0o644),
-                 ('Payload/link', stat.S_IFLNK | 0o777),
-                 ('Payload/fifo', stat.S_IFIFO | 0o600),
-                 ('Payload/setuid', stat.S_IFREG | 0o4755),
-                 ('Payload//alias', stat.S_IFREG | 0o644)]
-        for index, (name, mode) in enumerate(cases):
-            bundle = self.root / f'bad-{index}.zip'
-            with zipfile.ZipFile(bundle, 'w') as output:
+    def unsafe_zip(self, path, entries):
+        with zipfile.ZipFile(path, 'w') as output, warnings.catch_warnings():
+            warnings.simplefilter('ignore', UserWarning)  # zipfile warns on the duplicate fixture
+            for name, mode in entries:
                 entry = zipfile.ZipInfo(name)
                 entry.external_attr = mode << 16
                 output.writestr(entry, b'x')
-            with self.subTest(name=name), self.assertRaises(ValueError):
-                artifact.unpack(bundle, self.root / f'out-{index}', 'Payload')
+
+    def test_unsafe_zip_entries_are_rejected_before_extraction(self):
+        cases = [('traversal', [('Payload/../escape', stat.S_IFREG | 0o644)]),
+                 ('absolute', [('/Payload/absolute', stat.S_IFREG | 0o644)]),
+                 ('link-or-special', [('Payload/link', stat.S_IFLNK | 0o777)]),
+                 ('link-or-special', [('Payload/fifo', stat.S_IFIFO | 0o600)]),
+                 ('privileged-bits', [('Payload/setuid', stat.S_IFREG | 0o4755)]),
+                 ('noncanonical', [('Payload//alias', stat.S_IFREG | 0o644)]),
+                 ('unexpected-root', [('Symbols/A.symbols', stat.S_IFREG | 0o644)]),
+                 ('directory-mode-on-file', [('Payload/dir', stat.S_IFDIR | 0o755)]),
+                 ('duplicate', [('Payload/twice', stat.S_IFREG | 0o644)] * 2),
+                 ('backslash', [('Payload\\windows', stat.S_IFREG | 0o644)]),
+                 ('too-long', [('Payload/' + 'a/' * 40 + 'deep', stat.S_IFREG | 0o644)])]
+        for index, (reason, entries) in enumerate(cases):
+            bundle = self.root / f'bad-{index}.zip'
+            self.unsafe_zip(bundle, entries)
+            with self.subTest(reason=reason), self.assertRaises(artifact.UnsafeEntries) as caught:
+                artifact.unpack(bundle, self.root / f'out-{index}', ('Payload', 'SwiftSupport'))
+            self.assertEqual(caught.exception.report['violations'][0]['reason'], reason)
             self.assertFalse((self.root / f'out-{index}').exists())
+
+    def test_rejection_reports_every_entry_bounded_and_escaped(self):
+        bundle = self.root / 'many.ipa'
+        hostile = 'Other/\x1b[31m‮' + 'x' * 400
+        self.unsafe_zip(bundle, [('Payload/Glimmer.app/Glimmer', stat.S_IFREG | 0o755), (hostile, stat.S_IFREG | 0o644)]
+                        + [(f'Symbols/{n}.symbols', stat.S_IFREG | 0o644) for n in range(30)])
+        with self.assertRaises(artifact.UnsafeEntries) as caught:
+            artifact.unpack(bundle, self.root / 'out', ('Payload', 'SwiftSupport'))
+        report = caught.exception.report
+        self.assertEqual(report['violation_count'], 31)
+        self.assertEqual(len(report['violations']), artifact.MAX_REPORTED)
+        self.assertEqual(report['roots'], {'Symbols': 30, 'Payload': 1, 'Other': 1})
+        self.assertEqual(report['violations'][0], {'reason': 'unexpected-root', 'type': 'file', 'mode': '0644',
+                                                   'path': ascii(hostile)[1:-1][:artifact.MAX_REPORTED_PATH]})
+        self.assertTrue(all(value.isascii() and value.isprintable() and len(value) <= artifact.MAX_REPORTED_PATH
+                            for item in report['violations'] for value in item.values()))
+        stderr = io.StringIO()
+        with patch.object(cli.signing, 'export', side_effect=caught.exception), patch.object(cli, 'toolchain'), \
+                patch.object(sys, 'argv', ['ios-testflight.py', 'export']), patch.dict(os.environ, ENV), \
+                patch.object(sys, 'stderr', stderr), self.assertRaises(SystemExit):
+            cli.main()
+        lines = stderr.getvalue().splitlines()
+        self.assertEqual(json.loads(lines[0].removeprefix('ERR: entry report ')), report)
+        self.assertTrue(lines[1].startswith('ERR: unsafe or duplicate artifact entry (31 total): unexpected-root Other/'))
+        self.assertLess(len(stderr.getvalue()), 16 * 1024)
+
+    def test_diagnostics_keep_the_accepted_ipa_shape(self):
+        bundle = self.root / 'accepted.ipa'
+        self.unsafe_zip(bundle, [('Payload/Glimmer.app/Glimmer', stat.S_IFREG | 0o755),
+                                 ('Payload/Glimmer.app/unset-mode', 0),
+                                 ('SwiftSupport/iphoneos/libswiftCore.dylib', stat.S_IFREG | 0o644)])
+        artifact.unpack(bundle, self.root / 'ipa', ('Payload', 'SwiftSupport'))
+        self.assertEqual((self.root / 'ipa/Payload/Glimmer.app/unset-mode').stat().st_mode & 0o777, 0o600)
 
     def test_zip_size_budget_and_existing_destination_fail_closed(self):
         bundle = self.root / 'large.zip'

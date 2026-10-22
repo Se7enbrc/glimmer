@@ -14,6 +14,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 import zipfile
@@ -183,6 +184,9 @@ def main():
         elif args.operation == 'upload':
             signing.upload(args.output, expected)
     except ValueError as error:
+        # Only the bounded, escaped entry report; the IPA's bytes never reach the log.
+        if isinstance(error, artifact.UnsafeEntries):
+            print(f'ERR: entry report {json.dumps(error.report, sort_keys=True)}', file=sys.stderr)
         parser.exit(1, f'ERR: {str(error)[:240]}\n')
     except subprocess.CalledProcessError as error:
         # Tool arguments can contain credentials; never stringify a CalledProcessError.
