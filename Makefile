@@ -161,6 +161,10 @@ test-build:
 	xcodebuild build-for-testing -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
 	  -xcconfig $(STREAM_XCCONFIG) \
 	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS'
+	@# The tests link this Xcode's Swift Testing; ship it, since the runner's Xcode may be older.
+	@platform="$$(xcrun --sdk macosx --show-sdk-platform-path)/Developer"; \
+	  ditto "$$platform/Library/Frameworks/Testing.framework" "$(DERIVED)/Build/Products/Debug/Testing.framework" && \
+	  ditto "$$platform/usr/lib/lib_TestingInterop.dylib" "$(DERIVED)/Build/Products/Debug/lib_TestingInterop.dylib"
 	@$(UNREGISTER_BUILDS)
 
 test-run:
