@@ -233,6 +233,8 @@ public final class VideoDecoder {
     nonisolated(unsafe) var spsData: Data?
     nonisolated(unsafe) var ppsData: Data?
     nonisolated(unsafe) var vpsData: Data?  // HEVC only
+    // Only the serial decode queue reads or publishes the active AV1 configuration.
+    nonisolated(unsafe) var av1SequenceHeader: AV1SeqHeader?
 
     // The decode queue runs everything VideoToolbox-related serially. The
     // submit callback fires on the native backend's receive thread; we hop here

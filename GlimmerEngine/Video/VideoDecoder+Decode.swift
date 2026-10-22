@@ -103,6 +103,7 @@ extension VideoDecoder {
             self.spsData = nil
             self.ppsData = nil
             self.vpsData = nil
+            self.av1SequenceHeader = nil
             // Invalidation retires VT ownership; discard any pending batch behind this cleanup too.
             self.inFlightDecodeLock.lock()
             self.inFlightDecodes = 0
@@ -287,12 +288,14 @@ extension VideoDecoder {
     /// the VT output callback.
     private nonisolated func runDecodeOnQueue(_ pending: PendingDecode) {
         guard hasQueuedDecode(epoch: pending.epoch) else { return }
-        // New parameter sets, a forced recreate, or an IDR with no live session rebuilds. Decided
-        // here, not on the receive thread, because this queue owns `decompressionSession`.
-        let needsParamRebuild = pending.newSps != nil || pending.newPps != nil || pending.newVps != nil
-            || pending.forceSessionRecreate || (decompressionSession == nil && pending.isIDR)
         let format = streamVideoFormat
         let pictureData = pending.pictureData
+        // AV1 carries its configuration inside picture data, without separate parameter-set buffers.
+        let av1Header = pending.isIDR && (format & StreamProtocol.VIDEO_FORMAT_MASK_AV1) != 0
+            ? parseAV1SequenceHeader(pictureData) : nil
+        let needsParamRebuild = pending.newSps != nil || pending.newPps != nil || pending.newVps != nil
+            || pending.forceSessionRecreate || (decompressionSession == nil && pending.isIDR)
+            || (av1Header != nil && av1Header != av1SequenceHeader)
 
         if needsParamRebuild,
            !rebuildParamSetsAndSession(
