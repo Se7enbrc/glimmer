@@ -3,13 +3,14 @@
 
 import GameController
 import GlimmerEngine
+import Synchronization
 
 @MainActor
 final class IOSControllerCapture {
     struct Calls {
         let register: (ControllerDescriptor) -> ControllerRegistration?
         let unregister: (ControllerRegistration) -> Void
-        let submit: (ControllerRegistration, ControllerInputSample, TimeInterval) -> Void
+        let submit: @Sendable (ControllerRegistration, ControllerInputSample, TimeInterval) -> Void
         let focus: (Bool) -> Void
         var feedback: ((ControllerRegistration, ControllerFeedbackOutput) -> Void)?
         var motion: ((ControllerRegistration, ControllerMotionCapture) -> Void)?
@@ -26,6 +27,12 @@ final class IOSControllerCapture {
         let gestures: [(GCControllerButtonInput, GCControllerElement.SystemGestureState)]
     }
 
+    private final class Delivery: Sendable {
+        let registrations = Mutex<[ControllerRegistration: UUID]>([:])
+    }
+
+    private let captureQueue = DispatchQueue(label: "io.ugfugl.Glimmer.controller-capture", qos: .userInteractive)
+    private let delivery = Delivery()
     private let calls: Calls
     private let center: NotificationCenter
     private let readControllers: () -> [GCController]
@@ -106,6 +113,7 @@ final class IOSControllerCapture {
             self.focused = true
             for entry in attached.values { install(entry) }
         } else {
+            delivery.registrations.withLock { $0.removeAll() }
             calls.focus(false)
             self.focused = false
             for entry in attached.values { restore(entry) }
@@ -114,6 +122,7 @@ final class IOSControllerCapture {
 
     func stop() {
         guard !stopped else { return }
+        delivery.registrations.withLock { $0.removeAll() }
         calls.focus(false)
         focused = false
         stopped = true
@@ -148,9 +157,9 @@ final class IOSControllerCapture {
                              gestures: buttons.map { ($0, $0.preferredSystemGestureState) })
         attached[ObjectIdentifier(controller)] = entry
         if focused {
-            install(entry)
             // A newly attached pad may hold controls without delivering another native change.
             calls.submit(registration, Self.sample(pad), clock())
+            install(entry)
         }
     }
 
@@ -173,21 +182,23 @@ final class IOSControllerCapture {
     }
 
     private func install(_ entry: Attached) {
-        let id = ObjectIdentifier(entry.controller)
         let registration = entry.registration
-        let attempt = generation
-        entry.controller.handlerQueue = .main
+        let epoch = UUID()
+        let submit = calls.submit
+        delivery.registrations.withLock { $0[registration] = epoch }
+        entry.controller.handlerQueue = captureQueue
         for (button, _) in entry.gestures { button.preferredSystemGestureState = .disabled }
-        entry.controller.extendedGamepad?.valueChangedHandler = { [weak self] pad, _ in
-            MainActor.assumeIsolated {
-                guard let self, self.focused, !self.stopped, self.generation == attempt,
-                      self.attached[id]?.registration == registration else { return }
-                self.calls.submit(registration, Self.sample(pad), pad.lastEventTimestamp)
+        entry.controller.extendedGamepad?.valueChangedHandler = { @Sendable [delivery] pad, _ in
+            // Hold validity through submission so focus loss and detach finish after any in-flight sample.
+            delivery.registrations.withLock { registrations in
+                guard registrations[registration] == epoch else { return }
+                submit(registration, Self.sample(pad), pad.lastEventTimestamp)
             }
         }
     }
 
     private func restore(_ entry: Attached) {
+        _ = delivery.registrations.withLock { $0.removeValue(forKey: entry.registration) }
         entry.controller.extendedGamepad?.valueChangedHandler = entry.priorHandler
         entry.controller.handlerQueue = entry.priorQueue
         for (button, state) in entry.gestures { button.preferredSystemGestureState = state }

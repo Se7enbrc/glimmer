@@ -8,6 +8,8 @@
   its apps fails or is cancelled, so you can still forget it and pair again.
 - Stream failures on iPhone and iPad explain blocked ports, protected content
   and pairing recovery instead of showing generic connection advice.
+- Controller input on iPhone and iPad no longer waits for interface work, and
+  callbacks queued before leaving play cannot replay after you resume.
 
 ## 2026.10.8 - Unreleased
 
