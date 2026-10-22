@@ -271,11 +271,9 @@ public actor StreamSession {
     /// Count of stage-3 give-ups this session. DIAGNOSTIC ONLY - no budget, gates
     /// nothing (the watchdog never permanently disables anything).
     package nonisolated(unsafe) var pacingGiveUpCount = 0
-    /// Wall-clock when the DIRECT (no-pacer) present path first looked frozen
-    /// (decode healthy, present clock stalled); nil while healthy or paced.
-    /// Latches one recovery per episode - see `tickDirectPresentWatchdog`. The
-    /// detector the direct path lacked.
+    /// Main-thread-only clocks for direct recovery attempts and fresh decode without a first present.
     package nonisolated(unsafe) var directPresentStallSince: CFAbsoluteTime?
+    package nonisolated(unsafe) var directPresentMissingSince: CFAbsoluteTime?
     /// Wall-clock when the watchdog armed (start, or a re-enable). The startup-
     /// grace window measures from here so it spans the pacer's cadence-lock.
     package nonisolated(unsafe) var presentWatchdogStartedAt: CFAbsoluteTime?
