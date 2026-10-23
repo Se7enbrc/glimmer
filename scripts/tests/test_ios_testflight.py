@@ -419,14 +419,22 @@ class TestFlightTests(unittest.TestCase):
                 signing.cleanup()
             self.assertFalse(root.exists())
 
-    def test_delivery_receipt_drops_raw_messages_and_fails_unverified_output(self):
+    def test_delivery_receipt_keeps_only_capped_apple_reasons_and_fails_unverified_output(self):
         success = signing.delivery_outcome(0, b'{"success-message":"Uploaded"}')
         self.assertEqual(success['status'], 'upload_and_processing_command_succeeded')
         for code, output in [(1, b'{}'), (0, b'not-json'), (0, b'[]'),
-                             (0, b'{"errors":[{"code":123,"message":"sensitive detail"}]}')]:
+                             (0, b'{"errors":[{"code":123,"message":"m","other":"sensitive detail"}]}')]:
             receipt = signing.delivery_outcome(code, output)
             self.assertEqual(receipt['status'], 'delivery_unconfirmed')
             self.assertNotIn('sensitive', json.dumps(receipt))
+        error = {'code': 90039, 'message': 'x' * 900, 'userInfo': {
+            'NSLocalizedFailureReason': 'reason', 'NSUnderlyingError': 'sensitive detail'}}
+        receipt = signing.delivery_outcome(1, json.dumps({'product-errors': [error]}).encode())
+        self.assertEqual(receipt['error_codes'], ['90039'])
+        self.assertEqual(len(receipt['error_messages'][0]), 500)
+        self.assertNotIn('sensitive', json.dumps(receipt))
+        receipt = signing.delivery_outcome(1, b'{"errors":[{"code":1,"message":"m","userInfo":{"NSLocalizedFailureReason":"r"}}]}')
+        self.assertEqual(receipt['error_messages'], ['m | r'])
 
     def test_workflow_keeps_candidate_code_and_credentials_separate(self):
         workflows = Path(__file__).resolve().parents[2] / '.github/workflows'
