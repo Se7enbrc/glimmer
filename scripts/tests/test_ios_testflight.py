@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+import warnings
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -193,22 +194,93 @@ class TestFlightTests(unittest.TestCase):
         artifact.unpack(bundle, self.root / 'ipa', 'Payload')
         self.assertEqual((self.root / 'ipa/Payload/Glimmer.app/Glimmer').stat().st_mode & 0o777, 0o755)
 
-    def test_unsafe_zip_entries_are_rejected_before_extraction(self):
-        cases = [('Payload/../escape', stat.S_IFREG | 0o644),
-                 ('/Payload/absolute', stat.S_IFREG | 0o644),
-                 ('Payload/link', stat.S_IFLNK | 0o777),
-                 ('Payload/fifo', stat.S_IFIFO | 0o600),
-                 ('Payload/setuid', stat.S_IFREG | 0o4755),
-                 ('Payload//alias', stat.S_IFREG | 0o644)]
-        for index, (name, mode) in enumerate(cases):
-            bundle = self.root / f'bad-{index}.zip'
-            with zipfile.ZipFile(bundle, 'w') as output:
+    def unsafe_zip(self, path, entries):
+        with zipfile.ZipFile(path, 'w') as output, warnings.catch_warnings():
+            warnings.simplefilter('ignore', UserWarning)  # zipfile warns on the duplicate fixture
+            for name, mode in entries:
                 entry = zipfile.ZipInfo(name)
                 entry.external_attr = mode << 16
                 output.writestr(entry, b'x')
-            with self.subTest(name=name), self.assertRaises(ValueError):
-                artifact.unpack(bundle, self.root / f'out-{index}', 'Payload')
+
+    def test_unsafe_zip_entries_are_rejected_before_extraction(self):
+        cases = [('traversal', [('Payload/../escape', stat.S_IFREG | 0o644)]),
+                 ('absolute', [('/Payload/absolute', stat.S_IFREG | 0o644)]),
+                 ('link-or-special', [('Payload/link', stat.S_IFLNK | 0o777)]),
+                 ('link-or-special', [('Payload/fifo', stat.S_IFIFO | 0o600)]),
+                 ('privileged-bits', [('Payload/setuid', stat.S_IFREG | 0o4755)]),
+                 ('noncanonical', [('Payload//alias', stat.S_IFREG | 0o644)]),
+                 ('unexpected-root', [('Symbols/A.symbols', stat.S_IFREG | 0o644)]),
+                 ('directory-mode-on-file', [('Payload/dir', stat.S_IFDIR | 0o755)]),
+                 ('duplicate', [('Payload/twice', stat.S_IFREG | 0o644)] * 2),
+                 ('backslash', [('Payload\\windows', stat.S_IFREG | 0o644)]),
+                 ('too-long', [('Payload/' + 'a/' * 40 + 'deep', stat.S_IFREG | 0o644)])]
+        for index, (reason, entries) in enumerate(cases):
+            bundle = self.root / f'bad-{index}.zip'
+            self.unsafe_zip(bundle, entries)
+            with self.subTest(reason=reason), self.assertRaises(artifact.UnsafeEntries) as caught:
+                artifact.unpack(bundle, self.root / f'out-{index}', ('Payload', 'SwiftSupport'))
+            self.assertEqual(caught.exception.report['violations'][0]['reason'], reason)
             self.assertFalse((self.root / f'out-{index}').exists())
+
+    def test_rejection_reports_every_entry_bounded_and_escaped(self):
+        bundle = self.root / 'many.ipa'
+        hostile = 'Other/\x1b[31m‮' + 'x' * 400
+        self.unsafe_zip(bundle, [('Payload/Glimmer.app/Glimmer', stat.S_IFREG | 0o755), (hostile, stat.S_IFREG | 0o644)]
+                        + [(f'Symbols/{n}.symbols', stat.S_IFREG | 0o644) for n in range(30)])
+        with self.assertRaises(artifact.UnsafeEntries) as caught:
+            artifact.unpack(bundle, self.root / 'out', ('Payload', 'SwiftSupport'))
+        report = caught.exception.report
+        self.assertEqual(report['violation_count'], 31)
+        self.assertEqual(len(report['violations']), artifact.MAX_REPORTED)
+        self.assertEqual(report['roots'], {'Symbols': 30, 'Payload': 1, 'Other': 1})
+        self.assertEqual(report['violations'][0], {'reason': 'unexpected-root', 'type': 'file', 'mode': '0644',
+                                                   'path': ascii(hostile)[1:-1][:artifact.MAX_REPORTED_PATH]})
+        self.assertTrue(all(value.isascii() and value.isprintable() and len(value) <= artifact.MAX_REPORTED_PATH
+                            for item in report['violations'] for value in item.values()))
+        stderr = io.StringIO()
+        with patch.object(cli.signing, 'export', side_effect=caught.exception), patch.object(cli, 'toolchain'), \
+                patch.object(sys, 'argv', ['ios-testflight.py', 'export']), patch.dict(os.environ, ENV), \
+                patch.object(sys, 'stderr', stderr), self.assertRaises(SystemExit):
+            cli.main()
+        lines = stderr.getvalue().splitlines()
+        self.assertEqual(json.loads(lines[0].removeprefix('ERR: entry report ')), report)
+        self.assertTrue(lines[1].startswith('ERR: unsafe or duplicate artifact entry (31 total): unexpected-root Other/'))
+        self.assertLess(len(stderr.getvalue()), 16 * 1024)
+
+    def test_diagnostics_keep_the_accepted_ipa_shape(self):
+        bundle = self.root / 'accepted.ipa'
+        self.unsafe_zip(bundle, [('Payload/Glimmer.app/Glimmer', stat.S_IFREG | 0o755),
+                                 ('Payload/Glimmer.app/unset-mode', 0),
+                                 ('SwiftSupport/iphoneos/libswiftCore.dylib', stat.S_IFREG | 0o644)])
+        artifact.unpack(bundle, self.root / 'ipa', ('Payload', 'SwiftSupport'))
+        self.assertEqual((self.root / 'ipa/Payload/Glimmer.app/unset-mode').stat().st_mode & 0o777, 0o600)
+
+    def test_exported_symbols_must_be_exactly_the_app_uuids(self):
+        uuid = '54A97B0B-4991-30CD-9AE6-6DE03CEC217A'
+        other = '00000000-0000-0000-0000-000000000000'
+        app_uuids = [(uuid, 'arm64')]
+        # The shape Xcode's App Store export produced in delivery run 39840393056.
+        bundle = self.root / 'export.ipa'
+        self.unsafe_zip(bundle, [('Payload/Glimmer.app/Glimmer', stat.S_IFREG | 0o755),
+                                 ('Symbols/', stat.S_IFDIR | 0o755),
+                                 (f'Symbols/{uuid}.symbols', stat.S_IFREG | 0o644)])
+        inspected = self.root / 'ipa'
+        artifact.unpack(bundle, inspected, ('Payload', 'SwiftSupport', 'Symbols'))
+        signing.verify_exported_symbols(inspected, app_uuids)
+        signing.verify_exported_symbols(self.root / 'no-symbols', app_uuids)
+        for app in ([(other, 'arm64')], [(uuid, 'arm64'), (other, 'arm64')]):
+            with self.subTest(app=app), self.assertRaises(ValueError):
+                signing.verify_exported_symbols(inspected, app)
+        symbols = inspected / 'Symbols'
+        for name, make in [('extra.symbols', lambda p: p.write_bytes(b'x')), ('nested', Path.mkdir),
+                           (f'{other}.symbols', lambda p: p.symlink_to(symbols / f'{uuid}.symbols'))]:
+            make(symbols / name)
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                signing.verify_exported_symbols(inspected, app_uuids)
+            (symbols / name).rmdir() if name == 'nested' else (symbols / name).unlink()
+        (symbols / f'{uuid}.symbols').unlink()
+        with self.assertRaises(ValueError):
+            signing.verify_exported_symbols(inspected, app_uuids)
 
     def test_zip_size_budget_and_existing_destination_fail_closed(self):
         bundle = self.root / 'large.zip'
@@ -373,14 +445,22 @@ class TestFlightTests(unittest.TestCase):
                 signing.cleanup()
             self.assertFalse(root.exists())
 
-    def test_delivery_receipt_drops_raw_messages_and_fails_unverified_output(self):
+    def test_delivery_receipt_keeps_only_capped_apple_reasons_and_fails_unverified_output(self):
         success = signing.delivery_outcome(0, b'{"success-message":"Uploaded"}')
         self.assertEqual(success['status'], 'upload_and_processing_command_succeeded')
         for code, output in [(1, b'{}'), (0, b'not-json'), (0, b'[]'),
-                             (0, b'{"errors":[{"code":123,"message":"sensitive detail"}]}')]:
+                             (0, b'{"errors":[{"code":123,"message":"m","other":"sensitive detail"}]}')]:
             receipt = signing.delivery_outcome(code, output)
             self.assertEqual(receipt['status'], 'delivery_unconfirmed')
             self.assertNotIn('sensitive', json.dumps(receipt))
+        error = {'code': 90039, 'message': 'x' * 900, 'userInfo': {
+            'NSLocalizedFailureReason': 'reason', 'NSUnderlyingError': 'sensitive detail'}}
+        receipt = signing.delivery_outcome(1, json.dumps({'product-errors': [error]}).encode())
+        self.assertEqual(receipt['error_codes'], ['90039'])
+        self.assertEqual(len(receipt['error_messages'][0]), 500)
+        self.assertNotIn('sensitive', json.dumps(receipt))
+        receipt = signing.delivery_outcome(1, b'{"errors":[{"code":1,"message":"m","userInfo":{"NSLocalizedFailureReason":"r"}}]}')
+        self.assertEqual(receipt['error_messages'], ['m | r'])
 
     def test_workflow_keeps_candidate_code_and_credentials_separate(self):
         workflows = Path(__file__).resolve().parents[2] / '.github/workflows'
