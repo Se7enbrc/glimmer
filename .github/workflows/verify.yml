@@ -259,7 +259,9 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p iOS/build/logs
-          make ios-test TEST_FLAGS='-enableCodeCoverage YES -resultBundlePath build/CI-tests.xcresult' \
+          destination=$(scripts/ci-ios-simulator.sh)
+          make ios-test TEST_DESTINATION="$destination" \
+            TEST_FLAGS='-enableCodeCoverage YES -resultBundlePath build/CI-tests.xcresult' \
             2>&1 | tee iOS/build/logs/test.log
           if grep -E '(^|[[:space:]])warning:' iOS/build/logs/test.log; then exit 1; fi
           xcrun xccov view --report --json iOS/build/CI-tests.xcresult > iOS/build/logs/coverage.json
