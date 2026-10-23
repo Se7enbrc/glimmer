@@ -283,6 +283,78 @@ struct StreamViewKeyboardTests {
         #expect(backend.keyboard.isEmpty)
     }
 
+    @Test(arguments: [false, true])
+    func controlZSurvivesResponderAndPresentationChanges(keyEquivalentFirst: Bool) throws {
+        let forwarder = InputForwarder()
+        let backend = InputRecordingBackend()
+        let window = PointerFocusTestWindow(contentRect: .zero, styleMask: .borderless,
+                                            backing: .buffered, defer: true)
+        forwarder.attach(to: window)
+        forwarder.setBackend(backend)
+        defer { forwarder.detach() }
+        let view = try #require(forwarder.inputView)
+        forwarder.statsHotkeyProvider = {
+            HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "z")
+        }
+        let quits = Tally(), stats = Tally()
+        forwarder.onQuitHotkey = { quits.calls += 1 }
+        forwarder.onCancelConnect = { quits.calls += 1 }
+        forwarder.onStatsHotkey = { stats.calls += 1 }
+        let event = try key(.keyDown, kVK_ANSI_Z, mods: [.control], chars: "z")
+        let repeatEvent = try key(.keyDown, kVK_ANSI_Z, mods: [.control], chars: "z", isRepeat: true)
+        for step in 0..<6 {
+            switch step {
+            case 1: #expect(window.makeFirstResponder(view))
+            case 2: forwarder.isReady = true; forwarder.initialConnectPending = false
+            case 3: forwarder.setMiniPlayer(true)
+            case 4: forwarder.windowResignedKey(); #expect(window.makeFirstResponder(nil))
+            case 5: forwarder.setMiniPlayer(false); #expect(window.makeFirstResponder(view))
+            default: break
+            }
+            forwarder.heldModifierVKs = [0xA0, 0xA2, 0xA4, 0x5B]
+            for vk in forwarder.heldModifierVKs { forwarder.releases.hold(.key(VKScanCode(vk: vk))) }
+            backend.inputResult = -2
+            if keyEquivalentFirst { #expect(!view.performKeyEquivalent(with: event)) }
+            view.keyDown(with: event)
+            #expect(stats.calls == step + 1)
+            #expect(!forwarder.releases.pending.isEmpty)
+            if keyEquivalentFirst { #expect(!view.performKeyEquivalent(with: repeatEvent)) }
+            view.keyDown(with: repeatEvent)
+            #expect(stats.calls == step + 1)
+            #expect(quits.calls == 0)
+        }
+    }
+
+    @Test func aRetiredStreamViewCannotInvokeItsOldQuitProvider() throws {
+        let old = InputForwarder()
+        let oldWindow = PointerFocusTestWindow(contentRect: .zero, styleMask: .borderless,
+                                               backing: .buffered, defer: true)
+        old.attach(to: oldWindow)
+        old.setBackend(InputRecordingBackend())
+        let oldView = try #require(old.inputView)
+        let quits = Tally(), stats = Tally()
+        old.quitHotkeyProvider = {
+            HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "z")
+        }
+        old.onCancelConnect = { quits.calls += 1 }
+        old.onQuitHotkey = { quits.calls += 1 }
+        old.detach()
+        #expect(oldView.delegate == nil)
+
+        let (current, _, currentView) = ready()
+        defer { current.detach() }
+        current.statsHotkeyProvider = old.quitHotkeyProvider
+        current.onQuitHotkey = { quits.calls += 1 }
+        current.onStatsHotkey = { stats.calls += 1 }
+        let event = try key(.keyDown, kVK_ANSI_Z, mods: [.control], chars: "z")
+        #expect(!oldView.performKeyEquivalent(with: event))
+        oldView.keyDown(with: event)
+        #expect(!currentView.performKeyEquivalent(with: event))
+        currentView.keyDown(with: event)
+        #expect(quits.calls == 0)
+        #expect(stats.calls == 1)
+    }
+
     @Test func quitAndStatsChordsStayOnTheMac() throws {
         let (forwarder, backend, view) = ready()
         let quits = Tally()
