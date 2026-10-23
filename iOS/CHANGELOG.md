@@ -13,3 +13,5 @@
 
 - Touch mouse stays available alongside a controller. Turn it off in Input
   settings to prevent accidental screen input while playing.
+
+- Thumbstick mouse movement is smoother, with finer control for small movements.
