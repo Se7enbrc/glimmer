@@ -56,6 +56,33 @@ struct AppShellTests {
         }
     }
 
+    @Test @MainActor func nativeQualitySurvivesRelaunchAndFailedReadiness() {
+        withQualityDefaults {
+            let defaults = UserDefaults.standard
+            defaults.set("matchDisplay", forKey: "qualityPreset")
+            defaults.set(1920, forKey: "customWidth")
+            defaults.set(1080, forKey: "customHeight")
+            defaults.set(60, forKey: "customFPS")
+            let host = Host(id: "quality-pc", name: "Tower", customName: nil, localAddress: nil,
+                            manualAddress: nil, apps: [], lastConnected: nil, serverCertPEM: nil,
+                            appVersion: nil, macAddress: nil)
+            for _ in 0..<2 {
+                let model = AppModel()
+                model.displayProbe = { (3456, 2234, 120) }
+                for state: HostLiveStatus.State in [.unknown, .certMismatch, .idle, .asleep] {
+                    model.hostLiveStatus = HostLiveStatus(hostID: host.id, state: state, capturedAt: Date())
+                    let config = model.nativeStreamConfig(for: host)
+                    #expect((config.width, config.height, config.fps) == (3456, 2234, 120))
+                    #expect(model.qualityPreset == .matchDisplay)
+                    #expect(defaults.string(forKey: "qualityPreset") == "matchDisplay")
+                    #expect(defaults.integer(forKey: "customWidth") == 1920)
+                    #expect(defaults.integer(forKey: "customHeight") == 1080)
+                    #expect(defaults.integer(forKey: "customFPS") == 60)
+                }
+            }
+        }
+    }
+
     @Test @MainActor func fullscreenCoversEveryPanelUnlessTheUserChoseOtherwise() {
         let keys = ["streamCoversNotch", "streamUsesFullScreenSpace"]
         let defaults = UserDefaults.standard
