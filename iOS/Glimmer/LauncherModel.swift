@@ -142,7 +142,7 @@ final class LauncherModel {
             savedPCs = remaining
             forgetFailure = nil
         } catch {
-            forgetFailure = "Couldn't forget \(pc.name). Unlock the device and try again."
+            forgetFailure = LauncherFailureCopy.storageMessage(error, action: "forget \(pc.name)")
         }
     }
 
@@ -207,7 +207,7 @@ final class LauncherModel {
                 pairing = nil
                 busy = false
                 refreshSavedPCs()
-                message = LauncherFailureCopy.message(error)
+                message = LauncherFailureCopy.message(error, pcName: server.serverName)
             }
         }
     }
@@ -280,12 +280,10 @@ final class LauncherModel {
     private func isCurrent(_ attempt: UInt64) -> Bool { generation == attempt && !Task.isCancelled }
 
     private func refreshSavedPCs() {
-        do { savedPCs = try calls?.savedPCs() ?? [] } catch { showStorageFailure() }
-    }
-
-    private func showStorageFailure() {
-        savedPCs = []
-        message = "Glimmer couldn't read its saved PCs. Unlock the device and try again."
+        guard active else { return }
+        do { savedPCs = try calls?.savedPCs() ?? [] } catch {
+            message = LauncherFailureCopy.storageMessage(error, action: "read its saved PCs")
+        }
     }
 
     private func startDiscovery() {

@@ -457,6 +457,7 @@ final class LauncherFixture {
     var lastConnectedID: String?
     var forgotten: Set<String> = []
     var forgetFailure: Error?
+    var savedFailure: Error?
     var prepares = 0
     var pairs = 0
     var remembers = 0
@@ -479,7 +480,10 @@ final class LauncherFixture {
     var storedPCs: [SavedPC] { (additionalPCs + [saved]).filter { !forgotten.contains($0.id) } }
 
     func model() -> LauncherModel {
-        LauncherModel(calls: LauncherModel.Calls(savedPCs: { [self] in storedPCs },
+        LauncherModel(calls: LauncherModel.Calls(savedPCs: { [self] in
+            if let savedFailure { throw savedFailure }
+            return storedPCs
+        },
             prepare: { [self] server, saved in
                 prepares += 1
                 preparedAddress = server.address
