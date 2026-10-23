@@ -17,6 +17,7 @@ import Testing
 
 @MainActor
 struct StreamSignalTests {
+    private let settings = IsolatedDefaults()
 
     @MainActor private final class Spoken {
         var lines: [String] = []
@@ -195,7 +196,7 @@ struct StreamSignalTests {
         let decoder = VideoDecoder()
         decoder.setPresentSuppressed(true)
         let native = MacSessionServices()
-        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, audioDecoder: AudioDecoder(),
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, audioDecoder: AudioDecoder(defaults: settings.defaults),
             services: native.services(), backend: MacTransport.makeBackend(),
             makeNetwork: { NetworkClient(server: $0) }, makeBackend: { MacTransport.makeBackend() })
         let (beforeAdoption, afterAdoption) = await session.checkEarlyBackgroundAdoption(decoder, native: native)

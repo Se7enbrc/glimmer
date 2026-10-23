@@ -9,6 +9,8 @@ import os
 @testable import Glimmer
 
 struct AudioWorkerTests {
+    private let settings = IsolatedDefaults()
+
     @Test func progressingAudioSkipsHALQueriesButStallsAndResetsStillCheck() {
         var progress = AudioRenderProgress()
         let samples: [(Int64?, Bool)] = [(nil, true), (0, true), (240, false), (480, false),
@@ -94,7 +96,7 @@ struct AudioWorkerTests {
     }
 
     @Test func graphChangeReleasesDecodeLockAndAdmissionRecovers() async {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.beginGraphChange()
         let returned = DispatchSemaphore(value: 0)

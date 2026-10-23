@@ -14,45 +14,30 @@ import Testing
 @testable import Glimmer
 
 struct AppShellTests {
-
-    @MainActor private func withQualityDefaults(_ body: () -> Void) {
-        let keys = ["qualityPreset", "customWidth", "customHeight", "customFPS", "streamHDR",
-                    StreamDisplayMode.defaultsKey, BitrateMode.defaultsKey]
-        let defaults = UserDefaults.standard
-        let saved = keys.map { ($0, defaults.object(forKey: $0)) }
-        defer {
-            for (key, value) in saved {
-                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
-            }
-        }
-        for key in keys { defaults.removeObject(forKey: key) }
-        body()
-    }
+    private let settings = IsolatedDefaults()
 
     @Test @MainActor func customResolutionAndRefreshSurviveRelaunch() {
-        withQualityDefaults {
-            for (width, height, fps) in [(1920, 1080, 60), (1280, 720, 90), (2560, 1440, 120)] {
-                let model = AppModel()
-                model.qualityPreset = .custom
-                model.customWidth = width
-                model.customHeight = height
-                model.customFPS = fps
-                model.streamDisplayMode = .fullScreen
-                model.streamHDR = false
-                model.bitrateMode = .bandwidthSaver
-                let expectedBitrate = model.effectiveBitrateKbps
-                let relaunched = AppModel()
-                #expect(relaunched.qualityPreset == .custom)
-                #expect(relaunched.customWidth == width)
-                #expect(relaunched.customHeight == height)
-                #expect(relaunched.customFPS == fps)
-                #expect(relaunched.streamHDR == false)
-                #expect(relaunched.bitrateMode == .bandwidthSaver)
-                #expect(relaunched.effectiveBitrateKbps == expectedBitrate)
-                #expect(UserDefaults.standard.integer(forKey: "customWidth") == width)
-                #expect(UserDefaults.standard.integer(forKey: "customHeight") == height)
-                #expect(UserDefaults.standard.integer(forKey: "customFPS") == fps)
-            }
+        for (width, height, fps) in [(1920, 1080, 60), (1280, 720, 90), (2560, 1440, 120)] {
+            let model = AppModel(defaults: settings.defaults)
+            model.qualityPreset = .custom
+            model.customWidth = width
+            model.customHeight = height
+            model.customFPS = fps
+            model.streamDisplayMode = .fullScreen
+            model.streamHDR = false
+            model.bitrateMode = .bandwidthSaver
+            let expectedBitrate = model.effectiveBitrateKbps
+            let relaunched = AppModel(defaults: settings.defaults)
+            #expect(relaunched.qualityPreset == .custom)
+            #expect(relaunched.customWidth == width)
+            #expect(relaunched.customHeight == height)
+            #expect(relaunched.customFPS == fps)
+            #expect(relaunched.streamHDR == false)
+            #expect(relaunched.bitrateMode == .bandwidthSaver)
+            #expect(relaunched.effectiveBitrateKbps == expectedBitrate)
+            #expect(settings.defaults.integer(forKey: "customWidth") == width)
+            #expect(settings.defaults.integer(forKey: "customHeight") == height)
+            #expect(settings.defaults.integer(forKey: "customFPS") == fps)
         }
     }
 
@@ -84,44 +69,58 @@ struct AppShellTests {
     }
 
     @Test @MainActor func fullscreenCoversEveryPanelUnlessTheUserChoseOtherwise() {
-        let keys = ["streamCoversNotch", "streamUsesFullScreenSpace"]
-        let defaults = UserDefaults.standard
-        let saved = keys.map { ($0, defaults.object(forKey: $0)) }
-        defer {
-            for (key, value) in saved {
-                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
-            }
-        }
-        for key in keys { defaults.removeObject(forKey: key) }
-        let fresh = AppModel()
+        let defaults = settings.defaults
+        let fresh = AppModel(defaults: settings.defaults)
         for hasNotch in [true, false] {
             #expect(AppModel.streamCoversNotch(displayHasNotch: hasNotch, coversNotch: fresh.streamCoversNotch,
                                                usesFullScreenSpace: fresh.streamUsesFullScreenSpace))
         }
         defaults.set(false, forKey: "streamCoversNotch")
         defaults.set(true, forKey: "streamUsesFullScreenSpace")
-        let chosen = AppModel()
+        let chosen = AppModel(defaults: settings.defaults)
         #expect(!chosen.streamCoversNotch && chosen.streamUsesFullScreenSpace)
     }
 
     @Test @MainActor func loadingQualityDoesNotSaveUntouchedCustomValues() {
-        withQualityDefaults {
-            let model = AppModel()
-            for key in ["qualityPreset", "customWidth", "customHeight", "customFPS"] {
-                #expect(UserDefaults.standard.object(forKey: key) == nil)
-            }
-            let expected = model.effectiveValuesForPreset(model.qualityPreset)
-            model.qualityPreset = .custom
-            #expect(model.customWidth == expected.width)
-            #expect(model.customHeight == expected.height)
-            #expect(model.customFPS == expected.fps)
+        let model = AppModel(defaults: settings.defaults)
+        for key in ["qualityPreset", "customWidth", "customHeight", "customFPS"] {
+            #expect(settings.defaults.object(forKey: key) == nil)
         }
+        let expected = model.effectiveValuesForPreset(model.qualityPreset)
+        model.qualityPreset = .custom
+        #expect(model.customWidth == expected.width)
+        #expect(model.customHeight == expected.height)
+        #expect(model.customFPS == expected.fps)
     }
 
     @Test @MainActor func testHostRegistersDefaultsWithoutLaunchingTheApp() {
         #expect(AppDelegate.boundManager == nil)
-        let registration = UserDefaults.standard.volatileDomain(forName: UserDefaults.registrationDomain)
+        GlimmerApp.registerDefaults(defaults: settings.defaults)
+        let registration = settings.defaults.volatileDomain(forName: UserDefaults.registrationDomain)
         #expect(registration[MouseAccelerationControl.enabledDefaultsKey] as? Bool == true)
+    }
+
+    @Test @MainActor func injectedSettingsLeaveStandardDomainUntouched() throws {
+        let domain = try #require(Bundle.main.bundleIdentifier)
+        let before = UserDefaults.standard.persistentDomain(forName: domain) ?? [:]
+        defer {
+            let after = UserDefaults.standard.persistentDomain(forName: domain) ?? [:]
+            let unchanged = NSDictionary(dictionary: before).isEqual(to: after)
+            #expect(unchanged)
+        }
+        settings.defaults.set("maximum", forKey: "qualityPreset")
+        let model = AppModel(defaults: settings.defaults)
+        model.qualityPreset = .custom
+        model.customWidth = 2560
+        model.customHeight = 1440
+        model.customFPS = 120
+        model.rawHIDPromptAnswered = true
+        model.telemetryEnabled = true
+        let relaunched = AppModel(defaults: settings.defaults)
+        #expect(relaunched.customWidth == 2560 && relaunched.customHeight == 1440)
+        #expect(relaunched.customFPS == 120)
+        #expect(relaunched.rawHIDPromptAnswered && relaunched.telemetryEnabled)
+        #expect(settings.defaults.bool(forKey: "informationalFpsDefaultsApplied"))
     }
 
     @Test func dockIconStaysWhileThereIsSomethingToComeBackTo() {
@@ -210,7 +209,7 @@ struct AppShellTests {
     }
 
     @Test @MainActor func quitCancelsALaunchBeforeItsRouteSettles() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let route = CommandRouteWait()
         let (request, task) = try await pendingStream(model, route: route)
         let replies = CommandReplies()
@@ -230,7 +229,7 @@ struct AppShellTests {
     }
 
     @Test @MainActor func aCommandWaitsForReadinessAndQuitStillCancelsIt() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let readiness = CommandRouteWait()
         let readyTask = Task { await readiness.wait() }
         model.hostPolling.readinessTasks[tower.id] = readyTask
@@ -250,7 +249,7 @@ struct AppShellTests {
     }
 
     @Test @MainActor func quittingAnotherPCLeavesThePendingLaunchAlone() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let route = CommandRouteWait()
         let (request, task) = try await pendingStream(model, route: route)
         model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": "another-pc"])
@@ -262,7 +261,7 @@ struct AppShellTests {
     }
 
     @Test @MainActor func aLateRouteCannotClearTheReplacementLaunch() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let firstRoute = CommandRouteWait()
         let (_, firstTask) = try await pendingStream(model, route: firstRoute)
         model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])
@@ -279,7 +278,7 @@ struct AppShellTests {
     }
 
     @Test @MainActor func aLateRouteDoesNotDisturbAReconnectingSession() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let route = CommandRouteWait()
         let (_, task) = try await pendingStream(model, route: route)
         model.handleCommand(["id": UUID().uuidString, "verb": "quit", "host": tower.id])

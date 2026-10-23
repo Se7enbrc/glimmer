@@ -9,6 +9,8 @@ import Testing
 
 @Suite(.serialized)
 struct SessionPublicLifetimeTests {
+    private let settings = IsolatedDefaults()
+
     private var configuration: StreamConnection.Configuration {
         .init(width: 1920, height: 1080, fps: 60, bitrateKbps: 20_000, videoFormats: .h264)
     }
@@ -19,7 +21,8 @@ struct SessionPublicLifetimeTests {
         let release = SafetyTestGate()
         let disposed = SafetyTestCounter()
         let pair = await MainActor.run {
-            let media = StreamSession.PreparedMedia(video: VideoDecoder(), audio: AudioDecoder(), quiesce: {},
+            let media = StreamSession.PreparedMedia(video: VideoDecoder(), audio: AudioDecoder(defaults: settings.defaults),
+                quiesce: {},
                 finalDispose: {
                     await entered.open()
                     await release.wait()
@@ -63,7 +66,8 @@ struct SessionPublicLifetimeTests {
         let network = sunshine.client(server)
         let disposal = SafetyTestCounter()
         let pair = await MainActor.run {
-            StreamSession.make(media: .init(video: VideoDecoder(), audio: AudioDecoder(), quiesce: {},
+            StreamSession.make(media: .init(video: VideoDecoder(), audio: AudioDecoder(defaults: settings.defaults),
+                quiesce: {},
                 finalDispose: { await disposal.increment() }), network: network, hostDisposition: .disconnectOnly)
         }
         let backend = InputRecordingBackend()
@@ -91,7 +95,8 @@ struct SessionPublicLifetimeTests {
         server.pairStatus = .paired
         let disposal = SafetyTestCounter()
         let pair = await MainActor.run {
-            StreamSession.make(media: .init(video: VideoDecoder(), audio: AudioDecoder(), quiesce: {},
+            StreamSession.make(media: .init(video: VideoDecoder(), audio: AudioDecoder(defaults: settings.defaults),
+                quiesce: {},
                 finalDispose: { await disposal.increment() }), network: sunshine.client(server),
                 hostDisposition: .disconnectOnly)
         }
@@ -112,7 +117,8 @@ struct SessionPublicLifetimeTests {
         var server = SessionFlow.pairedPC()
         server.pairStatus = .paired
         let pair = await MainActor.run {
-            StreamSession.make(media: .init(video: VideoDecoder(), audio: AudioDecoder(), quiesce: {}, finalDispose: {}),
+            StreamSession.make(media: .init(video: VideoDecoder(), audio: AudioDecoder(defaults: settings.defaults),
+                quiesce: {}, finalDispose: {}),
                                network: sunshine.client(server), hostDisposition: .disconnectOnly)
         }
         let backend = InputRecordingBackend()
@@ -136,7 +142,8 @@ struct SessionPublicLifetimeTests {
         let stream = source.stream
         let input = StreamInput { source.yield(.input($0)) }
         let media = await MainActor.run {
-            StreamSession.PreparedMedia(video: VideoDecoder(), audio: AudioDecoder(), quiesce: {}, finalDispose: {})
+            StreamSession.PreparedMedia(video: VideoDecoder(), audio: AudioDecoder(defaults: settings.defaults),
+                quiesce: {}, finalDispose: {})
         }
         let session = StreamSession(hostDisposition: .disconnectOnly, audioDecoder: await media.audio,
             services: SessionServices(), backend: backend, makeNetwork: { FakeSunshine.scripted([:]).client($0) },
@@ -169,7 +176,8 @@ struct SessionPublicLifetimeTests {
             entered.continuation.finish()
             #expect(release.wait(timeout: .now() + 10) == .success)
         }
-        let session = StreamSession(hostDisposition: .disconnectOnly, audioDecoder: AudioDecoder(), services: services,
+        let session = StreamSession(hostDisposition: .disconnectOnly, audioDecoder: AudioDecoder(defaults: settings.defaults),
+            services: services,
             backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
             makeBackend: { InputRecordingBackend() })
         let starting = Task {
@@ -239,7 +247,8 @@ struct SessionPublicLifetimeTests {
         let stream = source.stream
         let input = StreamInput { source.yield(.input($0)) }
         let media = await MainActor.run {
-            StreamSession.PreparedMedia(video: VideoDecoder(), audio: AudioDecoder(), quiesce: {}, finalDispose: {})
+            StreamSession.PreparedMedia(video: VideoDecoder(), audio: AudioDecoder(defaults: settings.defaults),
+                quiesce: {}, finalDispose: {})
         }
         let sunshine = FakeSunshine.scripted([:])
         let network = sunshine.client(SessionFlow.pairedPC())
@@ -307,7 +316,7 @@ struct SessionPublicLifetimeTests {
         let video = VideoDecoder()
         let source = SessionEventSource()
         let stream = source.stream
-        let bridge = StreamBridgeContext(session: session, videoDecoder: video, audioDecoder: AudioDecoder(),
+        let bridge = StreamBridgeContext(session: session, videoDecoder: video, audioDecoder: AudioDecoder(defaults: settings.defaults),
                                          publicEvents: source)
         let media = SessionMedia(presentation: SessionPresentation(), input: SessionInputHooks(
             setBackend: { _ in }, setReady: { _ in }, quiesce: {}, detach: {}, configure: { _ in }), video: video)

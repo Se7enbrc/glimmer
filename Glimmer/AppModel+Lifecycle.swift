@@ -50,7 +50,7 @@ extension AppModel {
         // before AppModel reads any UserDefaults.
         // Repair login registration after moves and updates without blocking the launcher.
         await LoginItemManager.reconcile()
-        LoginItemManager.syncRelaunchOnLogin(UserDefaults.standard.bool(forKey: "launchAtLogin"))
+        LoginItemManager.syncRelaunchOnLogin(settingsDefaults.bool(forKey: "launchAtLogin"))
         // Same self-heal for the privileged AWDL daemon: an app update / reinstall
         // swaps the bundle (and the daemon binary inside it), which can wedge the
         // SMAppService registration. Re-assert it so the post-update stream uses
@@ -70,7 +70,7 @@ extension AppModel {
         // outlive the display they were derived from. Users who pick Custom in
         // Settings get the same seed for free from `qualityPreset`'s willSet,
         // which prefills the fields from the preset they were leaving.
-        if qualityPreset == .custom, UserDefaults.standard.object(forKey: "customWidth") == nil {
+        if qualityPreset == .custom, settingsDefaults.object(forKey: "customWidth") == nil {
             snapCustomToDisplay()
         }
         persistQualitySettings()

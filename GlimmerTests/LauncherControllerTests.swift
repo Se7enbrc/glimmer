@@ -9,6 +9,8 @@ import Testing
 
 @MainActor
 struct LauncherControllerTests {
+    private let settings = IsolatedDefaults()
+
     @Test func pairingSheetReceivesDirectionsAndActivationAfterNeutralInput() {
         let sheet = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
         let window = PairingParentWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
@@ -30,7 +32,7 @@ struct LauncherControllerTests {
 
     @Test func emptyLauncherRegistersItsPairButton() {
         var cells: [LauncherFocus] = []
-        let view = NSHostingView(rootView: EmptyPairingFocusFixture { cells = $0 }.environment(AppModel()))
+        let view = NSHostingView(rootView: EmptyPairingFocusFixture { cells = $0 }.environment(AppModel(defaults: settings.defaults)))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 500),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.contentView = view

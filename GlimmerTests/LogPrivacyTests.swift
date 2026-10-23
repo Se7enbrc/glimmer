@@ -9,12 +9,33 @@
 //
 
 @testable import GlimmerEngine
+import AppKit
 import CryptoKit
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct DiagMessageTests {
+
+    @Test @MainActor func spaceExitDiagnosticContainsNoKeyboardPayload() throws {
+        let events = try [(UInt16(37), NSEvent.ModifierFlags.command), (UInt16(49), .control)].map { code, flags in
+            try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
+                timestamp: 1, windowNumber: 0, context: nil, characters: "private-input",
+                charactersIgnoringModifiers: "private-input", isARepeat: false, keyCode: code))
+        }
+        let expected = "Space exit: type=10 responder=StreamInputView source=mini player frames=fixture"
+        for event in events {
+            let message = StreamWindow.spaceExitMessage(eventType: event.type, responder: "StreamInputView",
+                source: "mini player", frames: "fixture")
+            #expect(message.text == expected)
+            #expect(message.systemLogText == expected)
+            let store = LogStore(captureDebug: false)
+            store.log(.notice, message, category: "Stream.Window")
+            let entry = try #require(store.snapshot().first)
+            #expect(entry.message == expected)
+            #expect(entry.shareable.hasSuffix(expected))
+        }
+    }
 
     @Test func plainLiteralRendersOnce() {
         let message: DiagMessage = "stream connected"

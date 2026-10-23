@@ -7,6 +7,8 @@ import Testing
 @testable import Glimmer
 
 struct GlimmerAutomationTests {
+    private let settings = IsolatedDefaults()
+
     private let app = LibraryApp(id: 7, name: "Hades II", hdr: true, hidden: false)
 
     private func pc(manual: String? = "Den.local:47989") -> Glimmer.Host {
@@ -47,7 +49,7 @@ struct GlimmerAutomationTests {
     }
 
     @MainActor @Test func urlsDispatchThroughTheCommandChannel() throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.hosts = [pc()]
         var handled = Set<String>()
         for verb in ["stream", "wake", "quit"] {
@@ -71,7 +73,7 @@ struct GlimmerAutomationTests {
     }
 
     @MainActor @Test func unknownTargetsDoNotDispatchOrChangeSelection() throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.hosts = [pc()]
         var calls = 0
         for text in ["glimmer://stream?pc=Missing", "glimmer://stream?pc=Den%20PC&app=Missing",
@@ -83,7 +85,7 @@ struct GlimmerAutomationTests {
     }
 
     @MainActor @Test func aURLForTheCurrentStreamBringsItForwardWithoutRelaunching() throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.hosts = [pc()]
         model.isStreaming = true
         model.lastLaunchAttempt = (app, pc())
@@ -97,7 +99,7 @@ struct GlimmerAutomationTests {
     }
 
     @MainActor @Test func quitRequiresTheAppConfirmationEvenWithoutAStatusReading() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         var confirmations = 0
         model.hosts = [pc()]
         let request = [CommandChannel.Key.id: UUID().uuidString, CommandChannel.Key.verb: "quit",
@@ -111,7 +113,7 @@ struct GlimmerAutomationTests {
     }
 
     @MainActor @Test func quitConfirmationUsesOnlyFreshMatchingPCOrOwnLiveApp() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = pc()
         var targets: [String] = []
         for (id, date, expected) in [(host.id, Date(), "Hades II"),
@@ -151,13 +153,13 @@ struct GlimmerAutomationTests {
         }
         #expect(result == 1 && terminal.out.isEmpty)
         #expect(terminal.err == "Glimmer didn't answer. Try again.\n")
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let idle = try object(await model.commandStatusJSON())
         #expect(idle["live"] as? Bool == false && idle["pc"] is NSNull)
     }
 
     @MainActor @Test func appStatusReadsTheCurrentSessionAndRejectsSnapshotsAfterTeardown() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         model.nativeSession = session
         model.lastLaunchAttempt = (app, pc())

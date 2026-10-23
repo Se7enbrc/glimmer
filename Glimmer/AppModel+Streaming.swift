@@ -301,7 +301,7 @@ extension AppModel {
             // flips so the toast's first render already carries its
             // quiet line. nil for short (<5 min) sessions and dead
             // connects - the toast stays a single line for those.
-            self.lastSessionReceipt = SessionReceiptStore.finalizeSession()
+            self.lastSessionReceipt = SessionReceiptStore.finalizeSession(defaults: self.settingsDefaults)
             // One INFO either way - in testing the receipt write was
             // log-silent (stash vs skip was indistinguishable in any
             // artifact), so adjudicating the ≥5-min gate took a

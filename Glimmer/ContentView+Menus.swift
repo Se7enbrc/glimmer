@@ -24,6 +24,7 @@ private struct HostContextMenu: ViewModifier {
     let asButton: Bool
     @Environment(AppModel.self) private var model
     @State private var showUnpairConfirm = false
+    @State private var showUnpairFailure = false
     @State private var showRename = false
     @Environment(\.pairingOwner) private var pairingOwner
     @State private var draftName = ""
@@ -100,10 +101,17 @@ private struct HostContextMenu: ViewModifier {
             isPresented: $showUnpairConfirm,
             titleVisibility: .visible
         ) {
-            Button("Unpair", role: .destructive) { model.unpair(host) }
+            Button("Unpair", role: .destructive) {
+                do { try model.unpair(host) } catch { showUnpairFailure = true }
+            }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Glimmer will forget \(host.displayName). You can pair it again at any time.")
+        }
+        .alert(AppModel.forgetFailureTitle(host.displayName), isPresented: $showUnpairFailure) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(AppModel.forgetFailureRecovery)
         }
     }
 

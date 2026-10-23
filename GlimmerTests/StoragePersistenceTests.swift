@@ -171,7 +171,7 @@ struct PinnedCertPersistenceTests {
         #expect(try String(contentsOf: pin(store, "AAA"), encoding: .utf8) == "LEGACY")
     }
 
-    @Test func unavailableMacPathRetainsLegacyAuthenticationAndAllowsUnpair() throws {
+    @Test func unavailableMacPathRetainsLegacyAuthenticationAndRejectsUnpair() throws {
         let store = try IsolatedStore("pin-unavailable-path")
         defer { store.remove() }
         store.defaults.set("LEGACY", forKey: "glimmer.pinnedCert.AAA")
@@ -179,9 +179,11 @@ struct PinnedCertPersistenceTests {
         #expect(PinnedCertStore.load(forHostID: "AAA", defaults: store.defaults,
                                     base: store.directory, resolveBase: unavailable) == "LEGACY")
         #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == "LEGACY")
-        PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults,
-                               base: store.directory, resolveBase: unavailable)
-        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == nil)
+        #expect(throws: CocoaError(.fileReadNoPermission)) {
+            try PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults,
+                                       base: store.directory, resolveBase: unavailable)
+        }
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == "LEGACY")
     }
 
     @Test func deletingWipesBothStoresAndAHostIDCannotEscapeTheDirectory() throws {
@@ -190,8 +192,8 @@ struct PinnedCertPersistenceTests {
         try PinnedCertStore.store(pem: "PEM-A", forHostID: "../../evil", defaults: store.defaults, base: store.directory)
         #expect(FileManager.default.fileExists(atPath: pin(store, ".._.._evil").path))
         store.defaults.set("LEGACY", forKey: "glimmer.pinnedCert.AAA")
-        PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults, base: store.directory)
-        PinnedCertStore.delete(forHostID: "../../evil", defaults: store.defaults, base: store.directory)
+        try PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults, base: store.directory)
+        try PinnedCertStore.delete(forHostID: "../../evil", defaults: store.defaults, base: store.directory)
         #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == nil)
         #expect(PinnedCertStore.load(forHostID: "../../evil", defaults: store.defaults, base: store.directory) == nil)
     }

@@ -9,6 +9,8 @@ import Foundation
 import Testing
 
 struct AudioBoundaryTests {
+    private let settings = IsolatedDefaults()
+
     @Test func sharedOutputRetainsTheMacAdapterUntilItsLastOwnerReleasesIt() throws {
         var adapter: AudioHALOutput? = AudioHALOutput(channels: 2)
         weak let observedAdapter = adapter
@@ -41,7 +43,7 @@ struct AudioBoundaryTests {
     @Test func adapterFailureKeepsReceptionAliveAndArmsRecovery() {
         let fixture = Fixture()
         fixture.failure = kAudioUnitErr_Uninitialized
-        let decoder = AudioDecoder(platform: fixture.platform())
+        let decoder = AudioDecoder(platform: fixture.platform(), defaults: settings.defaults)
         defer { decoder.shutdown() }
         #expect(decoder.initialize(audioConfig: AudioConfig.stereo.cValue, opus: Self.opus) == 0)
         #expect(!decoder.engineRunning)
@@ -55,7 +57,7 @@ struct AudioBoundaryTests {
 
     @Test func queuedDeviceChangeCannotRestartAfterShutdownOrReinitialization() throws {
         let fixture = Fixture()
-        let decoder = AudioDecoder(platform: fixture.platform())
+        let decoder = AudioDecoder(platform: fixture.platform(), defaults: settings.defaults)
         defer { decoder.shutdown() }
         #expect(decoder.initialize(audioConfig: AudioConfig.stereo.cValue, opus: Self.opus) == 0)
         let oldChange = try #require(fixture.deviceChanged)
@@ -80,7 +82,7 @@ struct AudioBoundaryTests {
     @Test(arguments: [false, true])
     func queuedRateCannotReachAReplacementOutput(reinitialize: Bool) {
         let fixture = Fixture()
-        let decoder = AudioDecoder(platform: fixture.platform())
+        let decoder = AudioDecoder(platform: fixture.platform(), defaults: settings.defaults)
         defer { decoder.shutdown() }
         #expect(decoder.initialize(audioConfig: AudioConfig.stereo.cValue, opus: Self.opus) == 0)
         decoder.routeListenerQueue.suspend()
@@ -101,7 +103,7 @@ struct AudioBoundaryTests {
 
     @Test func shutdownWaitsForAnInFlightRouteChangeAndDisposesReplacement() async throws {
         let fixture = Fixture()
-        let decoder = AudioDecoder(platform: fixture.platform())
+        let decoder = AudioDecoder(platform: fixture.platform(), defaults: settings.defaults)
         #expect(decoder.initialize(audioConfig: AudioConfig.stereo.cValue, opus: Self.opus) == 0)
         let entered = DispatchSemaphore(value: 0)
         let release = DispatchSemaphore(value: 0)

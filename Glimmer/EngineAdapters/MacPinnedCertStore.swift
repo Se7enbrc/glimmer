@@ -20,11 +20,7 @@ extension PinnedCertStore {
     }
 
     static func delete(forHostID hostID: String, defaults: UserDefaults = .standard, base: URL? = nil,
-                       resolveBase: (URL?) throws -> URL = URL.supportRoot) {
-        guard let root = try? resolveBase(base) else {
-            defaults.removeObject(forKey: key(for: hostID))
-            return
-        }
-        try? deleteAvailable(forHostID: hostID, defaults: defaults, base: root)
+                       resolveBase: (URL?) throws -> URL = URL.supportRoot) throws {
+        try delete(forHostID: hostID, defaults: defaults, base: resolveBase(base), protectedDataAvailable: { true })
     }
 }

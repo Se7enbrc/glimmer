@@ -10,6 +10,8 @@ import Testing
 @testable import Glimmer
 
 struct AudioEngineLifecycleTests {
+    private let settings = IsolatedDefaults()
+
     @Test func stereoUsesThePreferredHardwarePair() throws {
         #expect(try AudioHALDevice.stereoChannelMap(channels: 4, preferred: (3, 4)) == [-1, -1, 0, 1])
         #expect(try AudioHALDevice.stereoChannelMap(channels: 4, preferred: (4, 2)) == [-1, 1, -1, 0])
@@ -44,7 +46,7 @@ struct AudioEngineLifecycleTests {
     }
 
     @Test func muteTogglesOnlyStreamSamples() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.setOutputMuted(true)
         decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         decoder.applyOutputMute()
@@ -55,7 +57,7 @@ struct AudioEngineLifecycleTests {
     }
 
     @Test func primeEdgeRejectsStaleRunningState() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.engineRunning = true
         decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
@@ -66,7 +68,7 @@ struct AudioEngineLifecycleTests {
     }
 
     @Test func monitorRecoversAnUnsolicitedStopWithoutWaitingForStall() async {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         let restarted = DispatchSemaphore(value: 0)
         decoder.engineRunning = true
@@ -89,14 +91,14 @@ struct AudioEngineLifecycleTests {
     }
 
     @Test func missingGraphReportsFailureWithoutCrashing() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         #expect(decoder.startEngineSafely() != nil)
         #expect(!decoder.engineRunning)
         decoder.shutdown()
     }
 
     @Test func reinitializationClearsRestartState() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.startOutput = { _ in kAudioUnitErr_Uninitialized }
         decoder.pendingSilenceFrames = 240
@@ -113,7 +115,7 @@ struct AudioEngineLifecycleTests {
 
     @Test(arguments: [false, true])
     func oldSessionRetryCannotConsumeNewLadder(shutdownFirst: Bool) throws {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.startOutput = { _ in kAudioUnitErr_Uninitialized }
         let generation = decoder.engineRestartGeneration
@@ -129,7 +131,7 @@ struct AudioEngineLifecycleTests {
 
     @Test(arguments: [false, true])
     func recoveryReconnectsAndUpdatesEngineGauge(primeEdge: Bool) throws {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
         decoder.outputGraphNeedsReconnect = true
@@ -147,7 +149,7 @@ struct AudioEngineLifecycleTests {
     }
 
     @Test func graphReplacementDiscardsPendingDrainAndClosesDecodeAdmission() throws {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
         decoder.startOutput = { _ in noErr }
@@ -171,7 +173,7 @@ struct AudioEngineLifecycleTests {
     }
 
     @Test func teardownInvalidatesRetriesBeforeReleasingTheGraph() throws {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
         decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         weak let released = decoder.halOutput
@@ -185,7 +187,7 @@ struct AudioEngineLifecycleTests {
     }
 
     @Test func failedStartReplacementDiscardsQueuedPCMWithoutCushionGrowth() throws {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         decoder.framesScheduled = 1_440
@@ -207,7 +209,7 @@ struct AudioEngineLifecycleTests {
     }
 
     @Test func exhaustedRestartLadderKeepsPrimeRecoveryArmedAndResetsAfterSuccess() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
         decoder.engineRestartRetries = AudioDecoder.maxEngineRestartRetries
@@ -234,7 +236,7 @@ struct AudioEngineLifecycleTests {
     }
 
     @Test func successfulRetryClearsTheLadderAndAlreadyRunningOrUnconfiguredEnginesDoNotStart() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.startOutput = { _ in Issue.record("An unconfigured engine must not start"); return noErr }
         decoder.retryEngineStart(attempt: 1, generation: decoder.engineRestartGeneration)
@@ -250,7 +252,7 @@ struct AudioEngineLifecycleTests {
     }
 
     @Test func failedDeviceRecoveryKeepsTheOriginalRecoveryTimeAndArmsRetries() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
         decoder.startOutput = { _ in kAudioUnitErr_Uninitialized }
@@ -326,7 +328,7 @@ struct AudioEngineLifecycleTests {
         let backend = NativeBackend()
         weak var released: AudioDecoder?
         do {
-            let decoder = AudioDecoder()
+            let decoder = AudioDecoder(defaults: settings.defaults)
             released = decoder
             backend.attachAudioSink(decoder)
         }
