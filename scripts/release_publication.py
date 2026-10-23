@@ -16,7 +16,7 @@ import sys
 import tempfile
 import time
 from release_artifact import digest, identity, seal, verify
-from release_validation import validate_bundle, validate_distribution
+from release_validation import validate_bundle, validate_distribution, validate_minimum_system
 from release_candidate_kind import parse_tag, validate_marker
 import release_symbols
 
@@ -49,6 +49,7 @@ def prepare(root, app):
     short, build = version()
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     validate_bundle(info, short, build)
+    min_system = validate_minimum_system(info.get('LSMinimumSystemVersion'))
     validate_marker(info, os.environ['RC_TAG'])
     source_info = plistlib.loads(source_file('Glimmer/Info.plist').encode())
     if info['SUPublicEDKey'] != source_info['SUPublicEDKey']:
@@ -71,7 +72,7 @@ def prepare(root, app):
                  'Additional local telemetry is enabled by default.\n\n' + notes)
     (root / 'notes.md').write_text(notes + f'\nSource: this repo at tag {os.environ["RC_TAG"]} (GPLv3).\n')
     receipt = {'short': short, 'build': build, 'signature': match[1], 'length': match[2],
-               'public_key': source_info['SUPublicEDKey']}
+               'public_key': source_info['SUPublicEDKey'], 'min_system': min_system}
     if parse_tag(os.environ['RC_TAG'])[2]:
         receipt['diagnostic_symbols'] = release_symbols.carry(
             Path(os.environ['RUNNER_TEMP']) / 'unsigned', root, short, identity())
@@ -102,6 +103,7 @@ def load(root):
     if set(proof['hashes']) != expected | {'release.json', 'notes.md', 'CHANGELOG.md', 'prerequisites.json'}:
         raise ValueError('signed artifact file set mismatch')
     receipt = json.loads((root / 'release.json').read_text())
+    validate_minimum_system(receipt.get('min_system'))
     if receipt.get('short') != short or receipt.get('build') != build:
         raise ValueError('signed artifact version mismatch')
     if receipt.get('length') != str((root / f'Glimmer-{short}.zip').stat().st_size):
@@ -124,6 +126,8 @@ def validate(root):
         app = Path(directory) / 'Glimmer.app'
         info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
         validate_bundle(info, receipt['short'], receipt['build'])
+        if validate_minimum_system(info.get('LSMinimumSystemVersion')) != receipt['min_system']:
+            raise ValueError('signed artifact minimum system version mismatch')
         validate_marker(info, os.environ['RC_TAG'])
         validate_distribution(str(app))
 
@@ -211,6 +215,7 @@ def publish_feed(root, receipt, tag):
                  '--version', receipt['build'], '--url',
                  f'https://github.com/{REPO}/releases/download/{tag}/Glimmer-{receipt["short"]}.zip',
                  '--ed-signature', receipt['signature'], '--length', receipt['length'],
+                 '--min-system', receipt['min_system'],
                  '--channel', 'rc', '--title', f'{receipt["short"]} (RC {tag.rsplit(".", 1)[1]})',
                  '--changelog', str(root / 'CHANGELOG.md')], 'candidate published; feed update rejected')
         if feed.read_text() != original:

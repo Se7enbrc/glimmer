@@ -51,6 +51,12 @@ def validate_feed(channel: ET.Element, short: str, build: str,
     return existing
 
 
+def validate_minimum_system(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[1-9][0-9]*(?:\.(?:0|[1-9][0-9]*)){1,2}", value):
+        raise ValueError("invalid minimum system version")
+    return value
+
+
 def validate_bundle(info: dict, short: str, build: str) -> None:
     for key, expected in (("CFBundleShortVersionString", short), ("CFBundleVersion", build)):
         if info.get(key) != expected:

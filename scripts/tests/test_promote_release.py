@@ -156,6 +156,25 @@ class CandidatePromotionTests(unittest.TestCase):
         self.assertIn(f"/releases/download/{TAG}/", self.feed)
         self.assertFalse(any(args[0] in {"make", "codesign", "ditto", "zip", "xcodebuild"} for args in self.calls))
 
+    def test_promotion_and_retry_preserve_candidate_floor_with_explicit_argument(self):
+        self.feed = self.feed.replace('>26.0<', '>15.7<')
+        PROMOTE.prepare(TAG, SHA)
+        PROMOTE.publish(TAG, SHA)
+        self.assertIn('>15.7<', self.feed)
+        original = self.feed
+        PROMOTE.publish(TAG, SHA)
+        self.assertEqual(self.feed, original)
+        updates = [args for args in self.calls if args[1] == 'scripts/update-appcast.py']
+        for args in updates:
+            self.assertEqual(args[args.index('--min-system') + 1], '15.7')
+
+    def test_changed_floor_after_verification_is_rejected(self):
+        PROMOTE.prepare(TAG, SHA)
+        self.feed = self.feed.replace('>26.0<', '>15.7<')
+        with self.assertRaisesRegex(ValueError, 'changed after provenance'):
+            PROMOTE.publish(TAG, SHA)
+        self.assertTrue(self.data['prerelease'])
+
     def test_final_tag_is_annotated_at_candidate_sha_before_release_becomes_stable(self):
         PROMOTE.prepare(TAG, SHA)
         PROMOTE.final_tag(TAG, SHA)
