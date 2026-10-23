@@ -448,29 +448,17 @@ extension AppModel {
 
     // MARK: - Unpair / cert recovery
 
-    /// Drop a paired host from local storage. This is the user-visible
-    /// inverse of `pair(hostnameOrIP:pin:)` - we wipe the UserDefaults
-    /// entries that `loadHosts` reads, plus any pinned cert keyed by
-    /// uniqueId, plus the per-host last-connected timestamp. We do NOT call
-    /// the host's `/unpair` endpoint here: the host treats our client cert
-    /// as the pairing token, so dropping it on our side is enough for our
-    /// purposes. If the host still lists us, the user can clear that from
-    /// the host's own UI; a stale entry there is harmless without our key.
-    /// Forget a host and leave the client in a fully clean state for it.
-    /// Deliberately idempotent / bulletproof: every cleanup keyed by the host
-    /// id runs UNCONDITIONALLY (pinned cert, last-connected, selection), and we
-    /// wipe ALL matching UserDefaults slots, not just the first - so a partial,
-    /// duplicated, or corrupt record (e.g. left over from the namespace
-    /// migration) still ends up gone. Safe to call repeatedly; a no-op once the
-    /// host is already clean.
+    /// Delete trust before metadata so a failed removal leaves the PC available for retry.
+    /// Clear every matching slot, including duplicates and partial legacy records.
     @discardableResult
     func unpair(_ host: Host, defaults: UserDefaults? = nil,
-                supportBase: URL? = nil) -> Task<Void, Never> {
+                supportBase: URL? = nil) throws -> Task<Void, Never> {
         let defaults = defaults ?? hostsDefaults
 
         // --- Unconditional, id-keyed cleanup (runs even if no slot matches) ---
         // File-store + legacy UserDefaults pinned cert.
-        PinnedCertStore.delete(forHostID: host.id, defaults: defaults, base: supportBase)
+        let supportBase = supportBase ?? self.supportBase
+        try PinnedCertStore.delete(forHostID: host.id, defaults: defaults, base: supportBase)
         defaults.removeObject(forKey: "glimmer.lastConnected.\(host.id)")
         HostCodecPreference.forget(hostID: host.id, defaults: defaults)
         LauncherStyle.forget(pcID: host.id, defaults: defaults)

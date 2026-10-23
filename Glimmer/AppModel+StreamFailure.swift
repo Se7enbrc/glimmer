@@ -42,6 +42,13 @@ extension AppModel {
         "Couldn't reach \(pcName). Make sure it's awake and on the same network."
     }
 
+    nonisolated static func forgetFailureTitle(_ pcName: String) -> String {
+        "Couldn't forget \(pcName)"
+    }
+
+    nonisolated static let forgetFailureRecovery = "Check that Glimmer can change files in "
+        + "~/Library/Application Support/Glimmer, then try again."
+
     /// Every surface's words for a PC running NVIDIA GameStream, which Glimmer
     /// refuses at pairing and at stream start.
     nonisolated static func needsSunshineMessage(_ pcName: String) -> String {

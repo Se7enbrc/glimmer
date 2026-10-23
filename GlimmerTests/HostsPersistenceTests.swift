@@ -100,7 +100,7 @@ struct HostsPersistenceTests {
         try save(app, store, uuid: "BBB", name: "two")
         let first = try #require(app.hosts.first { $0.id == "AAA" })
         app.setWakeOnLAN(first, enabled: false, defaults: store.defaults)
-        app.unpair(first, defaults: store.defaults, supportBase: store.directory)
+        try app.unpair(first, defaults: store.defaults, supportBase: store.directory)
         #expect(app.hosts.map(\.id) == ["BBB"])
         try save(app, store, uuid: "CCC", name: "three")
         #expect(store.defaults.integer(forKey: "hosts.size") == 2)
@@ -121,7 +121,7 @@ struct HostsPersistenceTests {
         let host = try #require(app.hosts.first)
         app.selectHost(host, defaults: store.defaults)
         #expect(FileManager.default.fileExists(atPath: pinFile(store, "AAA").path))
-        app.unpair(host, defaults: store.defaults, supportBase: store.directory)
+        try app.unpair(host, defaults: store.defaults, supportBase: store.directory)
         #expect(app.hosts.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: pinFile(store, "AAA").path))
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .auto)
@@ -129,6 +129,46 @@ struct HostsPersistenceTests {
         #expect(store.defaults.string(forKey: "glimmer.selectedHostID") == nil)
         #expect(store.defaults.string(forKey: "hosts.1.uuid") == nil)
         #expect(store.defaults.object(forKey: "hosts.1.apps.size") == nil)
+    }
+
+    @Test func deniedPinDeletionKeepsThePCAndAllowsRetry() async throws {
+        let store = try IsolatedStore("unpair-denied")
+        defer { store.remove() }
+        let app = AppModel(defaults: store.defaults)
+        app.supportBase = store.directory
+        defer { settle(app) }
+        try save(app, store, uuid: "AAA", name: "tower", pem: Self.pem)
+        let host = try #require(app.hosts.first)
+        app.selectHost(host)
+        HostCodecPreference.save(.hevc, for: host.id, defaults: store.defaults)
+        store.defaults.set("LEGACY", forKey: "glimmer.pinnedCert.AAA")
+        let before = store.defaults.persistentDomain(forName: store.domain) ?? [:]
+        let directory = pinFile(store, host.id).deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
+
+        do {
+            try app.unpair(host)
+            Issue.record("Expected denied pin deletion to fail")
+        } catch let error as CocoaError {
+            #expect(error.code == .fileWriteNoPermission)
+        }
+        #expect(app.hosts.map(\.id) == [host.id])
+        #expect(app.selectedHost?.id == host.id)
+        let unchanged = NSDictionary(dictionary: before).isEqual(
+            to: store.defaults.persistentDomain(forName: store.domain) ?? [:])
+        #expect(unchanged)
+        #expect(try String(contentsOf: pinFile(store, host.id), encoding: .utf8) == Self.pem)
+        #expect(AppModel.forgetFailureTitle(host.displayName) == "Couldn't forget tower")
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        try await app.unpair(host).value
+        #expect(app.hosts.isEmpty && app.selectedHost == nil)
+        #expect(!FileManager.default.fileExists(atPath: pinFile(store, host.id).path))
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == nil)
+        #expect(HostCodecPreference.load(for: host.id, defaults: store.defaults) == .auto)
+        #expect(store.defaults.string(forKey: "glimmer.selectedHostID") == nil)
+        try await app.unpair(host).value
     }
 
     @Test func unpairingWipesEveryDuplicateSlot() throws {
@@ -141,7 +181,7 @@ struct HostsPersistenceTests {
             store.defaults.set("dup", forKey: "hosts.\(slot).hostname")
         }
         store.defaults.set(2, forKey: "hosts.size")
-        app.unpair(bareHost("DUP"), defaults: store.defaults, supportBase: store.directory)
+        try app.unpair(bareHost("DUP"), defaults: store.defaults, supportBase: store.directory)
         #expect(store.defaults.string(forKey: "hosts.1.uuid") == nil)
         #expect(store.defaults.string(forKey: "hosts.2.uuid") == nil)
     }

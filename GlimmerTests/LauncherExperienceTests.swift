@@ -206,7 +206,7 @@ struct LauncherExperienceTests {
         for id in ["pc", "other"] {
             #expect(await cache.image(pcID: id, appID: 1, revision: "a", fetch: { data }) == data)
         }
-        await model.unpair(host, defaults: store.defaults, supportBase: store.directory).value
+        try await model.unpair(host, defaults: store.defaults, supportBase: store.directory).value
         #expect(LauncherStyle.load(for: host.id, defaults: store.defaults) == .buttons)
         #expect(await cache.image(pcID: "pc", appID: 1, revision: "a", fetch: { throw CancellationError() }) == nil)
         #expect(await cache.image(pcID: "other", appID: 1, revision: "a", fetch: { throw CancellationError() }) == data)
