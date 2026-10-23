@@ -105,6 +105,8 @@ extension AudioOutput {
         guard elapsed >= 1 else { return }
         let raw = queue.pointee.outputProbe.result.exchange(0, ordering: .acquiringAndReleasing)
         let result = AudioOutputProbe.Result(rawValue: raw) ?? .pending
+        telemetry.noteOutputProbe(result: result.rawValue, inputAudible: result == .pending ? nil
+            : queue.pointee.outputProbe.inputAudible.load(ordering: .relaxed))
         outputSilence.observe(result: result, elapsed: elapsed, log: log)
         outputSilence.lastObservation = now
         telemetry.noteOutputSilence(seconds: outputSilence.seconds)

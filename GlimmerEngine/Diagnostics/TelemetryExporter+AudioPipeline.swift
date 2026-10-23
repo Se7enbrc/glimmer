@@ -13,6 +13,10 @@ extension TelemetryRenderer {
                           snapshot.window.minimumRenderCushionMs)
         builder.emit("glimmer_audio_output_silent_s", "Consecutive sampled seconds of silent output with nonzero PCM.",
                      snapshot.window.outputSilentSeconds)
+        builder.emit("glimmer_audio_output_probe_result", "Mixer probe: 0 pending, 1 flowing/idle, 2 silent, 3 failed.",
+                     snapshot.window.outputProbeResult.map(Double.init))
+        builder.emit("glimmer_audio_output_probe_input_audible", "Nonzero PCM in the completed mixer probe.",
+                     snapshot.window.outputProbeInputAudible.map { $0 ? 1 : 0 })
         builder.emit("glimmer_audio_output_latency_ms", "HAL latency, safety offset and buffer duration.",
                      snapshot.window.outputLatencyMs)
         builder.emit("glimmer_audio_device_recovery_ms", "Device change to first rendered PCM.",
@@ -44,6 +48,10 @@ extension TelemetryRenderer {
         }
         builder.add("audio_render_cushion_min_ms", snapshot.window.minimumRenderCushionMs)
         builder.add("audio_output_silent_s", snapshot.window.outputSilentSeconds)
+        builder.add("audio_output_probe_result", snapshot.window.outputProbeResult.map(Double.init))
+        if let audible = snapshot.window.outputProbeInputAudible {
+            builder.addBool("audio_output_probe_input_audible", audible)
+        }
         builder.add("audio_output_latency_ms", snapshot.window.outputLatencyMs)
         builder.add("audio_device_recovery_ms", snapshot.window.deviceRecoveryMs)
         builder.addCount("audio_near_misses_window", snapshot.window.nearMisses)
@@ -62,6 +70,12 @@ extension TelemetryRenderer {
         [("audio_render_underrun_total", snapshot.window.renderUnderruns),
          ("audio_worker_overflow_total", snapshot.queueOverflow),
          ("audio_pcm_pool_exhausted_total", snapshot.poolExhausted),
-         ("audio_reconfiguration_drop_total", snapshot.reconfigurationDrops)]
+         ("audio_reconfiguration_drop_total", snapshot.reconfigurationDrops),
+         ("audio_received_datagrams_total", snapshot.receivedDatagrams),
+         ("audio_processed_datagrams_total", snapshot.processedDatagrams),
+         ("audio_decrypt_ok_total", snapshot.decryptOK),
+         ("audio_decrypt_failed_total", snapshot.decryptFailed),
+         ("audio_decoded_frames_total", snapshot.decodedFrames),
+         ("audio_rendered_frames_total", snapshot.renderedFrames)]
     }
 }

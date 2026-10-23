@@ -17,6 +17,7 @@ final class IOSAudioSession: @unchecked Sendable {
         let latency: Double
         let bufferDuration: Double
         let volume: Float
+        var ports: String = "unknown"
 
         var isUsable: Bool {
             sampleRate.isFinite && sampleRate > 0 && channels > 0 && latency.isFinite && latency >= 0
@@ -41,7 +42,8 @@ final class IOSAudioSession: @unchecked Sendable {
                          uid: outputs.isEmpty ? nil : outputs.map(\.uid).joined(separator: ","),
                          sampleRate: session.sampleRate, channels: session.outputNumberOfChannels,
                          latency: session.outputLatency, bufferDuration: session.ioBufferDuration,
-                         volume: session.outputVolume)
+                         volume: session.outputVolume,
+                         ports: outputs.map { $0.portType.rawValue }.joined(separator: ","))
         }
     }
 
@@ -94,6 +96,10 @@ final class IOSAudioSession: @unchecked Sendable {
                 if !active { try calls.activate(); active = true }
                 let route = calls.route()
                 guard route.isUsable else { throw AudioOutput.Failure(status: kAudioUnitErr_FormatNotSupported) }
+                AudioPlatform.recordSessionDiagnostic(
+                    "iOS audio session active: generation=\(generation) ports=\(route.ports) "
+                    + "rate=\(route.sampleRate) channels=\(route.channels) volume=\(route.volume) "
+                    + "buffer_ms=\(route.bufferDuration * 1000)")
                 leases += 1
                 return Lease(route: route, generation: generation)
             } catch {
@@ -144,6 +150,7 @@ final class IOSAudioSession: @unchecked Sendable {
             try calls.deactivate()
             active = false
             configured = false
+            AudioPlatform.recordSessionDiagnostic("iOS audio session inactive")
         } catch {
             Self.log.error("audio session deactivation failed: \(error.localizedDescription, privacy: .private)")
         }

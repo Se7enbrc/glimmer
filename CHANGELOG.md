@@ -63,6 +63,9 @@
 
 ### Bug fixes
 
+- iPhone audio diagnostics now distinguish missing packets, rejected audio and
+  silent output, helping locate streams that have video but no sound.
+
 - Use a controller to open pairing, choose a PC and finish pairing.
 - Opening pairing from another window brings the current pairing flow forward.
 - The menu bar keeps the streaming PC's name and network when another PC is

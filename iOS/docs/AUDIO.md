@@ -69,12 +69,87 @@ reads RemoteIO's
 [maximum render quantum](https://developer.apple.com/library/archive/qa/qa1777/_index.html)
 before initializing processing units.
 
-For missing audio, record a real stream using [diagnostics](DIAGNOSTICS.md) and
-check the PC routing described in [PC setup](HOST_SETUP.md).
+## Receive-to-output boundaries
 
-RemoteIO may report a zero hardware sample rate before initialization on a real
-iPhone. The adapter then uses the already activated AVAudioSession route rate,
-while preserving a valid explicit RemoteIO rate. A physical-device regression
-test exercises real graph creation, start and render-error status; fixture tests
-cover the zero-rate path. This proves output startup, not audible stream
-content.
+The receive socket remains unconnected and filters only the PC's IP, permitting
+Sunshine's different source port. Both platforms use `receiveOne`; iOS has no
+audio-specific connected-socket path. A failed receive startup can leave video
+running and increments `audio_receive_failed_total`.
+
+The shared receiver rejects malformed RTP and invalid encrypted payloads before
+queue admission. The queue can hold, discard or recover packets; startup backlog
+draining deliberately withholds stale packets. Ordered payloads pass through
+AES-CBC to AudioToolbox Opus, then the decoder's admission gate, PCM pool,
+latency-bound scheduling and SPSC ring. Reconfiguration, pool exhaustion, failed
+decode, overrun and unavailable output can each prevent PCM from reaching
+render. Their existing counters complement the new stage progress counters.
+
+The iOS-specific boundaries are session activation, usable route validation,
+stereo-only source admission, RemoteIO format negotiation, unit initialization
+and generation-checked start. Graph setup failure deliberately leaves receive
+and video alive while recovery retries, so decoder initialization success does
+not establish playback. A stale lease, interruption or media-services loss can
+block start. Interruption end without `shouldResume` requires a new stream.
+
+The iOS graph does not copy a hardware channel layout and requests stereo, so
+the Mac copied-layout/LFE failure has no direct counterpart here. It converts
+the 48 kHz source to the negotiated output rate. Playback category bypasses the
+silent switch; system media volume and route selection still apply. The shared
+mute flag defaults off in the iOS stream configuration. Ring consumption stays
+disabled until priming succeeds; mixer probes distinguish nonzero input becoming
+silent from a callback that never ran.
+
+History records the native adapter introduction at `341f417d` with physical
+audio validation still open. The imported history does not establish a last
+known audible iPhone revision. Passing synthetic output tests cannot identify
+the failing stage in TestFlight build 6 without its device recording.
+
+## Diagnose silent playback
+
+RemoteIO may report a zero hardware sample rate before initialization. The
+adapter uses the activated session's rate in that case. Simulator coverage feeds
+synthetic encrypted 5 ms stereo RTP through the receiver, Opus decoder and PCM
+ring, then pulls the native varispeed and mixer and requires nonzero output. It
+does not prove socket delivery, physical output or audibility on an iPhone.
+
+For one device recording:
+
+1. Enable **Settings → Diagnostics → Record diagnostics** before connecting.
+2. Play a known audible source on the PC, select the iPhone speakers and raise
+   the media volume. Record the app build and iOS version.
+3. Stream for 30 seconds. Note whether sound ever starts and the time of any
+   output change or interruption.
+4. Disconnect in Glimmer to flush the recording, then retrieve only its
+   diagnostic directory using [Record an iPhone test](DIAGNOSTICS.md).
+
+Compare counter differences between successive telemetry samples. Counters reset
+at session start; decryption counts attempts, including queue validation, rather
+than unique packets. Decoded frame counts include concealment; rendered counts
+measure consumed PCM before varispeed. No packet contents, audio samples, keys
+or device identities are added to the recording.
+
+| Evidence                                                           | Stage isolated                                                                                                                                       |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `audio_received_datagrams_total` stays zero                        | No datagrams from the PC reached the audio receive loop. Check ping/receive errors and Sunshine routing.                                             |
+| Received rises, `audio_processed_datagrams_total` stops            | The packet worker is stalled or overflowing; compare `audio_worker_overflow_total`.                                                                  |
+| Processed rises, `audio_decrypt_failed_total` rises                | Ciphertext is rejected, including before the queue establishes its first sequence.                                                                   |
+| `audio_decrypt_ok_total` rises, `audio_decoded_frames_total` stops | Check queue/FEC, startup-gate drops and `audio_decode_failed_total`. Successful decryption alone does not prove Opus reached decode.                 |
+| Decoded rises, `audio_rendered_frames_total` stops                 | Check graph start/retry, priming, reconfiguration drops and output probe state.                                                                      |
+| Rendered rises, output remains inaudible                           | Compare probe input, probe result, `audio_output_silent_s`, session route/volume and `audio_output_state`. Physical output remains beyond the probe. |
+
+`audio_output_probe_result` samples the existing mixer probe once per second: 0
+means no completed probe, 1 means flowing or idle, 2 means nonzero input became
+silent, and 3 means render failure. `audio_output_probe_input_audible`
+distinguishes silent input from nonzero input; it is omitted when no probe
+completed. A completed probe proves the mixer callback ran. Missing probes while
+PCM accumulates point to the render path. The initial probe needs one sampling
+interval to complete. An absent result means no observation was published in
+that capture interval; old route evidence is not carried forward.
+
+`iOS audio session active` and session event lines record numeric state and
+route types, never device names. They identify activation, invalidated graph
+leases, interruptions and media-services changes alongside the existing
+graph-ready, start-failure and output-volume evidence.
+
+Continue with [Record an iPhone test](DIAGNOSTICS.md) to collect the files, and
+[PC setup](HOST_SETUP.md) if receive counters remain zero.

@@ -3,13 +3,7 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  RtpAudioReceiver+Decrypt.swift
-//
-//  The decode hand-off: strip the 12-byte RTP header and hand the opus bytes to the sink,
-//  AES-128-CBC decrypted whenever the host offered SS_ENC_AUDIO. Split out of
-//  RtpAudioReceiver.swift, which keeps the aesKey/avRiKeyId material.
-//
+// Validate queue admission and decrypt the ordered audio payload before Opus decode.
 
 import Foundation
 import CommonCrypto
@@ -21,9 +15,11 @@ extension RtpAudioReceiver {
     /// The normal in-order path still decrypts only once, at the decode hand-off.
     func acceptsAudioPayload(_ buf: [UInt8], count: Int, arrival: UInt64) -> Bool {
         let payload = buf[RtpAudioQueue.fixedRtpHeaderSize..<count]
-        guard !payload.isEmpty else { return false }
-        guard audioEncryption else { return true }
-        guard payload.count.isMultiple(of: kCCBlockSizeAES128) else { return false }
+        guard audioEncryption else { return !payload.isEmpty }
+        guard !payload.isEmpty, payload.count.isMultiple(of: kCCBlockSizeAES128) else {
+            noteDecryptFailure()
+            return false
+        }
         let sequence = UInt16(buf[2]) << 8 | UInt16(buf[3])
         return !queue.requiresPayloadValidation(sequence: sequence, arrival: arrival)
             || decryptCbc(payload, sequenceNumber: sequence) != nil
@@ -54,11 +50,6 @@ extension RtpAudioReceiver {
             // The host's seq lives in the assembled header (host built it BE).
             let seq = UInt16(packet[2]) << 8 | UInt16(packet[3])
             guard let opus = decryptCbc(payload, sequenceNumber: seq) else {
-                if !loggedDecryptFailure {
-                    loggedDecryptFailure = true
-                    AudioDiagnostics.warn("NativeAudio AES-CBC decrypt failed (seq=\(seq)); "
-                        + "dropping undecryptable packets, first sighting this session", Self.cat)
-                }
                 return
             }
             opus.withUnsafeBytes { sink?.decodeAndPlay($0) }
@@ -72,7 +63,10 @@ extension RtpAudioReceiver {
     /// (Sunshine's cbc_t) so opus never sees it. Returns nil on failure.
     func decryptCbc(_ ciphertext: ArraySlice<UInt8>, sequenceNumber seq: UInt16) -> ArraySlice<UInt8>? {
         guard aesKey.count == kCCKeySizeAES128, !ciphertext.isEmpty,
-              ciphertext.count <= Self.maxPacketSize else { return nil }
+              ciphertext.count <= Self.maxPacketSize else {
+            noteDecryptFailure()
+            return nil
+        }
         var iv = ((avRiKeyId &+ UInt32(seq)).bigEndian, UInt32(0), UInt32(0), UInt32(0))
         var outMoved = 0
         let status = ciphertext.withUnsafeBytes { input in
@@ -90,7 +84,19 @@ extension RtpAudioReceiver {
         // CommonCrypto can return unstripped data for invalid padding. Sunshine's
         // PKCS7 payload must lose between one byte and one complete block.
         guard status == kCCSuccess, outMoved > 0, outMoved < ciphertext.count,
-              ciphertext.count - outMoved <= kCCBlockSizeAES128 else { return nil }
+              ciphertext.count - outMoved <= kCCBlockSizeAES128 else {
+            noteDecryptFailure()
+            return nil
+        }
+        AudioPipelineTelemetry.shared.decryptOK.wrappingAdd(1, ordering: .relaxed)
         return decryptScratch[..<outMoved]
+    }
+
+    private func noteDecryptFailure() {
+        AudioPipelineTelemetry.shared.decryptFailed.wrappingAdd(1, ordering: .relaxed)
+        guard !loggedDecryptFailure else { return }
+        loggedDecryptFailure = true
+        AudioDiagnostics.warn("NativeAudio AES-CBC decrypt failed; rejected length, key size or padding. "
+            + "Later failures count in audio_decrypt_failed_total", Self.cat)
     }
 }
