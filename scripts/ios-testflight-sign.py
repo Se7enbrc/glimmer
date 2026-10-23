@@ -251,6 +251,13 @@ def upload(output, expected):
         cleanup()
 
 
+def apple_message(error):
+    info = error.get('userInfo')
+    reason = info.get('NSLocalizedFailureReason') if isinstance(info, dict) else None
+    parts = [value for value in (error.get('message'), reason) if isinstance(value, str)]
+    return ' | '.join(parts)[:500]
+
+
 def delivery_outcome(returncode, output):
     result = {'returncode': returncode, 'status': 'delivery_unconfirmed', 'retry_safe': False}
     if len(output) > 8 * 1024**2:
@@ -267,6 +274,8 @@ def delivery_outcome(returncode, output):
     if isinstance(errors, list):
         result['error_codes'] = [str(error['code'])[:32] for error in errors
                                  if isinstance(error, dict) and isinstance(error.get('code'), (str, int))]
+        # Apple's validation text names the rejected item; keep only these two fields, capped.
+        result['error_messages'] = [apple_message(error) for error in errors if isinstance(error, dict)]
     delivery = data.get('delivery-id')
     if isinstance(delivery, str) and re.fullmatch(r'[A-Fa-f0-9-]{36}', delivery):
         result['delivery_id'] = delivery
