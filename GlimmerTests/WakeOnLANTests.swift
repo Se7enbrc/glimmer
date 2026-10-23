@@ -17,6 +17,7 @@ import UserNotifications
 @testable import Glimmer
 
 struct WakeOnLANTests {
+    private let settings = IsolatedDefaults()
 
     @Test func macNormalisesSeparatorsCaseAndShortOctets() {
         #expect(WakeOnLAN.normalizeMac("AA:BB:CC:DD:EE:FF") == "aa:bb:cc:dd:ee:ff")
@@ -79,7 +80,8 @@ struct WakeOnLANTests {
 
     @MainActor @Test func aWakeThatSendsNothingStopsAtOnce() async {
         let started = OSAllocatedUnfairLock(initialState: ContinuousClock.now)
-        let outcome = await AppModel().sendWakeAndWait(tower(mac: "aa:bb:cc:dd:ee:ff"), waitSeconds: 90) { _, _ in
+        let outcome = await AppModel(defaults: settings.defaults).sendWakeAndWait(
+            tower(mac: "aa:bb:cc:dd:ee:ff"), waitSeconds: 90) { _, _ in
             started.withLock { $0 = .now }
             return 0
         }
@@ -89,7 +91,8 @@ struct WakeOnLANTests {
     }
 
     @MainActor @Test func aPCWithoutAMacIsNotWoken() async {
-        let outcome = await AppModel().sendWakeAndWait(tower(mac: "00:00:00:00:00:00"), waitSeconds: nil) { _, _ in 1 }
+        let outcome = await AppModel(defaults: settings.defaults).sendWakeAndWait(
+            tower(mac: "00:00:00:00:00:00"), waitSeconds: nil) { _, _ in 1 }
         #expect(outcome == .noMac)
         #expect(outcome.failureReason == nil)
     }
@@ -111,7 +114,7 @@ struct WakeOnLANTests {
     }
 
     @MainActor @Test func connectResponseSelectsAndDispatchesHostLoadedDuringBootstrap() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = Glimmer.Host(id: "requested", name: "Requested", customName: nil, localAddress: nil,
                                 manualAddress: nil,
                                 apps: [LibraryApp(id: 1, name: "Desktop", hdr: false, hidden: false)],

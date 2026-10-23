@@ -363,7 +363,12 @@ public final class AudioDecoder: @unchecked Sendable {
     /// directly countable alongside `audio_underrun_total`.
     var rePrimeCount: UInt64 = 0
 
-    public init(platform: AudioPlatform) { self.platform = platform }
+    let defaults: UserDefaults
+
+    public init(platform: AudioPlatform, defaults: UserDefaults = .standard) {
+        self.platform = platform
+        self.defaults = defaults
+    }
 
     // Lifecycle canary: every session's decoder should log this after it ends.
     deinit {

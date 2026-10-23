@@ -303,30 +303,18 @@ struct StreamViewKeyboardTests {
 }
 
 /// ⌃B is a bookmark only while telemetry runs; otherwise it is the game's.
-/// Serialized because both tests pin the shared telemetry preference.
 @MainActor
-@Suite(.serialized)
 struct BookmarkChordTelemetryTests {
     @MainActor
     private final class Tally { var calls = 0 }
 
-    /// Runs `body` with TelemetryGate's preference pinned, restoring the prior value.
-    private func withTelemetry(_ enabled: Bool, _ body: () throws -> Void) throws {
-        try #require(getenv("GLIMMER_TELEMETRY").map { String(cString: $0) } != "1")
-        let defaults = UserDefaults.standard
-        let prior = defaults.object(forKey: "telemetryEnabled")
-        defer { defaults.set(prior, forKey: "telemetryEnabled") }
-        defaults.set(enabled, forKey: "telemetryEnabled")
-        try #require(TelemetryGate.isEnabled == enabled)
-        try body()
-    }
-
     /// One ⌃B with a handler wired: the bookmark count and the keys sent.
-    private func pressBookmark() throws -> (marks: Int, sent: [KeyboardSend]) {
+    private func pressBookmark(telemetryEnabled: Bool) throws -> (marks: Int, sent: [KeyboardSend]) {
         let forwarder = InputForwarder()
         let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
         forwarder.isReady = true
+        forwarder.bookmarkEnabled = { telemetryEnabled }
         let marks = Tally()
         forwarder.onBookmarkHotkey = { marks.calls += 1 }
         let view = StreamInputView()
@@ -342,20 +330,16 @@ struct BookmarkChordTelemetryTests {
     }
 
     @Test func withTelemetryOnTheChordIsABookmark() throws {
-        try withTelemetry(true) {
-            let result = try pressBookmark()
-            #expect(result.marks == 1)
-            #expect(result.sent.isEmpty)
-        }
+        let result = try pressBookmark(telemetryEnabled: true)
+        #expect(result.marks == 1)
+        #expect(result.sent.isEmpty)
     }
 
     @Test func withTelemetryOffTheChordReachesThePC() throws {
-        try withTelemetry(false) {
-            let result = try pressBookmark()
-            #expect(result.marks == 0)
-            #expect(result.sent.last == .init(keyCode: VKScanCode(vk: 0x42).wireCode,
-                                              action: Int8(StreamProtocol.KEY_ACTION_DOWN),
-                                              modifiers: Int8(StreamProtocol.MODIFIER_CTRL), flags: 0))
-        }
+        let result = try pressBookmark(telemetryEnabled: false)
+        #expect(result.marks == 0)
+        #expect(result.sent.last == .init(keyCode: VKScanCode(vk: 0x42).wireCode,
+                                          action: Int8(StreamProtocol.KEY_ACTION_DOWN),
+                                          modifiers: Int8(StreamProtocol.MODIFIER_CTRL), flags: 0))
     }
 }

@@ -15,13 +15,14 @@ import Testing
 
 @MainActor
 struct HostContextMenuTests {
+    private let settings = IsolatedDefaults()
 
     private let host = Host(
         id: "menu-test-pc", name: "tower", customName: "Tower", localAddress: "192.0.2.10", manualAddress: nil,
         apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
 
     private func model(polled state: HostLiveStatus.State, hostID: String? = nil, age: TimeInterval = 0) -> AppModel {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.hostLiveStatus = HostLiveStatus(
             hostID: hostID ?? host.id, state: state, capturedAt: Date(timeIntervalSinceNow: -age))
         return model
@@ -37,7 +38,7 @@ struct HostContextMenuTests {
     }
 
     @Test func onlyThePCBeingStreamedCounts() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.lastLaunchAttempt = (LibraryApp(id: 1, name: "Desktop", hdr: false, hidden: false), host)
         #expect(model.streamingHostID == nil)
         model.isStreaming = true
@@ -69,7 +70,7 @@ struct HostContextMenuTests {
     /// Without a pin nothing is sent, and the launcher points at the fix.
     @Test func quittingOnAnUnpairedPCSaysHowToPairAgain() async {
         do {
-            try await AppModel().quitRunningApp(on: host)
+            try await AppModel(defaults: settings.defaults).quitRunningApp(on: host)
             Issue.record("a quit went out without a pin")
         } catch {
             #expect(AppModel.quitFailureMessage(for: error, hostName: host.displayName)

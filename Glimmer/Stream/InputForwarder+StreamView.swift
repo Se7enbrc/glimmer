@@ -60,7 +60,7 @@ extension InputForwarder: StreamInputViewDelegate {
 
         // Without live telemetry a bookmark would do nothing, so let the PC use the chord.
         if !event.isARepeat, onBookmarkHotkey != nil,
-           bookmarkHotkeyProvider().matches(event: event, modifiers: mods), TelemetryGate.isEnabled {
+           bookmarkHotkeyProvider().matches(event: event, modifiers: mods), bookmarkEnabled() {
             log.info("Bookmark hotkey detected - invoking onBookmarkHotkey")
             onBookmarkHotkey?()
             return

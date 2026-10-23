@@ -15,6 +15,8 @@ import Testing
 @testable import Glimmer
 
 struct MenuBarPresentationTests {
+    private let settings = IsolatedDefaults()
+
     @Test @MainActor func liveNameKeepsTheStreamingPCWhenSelectionChanges() throws {
         let fixture = try FakePCModel("menu-identity", sunshine: .scripted([:]))
         defer { fixture.remove() }
@@ -44,7 +46,7 @@ struct MenuBarPresentationTests {
     }
 
     @Test @MainActor func liveModeDoesNotFollowNextStreamSettings() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         var snapshot = StreamStatsSnapshot()
         snapshot.configuredFps = 60
         model.menuDetails = snapshot
@@ -56,7 +58,7 @@ struct MenuBarPresentationTests {
     }
 
     @Test @MainActor func retiredSessionDetailsCannotOverwriteTheCurrentStream() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let retired = StreamSession(hostDisposition: .disconnectOnly, backend: InputRecordingBackend())
         let current = StreamSession(hostDisposition: .disconnectOnly, backend: InputRecordingBackend())
         model.isStreaming = true

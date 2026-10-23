@@ -8,6 +8,8 @@ import Testing
 
 @Suite(.serialized)
 struct GlimmerStopTests {
+    private let settings = IsolatedDefaults()
+
     private let app = LibraryApp(id: 7, name: "Steam", hdr: false, hidden: false)
 
     private func pc(id: String = "pc-id", name: String = "Den PC") -> Glimmer.Host {
@@ -93,7 +95,7 @@ struct GlimmerStopTests {
     }
 
     @MainActor @Test func urlMismatchAndIdleNeverStopOrAskForConfirmation() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.nativeSession = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         model.lastLaunchAttempt = (app, pc())
         var reply: [String: String]?
@@ -113,7 +115,7 @@ struct GlimmerStopTests {
 
     @MainActor @Test(arguments: ["menu", "url", "cli", "intent"])
     func everyStopUsesTheMenuTeardownAndCancelsThePC(_ route: String) async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let sunshine = FakeSunshine.scripted(["cancel": [SessionFlow.cancelled]])
         let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let server = SessionFlow.pairedPC()
@@ -156,14 +158,14 @@ struct GlimmerStopTests {
 
     @MainActor @Test func matchingUsesTheActivePCsNamesIDsAndAddresses() async {
         for name in ["den pc", "PC-ID", "192.0.2.10", "DEN.LOCAL"] {
-            let model = AppModel()
+            let model = AppModel(defaults: settings.defaults)
             model.nativeSession = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
             model.lastLaunchAttempt = (app, pc())
             #expect(await model.stopActiveStream(matching: name, source: "a test") == .stopped)
             #expect(model.menuStopInProgress)
         }
         await #expect(throws: PCIntentError.failed("No active stream.")) {
-            try await StopStreamingIntent.stop(model: AppModel())
+            try await StopStreamingIntent.stop(model: AppModel(defaults: settings.defaults))
         }
     }
 }

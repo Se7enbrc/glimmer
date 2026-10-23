@@ -14,6 +14,7 @@ import Testing
 @testable import Glimmer
 
 struct GlimmerCLITests {
+    private let settings = IsolatedDefaults()
 
     private func host(_ name: String, id: String, address: String?, custom: String? = nil) -> Glimmer.Host {
         Host(id: id, name: name, customName: custom, localAddress: address, manualAddress: address,
@@ -136,7 +137,7 @@ struct GlimmerCLITests {
     /// The pair sheet's address cleanup applies before anything is printed or dialled.
     @MainActor @Test func pairRefusesAnAddressThatIsNotOne() async throws {
         let command = try GlimmerCLI.parse(["pair", "my gaming pc"])
-        #expect(await GlimmerCLI.pair(command, model: AppModel()) == GlimmerCLI.Exit.usage)
+        #expect(await GlimmerCLI.pair(command, model: AppModel(defaults: settings.defaults)) == GlimmerCLI.Exit.usage)
     }
 
     @Test func aFailedPairSaysToRunItAgainNotToClickTryAgain() {
@@ -181,7 +182,7 @@ struct GlimmerCLITests {
     }
 
     @MainActor @Test func aCommandWaitEndsWhenTheNextStreamStartsImmediately() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.isStreaming = true
         var started = false
         var finished = false
@@ -199,7 +200,7 @@ struct GlimmerCLITests {
     }
 
     @MainActor @Test func aCommandWaitKeepsTheCompletedStreamsFailureAfterAnImmediateRestart() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.isStreaming = true
         var started = false
         var detail: String?
@@ -221,7 +222,7 @@ struct GlimmerCLITests {
     }
 
     @MainActor @Test func aCommandReporterEndsBeforeTheFirstFrameWhenAnotherStreamStarts() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let timing = ConnectTimingTelemetry.shared
         timing.resetForNewSession()
         defer { timing.resetForNewSession() }

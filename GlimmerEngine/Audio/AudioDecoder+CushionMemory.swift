@@ -396,7 +396,8 @@ extension AudioDecoder {
         // writes land in the real link's bucket.
         AudioDiagnostics.queue.async {
             if !write.key.hasSuffix("|unknown") {
-                Self.persistCushionMemory(key: write.key, targetMs: write.targetMs, floorMs: write.floorMs)
+                Self.persistCushionMemory(key: write.key, targetMs: write.targetMs, floorMs: write.floorMs,
+                                          defaults: self.defaults)
             }
         }
         AudioCushionTelemetry.shared.setFloorMs(write.floorMs)
@@ -438,7 +439,7 @@ extension AudioDecoder {
         // UserDefaults read OUTSIDE the meter lock (CFPrefs can block on IPC;
         // the tiny-lock discipline stands even on this one-shot path).
         let key = Self.cushionMemoryKey(host: host, link: link)
-        let stored = Self.readCushionMemory(key: key)
+        let stored = Self.readCushionMemory(key: key, defaults: defaults)
         // Jitter-aware cold seed for the no-memory branch below - computed HERE,
         // OUTSIDE the meter lock (it reads EnvSignal's own lock; the tiny-lock
         // discipline this file keeps). By now (~1-2s in) the reconciler HAS jitter,

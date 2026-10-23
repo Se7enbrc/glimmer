@@ -19,6 +19,7 @@ import Testing
 /// quietly downgrading the banner's button.
 @MainActor
 struct ConnectBannerActionTests {
+    private let settings = IsolatedDefaults()
 
     private func action(for error: Error, canWake: Bool = true, pc: String = "Tower") -> ConnectBannerAction {
         ConnectBannerAction(kind: AppModel.connectFailure(for: error, hostName: pc).kind, canWake: canWake)
@@ -81,7 +82,7 @@ struct ConnectBannerActionTests {
     /// A reconnect's failed stage leaves the banner alone; the give-up terminate
     /// records its kind alongside the sentence.
     @Test func engineFailuresRecordTheirKind() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let rig = Host(id: "pc-1", name: "rig", customName: "Repair Rig", localAddress: "192.0.2.10", manualAddress: nil,
                        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         model.nativeStreamErrorKind = .pairing
@@ -130,9 +131,10 @@ struct TakeoverDialogCopyTests {
 /// Every Pair Again… lands on the one launcher sheet, which names the PC.
 @MainActor
 struct PairAgainSheetTests {
+    private let settings = IsolatedDefaults()
 
     @Test func pairAgainCarriesThePCToTheSheet() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let tower = Host(id: "pc-1", name: "tower", customName: "Tower", localAddress: nil, manualAddress: "192.0.2.10",
                          apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         model.requestPairing(for: tower)

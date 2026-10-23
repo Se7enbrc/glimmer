@@ -9,6 +9,8 @@ import Testing
 @testable import Glimmer
 
 struct AudioPCMQueueTests {
+    private let settings = IsolatedDefaults()
+
     private func buffer(frames: Int, channels: Int = 2) throws -> AVAudioPCMBuffer {
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000,
                                                channels: UInt32(channels)))
@@ -110,7 +112,7 @@ struct AudioPCMQueueTests {
     }
 
     @Test func ringConsumptionFeedsMeterWithoutCountingExactEmptyAsStarvation() throws {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         let input = try buffer(frames: 240)
         let data = try #require(input.floatChannelData)
@@ -131,7 +133,7 @@ struct AudioPCMQueueTests {
         #expect(decoder.pendingUnderrunTargetMs == decoder.playoutTargetMs)
     }
     @Test func underrunPublicationSurvivesAnAlreadyReadMinimumWindow() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         let telemetry = AudioPipelineTelemetry()
@@ -142,7 +144,7 @@ struct AudioPCMQueueTests {
 
     @Test(arguments: [false, true])
     func renderTroughSurvivesWritesBeforeObservation(windowExpired: Bool) throws {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         decoder.halOutput = AudioHALOutput(channels: 2).sharedOutput
         let graph = try #require(decoder.halOutput)

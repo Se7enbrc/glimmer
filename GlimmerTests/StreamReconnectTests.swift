@@ -14,6 +14,7 @@ import Testing
 @testable import Glimmer
 
 struct StreamReconnectTests {
+    private let settings = IsolatedDefaults()
 
     // MARK: - Awake-time budget
 
@@ -85,7 +86,7 @@ struct StreamReconnectTests {
     }
 
     @MainActor @Test func giveUpWithAnUnreachablePcOffersWakeAndConnect() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let den = Host(id: "pc-1", name: "den", customName: "Den PC", localAddress: "192.0.2.10", manualAddress: nil,
                        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         model.handleNativeEvent(
@@ -99,7 +100,7 @@ struct StreamReconnectTests {
     /// Picking another PC while one connects doesn't redirect the failed one's banner: its action
     /// still targets the PC the error names.
     @MainActor @Test func bannerActionTargetsThePcThatFailed() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let den = Host(id: "pc-1", name: "den", customName: "Den PC", localAddress: "192.0.2.10", manualAddress: nil,
                        apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         let tower = Host(id: "pc-2", name: "tower", customName: nil, localAddress: "192.0.2.20", manualAddress: nil,

@@ -9,6 +9,8 @@ import Testing
 @testable import Glimmer
 
 struct SessionSafetyTests {
+    private let settings = IsolatedDefaults()
+
     @Test func stoppedBackendReleasesTheVideoSink() {
         weak var releasedBackend: NativeBackend?
         weak var released: StubVideoSink?
@@ -35,7 +37,7 @@ struct SessionSafetyTests {
         weak var audio: AudioDecoder?
         do {
             let videoSink = StubVideoSink()
-            let audioSink = AudioDecoder()
+            let audioSink = AudioDecoder(defaults: settings.defaults)
             video = videoSink
             audio = audioSink
             backend.attachVideoSink(videoSink)

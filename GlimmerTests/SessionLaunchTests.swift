@@ -9,6 +9,8 @@ import Testing
 // Sessions construct real audio engines; keep setup from contending across these tests.
 @Suite(.serialized)
 struct SessionLaunchTests {
+    private let settings = IsolatedDefaults()
+
     @Test func launchOwnershipSurvivesAnUncertainResponse() {
         #expect(!StreamSession.retainsLaunchOwnership(after: StreamError.hostRefused(message: "Busy", code: 503)))
         #expect(StreamSession.retainsLaunchOwnership(after: CancellationError()))
@@ -168,7 +170,7 @@ struct SessionLaunchTests {
     @Test func eventsGoToTheSessionTheirPipelineStartedFor() async {
         let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         let bridge = StreamBridgeContext(session: session, videoDecoder: await VideoDecoder(),
-                                         audioDecoder: AudioDecoder())
+                                         audioDecoder: AudioDecoder(defaults: settings.defaults))
         let (stream, continuation) = AsyncStream<StreamEvent>.makeStream()
         bridge.eventContinuation = continuation
         NativeConnectionEvents(bridge: bridge).stageStarting("name resolution")

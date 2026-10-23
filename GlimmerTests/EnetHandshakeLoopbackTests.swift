@@ -14,6 +14,7 @@ import Testing
 @testable import Glimmer
 
 struct EnetHandshakeLoopbackTests {
+    private let settings = IsolatedDefaults()
 
     private static func channel(to peer: EnetLoopbackPeer, connectData: UInt32 = 0) throws -> EnetControlChannel {
         EnetControlChannel(host: "127.0.0.1", port: peer.udp.port, controlConnectData: connectData,
@@ -88,7 +89,7 @@ struct EnetHandshakeLoopbackTests {
         var feedback = SessionFeedback()
         feedback.activated = { _ in activations.increment() }
         let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
-                                         audioDecoder: AudioDecoder(), feedback: feedback)
+                                         audioDecoder: AudioDecoder(defaults: settings.defaults), feedback: feedback)
         bridge.setEventSource(backend)
         let (stream, continuation) = AsyncStream.makeStream(of: StreamEvent.self)
         bridge.eventContinuation = continuation

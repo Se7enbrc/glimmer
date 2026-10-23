@@ -53,13 +53,13 @@ extension AudioDecoder {
     private func preparePlayoutForSession(sampleRate: Int32) -> AudioRoute {
         // Load memory before the meter lock so cold pre-roll starts at the PC's
         // learned depth instead of paying for startup underruns again.
-        let seed = Self.loadCushionSeed(environment: platform.environment())
+        let seed = Self.loadCushionSeed(environment: platform.environment(), defaults: defaults)
         // Per-host+device skew seed: start the resampler's integral at the persisted
         // offset between the PC's clock and THIS output device's clock, so the
         // session begins pre-corrected instead of re-drifting into underruns.
         let route = platform.sampleRoute()
         let skewKey = Self.resamplerSkewKey(host: seed.host, deviceUID: route.uid)
-        let skewSeedPpm = Self.loadResamplerSkewSeed(key: skewKey)
+        let skewSeedPpm = Self.loadResamplerSkewSeed(key: skewKey, defaults: defaults)
         if skewSeedPpm != 0 {
             Diag.notice("audio resampler skew seed: \(Int(skewSeedPpm.rounded()))ppm "
                 + "from per-device memory - starts pre-converged", "Stream.Audio")

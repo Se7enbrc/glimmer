@@ -152,6 +152,7 @@ public final class InputForwarder {
 
     /// Provider for the bookmark chord. See `quitHotkeyProvider` for why this is
     /// a closure rather than a stored chord value.
+    package var bookmarkEnabled: @MainActor () -> Bool = { TelemetryGate.isEnabled }
     package var bookmarkHotkeyProvider: (@MainActor () -> HotkeyChord) = { .defaultBookmark }
 
     /// Read live like the quit/stats chords; toggles capture in every presentation.

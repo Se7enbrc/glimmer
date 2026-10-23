@@ -15,13 +15,14 @@ import Testing
 
 @MainActor
 struct HostStatusPollerTests {
+    private let settings = IsolatedDefaults()
 
     init() {}
 
     private let hostID = "poll-\(UUID().uuidString)"
 
     private func model(apps: [LibraryApp] = []) -> AppModel {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.selectedHost = Glimmer.Host(id: hostID, name: "Tower", customName: nil, localAddress: "192.0.2.10",
                                           manualAddress: nil, apps: apps, lastConnected: nil, serverCertPEM: nil,
                                           appVersion: nil, macAddress: nil)

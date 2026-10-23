@@ -15,6 +15,7 @@ import Testing
 @testable import Glimmer
 
 struct GlimmerIntentsTests {
+    private let settings = IsolatedDefaults()
 
     private func pc(id: String = "pc-1", customName: String? = nil, apps: [String]) -> Glimmer.Host {
         Glimmer.Host(id: id, name: "DESKTOP-7Q2", customName: customName, localAddress: nil, manualAddress: nil,
@@ -66,7 +67,7 @@ struct GlimmerIntentsTests {
     @MainActor @Test func requestedPCAppSurvivesASelectionChangeDuringShortcut() throws {
         let requested = pc(id: "requested", apps: ["Desktop", "Steam"])
         let other = pc(id: "other", apps: ["Other Desktop", "Other Game"])
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.selectedHost = other
         model.hostLiveStatus = HostLiveStatus(hostID: other.id, state: .streamingApp(name: "Other Game"),
                                              capturedAt: Date())
@@ -79,7 +80,7 @@ struct GlimmerIntentsTests {
 
     @MainActor @Test func shortcutUsesOnlyAFreshRunningAppFromItsRequestedPC() {
         let requested = pc(id: "requested", apps: ["Desktop", "Shortcut Test App"])
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.hostLiveStatus = HostLiveStatus(hostID: requested.id, state: .streamingApp(name: "Shortcut Test App"),
                                              capturedAt: Date())
         #expect(model.heroTargetApp(on: requested)?.name == "Shortcut Test App")

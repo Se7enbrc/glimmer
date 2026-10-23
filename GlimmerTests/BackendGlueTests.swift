@@ -16,6 +16,7 @@ import Testing
 
 @MainActor
 struct BackendGlueTests {
+    private let settings = IsolatedDefaults()
 
     private func label(_ event: StreamEvent) -> String {
         switch event {
@@ -34,7 +35,7 @@ struct BackendGlueTests {
     @Test func eventsReachTheBridgeStreamInOrder() async {
         let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let bridge = StreamBridgeContext(
-            session: session, videoDecoder: VideoDecoder(), audioDecoder: AudioDecoder())
+            session: session, videoDecoder: VideoDecoder(), audioDecoder: AudioDecoder(defaults: settings.defaults))
         let (stream, continuation) = AsyncStream.makeStream(of: StreamEvent.self)
         bridge.eventContinuation = continuation
         bridge.session = nil
@@ -60,7 +61,7 @@ struct BackendGlueTests {
         let bridge = StreamBridgeContext(
             session: StreamSession(
                 hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend()), videoDecoder: VideoDecoder(),
-            audioDecoder: AudioDecoder())
+            audioDecoder: AudioDecoder(defaults: settings.defaults))
         let pointer = Unmanaged.passUnretained(bridge).toOpaque()
         #expect(StreamBridgeContext.from(pointer) === bridge)
         #expect(StreamBridgeContext.from(nil) == nil)
@@ -110,7 +111,7 @@ extension BackendGlueTests {
         var feedback = SessionFeedback()
         feedback.activated = { _ in activations.increment() }
         let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
-                                         audioDecoder: AudioDecoder(), feedback: feedback)
+                                         audioDecoder: AudioDecoder(defaults: settings.defaults), feedback: feedback)
         let backend = NativeBackend()
         bridge.setEventSource(backend)
         let events = NativeConnectionEvents(bridge: bridge, backend: backend)
@@ -130,7 +131,7 @@ extension BackendGlueTests {
         let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let decoder = VideoDecoder()
         let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
-                                         audioDecoder: AudioDecoder())
+                                         audioDecoder: AudioDecoder(defaults: settings.defaults))
         let old = NativeBackend()
         let replacement = NativeBackend()
         let (stream, continuation) = AsyncStream.makeStream(of: StreamEvent.self)

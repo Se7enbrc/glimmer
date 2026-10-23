@@ -21,13 +21,14 @@ struct FakePCModel {
     nonisolated static let desktop = AppModel.PairedApp(id: 1, name: "Desktop", hdr: false, hidden: false)
 
     let store: IsolatedStore
-    let model = AppModel()
+    let model: AppModel
     let sunshine: FakeSunshine
 
     init(_ name: String, sunshine: FakeSunshine, rtt: HostReachability.Outcome = .reachable(rttMs: 3),
          identity: (certPEM: String, keyPEM: String)? = nil) throws {
         store = try IsolatedStore("sunshine-\(name)")
         self.sunshine = sunshine
+        model = AppModel(defaults: store.defaults)
         model.hostsDefaults = store.defaults
         model.supportBase = store.directory
         model.makeNetwork = { sunshine.client($0, identity: identity) }

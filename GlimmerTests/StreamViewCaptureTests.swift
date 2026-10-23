@@ -12,6 +12,8 @@ import Testing
 
 @MainActor
 struct StreamViewCaptureTests {
+    private let settings = IsolatedDefaults()
+
     @MainActor
     private final class Edges { var seen: [Bool] = [] }
 
@@ -63,7 +65,7 @@ struct StreamViewCaptureTests {
 
     @Test(arguments: ["Desktop", "desktop", "Hades"])
     func everyAppBuildsWithRelativeFullscreenCapture(name: String) throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let app = LibraryApp(id: 1, name: name, hdr: false, hidden: false)
         let host = Host(id: "pointer-pc", name: "Tower", customName: nil, localAddress: nil,
                         manualAddress: nil, apps: [app], lastConnected: nil, serverCertPEM: nil,

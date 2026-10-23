@@ -14,18 +14,19 @@ import Testing
 @testable import Glimmer
 
 struct AudioCushionMemoryTests {
+    private let settings = IsolatedDefaults()
 
     private func store(link: String, target: Double, floor: Double = 0, savedOffset: Double = 100) -> String {
         let key = AudioDecoder.cushionMemoryKey(host: "test-\(UUID().uuidString)", link: link)
         let record: [String: Any] = ["target_ms": target, "floor_ms": floor,
                                      "saved_at": Date().timeIntervalSinceReferenceDate + savedOffset]
-        UserDefaults.standard.set(record, forKey: key)
+        settings.defaults.set(record, forKey: key)
         return key
     }
 
     private func read(_ key: String) -> (targetMs: Double, floorMs: Double)? {
-        defer { UserDefaults.standard.removeObject(forKey: key) }
-        return AudioDecoder.readCushionMemory(key: key)
+        defer { settings.defaults.removeObject(forKey: key) }
+        return AudioDecoder.readCushionMemory(key: key, defaults: settings.defaults)
     }
 
     // MARK: - Caps and keys
@@ -48,9 +49,9 @@ struct AudioCushionMemoryTests {
 
     @Test func persistedRecordRoundTripsThroughTheStore() throws {
         let key = AudioDecoder.cushionMemoryKey(host: "test-\(UUID().uuidString)", link: "wifi")
-        defer { UserDefaults.standard.removeObject(forKey: key) }
-        AudioDecoder.persistCushionMemory(key: key, targetMs: 100, floorMs: 50)
-        let record = try #require(AudioDecoder.readCushionMemory(key: key))
+        defer { settings.defaults.removeObject(forKey: key) }
+        AudioDecoder.persistCushionMemory(key: key, targetMs: 100, floorMs: 50, defaults: settings.defaults)
+        let record = try #require(AudioDecoder.readCushionMemory(key: key, defaults: settings.defaults))
         #expect(abs(record.targetMs - 100) < 0.01)
         #expect(abs(record.floorMs - 50) < 0.01)
     }
@@ -88,7 +89,7 @@ struct AudioCushionMemoryTests {
     // MARK: - Learning the floor
 
     @Test func underrunsPullTheFloorTowardTheFailedTargetAndCapIt() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.effectiveCushionMaxMs = 200
         decoder.cushionSeedKey = "audioCushionMemory.h|wifi"
         let first = decoder.cushionNoteUnderrunLocked(now: 1_000, failedTargetMs: 80)
@@ -104,7 +105,7 @@ struct AudioCushionMemoryTests {
     }
 
     @Test func startupGateStopsBootRampDrainsFromTeachingTheFloor() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.floorLearnGateUntilNanos = 10_000
         _ = decoder.cushionNoteUnderrunLocked(now: 5_000, failedTargetMs: 120)
         #expect(decoder.learnedFloorMs == 0)
@@ -115,7 +116,7 @@ struct AudioCushionMemoryTests {
     }
 
     @Test func recentFailureHoldsOneStepAboveTheFailedTargetUntilItExpires() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         #expect(decoder.recentFailureFloorMs(now: 500) == 0)
         _ = decoder.cushionNoteUnderrunLocked(now: 1_000, failedTargetMs: 80)
         let hold = AudioDecoder.recentFailureHoldNanos
@@ -126,7 +127,7 @@ struct AudioCushionMemoryTests {
     // MARK: - Quiet-window decay
 
     private func quietDecoder(target: Double, minFill: Double = 100) -> AudioDecoder {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.playoutTargetMs = target
         decoder.quietWindowMinFillMs = minFill
         return decoder

@@ -9,10 +9,12 @@ import Testing
 
 @Suite(.serialized)
 struct AudioPrimeEdgeSafetyTests {
+    private let settings = IsolatedDefaults()
+
     /// Repeated packets must not burn through the restart ladder while the
     /// output is unavailable. The empty graph deterministically rejects start.
     @Test func consecutivePrimeEdgesShareOneRestartAttempt() throws {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
         decoder.stateLock.lock()
@@ -56,7 +58,7 @@ struct AudioPrimeEdgeSafetyTests {
     /// next packet retries. (`engine.start()` on the empty graph fails or the
     /// un-attached `play()` raises - either path must degrade, never crash.)
     @Test func primeEdgeWithDeadEngineStaysUnprimedWithoutCrashing() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.audioMeterLock.lock()
         decoder.meterSampleRate = 48_000
         decoder.framesScheduled = 48_000   // fill far above any target
