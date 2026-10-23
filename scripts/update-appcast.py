@@ -9,7 +9,7 @@ Usage:
       --short-version 2026.6.4 --version 20260613 \
       --url https://.../Glimmer-2026.6.4.zip \
       --ed-signature <sig> --length <bytes> \
-      [--min-system 26.0] [--release-notes-url URL] [--changelog PATH]
+      [--min-system VERSION] [--release-notes-url URL] [--changelog PATH]
 
   update-appcast.py <appcast.xml> --backfill [--dry-run]
 
@@ -27,6 +27,7 @@ result to stdout and leaves the file alone.
 """
 import argparse
 import os
+import plistlib
 import sys
 import xml.etree.ElementTree as ET
 from email.utils import formatdate
@@ -56,6 +57,13 @@ def _escape_cdata(text):  # type: ignore[no-untyped-def]
 
 if _escape_cdata_orig is not None:
     ET._escape_cdata = _escape_cdata  # type: ignore[attr-defined]
+
+
+def app_minimum_system() -> str:
+    # The shipped floor lives in one place: the app's Info.plist at this commit.
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Glimmer", "Info.plist")
+    with open(path, "rb") as stream:
+        return str(plistlib.load(stream)["LSMinimumSystemVersion"])
 
 
 def sk(tag: str) -> str:
@@ -142,7 +150,8 @@ def main() -> None:
     ap.add_argument("--url")
     ap.add_argument("--ed-signature")
     ap.add_argument("--length")
-    ap.add_argument("--min-system", default="26.0")
+    ap.add_argument("--min-system", default=None,
+                    help="minimum macOS for a new item; defaults to the app's LSMinimumSystemVersion")
     ap.add_argument("--release-notes-url", default=None)
     ap.add_argument("--changelog", default=None, help="path to CHANGELOG.md")
     ap.add_argument("--backfill", action="store_true", help="also fill in descriptions on existing items")
@@ -179,7 +188,7 @@ def main() -> None:
                 expected = {"url": a.url, sk("edSignature"): a.ed_signature, "length": a.length}
                 if enclosure is None or any(enclosure.get(key) != value for key, value in expected.items()):
                     raise ValueError("published update bytes are immutable; bump the version")
-                if existing.findtext(sk("minimumSystemVersion")) != a.min_system:
+                if a.min_system is not None and existing.findtext(sk("minimumSystemVersion")) != a.min_system:
                     raise ValueError("published minimum system version is immutable")
                 insert = False
                 if a.promote and existing.find(sk("channel")) is not None:
@@ -220,7 +229,7 @@ def main() -> None:
         ET.SubElement(item, sk("shortVersionString")).text = a.short_version
         if a.channel:
             ET.SubElement(item, sk("channel")).text = a.channel
-        ET.SubElement(item, sk("minimumSystemVersion")).text = a.min_system
+        ET.SubElement(item, sk("minimumSystemVersion")).text = a.min_system or app_minimum_system()
         if a.release_notes_url:
             ET.SubElement(item, sk("releaseNotesLink")).text = a.release_notes_url
         enc = ET.SubElement(item, "enclosure")

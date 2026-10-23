@@ -210,7 +210,7 @@ def publish_feed(root, receipt, tag):
         command([sys.executable, 'scripts/update-appcast.py', str(feed), '--short-version', receipt['short'],
                  '--version', receipt['build'], '--url',
                  f'https://github.com/{REPO}/releases/download/{tag}/Glimmer-{receipt["short"]}.zip',
-                 '--ed-signature', receipt['signature'], '--length', receipt['length'], '--min-system', '26.0',
+                 '--ed-signature', receipt['signature'], '--length', receipt['length'],
                  '--channel', 'rc', '--title', f'{receipt["short"]} (RC {tag.rsplit(".", 1)[1]})',
                  '--changelog', str(root / 'CHANGELOG.md')], 'candidate published; feed update rejected')
         if feed.read_text() != original:

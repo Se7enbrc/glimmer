@@ -188,7 +188,7 @@ if [ "$CHANNEL" = rc ]; then
 fi
 "$HERE/scripts/update-appcast.py" "$FEED" \
 	--short-version "$SHORT" --version "$BUILD" \
-	--url "$ASSET_URL" --ed-signature "$ED_SIG" --length "$LENGTH" --min-system 26.0 \
+	--url "$ASSET_URL" --ed-signature "$ED_SIG" --length "$LENGTH" \
 	"${FEED_ARGS[@]}"
 if cmp -s "$FEED" "$WORK/original-appcast.xml"; then
 	echo "  ✓ appcast already current (no change to publish)"

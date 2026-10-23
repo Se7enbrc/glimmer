@@ -108,6 +108,9 @@ class CandidatePublicationTests(unittest.TestCase):
         ET.ElementTree(live_feed).write(self.root / "live-appcast.xml")
         for script in ("update-appcast.py", "release_validation.py", "changelog.py"):
             shutil.copy2(SCRIPTS / script, self.root / "scripts" / script)
+        # A new feed item takes its minimum macOS from the app's Info.plist.
+        (self.root / "Glimmer").mkdir(exist_ok=True)
+        shutil.copy2(SCRIPTS.parent / "Glimmer/Info.plist", self.root / "Glimmer/Info.plist")
         (self.root / "scripts/validate_actual.py").write_text(
             'import sys\nfrom pathlib import Path\nimport xml.etree.ElementTree as ET\n'
             'from release_validation import validate_feed\n'
