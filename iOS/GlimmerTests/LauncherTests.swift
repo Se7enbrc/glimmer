@@ -186,11 +186,13 @@ struct LauncherTests {
         let fixture = LauncherFixture()
         let model = fixture.model()
         #expect(model.streamProfile == .native120)
+        #expect(model.touchMouseEnabled)
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
         model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
         model.launch(fixture.app)
         #expect(model.stream?.launch.profile == .native120)
+        #expect(model.stream?.launch.touchMouseEnabled == true)
         model.streamClosed()
         await model.waitUntilStreamClosed()
     }
@@ -203,11 +205,14 @@ struct LauncherTests {
         await model.waitUntilOperationFinishes()
         model.streamProfile = .native120
         model.mouseStick = .left
+        model.touchMouseEnabled = false
         model.launch(fixture.app)
         model.streamProfile = .fullHD60
         model.mouseStick = .right
+        model.touchMouseEnabled = true
         #expect(model.stream?.launch.profile == .native120)
         #expect(model.stream?.launch.mouseStick == .left)
+        #expect(model.stream?.launch.touchMouseEnabled == false)
         #expect(fixture.prepares == 1)
         model.streamClosed()
         await model.waitUntilStreamClosed()
@@ -457,6 +462,7 @@ final class LauncherFixture {
     var lastConnectedID: String?
     var forgotten: Set<String> = []
     var forgetFailure: Error?
+    var savedFailure: Error?
     var prepares = 0
     var pairs = 0
     var remembers = 0
@@ -479,7 +485,10 @@ final class LauncherFixture {
     var storedPCs: [SavedPC] { (additionalPCs + [saved]).filter { !forgotten.contains($0.id) } }
 
     func model() -> LauncherModel {
-        LauncherModel(calls: LauncherModel.Calls(savedPCs: { [self] in storedPCs },
+        LauncherModel(calls: LauncherModel.Calls(savedPCs: { [self] in
+            if let savedFailure { throw savedFailure }
+            return storedPCs
+        },
             prepare: { [self] server, saved in
                 prepares += 1
                 preparedAddress = server.address

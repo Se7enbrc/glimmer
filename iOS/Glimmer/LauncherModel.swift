@@ -27,6 +27,7 @@ final class LauncherModel {
     var canForgetPC: Bool { active && session == nil && !busy }
     var stream: StreamSessionModel?
     var streamProfile: StreamProfile = .native120
+    var touchMouseEnabled = true
     var mouseStick: ControllerMouseStick = .right
     private var session: StreamSessionModel?
     var hasActiveStream: Bool { session.map { !$0.phase.isEnded } ?? false }
@@ -142,7 +143,7 @@ final class LauncherModel {
             savedPCs = remaining
             forgetFailure = nil
         } catch {
-            forgetFailure = "Couldn't forget \(pc.name). Unlock the device and try again."
+            forgetFailure = LauncherFailureCopy.storageMessage(error, action: "forget \(pc.name)")
         }
     }
 
@@ -207,7 +208,7 @@ final class LauncherModel {
                 pairing = nil
                 busy = false
                 refreshSavedPCs()
-                message = LauncherFailureCopy.message(error)
+                message = LauncherFailureCopy.message(error, pcName: server.serverName)
             }
         }
     }
@@ -238,7 +239,7 @@ final class LauncherModel {
         stopDiscovery()
         let session = calls.makeSession(StreamLaunch(network: selected.network,
             pcID: selected.server.uniqueId, pcName: selected.server.serverName, appID: app.id, appName: app.name,
-            profile: streamProfile, mouseStick: mouseStick))
+            profile: streamProfile, mouseStick: mouseStick, touchMouseEnabled: touchMouseEnabled))
         self.session = session
         stream = session
     }
@@ -280,12 +281,10 @@ final class LauncherModel {
     private func isCurrent(_ attempt: UInt64) -> Bool { generation == attempt && !Task.isCancelled }
 
     private func refreshSavedPCs() {
-        do { savedPCs = try calls?.savedPCs() ?? [] } catch { showStorageFailure() }
-    }
-
-    private func showStorageFailure() {
-        savedPCs = []
-        message = "Glimmer couldn't read its saved PCs. Unlock the device and try again."
+        guard active else { return }
+        do { savedPCs = try calls?.savedPCs() ?? [] } catch {
+            message = LauncherFailureCopy.storageMessage(error, action: "read its saved PCs")
+        }
     }
 
     private func startDiscovery() {

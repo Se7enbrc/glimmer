@@ -14,9 +14,11 @@ struct StreamLaunch: Identifiable, Sendable {
     let appName: String
     let profile: StreamProfile
     let mouseStick: ControllerMouseStick
+    let touchMouseEnabled: Bool
 
     init(network: NetworkClient, pcID: String, pcName: String, appID: Int, appName: String,
-         profile: StreamProfile = .native120, mouseStick: ControllerMouseStick = .right) {
+         profile: StreamProfile = .native120, mouseStick: ControllerMouseStick = .right,
+         touchMouseEnabled: Bool = true) {
         self.network = network
         self.pcID = pcID
         self.pcName = pcName
@@ -24,6 +26,7 @@ struct StreamLaunch: Identifiable, Sendable {
         self.appName = appName
         self.profile = profile
         self.mouseStick = mouseStick
+        self.touchMouseEnabled = touchMouseEnabled
     }
 }
 

@@ -7,9 +7,7 @@ extension InputCore {
     package func retainMouseTiming(slot: UInt8) {
         guard snapshot.ready, snapshot.focused, snapshot.controllersAnnounced,
               let state = controllerMouseStates[slot], state.isMouse else { return }
-        let axes = [state.analog.leftStickX, state.analog.leftStickY,
-                    state.analog.rightStickX, state.analog.rightStickY]
-        guard axes.contains(where: { Self.controllerMouseDelta($0) != 0 }) else {
+        guard Self.controllerMouseMoving(state.analog) else {
             mouseTimings[slot] = nil
             return
         }

@@ -8,6 +8,32 @@ import Testing
 
 @MainActor
 struct PairingRecoveryTests {
+    @Test func protectedDataTransitionDoesNotLeaveAnUnlockMessage() {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        fixture.savedFailure = LauncherServices.Failure.unavailable
+        model.availabilityChanged(active: false, background: false, protectedDataAvailable: false)
+        fixture.savedFailure = nil
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        #expect(model.message == nil)
+        #expect(model.savedPCs.count == 1)
+    }
+
+    @Test func onlyProtectedDataFailuresAskForUnlock() {
+        #expect(LauncherFailureCopy.message(IdentityStorageError.unavailable).contains("Unlock"))
+        #expect(LauncherFailureCopy.message(LauncherServices.Failure.unavailable).contains("Unlock"))
+        #expect(!LauncherFailureCopy.message(IdentityStorageError.defaultsUnavailable).contains("Unlock"))
+        #expect(!LauncherFailureCopy.message(LauncherServices.Failure.invalidIdentity).contains("Unlock"))
+    }
+
+    @Test func storageRecoveryDistinguishesLockFromIOAndNamesThePC() {
+        let message = LauncherFailureCopy.storageMessage(CocoaError(.fileWriteNoPermission), action: "forget Den PC")
+        #expect(message == "Glimmer couldn't forget Den PC. Close the app and try again.")
+        #expect(LauncherFailureCopy.message(LauncherServices.Failure.invalidIdentity,
+                                            pcName: "Den PC").contains("Den PC"))
+    }
+
     @Test func confirmationAndCancelDoNotForgetThePC() {
         let fixture = LauncherFixture()
         let model = fixture.model()

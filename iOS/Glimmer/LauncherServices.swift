@@ -153,30 +153,46 @@ final class LauncherServices {
 }
 
 enum LauncherFailureCopy {
-    static func message(_ error: Error) -> String {
+    private static func isProtectedDataUnavailable(_ error: Error) -> Bool {
+        if case IdentityStorageError.unavailable = error { return true }
+        if case LauncherServices.Failure.unavailable = error { return true }
+        return false
+    }
+
+    static func storageMessage(_ error: Error, action: String) -> String {
+        let recovery = isProtectedDataUnavailable(error) ? "Unlock the device and try again."
+            : "Close the app and try again."
+        return "Glimmer couldn't \(action). \(recovery)"
+    }
+
+    static func message(_ error: Error, pcName: String = "the PC") -> String {
         if case LauncherServices.Failure.missingPin = error {
-            return "Glimmer couldn't use its saved pairing. In Settings → PCs, forget the PC and pair again."
+            return "Glimmer couldn't use its saved pairing with \(pcName). "
+                + "In Settings → PCs, forget the PC and pair again."
         }
-        if error is IdentityStorageError || error is LauncherServices.Failure {
-            return "Glimmer couldn't read or save its pairing with the PC. Unlock the device and try again."
+        if isProtectedDataUnavailable(error) {
+            return storageMessage(error, action: "read or save its pairing with \(pcName)")
+        }
+        if case IdentityStorageError.defaultsUnavailable = error {
+            return storageMessage(error, action: "open its storage")
         }
         guard let error = error as? StreamError else {
-            return "Couldn't connect to the PC. Check Sunshine and local network access, then try again."
+            return "Couldn't connect to \(pcName). Check Sunshine and local network access, then try again."
         }
         switch error {
         case .pairingRejected, .pairingFailed:
-            return "Pairing failed. Check the PIN in Sunshine on the PC and try again."
+            return "Pairing with \(pcName) failed. Check the PIN in Sunshine on the PC and try again."
         case .hostCertChanged:
-            return "The PC's identity has changed. If you reset Sunshine, "
+            return "The identity of \(pcName) has changed. If you reset Sunshine, "
                 + "forget the PC in Settings → PCs and pair again."
         case .sunshineNeedsRestart:
-            return "Restart Sunshine on the PC, then try connecting again."
+            return "Restart Sunshine on \(pcName), then try connecting again."
         case .gameStreamHost:
-            return StreamFailureCopy.needsSunshineMessage("the PC")
+            return StreamFailureCopy.needsSunshineMessage(pcName)
         case .hostTimedOut, .hostUnreachable:
-            return "Couldn't reach the PC. Check Sunshine and the network, then try again."
+            return "Couldn't reach \(pcName). Check Sunshine and the network, then try again."
         default:
-            return "Couldn't connect to the PC. Check Sunshine and pairing, then try again."
+            return "Couldn't connect to \(pcName). Check Sunshine and pairing, then try again."
         }
     }
 }

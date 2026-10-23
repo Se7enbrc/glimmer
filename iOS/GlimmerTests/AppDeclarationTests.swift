@@ -30,6 +30,29 @@ struct AppDeclarationTests {
         #expect(writes == [false, true, false, false, true, false])
     }
 
+    @Test func controllersCanNavigateTheSystemInterface() {
+        #expect(Bundle.main.object(forInfoDictionaryKey: "GCSupportsControllerUserInteraction") as? Bool == true)
+    }
+
+    @Test func streamHandsControllerEventsBackToSystemControls() async {
+        let fixture = PlaybackFixture()
+        fixture.controllerConnected = true
+        let model = fixture.model()
+        let controller = StreamViewController(model: model, close: {})
+        controller.loadViewIfNeeded()
+        #expect(controller.controllerUserInteractionEnabled)
+        model.start(surface: controller.surface)
+        model.receive(fixture.update(.firstFrame))
+        #expect(!controller.controllerUserInteractionEnabled)
+        model.showControls()
+        #expect(controller.controllerUserInteractionEnabled)
+        model.resumeInput()
+        #expect(!controller.controllerUserInteractionEnabled)
+        model.stop()
+        await model.waitUntilStopped()
+        #expect(controller.controllerUserInteractionEnabled)
+    }
+
     @Test func pcSymbolExistsInSystemSymbolSet() {
         #expect(UIImage(systemName: LauncherView.pcSymbol) != nil)
     }
