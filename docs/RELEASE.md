@@ -37,6 +37,14 @@ failed checks, missing analysis results or open CodeQL alerts on that ref stop
 release. Fork runs cannot authorize it: mirror the reviewed commit and run
 upstream checks.
 
+### When PR checks do not start
+
+Open the **PR mergeability** workflow summary to check for conflicts. It reads
+open PR metadata on main updates and twice an hour, without checking out PR
+code; manual dispatch on main checks sooner. Scheduled runs can be delayed.
+Resolve any reported conflict and push the updated branch, then wait for Verify
+and all three CodeQL jobs on the new head before cutting a candidate.
+
 ### Cut a candidate from the command line
 
 Use `make rc` only when you intend to push a candidate and dispatch Release.

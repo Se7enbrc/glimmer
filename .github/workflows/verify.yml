@@ -7,21 +7,24 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# A pull request's newer push replaces its run; every main commit keeps its own.
+# A PR update or closure replaces its run; all other events keep independent runs.
 concurrency:
   group:
-    ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref
+    }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Main and dispatched runs build everything; a pull request skips the build and
   # tests only when it changes nothing but documentation and the website.
   changes:
+    if: github.event.action != 'closed'
     name: Decide what to verify
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -160,12 +163,28 @@ jobs:
             }}-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Verify
+        timeout-minutes: 20
         id: verify
         env:
           TARGET: ${{ matrix.target }}
           COVERAGE_KIND: ${{ matrix.coverage }}
           COVERAGE_PY: ${{ runner.temp }}/coverage/bin/python -m coverage
-        run: make "$TARGET" TEST_SUITE= ${COVERAGE_KIND:+COVERAGE=1}
+        run: |
+          set -o pipefail
+          mkdir -p build/logs
+          make "$TARGET" TEST_SUITE= ${COVERAGE_KIND:+COVERAGE=1} 2>&1 | tee build/logs/verify.log
+
+      - name: Save Mac results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mac-${{ matrix.part }}-results
+          path: |
+            build/logs/
+            build/Logs/Test/
+            build/coverage/swift/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Coverage summary
         if: matrix.coverage != ''
@@ -179,7 +198,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage
-        if: matrix.coverage != ''
+        if: always() && matrix.coverage != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-${{ matrix.coverage }}
@@ -222,9 +241,21 @@ jobs:
           persist-credentials: false
 
       - name: Build and test the source package
+        timeout-minutes: 5
         run: |
-          swift build -Xswiftc -warnings-as-errors
-          swift test -Xswiftc -warnings-as-errors
+          set -o pipefail
+          mkdir -p build/logs
+          swift build -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-build.log
+          swift test -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-test.log
+
+      - name: Save package results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: engine-package-results
+          path: build/logs/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Build engine for device and Simulator
         run: |
@@ -254,6 +285,7 @@ jobs:
           persist-credentials: false
 
       - name: Test iPhone app against this checkout
+        timeout-minutes: 20
         if: matrix.platform == 'Simulator'
         shell: bash
         run: |
@@ -310,6 +342,11 @@ jobs:
 
       - name: Build the unit tests for macOS 15.7
         run: |
+          export XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-ci.xcconfig"
+          cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+          GCC_TREAT_WARNINGS_AS_ERRORS = YES
+          XCCONFIG
           make test-build
           tar -C build/Build -czf "$RUNNER_TEMP/sequoia-tests.tgz" Products
 
@@ -343,11 +380,25 @@ jobs:
           path: ${{ runner.temp }}
 
       - name: Run the unit tests on macOS 15
+        timeout-minutes: 10
         run: |
+          set -o pipefail
           sw_vers
-          mkdir -p build/Build
+          mkdir -p build/Build build/logs
           tar -C build/Build -xzf "$RUNNER_TEMP/sequoia-tests.tgz"
-          make test-run
+          make test-run TEST_FLAGS='-resultBundlePath build/sequoia.xcresult' \
+            2>&1 | tee build/logs/sequoia.log
+
+      - name: Save macOS 15 results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sequoia-results
+          path: |
+            build/logs/
+            build/sequoia.xcresult
+          if-no-files-found: ignore
+          retention-days: 14
 
   fuzz:
     name: libFuzzer
@@ -362,14 +413,29 @@ jobs:
           persist-credentials: false
 
       - name: Fuzz protocol parsers
+        timeout-minutes: 4
         env:
           FUZZ_SECONDS: "30"
-        run: scripts/fuzz.sh
+        run: |
+          set -o pipefail
+          mkdir -p build/logs
+          scripts/fuzz.sh 2>&1 | tee build/logs/fuzz.log
+
+      - name: Save fuzzer results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: libfuzzer-results
+          path: |
+            build/logs/
+            build/fuzz/
+          if-no-files-found: ignore
+          retention-days: 14
   # The required check: green only when every part of the gate passed.
   gate:
     name: macOS
-    needs: [changes, verify, engine-ios, ios, sequoia]
-    if: always()
+    needs: [changes, verify, engine-ios, ios, sequoia-build, sequoia, fuzz]
+    if: always() && github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -381,6 +447,8 @@ jobs:
           ENGINE: ${{ needs.engine-ios.result }}
           IOS: ${{ needs.ios.result }}
           SEQUOIA: ${{ needs.sequoia.result }}
+          SEQUOIA_BUILD: ${{ needs.sequoia-build.result }}
+          FUZZ: ${{ needs.fuzz.result }}
         run: |
           test "$DECIDED" = success
           test "$RESULT" = success
@@ -388,10 +456,14 @@ jobs:
             test "$ENGINE" = success
             test "$IOS" = success
             test "$SEQUOIA" = success
+            test "$SEQUOIA_BUILD" = success
+            test "$FUZZ" = success
           elif [ "$BUILD" = false ]; then
             test "$ENGINE" = skipped
             test "$IOS" = skipped
             test "$SEQUOIA" = skipped
+            test "$SEQUOIA_BUILD" = skipped
+            test "$FUZZ" = skipped
           else
             exit 1
           fi
