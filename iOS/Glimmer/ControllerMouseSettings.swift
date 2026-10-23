@@ -134,6 +134,7 @@ struct GlimmerSettings: View {
             Text("Stream")
         } footer: {
             Text("Native matches this display's full resolution. The PC needs the same display mode. "
+                 + "Some games need 16:9. Choose 1080p if the picture looks wrong. "
                  + "Changes apply to the next stream.")
         }
     }

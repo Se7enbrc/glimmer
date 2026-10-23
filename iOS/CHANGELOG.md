@@ -18,3 +18,6 @@
 
 - Use a controller to navigate Glimmer's menus and settings. Game input stays
   with the PC while you play.
+
+- Stream settings and the PC setup guide explain when games need a 16:9 mode and
+  which virtual display setups need the sample configuration.

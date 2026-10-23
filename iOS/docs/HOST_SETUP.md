@@ -1,11 +1,19 @@
 # Set up the PC for iPhone and iPad
 
-Follow the [shared PC setup guide](../../docs/HOST_SETUP.md) to install
-Sunshine, copy the [iPhone/iPad display modes](../../docs/vdd/iphone-ipad.xml),
-and let Sunshine select the right size and refresh rate. For a mix of Mac,
-iPhone and iPad, use
-[all-glimmer-clients.xml](../../docs/vdd/all-glimmer-clients.xml) instead. The
-guide also includes an optional Apollo path without an XML file.
+Choose a display mode on the PC that your game supports. Some games crop,
+stretch, or refuse the wider iPhone aspect ratio. Use **1080p** in Settings →
+Quality and 1920 × 1080 on the PC when a game needs 16:9.
+
+Follow the [shared PC setup guide](../../docs/HOST_SETUP.md) to install Sunshine
+and select the right size and refresh rate. For MTT Virtual Display Driver, use
+the [iPhone/iPad sample modes](../../docs/vdd/iphone-ipad.xml). For a mix of
+Mac, iPhone and iPad, use
+[all-glimmer-clients.xml](../../docs/vdd/all-glimmer-clients.xml) instead.
+
+Software with its own virtual display, such as Apollo, does not need the MTT
+sample configuration. Neither does a PC monitor set to a 16:9 mode. A virtual
+display provides the requested size; it cannot make a game support that aspect
+ratio.
 
 In Settings → Quality, **Native · 120 fps** requests this display's landscape
 pixel size rounded down to even dimensions, capped to its maximum frame rate.
