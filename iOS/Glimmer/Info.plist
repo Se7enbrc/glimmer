@@ -28,7 +28,7 @@
 		</dict>
 	</array>
 	<key>GCSupportsControllerUserInteraction</key>
-	<false/>
+	<true/>
 	<key>LSSupportsGameMode</key>
 	<true/>
 	<key>LSRequiresIPhoneOS</key>

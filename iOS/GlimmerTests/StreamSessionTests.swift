@@ -512,7 +512,7 @@ struct StreamSessionTests {
 }
 
 @MainActor
-private final class PlaybackFixture {
+final class PlaybackFixture {
     let id = UUID()
     var makes = 0
     var visibility: [Bool] = []

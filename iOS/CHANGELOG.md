@@ -15,3 +15,6 @@
   settings to prevent accidental screen input while playing.
 
 - Thumbstick mouse movement is smoother, with finer control for small movements.
+
+- Use a controller to navigate Glimmer's menus and settings. Game input stays
+  with the PC while you play.
