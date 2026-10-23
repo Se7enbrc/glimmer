@@ -42,8 +42,8 @@ struct AppShellTests {
     }
 
     @Test @MainActor func nativeQualitySurvivesRelaunchAndFailedReadiness() {
-        withQualityDefaults {
-            let defaults = UserDefaults.standard
+        do {
+            let defaults = settings.defaults
             defaults.set("matchDisplay", forKey: "qualityPreset")
             defaults.set(1920, forKey: "customWidth")
             defaults.set(1080, forKey: "customHeight")
@@ -52,7 +52,7 @@ struct AppShellTests {
                             manualAddress: nil, apps: [], lastConnected: nil, serverCertPEM: nil,
                             appVersion: nil, macAddress: nil)
             for _ in 0..<2 {
-                let model = AppModel()
+                let model = AppModel(defaults: defaults)
                 model.displayProbe = { (3456, 2234, 120) }
                 for state: HostLiveStatus.State in [.unknown, .certMismatch, .idle, .asleep] {
                     model.hostLiveStatus = HostLiveStatus(hostID: host.id, state: state, capturedAt: Date())
