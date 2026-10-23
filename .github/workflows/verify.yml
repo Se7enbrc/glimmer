@@ -368,7 +368,7 @@ jobs:
   # The required check: green only when every part of the gate passed.
   gate:
     name: macOS
-    needs: [changes, verify, engine-ios, ios, sequoia]
+    needs: [changes, verify, engine-ios, ios, sequoia-build, sequoia, fuzz]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -381,6 +381,8 @@ jobs:
           ENGINE: ${{ needs.engine-ios.result }}
           IOS: ${{ needs.ios.result }}
           SEQUOIA: ${{ needs.sequoia.result }}
+          SEQUOIA_BUILD: ${{ needs.sequoia-build.result }}
+          FUZZ: ${{ needs.fuzz.result }}
         run: |
           test "$DECIDED" = success
           test "$RESULT" = success
@@ -388,10 +390,14 @@ jobs:
             test "$ENGINE" = success
             test "$IOS" = success
             test "$SEQUOIA" = success
+            test "$SEQUOIA_BUILD" = success
+            test "$FUZZ" = success
           elif [ "$BUILD" = false ]; then
             test "$ENGINE" = skipped
             test "$IOS" = skipped
             test "$SEQUOIA" = skipped
+            test "$SEQUOIA_BUILD" = skipped
+            test "$FUZZ" = skipped
           else
             exit 1
           fi

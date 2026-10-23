@@ -19,22 +19,32 @@ class AppleVerificationTests(unittest.TestCase):
         match = re.search(r"        run: \|\n((?:          .*\n|\n)+)", source)
         self.assertIsNotNone(match)
         env = dict(os.environ, DECIDED="success", RESULT="success", BUILD="true",
-                   ENGINE="success", IOS="success", SEQUOIA="success")
+                   ENGINE="success", IOS="success", SEQUOIA="success", SEQUOIA_BUILD="success", FUZZ="success")
         env.update(overrides)
         return subprocess.run(["/bin/bash", "-euo", "pipefail", "-c", textwrap.dedent(match[1])],
                               env=env, capture_output=True, timeout=10).returncode
 
+    def test_gate_depends_on_every_required_job(self):
+        source = (ROOT / ".github/workflows/verify.yml").read_text()
+        jobs = set(re.findall(r"^  ([a-z-]+):$", source.split("jobs:\n", 1)[1], re.MULTILINE)) - {"gate"}
+        gate = source.split("  gate:\n", 1)[1]
+        needs = re.search(r"    needs: \[(.*?)\]", gate)[1]
+        self.assertEqual(set(needs.split(", ")), jobs)
+        for job, variable in (("fuzz", "FUZZ"), ("sequoia-build", "SEQUOIA_BUILD")):
+            self.assertIn(f"{variable}: ${{{{ needs.{job}.result }}}}", gate)
+
     def test_both_apps_must_pass_for_code_changes(self):
         self.assertEqual(self.gate(), 0)
-        for name in ("DECIDED", "RESULT", "ENGINE", "IOS", "SEQUOIA"):
+        for name in ("DECIDED", "RESULT", "ENGINE", "IOS", "SEQUOIA", "SEQUOIA_BUILD", "FUZZ"):
             for result in ("failure", "cancelled", "skipped"):
                 with self.subTest(job=name, result=result):
                     self.assertNotEqual(self.gate(**{name: result}), 0)
 
     def test_docs_skip_requires_successful_checks_and_explicit_skipped_builds(self):
-        skipped = dict(BUILD="false", ENGINE="skipped", IOS="skipped", SEQUOIA="skipped")
+        skipped = dict(BUILD="false", ENGINE="skipped", IOS="skipped", SEQUOIA="skipped",
+                       SEQUOIA_BUILD="skipped", FUZZ="skipped")
         self.assertEqual(self.gate(**skipped), 0)
-        for job in ("ENGINE", "IOS", "SEQUOIA"):
+        for job in ("ENGINE", "IOS", "SEQUOIA", "SEQUOIA_BUILD", "FUZZ"):
             self.assertNotEqual(self.gate(**{**skipped, job: "failure"}), 0)
         self.assertNotEqual(self.gate(**skipped, RESULT="failure"), 0)
         self.assertNotEqual(self.gate(**skipped, DECIDED="failure"), 0)
