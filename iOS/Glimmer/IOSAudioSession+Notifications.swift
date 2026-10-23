@@ -3,6 +3,7 @@
 
 import AVFAudio
 import Foundation
+import GlimmerEngine
 
 extension IOSAudioSession {
     enum Event: Sendable {
@@ -105,6 +106,9 @@ extension IOSAudioSession {
             case .route: break
             }
             generation &+= 1
+            AudioPlatform.recordSessionDiagnostic(
+                "iOS audio session event: \(String(describing: event)) generation=\(generation) "
+                + "active=\(active) interrupted=\(interrupted) services_lost=\(servicesLost)")
             if case .route = event { return routeListener ?? deviceListener }
             return deviceListener ?? routeListener
         }

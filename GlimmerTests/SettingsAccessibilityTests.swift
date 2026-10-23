@@ -9,13 +9,10 @@ import Testing
 
 @MainActor
 struct SettingsAccessibilityTests {
+    private let settings = IsolatedDefaults()
+
     @Test func customFieldsExposeDistinctNamesAndValues() throws {
-        let keys = ["qualityPreset", "customWidth", "customHeight", "customFPS"]
-        let saved = keys.map { UserDefaults.standard.object(forKey: $0) }
-        defer {
-            for (key, value) in zip(keys, saved) { UserDefaults.standard.set(value, forKey: key) }
-        }
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.qualityPreset = .custom
         model.customWidth = 1920
         model.customHeight = 1080

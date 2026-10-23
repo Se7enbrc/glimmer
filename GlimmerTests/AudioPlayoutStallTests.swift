@@ -30,12 +30,13 @@ import Testing
 /// an observed flake, not a hypothetical.
 @Suite(.serialized)
 struct AudioPlayoutStallTests {
+    private let settings = IsolatedDefaults()
 
     /// A meter in the wedged session's exact state: playout started and primed,
     /// a backlog pinned past the over-run ceiling (340ms default: 1s scheduled,
     /// nothing played), grace expired - so the ceiling branch drops the packet.
     private func wedgedDecoder() -> AudioDecoder {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.audioMeterLock.lock()
         decoder.meterSampleRate = 48_000
         decoder.playoutStarted = true
@@ -98,7 +99,7 @@ struct AudioPlayoutStallTests {
     /// clear `meterRecovering` and stamp fresh progress (a paused cold pre-roll
     /// begins its 3s window here, so it can never read as a stall).
     @Test func armEdgeClearsRecoveryAndStampsProgress() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.audioMeterLock.lock()
         decoder.meterSampleRate = 48_000
         decoder.playoutStarted = true
@@ -121,7 +122,7 @@ struct AudioPlayoutStallTests {
     /// cushion target and persist the floor (the disguised-permanent-pin class
     /// the shutdown gate already blocks).
     @Test func recoveryCompletionBurstMintsNoUnderrun() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.audioMeterLock.lock()
         decoder.meterSampleRate = 48_000
         decoder.playoutStarted = true
@@ -143,7 +144,7 @@ struct AudioPlayoutStallTests {
     /// reaches the under-run edge (the no-count result is the gate, not a
     /// mis-arranged test).
     @Test func realDrainStillCountsUnderrun() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.audioMeterLock.lock()
         decoder.meterSampleRate = 48_000
         decoder.playoutStarted = true
@@ -163,7 +164,7 @@ struct AudioPlayoutStallTests {
     /// wedge's precursor) must force the drained latch so the next schedule
     /// takes the re-arm edge (drift re-anchor + cushion rebuild).
     @Test func flowResumeForcesMissedDrainEdge() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.audioMeterLock.lock()
         decoder.playoutStarted = true
         decoder.playoutDrained = false
@@ -175,7 +176,7 @@ struct AudioPlayoutStallTests {
     /// Before playout ever starts, a flow-resume edge is meaningless and must
     /// change nothing (no false drain on a cold session's first packets).
     @Test func flowResumeBeforePlayoutIsANoop() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.notePacketFlowResumed(afterGapMs: 9_000)
         #expect(!decoder.playoutDrained)
     }

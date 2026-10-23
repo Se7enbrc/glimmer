@@ -3,6 +3,7 @@
 
 import Foundation
 import os
+import Synchronization
 
 /// Independent locks keep receive, decode and render observations out of each other's critical sections.
 package final class AudioPipelineTelemetry: Sendable {
@@ -17,6 +18,13 @@ package final class AudioPipelineTelemetry: Sendable {
     package let queueOverflow = TelemetryCounters.Counter()
     package let poolExhausted = TelemetryCounters.Counter()
     package let reconfigurationDrops = TelemetryCounters.Counter()
+    // Scalar progress only; packet paths never format logs or acquire an additional lock.
+    package let receivedDatagrams = Atomic<UInt64>(0)
+    package let processedDatagrams = Atomic<UInt64>(0)
+    package let decryptOK = Atomic<UInt64>(0)
+    package let decryptFailed = Atomic<UInt64>(0)
+    package let decodedFrames = Atomic<UInt64>(0)
+    package let renderedFrames = Atomic<UInt64>(0)
     private let window = OSAllocatedUnfairLock(initialState: Window())
 
     package struct Window: Sendable {
@@ -46,6 +54,8 @@ package final class AudioPipelineTelemetry: Sendable {
         package var outputSilentSeconds: Double = 0
         package var outputLatencyMs: Double?
         package var deviceRecoveryMs: Double?
+        package var outputProbeResult: Int?
+        package var outputProbeInputAudible: Bool?
     }
 
     package struct Snapshot: Sendable {
@@ -78,6 +88,12 @@ package final class AudioPipelineTelemetry: Sendable {
         package var queueOverflow: UInt64
         package var poolExhausted: UInt64
         package var reconfigurationDrops: UInt64
+        package var receivedDatagrams: UInt64 = 0
+        package var processedDatagrams: UInt64 = 0
+        package var decryptOK: UInt64 = 0
+        package var decryptFailed: UInt64 = 0
+        package var decodedFrames: UInt64 = 0
+        package var renderedFrames: UInt64 = 0
     }
 
     package func noteRender(cushionMs: Double, underrun: Bool) {
@@ -97,6 +113,13 @@ package final class AudioPipelineTelemetry: Sendable {
 
     package func noteOutputSilence(seconds: Double) { window.withLock { $0.outputSilentSeconds = seconds } }
 
+    package func noteOutputProbe(result: Int, inputAudible: Bool?) {
+        window.withLock {
+            $0.outputProbeResult = result
+            $0.outputProbeInputAudible = inputAudible
+        }
+    }
+
     package func noteNearMiss() { window.withLock { $0.nearMisses &+= 1 } }
     package func setRealtime(_ enabled: Bool) { window.withLock { $0.realtime = enabled } }
 
@@ -105,17 +128,32 @@ package final class AudioPipelineTelemetry: Sendable {
             let captured = value
             value.minimumRenderCushionMs = nil
             value.nearMisses = 0
+            value.outputProbeResult = nil
+            value.outputProbeInputAudible = nil
             return captured
         }
-        return Snapshot(receiveGap: receiveGap.snapshotValue(), decodeSchedule: decodeSchedule.snapshotValue(),
+        var snapshot = Snapshot(receiveGap: receiveGap.snapshotValue(), decodeSchedule: decodeSchedule.snapshotValue(),
                         stateLockWait: stateLockWait.snapshotValue(), queueWait: queueWait.snapshotValue(),
                         window: captured, queueOverflow: queueOverflow.value, poolExhausted: poolExhausted.value,
                         reconfigurationDrops: reconfigurationDrops.value)
+        snapshot.receivedDatagrams = receivedDatagrams.load(ordering: .relaxed)
+        snapshot.processedDatagrams = processedDatagrams.load(ordering: .relaxed)
+        snapshot.decryptOK = decryptOK.load(ordering: .relaxed)
+        snapshot.decryptFailed = decryptFailed.load(ordering: .relaxed)
+        snapshot.decodedFrames = decodedFrames.load(ordering: .relaxed)
+        snapshot.renderedFrames = renderedFrames.load(ordering: .relaxed)
+        return snapshot
     }
 
     package func reset() {
         receiveGap.reset(); decodeSchedule.reset(); stateLockWait.reset(); queueWait.reset()
         queueOverflow.reset(); poolExhausted.reset(); reconfigurationDrops.reset()
+        receivedDatagrams.store(0, ordering: .relaxed)
+        processedDatagrams.store(0, ordering: .relaxed)
+        decryptOK.store(0, ordering: .relaxed)
+        decryptFailed.store(0, ordering: .relaxed)
+        decodedFrames.store(0, ordering: .relaxed)
+        renderedFrames.store(0, ordering: .relaxed)
         window.withLock { $0 = Window() }
     }
 }

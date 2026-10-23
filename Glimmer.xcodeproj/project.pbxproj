@@ -91,6 +91,7 @@
 		A100019A /* AboutPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100019B /* AboutPane.swift */; };
 		DEC0DE2026092000000000D1 /* WakeOnLAN.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000D2 /* WakeOnLAN.swift */; };
 		DEC0DE20260922030000000F /* AppShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609220300000010 /* AppShellTests.swift */; };
+		A1501A7E0000000000000001 /* IsolatedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1501A7E0000000000000002 /* IsolatedDefaults.swift */; };
 		DEC0DE2026092000000000C7 /* MenuBarPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C8 /* MenuBarPanel.swift */; };
 		DEC0DE2026092000000000C3 /* MenuBarPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */; };
 		A100020A /* DiagnosticsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100020B /* DiagnosticsPane.swift */; };
@@ -616,6 +617,7 @@
 		47C0329BABB04AAD8D17E031 /* ControllerRearmState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B232171E04CF4216A7177073 /* ControllerRearmState.swift */; };
 		8AB91C65993C4DF88404AA2B /* InputCore+Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC7A40F932F46A0AE5AAAFF /* InputCore+Controller.swift */; };
 		D02BB946E28B4033B2719286 /* InputCore+Mouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A04597DCD0F4F34A14438C9 /* InputCore+Mouse.swift */; };
+		E5E54ED35009425384B7E4B9 /* ControllerMouseMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC63CE59E65744B581B3689F /* ControllerMouseMotion.swift */; };
 		3CD0C9433D864ACEABD70FD5 /* InputCore+Pointer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62AC3EB39E6045B88C0844A4 /* InputCore+Pointer.swift */; };
 		5917CF91FE8F4FDE957C6480 /* InputCore+Touchpad.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FEBC0FFDDD44133A11DA500 /* InputCore+Touchpad.swift */; };
 		DC6C4EFE1C0A460CB5C22120 /* StreamInput+Chord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF4EBEEDF0140568600D373 /* StreamInput+Chord.swift */; };
@@ -835,6 +837,7 @@
 		A100019B /* AboutPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutPane.swift; sourceTree = "<group>"; };
 		DEC0DE2026092000000000D2 /* WakeOnLAN.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/WakeOnLAN.swift"; sourceTree = SOURCE_ROOT; };
 		DEC0DE202609220300000010 /* AppShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppShellTests.swift"; sourceTree = "<group>"; };
+		A1501A7E0000000000000002 /* IsolatedDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IsolatedDefaults.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C8 /* MenuBarPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPanel.swift"; sourceTree = "<group>"; };
 		DEC0DE2026092000000000C4 /* MenuBarPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MenuBarPresentation.swift"; sourceTree = "<group>"; };
 		A100020B /* DiagnosticsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsPane.swift; sourceTree = "<group>"; };
@@ -1354,6 +1357,7 @@
 		B232171E04CF4216A7177073 /* ControllerRearmState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerRearmState.swift"; sourceTree = SOURCE_ROOT; };
 		3CC7A40F932F46A0AE5AAAFF /* InputCore+Controller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Controller.swift"; sourceTree = SOURCE_ROOT; };
 		7A04597DCD0F4F34A14438C9 /* InputCore+Mouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Mouse.swift"; sourceTree = SOURCE_ROOT; };
+		FC63CE59E65744B581B3689F /* ControllerMouseMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerMouseMotion.swift"; sourceTree = SOURCE_ROOT; };
 		62AC3EB39E6045B88C0844A4 /* InputCore+Pointer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Pointer.swift"; sourceTree = SOURCE_ROOT; };
 		0FEBC0FFDDD44133A11DA500 /* InputCore+Touchpad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Touchpad.swift"; sourceTree = SOURCE_ROOT; };
 		0CF4EBEEDF0140568600D373 /* StreamInput+Chord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/StreamInput+Chord.swift"; sourceTree = SOURCE_ROOT; };
@@ -1873,6 +1877,7 @@
 				DEC0DE2026101010A0000004 /* SunshineHTTPParsingTests.swift */,
 				DEC0DE2026101010A0000006 /* PairingHandshakeTests.swift */,
 				DEC0DE202609220300000010 /* AppShellTests.swift */,
+				A1501A7E0000000000000002 /* IsolatedDefaults.swift */,
 				DEC0DE202609222200000005 /* HostContextMenuTests.swift */,
 				DEC0DE202609222200000003 /* StreamButtonTests.swift */,
 				DEC0DE2026092000000000D8 /* MiniPlayerTests.swift */,
@@ -2000,6 +2005,7 @@
 				0FEBC0FFDDD44133A11DA500 /* InputCore+Touchpad.swift */,
 				62AC3EB39E6045B88C0844A4 /* InputCore+Pointer.swift */,
 				7A04597DCD0F4F34A14438C9 /* InputCore+Mouse.swift */,
+				FC63CE59E65744B581B3689F /* ControllerMouseMotion.swift */,
 				3CC7A40F932F46A0AE5AAAFF /* InputCore+Controller.swift */,
 				B232171E04CF4216A7177073 /* ControllerRearmState.swift */,
 				ACC55B08FAF443E0A701E5F3 /* ControllerChord.swift */,
@@ -2723,6 +2729,7 @@
 				DEC0DE2026101010A0000003 /* SunshineHTTPParsingTests.swift in Sources */,
 				DEC0DE2026101010A0000005 /* PairingHandshakeTests.swift in Sources */,
 				DEC0DE20260922030000000F /* AppShellTests.swift in Sources */,
+				A1501A7E0000000000000001 /* IsolatedDefaults.swift in Sources */,
 				DEC0DE202609222200000006 /* HostContextMenuTests.swift in Sources */,
 				DEC0DE202609222200000004 /* StreamButtonTests.swift in Sources */,
 				DEC0DE2026092000000000D7 /* MiniPlayerTests.swift in Sources */,
@@ -2849,6 +2856,7 @@
 				5917CF91FE8F4FDE957C6480 /* InputCore+Touchpad.swift in Sources */,
 				3CD0C9433D864ACEABD70FD5 /* InputCore+Pointer.swift in Sources */,
 				D02BB946E28B4033B2719286 /* InputCore+Mouse.swift in Sources */,
+				E5E54ED35009425384B7E4B9 /* ControllerMouseMotion.swift in Sources */,
 				8AB91C65993C4DF88404AA2B /* InputCore+Controller.swift in Sources */,
 				47C0329BABB04AAD8D17E031 /* ControllerRearmState.swift in Sources */,
 				CC6CE5CEDA3E4735B16C44A7 /* ControllerChord.swift in Sources */,

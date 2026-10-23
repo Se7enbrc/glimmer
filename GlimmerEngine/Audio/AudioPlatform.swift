@@ -31,6 +31,12 @@ public struct AudioEnvironment: Sendable {
 /// Graph/listener hooks are serialized; route, volume and environment probes must be thread safe.
 /// Deliver notifications asynchronously on the supplied queue, never inline from an adapter hook.
 public struct AudioPlatform {
+    /// Native session events join the recording. Pass only scalar state and system route types,
+    /// never device names, identifiers, error text or audio contents.
+    public static func recordSessionDiagnostic(_ message: String) {
+        Diag.notice("\(message)", "Stream.Audio")
+    }
+
     let makeOutput: (AVAudioFormat) throws -> AudioOutput
     let sampleRoute: () -> AudioRoute
     let installRouteListener: (DispatchQueue, String, @escaping @Sendable (UInt64) -> Void) -> Void

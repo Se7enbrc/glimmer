@@ -40,6 +40,7 @@
 		1A26CF1176BA5F2D37E40F0A /* IOSAudioFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */; };
 		5357DD73479F12579699A792 /* IOSAudioSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */; };
 		FAA9B2DAAD28F9FC05CD2E80 /* IOSAudioOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */; };
+		E53BAE83AE664B16A3908721 /* IOSAudioPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAEE98C2A04C4861AF0185B2 /* IOSAudioPipelineTests.swift */; };
 		902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */; };
 		BFCC9B0DBFB951A6374D2892 /* StreamSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 449C39977453B76D4D682FFF /* StreamSessionModel.swift */; };
 		D2CF67DA276842128B900E3A /* StreamSessionFailureCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */; };
@@ -53,6 +54,7 @@
 		E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */; };
 		2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = F08434884699435EA80067AB /* StreamTouchCapture.swift */; };
 		BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */; };
+		A037E3519F7846D6958E34F0 /* ControllerMouseMotionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */; };
 		2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */; };
 		BF51A1858C9E4892B1CD845D /* IOSControllerCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */; };
 		7C852A7B0A774B1287D2B023 /* IOSControllerCapture+Samples.swift in Sources */ = {isa = PBXBuildFile; fileRef = 390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */; };
@@ -111,6 +113,7 @@
 		22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioFixtures.swift"; sourceTree = "<group>"; };
 		8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioSessionTests.swift"; sourceTree = "<group>"; };
 		EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioOutputTests.swift"; sourceTree = "<group>"; };
+		CAEE98C2A04C4861AF0185B2 /* IOSAudioPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioPipelineTests.swift"; sourceTree = "<group>"; };
 		57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamPlayback.swift"; sourceTree = "<group>"; };
 		449C39977453B76D4D682FFF /* StreamSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionModel.swift"; sourceTree = "<group>"; };
 		E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionFailureCopy.swift"; sourceTree = "<group>"; };
@@ -124,6 +127,7 @@
 		2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests.swift"; sourceTree = "<group>"; };
 		F08434884699435EA80067AB /* StreamTouchCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCapture.swift"; sourceTree = "<group>"; };
 		4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCaptureTests.swift"; sourceTree = "<group>"; };
+		1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerMouseMotionTests.swift"; sourceTree = "<group>"; };
 		5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchRecognizers.swift"; sourceTree = "<group>"; };
 		1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerCapture.swift"; sourceTree = "<group>"; };
 		390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerCapture+Samples.swift"; sourceTree = "<group>"; };
@@ -214,11 +218,13 @@
 				DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */,
 				E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */,
 				4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */,
+				1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */,
 				9F5102EDB7AD2531AE0663B1 /* ControllerMonitorTests.swift */,
 				198F3AC99E774F7CB79C6798 /* IOSControllerCaptureTests.swift */,
 				7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */,
 				6958391F13644D4EBE6E2E6D /* IOSControllerFeedbackTests.swift */,
 				EB83DDE85DC0437A1433B76D /* IOSAudioOutputTests.swift */,
+				CAEE98C2A04C4861AF0185B2 /* IOSAudioPipelineTests.swift */,
 				8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */,
 				22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */,
 				C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */,
@@ -384,11 +390,13 @@
 				00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */,
 				9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */,
 				BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */,
+				A037E3519F7846D6958E34F0 /* ControllerMouseMotionTests.swift in Sources */,
 				99827218F70ECA345A8EED25 /* ControllerMonitorTests.swift in Sources */,
 				0A34A869941C483784D1C76F /* IOSControllerCaptureTests.swift in Sources */,
 				610DFE85BF994F3ABF7A541A /* IOSControllerSensorsTests.swift in Sources */,
 				0A75FC5D61394A19A155A87D /* IOSControllerFeedbackTests.swift in Sources */,
 				FAA9B2DAAD28F9FC05CD2E80 /* IOSAudioOutputTests.swift in Sources */,
+				E53BAE83AE664B16A3908721 /* IOSAudioPipelineTests.swift in Sources */,
 				5357DD73479F12579699A792 /* IOSAudioSessionTests.swift in Sources */,
 				1A26CF1176BA5F2D37E40F0A /* IOSAudioFixtures.swift in Sources */,
 				2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */,

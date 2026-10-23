@@ -85,6 +85,7 @@ extension RtpAudioReceiver {
         // is still a socket arrival, and the counters measure the ARRIVAL process).
         if arrival == nil { noteAudioArrivalGap(now: DispatchTime.now().uptimeNanoseconds) }
         let packetArrival = arrival ?? DispatchTime.now().uptimeNanoseconds
+        AudioPipelineTelemetry.shared.processedDatagrams.wrappingAdd(1, ordering: .relaxed)
         noteProcessedArrival(packetArrival)
 
         guard count >= RtpAudioQueue.fixedRtpHeaderSize, count <= buf.count, buf[0] == 0x80,
@@ -202,6 +203,7 @@ extension RtpAudioReceiver {
     /// Receive timestamps distinguish a socket stall from a delayed decoder. No sink work runs here.
     /// This is recvQueue-confined; startup/reorder state is owned by the worker.
     private func noteAudioArrivalGap(now: UInt64) {
+        AudioPipelineTelemetry.shared.receivedDatagrams.wrappingAdd(1, ordering: .relaxed)
         let gap: UInt64? = lastDatagramArrivalNanos != 0 ? now &- lastDatagramArrivalNanos : nil
         if let gap {
             AudioPipelineTelemetry.shared.receiveGap.observe(Double(gap) / 1_000_000)

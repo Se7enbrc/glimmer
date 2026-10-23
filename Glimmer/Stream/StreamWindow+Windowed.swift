@@ -248,9 +248,6 @@ extension StreamWindow {
     }
 
     private func logSpaceExit() {
-        let event = NSApp.currentEvent
-        let isKeyEvent = event?.type == .keyDown || event?.type == .keyUp || event?.type == .flagsChanged
-        let keyCode = isKeyEvent ? event.map { String($0.keyCode) } ?? "none" : "none"
         let frames = Thread.callStackSymbols.filter {
             $0.split(whereSeparator: \.isWhitespace).dropFirst().first != "AppKit"
         }.prefix(2).joined(separator: " | ")
@@ -258,9 +255,15 @@ extension StreamWindow {
         let streamWindow = window as? KeyableWindow
         let source = streamWindow?.fullScreenExitSource ?? "unobserved"
         streamWindow?.fullScreenExitSource = "unobserved"
-        Diag.notice("Space exit: type=\(event.map { String($0.type.rawValue) } ?? "none") keyCode=\(keyCode) "
-            + "modifiers=\(event?.modifierFlags.rawValue ?? 0) responder=\(responder) "
-            + "source=\(source) frames=\(frames)", "Stream.Window")
+        Diag.notice(Self.spaceExitMessage(eventType: NSApp.currentEvent?.type, responder: responder,
+            source: source, frames: frames), "Stream.Window")
+    }
+
+    static func spaceExitMessage(
+        eventType: NSEvent.EventType?, responder: String, source: String, frames: String
+    ) -> DiagMessage {
+        "Space exit: type=\(eventType.map { String($0.rawValue) } ?? "none") responder=\(responder) "
+            + "source=\(source) frames=\(frames)"
     }
 
     /// Full screen is ending (a Space exit under way, or the mini player

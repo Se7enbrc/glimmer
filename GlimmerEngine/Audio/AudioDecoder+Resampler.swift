@@ -193,7 +193,7 @@ extension AudioDecoder {
         if let rateToApply { applyVarispeedRate(rateToApply) }
         if let skewSave {
             AudioDiagnostics.queue.async {
-                Self.persistResamplerSkew(key: skewSave.key, ppm: skewSave.ppm)
+                Self.persistResamplerSkew(key: skewSave.key, ppm: skewSave.ppm, defaults: self.defaults)
             }
         }
     }

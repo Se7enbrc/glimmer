@@ -75,6 +75,7 @@ extension AudioDecoder {
             // A loss, or a packet that won't decode, before any good packet: nothing to play.
             return false
         }
+        AudioPipelineTelemetry.shared.decodedFrames.wrappingAdd(UInt64(decoded), ordering: .relaxed)
         pcm.frameLength = AVAudioFrameCount(decoded)
 
         // A drained player no longer ends at the skipped block's predecessor.

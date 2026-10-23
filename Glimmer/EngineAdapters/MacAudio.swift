@@ -73,5 +73,5 @@ final class MacAudio: @unchecked Sendable {
 }
 
 extension AudioDecoder {
-    convenience init() { self.init(platform: MacAudio().platform()) }
+    convenience init(defaults: UserDefaults = .standard) { self.init(platform: MacAudio().platform(), defaults: defaults) }
 }

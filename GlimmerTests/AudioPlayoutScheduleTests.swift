@@ -12,6 +12,7 @@ import Testing
 
 @Suite(.serialized)
 struct AudioPlayoutScheduleTests {
+    private let settings = IsolatedDefaults()
 
     /// One real 5 ms stereo CELT packet at Sunshine's settings (from OpusDecoderTests).
     private static let packet = "ec7f4bd60777985d8731b747622a18fd2b679a2e9def04904278899d9136b906038d671fa4e046bc58abc93cb740be"
@@ -32,7 +33,7 @@ struct AudioPlayoutScheduleTests {
 
     /// A decoder whose player is the recorder. The prime edge is pinned shut so no engine starts.
     private func harness() throws -> (AudioDecoder, Recorder, AVAudioFormat) {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         let recorder = Recorder()
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
         decoder.schedulePlayout = recorder.record

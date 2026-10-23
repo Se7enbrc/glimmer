@@ -169,7 +169,7 @@ test-build:
 
 test-run:
 	@set -- "$(DERIVED)"/Build/Products/*.xctestrun; test -f "$$1" || { echo "ERR: run make test-build first" >&2; exit 1; }; \
-	  xcodebuild test-without-building -xctestrun "$$1" -destination 'platform=macOS'; \
+	  xcodebuild test-without-building -xctestrun "$$1" -destination 'platform=macOS' $(TEST_FLAGS); \
 	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
 
 # Exercise untrusted protocol input with memory error detection enabled.

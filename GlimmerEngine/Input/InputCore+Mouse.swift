@@ -10,6 +10,11 @@ package struct ControllerMouseState {
     package var analog = InputCore.neutral
     package var clicks: Set<Int32> = []
     package var touchpad = ControllerTouchpadMouseState()
+    #if os(iOS)
+    package var pointerMotion = ControllerMouseMotion()
+    package var scrollMotion = ControllerMouseMotion()
+    package var sampledAt: TimeInterval?
+    #endif
     private var startDownAt: TimeInterval?
     private var blocked = false
 
@@ -33,6 +38,12 @@ package struct ControllerMouseState {
 }
 
 extension InputCore {
+    #if os(iOS)
+    package static let controllerMousePollInterval = 1.0 / 120
+    #else
+    package static let controllerMousePollInterval = 0.05
+    #endif
+
     // Positional clicks match moonlight-qt/app/streaming/input/gamepad.cpp.
     package static let controllerMouseClicks: [(Int32, Int32)] = [
         (StreamProtocol.A_FLAG, StreamProtocol.BUTTON_LEFT),
@@ -53,6 +64,11 @@ extension InputCore {
         let previous = state.buttons
         let previousAnalog = state.analog
         let toggled = state.update(buttons: buttons, analog: analog, chordHeld: chordHeld, now: now)
+        #if os(iOS)
+        if state.isMouse || toggled {
+            state.resetIdleMotion(rightPointer: controllerMouseMapping == .rightStick)
+        }
+        #endif
         controllerMouseStates[slot] = state
         if toggled || chordHeld {
             mouseTimings[slot] = nil
@@ -139,12 +155,7 @@ extension InputCore {
     }
 
     package func updateControllerMousePolling() {
-        let moving = controllerMouseStates.values.contains { state in
-            state.isMouse && (Self.controllerMouseDelta(state.analog.leftStickX) != 0
-                || Self.controllerMouseDelta(state.analog.leftStickY) != 0
-                || Self.controllerMouseDelta(state.analog.rightStickX) != 0
-                || Self.controllerMouseDelta(state.analog.rightStickY) != 0)
-        }
+        let moving = controllerMouseStates.values.contains { $0.isMouse && Self.controllerMouseMoving($0.analog) }
         guard snapshot.ready, snapshot.focused, moving else {
             mousePollingGeneration &+= 1
             controllerMouseTimer?.cancel()
@@ -155,10 +166,21 @@ extension InputCore {
         mousePollingGeneration &+= 1
         let generation = mousePollingGeneration
         let timer = DispatchSource.makeTimerSource(queue: mouseQueue)
-        timer.schedule(deadline: .now() + .milliseconds(50), repeating: .milliseconds(50))
+        timer.schedule(deadline: .now() + Self.controllerMousePollInterval,
+                       repeating: Self.controllerMousePollInterval)
         timer.setEventHandler { [weak self] in self?.pollControllerMouse(generation: generation) }
         controllerMouseTimer = timer
         timer.resume()
+    }
+
+    package static func controllerMouseMoving(_ analog: GamepadAnalog) -> Bool {
+        #if os(iOS)
+        ControllerMouseMotion.velocity(x: analog.leftStickX, y: analog.leftStickY) != .zero
+            || ControllerMouseMotion.velocity(x: analog.rightStickX, y: analog.rightStickY) != .zero
+        #else
+        controllerMouseDelta(analog.leftStickX) != 0 || controllerMouseDelta(analog.leftStickY) != 0
+            || controllerMouseDelta(analog.rightStickX) != 0 || controllerMouseDelta(analog.rightStickY) != 0
+        #endif
     }
 
     // The cubic curve and 50 ms cadence follow Moonlight; mapping selects which stick scrolls.
@@ -168,15 +190,28 @@ extension InputCore {
         return abs(curved) > 2 ? Int16(curved - (curved > 0 ? 2 : -2)) : 0
     }
 
-    package func pollControllerMouse(generation: UInt64? = nil) {
+    package func pollControllerMouse(generation: UInt64? = nil,
+                                     now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
         lock.lock(); defer { lock.unlock() }
         guard generation == nil || generation == mousePollingGeneration else { return }
         guard snapshot.ready, snapshot.focused, snapshot.controllersAnnounced, flushReleases() else { return }
-        for (slot, state) in controllerMouseStates where state.isMouse {
+        // Updating sampled state must not copy a dictionary retained by its iterator on each tick.
+        for slot in 0..<UInt8(Enet.maxGamepads) {
+            guard let state = controllerMouseStates[slot], state.isMouse else { continue }
             if let timing = mouseTimings.removeValue(forKey: slot) {
                 InputTimingContext.begin(samples: timing)
             }
             defer { InputTimingContext.end() }
+            #if os(iOS)
+            var sampled = state
+            let delta = sampled.sampleMotion(rightPointer: controllerMouseMapping == .rightStick, now: now)
+            controllerMouseStates[slot] = sampled
+            if delta.pointer != .zero {
+                record("LiSendMouseMoveEvent(controller)",
+                       backend?.sendMouseMove(dx: delta.pointer.x, dy: -delta.pointer.y) ?? -2)
+            }
+            sendControllerScroll(x: delta.scroll.x, y: delta.scroll.y)
+            #else
             let rightPointer = controllerMouseMapping == .rightStick
             let dx = Self.controllerMouseDelta(rightPointer ? state.analog.rightStickX : state.analog.leftStickX)
             let dy = -Self.controllerMouseDelta(rightPointer ? state.analog.rightStickY : state.analog.leftStickY)
@@ -186,6 +221,7 @@ extension InputCore {
             sendControllerScroll(
                 x: Self.controllerMouseDelta(rightPointer ? state.analog.leftStickX : state.analog.rightStickX),
                 y: Self.controllerMouseDelta(rightPointer ? state.analog.leftStickY : state.analog.rightStickY))
+            #endif
         }
     }
 

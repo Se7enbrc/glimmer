@@ -456,7 +456,6 @@ struct PinnedCertStoreTests {
         let store = try IsolatedStore("pin-replacement")
         defer { store.remove() }
         let hostID = "pin-replacement-\(UUID().uuidString)"
-        defer { PinnedCertStore.delete(forHostID: hostID, defaults: store.defaults, base: store.directory) }
         try PinnedCertStore.store(pem: "old certificate", forHostID: hostID,
                                   defaults: store.defaults, base: store.directory)
 

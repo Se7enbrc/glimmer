@@ -7,6 +7,25 @@ import UIKit
 
 @MainActor
 struct StreamTouchCaptureTests {
+    @Test func disabledMouseKeepsOnlyRevealGesture() {
+        var clicks = 0
+        var moves = 0
+        var reveals = 0
+        let capture = StreamTouchCapture(view: UIView(), actions: .init(
+            move: { _, _ in moves += 1 }, scroll: { _, _ in moves += 1 },
+            click: { _, _ in clicks += 1 }, endScroll: {}, revealControls: { reveals += 1 }))
+        capture.setEnabled(true, mouseEnabled: false)
+        capture.handleTap(touches: 1, capturedAt: 1)
+        capture.handleTap(touches: 2, capturedAt: 1)
+        capture.handlePan(scroll: false, state: .changed, translation: CGPoint(x: 3, y: 4), capturedAt: 1)
+        capture.handlePan(scroll: true, state: .changed, translation: CGPoint(x: 3, y: 4), capturedAt: 1)
+        #expect(clicks == 0 && moves == 0)
+        #expect(capture.revealTap.isEnabled && !capture.primaryTap.isEnabled && !capture.pointerPan.isEnabled)
+        capture.handleTap(touches: 3, capturedAt: 1)
+        #expect(reveals == 1)
+        #expect(capture.recognizers.allSatisfy { !$0.isEnabled })
+    }
+
     @Test func delayedEventKeepsOriginalTimestampAcrossFocusChange() {
         var now: TimeInterval = 100
         let capture = StreamTouchCapture(view: UIView(), actions: .init(move: { _, _ in }, scroll: { _, _ in },

@@ -12,10 +12,12 @@ import UniformTypeIdentifiers
 @testable import Glimmer
 
 struct LauncherExperienceTests {
+    private let settings = IsolatedDefaults()
+
     @Test @MainActor func buttonsAreDefaultAndExplicitChoicePersistsPerPC() throws {
         let store = try IsolatedStore("launcher-style")
         defer { store.remove() }
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.hostsDefaults = store.defaults
         model.supportBase = store.directory
         defer { model.hostStatusTask?.cancel() }
@@ -193,7 +195,7 @@ struct LauncherExperienceTests {
     @Test @MainActor func removingAPCClearsOnlyItsArtAndStyle() async throws {
         let store = try IsolatedStore("launcher-removal")
         defer { store.remove() }
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.supportBase = store.directory
         model.hostsDefaults = store.defaults
         let data = try Self.png(width: 3, height: 4)
@@ -204,7 +206,7 @@ struct LauncherExperienceTests {
         for id in ["pc", "other"] {
             #expect(await cache.image(pcID: id, appID: 1, revision: "a", fetch: { data }) == data)
         }
-        await model.unpair(host, defaults: store.defaults, supportBase: store.directory).value
+        try await model.unpair(host, defaults: store.defaults, supportBase: store.directory).value
         #expect(LauncherStyle.load(for: host.id, defaults: store.defaults) == .buttons)
         #expect(await cache.image(pcID: "pc", appID: 1, revision: "a", fetch: { throw CancellationError() }) == nil)
         #expect(await cache.image(pcID: "other", appID: 1, revision: "a", fetch: { throw CancellationError() }) == data)
@@ -262,7 +264,7 @@ struct LauncherExperienceTests {
     @Test @MainActor func coverMemoryHitsDoNotConstructClientsAndReachabilityRetries() async throws {
         let store = try IsolatedStore("launcher-art-client")
         defer { store.remove() }
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.supportBase = store.directory
         let data = try Self.png(width: 3, height: 4)
         let sunshine = FakeSunshine.scripted(["appasset": [
@@ -294,7 +296,7 @@ struct LauncherExperienceTests {
     @Test @MainActor func streamMenuAllowsPCSelectionDuringAStream() throws {
         let store = try IsolatedStore("launcher-stream-menu")
         defer { store.remove() }
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.hostsDefaults = store.defaults
         model.supportBase = store.directory
         defer { model.hostStatusTask?.cancel() }
@@ -309,7 +311,7 @@ struct LauncherExperienceTests {
     }
 
     @Test @MainActor func runningCoverFollowsTheLiveSessionOrFreshPCStatus() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let app = LibraryApp(id: 7, name: "Game", hdr: false, hidden: false)
         let other = LibraryApp(id: 8, name: "Other", hdr: false, hidden: false)
         let host = Host(id: "pc", name: "PC", customName: nil, localAddress: nil, manualAddress: nil,

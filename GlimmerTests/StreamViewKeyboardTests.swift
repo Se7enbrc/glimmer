@@ -220,6 +220,141 @@ struct StreamViewKeyboardTests {
 
     // MARK: Client chords are consumed, never forwarded
 
+    @Test(arguments: [false, true], [false, true])
+    func persistedControlZTogglesStatsWithoutQuitting(keyEquivalentFirst: Bool, connecting: Bool) throws {
+        let store = try IsolatedStore("stats-z-\(keyEquivalentFirst)-\(connecting)")
+        defer { store.remove() }
+        store.defaults.set(Data(#"{"ctrl":true,"alt":false,"shift":false,"cmd":false,"keyChar":"q"}"#.utf8),
+                           forKey: "quitHotkey")
+        store.defaults.set(Data(#"{"ctrl":true,"alt":false,"shift":false,"cmd":false,"keyChar":"z"}"#.utf8),
+                           forKey: "statsHotkey")
+        let quit = try #require(AppModel.persistedDecoded("quitHotkey", HotkeyChord.self, defaults: store.defaults))
+        let stats = try #require(AppModel.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: store.defaults))
+        let (forwarder, backend, view) = ready()
+        forwarder.quitHotkeyProvider = { quit }
+        forwarder.statsHotkeyProvider = { stats }
+        forwarder.initialConnectPending = connecting
+        forwarder.isReady = !connecting
+        let quits = Tally()
+        let toggles = Tally()
+        forwarder.onQuitHotkey = { quits.calls += 1 }
+        forwarder.onCancelConnect = { quits.calls += 1 }
+        forwarder.onStatsHotkey = { toggles.calls += 1 }
+        let event = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [.control], timestamp: 1,
+            windowNumber: 0, context: nil, characters: "\u{1a}", charactersIgnoringModifiers: "z",
+            isARepeat: false, keyCode: 6))
+        if keyEquivalentFirst { #expect(!view.performKeyEquivalent(with: event)) }
+        #expect(quits.calls == 0)
+        view.keyDown(with: event)
+        #expect(quits.calls == 0)
+        #expect(toggles.calls == 1)
+        #expect(backend.keyboard.isEmpty)
+        #expect(backend.texts.isEmpty)
+
+        let stop = try key(.keyDown, kVK_ANSI_Q, mods: [.control], chars: "q", at: 2)
+        if keyEquivalentFirst {
+            #expect(view.performKeyEquivalent(with: stop))
+        } else {
+            view.keyDown(with: stop)
+        }
+        #expect(quits.calls == 1)
+        #expect(toggles.calls == 1)
+    }
+
+    @Test func controlZFromCoreGraphicsDoesNotMatchQuit() throws {
+        let raw = try #require(CGEvent(keyboardEventSource: nil, virtualKey: 6, keyDown: true))
+        raw.flags = .maskControl
+        raw.keyboardSetUnicodeString(stringLength: 1, unicodeString: [0x7A])
+        let event = try #require(NSEvent(cgEvent: raw))
+        let (forwarder, backend, view) = ready()
+        let quits = Tally()
+        let stats = Tally()
+        forwarder.statsHotkeyProvider = {
+            HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "z")
+        }
+        forwarder.onQuitHotkey = { quits.calls += 1 }
+        forwarder.onStatsHotkey = { stats.calls += 1 }
+        #expect(event.keyCode == 6)
+        #expect(!view.performKeyEquivalent(with: event))
+        view.keyDown(with: event)
+        #expect(quits.calls == 0)
+        #expect(stats.calls == 1)
+        #expect(backend.keyboard.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
+    func controlZSurvivesResponderAndPresentationChanges(keyEquivalentFirst: Bool) throws {
+        let forwarder = InputForwarder()
+        let backend = InputRecordingBackend()
+        let window = PointerFocusTestWindow(contentRect: .zero, styleMask: .borderless,
+                                            backing: .buffered, defer: true)
+        forwarder.attach(to: window)
+        forwarder.setBackend(backend)
+        defer { forwarder.detach() }
+        let view = try #require(forwarder.inputView)
+        forwarder.statsHotkeyProvider = {
+            HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "z")
+        }
+        let quits = Tally(), stats = Tally()
+        forwarder.onQuitHotkey = { quits.calls += 1 }
+        forwarder.onCancelConnect = { quits.calls += 1 }
+        forwarder.onStatsHotkey = { stats.calls += 1 }
+        let event = try key(.keyDown, kVK_ANSI_Z, mods: [.control], chars: "z")
+        let repeatEvent = try key(.keyDown, kVK_ANSI_Z, mods: [.control], chars: "z", isRepeat: true)
+        for step in 0..<6 {
+            switch step {
+            case 1: #expect(window.makeFirstResponder(view))
+            case 2: forwarder.isReady = true; forwarder.initialConnectPending = false
+            case 3: forwarder.setMiniPlayer(true)
+            case 4: forwarder.windowResignedKey(); #expect(window.makeFirstResponder(nil))
+            case 5: forwarder.setMiniPlayer(false); #expect(window.makeFirstResponder(view))
+            default: break
+            }
+            forwarder.heldModifierVKs = [0xA0, 0xA2, 0xA4, 0x5B]
+            for vk in forwarder.heldModifierVKs { forwarder.releases.hold(.key(VKScanCode(vk: vk))) }
+            backend.inputResult = -2
+            if keyEquivalentFirst { #expect(!view.performKeyEquivalent(with: event)) }
+            view.keyDown(with: event)
+            #expect(stats.calls == step + 1)
+            #expect(!forwarder.releases.pending.isEmpty)
+            if keyEquivalentFirst { #expect(!view.performKeyEquivalent(with: repeatEvent)) }
+            view.keyDown(with: repeatEvent)
+            #expect(stats.calls == step + 1)
+            #expect(quits.calls == 0)
+        }
+    }
+
+    @Test func aRetiredStreamViewCannotInvokeItsOldQuitProvider() throws {
+        let old = InputForwarder()
+        let oldWindow = PointerFocusTestWindow(contentRect: .zero, styleMask: .borderless,
+                                               backing: .buffered, defer: true)
+        old.attach(to: oldWindow)
+        old.setBackend(InputRecordingBackend())
+        let oldView = try #require(old.inputView)
+        let quits = Tally(), stats = Tally()
+        old.quitHotkeyProvider = {
+            HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "z")
+        }
+        old.onCancelConnect = { quits.calls += 1 }
+        old.onQuitHotkey = { quits.calls += 1 }
+        old.detach()
+        #expect(oldView.delegate == nil)
+
+        let (current, _, currentView) = ready()
+        defer { current.detach() }
+        current.statsHotkeyProvider = old.quitHotkeyProvider
+        current.onQuitHotkey = { quits.calls += 1 }
+        current.onStatsHotkey = { stats.calls += 1 }
+        let event = try key(.keyDown, kVK_ANSI_Z, mods: [.control], chars: "z")
+        #expect(!oldView.performKeyEquivalent(with: event))
+        oldView.keyDown(with: event)
+        #expect(!currentView.performKeyEquivalent(with: event))
+        currentView.keyDown(with: event)
+        #expect(quits.calls == 0)
+        #expect(stats.calls == 1)
+    }
+
     @Test func quitAndStatsChordsStayOnTheMac() throws {
         let (forwarder, backend, view) = ready()
         let quits = Tally()
@@ -303,30 +438,18 @@ struct StreamViewKeyboardTests {
 }
 
 /// ⌃B is a bookmark only while telemetry runs; otherwise it is the game's.
-/// Serialized because both tests pin the shared telemetry preference.
 @MainActor
-@Suite(.serialized)
 struct BookmarkChordTelemetryTests {
     @MainActor
     private final class Tally { var calls = 0 }
 
-    /// Runs `body` with TelemetryGate's preference pinned, restoring the prior value.
-    private func withTelemetry(_ enabled: Bool, _ body: () throws -> Void) throws {
-        try #require(getenv("GLIMMER_TELEMETRY").map { String(cString: $0) } != "1")
-        let defaults = UserDefaults.standard
-        let prior = defaults.object(forKey: "telemetryEnabled")
-        defer { defaults.set(prior, forKey: "telemetryEnabled") }
-        defaults.set(enabled, forKey: "telemetryEnabled")
-        try #require(TelemetryGate.isEnabled == enabled)
-        try body()
-    }
-
     /// One ⌃B with a handler wired: the bookmark count and the keys sent.
-    private func pressBookmark() throws -> (marks: Int, sent: [KeyboardSend]) {
+    private func pressBookmark(telemetryEnabled: Bool) throws -> (marks: Int, sent: [KeyboardSend]) {
         let forwarder = InputForwarder()
         let backend = InputRecordingBackend()
         forwarder.setBackend(backend)
         forwarder.isReady = true
+        forwarder.bookmarkEnabled = { telemetryEnabled }
         let marks = Tally()
         forwarder.onBookmarkHotkey = { marks.calls += 1 }
         let view = StreamInputView()
@@ -342,20 +465,16 @@ struct BookmarkChordTelemetryTests {
     }
 
     @Test func withTelemetryOnTheChordIsABookmark() throws {
-        try withTelemetry(true) {
-            let result = try pressBookmark()
-            #expect(result.marks == 1)
-            #expect(result.sent.isEmpty)
-        }
+        let result = try pressBookmark(telemetryEnabled: true)
+        #expect(result.marks == 1)
+        #expect(result.sent.isEmpty)
     }
 
     @Test func withTelemetryOffTheChordReachesThePC() throws {
-        try withTelemetry(false) {
-            let result = try pressBookmark()
-            #expect(result.marks == 0)
-            #expect(result.sent.last == .init(keyCode: VKScanCode(vk: 0x42).wireCode,
-                                              action: Int8(StreamProtocol.KEY_ACTION_DOWN),
-                                              modifiers: Int8(StreamProtocol.MODIFIER_CTRL), flags: 0))
-        }
+        let result = try pressBookmark(telemetryEnabled: false)
+        #expect(result.marks == 0)
+        #expect(result.sent.last == .init(keyCode: VKScanCode(vk: 0x42).wireCode,
+                                          action: Int8(StreamProtocol.KEY_ACTION_DOWN),
+                                          modifiers: Int8(StreamProtocol.MODIFIER_CTRL), flags: 0))
     }
 }

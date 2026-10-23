@@ -19,6 +19,7 @@ struct LauncherView: View {
     @State private var pendingAddPC = false
     @State private var pendingPC: HostDiscovery.Discovered?
     @AppStorage("streamProfile") private var profile: StreamProfile = .native120
+    @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
     @AppStorage("controllerMouseStick") private var mouseStick: ControllerMouseStick = .right
 
     init(model: LauncherModel = .make(), style: LauncherStyle? = nil) {
@@ -66,6 +67,7 @@ struct LauncherView: View {
                 addPC: { pendingAddPC = true; showingSettings = false },
                 pairPC: { pendingPC = $0; showingSettings = false })
         }
+        .onChange(of: touchMouseEnabled, initial: true) { _, enabled in model.touchMouseEnabled = enabled }
         .onChange(of: profile, initial: true) { _, profile in model.streamProfile = profile }
         .onChange(of: mouseStick, initial: true) { _, stick in model.mouseStick = stick }
         .sheet(isPresented: $addingPC, onDismiss: {

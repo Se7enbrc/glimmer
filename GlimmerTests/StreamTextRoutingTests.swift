@@ -93,6 +93,42 @@ struct StreamTextRoutingTests {
         #expect(backend.texts.isEmpty)
     }
 
+    @Test(arguments: ["unchanged", "focus", "reconnect", "replacement"])
+    func deferredStatsChordCannotBecomeQuitAcrossInputGenerations(transition: String) async throws {
+        let (forwarder, backend, view) = ready()
+        defer { forwarder.detach() }
+        forwarder.statsHotkeyProvider = {
+            HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "z")
+        }
+        var quits = 0, stats = 0
+        forwarder.onQuitHotkey = { quits += 1 }
+        forwarder.onStatsHotkey = { stats += 1 }
+        forwarder.heldModifierVKs = [0xA4]
+        forwarder.releases.hold(.key(VKScanCode(vk: 0xA4)))
+        backend.inputResult = -2
+        let pending = try #require(forwarder.queueText("test", modifiers: []))
+        let event = try key(kVK_ANSI_Z, mods: [.control], chars: "z")
+        #expect(!view.performKeyEquivalent(with: event))
+        view.keyDown(with: event)
+        #expect(forwarder.pendingKeyboardEvents.count == 1)
+        #expect(stats == 0 && quits == 0)
+        switch transition {
+        case "focus": forwarder.inputOwnershipLost(reason: "first responder lost", includingControllers: false)
+        case "reconnect": forwarder.setReady(false); forwarder.setReady(true)
+        case "replacement": forwarder.setBackend(InputRecordingBackend()); forwarder.isReady = true
+        default: break
+        }
+        backend.inputResult = 0
+        await pending.value
+        let expected = transition == "unchanged" ? 1 : 0
+        #expect(stats == expected)
+        #expect(quits == 0)
+        #expect(forwarder.pendingKeyboardEvents.isEmpty)
+        view.keyDown(with: event)
+        #expect(stats == expected + 1)
+        #expect(quits == 0)
+    }
+
     @Test(arguments: [kVK_ANSI_E, kVK_ANSI_U, kVK_ANSI_I, kVK_ANSI_N, kVK_ANSI_Grave], [false, true])
     func capturedDeadKeysAndTheirNextKeyStayPhysical(code: Int, option: Bool) throws {
         let (forwarder, backend, view) = ready()

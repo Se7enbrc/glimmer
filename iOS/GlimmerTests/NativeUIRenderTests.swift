@@ -143,6 +143,35 @@ struct NativeUIRenderTests {
                          name: "launcher-two-buttons-\(style)", size: size, dark: dark)
     }
 
+    @Test(arguments: [false, true])
+    func pairingFailureMessages(dark: Bool) async throws {
+        let fixture = LauncherFixture()
+        fixture.prepareFailure = LauncherServices.Failure.invalidIdentity
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        try await record(LauncherView(model: model), name: "pairing-failure-\(dark ? "dark" : "light")",
+                         size: nil, dark: dark, textSize: .large)
+    }
+
+    @Test(arguments: [false, true])
+    func testFlightScreens(dark: Bool) async throws {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        let style = dark ? "dark" : "light"
+        try await record(LauncherView(model: model), name: "testflight-launcher-\(style)",
+                         size: nil, dark: dark, textSize: .large)
+        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+        for page in [GlimmerSettings.Page.input, .quality] {
+            try await record(NavigationStack { settings.settingsPage(page) },
+                             name: "testflight-\(page.rawValue)-\(style)", size: nil, dark: dark, textSize: .large)
+        }
+    }
+
     @Test func actualSimulatorLauncherSupportsPortrait() async throws {
         let calls = LauncherModel.Calls(savedPCs: { [] },
             prepare: { _, _ in throw CancellationError() }, pair: { pc, _ in pc }, apps: { _ in [] },
