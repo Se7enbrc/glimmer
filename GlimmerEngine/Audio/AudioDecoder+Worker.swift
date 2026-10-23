@@ -93,6 +93,7 @@ extension AudioDecoder {
         let silent = observation.silence
         let underruns = observation.underruns
         let frames = consumed &- observedRingFrames
+        if frames > 0 { telemetry.renderedFrames.wrappingAdd(frames, ordering: .relaxed) }
         let silenceFrames = silent &- observedRingSilence
         let edges = underruns &- observedRingUnderruns
         observedRingFrames = consumed
