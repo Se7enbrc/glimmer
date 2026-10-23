@@ -436,6 +436,18 @@ class TestFlightTests(unittest.TestCase):
         receipt = signing.delivery_outcome(1, b'{"errors":[{"code":1,"message":"m","userInfo":{"NSLocalizedFailureReason":"r"}}]}')
         self.assertEqual(receipt['error_messages'], ['m | r'])
 
+    def test_delivery_receipt_reads_json_among_altool_progress_output(self):
+        delivery = '0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0'
+        noisy = ('Waiting for build processing...\n{"progress":"uploaded"}\nnot json {\n'
+                 '{"success-message":"No errors uploading","delivery-id":"%s"}\n' % delivery).encode()
+        receipt = signing.delivery_outcome(0, noisy)
+        self.assertEqual(receipt['status'], 'upload_and_processing_command_succeeded')
+        self.assertEqual(receipt['delivery_id'], delivery)
+        failed = b'progress {"product-errors":[{"code":90991,"message":"m"}]} {"done":true}'
+        receipt = signing.delivery_outcome(0, failed)
+        self.assertEqual((receipt['status'], receipt['error_codes']), ('delivery_unconfirmed', ['90991']))
+        self.assertEqual(signing.delivery_outcome(0, b'no json at all')['status'], 'delivery_unconfirmed')
+
     def test_workflow_keeps_candidate_code_and_credentials_separate(self):
         workflows = Path(__file__).resolve().parents[2] / '.github/workflows'
         workflow = (workflows / 'ios-testflight.yml').read_text()
