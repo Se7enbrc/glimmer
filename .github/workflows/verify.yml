@@ -342,6 +342,11 @@ jobs:
 
       - name: Build the unit tests for macOS 15.7
         run: |
+          export XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-ci.xcconfig"
+          cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+          GCC_TREAT_WARNINGS_AS_ERRORS = YES
+          XCCONFIG
           make test-build
           tar -C build/Build -czf "$RUNNER_TEMP/sequoia-tests.tgz" Products
 
