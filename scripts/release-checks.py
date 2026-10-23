@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 from urllib.parse import quote
 
 REPO = "Se7enbrc/glimmer"
@@ -24,10 +25,32 @@ CATEGORIES = {f"/language:{language}": f"Analyze ({language})"
 
 
 def api(path):
-    result = subprocess.run(["gh", "api", "--paginate", "--slurp", f"repos/{REPO}/{path}"],
-                            capture_output=True, text=True, timeout=60)
-    if result.returncode:
-        raise ValueError("GitHub check lookup failed; nothing authorized")
+    deadline = time.monotonic() + 60
+    for attempt in range(3):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ValueError("GitHub check lookup failed (deadline); nothing authorized")
+        try:
+            result = subprocess.run(["gh", "api", "--paginate", "--slurp", f"repos/{REPO}/{path}"],
+                                    capture_output=True, text=True, timeout=min(20, remaining))
+        except subprocess.TimeoutExpired:
+            transient, detail = True, "timeout"
+        else:
+            if not result.returncode:
+                break
+            status = re.search(r"\bHTTP ([1-5][0-9]{2})\b", result.stderr)
+            if status:
+                transient = 500 <= int(status[1]) <= 599
+                detail = f"HTTP {status[1]}"
+            else:
+                transient = result.returncode == 1 and re.search(
+                    r"timeout|timed out|connection|error connecting|network|no such host|temporary failure|\bEOF\b|TLS handshake",
+                    result.stderr, re.I) is not None
+                detail = "network failure" if transient else "command failure"
+        delay = 0.25 * (2 ** attempt)
+        if not transient or attempt == 2 or time.monotonic() + delay >= deadline:
+            raise ValueError(f"GitHub check lookup failed ({detail}); nothing authorized")
+        time.sleep(delay)
     try:
         pages = json.loads(result.stdout)
     except json.JSONDecodeError as error:
