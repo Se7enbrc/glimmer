@@ -10,3 +10,6 @@
 
 - Pairing no longer asks you to unlock an already available device for unrelated
   connection errors.
+
+- Touch mouse stays available alongside a controller. Turn it off in Input
+  settings to prevent accidental screen input while playing.

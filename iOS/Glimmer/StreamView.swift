@@ -29,7 +29,7 @@ final class StreamViewController: GCEventViewController {
     let surface = StreamSurface()
     private(set) var presentationActive = false
     private let overlay: UIHostingController<StreamControls>
-    private var touchCapture: StreamTouchCapture?
+    private(set) var touchCapture: StreamTouchCapture?
     private var screenIdentity: ObjectIdentifier?
     private weak var presentationWindow: UIWindow?
 
@@ -122,7 +122,7 @@ final class StreamViewController: GCEventViewController {
         }, endScroll: { [weak model] in model?.streamInput?.endScroll() },
            revealControls: { [weak model] in model?.showControls() }))
         model.inputCaptureChanged = { [weak self] focused in
-            self?.touchCapture?.setEnabled(focused)
+            self?.touchCapture?.setEnabled(focused, mouseEnabled: self?.model.launch.touchMouseEnabled ?? true)
             self?.controllerUserInteractionEnabled = !focused
         }
         surface.accessibilityCustomActions = [UIAccessibilityCustomAction(name: "Show controls") { [weak model] _ in
@@ -232,8 +232,10 @@ struct StreamControls: View {
                         Text("Hold Menu for a second and release to switch between gamepad and mouse.")
                         Text(model.launch.mouseStick.controls)
                         Text("Hold Menu, Options, and both shoulder buttons to disconnect.")
-                        Text("Drag to move the pointer. Tap to click.")
-                        Text("Use two fingers to scroll or tap for a secondary click.")
+                        if model.launch.touchMouseEnabled {
+                            Text("Drag to move the pointer. Tap to click.")
+                            Text("Use two fingers to scroll or tap for a secondary click.")
+                        }
                         Text("Tap with three fingers to show these controls.")
                             .accessibilityHint("VoiceOver users can choose Show controls on the video.")
                         if model.audioUnavailable { Label("Audio is unavailable", systemImage: "speaker.slash") }

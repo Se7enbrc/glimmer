@@ -24,6 +24,7 @@ struct GlimmerSettings: View {
     var addPC: () -> Void = {}
     var pairPC: (HostDiscovery.Discovered) -> Void = { _ in }
     @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
+    @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
     @AppStorage("telemetryEnabled") private var diagnostics = false
     @Environment(\.dismiss) private var dismiss
     enum Page: String, CaseIterable, Identifiable {
@@ -137,7 +138,19 @@ struct GlimmerSettings: View {
         }
     }
 
-    private var controllerSettings: some View {
+    @ViewBuilder private var controllerSettings: some View {
+        Section {
+            Toggle(isOn: $touchMouseEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Touch mouse")
+                    Text("Move and click with touch, even with a controller connected.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+        } footer: {
+            Text("Turn off to avoid accidental touches while playing. Three-finger tap still shows controls. "
+                 + "Changes apply to the next stream.")
+        }
         Section {
             Picker("Mouse stick", selection: $stick) {
                 ForEach(ControllerMouseStick.allCases) { option in Text(option.label).tag(option) }

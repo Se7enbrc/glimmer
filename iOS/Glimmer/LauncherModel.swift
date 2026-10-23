@@ -27,6 +27,7 @@ final class LauncherModel {
     var canForgetPC: Bool { active && session == nil && !busy }
     var stream: StreamSessionModel?
     var streamProfile: StreamProfile = .native120
+    var touchMouseEnabled = true
     var mouseStick: ControllerMouseStick = .right
     private var session: StreamSessionModel?
     var hasActiveStream: Bool { session.map { !$0.phase.isEnded } ?? false }
@@ -238,7 +239,7 @@ final class LauncherModel {
         stopDiscovery()
         let session = calls.makeSession(StreamLaunch(network: selected.network,
             pcID: selected.server.uniqueId, pcName: selected.server.serverName, appID: app.id, appName: app.name,
-            profile: streamProfile, mouseStick: mouseStick))
+            profile: streamProfile, mouseStick: mouseStick, touchMouseEnabled: touchMouseEnabled))
         self.session = session
         stream = session
     }

@@ -10,6 +10,31 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct StreamSessionTests {
+    @Test func touchStaysEnabledWithControllerAndAfterRecovery() async throws {
+        let fixture = PlaybackFixture()
+        fixture.controllerConnected = true
+        let model = fixture.model()
+        let controller = StreamViewController(model: model, close: {})
+        controller.loadViewIfNeeded()
+        model.start(surface: controller.surface)
+        model.receive(fixture.update(.firstFrame))
+        let touch = try #require(controller.touchCapture)
+        #expect(touch.primaryTap.isEnabled && touch.pointerPan.isEnabled)
+        model.receive(fixture.update(.input(.controllersActive(true))))
+        #expect(touch.primaryTap.isEnabled && touch.pointerPan.isEnabled)
+        model.showControls()
+        #expect(!touch.primaryTap.isEnabled)
+        model.resumeInput()
+        #expect(touch.primaryTap.isEnabled)
+        model.receive(fixture.update(.reconnecting))
+        #expect(!touch.primaryTap.isEnabled)
+        model.receive(fixture.update(.reconnected))
+        #expect(touch.primaryTap.isEnabled)
+        model.stop()
+        await model.waitUntilStopped()
+        #expect(!touch.primaryTap.isEnabled)
+    }
+
     @Test func connectedControllerStartsCleanAndHotplugRestoresInputWithoutOverridingManualControls() async {
         let fixture = PlaybackFixture()
         fixture.controllerConnected = true

@@ -21,6 +21,7 @@ final class StreamTouchCapture: NSObject, UIGestureRecognizerDelegate {
     private let actions: Actions
     private let clock: () -> TimeInterval
     private var enabled = false
+    private var mouseEnabled = true
     private weak var view: UIView?
 
     init(view: UIView, actions: Actions,
@@ -60,11 +61,14 @@ final class StreamTouchCapture: NSObject, UIGestureRecognizerDelegate {
 
     var recognizers: [UIGestureRecognizer] { [primaryTap, secondaryTap, revealTap, pointerPan, scrollPan] }
 
-    func setEnabled(_ enabled: Bool) {
-        guard self.enabled != enabled else { return }
+    func setEnabled(_ enabled: Bool, mouseEnabled: Bool = true) {
+        guard self.enabled != enabled || self.mouseEnabled != mouseEnabled else { return }
         self.enabled = enabled
-        for recognizer in recognizers { recognizer.isEnabled = enabled }
-        if !enabled { actions.endScroll() }
+        self.mouseEnabled = mouseEnabled
+        for recognizer in recognizers {
+            recognizer.isEnabled = enabled && (recognizer === revealTap || mouseEnabled)
+        }
+        if !enabled || !mouseEnabled { actions.endScroll() }
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
@@ -100,14 +104,14 @@ final class StreamTouchCapture: NSObject, UIGestureRecognizerDelegate {
         if touches == 3 {
             setEnabled(false)
             actions.revealControls()
-        } else if touches == 1 || touches == 2 {
+        } else if mouseEnabled && (touches == 1 || touches == 2) {
             actions.click(touches == 2, capturedAt)
         }
     }
 
     func handlePan(scroll: Bool, state: UIGestureRecognizer.State, translation: CGPoint,
                    capturedAt: TimeInterval) {
-        guard enabled else { return }
+        guard enabled, mouseEnabled else { return }
         if state == .began || state == .changed {
             if scroll { actions.scroll(translation, capturedAt) } else { actions.move(translation, capturedAt) }
         } else if scroll && (state == .ended || state == .cancelled || state == .failed) {
