@@ -104,6 +104,8 @@ struct AppDeclarationTests {
         // Absent means not required or recommended; App Store Connect rejects the key (90039, 90991)
         // unless it is a platform dictionary with GCSupportsControllerUserInteraction set to true.
         #expect(info["GCRequiresControllerUserInteraction"] == nil)
+        // Only Apple's platform cryptography (TLS, CryptoKit): App Store Connect skips the compliance prompt.
+        #expect(info["ITSAppUsesNonExemptEncryption"] as? Bool == false)
         let orientations = info["UISupportedInterfaceOrientations"] as? [String] ?? []
         let landscape = ["UIInterfaceOrientationLandscapeLeft", "UIInterfaceOrientationLandscapeRight"]
         let portraits = UIDevice.current.userInterfaceIdiom == .pad
