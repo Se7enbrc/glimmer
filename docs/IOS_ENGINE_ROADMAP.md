@@ -251,11 +251,12 @@ platforms against their actual display tooling rather than promising universal
 automatic resizing.
 
 After the selector is implemented, extend [HOST_SETUP.md](HOST_SETUP.md) and
-[vddsettings.xml](vddsettings.xml) with the tested phone/tablet modes and their
-efficient alternatives. Record the exact width, height, refresh, device/aspect
-coverage, and encoder alignment. Generate examples from the same selection
-fixtures or validate them against those fixtures so client and PC instructions
-cannot drift. Do not publish a guessed list of iPhone resolutions now.
+[iPhone/iPad sample](vdd/iphone-ipad.xml) with the tested phone/tablet modes and
+their efficient alternatives. Record the exact width, height, refresh,
+device/aspect coverage, and encoder alignment. Generate examples from the same
+selection fixtures or validate them against those fixtures so client and PC
+instructions cannot drift. Do not publish a guessed list of iPhone resolutions
+now.
 
 Verify PC mode selection, encoded dimensions, visible aspect ratio, and desktop
 restoration on normal stop and interrupted sessions. Test switching between a

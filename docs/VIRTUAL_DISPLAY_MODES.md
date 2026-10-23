@@ -1,6 +1,6 @@
 # Virtual display mode reference
 
-Use this reference to maintain [vddsettings.xml](vddsettings.xml) against the
+Use this reference to maintain the [virtual display samples](vdd/) against the
 client code and Apple's display specifications. For installation, follow the
 [PC setup guide](HOST_SETUP.md).
 
@@ -36,9 +36,9 @@ linked Apple specifications give the physical panel sizes.
 ## Mac displays
 
 Each row gives Sharpest and the actual Balanced request. FPS normally equals the
-maximum shown. The sample also includes 48, 50 and 60 for MacBook Pro and Pro
-Display XDR fixed-refresh use, and common lower integer rates for Custom.
-Fractional rates such as 59.94 are not selectable as Glimmer FPS.
+maximum shown. The matching samples also include 48, 50 and 60 for MacBook Pro
+and Pro Display XDR fixed-refresh use, and common lower integer rates for
+Custom. Fractional rates such as 59.94 are not selectable as Glimmer FPS.
 
 | Models and Apple specifications                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Sharpest    | Balanced    | Maximum Hz |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------- | ---------- |
@@ -60,8 +60,10 @@ Fractional rates such as 59.94 are not selectable as Glimmer FPS.
 
 Studio Display XDR is capped at 60 Hz on M1, M1 Pro, M1 Max, M1 Ultra, M2 and M3
 Macs. Its Apple specification lists the compatible Mac and iPad models. The
-sample includes both 60 and 120 Hz. MacBook Neo's half size would be 1204 × 753,
-so Balanced retains 2408 × 1506.
+Apple-display sample includes both 60 and 120 Hz for Studio Display XDR, and
+48/50/60 for Pro Display XDR. MacBook Neo's integer half size is 1204 × 753, so
+Balanced retains 2408 × 1506. The built-in sample also includes the optional
+half size **1204 × 752**, rounded down to even, for Mac Custom.
 
 ### Macs with separate displays
 
@@ -132,11 +134,11 @@ lists these newer models. Their modes are included in addition to the iOS 26
 set. The two Duo sizes describe the screens independently; this is not a claim
 that changing screens during a stream has been verified.
 
-| Model and Apple specifications                                     | Native landscape request  | Maximum Hz |
-| ------------------------------------------------------------------ | ------------------------- | ---------- |
-| [iPhone 18 Pro](https://support.apple.com/en-us/148590)            | 2622 × 1206               | 120        |
-| [iPhone 18 Pro Max](https://support.apple.com/en-us/148591)        | 2868 × 1320               | 120        |
-| [iPhone Duo](https://support.apple.com/en-us/148588), open / cover | 2670 × 1878 / 2034 × 1398 | 120        |
+| Model and Apple specifications                                      | Native landscape request  | Maximum Hz |
+| ------------------------------------------------------------------- | ------------------------- | ---------- |
+| [iPhone 18 Pro](https://support.apple.com/en-us/148590)             | 2622 × 1206               | 120        |
+| [iPhone 18 Pro Max](https://support.apple.com/en-us/148591)         | 2868 × 1320               | 120        |
+| [iPhone Duo](https://www.apple.com/iphone-duo/specs/), open / cover | 2670 × 1878 / 2034 × 1398 | 120        |
 
 ## iPad
 
@@ -159,12 +161,58 @@ ProMotion; Air, mini and standard iPad models use 60 Hz.
 | [iPad Pro 12.9-inch (6th generation)](https://support.apple.com/en-us/111841), [iPad Pro 12.9-inch (5th generation)](https://support.apple.com/en-us/111896), [iPad Pro 12.9-inch (4th generation)](https://support.apple.com/en-us/111977), [iPad Pro 12.9-inch (3rd generation)](https://support.apple.com/en-us/111979)                                                                                                                                          | 2732 × 2048              | 120        |
 | [iPad Pro 13-inch (M5)](https://support.apple.com/en-us/125407), [iPad Pro 13-inch (M4)](https://support.apple.com/en-us/119891)                                                                                                                                                                                                                                                                                                                                    | 2752 × 2064              | 120        |
 
+### Optional mobile half sizes
+
+[iphone-ipad.xml](vdd/iphone-ipad.xml) includes the native rows above, their
+halves below, and 1920 × 1080 at 60/120 Hz. Halve each dimension, then round
+down to even. These additional modes do not add a half-size choice to Glimmer on
+iOS. Each row's rates apply to both sizes; shared panel sizes use the union of
+rates.
+
+| Native landscape size | Half size   | Rates (Hz) |
+| --------------------- | ----------- | ---------- |
+| 1334 × 750            | 666 × 374   | 60         |
+| 1792 × 828            | 896 × 414   | 60         |
+| 2340 × 1080           | 1170 × 540  | 60         |
+| 2436 × 1124           | 1218 × 562  | 60         |
+| 2532 × 1170           | 1266 × 584  | 60, 120    |
+| 2556 × 1178           | 1278 × 588  | 60, 120    |
+| 2622 × 1206           | 1310 × 602  | 60, 120    |
+| 2688 × 1242           | 1344 × 620  | 60         |
+| 2736 × 1260           | 1368 × 630  | 60, 120    |
+| 2778 × 1284           | 1388 × 642  | 60, 120    |
+| 2796 × 1290           | 1398 × 644  | 60, 120    |
+| 2868 × 1320           | 1434 × 660  | 60, 120    |
+| 2048 × 1536           | 1024 × 768  | 60         |
+| 2160 × 1620           | 1080 × 810  | 60         |
+| 2224 × 1668           | 1112 × 834  | 60         |
+| 2266 × 1488           | 1132 × 744  | 60         |
+| 2360 × 1640           | 1180 × 820  | 60         |
+| 2388 × 1668           | 1194 × 834  | 60, 120    |
+| 2420 × 1668           | 1210 × 834  | 60, 120    |
+| 2732 × 2048           | 1366 × 1024 | 60, 120    |
+| 2752 × 2064           | 1376 × 1032 | 60, 120    |
+| 2670 × 1878           | 1334 × 938  | 60, 120    |
+| 2034 × 1398           | 1016 × 698  | 60, 120    |
+
 ## Sample coverage and limits
 
-The sample has **90 distinct width × height × refresh combinations**, in **51
-resolution entries**. One entry holds several `<refresh_rate>` children. The
-empty `<global />` is deliberate: `<g_refresh_rate>` adds that rate to every
-resolution and does not deduplicate a rate already present locally.
+All five files target MTT VDD 25.7.23 and select the GPU automatically. Each
+header gives its exact count and the **90-mode budget**. The
+[setup guide's file table](HOST_SETUP.md#pick-your-file) lists their counts.
+`mac-builtin.xml` covers every built-in Mac panel above at native and even half
+size (26 modes); `mac-apple-displays.xml` covers the Apple external table (10
+modes). `iphone-ipad.xml` covers every mobile row and both 1080p rates (74
+modes). None of these three files drops a listed native or half-size mode.
+
+### Default for mixed clients
+
+[all-glimmer-clients.xml](vdd/all-glimmer-clients.xml) preserves the original
+sample's mode list. It has **90 distinct width × height × refresh
+combinations**, in **51 resolution entries**. One entry holds several
+`<refresh_rate>` children. The empty `<global />` is deliberate:
+`<g_refresh_rate>` adds that rate to every resolution and does not deduplicate a
+rate already present locally.
 
 The mode budget prioritizes every named Apple native and Mac Balanced request,
 including 60/120 Hz where the same size is shared or the screen caps the rate.
@@ -185,7 +233,40 @@ every external display, or future devices. Choosing an unlisted Custom value
 still needs a matching PC mode. Apollo creates modes on demand, subject to the
 same encoder limitations.
 
-### Why the file stops at 90 modes
+### Standard external displays
+
+[standard-external.xml](vdd/standard-external.xml) spends its 90 modes on the
+following Custom sizes. Common gaming sizes get the widest refresh selection;
+large and less common sizes get fewer rates. These are selected virtual modes,
+not a claim that every physical monitor supports each combination.
+
+| Aspect class | Sizes                                             | Rates (Hz)                      |
+| ------------ | ------------------------------------------------- | ------------------------------- |
+| 16:9         | 1280 × 720, 1920 × 1080, 2560 × 1440, 3840 × 2160 | 60, 75, 100, 120, 144, 165, 240 |
+| 16:9         | 1600 × 900                                        | 60, 75                          |
+| 16:9         | 5120 × 2880, 7680 × 4320                          | 60, 120                         |
+| 16:9         | 5760 × 3240                                       | 60                              |
+| 16:10        | 1280 × 800, 1680 × 1050                           | 60, 75                          |
+| 16:10        | 1920 × 1200                                       | 60, 75, 120                     |
+| 16:10        | 2560 × 1600                                       | 60, 120, 144, 165               |
+| 16:10        | 2880 × 1800, 3840 × 2400                          | 60, 120                         |
+| 16:10        | 5120 × 3200, 6400 × 4000                          | 60                              |
+| 21:9         | 2560 × 1080, 3440 × 1440                          | 60, 75, 100, 120, 144, 165, 240 |
+| 21:9         | 3840 × 1600                                       | 60, 100, 120, 144, 165          |
+| 21:9         | 5120 × 2160                                       | 60, 120                         |
+| 21:9         | 6880 × 2880, 7680 × 3200                          | 60                              |
+| 32:9         | 2560 × 720                                        | 60, 120                         |
+| 32:9         | 3840 × 1080                                       | 60, 120, 144                    |
+| 32:9         | 5120 × 1440, 7680 × 2160                          | 60, 120, 144, 165, 240          |
+
+The budget leaves out other rates at the sizes above, including 75/100 Hz on
+32:9 displays, 240 Hz at 3840 × 1600 and most high-refresh 16:10 modes. It also
+omits 30/48/50/72/90/200 Hz throughout. 8K stops at 120 Hz because 144 Hz and
+above overflow the tagged driver's timing arithmetic, not because of the mode
+budget. Sizes beyond Glimmer's 7680 × 4320 bounds, including 7680 × 4800, cannot
+be selected in Mac Custom. The driver itself publishes no fixed maximum size.
+
+### Why each file stops at 90 modes
 
 The target is the driver in
 [MTT VDD release 25.7.23](https://github.com/VirtualDrivers/Virtual-Display-Driver/releases/tag/25.7.23),
@@ -205,10 +286,10 @@ works. In
 [issue 157](https://github.com/VirtualDrivers/Virtual-Display-Driver/issues/157#issuecomment-2796544498),
 a project member reported trouble above roughly 90 modes. These are practical
 reports, not a documented universal Windows limit. Neither issue establishes a
-fix in 25.7.23. The budget is **96 modes**; this file keeps a conservative **90
-modes**, which still need a Windows installation check.
+fix in 25.7.23. Every sample uses a conservative budget of **90 modes**, which
+still needs a Windows installation check.
 
-### What the budget leaves out
+### What the default file leaves out
 
 - iPhone/iPad half-size modes and MacBook Neo's half size. No current Glimmer
   preset requests them. All actual Mac Balanced sizes remain.
@@ -223,8 +304,10 @@ modes**, which still need a Windows installation check.
 - 120–240 Hz variants of the optional ultrawide sizes and 8K. The four Mac
   shortcuts retain 60/120/240, and mobile 1080p retains 60/120.
 
-Do not add global rates to recover these: they multiply the total. Replace
-optional modes within the budget or use Apollo for arbitrary Custom requests.
+The device-specific samples recover many of these modes within their separate
+budgets. Do not add global rates: they multiply the total. Follow the
+[combining instructions](HOST_SETUP.md#combine-two-files) to select modes from
+two samples, or use Apollo for arbitrary Custom requests.
 
 ### Dimension and refresh limits
 
@@ -261,11 +344,12 @@ Virtual Display**, **Headless Mode** and first-use Windows display arrangement.
 ## Verification
 
 [scripts/tests/test_vdd_settings.py](../scripts/tests/test_vdd_settings.py)
-parses the XML, rejects duplicate blocks/modes and malformed mode entries,
-checks the mode budget and timing limits, and requires the exact client table
-plus common Custom shortcuts. It runs with the other Python unittests under
-`make check`. The table is explicit so a sample edit cannot silently redefine
-expected modes.
+parses every sample, rejects duplicate blocks/modes and malformed mode entries,
+checks header counts, the 90-mode budget and timing limits, and requires each
+file's device table. The default still covers all listed Glimmer preset requests
+and the common Custom shortcuts at 60/120/240 Hz. It runs with the other Python
+unittests under `make check`. The table is explicit so a sample edit cannot
+silently redefine expected modes.
 
 This revision checks source and configuration coverage. It does not establish
 Windows driver installation, GPU encoder acceptance, sustained frame delivery,
