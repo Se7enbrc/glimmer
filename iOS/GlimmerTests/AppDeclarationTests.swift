@@ -101,8 +101,9 @@ struct AppDeclarationTests {
         #expect(info["CADisableMinimumFrameDurationOnPhone"] as? Bool == true)
         let profiles = info["GCSupportedGameControllers"] as? [[String: String]]
         #expect(profiles == [["ProfileName": "ExtendedGamepad"]])
-        // App Store Connect rejects a bare Boolean here (ITMS-90039): it is a per-platform dictionary.
-        #expect(info["GCRequiresControllerUserInteraction"] as? [String: Bool] == ["iOS": false])
+        // Absent means not required or recommended; App Store Connect rejects the key (90039, 90991)
+        // unless it is a platform dictionary with GCSupportsControllerUserInteraction set to true.
+        #expect(info["GCRequiresControllerUserInteraction"] == nil)
         let orientations = info["UISupportedInterfaceOrientations"] as? [String] ?? []
         let landscape = ["UIInterfaceOrientationLandscapeLeft", "UIInterfaceOrientationLandscapeRight"]
         let portraits = UIDevice.current.userInterfaceIdiom == .pad
