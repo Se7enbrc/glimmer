@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: PR mergeability
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  pull-requests: read
+
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report PRs blocked before verification
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          printf '## PR mergeability\n\n' >> "$GITHUB_STEP_SUMMARY"
+          numbers=$(gh api --method GET --paginate \
+            "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].number')
+          status=0
+          for number in $numbers; do
+            [[ "$number" =~ ^[0-9]+$ ]]
+            metadata=$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls/$number" \
+              --jq '[.state, .head.sha, (.mergeable | tostring)] | @tsv')
+            IFS=$'\t' read -r state sha mergeable <<< "$metadata"
+            [ "$state" != closed ] || continue
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+            case "$mergeable" in
+              true) continue ;;
+              false)
+                reason='Merge conflict blocks automatic Verify and CodeQL. Resolve the conflict and push the updated branch.' ;;
+              null)
+                reason='GitHub has not computed mergeability yet. Rerun PR mergeability to check again.' ;;
+              *) echo 'Invalid mergeability response' >&2; exit 1 ;;
+            esac
+            printf -- '- PR #%s (%s): %s\n' "$number" "$sha" "$reason" >> "$GITHUB_STEP_SUMMARY"
+            printf '::warning::PR #%s: %s\n' "$number" "$reason"
+            status=1
+          done
+          if [ "$status" = 0 ]; then
+            printf 'No merge conflicts found among open PRs.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
