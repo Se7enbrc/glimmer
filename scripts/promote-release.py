@@ -19,7 +19,9 @@ REPO = "Se7enbrc/glimmer"
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 WORKFLOW = f"{REPO}/.github/workflows/release.yml"
 # Everything that goes into the shipped bytes; release tooling, docs and tests may move on.
-SHIPPED = ("Glimmer", "helper", "LoginHelper", "Glimmer.xcodeproj", "Makefile",
+SHIPPED = ("Glimmer", "GlimmerEngine", "helper", "LoginHelper", "Glimmer.xcodeproj", "Makefile",
+           "Glimmer-Bridging-Header.h", "LICENSE", "CREDITS.md", "scripts/dmg",
+           "scripts/provisioning.py", "scripts/release_candidate_kind.py", "scripts/hitch-recording-options.json",
            "scripts/generate-build-info.sh", "scripts/generate-dmg-background.swift",
            "scripts/make-dmg.sh", "scripts/sign-bundle.sh", "scripts/sparkle-tools.sh", "scripts/release-bundle.mk")
 FEED_BRANCH = "appcast"
