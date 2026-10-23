@@ -220,6 +220,69 @@ struct StreamViewKeyboardTests {
 
     // MARK: Client chords are consumed, never forwarded
 
+    @Test(arguments: [false, true], [false, true])
+    func persistedControlZTogglesStatsWithoutQuitting(keyEquivalentFirst: Bool, connecting: Bool) throws {
+        let store = try IsolatedStore("stats-z-\(keyEquivalentFirst)-\(connecting)")
+        defer { store.remove() }
+        store.defaults.set(Data(#"{"ctrl":true,"alt":false,"shift":false,"cmd":false,"keyChar":"q"}"#.utf8),
+                           forKey: "quitHotkey")
+        store.defaults.set(Data(#"{"ctrl":true,"alt":false,"shift":false,"cmd":false,"keyChar":"z"}"#.utf8),
+                           forKey: "statsHotkey")
+        let quit = try #require(AppModel.persistedDecoded("quitHotkey", HotkeyChord.self, defaults: store.defaults))
+        let stats = try #require(AppModel.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: store.defaults))
+        let (forwarder, backend, view) = ready()
+        forwarder.quitHotkeyProvider = { quit }
+        forwarder.statsHotkeyProvider = { stats }
+        forwarder.initialConnectPending = connecting
+        forwarder.isReady = !connecting
+        let quits = Tally()
+        let toggles = Tally()
+        forwarder.onQuitHotkey = { quits.calls += 1 }
+        forwarder.onCancelConnect = { quits.calls += 1 }
+        forwarder.onStatsHotkey = { toggles.calls += 1 }
+        let event = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [.control], timestamp: 1,
+            windowNumber: 0, context: nil, characters: "\u{1a}", charactersIgnoringModifiers: "z",
+            isARepeat: false, keyCode: 6))
+        if keyEquivalentFirst { #expect(!view.performKeyEquivalent(with: event)) }
+        #expect(quits.calls == 0)
+        view.keyDown(with: event)
+        #expect(quits.calls == 0)
+        #expect(toggles.calls == 1)
+        #expect(backend.keyboard.isEmpty)
+        #expect(backend.texts.isEmpty)
+
+        let stop = try key(.keyDown, kVK_ANSI_Q, mods: [.control], chars: "q", at: 2)
+        if keyEquivalentFirst {
+            #expect(view.performKeyEquivalent(with: stop))
+        } else {
+            view.keyDown(with: stop)
+        }
+        #expect(quits.calls == 1)
+        #expect(toggles.calls == 1)
+    }
+
+    @Test func controlZFromCoreGraphicsDoesNotMatchQuit() throws {
+        let raw = try #require(CGEvent(keyboardEventSource: nil, virtualKey: 6, keyDown: true))
+        raw.flags = .maskControl
+        raw.keyboardSetUnicodeString(stringLength: 1, unicodeString: [0x7A])
+        let event = try #require(NSEvent(cgEvent: raw))
+        let (forwarder, backend, view) = ready()
+        let quits = Tally()
+        let stats = Tally()
+        forwarder.statsHotkeyProvider = {
+            HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "z")
+        }
+        forwarder.onQuitHotkey = { quits.calls += 1 }
+        forwarder.onStatsHotkey = { stats.calls += 1 }
+        #expect(event.keyCode == 6)
+        #expect(!view.performKeyEquivalent(with: event))
+        view.keyDown(with: event)
+        #expect(quits.calls == 0)
+        #expect(stats.calls == 1)
+        #expect(backend.keyboard.isEmpty)
+    }
+
     @Test func quitAndStatsChordsStayOnTheMac() throws {
         let (forwarder, backend, view) = ready()
         let quits = Tally()
