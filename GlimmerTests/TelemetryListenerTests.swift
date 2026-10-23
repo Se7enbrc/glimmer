@@ -45,34 +45,38 @@ final class TelemetryListenerTests {
             stream: StreamTelemetryConfig(width: 1920, height: 1080, fps: 60, codec: "HEVC", bitrate: nil))
     }
 
-    private func startedExporter() async throws -> (TelemetryExporter, UInt16) {
-        TelemetryExporter.captureBaselines = TelemetryExporter.CaptureBaselines()
-        let exporter = TelemetryExporter(
-            source: Self.source(), serverName: "Den PC", outputDirectory: dir,
-            counters: TelemetryCounters(), port: 0, listenOnLAN: false)
-        exporter.start()
-        return (exporter, try await Self.readyPort(exporter))
+    private func exporter() -> TelemetryExporter {
+        TelemetryExporter(source: Self.source(), serverName: "Den PC", outputDirectory: dir,
+                          counters: TelemetryCounters(), port: 0, listenOnLAN: false)
     }
 
-    /// Waits for `.ready` on the work queue (where state updates land), then reads the bound port.
-    static func readyPort(_ exporter: TelemetryExporter) async throws -> UInt16 {
-        let listener = try #require(exporter.workQueue.sync { exporter.listener })
-        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-            exporter.workQueue.async {
-                if case .ready = listener.state { done.resume(); return }
-                let original = listener.stateUpdateHandler
-                listener.stateUpdateHandler = { state in
-                    original?(state)
-                    switch state {
-                    case .ready, .failed, .cancelled:
-                        listener.stateUpdateHandler = original
-                        done.resume()
-                    default: break
-                    }
-                }
-            }
+    private func startedExporter() async throws -> (TelemetryExporter, UInt16) {
+        TelemetryExporter.captureBaselines = TelemetryExporter.CaptureBaselines()
+        let exporter = exporter()
+        exporter.start()
+        do {
+            return (exporter, try await Self.readyPort(exporter))
+        } catch {
+            exporter.stop()
+            throw error
         }
-        return try #require(exporter.workQueue.sync { listener.port?.rawValue })
+    }
+
+    static func readyPort(_ exporter: TelemetryExporter) async throws -> UInt16 {
+        var iterator = listeningResult(exporter).makeAsyncIterator()
+        let result = try #require(await iterator.next(), "Telemetry listener did not respond within five seconds")
+        return try #require(result, "Telemetry listener failed or stopped before becoming ready")
+    }
+
+    /// A deadline must end the stream even if readiness is never delivered.
+    private static func listeningResult(_ exporter: TelemetryExporter) -> AsyncStream<UInt16?> {
+        AsyncStream { continuation in
+            exporter.whenListening { port in
+                continuation.yield(port)
+                continuation.finish()
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) { continuation.finish() }
+        }
     }
 
     private func get(_ path: String, host: String = "127.0.0.1", port: UInt16) async throws
@@ -158,6 +162,67 @@ final class TelemetryListenerTests {
         await #expect(throws: (any Error).self) { _ = try await self.get("/metrics", host: lan, port: port) }
         let (response, _) = try await get("/metrics", port: port)
         #expect(response.statusCode == 200)
+    }
+
+    @Test func readinessReachesEarlyAndLateObservers() async throws {
+        let exporter = exporter()
+        defer { exporter.stop() }
+        let early = Self.listeningResult(exporter)
+        exporter.start()
+        var iterator = early.makeAsyncIterator()
+        let result = try #require(await iterator.next(), "Early readiness observer was not resumed")
+        let port = try #require(result)
+        #expect(try await Self.readyPort(exporter) == port)
+        let (response, _) = try await get("/metrics", port: port)
+        #expect(response.statusCode == 200)
+    }
+
+    @Test func stopResumesPendingAndLateReadinessObservers() async throws {
+        let exporter = exporter()
+        var early = Self.listeningResult(exporter).makeAsyncIterator()
+        exporter.stop()
+        let first = try #require(await early.next(), "Stop did not resume the pending observer")
+        #expect(first == nil)
+        #expect(await early.next() == nil)
+        var late = Self.listeningResult(exporter).makeAsyncIterator()
+        let second = try #require(await late.next(), "Stop did not resume the late observer")
+        #expect(second == nil)
+        exporter.start()
+        #expect(exporter.workQueue.sync { exporter.listener == nil && exporter.captureTimer == nil })
+    }
+
+    @Test func stopOnWorkQueueFinishesWithoutWaitingForMainQueue() async {
+        await #expect(processExitsWith: .success) {
+            // A deadlock or dispatch precondition must fail only this child, never hang the test host.
+            alarm(10)
+            let fixture = try TelemetryListenerTests()
+            let (exporter, _) = try await fixture.startedExporter()
+            let finished = DispatchSemaphore(value: 0)
+            await MainActor.run {
+                exporter.workQueue.async {
+                    exporter.stop()
+                    exporter.stop()
+                    finished.signal()
+                }
+                if finished.wait(timeout: .now() + 5) != .success { _exit(1) }
+            }
+            try #require(exporter.workQueue.sync { exporter.listener == nil && exporter.fileHandle == nil })
+            alarm(0)
+        }
+    }
+
+    @Test func stopOnMainQueueFinishes() async {
+        await #expect(processExitsWith: .success) {
+            alarm(10)
+            let fixture = try TelemetryListenerTests()
+            let (exporter, _) = try await fixture.startedExporter()
+            await MainActor.run {
+                exporter.stop()
+                exporter.stop()
+            }
+            try #require(exporter.workQueue.sync { exporter.listener == nil && exporter.fileHandle == nil })
+            alarm(0)
+        }
     }
 
     @Test func stopClosesThePort() async throws {
