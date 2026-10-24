@@ -1,7 +1,8 @@
 # Test Glimmer through TestFlight
 
-Build an internal iPhone/iPad beta from an exact reviewed commit using CI. The
-Mac release workflow and Sparkle feeds are separate.
+Build an iPhone/iPad beta eligible for internal and external testing from an
+exact reviewed commit using CI. The Mac release workflow and Sparkle feeds are
+separate.
 
 ## First-time setup
 
@@ -24,9 +25,10 @@ certificates, passwords or provisioning profiles into an issue or chat.
    reviewer and deployments restricted to `main`. Keep its signing and upload
    values in environment secrets, using the existing approved secret-management
    process. Never expose them as repository variables.
-5. Create an **Internal** TestFlight group. Initially add only the maintainer
-   and select builds manually. Review the app's encryption answers before making
-   the first processed build available.
+5. Create an **Internal** TestFlight group and keep **Enable automatic
+   distribution** selected so members receive every processed, compliant build.
+   Review the app's encryption declaration before the first upload. External
+   testing uses a separate group and Apple's review process below.
 
 Internal testers must be eligible App Store Connect users. Internal builds are
 available for 90 days. See Apple's
@@ -72,12 +74,41 @@ device or automatically repair account signing state.
    workflow run ID as `archive_run_id`. The trusted gate selects that run's
    exact producing attempt and immutable archive artifact. Review its source
    identity and verification evidence before approving the protected job.
-6. After Apple processes the upload, review its status and compliance questions,
-   then add the build to **Internal**. Enter a short **What to Test**
-   description covering the actual changes and known limitations.
+6. After Apple processes the upload, check its status and confirm automatic
+   availability in **Internal**. Enter a short **What to Test** description
+   covering the actual changes and known limitations. Internal distribution
+   continues while an external build awaits Beta App Review.
 
-The internal-only export must not be used for external testing or App Store
-release. A future public release needs a separate reviewed distribution path.
+Every export sets `testFlightInternalTestingOnly = false`. This removes the
+Internal Only restriction; it does not grant Beta App Review approval or publish
+an App Store release. Existing Internal Only uploads cannot join external
+groups. Use a new increasing build number for the first eligible upload after
+this tooling lands on `main`; rerunning an old delivery pins the old tooling.
+See Apple's
+[external testing guide](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers).
+
+## First external build
+
+1. In App Store Connect, open the app's **TestFlight** tab. Keep the internal
+   group, then use **+** beside **External Testing** to create an external
+   group.
+2. Under **Additional → Test Information**, complete the beta description,
+   feedback email and review contact details. Include review notes explaining
+   how to connect to a PC running Sunshine and any access needed to test it. See
+   Apple's
+   [test information guide](https://developer.apple.com/help/app-store-connect/test-a-beta-version/provide-test-information).
+3. In the external group, choose **Add Builds**, select the new processed build,
+   enter **What to Test**, and submit it for Beta App Review. The first build
+   requires full review; later builds of the same version may not.
+4. After approval, start testing and invite testers by email or public link.
+   Select **Automatically notify testers** when adding the build, or distribute
+   it manually after approval. Follow Apple's
+   [external testing steps](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers).
+
+External eligibility does not automatically add each upload to an external
+group. Internal groups with automatic distribution still receive every eligible
+build without waiting for external review. App Store publication remains a
+separate maintainer decision.
 
 ## What CI must preserve
 
@@ -87,6 +118,16 @@ does not check out or execute candidate code. Its fresh protected job validates
 the successful build run, workflow, source, repository, producing attempt,
 GitHub artifact digest, manifest and bundle identity before signing/exporting
 and uploading the existing bytes.
+
+The signed receipt uses schema 2 and `external_testing_eligible: true` in place
+of `internal_only`. This records export eligibility, not Apple's review status.
+Before export and again before upload, tooling requires exactly the reviewed
+export options, including explicit manual signing selectors, the app's sole
+profile, `testFlightInternalTestingOnly: false`, unchanged version/build numbers
+and enabled symbol stripping/upload. Missing, extra, changed or mistyped options
+and legacy receipts fail closed. Source/archive identity, binary UUID matching,
+attestation, separate signing/upload credentials and protected `ios-testflight`
+approval remain required.
 
 Retain the archive, matching dSYMs, source and tooling SHAs, build/version,
 verification evidence, artifact digests and upload result. A successful upload
@@ -119,11 +160,15 @@ local files and loopback metrics; no analytics or developer upload endpoint is
 present. Confirm actual support/data-handling practices when completing
 account-side privacy answers.
 
-Encryption answers must match the shipped pairing and transport implementation.
-Do not set `ITSAppUsesNonExemptEncryption` to false merely to suppress an App
-Store Connect question. Keep the implementation inventory and the maintainer's
-confirmed classification with release evidence. See Apple's
-[export-compliance guide](https://developer.apple.com/help/app-store-connect/manage-app-information/overview-of-export-compliance).
+Encryption is declared in the candidate app's `Info.plist` via the Boolean
+`ITSAppUsesNonExemptEncryption`; check that the archived app carries the
+reviewed value. It must match the shipped pairing and transport implementation.
+A false value declares no non-exempt encryption, not an absence of encryption.
+Use it only for the maintainer-confirmed classification, not merely to suppress
+an App Store Connect question. Keep that classification and implementation
+inventory with release evidence. Apple's
+[beta export-compliance guide](https://developer.apple.com/help/app-store-connect/test-a-beta-version/provide-export-compliance-information-for-beta-builds)
+explains declaring this in `Info.plist` instead of answering for every upload.
 
 Current source uses Apple Security for RSA identities/signatures, CommonCrypto
 for pairing AES-ECB and audio AES-CBC, CryptoKit for SHA-256 and AES-GCM
