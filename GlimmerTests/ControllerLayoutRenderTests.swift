@@ -7,6 +7,7 @@ import Testing
 @testable import Glimmer
 #if os(macOS)
 import AppKit
+import ApplicationServices
 #else
 import UIKit
 #endif
@@ -77,22 +78,73 @@ struct ControllerLayoutRenderTests {
         }
     }
 
+    #if os(macOS)
+    @Test func diagramVoiceOverNamesEveryVisibleControl() throws {
+        for family in ControllerDiagramFamily.allCases {
+            let device = fixture(family)
+            for rear in [false, true] where !rear || family == .dualSenseEdge || family == .xboxElite {
+                let diagram = ControllerLayoutDiagram(family: family, controls: device.controls, rear: rear) { _ in }
+                let host = NSHostingController(rootView: diagram.frame(width: 480, height: 380))
+                let window = NSWindow(contentViewController: host)
+                defer { window.contentViewController = nil; window.contentView = nil; window.close() }
+                window.title = "Controller artwork accessibility test"
+                window.orderFront(nil)
+                host.view.layoutSubtreeIfNeeded()
+                window.displayIfNeeded()
+                let app = AXUIElementCreateApplication(getpid())
+                let windows = try #require(accessibilityValue(kAXWindowsAttribute, of: app) as? [AXUIElement])
+                let accessibleWindow = try #require(windows.first {
+                    accessibilityValue(kAXTitleAttribute, of: $0) as? String == window.title
+                })
+                let labels = accessibilityLabels(accessibleWindow)
+                for control in device.controls where ControllerDiagramGeometry.visiblePlacement(
+                    control, family: family, rear: rear) != nil {
+                    #expect(labels.contains(control.name), "Missing VoiceOver label: \(family) \(control.name)")
+                }
+                if !rear {
+                    for name in ["Left stick", "Right stick", "D-pad"] { #expect(labels.contains(name)) }
+                }
+            }
+        }
+    }
+
+    private func accessibilityLabels(_ element: AXUIElement, depth: Int = 0) -> [String] {
+        guard depth < 30 else { return [] }
+        let label = accessibilityValue(kAXDescriptionAttribute, of: element) as? String
+            ?? accessibilityValue(kAXTitleAttribute, of: element) as? String
+        let children = accessibilityValue(kAXChildrenAttribute, of: element) as? [AXUIElement] ?? []
+        return (label.map { [$0] } ?? []) + children.flatMap { accessibilityLabels($0, depth: depth + 1) }
+    }
+
+    private func accessibilityValue(_ name: String, of element: AXUIElement) -> CFTypeRef? {
+        var result: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, name as CFString, &result) == .success else { return nil }
+        return result
+    }
+    #endif
+
     private func fixture(_ family: ControllerDiagramFamily) -> ControllerLayoutDevice {
         let names: [ControllerDiagramFamily: String] = [.xbox: "Xbox Series", .xboxElite: "Xbox Elite Series 2",
             .dualSense: "DualSense", .dualSenseEdge: "DualSense Edge", .dualShock: "DualShock 4",
-            .backbone: "Backbone One", .generic: "MFi controller"]
+            .backbone: "Backbone One", .backbonePlayStation: "Backbone One PlayStation Edition", .generic: "MFi controller"]
         let excluded: Set<ControllerMappedButton> = [.paddle1, .paddle2, .paddle3, .paddle4, .touchpad, .share]
         var buttons = ControllerMappedButton.allCases.filter { !excluded.contains($0) }
         if family == .xboxElite { buttons += [.paddle1, .paddle2, .paddle3, .paddle4] }
         if family.isPlayStation { buttons.append(.touchpad) }
         if family.isDualSense || family == .xbox { buttons.append(.share) }
-        if family == .backbone { buttons.append(.share) }
+        if family.isBackbone { buttons.append(.share) }
         let layout = ControllerLayout.standard(buttons: buttons)
         var labels: [ControllerMappedButton: (String, String)] = [:]
-        if family.isPlayStation {
+        if family.isPlayStation || family == .backbonePlayStation {
             labels = [.a: ("Cross", "xmark"), .b: ("Circle", "circle"), .x: ("Square", "square"), .y: ("Triangle", "triangle"),
                 .home: ("PS button", "playstation.logo"), .share: ("Mute", "mic.slash"),
                 .menu: ("Options", "line.3.horizontal"), .options: ("Create", "line.3.horizontal.decrease")]
+            if family.isBackbone {
+                labels[.home] = ("Home", "house.circle")
+                labels[.share] = ("Capture", "viewfinder")
+                labels[.options] = ("Options", "ellipsis")
+            }
+            if family == .dualShock { labels[.options] = ("Share", "line.3.horizontal.decrease") }
         } else if family.isXbox {
             labels = [.home: ("Xbox button", "xbox.logo"),
                 .leftShoulder: ("LB", "lb.button.roundedbottom.horizontal"),

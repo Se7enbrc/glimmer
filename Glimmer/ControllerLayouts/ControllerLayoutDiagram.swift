@@ -86,6 +86,7 @@ struct ControllerLayoutDiagram: View {
         }
         .buttonStyle(.plain).menuIndicator(.hidden)
         .disabled(available.isEmpty)
+        .accessibilityLabel("D-pad")
         .position(x: family.dpad.x * scale, y: family.dpad.y * scale)
     }
 
@@ -102,11 +103,12 @@ struct ControllerLayoutDiagram: View {
         return Menu {
             ForEach(available) { control in Button(control.name) { select(control) } }
         } label: {
-            ControllerStickArtwork(family: family, left: left, scale: scale)
+            ControllerStickArtwork(family: family, scale: scale)
                 .contentShape(.circle)
         }
         .buttonStyle(.plain).menuIndicator(.hidden)
         .disabled(available.isEmpty)
+        .accessibilityLabel(left ? "Left stick" : "Right stick")
         .position(x: point.x * scale, y: point.y * scale)
     }
 }

@@ -30,6 +30,9 @@
   and save it with the layout.
 - Controller layouts use detailed diagrams for PlayStation, Xbox, Backbone and
   MFi controllers, with back views for supported paddles and extra buttons.
+- Controller layouts show the shapes and controls of DualSense, DualSense Edge,
+  DualShock 4, Xbox Series, Xbox Elite Series 2 and both Backbone One editions,
+  with back views for supported paddles and a diagram for other MFi controllers.
 
 - Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
   Sequoia, windows and controls use the system's standard materials in place of

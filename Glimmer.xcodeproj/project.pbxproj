@@ -736,6 +736,7 @@
 		D0F3D158B8404F6780B9AE6A /* ControllerSurfaceShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = 356D8AE2FC704A91ADF9EBE9 /* ControllerSurfaceShape.swift */; };
 		329F02FEBDD44DAFA28300BC /* ControllerArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = D31A6D9DC42043D096EDE55D /* ControllerArtwork.swift */; };
 		059E9C4832CB459FB0FB8300 /* ControllerControlArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */; };
+		966232EF57614C298EE9BFD6 /* ControllerDpadSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1526,6 +1527,7 @@
 		356D8AE2FC704A91ADF9EBE9 /* ControllerSurfaceShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerSurfaceShape.swift"; sourceTree = SOURCE_ROOT; };
 		D31A6D9DC42043D096EDE55D /* ControllerArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerArtwork.swift"; sourceTree = SOURCE_ROOT; };
 		7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerControlArtwork.swift"; sourceTree = SOURCE_ROOT; };
+		B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerDpadSurface.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1622,6 +1624,7 @@
 			children = (
 				E92A400B198D99C4E81A5016 /* ControllerLayoutDiagram.swift */,
 				7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */,
+				B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */,
 				D31A6D9DC42043D096EDE55D /* ControllerArtwork.swift */,
 				356D8AE2FC704A91ADF9EBE9 /* ControllerSurfaceShape.swift */,
 				E739566E42134718B281E78F /* ControllerBodyShape.swift */,
@@ -2538,6 +2541,7 @@
 			files = (
 				51DAB01AF73E7404229D81AF /* ControllerLayoutDiagram.swift in Sources */,
 				059E9C4832CB459FB0FB8300 /* ControllerControlArtwork.swift in Sources */,
+				966232EF57614C298EE9BFD6 /* ControllerDpadSurface.swift in Sources */,
 				329F02FEBDD44DAFA28300BC /* ControllerArtwork.swift in Sources */,
 				D0F3D158B8404F6780B9AE6A /* ControllerSurfaceShape.swift in Sources */,
 				7E4AFBDE5A4F4F8C9A27299D /* ControllerBodyShape.swift in Sources */,

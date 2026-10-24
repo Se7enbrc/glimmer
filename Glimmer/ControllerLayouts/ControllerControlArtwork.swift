@@ -14,7 +14,7 @@ struct ControllerControlArtwork: View {
         [.button(.a), .button(.b), .button(.x), .button(.y)].contains(control.id)
     }
     private var dark: Bool {
-        !isFace || family.darkShell
+        !isFace || family.darkShell || family == .dualSenseEdge
     }
 
     var body: some View {
@@ -23,7 +23,8 @@ struct ControllerControlArtwork: View {
         } else {
             let shape = ControllerButtonShape(family: family, placement: placement, source: control.id)
             shape.fill(LinearGradient(colors: tones, startPoint: .topLeading, endPoint: .bottomTrailing))
-                .overlay { glyph }
+                .overlay { shape.stroke(dark ? .white.opacity(0.18) : .black.opacity(0.25), lineWidth: scale) }
+                .overlay { if !shape.isPaddle { glyph } }
                 .frame(width: placement.width * scale, height: placement.height * scale)
         }
     }
@@ -45,7 +46,7 @@ struct ControllerControlArtwork: View {
 
     private var touchpad: some View {
         let shape = ControllerTouchpadShape(family: family)
-        let darkPad = family == .dualSenseEdge || family == .dualShock
+        let darkPad = family == .dualSenseEdge || (family == .dualShock || family == .dualSenseEdge)
         return shape.fill(.regularMaterial)
             .overlay {
                 shape.fill(LinearGradient(colors: darkPad ? [Color(white: 0.23), Color(white: 0.12)]
@@ -58,8 +59,6 @@ struct ControllerControlArtwork: View {
                     Capsule().fill(Color.blue.opacity(0.65)).frame(width: 112 * scale, height: 2 * scale)
                         .offset(y: -24 * scale)
                 }
-                Image(systemName: family.symbol(for: control)).font(.system(size: max(1, 13 * scale)))
-                    .foregroundStyle(darkPad ? Color.white.opacity(0.4) : Color.black.opacity(0.25))
             }
             .frame(width: placement.width * scale, height: placement.height * scale)
     }
@@ -67,7 +66,6 @@ struct ControllerControlArtwork: View {
 
 struct ControllerStickArtwork: View {
     let family: ControllerDiagramFamily
-    let left: Bool
     let scale: CGFloat
 
     var body: some View {
@@ -86,10 +84,6 @@ struct ControllerStickArtwork: View {
                                              startPoint: .top, endPoint: .bottom))
                     .overlay { Circle().stroke(.black.opacity(0.7), lineWidth: scale) }.padding(10 * scale)
             }
-            .overlay {
-                Image(systemName: left ? "l.joystick.press.down" : "r.joystick.press.down")
-                    .font(.system(size: max(1, (family == .backbone ? 9 : 14) * scale))).foregroundStyle(Color(white: 0.52))
-            }
             .shadow(color: .black.opacity(0.4), radius: 2 * scale, y: 2 * scale)
             .frame(width: family.stickDiameter * scale, height: family.stickDiameter * scale)
     }
@@ -103,23 +97,28 @@ struct ControllerDpadArtwork: View {
         ZStack {
             if family.isXbox {
                 Circle().fill(Color(white: 0.065)).padding(-4 * scale)
-                ControllerDpadShape(dish: true).fill(LinearGradient(colors: [Color(white: 0.48), Color(white: 0.16)],
+                ControllerDpadShape(dish: true, roundDish: family == .xboxElite)
+                    .fill(LinearGradient(colors: [Color(white: 0.48), Color(white: 0.16)],
                                                                  startPoint: .topLeading, endPoint: .bottomTrailing))
-                ControllerDpadShape(dish: true).stroke(Color(white: 0.55), lineWidth: scale)
-                Image(systemName: "dpad.fill").resizable().foregroundStyle(Color.black.opacity(0.35)).padding(11 * scale)
+                ControllerDpadShape(dish: true, roundDish: family == .xboxElite).stroke(Color(white: 0.55), lineWidth: scale)
+                ControllerDpadFacets().fill(.white.opacity(family == .xboxElite ? 0.20 : 0.07))
+                    .clipShape(ControllerDpadShape(dish: true, roundDish: family == .xboxElite))
+                ControllerDpadCross().fill(Color.black.opacity(0.22)).padding(7 * scale)
             } else if family.isPlayStation {
                 ForEach(0..<4) { index in
                     ControllerDpadShape(dish: false)
-                        .fill(LinearGradient(colors: family == .dualShock
+                        .fill(LinearGradient(colors: (family == .dualShock || family == .dualSenseEdge)
                             ? [Color(white: 0.3), Color(white: 0.12)] : [Color(white: 0.88), Color(white: 0.62)],
                                              startPoint: .top, endPoint: .bottom))
                         .overlay { ControllerDpadShape(dish: false).stroke(Color.black.opacity(0.6), lineWidth: scale) }
                         .rotationEffect(.degrees(Double(index) * 90))
                 }
             } else {
-                Image(systemName: "dpad.fill").resizable()
-                    .foregroundStyle(LinearGradient(colors: [Color(white: 0.38), Color(white: 0.13)],
-                                                    startPoint: .top, endPoint: .bottom))
+                ControllerDpadCross()
+                    .fill(LinearGradient(colors: family == .backbonePlayStation
+                        ? [Color(white: 0.96), Color(white: 0.71)] : [Color(white: 0.38), Color(white: 0.13)],
+                                         startPoint: .top, endPoint: .bottom))
+                    .overlay { ControllerDpadCross().stroke(.black.opacity(0.6), lineWidth: scale) }
             }
         }
         .shadow(color: .black.opacity(0.3), radius: scale, y: scale)
@@ -129,8 +128,10 @@ struct ControllerDpadArtwork: View {
 
 struct ControllerDpadShape: Shape {
     let dish: Bool
+    var roundDish = false
 
     func path(in rect: CGRect) -> Path {
+        if dish && roundDish { return Path(ellipseIn: rect) }
         if !dish {
             let lobe = Path { path in
                 path.move(to: CGPoint(x: 0.4, y: 0.02))
