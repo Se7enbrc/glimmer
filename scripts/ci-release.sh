@@ -283,6 +283,13 @@ case "${1:-}" in
         make codesign-setup setup-notary
         # Compilation and helper embedding already succeeded without credentials.
         make CONFIG=Release preflight notarize-bundle
+        started=$SECONDS
+        make CONFIG=Release dmg
+        make CONFIG=Release notarize-dmg
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            printf 'DMG packaging, signing, notarization and stapling: %ss\n' "$((SECONDS - started))" \
+                >> "$GITHUB_STEP_SUMMARY"
+        fi
         cleanup
         printf '%s\n' "$EXPECTED_SHA" > "$SIGNED"
         ;;
@@ -292,7 +299,7 @@ case "${1:-}" in
         require_phase "$SIGNED"
         [ ! -e "$PRIVATE" ] || die "signing credentials have not been removed"
         [ -n "${GITHUB_OUTPUT:-}" ] || die "workflow output file missing"
-        make CONFIG=Release dmg sparkle-zip
+        make CONFIG=Release sparkle-zip
         [ -s "$DMG" ] && [ -s "$ZIP" ] || die "packaged release asset missing"
         shasum -a 256 "$DMG" "$ZIP" > "$ARTIFACTS"
         printf 'dmg-path=%s\nzip-path=%s\n' "$DMG" "$ZIP" >> "$GITHUB_OUTPUT"
