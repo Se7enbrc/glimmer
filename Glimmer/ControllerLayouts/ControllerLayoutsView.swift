@@ -39,11 +39,8 @@ struct ControllerLayoutsView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .controllerLayoutNavigation()
-        .onAppear { ControllerLayoutEditing.begin(editingID) }
-        .task {
-            await model.load()
-            model.beginObserving()
-        }
+        .onAppear { ControllerLayoutEditing.begin(editingID); model.beginObserving() }
+        .task { await model.load() }
         .onDisappear { model.endObserving(); ControllerLayoutEditing.end(editingID) }
     }
 }

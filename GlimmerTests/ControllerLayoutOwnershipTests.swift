@@ -3,12 +3,39 @@
 
 import AppKit
 import GlimmerEngine
+import SwiftUI
 import Testing
 @testable import Glimmer
 
 @MainActor
 @Suite(.serialized)
 struct ControllerLayoutOwnershipTests {
+    @Test func closingWhileLayoutsLoadDoesNotStartDeviceObservationAfterDismissal() async throws {
+        let identity = ControllerLayoutIdentity(category: "fixture", profile: "physical", controls: [])
+        let record = ControllerLayoutRecord(key: .init(owner: .type(identity.type), scope: .allGames),
+            name: "Saved controller", layout: .init(bindings: [.init(.button(.a), .button(.b))]))
+        var pending: CheckedContinuation<Void, Never>?
+        let model = ControllerLayoutsModel(read: {
+            await withCheckedContinuation { pending = $0 }
+            return .init(records: [record])
+        })
+        let window = NSWindow(contentViewController: NSHostingController(rootView: NavigationStack {
+            ControllerLayoutsView(model: model)
+        }))
+        window.setContentSize(CGSize(width: 620, height: 500))
+        window.makeKeyAndOrderFront(nil)
+        try await waitUntil { pending != nil }
+        window.contentViewController = nil
+        window.close()
+        pending?.resume()
+        pending = nil
+        await model.load()
+        await DispatchQueue.main.drainForTest()
+        #expect(model.loaded)
+        #expect(model.devices.isEmpty)
+        #expect(!ControllerLayoutEditing.active)
+    }
+
     @Test func closingTheEditorReturnsMiniPlayerOwnershipAndReleasesTheEditor() async throws {
         let streamWindow = PointerFocusTestWindow(contentRect: .zero, styleMask: .borderless,
                                                    backing: .buffered, defer: true)

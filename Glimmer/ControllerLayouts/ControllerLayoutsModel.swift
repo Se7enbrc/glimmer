@@ -41,13 +41,16 @@ final class ControllerLayoutsModel {
     private(set) var devices: [ControllerLayoutDevice] = []
     var games: [ControllerLayoutGame] = []
     private let store: ControllerLayoutStore
+    private let readLibrary: () async throws -> ControllerLayoutLibrary
     private var loadTask: Task<Void, Never>?
     private var observations: [NSObjectProtocol] = []
     private var observers = 0
     private var saving = false
 
-    init(url: URL = ControllerLayoutsModel.storeURL) {
-        store = ControllerLayoutStore(url: url)
+    init(url: URL = ControllerLayoutsModel.storeURL, read: (() async throws -> ControllerLayoutLibrary)? = nil) {
+        let store = ControllerLayoutStore(url: url)
+        self.store = store
+        readLibrary = read ?? { try await store.load() }
     }
 
     private static var storeURL: URL {
@@ -64,10 +67,11 @@ final class ControllerLayoutsModel {
         loadTask = Task { [weak self] in
             guard let self else { return }
             do {
-                library = try await store.load()
+                library = try await readLibrary()
                 let current = games
                 games = library.games.filter { cached in !current.contains { $0.id == cached.id } } + current
                 loaded = true
+                if observers > 0 { refreshDevices() }
             } catch {
                 loadError = "Couldn't read controller layouts. Your saved file has been kept."
             }
