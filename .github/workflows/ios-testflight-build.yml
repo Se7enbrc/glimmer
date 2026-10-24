@@ -6,6 +6,12 @@ name: iOS TestFlight Build
 on:
   workflow_dispatch:
     inputs:
+      flavour:
+        description: Compiled iOS flavour
+        required: true
+        type: choice
+        options: [beta, production]
+        default: production
       expected_sha:
         description:
           Reserved release-candidate HEAD with direct Verify and CodeQL
@@ -31,6 +37,7 @@ concurrency:
 
 env:
   EXPECTED_SHA: ${{ inputs.expected_sha }}
+  IOS_FLAVOUR: ${{ inputs.flavour }}
   IOS_VERSION: ${{ inputs.marketing_version }}
   IOS_BUILD_NUMBER: ${{ inputs.build_number }}
   DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}

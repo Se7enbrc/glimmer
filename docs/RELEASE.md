@@ -10,6 +10,20 @@ change goes through a PR. A candidate must pass the hosted checks before it is
 built, then pass a playback test before the PR is merged or the candidate is
 promoted. A green build alone is not release acceptance.
 
+## iPhone and iPad artifacts
+
+Choose the compiled flavour before archiving: `beta` includes local diagnostics;
+`production` excludes them, even when installed through TestFlight. Only a
+production archive may be used as App Store submission source. A beta build
+cannot be promoted unchanged to production.
+
+Follow the [iOS TestFlight process](../iOS/docs/TESTFLIGHT.md). Keep flavour in
+the sealed archive identity and attested receipt, and inspect the executable and
+resources before delivery. The current delivery workflow remains internal-only;
+public submission requires its own reviewed export from the tested production
+archive. Land trusted workflow and script changes on `main` before dispatching;
+land app and shared-engine exclusions on the reviewed feature branch.
+
 ## 1. Prepare the candidate
 
 Keep the final numeric marketing version in `Glimmer/Version.xcconfig`, such as
