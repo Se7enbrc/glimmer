@@ -37,6 +37,10 @@
   Shoulder buttons curve along the grips, with triggers partly hidden behind
   them.
 
+- Connection quality adjustments keep the game running on the PC and reconnect
+  in the same stream window. Brief adjustments keep the reconnect message
+  hidden.
+
 - Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
   Sequoia, windows and controls use the system's standard materials in place of
   Liquid Glass.

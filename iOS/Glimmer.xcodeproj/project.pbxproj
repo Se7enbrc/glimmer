@@ -12,6 +12,7 @@
 		4474E8B9FD1A47A480A396C4 /* NativeUIRenderTests+IPhone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */; };
 		F01EE836436E483F863DF4F4 /* UITestLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4083AB719BDD4036984B93B7 /* UITestLauncher.swift */; };
 		BFC410B98DE44455B3A9D872 /* NativeUIRenderTests+iPad.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D536F6F337545DEB9369D51 /* NativeUIRenderTests+iPad.swift */; };
+		B17A7E0C0B1A4C0D9E2F3A41 /* NativeUIRenderTests+Bitrate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B17A7E0C0B1A4C0D9E2F3A42 /* NativeUIRenderTests+Bitrate.swift */; };
 		9D8E655FEF584B17AD847218 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */; };
 		40E56A34C6B84BFD97F585B0 /* PairingRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */; };
 		9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */; };
@@ -172,6 +173,7 @@
 		78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests+IPhone.swift"; sourceTree = "<group>"; };
 		4083AB719BDD4036984B93B7 /* UITestLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestLauncher.swift; sourceTree = "<group>"; };
 		9D536F6F337545DEB9369D51 /* NativeUIRenderTests+iPad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests+iPad.swift"; sourceTree = "<group>"; };
+		B17A7E0C0B1A4C0D9E2F3A42 /* NativeUIRenderTests+Bitrate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests+Bitrate.swift"; sourceTree = "<group>"; };
 		8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingRecoveryTests.swift; sourceTree = "<group>"; };
 		E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherGalleryTests.swift"; sourceTree = "<group>"; };
@@ -418,6 +420,7 @@
 				8D45B4D6D520493193F710F5 /* ControllerLayoutRenderTests.swift */,
 				2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */,
 				9D536F6F337545DEB9369D51 /* NativeUIRenderTests+iPad.swift */,
+				B17A7E0C0B1A4C0D9E2F3A42 /* NativeUIRenderTests+Bitrate.swift */,
 				69AB6019C55BC9409A7FA80F /* LauncherTests.swift */,
 				D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */,
 				155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */,
@@ -702,6 +705,7 @@
 				8033B9ABE605D5A2C6102F12 /* ControllerLayoutRenderTests.swift in Sources */,
 				E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */,
 				BFC410B98DE44455B3A9D872 /* NativeUIRenderTests+iPad.swift in Sources */,
+				B17A7E0C0B1A4C0D9E2F3A41 /* NativeUIRenderTests+Bitrate.swift in Sources */,
 				7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */,
 				40E56A34C6B84BFD97F585B0 /* PairingRecoveryTests.swift in Sources */,
 				F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */,

@@ -26,6 +26,7 @@ final class MacSessionServices: @unchecked Sendable {
         result.stopLog = { SessionLogFileSink.stop() }
         result.captureEnd = { SessionReceiptStore.captureStreamEnd(rttMs: $0, collector: $1) }
         result.armWake = { self.armWake($0) }
+        result.armAvailability = { self.armAvailability($0) }
         result.stopWake = { self.stopWake() }
         result.latchHost = { StreamRouteProbe.latchHost($0) }
         result.route = { MacStreamPath.probe(host: $0.address, rttPort: UInt16($0.httpsPort), rtt: $1) }
@@ -94,6 +95,16 @@ final class MacSessionServices: @unchecked Sendable {
         let center = NSWorkspace.shared.notificationCenter
         wakeObservers.append(center.addObserver(forName: NSWorkspace.didWakeNotification,
                                                 object: nil, queue: .main) { _ in wake() })
+    }
+
+    private func armAvailability(_ changed: @escaping @Sendable (Bool) -> Void) {
+        let center = NSWorkspace.shared.notificationCenter
+        for (name, available) in [(NSWorkspace.willSleepNotification, false),
+                                  (NSWorkspace.didWakeNotification, true)] {
+            wakeObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { _ in
+                changed(available)
+            })
+        }
     }
 
     private func stopWake() {

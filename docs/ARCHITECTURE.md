@@ -206,14 +206,17 @@ steps below share the same occupancy decisions on both platforms.
 
 Continuation never silently becomes a new launch when the game ends. Known,
 compatible stream requests are reused; unknown formats suppress
-resolution-change intent. Local presentation fits the picture. Requested video
+resolution-change intent. Local presentation fills the window. Requested video
 size is not proof of the PC's display mode. Local, bounded format history
 contains no ownership claim.
 
-The frame watchdog requests keyframes after two seconds of decode silence. At
-ten seconds it tears down unless video previously flowed and control ACKs remain
-recent; a remote route may reduce bitrate instead. Hidden decode gates suppress
-inappropriate watchdog recovery.
+Ordinary Mac recovery renegotiates a new launch; disconnect-only clients may
+resume the same PC app under their explicit disposition. Bitrate-only recovery
+uses the shared [resume-only actuator](BITRATE_ACTUATOR.md), regardless of
+final-stop disposition. The frame watchdog requests keyframes after two seconds
+of decode silence. At ten seconds it tears down unless video previously flowed
+and control ACKs remain recent; a remote route may reduce bitrate instead.
+Hidden decode gates suppress inappropriate watchdog recovery.
 
 ### Teardown
 

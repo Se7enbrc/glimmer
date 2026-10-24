@@ -25,6 +25,9 @@ extension StreamSession {
 
     /// Native services own live-session wake observers; shared policy owns the bounded liveness probe.
     package func armWakeObservers() {
+        services.armAvailability { [weak self] available in
+            Task { await self?.setBitrateChangesAvailable(available) }
+        }
         services.armWake { [weak self] in Task { await self?.handleSystemWake() } }
     }
 

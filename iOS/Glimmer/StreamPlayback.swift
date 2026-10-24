@@ -109,6 +109,7 @@ struct StreamPlayback {
            }, input: input, focusInput: nativeInput.focus, format: format,
            setVisible: { visible, inputs in
                video.setPresentSuppressed(!visible, visibility: inputs, sessionGeneration: session.id)
+               Task { await session.setBitrateChangesAvailable(visible) }
            }, observeControllers: nativeInput.observeControllers, touchGamepad: nativeInput.touch,
            showTouchControls: nativeInput.showTouchControls)
     }

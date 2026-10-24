@@ -488,7 +488,7 @@ struct NativeUIRenderTests {
         }
     }
 
-    private func recordPhase(_ view: UIView, name: String) throws {
+    func recordPhase(_ view: UIView, name: String) throws {
         view.layoutIfNeeded()
         let renderer = UIGraphicsImageRenderer(bounds: view.bounds)
         var rendered = false

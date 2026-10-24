@@ -79,6 +79,7 @@ package struct SessionServices: Sendable {
     package var stopLog: @Sendable () -> Void = {}
     package var captureEnd: @Sendable (Double?, StatsCollector?) -> Void = { _, _ in }
     package var armWake: @Sendable (@escaping @Sendable () -> Void) -> Void = { _ in }
+    package var armAvailability: @Sendable (@escaping @Sendable (Bool) -> Void) -> Void = { _ in }
     package var stopWake: @Sendable () -> Void = {}
     package var latchHost: @Sendable (String) -> Void = { _ in }
     package var route: @Sendable (ServerInfo, RttStats?) -> StreamPathProbe = { _, _ in StreamPathProbe() }
