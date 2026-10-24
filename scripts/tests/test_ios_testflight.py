@@ -90,17 +90,17 @@ class TestFlightTests(unittest.TestCase):
         with patch.dict(os.environ, {**ENV, 'RUNNER_TEMP': str(self.root)}, clear=True):
             with patch.object(checks, 'check', return_value={'sha': ENV['EXPECTED_SHA'], 'runs': []}) as check:
                 cli.gate(self.expected)
-                check.assert_called_once_with(ENV['EXPECTED_SHA'])
+                check.assert_called_once_with(ENV['EXPECTED_SHA'], candidate=True)
             with patch.object(checks, 'check', side_effect=ValueError('checks not green')):
                 with self.assertRaisesRegex(ValueError, 'checks not green'):
                     cli.gate(self.expected)
 
     def test_builder_runs_only_its_exact_nondefault_branch_commit(self):
-        env = {**ENV, 'GITHUB_SHA': 'a' * 40, 'GITHUB_REF': 'refs/heads/candidate', 'DEFAULT_BRANCH': 'main',
-               'GITHUB_WORKFLOW_REF': 'Se7enbrc/glimmer/.github/workflows/ios-testflight-build.yml@refs/heads/candidate'}
+        env = {**ENV, 'GITHUB_SHA': 'a' * 40, 'GITHUB_REF': 'refs/heads/release-candidate', 'DEFAULT_BRANCH': 'main',
+               'GITHUB_WORKFLOW_REF': 'Se7enbrc/glimmer/.github/workflows/ios-testflight-build.yml@refs/heads/release-candidate'}
         artifact.require_builder(env)
-        for key, value in [('GITHUB_SHA', 'c' * 40), ('GITHUB_REF', 'refs/heads/main'),
-                           ('DEFAULT_BRANCH', 'candidate'), ('DEFAULT_BRANCH', ''),
+        for key, value in [('GITHUB_SHA', 'c' * 40), ('GITHUB_REF', 'refs/heads/main'), ('GITHUB_REF', 'refs/heads/feature'),
+                           ('DEFAULT_BRANCH', 'release-candidate'), ('DEFAULT_BRANCH', ''),
                            ('GITHUB_EVENT_NAME', 'pull_request_target')]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 artifact.require_builder({**env, key: value})
@@ -332,23 +332,23 @@ class TestFlightTests(unittest.TestCase):
     def test_build_run_requires_workflow_source_repository_success_and_branch(self):
         run = {'id': 123, 'head_sha': 'a' * 40, 'head_repository': {'full_name': 'Se7enbrc/glimmer'},
                'event': 'workflow_dispatch', 'path': cli.BUILD_WORKFLOW, 'workflow_id': 17,
-               'status': 'completed', 'conclusion': 'success', 'head_branch': 'candidate', 'run_attempt': 2}
+               'status': 'completed', 'conclusion': 'success', 'head_branch': 'release-candidate', 'run_attempt': 2}
         cli.check_build_run(run, self.expected, 17, 'main')
         for key, value in [('id', 124), ('head_sha', 'b' * 40), ('head_repository', {'full_name': 'fork/glimmer'}),
                            ('event', 'pull_request_target'), ('path', '.github/workflows/other.yml'),
                            ('workflow_id', 18), ('status', 'in_progress'), ('conclusion', 'failure'),
-                           ('head_branch', 'main'), ('run_attempt', 0)]:
+                           ('head_branch', 'main'), ('head_branch', 'feature'), ('run_attempt', 0)]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 cli.check_build_run({**run, key: value}, self.expected, 17, 'main')
         with self.assertRaises(ValueError):
-            cli.check_build_run(run, self.expected, 17, 'candidate')
+            cli.check_build_run(run, self.expected, 17, 'release-candidate')
 
     def test_resolve_selects_exact_producing_attempt_and_emits_digest(self):
         checks = importlib.import_module('release-checks')
         workflow = {'id': 17, 'path': cli.BUILD_WORKFLOW, 'state': 'active'}
         run = {'id': 123, 'head_sha': 'a' * 40, 'head_repository': {'full_name': 'Se7enbrc/glimmer'},
                'event': 'workflow_dispatch', 'path': cli.BUILD_WORKFLOW, 'workflow_id': 17,
-               'status': 'completed', 'conclusion': 'success', 'head_branch': 'candidate', 'run_attempt': 4}
+               'status': 'completed', 'conclusion': 'success', 'head_branch': 'release-candidate', 'run_attempt': 4}
         metadata = {'id': 44, 'name': 'ios-unsigned-123-4', 'expired': False, 'digest': 'sha256:' + 'd' * 64,
                     'workflow_run': {'id': 123, 'head_sha': 'a' * 40}}
         with patch.dict(os.environ, {**ENV, 'DEFAULT_BRANCH': 'main'}, clear=True):
@@ -459,7 +459,7 @@ class TestFlightTests(unittest.TestCase):
         self.assertNotIn('actions/cache', build)
         self.assertIn('ref: ${{ github.sha }}', build)
         self.assertNotIn('ref: ${{ inputs.expected_sha }}', build)
-        self.assertIn("github.ref != 'refs/heads/main'", build)
+        self.assertIn("github.ref ==\n      'refs/heads/release-candidate'", build)
         self.assertIn('github.event.repository.default_branch', build)
         self.assertNotIn('ios-testflight.py archive', workflow)
         self.assertNotIn('ref: ${{ inputs.expected_sha }}', workflow)
@@ -472,6 +472,8 @@ class TestFlightTests(unittest.TestCase):
         self.assertLess(signing_job.index('ios-testflight.py gate'), signing_job.index('IOS_DISTRIBUTION_P12_BASE64'))
         self.assertLess(signing_job.index('ios-testflight.py import'), signing_job.index('IOS_DISTRIBUTION_P12_BASE64'))
         self.assertLess(signing_job.index('Preserve signed bytes before upload'), signing_job.index('ASC_KEY_BASE64'))
+        self.assertEqual(signing_job.count('ios-testflight.py gate'), 2)
+        self.assertLess(signing_job.rindex('ios-testflight.py gate'), signing_job.index('ASC_KEY_BASE64'))
         self.assertIn('if: always()\n        run: python3 scripts/ios-testflight.py cleanup', signing_job)
         self.assertNotIn('notarytool', workflow)
 

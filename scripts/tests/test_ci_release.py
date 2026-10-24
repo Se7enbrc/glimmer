@@ -159,6 +159,8 @@ class HostedReleaseTests(unittest.TestCase):
 
     def verified(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
+        self.assertEqual([call["args"] for call in self.calls() if call["tool"] == "release-checks.py"][-1],
+                         [SHA, "--candidate"])
         for part in ("checks", "tests", "asan"):
             output = Path(self.env["GITHUB_OUTPUT"])
             output.write_text("")
@@ -319,7 +321,7 @@ class HostedReleaseTests(unittest.TestCase):
         self.env["FIXTURE_FAIL"] = "git:fetch --quiet origin refs/tags/2026.10.6-rc.1"
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "release-checks.py" for call in self.calls()))
-        self.env["FIXTURE_FAIL"] = "release-checks.py:" + SHA
+        self.env["FIXTURE_FAIL"] = "release-checks.py:" + SHA + " --candidate"
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
         self.assertNotEqual(self.run_phase("verify-checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "security" or

@@ -13,7 +13,9 @@ on:
         type: choice
         options: [candidate, promote]
       expected_sha:
-        description: Reviewed dispatch branch commit (full 40-character SHA)
+        description:
+          Reviewed dispatch SHA; candidates require a held reservation and
+          direct scans
         required: true
         type: string
       rc_tag:
@@ -79,7 +81,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Require all checks green for the reviewed commit
+      - name: Require direct candidate checks on the reserved source
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks
@@ -136,7 +138,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Require all checks green for the reviewed commit
+      - name: Require direct candidate checks on the reserved source
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks
@@ -187,7 +189,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Require all checks green for the reviewed commit
+      - name: Require direct candidate checks on the reserved source
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks

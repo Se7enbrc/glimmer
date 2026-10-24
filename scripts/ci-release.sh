@@ -229,8 +229,10 @@ case "${1:-}" in
     checks)
         check_source
         rm -f "$GREEN"
+        check_args=("$EXPECTED_SHA")
+        if [ "$OPERATION" = candidate ]; then check_args+=(--candidate); fi
         RELEASE_CHECKS_FILE="$RUNNER_TEMP/glimmer-prerequisites.json" \
-            python3 scripts/release-checks.py "$EXPECTED_SHA"
+            python3 scripts/release-checks.py "${check_args[@]}"
         printf '%s\n' "$EXPECTED_SHA" > "$GREEN"
         ;;
     verify-checks|verify-tests|verify-asan) verify_part "${1#verify-}" ;;

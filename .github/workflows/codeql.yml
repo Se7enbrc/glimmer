@@ -17,7 +17,8 @@ permissions:
 # A pull request's newer push replaces its run; every main commit keeps its own.
 concurrency:
   group:
-    ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+    ${{ github.workflow }}-${{ github.ref }}-${{
+    github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -191,6 +192,7 @@ jobs:
           category: /language:${{ matrix.language }}
           output: ${{ runner.temp }}/codeql-results
           upload-database: false
+          wait-for-processing: true
 
       - name: Require complete Swift extraction
         if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
