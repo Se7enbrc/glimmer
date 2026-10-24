@@ -214,3 +214,14 @@ h1 span { color: var(--secondary); }
     .footer { padding-block: 20px 26px; font-size: 11px; gap: 14px; }
     .footer nav { gap: 16px; }
 }
+
+.policy { width: min(100%, 720px); margin-inline: auto; padding-block: 40px 56px; gap: 20px; line-height: 1.65; overflow-wrap: anywhere; }
+.policy h1 { font-size: clamp(36px, 7vw, 54px); line-height: 1.1; }
+.policy .policy-lead { font-size: 19px; color: var(--ink); }
+.policy p, .policy li { color: var(--secondary); }
+.policy h2 { font-size: 22px; font-weight: 650; letter-spacing: -0.025em; margin-bottom: 12px; }
+.policy section { margin-top: 12px; }
+.policy section p + p { margin-top: 14px; }
+.policy ol { margin: 0 0 16px; padding-left: 24px; }
+.policy li + li { margin-top: 10px; }
+.policy a { color: var(--ink); }

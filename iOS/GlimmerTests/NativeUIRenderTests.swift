@@ -172,6 +172,18 @@ struct NativeUIRenderTests {
         }
     }
 
+    @Test(arguments: [false, true], [DynamicTypeSize.large, .accessibility3])
+    func settingsSupportLinks(dark: Bool, textSize: DynamicTypeSize) async throws {
+        let calls = LauncherModel.Calls(savedPCs: { [] },
+            prepare: { _, _ in throw CancellationError() }, pair: { pc, _ in pc }, apps: { _ in [] },
+            remember: { _ in [] }, protectedDataChanged: { _ in })
+        let model = LauncherModel(calls: calls, discoveryEnabled: false)
+        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+        let style = "\(dark ? "dark" : "light")-\(textSize.isAccessibilitySize ? "accessibility" : "standard")"
+        try await record(settings, name: "settings-support-\(style)", size: nil,
+                         dark: dark, textSize: textSize, portrait: true)
+    }
+
     @Test func actualSimulatorLauncherSupportsPortrait() async throws {
         let calls = LauncherModel.Calls(savedPCs: { [] },
             prepare: { _, _ in throw CancellationError() }, pair: { pc, _ in pc }, apps: { _ in [] },

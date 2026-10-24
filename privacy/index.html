@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta name="description" content="Learn what Glimmer sends to your PC, what stays on your device and how to contact support about information you share.">
+    <link rel="canonical" href="https://se7enbrc.github.io/glimmer/privacy/">
+    <link rel="icon" type="image/png" href="../docs/assets/icon-512.png">
+    <link rel="stylesheet" href="../website/site.css">
+    <title>Privacy policy · Glimmer</title>
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="page wrap">
+        <header class="masthead">
+            <a class="wordmark" href="../" aria-label="Glimmer home">
+                <img src="../docs/assets/icon-512.png" width="40" height="40" alt="">
+                <span>Glimmer</span>
+            </a>
+            <nav aria-label="Main navigation">
+                <a href="../support/">Support</a>
+                <a href="../privacy/" aria-current="page">Privacy</a>
+                <a href="https://github.com/Se7enbrc/glimmer">GitHub</a>
+            </nav>
+        </header>
+        <main id="main" class="policy">
+            <h1>Privacy policy</h1>
+            <p class="policy-lead">Learn what Glimmer sends to your PC, what stays on your device and how to contact support about information you share.</p>
+            <p>Updated October 24, 2026. This policy covers Glimmer for iPhone, iPad and Mac, and this website.</p>
+            <section aria-labelledby="pc">
+                <h2 id="pc">Your PC connection</h2>
+                <p>Glimmer connects to Sunshine on the PC you choose. It receives app names, artwork, picture and sound, and sends pairing information, stream requests and your input back to the PC. Pairing sends a device name, an app-generated identifier and a public certificate. Supported controller motion and battery information may also be sent to the PC. On Mac, input includes keyboard and mouse actions, and clipboard text when you choose Paste.</p>
+                <p>Glimmer uses local network discovery to find the PC and can send Wake on LAN packets on Mac. If you enter an address, the connection follows your network's routing, including any VPN or tunnel you choose. Your PC, DNS provider and network or VPN services have their own data practices. Glimmer does not send your stream or input to its developer.</p>
+            </section>
+            <section aria-labelledby="device">
+                <h2 id="device">Information on your device</h2>
+                <p>Glimmer saves preferences, PC details and pairing information on your device. It may cache app artwork received from the PC. No Glimmer account is required. The app contains no advertising or analytics service and does not track you across other apps or websites.</p>
+                <p>Optional diagnostic recording saves performance and troubleshooting files on your device. It does not upload them. Production builds default to recording off; development and diagnostic builds can enable it by default. Files can include stream configuration, performance measurements and controller capabilities. Private log fields are redacted in session files, and PC telemetry labels use per-install codes. Check files before sharing them.</p>
+                <p>On iPhone and iPad, live diagnostic metrics are available only on the device. On Mac, diagnostic metrics are available on the Mac by default; a separate opt-in can expose them to your local network.</p>
+            </section>
+            <section aria-labelledby="choices">
+                <h2 id="choices">Your choices</h2>
+                <p>On iPhone and iPad, turn off Record diagnostics in Settings → Diagnostics to stop recording future streams. Existing files remain until local cleanup or removal. Cleanup removes old session logs and limits some performance files when it runs. A controller capability record can remain until app data is removed.</p>
+                <p>Use Settings → PCs → Forget… on iPhone and iPad, or Unpair on Mac, to remove a saved PC and its local trust record. This does not remove the paired-device record on the PC or every cached image. Manage the PC's pairing record in Sunshine.</p>
+                <p>Deleting Glimmer on iPhone or iPad removes its local app container. Removing the Mac app does not automatically remove its saved data or logs. Backups and files you copied elsewhere are managed separately. You can revoke local network access in system Settings.</p>
+            </section>
+            <section aria-labelledby="updates">
+                <h2 id="updates">Mac updates and website visits</h2>
+                <p>The Mac app uses Sparkle to check for updates and download them from GitHub. These requests reach GitHub with connection information such as your IP address. The iPhone and iPad app receives updates through Apple's App Store or TestFlight.</p>
+                <p>This website is served by GitHub Pages. GitHub may log connection information when you visit it. The site has no advertising, analytics scripts or tracking cookies. See <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a> for its practices. Opening a support or privacy link in Glimmer opens your browser and loads this website.</p>
+            </section>
+            <section aria-labelledby="support">
+                <h2 id="support">Beta testing and support</h2>
+                <p>When you use TestFlight, Apple handles testing information and feedback and makes some of it available to the developer. See <a href="https://testflight.apple.com/">Apple's TestFlight information</a> for details.</p>
+                <p>If you email support or choose to share diagnostic files, the Glimmer maintainer receives your message, email address and any files you send to answer your request and investigate the problem. Contact <a href="mailto:glimmer-prerelease@ugfugl.io">glimmer-prerelease@ugfugl.io</a> for privacy questions or to request deletion of information you have sent. Apple and your PC software manage information they retain separately.</p>
+                <p>Do not send pairing files, private keys or PINs.</p>
+            </section>
+        </main>
+        <footer class="footer">
+            <p>Next: <a href="../support/">Get help with Glimmer</a>.</p>
+        </footer>
+    </div>
+</body>
+</html>

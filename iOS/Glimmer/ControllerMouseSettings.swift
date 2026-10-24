@@ -52,9 +52,21 @@ struct GlimmerSettings: View {
 
     var body: some View {
         NavigationStack {
-            List(Page.allCases) { page in
-                NavigationLink { settingsPage(page) } label: {
-                    Label(page.title, systemImage: page.symbol)
+            List {
+                Section {
+                    ForEach(Page.allCases) { page in
+                        NavigationLink { settingsPage(page) } label: {
+                            Label(page.title, systemImage: page.symbol)
+                        }
+                    }
+                }
+                Section {
+                    if let url = URL(string: "https://se7enbrc.github.io/glimmer/support/") {
+                        Link("Support", destination: url)
+                    }
+                    if let url = URL(string: "https://se7enbrc.github.io/glimmer/privacy/") {
+                        Link("Privacy Policy", destination: url)
+                    }
                 }
             }
             .navigationTitle("Settings")
