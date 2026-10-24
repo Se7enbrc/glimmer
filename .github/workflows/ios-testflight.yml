@@ -6,6 +6,12 @@ name: iOS TestFlight
 on:
   workflow_dispatch:
     inputs:
+      flavour:
+        description: Compiled iOS flavour
+        required: true
+        type: choice
+        options: [beta, production]
+        default: production
       expected_sha:
         description:
           Reviewed source commit with green Verify and CodeQL (40 lowercase hex
@@ -36,6 +42,7 @@ concurrency:
 
 env:
   EXPECTED_SHA: ${{ inputs.expected_sha }}
+  IOS_FLAVOUR: ${{ inputs.flavour }}
   IOS_VERSION: ${{ inputs.marketing_version }}
   IOS_BUILD_NUMBER: ${{ inputs.build_number }}
   ARCHIVE_RUN_ID: ${{ inputs.archive_run_id }}

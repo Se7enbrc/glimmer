@@ -9,6 +9,20 @@ Build one verified candidate, test the published artifact, then promote those
 exact files. For installing updates or joining the candidate channel, use
 [Releases and updates](UPDATES.md).
 
+## iPhone and iPad artifacts
+
+Choose the compiled flavour before archiving: `beta` includes local diagnostics;
+`production` excludes them, even when installed through TestFlight. Only a
+production archive may be used as App Store submission source. A beta build
+cannot be promoted unchanged to production.
+
+Follow the [iOS TestFlight process](../iOS/docs/TESTFLIGHT.md). Keep flavour in
+the sealed archive identity and attested receipt, and inspect the executable and
+resources before delivery. The current delivery workflow remains internal-only;
+public submission requires its own reviewed export from the tested production
+archive. Land trusted workflow and script changes on `main` before dispatching;
+land app and shared-engine exclusions on the reviewed feature branch.
+
 ## 1. Prepare the candidate
 
 Choose a numeric CalVer version and a build number above every build in the

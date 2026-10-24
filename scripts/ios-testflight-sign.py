@@ -201,7 +201,10 @@ def export(archive, output, expected):
         if {p.name for p in (inspected / 'Payload').iterdir()} != {'Glimmer.app'}:
             raise ValueError('export contains an unexpected application')
         verify_signed_app(inspected / 'Payload/Glimmer.app', expected, team)
+        importlib.import_module('check-ios-diagnostics').inspect_app(
+            inspected / 'Payload/Glimmer.app', expected['IOS_FLAVOUR'])
         receipt = {'schema': 1, 'identity': expected, 'internal_only': True, 'team': team,
+                   'app_store_source_eligible': artifact.app_store_source_eligible(expected['IOS_FLAVOUR']),
                    'trusted_tooling_sha': os.environ['TRUSTED_TOOLING_SHA'],
                    'signing_run_id': os.environ['GITHUB_RUN_ID'],
                    'signing_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
@@ -219,7 +222,8 @@ def upload(output, expected):
     artifact.require_dispatch()
     receipt = json.loads((output / 'receipt.json').read_text())
     ipa = output / 'Glimmer.ipa'
-    if (receipt.get('identity') != expected or receipt.get('internal_only') is not True
+    if (receipt.get('app_store_source_eligible') != artifact.app_store_source_eligible(expected['IOS_FLAVOUR'])
+            or receipt.get('identity') != expected or receipt.get('internal_only') is not True
             or receipt.get('ipa_sha256') != artifact.digest(ipa)):
         raise ValueError('signed artifact identity mismatch')
     key = os.environ.get('ASC_KEY_ID', '')

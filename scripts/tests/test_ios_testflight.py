@@ -29,7 +29,7 @@ cli = importlib.import_module('ios-testflight')
 ENV = {
     'GITHUB_REPOSITORY': 'Se7enbrc/glimmer', 'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2',
     'EXPECTED_SHA': 'a' * 40, 'TRUSTED_TOOLING_SHA': 'b' * 40, 'GITHUB_SHA': 'b' * 40,
-    'IOS_VERSION': '2026.10.8', 'IOS_BUILD_NUMBER': '3', 'GITHUB_REF': 'refs/heads/main',
+    'IOS_FLAVOUR': 'production', 'IOS_VERSION': '2026.10.8', 'IOS_BUILD_NUMBER': '3', 'GITHUB_REF': 'refs/heads/main',
     'GITHUB_EVENT_NAME': 'workflow_dispatch',
     'GITHUB_WORKFLOW_REF': 'Se7enbrc/glimmer/.github/workflows/ios-testflight.yml@refs/heads/main',
 }
@@ -42,6 +42,10 @@ class TestFlightTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.expected = artifact.identity(ENV)
+        inspector = importlib.import_module('check-ios-diagnostics')
+        inspection = patch.object(inspector, 'inspect_app')
+        inspection.start()
+        self.addCleanup(inspection.stop)
 
     def fixture(self):
         root = self.root / 'Glimmer.xcarchive'
@@ -49,7 +53,7 @@ class TestFlightTests(unittest.TestCase):
         app.mkdir(parents=True)
         info = {'CFBundleIdentifier': artifact.BUNDLE, 'CFBundleExecutable': 'Glimmer',
                 'CFBundleShortVersionString': '2026.10.8', 'CFBundleVersion': '3',
-                'CFBundleSupportedPlatforms': ['iPhoneOS']}
+                'CFBundleSupportedPlatforms': ['iPhoneOS'], 'GlimmerBuildFlavour': 'production'}
         (app / 'Info.plist').write_bytes(plistlib.dumps(info))
         (app / 'Glimmer').write_bytes(b'inert executable fixture')
         (app / 'Glimmer').chmod(0o755)
@@ -65,6 +69,20 @@ class TestFlightTests(unittest.TestCase):
         symbols.mkdir(parents=True)
         (symbols / 'Glimmer').write_bytes(b'inert symbols fixture')
         return root
+
+    def test_flavour_is_required_and_submission_fails_closed(self):
+        for flavour in ('', 'unknown', 'sandbox', None):
+            with self.subTest(flavour=flavour), self.assertRaises(ValueError):
+                artifact.identity({**ENV, 'IOS_FLAVOUR': flavour})
+        self.assertFalse(artifact.app_store_source_eligible('beta'))
+        self.assertTrue(artifact.app_store_source_eligible('production'))
+        with self.assertRaises(KeyError):
+            artifact.identity({key: value for key, value in ENV.items() if key != 'IOS_FLAVOUR'})
+
+    def test_archive_rejects_flavour_mismatch(self):
+        root = self.fixture()
+        with self.assertRaisesRegex(ValueError, 'flavour mismatch'):
+            artifact.validate_archive(root, {**self.expected, 'IOS_FLAVOUR': 'beta'}, check_symbols=False)
 
     def test_apple_version_and_build_inputs(self):
         for build in ('1', '9999', '3.99', '3.99.99'):
@@ -93,14 +111,29 @@ class TestFlightTests(unittest.TestCase):
         (source / 'Glimmer').mkdir(parents=True)
         (source / 'Glimmer/Version.xcconfig').write_text('MARKETING_VERSION = 2026.10.8\n')
         head = subprocess.CompletedProcess([], 0, stdout=ENV['EXPECTED_SHA'])
-        with patch.object(cli.subprocess, 'run', return_value=head) as run, \
-                patch.object(cli, 'toolchain', return_value='Xcode 26.6'), \
-                patch.object(artifact, 'validate_archive'):
-            cli.archive(source, self.root / 'archive', self.expected)
-        command = run.call_args.args[0]
-        self.assertIn('SWIFT_SUPPRESS_WARNINGS=NO', command)
-        self.assertIn('SWIFT_TREAT_WARNINGS_AS_ERRORS=YES', command)
-        self.assertIn('GCC_TREAT_WARNINGS_AS_ERRORS=YES', command)
+        for flavour in ('beta', 'production'):
+            with self.subTest(flavour=flavour), patch.object(cli.subprocess, 'run', return_value=head) as run, \
+                    patch.object(cli, 'toolchain', return_value='Xcode 26.6'), \
+                    patch.object(artifact, 'validate_archive'):
+                cli.archive(source, self.root / 'archive', {**self.expected, 'IOS_FLAVOUR': flavour})
+            command = run.call_args.args[0]
+            self.assertIn('SWIFT_SUPPRESS_WARNINGS=NO', command)
+            self.assertIn('SWIFT_TREAT_WARNINGS_AS_ERRORS=YES', command)
+            self.assertIn('GCC_TREAT_WARNINGS_AS_ERRORS=YES', command)
+            conditions = 'GLIMMER_DIAGNOSTICS' if flavour == 'beta' else ''
+            self.assertIn(f'SWIFT_ACTIVE_COMPILATION_CONDITIONS={conditions}', command)
+            self.assertIn(f'GLIMMER_BUILD_FLAVOUR={flavour}', command)
+
+    def test_delivery_rejects_beta_receipt_for_production_before_credentials(self):
+        (self.root / 'Glimmer.ipa').write_bytes(b'fixture')
+        receipt = {'identity': {**self.expected, 'IOS_FLAVOUR': 'beta'},
+                   'app_store_source_eligible': False, 'internal_only': True,
+                   'ipa_sha256': artifact.digest(self.root / 'Glimmer.ipa')}
+        (self.root / 'receipt.json').write_text(json.dumps(receipt))
+        with patch.object(artifact, 'require_dispatch'), patch.object(signing.subprocess, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'identity mismatch'):
+                signing.upload(self.root, self.expected)
+            run.assert_not_called()
 
     def test_only_main_manual_workflow_can_access_distribution(self):
         artifact.require_dispatch(ENV)

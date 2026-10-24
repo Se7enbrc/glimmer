@@ -1,7 +1,8 @@
 # Test Glimmer through TestFlight
 
-Build an internal iPhone/iPad beta from an exact reviewed commit using CI. The
-Mac release workflow and Sparkle feeds are separate.
+Build an internal iPhone/iPad beta or production candidate from an exact
+reviewed commit using CI. The Mac release workflow and Sparkle feeds are
+separate.
 
 ## First-time setup
 
@@ -65,39 +66,72 @@ device or automatically repair account signing state.
    version. Check App Store Connect before dispatching. A retry after Apple
    accepts an upload must not overwrite or silently reuse that build number.
 4. Dispatch **iOS TestFlight Build** on the candidate branch whose HEAD is that
-   exact SHA, with the version and build number. The builder rejects `main` and
-   the repository's default branch. It checks out only its own workflow commit,
-   so candidate code cannot write caches in the default branch's trust scope.
+   exact SHA, with the version, build number and `flavour` (`beta` or
+   `production`). The builder rejects `main` and the repository's default
+   branch. It checks out only its own workflow commit, so candidate code cannot
+   write caches in the default branch's trust scope.
 5. After that build succeeds, dispatch **iOS TestFlight** from `main`. Provide
-   the same source SHA, version and build number, plus the successful build's
-   workflow run ID as `archive_run_id`. The trusted gate selects that run's
-   exact producing attempt and immutable archive artifact. Review its source
-   identity and verification evidence before approving the protected job.
+   the same source SHA, version, build number and flavour, plus the successful
+   build's workflow run ID as `archive_run_id`. The trusted gate selects that
+   run's exact producing attempt and immutable archive artifact. Review its
+   source identity and verification evidence before approving the protected job.
 6. After Apple processes the upload, review its status and compliance questions,
    then confirm availability in **Internal** (automatic distribution is enabled
    for the initial maintainer group). Enter a short **What to Test** description
    covering the actual changes and known limitations.
 
-The internal-only export must not be used for external testing or App Store
-release. A future public release needs a separate reviewed distribution path.
+Choose `beta` for local diagnostic recording, on by default unless the player
+has turned it off. Choose `production` to test the diagnostics-free App Store
+candidate through TestFlight. Installation through TestFlight never changes the
+compiled flavour. Production ignores saved diagnostic preferences and leaves old
+files untouched, without exposing them.
+
+Only a production archive is eligible as App Store submission source. This
+workflow still exports **internal-only** TestFlight IPAs. Neither flavour's
+internal-only IPA can be submitted to the App Store. Public delivery needs a
+separate reviewed export path from the accepted production archive.
 
 ## What CI must preserve
 
 The candidate-branch workflow builds a Release archive without signing
-credentials or local development compilation flags. The separate main workflow
-does not check out or execute candidate code. Its fresh protected job validates
-the successful build run, workflow, source, repository, producing attempt,
-GitHub artifact digest, manifest and bundle identity before signing/exporting
-and uploading the existing bytes.
+credentials or local development compilation flags. `beta` sets
+`GLIMMER_DIAGNOSTICS` for both the app and shared engine; `production` leaves it
+unset. Unspecified local builds are production. Unknown flavour inputs fail. The
+separate main workflow does not check out or execute candidate code. Its fresh
+protected job validates the successful build run, workflow, source, repository,
+producing attempt, GitHub artifact digest, manifest, compiled flavour and bundle
+identity before signing/exporting and uploading the existing bytes.
 
 Retain the archive, matching dSYMs, source and tooling SHAs, build/version,
-verification evidence, artifact digests and upload result. A successful upload
-means Apple received the build; processing and tester availability are separate
-states. A failed upload or validation must not be recorded as release success.
+verification evidence, artifact digests, compiled flavour and upload result. The
+sealed manifest and attested receipt bind `IOS_FLAVOUR`; bundle metadata and
+binary/resource inspection must agree at archive, import and export. A
+successful upload means Apple received the build; processing and tester
+availability are separate states. A failed upload or validation must not be
+recorded as release success.
 
 Local unsigned archives establish packaging and symbol matching. They do not
 prove Apple Distribution signing, App Store validation or successful processing.
 The first authorized CI run must establish those remaining boundaries.
+
+## Verify both compiled flavours
+
+Run these unsigned Simulator checks at low priority. No PC or physical device is
+used. Repeat with `beta` in place of `production`.
+
+```sh
+nice -n 15 taskpolicy -c utility make ios-test IOS_FLAVOUR=production
+nice -n 15 taskpolicy -c utility make ios-app IOS_FLAVOUR=production CONFIG=Release BUILD_FLAGS='ARCHS=arm64'
+python3 scripts/check-ios-diagnostics.py \
+  iOS/build/production/DerivedData/Build/Products/Release-iphonesimulator/Glimmer.app \
+  --flavour production
+```
+
+The inspection scans defined symbols, executable contents, debug dylibs and
+resources. Production rejects recording, trace, probe and control markers; beta
+must contain the recording components. See the
+[diagnostics audit](../../docs/IOS_DIAGNOSTICS.md) for operational measurements
+that remain and the physical-device acceptance checklist.
 
 ## Privacy and encryption review
 
@@ -108,18 +142,18 @@ of tracking does not remove the required-reason API declaration requirement.
 
 The audited declarations are:
 
-| Category         | Reason             | Use in the shipped app                                              |
-| ---------------- | ------------------ | ------------------------------------------------------------------- |
-| User defaults    | `CA92.1`           | Private preferences, saved PCs and audio seeds                      |
-| System boot time | `35F9.1`, `8FFB.1` | Elapsed input/session timing and receive-event timestamps           |
-| File timestamps  | `C617.1`           | Sandbox cache eviction, diagnostic retention and identity/pin files |
+| Category         | Reason             | Use in the shipped app                                                |
+| ---------------- | ------------------ | --------------------------------------------------------------------- |
+| User defaults    | `CA92.1`           | Private preferences, saved PCs and audio seeds                        |
+| System boot time | `35F9.1`, `8FFB.1` | Elapsed input/session timing and receive-event timestamps             |
+| File timestamps  | `C617.1`           | Sandbox cache eviction, identity/pin files; beta diagnostic retention |
 
 The app-level resource covers the same-developer, statically linked engine.
 There are no external Swift package dependencies. This does not establish
-manifest packaging for a future independently distributed SDK. Diagnostics are
-local files and loopback metrics; no analytics or developer upload endpoint is
-present. Confirm actual support/data-handling practices when completing
-account-side privacy answers.
+manifest packaging for a future independently distributed SDK. Beta diagnostics
+are local files and loopback metrics; production has no diagnostic recording or
+listener; no analytics or developer upload endpoint is present. Confirm actual
+support/data-handling practices when completing account-side privacy answers.
 
 Encryption answers must match the shipped pairing and transport implementation.
 Do not set `ITSAppUsesNonExemptEncryption` to false merely to suppress an App
