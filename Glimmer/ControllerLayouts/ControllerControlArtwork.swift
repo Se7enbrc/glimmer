@@ -23,7 +23,6 @@ struct ControllerControlArtwork: View {
         } else {
             let shape = ControllerButtonShape(family: family, placement: placement, source: control.id)
             shape.fill(LinearGradient(colors: tones, startPoint: .topLeading, endPoint: .bottomTrailing))
-                .overlay { shape.stroke(dark ? .white.opacity(0.18) : .black.opacity(0.25), lineWidth: scale) }
                 .overlay { if !shape.isPaddle { glyph } }
                 .frame(width: placement.width * scale, height: placement.height * scale)
         }
@@ -36,10 +35,26 @@ struct ControllerControlArtwork: View {
         return dark ? [Color(white: 0.23), Color(white: 0.09)] : [Color(white: 0.96), Color(white: 0.73)]
     }
 
+    private var legendColor: Color {
+        if family == .xbox {
+            let colors: [ControllerLayoutSource: Color] = [
+                .button(.a): .green, .button(.b): .red, .button(.x): .cyan, .button(.y): .yellow
+            ]
+            if let color = colors[control.id] { return color }
+        }
+        if family == .dualShock {
+            let colors: [ControllerLayoutSource: Color] = [
+                .button(.a): .cyan, .button(.b): .pink, .button(.x): .pink, .button(.y): .mint
+            ]
+            if let color = colors[control.id] { return color }
+        }
+        return dark ? Color(white: 0.83) : Color(white: 0.29)
+    }
+
     private var glyph: some View {
         Image(systemName: family.symbol(for: control))
             .resizable().scaledToFit()
-            .foregroundStyle(dark ? Color(white: 0.83) : Color(white: 0.29))
+            .foregroundStyle(legendColor)
             .frame(width: min(placement.width - 6, isFace ? 20 : 25) * scale,
                    height: min(placement.height - 6, isFace ? 20 : 15) * scale)
     }

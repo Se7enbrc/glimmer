@@ -27,13 +27,17 @@ enum ControllerDiagramFamily: String, CaseIterable {
         guard control.symbol == control.id.layoutSymbol else { return control.symbol }
         let playStation: [ControllerLayoutSource: String] = [
             .button(.a): "xmark", .button(.b): "circle", .button(.x): "square", .button(.y): "triangle",
-            .button(.home): "playstation.logo"]
+            .button(.home): "playstation.logo", .button(.menu): "line.3.horizontal",
+            .button(.options): "line.3.horizontal.decrease", .button(.share): "mic.slash"]
         let xbox: [ControllerLayoutSource: String] = [
             .button(.home): "xbox.logo", .trigger(.left): "lt.button.roundedtop.horizontal",
             .trigger(.right): "rt.button.roundedtop.horizontal", .button(.leftShoulder): "lb.button.roundedbottom.horizontal",
             .button(.rightShoulder): "rb.button.roundedbottom.horizontal"]
-        if self == .backbonePlayStation, control.id != .button(.home) {
-            return playStation[control.id] ?? control.symbol
+        if isBackbone {
+            let buttons: [ControllerLayoutSource: String] = [.button(.options): "ellipsis",
+                .button(.menu): "line.3.horizontal", .button(.share): "viewfinder", .button(.home): "house"]
+            if let symbol = buttons[control.id] { return symbol }
+            return self == .backbonePlayStation ? playStation[control.id] ?? control.symbol : control.symbol
         }
         if isPlayStation { return playStation[control.id] ?? control.symbol }
         if isXbox { return xbox[control.id] ?? control.symbol }

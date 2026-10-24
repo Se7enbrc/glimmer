@@ -121,6 +121,12 @@ struct ControllerDiagramTests {
         let cross = ControllerLayoutControl(id: .button(.a), name: "Cross", symbol: ControllerMappedButton.a.layoutSymbol)
         #expect(family.darkShell == false)
         #expect(family.symbol(for: cross) == "xmark")
+        for edition in [family, .backbone] {
+            let capture = ControllerLayoutControl(id: .button(.share), name: "Capture", symbol: "square.and.arrow.up")
+            let options = ControllerLayoutControl(id: .button(.options), name: "Options", symbol: "rectangle.on.rectangle.circle")
+            #expect(edition.symbol(for: capture) == "viewfinder")
+            #expect(edition.symbol(for: options) == "ellipsis")
+        }
         #expect(family.leftStick == ControllerDiagramFamily.backbone.leftStick)
         #expect(family.rightStick == ControllerDiagramFamily.backbone.rightStick)
         #expect(ControllerDiagramFamily.identify(category: "MFi", name: "Backbone One", controls: []) == .backbone)
