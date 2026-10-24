@@ -28,10 +28,11 @@ draft. Both return to the menu so you can choose when to resume. Reset layout
 affects only this app and layout size. Forgetting the PC also removes its
 layouts.
 
-The controls use fixed translucent fills over video. They do not animate or poll
-while idle. Increase Contrast and Reduce Transparency change their native
-appearance. VoiceOver offers Hold and Release, stick directions and Center, and
-adjustable trigger values. The editor supports Dynamic Type and arrow-key moves.
+The controls follow Light and Dark appearance with translucent fills over video.
+They do not animate or poll while idle. Increase Contrast and Reduce
+Transparency change their native appearance. VoiceOver offers Hold and Release,
+stick directions and Center, and adjustable trigger values. The editor supports
+Dynamic Type and arrow-key moves.
 
 ## Controller mouse mode
 

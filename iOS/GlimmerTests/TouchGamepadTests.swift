@@ -10,6 +10,98 @@ import UIKit
 
 @MainActor
 struct TouchGamepadTests {
+    @Test func lightButtonsUseLightSurfacesAndDarkTitles() throws {
+        let button = TouchButton(.a)
+        button.overrideUserInterfaceStyle = .light
+        button.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
+        button.layoutIfNeeded()
+        let fill = try #require(button.backgroundColor)
+        let title = try #require(button.titleColor(for: .normal))
+        var red: CGFloat = 0
+        #expect(fill.getRed(&red, green: nil, blue: nil, alpha: nil))
+        #expect(red > 0.8)
+        #expect(title.getRed(&red, green: nil, blue: nil, alpha: nil))
+        #expect(red < 0.2)
+    }
+
+    @Test(arguments: [false, true])
+    func lightGlyphsKeepTextContrastOverBrightAndDarkVideo(pressed: Bool) throws {
+        for contrast in [false, true] {
+            for opaque in [false, true] {
+                let colors = TouchAppearance.colors(style: .light, contrast: contrast, opaque: opaque, pressed: pressed)
+                for background in [SIMD3<Double>(repeating: 0), SIMD3<Double>(repeating: 1)] {
+                    let surface = try composite(colors.fill, over: background)
+                    let thumb = try composite(colors.thumb, over: surface)
+                    for base in [surface, thumb] {
+                        let glyph = try composite(colors.glyph, over: base)
+                        #expect((luminance(base) + 0.05) / (luminance(glyph) + 0.05) >= 4.5)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func darkPaletteRetainsItsExistingColors(pressed: Bool) {
+        let colors = TouchAppearance.colors(style: .dark, contrast: false, opaque: false, pressed: pressed)
+        #expect(colors.fill == UIColor.black.withAlphaComponent(pressed ? 0.65 : 0.26))
+        #expect(colors.glyph == UIColor.white.withAlphaComponent(0.85))
+        #expect(colors.border == UIColor.white.withAlphaComponent(0.38))
+        #expect(colors.thumb == UIColor.white.withAlphaComponent(0.24))
+    }
+
+    @Test func appearanceChangesPreserveHeldInputAndHitFrames() async throws {
+        let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
+        var submissions = 0
+        let capture = TouchGamepadCapture(calls: .init(register: connection.input.registerController,
+            unregister: connection.input.unregisterController, submit: { _, _, _ in submissions += 1 }))
+        #expect(capture.attach())
+        capture.setEnabled(true)
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.overrideUserInterfaceStyle = .light
+        let owner = UIViewController()
+        window.rootViewController = owner
+        let view = TouchGamepadView(frame: CGRect(x: 0, y: 0, width: 844, height: 390))
+        owner.view.addSubview(view)
+        window.isHidden = false
+        defer { window.isHidden = true }
+        view.configure(capture: capture, layout: TouchLayout(), area: view.bounds.insetBy(dx: 24, dy: 12))
+        view.layoutIfNeeded()
+        let button = try #require(view.controls[.a] as? TouchButton)
+        let hold = try #require(button.accessibilityCustomActions?.first)
+        #expect(hold.actionHandler?(hold) == true)
+        let frames = view.controls.mapValues(\.frame)
+        let sent = submissions
+        window.overrideUserInterfaceStyle = .dark
+        window.layoutIfNeeded()
+        #expect(view.controls.mapValues(\.frame) == frames)
+        #expect(submissions == sent && capture.enabled && button.isHighlighted)
+        #expect(button.backgroundColor == UIColor.black.withAlphaComponent(0.65))
+        window.overrideUserInterfaceStyle = .light
+        window.layoutIfNeeded()
+        #expect(view.controls.mapValues(\.frame) == frames && submissions == sent)
+        var red: CGFloat = 0
+        #expect(button.titleColor(for: .normal)?.getRed(&red, green: nil, blue: nil, alpha: nil) == true)
+        #expect(red < 0.2)
+        capture.detach()
+        await connection.stop()
+    }
+
+    private func composite(_ color: UIColor, over background: SIMD3<Double>) throws -> SIMD3<Double> {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        try #require(color.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+        return SIMD3(Double(red), Double(green), Double(blue)) * Double(alpha) + background * (1 - Double(alpha))
+    }
+
+    private func luminance(_ color: SIMD3<Double>) -> Double {
+        let channels = [color.x, color.y, color.z].map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+        return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+    }
+
     @Test func nativeActivationAndAccessibilityReleaseTheirContacts() async throws {
         let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
         var samples: [ControllerInputSample] = []

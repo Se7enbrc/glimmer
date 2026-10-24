@@ -449,7 +449,7 @@ struct NativeUIRenderTests {
         #expect(host.view.bounds.size == expectedSize)
         if host is StreamViewController {
             #expect(host.children.allSatisfy { $0.view.bounds.size == expectedSize })
-            #expect(host.children.allSatisfy { $0.traitCollection.userInterfaceStyle == .dark })
+            #expect(host.children.allSatisfy { $0.traitCollection.userInterfaceStyle == (dark ? .dark : .light) })
         }
         if portrait, scene.traitCollection.userInterfaceIdiom != .pad {
             #expect(scene.effectiveGeometry.interfaceOrientation == .portrait)

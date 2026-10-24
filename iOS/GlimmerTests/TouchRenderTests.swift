@@ -43,7 +43,7 @@ struct TouchRenderTests {
                         TouchLayoutEditor(launch: testLaunch(), area: area, close: {})
                     }
                 }
-                try await record(view.preferredColorScheme(.dark), name: "\(name)-\(state)",
+                try await record(view, name: "\(name)-\(state)",
                                  size: viewport.size, dark: dark)
             }
         }
@@ -100,7 +100,7 @@ struct TouchRenderTests {
             if state == "override" { model.toggleTouchControls(); model.resumeInput() }
             let view = ZStack {
                 TouchSampleFrame()
-                StreamControls(model: model, close: {}).environment(\.colorScheme, .dark)
+                StreamControls(model: model, close: {})
             }
             let size = viewport.fold ? CGSize(width: viewport.size.width, height: 395) : viewport.size
             try await record(view, name: "override-\(viewport.name)-\(dark ? "dark" : "light")-\(state)",
@@ -109,6 +109,27 @@ struct TouchRenderTests {
         model.stop()
         await model.waitUntilStopped()
         await connection.stop()
+    }
+
+    @Test(arguments: viewports, [false, true])
+    func appearanceOverBrightAndDarkFrames(viewport: Viewport, dark: Bool) async throws {
+        let size = viewport.fold ? CGSize(width: viewport.size.width, height: 395) : viewport.size
+        let area = CGRect(origin: .zero, size: size).insetBy(dx: 24, dy: 12)
+        for bright in [false, true] {
+            for editing in [false, true] {
+                let content = ZStack {
+                    TouchSampleFrame(exposure: bright ? 0.9 : -0.75)
+                    if editing {
+                        TouchLayoutEditor(launch: testLaunch(), area: area, close: {})
+                    } else {
+                        TouchPlayControls(layout: TouchLayout(), area: area, preview: true, showControls: {})
+                    }
+                }
+                let name = "appearance-\(viewport.name)-\(dark ? "dark" : "light")"
+                    + "-\(bright ? "bright" : "dim")-\(editing ? "editor" : "play")"
+                try await record(content, name: name, size: size, dark: dark)
+            }
+        }
     }
 
     private func record(_ content: some View, name: String, size: CGSize, dark: Bool) async throws {
@@ -160,6 +181,8 @@ private final class TouchViewportController: UIViewController {
 }
 
 struct TouchSampleFrame: View {
+    var exposure: Double = 0
+
     var body: some View {
         Canvas { context, size in
             context.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(
@@ -179,11 +202,14 @@ struct TouchSampleFrame: View {
                     ? Color(red: 0.36, green: 0.49, blue: 0.48) : Color(red: 0.16, green: 0.32, blue: 0.30)))
             }
         }
+        .overlay(exposure > 0 ? Color.white.opacity(exposure) : Color.black.opacity(-exposure))
         .overlay(alignment: .top) {
-            Text("ALPINE RUN").font(.caption).tracking(3).foregroundStyle(.white).padding(.top, 28)
+            Text("ALPINE RUN").font(.caption).tracking(3)
+                .foregroundStyle(exposure > 0 ? .black : .white).padding(.top, 28)
         }
         .overlay(alignment: .bottomLeading) {
-            Text("Illustrative sample frame").font(.caption2).foregroundStyle(.white.opacity(0.7)).padding(8)
+            Text("Illustrative sample frame").font(.caption2)
+                .foregroundStyle((exposure > 0 ? Color.black : .white).opacity(0.7)).padding(8)
         }
         .accessibilityHidden(true)
     }

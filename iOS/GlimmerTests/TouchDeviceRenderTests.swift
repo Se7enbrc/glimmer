@@ -52,7 +52,9 @@ struct TouchDeviceRenderTests {
         model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
         var playingFrames: [TouchElement: CGRect]?
         for state in ["before", "after", "editor", "physical", "show-menu", "override",
-                      "hide-menu", "hidden", "disconnected", "mouse"] {
+                      "hide-menu", "hidden", "disconnected", "bright", "dim", "mouse"] {
+            sample.rootView = TouchSampleFrame(exposure: state == "bright" ? 0.9 : state == "dim" ? -0.75 : 0)
+                .ignoresSafeArea()
             transition(state, model: model, capture: capture, presence: presence)
             model.editingTouchControls = state == "editor"
             for child in host.children where child !== sample { child.view.isHidden = state == "before" }
@@ -64,7 +66,7 @@ struct TouchDeviceRenderTests {
             try await Task.sleep(for: .milliseconds(250))
             #expect(window.bounds.width > window.bounds.height)
             if state == "physical" || state == "hidden" { verifyMouseOnly(host) }
-            if state == "after" { playingFrames = touchView(in: host.view)?.controls.mapValues(\.frame) }
+            if state == "after" { playingFrames = try verifyAppearance(host, dark: dark) }
             if state == "mouse" {
                 let frames = try #require(touchView(in: host.view)?.controls.mapValues(\.frame))
                 #expect(playingFrames == frames)
@@ -75,6 +77,16 @@ struct TouchDeviceRenderTests {
         model.stop()
         await model.waitUntilStopped()
         await connection.stop()
+    }
+
+    private func verifyAppearance(_ host: StreamViewController, dark: Bool) throws -> [TouchElement: CGRect] {
+        let view = try #require(touchView(in: host.view))
+        #expect(view.traitCollection.userInterfaceStyle == (dark ? .dark : .light))
+        let button = try #require(view.controls[.a] as? UIButton)
+        var red: CGFloat = 0
+        #expect(button.titleColor(for: .normal)?.getRed(&red, green: nil, blue: nil, alpha: nil) == true)
+        #expect(dark ? red > 0.8 : red < 0.2)
+        return view.controls.mapValues(\.frame)
     }
 
     private func verifyMouseOnly(_ host: StreamViewController) {

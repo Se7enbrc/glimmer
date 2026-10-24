@@ -46,12 +46,12 @@ final class TouchAxisControl: UIControl {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        TouchAppearance.apply(to: self, pressed: value != .zero)
+        let colors = TouchAppearance.apply(to: self, pressed: value != .zero)
         let diameter = bounds.width * 0.44
         thumb.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
         thumb.center = CGPoint(x: bounds.midX + value.x * bounds.width * 0.3,
                                y: bounds.midY - value.y * bounds.height * 0.3)
-        thumb.backgroundColor = UIColor.white.withAlphaComponent(0.24)
+        thumb.backgroundColor = colors.thumb
         thumb.layer.cornerRadius = diameter / 2
         thumb.layer.borderWidth = 1
         thumb.layer.borderColor = tintColor.cgColor

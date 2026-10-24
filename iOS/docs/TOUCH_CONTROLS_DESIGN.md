@@ -211,19 +211,25 @@ layouts. Do not auto-create records for every game launch.
 ## Appearance, accessibility and haptics
 
 During play, use static translucent system neutral fills, semantic labels and a
-fine contrasting edge. Starting visual values are 26% dark or 34% light fill,
-with labels at about 85%; increase contrast for the accessibility preference.
-These are design tokens, not user settings. Pressed controls become more opaque
-immediately. Avoid live background blur, refraction and shadows over moving
-video. Use native material only in the editor/stream menu. No scene luminance
-sampling, timed fade, idle animation, haptic keepalive or display link.
+contrasting edge. Light appearance uses an 82% system background fill, dark
+labels at 90%, and a dark 45% edge. Pressed and Increase Contrast light fills
+rise to 94%; Reduce Transparency makes the fill opaque. The dark palette keeps
+its existing 26% fill, 65% pressed fill and white glyphs. These are design
+tokens, not user settings.
 
-The fixture shows light and dark alternatives over the same illustrative frame.
-The existing stream menu is deliberately dark. Recommended play chrome also
-stays dark in both system appearances, with accessibility contrast overrides;
-keep the menu policy. Light chrome is an explicit review alternative. The
-comparison boards evaluate the alternative, not an unapproved appearance change
-to the rest of the app.
+The stream follows system appearance. Light controls look light over bright and
+dark game frames; dark controls retain their existing appearance. The ellipsis
+keeps its existing frame and position while adopting the same palette. The
+editor and stream menu use the system's materials in the current appearance.
+This approved refinement replaces the original always-dark recommendation.
+
+The light pause/status surface uses regular system material behind its text. It
+is absent during gameplay; the dark pause surface retains its existing style.
+
+Avoid live background blur, refraction and shadows during play. No scene
+luminance sampling, timed fade, idle animation, haptic keepalive or display
+link. Appearance changes update colors once through native trait notifications
+and preserve input ownership, layout and hit frames.
 
 Editor text uses system text styles, Dynamic Type and scrollable native
 presentation when space is tight. Gameplay glyphs identify stable controls;

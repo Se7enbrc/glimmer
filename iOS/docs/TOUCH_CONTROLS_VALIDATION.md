@@ -38,7 +38,7 @@ renderer remain excluded.
 ## Correctness and build
 
 The Simulator warning-as-error build succeeds with Swift 6 strict concurrency.
-The final override correctness run passes 157 tests in 18 suites, including
+The final appearance correctness run passes 161 tests in 18 suites, including
 ownership, timestamps, unchanged-sample suppression, stale generations, physical
 admission ordering, focus rearming, native accessibility activation/release,
 geometry, persistence and session behavior. Eleven existing native UI tests also
@@ -132,8 +132,10 @@ iPad mini/large/resized and Duo outer/inner/partial-fold geometry, including
 editing and largest accessibility text. Increase Contrast captures pass on the
 small phone; the Simulator preference was restored afterward. The before image
 is the same original illustrative frame without the overlay, not an old
-executable or a PC game. Play chrome stays dark in both system appearances as
-approved. No screenshots are cropped or retouched.
+executable or a PC game. Play chrome now follows system appearance: light
+surfaces with dark glyphs in Light, and the existing dark palette in Dark. The
+appearance follow-up boards are in `shots-48/phase2/light/`. No screenshots are
+cropped or retouched.
 
 The iPad runtime rejects programmatic orientation changes in its current
 windowing mode. Both actual-iPad capture runs fail with that system error;
@@ -147,6 +149,33 @@ Real thumb reach, haptic feel, VoiceOver/Switch Control interaction, physical
 keyboard navigation, Reduce Transparency/Reduce Motion behavior, physical
 touch-to-photon latency and sustained iOS watts remain unverified under
 Simulator-only work. These are explicit acceptance gaps.
+
+## Light appearance refinement
+
+The stream host no longer pins dark appearance. Gameplay uses static colors
+resolved from system background, label and fill colors. The ellipsis shares the
+palette and retains its exact layout code. Native materials in the editor and
+stream menu follow the current appearance. A regular system material backs the
+light pause/status surface so dark text stays readable over the game; it is
+absent during gameplay. Gameplay adds no backdrop blur.
+
+Tests check light glyph contrast of at least 4.5:1 over composited pure black
+and white frames, including stick thumbs, pressed controls, Increase Contrast
+and Reduce Transparency. They also preserve the dark palette's existing color
+values and check that a live appearance change retains held input and all hit
+frames without sending input. The final scene captures assert the actual native
+control traits and title colors, not just the fixture's requested theme.
+
+All six dark gameplay captures, covering small iPhone, Max and Duo primary
+display in both landscape orientations, are byte-identical to the preceding
+override captures. Nineteen comparison boards include gameplay, editing and the
+per-session controller override menu in both appearances.
+
+Bright and dim sample frames are native fixture illustrations. They are not PC
+footage, HDR measurements or proof of every game's legibility. No product
+strings are added. The input submission path, frame geometry and previous
+latency/idle measurements are unchanged; no new timing or sustained-energy claim
+is made.
 
 ## Integration ownership
 

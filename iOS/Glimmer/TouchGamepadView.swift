@@ -23,7 +23,9 @@ class TouchGamepadView: UIView {
             controls[element] = control
             addSubview(control)
         }
-        registerForTraitChanges([UITraitAccessibilityContrast.self]) { (view: TouchGamepadView, _: UITraitCollection) in
+        registerForTraitChanges(
+            [UITraitAccessibilityContrast.self, UITraitUserInterfaceStyle.self]
+        ) { (view: TouchGamepadView, _: UITraitCollection) in
             for control in view.controls.values { control.setNeedsLayout() }
         }
         transparencyObserver = NotificationCenter.default.addObserver(

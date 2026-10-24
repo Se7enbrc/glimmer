@@ -60,13 +60,41 @@ final class TouchTracking {
 
 @MainActor
 enum TouchAppearance {
-    static func apply(to control: UIControl, pressed: Bool = false) {
-        let opaque = UIAccessibility.isReduceTransparencyEnabled
+    struct Colors {
+        let fill: UIColor
+        let glyph: UIColor
+        let border: UIColor
+        let thumb: UIColor
+    }
+
+    static func colors(style: UIUserInterfaceStyle, contrast: Bool, opaque: Bool, pressed: Bool) -> Colors {
+        if style == .dark {
+            return Colors(fill: .black.withAlphaComponent(opaque ? 1 : (pressed ? 0.65 : 0.26)),
+                          glyph: .white.withAlphaComponent(contrast ? 1 : 0.85),
+                          border: .white.withAlphaComponent(contrast ? 1 : 0.38),
+                          thumb: .white.withAlphaComponent(0.24))
+        }
+        let traits = UITraitCollection(userInterfaceStyle: .light)
+        let foreground = UIColor.label.resolvedColor(with: traits)
+        // Static system fills preserve contrast over video without a live backdrop effect.
+        return Colors(fill: UIColor.systemBackground.resolvedColor(with: traits)
+                        .withAlphaComponent(opaque ? 1 : (pressed || contrast ? 0.94 : 0.82)),
+                      glyph: foreground.withAlphaComponent(contrast ? 1 : 0.90),
+                      border: foreground.withAlphaComponent(contrast ? 1 : 0.45),
+                      thumb: UIColor.systemFill.resolvedColor(with: traits))
+    }
+
+    @discardableResult static func apply(to control: UIControl, pressed: Bool = false) -> Colors {
         let contrast = control.traitCollection.accessibilityContrast == .high
-        control.backgroundColor = UIColor.black.withAlphaComponent(opaque ? 1 : (pressed ? 0.65 : 0.26))
-        control.layer.borderColor = UIColor.white.withAlphaComponent(contrast ? 1 : 0.38).cgColor
+        let dark = control.traitCollection.userInterfaceStyle == .dark
+        let colors = colors(style: control.traitCollection.userInterfaceStyle, contrast: contrast,
+                            opaque: UIAccessibility.isReduceTransparencyEnabled, pressed: pressed)
+        control.backgroundColor = colors.fill
+        control.layer.borderColor = colors.border.cgColor
         control.layer.borderWidth = contrast ? 2 : 1
-        control.tintColor = UIColor.white.withAlphaComponent(contrast ? 1 : 0.85)
+        control.tintColor = colors.glyph
+        (control as? UIButton)?.setTitleColor(dark ? .white : colors.glyph, for: .normal)
         control.layer.cornerRadius = min(control.bounds.width, control.bounds.height) / 2
+        return colors
     }
 }

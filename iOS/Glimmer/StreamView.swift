@@ -62,7 +62,6 @@ final class StreamViewController: GCEventViewController {
             guard let self else { return }
             outputs.end(self)
         }
-        overlay.overrideUserInterfaceStyle = .dark
         addChild(overlay)
         overlay.view.backgroundColor = .clear
         view.addSubview(overlay.view)
@@ -170,6 +169,7 @@ struct StreamControls: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var confirmingQuit = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
@@ -177,7 +177,6 @@ struct StreamControls: View {
             TouchOverlay(model: model)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .preferredColorScheme(.dark)
         .overlay(alignment: model.touchControlsVisible ? .center : .bottom) {
             if model.inputFocused { notices.offset(y: model.touchControlsVisible ? -24 : 0) }
         }
@@ -239,6 +238,13 @@ struct StreamControls: View {
             }
         }
         .safeAreaInset(edge: .bottom) { if !model.inputFocused { notices } }
+        .background {
+            if colorScheme == .light, !model.editingTouchControls,
+               model.controlsVisible || model.phase != .streaming
+                || (!model.controllerConnected && !model.touchGeometryUsable) {
+                Rectangle().fill(.regularMaterial).ignoresSafeArea()
+            }
+        }
     }
 
     private var notices: some View {

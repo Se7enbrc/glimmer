@@ -81,14 +81,18 @@ private struct TouchControlsButton: View {
 }
 
 private struct TouchMenuStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
     func makeBody(configuration: Configuration) -> some View {
+        let colors = TouchAppearance.colors(style: colorScheme == .dark ? .dark : .light,
+                                           contrast: contrast == .increased, opaque: reduceTransparency,
+                                           pressed: configuration.isPressed)
         configuration.label.frame(width: 44, height: 44).contentShape(.rect)
-            .foregroundStyle(.white.opacity(contrast == .increased ? 1 : 0.85))
-            .background(.black.opacity(reduceTransparency ? 1 : configuration.isPressed ? 0.65 : 0.26), in: .circle)
-            .overlay { Circle().stroke(.white.opacity(contrast == .increased ? 1 : 0.38), lineWidth: 1) }
+            .foregroundStyle(Color(uiColor: colors.glyph))
+            .background(Color(uiColor: colors.fill), in: .circle)
+            .overlay { Circle().stroke(Color(uiColor: colors.border), lineWidth: 1) }
     }
 }
 
