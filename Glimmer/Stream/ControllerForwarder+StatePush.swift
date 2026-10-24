@@ -52,6 +52,11 @@ extension InputForwarder {
     private func pushControllerState(pad: GCExtendedGamepad, slot: UInt8) -> Bool {
         guard forwardsControllerEvents else { return false }
         publishInputSnapshot()
+        if let controller = pad.controller, let sample = controllerLayouts?.sample(for: controller, slot: slot) {
+            let result = inputCore.receive(slot: slot, buttons: Int32(bitPattern: sample.game.buttons),
+                analog: sample.game.gamepadAnalog, extras: sample.physical.extras, physicalSample: sample.physical)
+            return result == .forwarded || result == .mouse
+        }
         let buttons = pressedButtonFlags(pad: pad)
         let result = inputCore.receive(slot: slot, buttons: buttons, analog: Self.controllerAnalog(pad),
                                        chordButtons: Self.controllerChordButtons(pad, buttons: buttons))

@@ -264,6 +264,10 @@ struct ShortcutsPane: View {
 
             NintendoLayoutSettings(isConnected: nintendoPresence.isConnected)
 
+            Section("Controllers") {
+                NavigationLink("Controller layouts") { ControllerLayoutsView() }
+            }
+
             Section("macOS keys") {
                 Toggle(isOn: $model.captureSysKeys) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -302,7 +306,10 @@ struct ShortcutsPane: View {
         .formStyle(.grouped)
         .animation(Motion.layout(reduceMotion: reduceMotion), value: model.controllerConnected)
         .animation(Motion.layout(reduceMotion: reduceMotion), value: model.rawHIDControllerEnabled)
-        .onAppear { nintendoPresence.start() }
+        .onAppear {
+            nintendoPresence.start()
+            ControllerLayoutsModel.shared.games = model.controllerLayoutGames()
+        }
         .onDisappear { nintendoPresence.stop() }
         .sheet(isPresented: $showChordCapture) {
             ChordCaptureSheet().environment(model)

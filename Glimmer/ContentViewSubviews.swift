@@ -175,6 +175,7 @@ struct AppIconsRow: View {
         .accessibilityLabel(app.name)
         .accessibilityValue(state.spoken.value.isEmpty && isRunning(app) ? "Running" : state.spoken.value)
         .accessibilityHint(model.readinessReason(for: host) ?? state.spoken.hint)
+        .modifier(ControllerLayoutAppMenu(host: host, app: app))
     }
 
     private func activate(_ app: LibraryApp) {

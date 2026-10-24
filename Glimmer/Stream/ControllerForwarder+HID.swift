@@ -41,11 +41,18 @@ extension InputForwarder {
             inputCore.receiveHID(slot: slot, token: token, buttons: buttons, analog: analog, capturedAt: timestamp)
         }
         HIDGamepadManager.shared.register(slot: slot, pad: pad)
+        if let state = attachedHIDControllers[pad.id] { controllerLayouts?.installHID(state) }
         if isReady { pushHID(pad) }
     }
 
     func pushHID(_ pad: HIDGamepadDevice) {
         guard let attached = attachedHIDControllers[pad.id] else { return }
+        if inputCore.withLock({ inputCore.layouts?.states[Int(attached.slot)] != nil }) {
+            let sample = pad.capture.layoutSample(indexes: pad.layoutExtras.map(\.index))
+            inputCore.receive(slot: attached.slot, buttons: Int32(bitPattern: sample.buttons),
+                              analog: sample.gamepadAnalog, extras: sample.extras)
+            return
+        }
         pushHID(slot: attached.slot, state: pad.state) { [weak pad] in
             pad?.state
         }
@@ -61,6 +68,7 @@ extension InputForwarder {
     }
 
     func detachHID(_ pad: HIDGamepadDevice, sendFinal: Bool = true) {
+        controllerLayouts?.releaseHID(pad.id)
         guard let attached = attachedHIDControllers.removeValue(forKey: pad.id) else { return }
         inputCore.withLock {
             inputCore.hidRegistrations[attached.slot] = nil

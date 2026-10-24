@@ -152,7 +152,11 @@ struct GlimmerApp: App {
             CommandGroup(after: .appSettings) {
                 Button("Install Command Line Tool…") { CommandLineToolInstaller.install() }
             }
-            CommandMenu("Stream") { StreamMenu(model: model) }
+            CommandMenu("Stream") {
+                StreamMenu(model: model)
+                Button("Controller layout…") { MacControllerLayouts.active?.showControls() }
+                    .disabled(!model.isStreaming)
+            }
         }
 
         Settings {

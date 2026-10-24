@@ -270,6 +270,7 @@ extension InputForwarder {
     }
 
     func detach(gamepad: GCController) {
+        controllerLayouts?.release(gamepad)
         guard let state = attachedControllers.removeValue(forKey: ObjectIdentifier(gamepad)) else { return }
         inputCore.removeController(id: ObjectIdentifier(gamepad))
         gamepad.extendedGamepad?.valueChangedHandler = nil
@@ -335,6 +336,8 @@ extension InputForwarder {
     /// .stop() runs this after stopConnection(), so there is no live
     /// connection to tell.
     func releaseAttachedControllers() {
+        controllerLayouts?.stop()
+        controllerLayouts = nil
         // A pad connecting while stop waits on the PC must not retake the HID
         // retain and haptics, motion, or battery slots this walk releases.
         removeGamepadObservers()
@@ -473,7 +476,8 @@ extension InputForwarder {
     /// Reassert ownership of GameController state and raw-HID centre-button updates.
     /// The chord recorder polls independently and leaves these handlers alone.
     func installInputHandlers(for state: AttachedController) {
-        guard let gamepad = state.controller else { return }
+        guard !ControllerLayoutEditing.active, let gamepad = state.controller else { return }
+        controllerLayouts?.release(gamepad)
         let slot = state.slot
         let routesHID = state.retainedHID
         publishInputSnapshot()
@@ -516,6 +520,7 @@ extension InputForwarder {
                 inputCore.receiveCenterButtons(device: device, capturedAt: capturedAt)
             }
         }
+        controllerLayouts?.install(state)
     }
 
     // MARK: - Focus resync
@@ -526,6 +531,7 @@ extension InputForwarder {
     /// that used to live here moved to ControllerBattery.swift, with the
     /// host-facing battery uplink.)
     func resyncControllers() {
+        guard !ControllerLayoutEditing.active else { return }
         controllerOwnershipSuspended = false
         publishInputSnapshot()
         guard forwardsControllerEvents else { return }

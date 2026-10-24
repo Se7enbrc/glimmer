@@ -17,6 +17,13 @@ final class HIDGamepadCapture: @unchecked Sendable {
     private var handlerEntry: UInt64 = 0
     private var reading = false
     private var handler: (@Sendable (Int32, GamepadAnalog, TimeInterval) -> Void)?
+    private var layoutHandler: LayoutHandler?
+
+    private struct LayoutHandler: Sendable {
+        let id = UUID()
+        let indexes: [Int]
+        let receive: @Sendable (ControllerMappingSample, TimeInterval) -> Void
+    }
 
     init(readings: HIDGamepadReadings, mapping: HIDGamepadMapping,
          scheduleDrain: @escaping @Sendable (@escaping @Sendable () -> Void) -> Void = {
@@ -32,6 +39,37 @@ final class HIDGamepadCapture: @unchecked Sendable {
 
     func setHandler(_ handler: (@Sendable (Int32, GamepadAnalog, TimeInterval) -> Void)?) {
         lock.withLock { self.handler = handler }
+    }
+
+    func layoutSample(indexes: [Int]) -> ControllerMappingSample {
+        lock.withLock {
+            let state = mapping.translate(readings.snapshot)
+            return sample(buttons: state.buttons, analog: state.analog, indexes: indexes)
+        }
+    }
+
+    func acquireLayout(indexes: [Int], receive: @escaping @Sendable (ControllerMappingSample, TimeInterval) -> Void)
+        -> @Sendable () -> Void {
+        let entry = LayoutHandler(indexes: indexes, receive: receive)
+        let previous = lock.withLock {
+            let previous = layoutHandler
+            layoutHandler = entry
+            return previous
+        }
+        return { [weak self] in
+            guard let self else { return }
+            self.lock.withLock {
+                if self.layoutHandler?.id == entry.id { self.layoutHandler = previous }
+            }
+        }
+    }
+
+    private func sample(buttons: Int32, analog: GamepadAnalog, indexes: [Int]) -> ControllerMappingSample {
+        var sample = ControllerMappingSample(buttons: buttons, analog: analog)
+        for (extra, index) in indexes.enumerated() where readings.snapshot.buttons.indices.contains(index) {
+            sample.setExtra(extra, pressed: readings.snapshot.buttons[index])
+        }
+        return sample
     }
 
     func setReading(_ enabled: Bool) {
@@ -78,6 +116,7 @@ final class HIDGamepadCapture: @unchecked Sendable {
         let buttons: Int32
         let analog: GamepadAnalog
         let handler: (@Sendable (Int32, GamepadAnalog, TimeInterval) -> Void)?
+        let layout: (ControllerMappingSample, LayoutHandler)?
     }
 
     private func flush() {
@@ -86,13 +125,17 @@ final class HIDGamepadCapture: @unchecked Sendable {
             self.pending = nil
             reportCount &+= 1
             let state = mapping.translate(readings.snapshot)
+            let layout = layoutHandler.map { (sample(buttons: state.buttons, analog: state.analog, indexes: $0.indexes), $0) }
             return Report(timestamp: pending.timestamp, entered: handlerEntry, buttons: state.buttons,
-                          analog: state.analog, handler: handler)
+                          analog: state.analog, handler: handler, layout: layout)
         }
         guard let value else { return }
         InputTimingContext.begin(source: .rawHID, timestamp: HIDInputThread.seconds(ticks: value.timestamp),
                                  handler: value.entered)
         defer { InputTimingContext.end() }
-        value.handler?(value.buttons, value.analog, HIDInputThread.seconds(ticks: value.timestamp))
+        let timestamp = HIDInputThread.seconds(ticks: value.timestamp)
+        if let (sample, layout) = value.layout { layout.receive(sample, timestamp) } else {
+            value.handler?(value.buttons, value.analog, timestamp)
+        }
     }
 }
