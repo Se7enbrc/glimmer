@@ -8,6 +8,24 @@ import UIKit
 @testable import Glimmer
 
 extension NativeUIRenderTests {
+    @Test func steamSymbolSupportsLargestText() throws {
+        for scale in [Image.Scale.small, .medium, .large] {
+            let renderer = ImageRenderer(content: AppGlyph(name: "Steam").font(.body)
+                .imageScale(scale).dynamicTypeSize(.accessibility5).foregroundStyle(.white)
+                .frame(width: 100, height: 100))
+            let image = try #require(renderer.cgImage)
+            var pixels = [UInt8](repeating: 0, count: 100 * 100 * 4)
+            let hasInk = try pixels.withUnsafeMutableBytes { bytes in
+                let context = try #require(CGContext(data: bytes.baseAddress, width: 100, height: 100,
+                    bitsPerComponent: 8, bytesPerRow: 400, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                context.draw(image, in: CGRect(x: 0, y: 0, width: 100, height: 100))
+                return stride(from: 3, to: bytes.count, by: 4).contains { bytes[$0] != 0 }
+            }
+            #expect(hasInk, "The Steam glyph must remain visible at the largest accessibility text size.")
+        }
+    }
+
     @Test(arguments: ["portrait", "landscape", "narrow", "medium"], [false, true])
     func iPadInventory(layout: String, dark: Bool) async throws {
         let size = try iPadViewport(layout: layout)

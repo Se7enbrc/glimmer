@@ -25,7 +25,7 @@ struct AppGlyph: View {
 
     var body: some View {
         if name.localizedCaseInsensitiveContains("steam") {
-            // This custom symbol supplies only a medium master.
+            // The asset defines the medium scale; its font size still follows Dynamic Type.
             Image("steam").imageScale(.medium)
         } else {
             Image(systemName: name.lowercased() == "desktop" ? "macwindow" : "gamecontroller.fill")
