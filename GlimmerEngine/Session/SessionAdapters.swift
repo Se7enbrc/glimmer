@@ -71,6 +71,7 @@ package struct SessionMedia: Sendable {
 
 /// Native session services run only at lifecycle edges or existing diagnostic cadence.
 package struct SessionServices: Sendable {
+    package var bandwidthInputs: BandwidthInputs?
     package var beginActivity: @Sendable () -> Void = {}
     package var endActivity: @Sendable () -> Void = {}
     package var refreshActivity: @Sendable (Bool) -> Void = { _ in }

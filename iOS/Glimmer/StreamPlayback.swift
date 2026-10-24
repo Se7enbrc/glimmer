@@ -88,11 +88,12 @@ struct StreamPlayback {
         video.attach(to: surface.displayLayer)
         video.startPacing(display: surface.pacerDisplay, configuredFps: format.pacingFPS)
         let nativeInput = NativeInputLifetime()
+        let bandwidth = IOSBandwidthSignals()
         let media = StreamSession.PreparedMedia(video: video, audio: audio,
-            quiesce: { nativeInput.focus(false); quiesce() }, finalDispose: { nativeInput.stop() })
+            quiesce: { nativeInput.focus(false); quiesce() }, finalDispose: { nativeInput.stop(); bandwidth.stop() })
         let (session, input) = StreamSession.make(media: media, network: launch.network,
                                                   hostDisposition: launch.hostDisposition,
-            diagnosticsDirectory: DiagnosticsDefaults.directory)
+            diagnosticsDirectory: DiagnosticsDefaults.directory, bandwidthInputs: bandwidth.inputs)
         input.setStopChord(.menuOptionsShoulders)
         input.setControllerMouseMapping(launch.mouseStick.mapping)
         nativeInput.start(input: input, scope: .game(pcID: launch.pcID, appID: UInt32(clamping: launch.appID)))
@@ -101,7 +102,15 @@ struct StreamPlayback {
                 await session.requireContinuation(previous: launch.useScreenSize ? launch.previousFormat : nil)
             }
             if let occupant = launch.approvedOccupant { await session.approveReplacement(of: occupant) }
-            try await session.start(appID: launch.appID, configuration: configuration)
+            let address = await launch.network.destinationAddress()
+            try Task.checkCancellation()
+            await bandwidth.start(host: address)
+            do {
+                try await session.start(appID: launch.appID, configuration: configuration)
+            } catch {
+                await bandwidth.stop()
+                throw error
+            }
         }, stop: { await session.stop() }, screenChanged: { video.pacingScreenDidChange() },
            quit: {
                await session.disconnectLeavingGameRunning()
@@ -109,6 +118,7 @@ struct StreamPlayback {
            }, input: input, focusInput: nativeInput.focus, format: format,
            setVisible: { visible, inputs in
                video.setPresentSuppressed(!visible, visibility: inputs, sessionGeneration: session.id)
+               bandwidth.setForeground(visible)
                Task { await session.setBitrateChangesAvailable(visible) }
            }, observeControllers: nativeInput.observeControllers, touchGamepad: nativeInput.touch,
            showTouchControls: nativeInput.showTouchControls)

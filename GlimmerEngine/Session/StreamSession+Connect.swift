@@ -15,13 +15,7 @@ extension StreamSession {
         config: StreamRequest, launch: LaunchResponse, server: ServerInfo,
         rtt: RttStats? = nil, rttPreLaunch: Bool = false, exactBitrate: Bool = false
     ) -> BackendStreamConfig {
-        // Resolve `.auto` from the route we will actually egress on. Without
-        // this, `.auto` (STREAM_CFG_AUTO = 2) never equals STREAM_CFG_REMOTE and
-        // every remote-only SDP behaviour - the 1024 packet-size clamp, the
-        // remote bitrate headroom, the remote qosTrafficType - stays dead, so a
-        // 1392-byte LAN packet gets advertised onto a 1280-MTU tunnel and every
-        // video packet fragments. An explicit .local/.remote from the caller is
-        // honoured as-is; only `.auto` consults the probe.
+        // Explicit remoteness wins. Unknown public paths keep conservative packets until destination evidence arrives.
         let path = config.remoteness == .auto
             ? services.route(server, rtt) : StreamPathProbe()
         let resolvedRemoteness: Remoteness
@@ -29,17 +23,13 @@ extension StreamSession {
         case .local, .remote:
             resolvedRemoteness = config.remoteness
         case .auto:
-            resolvedRemoteness = path.isRemotePath ? .remote : .local
+            let facts = services.bandwidthInputs?.snapshot().path
+            let conservative = facts.map { path.interfaceName == nil || $0.needsConservativePacketSize } ?? false
+            resolvedRemoteness = path.isRemotePath || conservative ? .remote : .local
         }
-        // CONNECT-TIME QUALITY GATE. The demand-based bitrate from
-        // QualityCalculator answers "what does this resolution need?" - it was
-        // measured on a LAN harness and never asks what the PATH will deliver.
-        // Asking for a LAN-measured 84 Mbps over a 50 ms tunnel is not a
-        // considered choice, it is the absence of one. Since bitrate is fixed at
-        // ANNOUNCE (no client→host rate message exists, and the host never
-        // changes it after), choosing well HERE is the only cheap lever there is.
-        let pathCappedKbps = StreamPathMTU.cappedBitrateKbps(
-            configured: config.bitrateKbps, path: path)
+        // Retain Mac compatibility gates; current-environment shadow decisions do not inherit a latency-based cap.
+        let pathCappedKbps = services.bandwidthInputs == nil
+            ? StreamPathMTU.cappedBitrateKbps(configured: config.bitrateKbps, path: path) : config.bitrateKbps
         // The wired boost assumed Ethernet at both ends; the measured RTT is
         // the host side's answer, and a Wi-Fi hop there takes the boost off.
         let cappedBitrateKbps = exactBitrate ? config.bitrateKbps : StreamPathMTU.wiredAskKbps(
@@ -92,6 +82,7 @@ extension StreamSession {
             interfaceName: path.interfaceName, mtu: routeMTU, isTunnel: path.isTunnel,
             rtt: path.rtt, rttPreLaunch: rttPreLaunch, configuredBitrateKbps: config.bitrateKbps,
             askedBitrateKbps: cappedBitrateKbps, packetSize: resolvedPacketSize))
+        seedBandwidth(config: config, appliedKbps: cappedBitrateKbps, rtt: rtt, preLaunch: rttPreLaunch)
         return BackendStreamConfig(
             width: Int32(config.width),
             height: Int32(config.height),

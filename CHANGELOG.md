@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- iPhone and iPad connections now check the route to the PC before choosing
+  packet sizes, including when playing through a tunnel.
+
 ### Features
 
 - The production iPhone and iPad app no longer includes diagnostic recording.

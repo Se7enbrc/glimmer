@@ -7,6 +7,8 @@ import Network
 import os.log
 
 extension NetworkClient {
+    /// Native route observers use the paired destination without another status request or certificate access.
+    public func destinationAddress() -> String { server.address }
 
     // MARK: - Endpoint: /serverinfo
 

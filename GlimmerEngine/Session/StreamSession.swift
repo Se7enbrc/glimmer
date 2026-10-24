@@ -17,6 +17,10 @@ public actor StreamSession {
     package var publicTerminal = false
     package var publicStarted = false
     package var suppliedRouteMTU: Int?
+    package var bandwidthPolicy: BandwidthPolicy?
+    package var bandwidthLastObservation: Double?
+    package var bandwidthConnectRTT: RttStats?
+    package var bandwidthProbeGeneration: UInt64?
     package var waitingForVideo = false
     package var attemptID = UUID()
     package var telemetryGeneration: UInt64 = 0

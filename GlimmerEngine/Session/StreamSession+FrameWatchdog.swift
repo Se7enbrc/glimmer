@@ -76,6 +76,14 @@ extension StreamSession {
     /// One watchdog tick, on the main thread. A gated decoder (hidden window) is healthy by design and
     /// trips nothing; stopConnection clears the gate, so it can never shield a dead session from teardown.
     package nonisolated func frameWatchdogTick(decoder dec: VideoDecoder) {
+        if services.bandwidthInputs != nil {
+            let time = uptimeSeconds
+            Task { [weak self] in
+                guard let self else { return }
+                let attempt = await self.attemptID
+                await self.observeBandwidth(at: time, attempt: attempt)
+            }
+        }
         if dec.decodeGated { return }
         let sinceArm = uptimeSeconds - frameWatchdogArmedAt
         let sinceDecoded = dec.secondsSinceLastDecodedFrame()
