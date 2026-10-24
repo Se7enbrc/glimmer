@@ -222,6 +222,6 @@ h1 span { color: var(--secondary); }
 .policy h2 { font-size: 22px; font-weight: 650; letter-spacing: -0.025em; margin-bottom: 12px; }
 .policy section { margin-top: 12px; }
 .policy section p + p { margin-top: 14px; }
-.policy ol { margin: 0 0 16px; padding-left: 24px; }
+.policy ol, .policy ul { margin: 0 0 16px; padding-left: 24px; }
 .policy li + li { margin-top: 10px; }
 .policy a { color: var(--ink); }

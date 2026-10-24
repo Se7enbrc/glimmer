@@ -43,6 +43,9 @@ jobs:
           git fetch --quiet --depth 1 origin refs/heads/appcast
           git show FETCH_HEAD:appcast.xml >appcast.xml
 
+      - name: Render the privacy policy
+        run: python3 scripts/build-policy-page.py
+
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
