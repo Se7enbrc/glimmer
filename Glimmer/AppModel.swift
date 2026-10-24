@@ -120,6 +120,14 @@ final class AppModel {
     }
 
     // Defaults
+    var leaveGamesRunning = false {
+        didSet { settingsDefaults.set(leaveGamesRunning, forKey: "leaveGamesRunning") }
+    }
+    var activeContinuationFormat: ContinuationFormat?
+    var pictureTrial: PictureTrial?
+    var endedContinuation: EndedContinuation?
+    var nativeStreamTask: Task<Void, Never>?
+
     var defaultLaunchApp: String = "Desktop" {
         didSet { settingsDefaults.set(defaultLaunchApp, forKey: "defaultLaunchApp") }
     }
@@ -196,6 +204,8 @@ final class AppModel {
         let host: Host
         /// nil when the PC runs an app it didn't name.
         let occupantApp: String?
+        var occupantID: Int?
+        var useScreenSize = false
     }
 
     // Menu bar (see AppModel+MenuBar): reconnect edge, Stop latch, overlay mirror,
@@ -515,6 +525,7 @@ final class AppModel {
         // Observation setters can run during initialization. Restore quality's
         // backing storage so entering Custom cannot overwrite saved dimensions
         // before they are read, or persist defaults the user never chose.
+        leaveGamesRunning = defaults.bool(forKey: "leaveGamesRunning")
         muteMacWhileStreaming = settingsDefaults.bool(forKey: "muteMacWhileStreaming")
         defaultLaunchApp = settingsDefaults.string(forKey: "defaultLaunchApp") ?? defaultLaunchApp
         _qualityPreset = Self.persistedQualityPreset(defaults: defaults) ?? _qualityPreset

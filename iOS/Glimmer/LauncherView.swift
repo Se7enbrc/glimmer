@@ -19,6 +19,7 @@ struct LauncherView: View {
     @State private var showingSettings = false
     @State private var pendingAddPC = false
     @State private var pendingPC: HostDiscovery.Discovered?
+    @AppStorage("leaveGamesRunning") private var leaveGamesRunning = false
     @AppStorage("streamProfile") private var profile: StreamProfile = .native120
     @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
     @AppStorage("controllerMouseStick") private var mouseStick: ControllerMouseStick = .right
@@ -34,6 +35,7 @@ struct LauncherView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         pcHeader
+                        RunningGameRow(model: model)
                         LauncherGallery(model: model, style: styleOverride ?? launcherStyle,
                                         size: CGSize(width: max(0, geometry.size.width - 48),
                                                      height: geometry.size.height))
@@ -69,6 +71,8 @@ struct LauncherView: View {
                 addPC: { pendingAddPC = true; showingSettings = false },
                 pairPC: { pendingPC = $0; showingSettings = false })
         }
+        .onChange(of: leaveGamesRunning, initial: true) { _, enabled in model.leaveGamesRunning = enabled }
+        .modifier(RunningGameConfirmation(model: model))
         .onChange(of: touchMouseEnabled, initial: true) { _, enabled in model.touchMouseEnabled = enabled }
         .onChange(of: profile, initial: true) { _, profile in model.streamProfile = profile }
         .onChange(of: mouseStick, initial: true) { _, stick in model.mouseStick = stick }

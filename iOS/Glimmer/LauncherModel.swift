@@ -16,20 +16,30 @@ final class LauncherModel {
 
     private(set) var savedPCs: [SavedPC] = []
     private(set) var discovered: [HostDiscovery.Discovered] = []
-    private(set) var apps: [HostApp] = []
+    var apps: [HostApp] = []
     private(set) var selectedName: String?
-    private(set) var busy = false
+    var busy = false
     private(set) var discoveryDenied = false
-    private(set) var message: String?
+    var message: String?
     private(set) var pairing: PairingPrompt?
     private(set) var pendingForget: SavedPC?
     private(set) var forgetFailure: String?
     var canForgetPC: Bool { active && session == nil && !busy }
     var stream: StreamSessionModel?
+    var allApps: [HostApp] = []
+    var runningApp: HostApp?
+    var endedGame: HostApp?
+    var endedFormat: ContinuationFormat?
+    var pendingGameAction: GameAction?
+    var leaveGamesRunning = false
+    var history: ContinuationHistory
+    var pictureTrial: PictureTrial?
+    var streamReturn: StreamReturn?
+    private var returningPCID: String?
     var streamProfile: StreamProfile = .native120
     var touchMouseEnabled = true
     var mouseStick: ControllerMouseStick = .right
-    private var session: StreamSessionModel?
+    var session: StreamSessionModel?
     var hasActiveStream: Bool { session.map { !$0.phase.isEnded } ?? false }
     private var closingTask: Task<Void, Never>?
     @MainActor
@@ -43,23 +53,28 @@ final class LauncherModel {
         var lastConnectedPCID: () -> String? = { nil }
         var forget: (String) throws -> [SavedPC] = { _ in throw LauncherServices.Failure.unavailable }
         var artwork: @Sendable (PreparedPC, Int) async throws -> Data = { try await $0.network.appAsset(appID: $1) }
+        var status: (PreparedPC) async throws -> ServerInfo = { $0.server }
+        var quit: (PreparedPC, Int) async throws -> Void = {
+            try await StreamSession.quitRunningApp(network: $0.network, expectedAppID: $1)
+        }
         var makeSession: @MainActor (StreamLaunch) -> StreamSessionModel = { StreamSessionModel(launch: $0) }
     }
 
-    private let calls: Calls?
+    let calls: Calls?
     private let discoveryEnabled: Bool
     private let discovery = HostDiscovery()
-    private var selected: PreparedPC?
+    var selected: PreparedPC?
     private var selection: SavedPC?
-    private var generation: UInt64 = 0
-    private var operation: Task<Void, Never>?
+    var generation: UInt64 = 0
+    var operation: Task<Void, Never>?
     private var discoveryTask: Task<Void, Never>?
     private var discoveryRun: UInt64?
     private let artCache = LauncherArtCache(base: URL.cachesDirectory)
-    private var active = false
-    private var needsRefresh = false
+    var active = false
+    var needsRefresh = false
 
     init(services: LauncherServices?) {
+        history = ContinuationHistory(defaults: .standard)
         calls = services.map { services in
             Calls(savedPCs: { try services.savedPCs() },
                   prepare: { try await services.prepare(server: $0, saved: $1) },
@@ -68,13 +83,15 @@ final class LauncherModel {
                   remember: { try services.remember($0) },
                   protectedDataChanged: { services.protectedData.update($0) },
                   lastConnectedPCID: { services.lastConnectedPCID() },
-                  forget: { try services.forget($0) })
+                  forget: { try services.forget($0) }, status: { try await $0.network.fetchServerInfo() })
         }
         discoveryEnabled = true
         if services == nil { message = "Glimmer couldn't open its storage. Close the app and try again." }
     }
 
     init(calls: Calls, discoveryEnabled: Bool = true) {
+        let defaults = UserDefaults(suiteName: "launcher-test-\(UUID().uuidString)") ?? UserDefaults()
+        history = ContinuationHistory(defaults: defaults)
         self.calls = calls
         self.discoveryEnabled = discoveryEnabled
     }
@@ -175,6 +192,9 @@ final class LauncherModel {
         needsRefresh = false
         selectedName = server.serverName
         apps = []
+        runningApp = nil
+        endedGame = nil
+        pendingGameAction = nil
         busy = true
         message = nil
         operation = Task {
@@ -200,9 +220,15 @@ final class LauncherModel {
                 selected = pc
                 selection = SavedPC(server: pc.server)
                 selectedName = pc.server.serverName
+                allApps = list
                 apps = list.filter { !$0.hidden }
+                updateRunningApp(pc.server, list: list)
                 needsRefresh = false
                 busy = false
+                if let returningPCID {
+                    self.returningPCID = nil
+                    applyStreamReturn(pcID: returningPCID)
+                }
             } catch {
                 guard isCurrent(attempt) else { return }
                 pairing = nil
@@ -230,25 +256,13 @@ final class LauncherModel {
         return LauncherArtCache.decode(data)
     }
 
-    func launch(_ app: HostApp) {
-        guard active, !busy, session == nil, let selected, let calls else { return }
-        if needsRefresh {
-            message = "Choose the PC again to refresh its connection before starting a game."
-            return
-        }
-        stopDiscovery()
-        let session = calls.makeSession(StreamLaunch(network: selected.network,
-            pcID: selected.server.uniqueId, pcName: selected.server.serverName, appID: app.id, appName: app.name,
-            profile: streamProfile, mouseStick: mouseStick, touchMouseEnabled: touchMouseEnabled))
-        self.session = session
-        stream = session
-    }
-
     func streamClosed() {
         guard closingTask == nil, let session else { return }
         stream = nil
+        returningPCID = session.launch.pcID
         needsRefresh = true
         apps = []
+        runningApp = nil
         session.stop()
         closingTask = Task {
             await session.waitUntilStopped()
@@ -258,6 +272,7 @@ final class LauncherModel {
             if active {
                 startDiscovery()
                 selectInitialPCIfNeeded()
+                await waitUntilOperationFinishes()
             }
         }
     }
@@ -269,6 +284,7 @@ final class LauncherModel {
     }
 
     func cancelOperation() {
+        pendingGameAction = nil
         generation &+= 1
         operation?.cancel()
         refreshSavedPCs()
@@ -278,7 +294,7 @@ final class LauncherModel {
 
     func waitUntilOperationFinishes() async { await operation?.value }
 
-    private func isCurrent(_ attempt: UInt64) -> Bool { generation == attempt && !Task.isCancelled }
+    func isCurrent(_ attempt: UInt64) -> Bool { generation == attempt && !Task.isCancelled }
 
     private func refreshSavedPCs() {
         guard active else { return }
@@ -301,7 +317,7 @@ final class LauncherModel {
         }
     }
 
-    private func stopDiscovery() {
+    func stopDiscovery() {
         discoveryTask?.cancel()
         discoveryTask = nil
         if let run = discoveryRun {

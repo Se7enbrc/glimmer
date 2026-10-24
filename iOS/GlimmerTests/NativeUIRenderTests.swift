@@ -12,11 +12,12 @@ import UIKit
 @MainActor
 struct NativeUIRenderTests {
     @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440),
-                      CGSize(width: 390, height: 844)], [false, true])
+                      CGSize(width: 390, height: 844), CGSize(width: 1024, height: 768)], [false, true])
     func launcherAndPairing(size: CGSize, dark: Bool) async throws {
         let launch = testLaunch()
         let server: ServerInfo = {
             var server = ServerInfo(address: "pc.invalid", uniqueId: launch.pcID, serverName: "Living room PC")
+            server.currentGameID = 2
             server.pairStatus = .paired
             server.serverCertPEM = "test placeholder, never sent to a transport"
             return server
@@ -49,6 +50,25 @@ struct NativeUIRenderTests {
                          name: "mouse-settings-\(style)", size: size, dark: dark)
     }
 
+    @Test(arguments: [CGSize(width: 390, height: 844), CGSize(width: 1024, height: 768)], [false, true])
+    func continuationActions(size: CGSize, dark: Bool) async throws {
+        let fixture = LauncherFixture()
+        fixture.runningAppID = fixture.app.id
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        model.history.remember(.init(width: 1920, height: 1080, fps: 60, hdr: false),
+                               pc: fixture.saved.id, app: fixture.app.id)
+        let name = "continuation-\(Int(size.width))-\(dark ? "dark" : "light")"
+        try await record(LauncherView(model: model), name: name, size: size, dark: dark, leaveRunning: true)
+        #expect(model.leaveGamesRunning)
+        #expect(model.continuationTitle == "Resume")
+        try await record(LauncherView(model: model), name: "quit-choice-\(name)", size: size,
+                         dark: dark, leaveRunning: true, captureWindow: true, prepare: { model.requestQuit() })
+        model.pendingGameAction = nil
+    }
+
     @Test(arguments: [DynamicTypeSize.large, .accessibility3])
     func connectingLauncherOffersCancellation(textSize: DynamicTypeSize) async throws {
         let fixture = LauncherFixture()
@@ -74,7 +94,7 @@ struct NativeUIRenderTests {
     }
 
     @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440),
-                      CGSize(width: 390, height: 844)], [false, true])
+                      CGSize(width: 390, height: 844), CGSize(width: 1024, height: 768)], [false, true])
     func settingsPages(size: CGSize, dark: Bool) async throws {
         let saved = SavedPC(server: ServerInfo(address: "pc.invalid", uniqueId: "settings-pc",
                                                serverName: "Living room gaming PC"))
@@ -253,6 +273,7 @@ struct NativeUIRenderTests {
         try await waitForLauncherLayout(launcher, window: window)
         try recordPhase(launcher.view, name: "orientation-launcher-before-stream")
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         let stream = try #require(model.stream)
         var captureError: Error?
         do {
@@ -366,22 +387,27 @@ struct NativeUIRenderTests {
 
     func record<Content: View>(_ content: Content, name: String, size: CGSize?, dark: Bool,
                                textSize: DynamicTypeSize = .xxxLarge, portrait: Bool = false,
-                               landscapeRight: Bool = false,
+                               landscapeRight: Bool = false, leaveRunning: Bool = false,
+                               captureWindow: Bool = false,
                                prepare: (() async -> Void)? = nil,
                                inspect: ((UIView) throws -> Void)? = nil) async throws {
-        let host = UIHostingController(rootView: content.dynamicTypeSize(textSize))
+        let defaults = UserDefaults(suiteName: "render-\(UUID().uuidString)") ?? UserDefaults()
+        defaults.set(leaveRunning, forKey: "leaveGamesRunning")
+        let host = UIHostingController(rootView: content.defaultAppStorage(defaults).dynamicTypeSize(textSize))
         try await recordController(host, name: name, size: size, dark: dark, portrait: portrait,
-                                   prepare: prepare, textSize: textSize, landscapeRight: landscapeRight,
-                                   inspect: inspect)
+                                   captureWindow: captureWindow, prepare: prepare, textSize: textSize,
+                                   landscapeRight: landscapeRight, inspect: inspect)
     }
 
     func recordController(_ host: UIViewController, name: String, size: CGSize?, dark: Bool,
-                          portrait: Bool = false, prepare: (() async -> Void)? = nil,
+                          portrait: Bool = false, captureWindow: Bool = false,
+                          prepare: (() async -> Void)? = nil,
                           textSize: DynamicTypeSize = .xxxLarge, landscapeRight: Bool = false,
                           inspect: ((UIView) throws -> Void)? = nil) async throws {
         let scene = try await testWindowScene()
         let previous = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
+        window.overrideUserInterfaceStyle = dark ? .dark : .light
         window.frame = scene.effectiveGeometry.coordinateSpace.bounds
         window.traitOverrides.preferredContentSizeCategory = textSize == .accessibility5
             ? .accessibilityExtraExtraExtraLarge : (textSize == .large ? .large : .extraExtraExtraLarge)
@@ -434,15 +460,22 @@ struct NativeUIRenderTests {
             #expect(window.bounds.width > window.bounds.height)
         }
         if name.hasPrefix("ipad-") { recordIPadGeometry(host.view, name: name) }
+        if captureWindow {
+            try await waitForUIState("Confirmation is presented") {
+                root.presentedViewController != nil || host.presentedViewController != nil
+            }
+            await finishTransition(root)
+        }
+        let snapshot: UIView = captureWindow ? window : host.view
         let format = UIGraphicsImageRendererFormat()
         if name.hasPrefix("ipad-") { format.scale = 1 }
-        let renderer = UIGraphicsImageRenderer(bounds: host.view.bounds, format: format)
+        let renderer = UIGraphicsImageRenderer(bounds: snapshot.bounds, format: format)
         var rendered = false
         let image = renderer.image { _ in
-            rendered = host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)
+            rendered = snapshot.drawHierarchy(in: snapshot.bounds, afterScreenUpdates: true)
         }
         #expect(rendered)
-        #expect(image.size == expectedSize)
+        #expect(image.size == (captureWindow ? window.bounds.size : expectedSize))
         let data = try #require(image.pngData())
         #expect(data.count > 1_000)
         Attachment.record(Array(data), named: "\(name)-large-text.png")

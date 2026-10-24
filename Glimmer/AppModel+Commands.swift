@@ -59,6 +59,7 @@ enum CommandChannel {
         static let pc = "pc"
         static let app = "app"
         static let takeover = "takeover"
+        static let occupant = "occupant"
         static let event = "event"
         static let detail = "detail"
     }
@@ -106,9 +107,9 @@ enum CommandChannel {
         guard let hostID = info[Key.host] else { return nil }
         switch info[Key.verb] {
         case "check":
-            return streamingFrom == nil ? .ready : .rejected(alreadyStreaming)
+            return streamingFrom == nil || streamingFrom == hostID ? .ready : .rejected(alreadyStreaming)
         case "stream":
-            guard streamingFrom == nil else { return .rejected(alreadyStreaming) }
+            guard streamingFrom == nil || streamingFrom == hostID else { return .rejected(alreadyStreaming) }
             let appID = info[Key.app].flatMap { Int($0) }
             guard let host = hosts.first(where: { $0.id == hostID }),
                   let app = host.apps.first(where: { $0.id == appID }) else {
@@ -162,7 +163,8 @@ extension AppModel {
             // The terminal settled the takeover; an older unanswered prompt no longer applies.
             pendingTakeover = nil
             selectHost(host)
-            beginCommandStream(id, app: app, on: host, takeover: !fromURL && takeover)
+            beginCommandStream(id, app: app, on: host, takeover: !fromURL && takeover,
+                approvedOccupant: fromURL ? nil : info[CommandChannel.Key.occupant].flatMap(Int.init))
         case .rejected(let why):
             replyToCommand(id, CommandChannel.Event.rejected, why)
         case .ready:
@@ -197,7 +199,7 @@ extension AppModel {
     }
 
     /// Retain the route wait so quit can invalidate it before any session exists.
-    func beginCommandStream(_ id: String, app: LibraryApp, on host: Host, takeover: Bool,
+    func beginCommandStream(_ id: String, app: LibraryApp, on host: Host, takeover: Bool, approvedOccupant: Int? = nil,
                             waitForRoute: (@MainActor () async -> Void)? = nil) {
         cancelPendingCommandStream()
         let request = PendingCommandStream(id: id, hostID: host.id)
@@ -209,11 +211,28 @@ extension AppModel {
             // A cancelled wait may still resume after a newer request took its place.
             guard !Task.isCancelled, pendingCommandStream === request else { return }
             pendingCommandStream = nil
-            guard !isStreaming else {
-                replyToCommand(id, CommandChannel.Event.rejected, CommandChannel.alreadyStreaming)
-                return
+            if isStreaming {
+                guard let active = lastLaunchAttempt, active.host.id == host.id else {
+                    replyToCommand(id, CommandChannel.Event.rejected, CommandChannel.alreadyStreaming)
+                    return
+                }
+                if active.app.id == app.id {
+                    resumeStreamWindow()
+                    replyToCommand(id, CommandChannel.Event.accepted)
+                    reportCommandSession(id)
+                    return
+                }
+                if !takeover {
+                    requestStream(app: app, on: host)
+                    replyToCommand(id, CommandChannel.Event.accepted)
+                    return
+                }
+                let ending = nativeStreamTask
+                await nativeSession?.disconnectLeavingGameRunning()
+                await ending?.value
             }
-            stream(app: app, on: host, takeoverAuthorized: takeover)
+            stream(app: app, on: host, takeoverAuthorized: takeover && approvedOccupant == nil,
+                   approvedOccupant: approvedOccupant)
             replyToCommand(id, CommandChannel.Event.accepted)
             reportCommandSession(id)
         }
@@ -257,32 +276,22 @@ extension AppModel {
         return !Task.isCancelled && settled()
     }
 
-    /// "notMine" leaves the /cancel to the command line.
+    /// An explicit quit must still cancel when ordinary disconnect preserves games.
     private func stopForCommand(_ id: String) {
         cancelPendingCommandStream()
-        guard let session = nativeSession else {
+        guard nativeSession != nil, let active = lastLaunchAttempt else {
             replyToCommand(id, CommandChannel.Event.notMine)
             return
         }
         Task {
-            let quit = await stopOwnStream(session, source: "the command line")
-            replyToCommand(id, quit ? CommandChannel.Event.stopped : CommandChannel.Event.notMine)
+            do {
+                try await quitRunningApp(on: active.host, expectedAppID: active.app.id)
+                replyToCommand(id, CommandChannel.Event.stopped)
+            } catch {
+                replyToCommand(id, CommandChannel.Event.rejected,
+                               Self.quitFailureMessage(for: error, hostName: active.host.displayName))
+            }
         }
-    }
-
-    /// Our stream ends through stop(), which can't trigger a reconnect. True when
-    /// that quit the app on the PC too: stop() cancels there only when this
-    /// session launched it.
-    func stopOwnStream(source: String) async -> Bool {
-        guard let session = nativeSession else { return false }
-        return await stopOwnStream(session, source: source)
-    }
-
-    private func stopOwnStream(_ session: StreamSession, source: String) async -> Bool {
-        let owns = await session.ownsHostSession
-        guard nativeSession === session else { return false }
-        stopStreamFromMenu(source: source)
-        return owns
     }
 
     private func replyToCommand(_ id: String, _ event: String, _ detail: String? = nil, extra: [String: String] = [:]) {
@@ -313,7 +322,7 @@ extension AppModel {
 
     fileprivate func commandSessionDetail() -> String? {
         let busy = pendingTakeover.map {
-            "\($0.host.displayName) is busy. Choose Quit and Stream in Glimmer, or run again with --force."
+            "Choose Quit \($0.occupantApp ?? "the running app") and start \($0.app.name) in Glimmer."
         }
         return nativeStreamError ?? busy
     }
@@ -338,17 +347,27 @@ extension AppModel {
     /// Ends whatever the PC is running without streaming into it: /cancel
     /// over the pinned connection, then a fresh readiness poll. Without a pin
     /// the request refuses before sending anything.
-    func quitRunningApp(on host: Host) async throws {
-        let client = makeNetwork(nativeServerInfo(for: host))
+    func quitRunningApp(on host: Host, expectedAppID: Int? = nil) async throws {
+        let server = nativeServerInfo(for: host)
+        guard server.serverCertPEM != nil else { throw NetworkClient.notPaired(host.displayName) }
+        let client = makeNetwork(server)
         defer { restartHostStatusPolling() }
         do {
-            try await client.cancel()
+            let expected: Int
+            if let expectedAppID { expected = expectedAppID } else {
+                expected = try await client.fetchServerInfo().currentGameID
+            }
+            if isStreaming, lastLaunchAttempt?.host.id == host.id {
+                await nativeSession?.disconnectLeavingGameRunning()
+                await nativeStreamTask?.value
+            }
+            try await StreamSession.quitRunningApp(network: client, expectedAppID: expected)
             await client.shutdown()
         } catch StreamError.launchFailed, StreamError.hostRefused {
             await client.shutdown()
             // Older Sunshine answers 503 while another device is connected.
             throw StreamError.launchFailed(
-                "\(host.displayName) wouldn't quit the app. If another device is streaming from it, stop that stream first.")
+                StreamFailureCopy.quitRefused(host.displayName))
         } catch {
             await client.shutdown()
             throw error
@@ -358,6 +377,12 @@ extension AppModel {
     /// A failed quit in the launcher and Shortcuts: the refusal reads as the
     /// command line prints it, anything else as a failed connect does.
     static func quitFailureMessage(for error: Error, hostName: String) -> String {
+        if error is TakeoverRequired {
+            return StreamFailureCopy.runningAppChanged(hostName)
+        }
+        if error is RunningAppFailure {
+            return StreamFailureCopy.quitUnconfirmed("the app", pc: hostName)
+        }
         if case .launchFailed(let detail) = error as? StreamError { return detail }
         return connectFailure(for: error, hostName: hostName).message
     }

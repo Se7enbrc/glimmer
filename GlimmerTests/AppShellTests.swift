@@ -176,9 +176,8 @@ struct AppShellTests {
     @Test func checkTellsTheTerminalWhetherAStreamWouldBeTaken() {
         var handled: Set<String> = []
         #expect(decide(["id": "a", "verb": "check", "host": "UUID-1"], handled: &handled) == .ready)
-        // Streaming, or a request still waiting on its route: asking about a takeover would be moot.
-        #expect(decide(["id": "b", "verb": "check", "host": "UUID-1"], streamingFrom: "UUID-1", handled: &handled)
-            == .rejected(CommandChannel.alreadyStreaming))
+        // A live stream on this PC can return to its window or offer a named replacement.
+        #expect(decide(["id": "b", "verb": "check", "host": "UUID-1"], streamingFrom: "UUID-1", handled: &handled) == .ready)
     }
 
     @Test @MainActor func routeWaitStopsAtTheFirstSettledCheckOrAfterTheBudget() async {

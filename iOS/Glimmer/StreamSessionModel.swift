@@ -14,6 +14,15 @@ final class StreamSessionModel {
 
     private(set) var phase: Phase = .idle
     private(set) var audioUnavailable = false
+    var firstVideo: ((StreamFormat) -> Void)?
+    var continuationEnded: (() -> Void)?
+    var startupFailed: ((StreamFormat?) -> Void)?
+    var pictureNeedsReview = false
+    var keepSize: (() -> Void)?
+    var restoreSize: (() -> Void)?
+    var replacementRequired: ((Int) -> Void)?
+    private var quittingGame = false
+    var quitFailure: String?
     private(set) var connectionPoor = false
     private(set) var waitingForVideo = false
     private(set) var requestedFormat: StreamFormat?
@@ -79,8 +88,18 @@ final class StreamSessionModel {
         startTask = Task { [weak self] in
             do {
                 try await playback.start()
+            } catch RunningAppFailure.ended {
+                guard let self, !self.stopRequested else { return }
+                self.endingMessage = StreamFailureCopy.gameEnded(self.launch.appName, pc: self.launch.pcName)
+                self.continuationEnded?()
+                self.complete()
+            } catch let takeover as TakeoverRequired {
+                guard let self, !self.stopRequested else { return }
+                self.replacementRequired?(takeover.appID)
+                self.disconnect()
             } catch {
                 guard let self, !self.stopRequested else { return }
+                self.startupFailed?(self.requestedFormat)
                 if !self.terminalFailure {
                     self.endingMessage = StreamSessionFailureCopy.connection(
                         StreamFailure.connection(error), pcName: self.launch.pcName)
@@ -99,6 +118,26 @@ final class StreamSessionModel {
         synchronizeInputFocus()
         stopTask = Task {
             await playback.stop()
+            complete()
+            stopTask = nil
+        }
+    }
+
+    func quitGame() {
+        guard stopTask == nil, !phase.isEnded, let quit = playback?.quit else { return }
+        quittingGame = true
+        stopRequested = true
+        phase = .stopping
+        synchronizeInputFocus()
+        stopTask = Task {
+            do {
+                try await quit()
+                dismissWhenStopped = true
+            } catch {
+                quitFailure = StreamSessionFailureCopy.quit(error, app: launch.appName, pc: launch.pcName)
+                endingMessage = quitFailure
+            }
+            quittingGame = false
             complete()
             stopTask = nil
         }
@@ -213,12 +252,37 @@ final class StreamSessionModel {
         }
     }
 
+    private func recordFirstVideo() {
+        guard !hasReceivedVideo, let format = requestedFormat else { return }
+        firstVideo?(format)
+        pictureNeedsReview = launch.continuing && launch.useScreenSize && launch.previousFormat != nil
+        if pictureNeedsReview { controlsRequested = true; controlsVisible = true }
+    }
+
+    private func rejectPictureTrial() {
+        guard pictureNeedsReview else { return }
+        startupFailed?(requestedFormat)
+        pictureNeedsReview = false
+    }
+
+    private func prepareForRecovery() {
+        rejectPictureTrial()
+        if launch.useScreenSize, let old = launch.previousFormat, old.isValid {
+            requestedFormat = StreamFormat(width: old.width, height: old.height, fps: old.fps,
+                                           changeResolution: old.changeResolution)
+        }
+        captureSuspended = true
+        phase = .reconnecting
+        synchronizeInputFocus()
+    }
+
     func receive(_ update: StreamSession.Update) {
         guard playback?.id == update.sessionID, !phase.isEnded else { return }
-        if case .stopped = update.event { complete(); return }
+        if case .stopped = update.event { if !quittingGame { complete() }; return }
         guard phase != .stopping else { return }
         switch update.event {
         case .firstFrame, .reconnected:
+            recordFirstVideo()
             hasReceivedVideo = true
             endingMessage = nil
             terminalFailure = false
@@ -226,11 +290,9 @@ final class StreamSessionModel {
             phase = .streaming
             if controllerConnected, !controlsRequested { controlsVisible = false }
             synchronizeInputFocus()
-        case .reconnecting:
-            captureSuspended = true
-            phase = .reconnecting
-            synchronizeInputFocus()
+        case .reconnecting: prepareForRecovery()
         case .connectionTerminated(let code, let error):
+            rejectPictureTrial()
             let reason = StreamFailure.termination(code: code, hasReceivedVideo: hasReceivedVideo)
             terminalFailure = error != nil || reason != .unexpected
             if let error {

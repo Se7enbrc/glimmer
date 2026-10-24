@@ -113,6 +113,7 @@ struct GeneralPane: View {
                 }
                 .accessibilityLabel("Play sound on the PC")
             }
+            DisconnectSettings()
             Section {
                 // Picker sourced from the selected host's announced app
                 // list (Sunshine's `applist`). "Desktop" is always

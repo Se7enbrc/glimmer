@@ -6,6 +6,9 @@ import SwiftUI
 
 enum LauncherFocus: Hashable {
     case app(Int), pc, overflow, state, pairing(PairingFocus)
+    case runningResume, runningQuit, runningSize
+
+    var isRunningAction: Bool { [.runningResume, .runningQuit, .runningSize].contains(self) }
 }
 
 enum LauncherCommand: Equatable {
@@ -90,14 +93,20 @@ enum LauncherNavigation {
         guard command != .activate, command != .dismiss else { return focus }
         guard !cells.isEmpty else { return hasSwitcher ? .pc : nil }
         if focus == .pc { return command == .down ? cells.first : .pc }
-        guard let focus, let index = cells.firstIndex(of: focus) else { return cells.first }
+        guard let focus, cells.contains(focus) else { return cells.first }
+        let running = cells.filter(\.isRunningAction)
+        let grid = cells.filter { $0 != .state && !$0.isRunningAction }
+        if let index = running.firstIndex(of: focus) {
+            return runningDestination(command, index: index, running: running, grid: grid, hasSwitcher: hasSwitcher)
+        }
         if focus == .state {
             return command == .up ? cells.last(where: { $0 != .state }) ?? (hasSwitcher ? .pc : .state) : .state
         }
-        let grid = cells.filter { $0 != .state }
+        guard let index = grid.firstIndex(of: focus) else { return focus }
         let columns = max(1, columns)
         switch command {
         case .up:
+            if index < columns, !running.isEmpty { return running[min(index, running.count - 1)] }
             return index < columns ? (hasSwitcher ? .pc : focus) : grid[index - columns]
         case .down:
             guard index / columns < (grid.count - 1) / columns else {
@@ -108,6 +117,17 @@ enum LauncherNavigation {
             return index % columns == 0 ? focus : grid[index - 1]
         case .right:
             return (index + 1) % columns == 0 ? focus : grid[min(index + 1, grid.count - 1)]
+        case .activate, .dismiss: return focus
+        }
+    }
+    private static func runningDestination(_ command: LauncherCommand, index: Int, running: [LauncherFocus],
+                                           grid: [LauncherFocus], hasSwitcher: Bool) -> LauncherFocus {
+        let focus = running[index]
+        switch command {
+        case .left: return running[max(0, index - 1)]
+        case .right: return running[min(index + 1, running.count - 1)]
+        case .up: return hasSwitcher ? .pc : focus
+        case .down: return grid.isEmpty ? focus : grid[min(index, grid.count - 1)]
         case .activate, .dismiss: return focus
         }
     }

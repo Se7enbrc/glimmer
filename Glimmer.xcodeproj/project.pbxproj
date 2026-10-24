@@ -56,6 +56,8 @@
 		82EEF25A701FD81C0CDC8240 /* HostsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6B7F5AA2DBCDB1B8D9A413 /* HostsStore.swift */; };
 		A10000001 /* GlimmerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000011 /* GlimmerApp.swift */; };
 		A10000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012 /* ContentView.swift */; };
+		DC9A61DEBDDA4825AE9B1220 /* RunningGameRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E166D0400B2847E0AB1167B4 /* RunningGameRow.swift */; };
+		950271A5578F49C4B8E77618 /* AppModel+Continuation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71FFCA44FBC545A69F7D8EB6 /* AppModel+Continuation.swift */; };
 		A10000003 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000013 /* AppModel.swift */; };
 		A10000004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000014 /* Assets.xcassets */; };
 		A10000005 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000017 /* SettingsView.swift */; };
@@ -649,6 +651,7 @@
 		387C9B9581964477845D0A2D /* ContinuationFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA21FFB9D89D455088E41609 /* ContinuationFormat.swift */; };
 		B2335A0CF2234B9ABAB12F27 /* StreamSession+RunningApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB002205E837494CA0C444B3 /* StreamSession+RunningApp.swift */; };
 		21B30BD95DBE473A9BE2CC35 /* SessionHostDispositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A94F72CE390A4492A80CBC69 /* SessionHostDispositionTests.swift */; };
+		58E68087D1C647789143820A /* SessionContinuationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48520FACFC0E4646AEB1A004 /* SessionContinuationTests.swift */; };
 		654D3BE0BFE14BC2B94FC4BF /* MacEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A500824C204ED79D0F1972 /* MacEnvironment.swift */; };
 		73EF5143F2C64BDF8A48E862 /* MacSessionFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5750FB726B46128E221E19 /* MacSessionFeedback.swift */; };
 		799034B7D97F48C49DA74C4B /* MacSessionPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31AA0C4A7B344F7A84487C44 /* MacSessionPresentation.swift */; };
@@ -810,6 +813,8 @@
 		A10000010 /* Glimmer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glimmer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000011 /* GlimmerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerApp.swift; sourceTree = "<group>"; };
 		A10000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		E166D0400B2847E0AB1167B4 /* RunningGameRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/RunningGameRow.swift"; sourceTree = SOURCE_ROOT; };
+		71FFCA44FBC545A69F7D8EB6 /* AppModel+Continuation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/AppModel+Continuation.swift"; sourceTree = SOURCE_ROOT; };
 		A10000013 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		A10000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A10000015 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -1399,6 +1404,7 @@
 		BA21FFB9D89D455088E41609 /* ContinuationFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/ContinuationFormat.swift"; sourceTree = SOURCE_ROOT; };
 		BB002205E837494CA0C444B3 /* StreamSession+RunningApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamSession+RunningApp.swift"; sourceTree = SOURCE_ROOT; };
 		A94F72CE390A4492A80CBC69 /* SessionHostDispositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerTests/SessionHostDispositionTests.swift; sourceTree = SOURCE_ROOT; };
+		48520FACFC0E4646AEB1A004 /* SessionContinuationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/SessionContinuationTests.swift"; sourceTree = SOURCE_ROOT; };
 		B1A500824C204ED79D0F1972 /* MacEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacEnvironment.swift"; sourceTree = SOURCE_ROOT; };
 		BC5750FB726B46128E221E19 /* MacSessionFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacSessionFeedback.swift"; sourceTree = SOURCE_ROOT; };
 		31AA0C4A7B344F7A84487C44 /* MacSessionPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/MacSessionPresentation.swift"; sourceTree = SOURCE_ROOT; };
@@ -1561,6 +1567,8 @@
 				A10000011 /* GlimmerApp.swift */,
 				A1009002 /* UpdaterController.swift */,
 				A10000012 /* ContentView.swift */,
+				E166D0400B2847E0AB1167B4 /* RunningGameRow.swift */,
+				71FFCA44FBC545A69F7D8EB6 /* AppModel+Continuation.swift */,
 				A10000017 /* SettingsView.swift */,
 				A1000009B /* PairSheet.swift */,
 				5E55105026102200000000B2 /* PairingPresentation.swift */,
@@ -1874,6 +1882,7 @@
 				21C273D96FC84878A5D36D98 /* InputCoreTests.swift */,
 				495E63BB12264898A2E14C16 /* StreamInputChordEdgeTests.swift */,
 				A94F72CE390A4492A80CBC69 /* SessionHostDispositionTests.swift */,
+				48520FACFC0E4646AEB1A004 /* SessionContinuationTests.swift */,
 				F67B762716E944619C75C896 /* ControllerFeedbackBoundaryTests.swift */,
 				E2296FF6A713465DABEA1251 /* InputExtractionBoundaryTests.swift */,
 				FFDB27E27E6B4A149293B838 /* StreamInputBoundaryTests.swift */,
@@ -2437,6 +2446,8 @@
 				A10000001 /* GlimmerApp.swift in Sources */,
 				A1009001 /* UpdaterController.swift in Sources */,
 				A10000002 /* ContentView.swift in Sources */,
+				DC9A61DEBDDA4825AE9B1220 /* RunningGameRow.swift in Sources */,
+				950271A5578F49C4B8E77618 /* AppModel+Continuation.swift in Sources */,
 				A10000005 /* SettingsView.swift in Sources */,
 				A1000009A /* PairSheet.swift in Sources */,
 				5E55105026102200000000B1 /* PairingPresentation.swift in Sources */,
@@ -2736,6 +2747,7 @@
 				FC0BF6D54C37471FB74A1E5E /* InputCoreTests.swift in Sources */,
 				D218BE89D58F4B61A16B6530 /* StreamInputChordEdgeTests.swift in Sources */,
 				21B30BD95DBE473A9BE2CC35 /* SessionHostDispositionTests.swift in Sources */,
+				58E68087D1C647789143820A /* SessionContinuationTests.swift in Sources */,
 				9457688C09C64D7EAA26FF38 /* ControllerFeedbackBoundaryTests.swift in Sources */,
 				66C8CCDC9ABC4E5491B48EBE /* InputExtractionBoundaryTests.swift in Sources */,
 				B6EBDAE5E14B486CBC3109D3 /* StreamInputBoundaryTests.swift in Sources */,

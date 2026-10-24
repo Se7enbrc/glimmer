@@ -19,6 +19,12 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// A native-size trial asks for the window's listed size at this profile's refresh cap.
+    func screenSize(windowPixels: CGSize, maximumFramesPerSecond: Int) throws -> StreamFormat {
+        try Self.native120.resolve(windowPixels: windowPixels,
+                                   maximumFramesPerSecond: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond))
+    }
+
     enum Failure: Error { case displayUnavailable, modesUnavailable }
 
     func resolve(windowPixels: CGSize, maximumFramesPerSecond: Int) throws -> StreamFormat {
@@ -50,6 +56,24 @@ struct StreamFormat: Hashable, Sendable {
     let width: Int
     let height: Int
     let fps: Int
+    var changeResolution = true
+
+    var continuationFormat: ContinuationFormat {
+        ContinuationFormat(width: width, height: height, fps: fps, hdr: false, changeResolution: changeResolution)
+    }
+
+    static func continuing(_ launch: StreamLaunch, native: StreamFormat, maximumFPS: Int) -> StreamFormat {
+        guard !launch.useScreenSize else { return native }
+        let previous = launch.continuing ? launch.previousFormat : launch.startFormat
+        if let old = previous?.supported(maximumWidth: 3840, maximumHeight: 2160,
+                                                       maximumFPS: maximumFPS, supportsHDR: false) {
+            return StreamFormat(width: old.width, height: old.height, fps: old.fps,
+                                changeResolution: old.changeResolution)
+        }
+        var result = native
+        result.changeResolution = !launch.continuing
+        return result
+    }
 
     var summary: String { "\(width) × \(height) · \(fps) fps" }
     var pacingFPS: Int32 { Int32(fps) }
@@ -57,6 +81,7 @@ struct StreamFormat: Hashable, Sendable {
                        hardwareFormats: VideoFormats = .hardwareSupported) -> StreamConnection.Configuration {
         let formats = hardwareFormats.forDisplay(potentialEDRHeadroom: potentialEDRHeadroom)
         return StreamConnection.Configuration(width: width, height: height, fps: fps,
-            bitrateKbps: StreamProfile.bitrateKbps, videoFormats: formats, audio: .stereo)
+            bitrateKbps: StreamProfile.bitrateKbps, videoFormats: formats, audio: .stereo,
+            changeResolution: changeResolution, resumeResolutionChange: true)
     }
 }

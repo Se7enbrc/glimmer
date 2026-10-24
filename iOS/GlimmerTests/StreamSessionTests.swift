@@ -399,7 +399,7 @@ struct StreamSessionTests {
         #expect(surface.displayLayer === replacement)
         #expect(replacement.superlayer === surface.layer)
         #expect(failedLayer.superlayer == nil)
-        #expect(replacement.videoGravity == .resizeAspectFill)
+        #expect(replacement.videoGravity == .resizeAspect)
         #expect(replacement.frame == surface.bounds && surface.clipsToBounds)
     }
 
@@ -407,7 +407,7 @@ struct StreamSessionTests {
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 800, height: 400))
         surface.layoutIfNeeded()
         #expect(surface.displayLayer.frame == surface.bounds)
-        #expect(surface.displayLayer.videoGravity == .resizeAspectFill)
+        #expect(surface.displayLayer.videoGravity == .resizeAspect)
         #expect(surface.clipsToBounds)
         let model = PlaybackFixture().model()
         let controller = StreamViewController(model: model, close: {})
@@ -424,6 +424,7 @@ struct StreamSessionTests {
 final class PlaybackFixture {
     let id = UUID()
     var makes = 0
+    var format: StreamFormat?
     var visibility: [Bool] = []
     var visibilityInputs: [VideoDecoder.PresentationVisibility] = []
     var focusHistory: [Bool] = []
@@ -440,15 +441,15 @@ final class PlaybackFixture {
         .init(sessionID: id, attemptID: UUID(), event: event)
     }
 
-    func model() -> StreamSessionModel {
-        StreamSessionModel(launch: testLaunch(), backgroundGrace: StreamBackgroundGrace(calls: backgroundCalls),
+    func model(launch: StreamLaunch = testLaunch()) -> StreamSessionModel {
+        StreamSessionModel(launch: launch, backgroundGrace: StreamBackgroundGrace(calls: backgroundCalls),
                            makePlayback: { [self] _, _, quiesce in
             makes += 1
             self.quiesce = quiesce
             return StreamPlayback(id: id, events: events.stream, start: start, stop: { [self] in
                 await stop()
                 await MainActor.run { completedStops += 1 }
-            }, screenChanged: {}, focusInput: { [self] in focusHistory.append($0) },
+            }, screenChanged: {}, focusInput: { [self] in focusHistory.append($0) }, format: format,
                setVisible: { [self] visible, inputs in
                    visibility.append(visible)
                    visibilityInputs.append(inputs)

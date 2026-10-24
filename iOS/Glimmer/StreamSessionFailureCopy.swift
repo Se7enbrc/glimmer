@@ -4,6 +4,16 @@
 import GlimmerEngine
 
 enum StreamSessionFailureCopy {
+    static func quit(_ error: Error, app: String, pc: String) -> String {
+        if error is TakeoverRequired { return StreamFailureCopy.runningAppChanged(pc) }
+        if error is RunningAppFailure { return StreamFailureCopy.quitUnconfirmed(app, pc: pc) }
+        switch StreamFailure.connection(error) {
+        case .launchRefused, .launchFailed: return StreamFailureCopy.quitRefused(pc)
+        case .hostTimedOut: return StreamFailureCopy.quitUnconfirmed(app, pc: pc)
+        default: return connection(StreamFailure.connection(error), pcName: pc)
+        }
+    }
+
     static func connection(_ reason: StreamFailure.ConnectionReason, pcName: String) -> String {
         switch reason {
         case .portsBlocked(let proto, let port):

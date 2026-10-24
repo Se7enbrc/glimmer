@@ -169,6 +169,7 @@ struct StreamControls: View {
     let close: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var confirmingQuit = false
 
     var body: some View {
         ZStack {
@@ -190,6 +191,13 @@ struct StreamControls: View {
             if model.controlsVisible || model.phase != .streaming {
                 VStack(alignment: .trailing, spacing: 0) {
                     controls
+                    if model.pictureNeedsReview {
+                        VStack(alignment: .trailing, spacing: 8) {
+                            Text("Does \(model.launch.appName) look right?")
+                            Button("Keep this size") { model.keepSize?() }
+                            Button("Use the previous size") { model.restoreSize?() }
+                        }.buttonStyle(.glass).padding()
+                    }
                     if let format = model.requestedFormat {
                         Text("Requested: \(format.summary)")
                             .font(.caption).foregroundStyle(.secondary)
@@ -212,6 +220,13 @@ struct StreamControls: View {
             }
             .padding(.bottom, 8)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.controllerModeMessage)
+        }
+        .confirmationDialog("Quit \(model.launch.appName) on \(model.launch.pcName)?",
+                            isPresented: $confirmingQuit, titleVisibility: .visible) {
+            Button("Quit \(model.launch.appName)", role: .destructive, action: model.quitGame)
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Unsaved progress may be lost. Other streams from \(model.launch.pcName) will stop.")
         }
         .opacity(model.dismissWhenStopped ? 0 : 1)
         .allowsHitTesting(!model.dismissWhenStopped)
@@ -255,7 +270,12 @@ struct StreamControls: View {
         .buttonStyle(.glass)
         .disabled(model.phase == .stopping)
         .accessibilityHint(model.phase.isEnded ? "Returns to your apps."
-                           : "Disconnects without quitting the game on the PC.")
+            : model.launch.leaveGamesRunning ? "Ends this stream and leaves the game running on the PC."
+            : "Ends this stream and quits the game on the PC.")
+        if !model.phase.isEnded {
+            Button("Quit \(model.launch.appName)…", role: .destructive) { confirmingQuit = true }
+                .buttonStyle(.glass).disabled(model.phase == .stopping)
+        }
     }
 
     @ViewBuilder private var status: some View {

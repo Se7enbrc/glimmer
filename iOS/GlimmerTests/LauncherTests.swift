@@ -25,6 +25,7 @@ struct LauncherTests {
         #expect(await model.artwork(for: fixture.app) == nil)
         #expect(requests.withLock { $0 } == 1)
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         #expect(model.artworkRevision == nil)
         #expect(await model.artwork(for: fixture.app) == nil)
         #expect(requests.withLock { $0 } == 1)
@@ -106,6 +107,7 @@ struct LauncherTests {
         model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         model.availabilityChanged(active: false, background: true, protectedDataAvailable: true)
         model.streamClosed()
         await model.waitUntilStreamClosed()
@@ -125,6 +127,7 @@ struct LauncherTests {
         model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         fixture.prepareFailure = LauncherServices.Failure.unavailable
         model.streamClosed()
         await model.waitUntilStreamClosed()
@@ -142,6 +145,7 @@ struct LauncherTests {
         model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         let changes = Mutex(0)
         withObservationTracking {
             #expect(model.hasActiveStream)
@@ -191,6 +195,7 @@ struct LauncherTests {
         model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         #expect(model.stream?.launch.profile == .native120)
         #expect(model.stream?.launch.touchMouseEnabled == true)
         model.streamClosed()
@@ -207,6 +212,7 @@ struct LauncherTests {
         model.mouseStick = .left
         model.touchMouseEnabled = false
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         model.streamProfile = .fullHD60
         model.mouseStick = .right
         model.touchMouseEnabled = true
@@ -229,6 +235,7 @@ struct LauncherTests {
         #expect(fixture.remembers == 1)
         #expect(model.apps.map(\.id) == [1])
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         #expect(model.stream?.launch.appID == 1)
         #expect(fixture.prepares == 1)
         model.streamClosed()
@@ -237,6 +244,7 @@ struct LauncherTests {
         #expect(model.selectedName == "Test PC" && model.apps.count == 1)
         #expect(model.message == nil)
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         #expect(model.stream != nil)
         #expect(fixture.prepares == 2)
     }
@@ -255,6 +263,7 @@ struct LauncherTests {
         model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         #expect(model.hasActiveStream)
         model.stream?.start(surface: StreamSurface())
         model.stream = nil
@@ -263,6 +272,7 @@ struct LauncherTests {
         #expect(model.hasActiveStream)
         model.select(fixture.saved)
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         #expect(model.stream == nil)
         #expect(fixture.prepares == 1)
         await gate.release()
@@ -279,6 +289,7 @@ struct LauncherTests {
         model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         #expect(fixture.prepares == 0)
         #expect(model.stream == nil)
     }
@@ -468,6 +479,8 @@ final class LauncherFixture {
     var remembers = 0
     var appRequests = 0
     var makeSession: @MainActor (StreamLaunch) -> StreamSessionModel = { StreamSessionModel(launch: $0) }
+    var runningAppID = 0
+    var quitIDs: [Int] = []
     var paired = true
     var pairGate: StreamTestGate?
     var appGate: StreamTestGate?
@@ -477,6 +490,7 @@ final class LauncherFixture {
     var preparedSaved: Bool?
     var server: ServerInfo {
         var server = ServerInfo(address: "pc.invalid", uniqueId: pcID, serverName: "Test PC")
+        server.currentGameID = runningAppID
         server.pairStatus = paired ? .paired : .unpaired
         server.serverCertPEM = paired ? "test placeholder, never sent to a transport" : nil
         return server
@@ -520,7 +534,10 @@ final class LauncherFixture {
                 if lastConnectedID == id { lastConnectedID = nil }
                 return storedPCs
             },
-            artwork: artwork, makeSession: makeSession),
+            artwork: artwork, status: { [self] _ in server }, quit: { [self] _, appID in
+                quitIDs.append(appID)
+                runningAppID = 0
+            }, makeSession: makeSession),
             discoveryEnabled: false)
     }
 }

@@ -106,6 +106,17 @@ struct SystemServiceSeamTests {
         #expect(host.apps.contains { $0.name == launches.first?.app })
     }
 
+    @Test func anotherAppOnTheLivePCUsesTheSharedReplacementChoice() async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let host = pc(apps: ["Desktop", "Steam"])
+        model.hosts = [host]
+        model.selectedHost = host
+        model.lastLaunchAttempt = (host.apps[0], host)
+        model.isStreaming = true
+        let (_, launches) = try await stream(model, pc: PCEntity(host: host), app: "Steam")
+        #expect(launches.count == 1 && launches.first?.app == "Steam")
+    }
+
     @Test func anUnknownAppOrPCIsRefused() async throws {
         let model = AppModel(defaults: settings.defaults)
         let host = pc()

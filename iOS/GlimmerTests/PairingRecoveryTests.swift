@@ -82,6 +82,7 @@ struct PairingRecoveryTests {
         #expect(model.selectedName == fixture.saved.name && model.apps.count == 1)
         #expect(model.artworkRevision == revision && fixture.lastConnectedID == fixture.pcID)
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         #expect(model.stream != nil)
     }
 
@@ -130,6 +131,7 @@ struct PairingRecoveryTests {
         await model.waitUntilOperationFinishes()
         model.requestForget(fixture.saved)
         model.launch(fixture.app)
+        await model.waitUntilOperationFinishes()
         model.confirmForget(fixture.saved)
         #expect(!model.canForgetPC && fixture.forgotten.isEmpty && model.stream != nil)
     }

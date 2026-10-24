@@ -103,6 +103,7 @@ private struct GlimmerSettingsPage: View {
     let pairPC: (HostDiscovery.Discovered) -> Void
     let page: GlimmerSettings.Page
     @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
+    @AppStorage("leaveGamesRunning") private var leaveGamesRunning = false
     @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
     #if GLIMMER_DIAGNOSTICS
     @AppStorage("telemetryEnabled") private var diagnostics = true
@@ -117,6 +118,12 @@ private struct GlimmerSettingsPage: View {
                     Picker("Layout", selection: $launcherStyle) {
                         ForEach(LauncherStyle.allCases) { Text($0.label).tag($0) }
                     }
+                }
+                Section {
+                    Toggle("Leave games running when you disconnect", isOn: $leaveGamesRunning)
+                } footer: {
+                    Text("For games and PCs that handle a change in screen size. "
+                         + "Otherwise, disconnecting quits the game.")
                 }
             case .quality: StreamQualitySettings(profile: $profile)
             case .pcs: computerSettings

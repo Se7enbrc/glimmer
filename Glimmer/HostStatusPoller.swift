@@ -244,6 +244,7 @@ extension AppModel {
         guard let host = selectedHost, host.id == hostID else { return appListFor }
         updateHostMac(hostID: hostID, mac: info.macAddress, defaults: hostsDefaults)
         let running = info.currentGameID
+        if running == 0, !info.isBusy { continuationHistory.invalidate(pc: hostID) }
         var status = HostLiveStatus(
             hostID: hostID, state: Self.liveState(info, apps: host.apps), rttMs: rttMs,
             sunshineVersion: info.appVersion, capturedAt: Date(), runningAppID: running == 0 ? nil : running

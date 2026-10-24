@@ -22,13 +22,19 @@ import os.log
 
 extension AppModel {
 
-    /// Prompt at once when the launcher already knows the host is taken; the
-    /// launch flow re-checks fresh server-info and prompts if that disagrees.
+    /// Every launcher entry shares the same running-app decision, including a live local stream.
     func requestStream(app: LibraryApp, on host: Host) {
-        if readinessReason(for: host) == nil, !isStreaming, let live = hostLiveStatus, live.hostID == host.id,
-           Date().timeIntervalSince(live.capturedAt) <= HostLiveStatus.stale,
-           let occupant = Self.occupant(of: live.state) {
-            pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
+        if isStreaming, let active = lastLaunchAttempt, active.host.id == host.id {
+            if active.app.id == app.id { resumeStreamWindow(); return }
+            pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: active.app.name,
+                                               occupantID: active.app.id)
+            presentTakeoverAlertIfNeeded()
+            return
+        }
+        if readinessReason(for: host) == nil, let running = runningApp(on: host) {
+            if running.id == app.id { stream(app: app, on: host, continuing: true); return }
+            pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: running.name,
+                                               occupantID: running.id)
             presentTakeoverAlertIfNeeded()
             return
         }
@@ -45,11 +51,17 @@ extension AppModel {
         }
     }
 
-    /// Confirm the armed takeover and launch over the host's current session.
+    /// Stop only local media before the engine executes the one approved replacement.
     func confirmPendingTakeover() {
         guard let pending = pendingTakeover else { return }
         pendingTakeover = nil
-        stream(app: pending.app, on: pending.host, takeoverAuthorized: true)
+        let ending = nativeStreamTask
+        Task {
+            if let session = nativeSession { await session.disconnectLeavingGameRunning() }
+            await ending?.value
+            stream(app: pending.app, on: pending.host, takeoverAuthorized: pending.occupantID == nil,
+                   approvedOccupant: pending.occupantID, useScreenSize: pending.useScreenSize)
+        }
     }
 
     /// The per-launch UI state, reset at every start. The click anchors live
@@ -57,6 +69,7 @@ extension AppModel {
     /// only the click can answer "did the user wait > 400 ms".
     private func armLaunchState(app: LibraryApp, host: Host) {
         cancelPendingCommandStream()
+        endedContinuation = nil
         hostPolling.establishedHostID = nil
         lastLaunchAttempt = (app, host)
         streamRoute.monitor(address: Self.routeAddress(host))
@@ -82,17 +95,12 @@ extension AppModel {
         requestStream(app: attempt.app, on: attempt.host)
     }
 
-    func stream(app: LibraryApp, on host: Host, takeoverAuthorized: Bool = false) {
-        // RE-ENTRANCY GUARD. The native backend runs ONE session at a time
-        // (StreamBridgeContext.current is a single process-global slot), and
-        // a second entry here would corrupt it wholesale: a second
-        // StreamSession overwrites nativeSession, markStreamStart() wipes the
-        // live session's pending receipt, the new launch's /cancel kills the
-        // old host-side session, and the old session's teardown then clobbers
-        // isStreaming/streamPhase out from under the new one. The UI disables
-        // its launch surfaces while a session exists, but a double-click can
-        // land before SwiftUI re-renders - this guard is the actual wall.
+    func stream(app: LibraryApp, on host: Host, takeoverAuthorized: Bool = false,
+                approvedOccupant: Int? = nil, continuing: Bool = false, useScreenSize: Bool = false,
+                startFormat: ContinuationFormat? = nil) {
+        // The process owns one live engine session. A second app must pass through replacement.
         guard !isStreaming else {
+            if lastLaunchAttempt?.host.id == host.id { requestStream(app: app, on: host); return }
             Diag.notice("Ignoring stream request (\(app.name) on \(host.displayName, privacy: .private)) "
                 + "- a session is already in flight", "Stream")
             return
@@ -100,6 +108,8 @@ extension AppModel {
         LogStore.shared.beginSession()
         Diag.notice("Starting stream → \(host.displayName, privacy: .private) · \(app.name)", "Stream")
         let readiness = hostPolling.readinessTasks[host.id]
+        let cfg = continuationConfig(for: host, app: app, continuing: continuing, useScreenSize: useScreenSize,
+                                     startFormat: startFormat)
         armLaunchState(app: app, host: host)
         // NB: the "last played" timestamp is intentionally NOT written here.
         // It records when the stream ENDED, not when it started - writing it
@@ -125,40 +135,19 @@ extension AppModel {
 
         beforeStreamStart()
 
-        let cfg = nativeStreamConfig(for: host, app: app)
-        prepareMenuBarDetails(width: cfg.width, height: cfg.height, fps: cfg.fps)
-        // One line naming how the stream will be shown and what was asked for,
-        // so a "why is it 1080p in a window" report answers itself from the log.
-        Diag.info("Show the stream: \(cfg.displayMode.displayName.lowercased()) - requesting "
-            + "\(cfg.width)x\(cfg.height) at \(cfg.fps) Hz", "Stream")
+        recordNativeLaunch(cfg, host: host)
         let info = nativeServerInfo(for: host)
-        // Arm the session-receipt latch with this session's identity (host +
-        // requested mode). The live edge stamps the wall clock; the teardown
-        // hook in StreamSession.stop() adds the end-of-session numbers; the
-        // cleanup below finalizes. See SessionReceiptStore for the contract.
-        SessionReceiptStore.markStreamStart(
-            hostId: host.id, width: cfg.width, height: cfg.height, refreshHz: cfg.fps)
-        // Hotkey chords are read live via providers (see below) rather
-        // than captured here, so edits to quitHotkey/statsHotkey in
-        // Settings take effect mid-stream without restarting.
-        //
-        // Seed the session-scoped stats-overlay state from the user's
-        // persisted preference. The in-stream hotkey toggles this value
-        // but intentionally does not write back to UserDefaults - see the
-        // doc on `statsHotkey`.
         let initialStatsOverlay = showStreamStats
 
-        Task { [weak self] in
+        let disposition = StreamHostDisposition(leaveGamesRunning: leaveGamesRunning)
+        nativeStreamTask = Task { [weak self] in
             guard let self else { return }
             guard !menuStopInProgress else {
                 cleanupAfterStream(host: host, caughtError: CancellationError())
                 return
             }
-            // The Swift-native engine is the only path.
-            let session = StreamSession(
-                hostDisposition: .cancelOwnedHostSession, backend: MacTransport.makeBackend(), makeNetwork: makeNetwork)
-            self.nativeSession = session
-            await session.authorizeTakeover(takeoverAuthorized)
+            let session = await makeNativeSession(disposition: disposition, takeoverAuthorized: takeoverAuthorized,
+                                                  approvedOccupant: approvedOccupant, continuing: continuing)
             if let launch = cfg.bitrateDecision {
                 await session.setRouteAskProvider(routeAskProvider(launch: launch, hostID: host.id))
             }
@@ -225,6 +214,15 @@ extension AppModel {
         }
     }
 
+    private func recordNativeLaunch(_ config: StreamConfig, host: Host) {
+        activeContinuationFormat = config.continuationFormat
+        prepareMenuBarDetails(width: config.width, height: config.height, fps: config.fps)
+        Diag.info("Show the stream: \(config.displayMode.displayName.lowercased()) - requesting "
+            + "\(config.width)x\(config.height) at \(config.fps) Hz", "Stream")
+        SessionReceiptStore.markStreamStart(hostId: host.id, width: config.width, height: config.height,
+                                           refreshHz: config.fps)
+    }
+
     /// A stop during readiness must not start a session when the shared check eventually finishes.
     func waitForStreamReadiness(_ readiness: Task<Void, Never>?) async throws {
         await readiness?.value
@@ -239,10 +237,16 @@ extension AppModel {
         await session.stop()
         if let takeover {
             let occupant = host.apps.first(where: { $0.id == takeover.appID })?.name
-            pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant)
+            pendingTakeover = PendingTakeover(app: app, host: host, occupantApp: occupant, occupantID: takeover.appID)
             isStreaming = false
         }
-        cleanupAfterStream(host: host, caughtError: error)
+        let ended = (error as? RunningAppFailure) == .ended
+        cleanupAfterStream(host: host, caughtError: ended ? nil : error)
+        if ended {
+            nativeStreamError = nil
+            endedContinuation = EndedContinuation(host: host, app: app,
+                format: continuationHistory.previous(pc: host.id, app: app.id))
+        }
         if takeover != nil { presentTakeoverAlertIfNeeded() }
     }
 
@@ -251,6 +255,7 @@ extension AppModel {
     /// stays one site - never duplicate any of this elsewhere (a second
     /// "cleanup" is how zombie state is made).
     private func cleanupAfterStream(host: Host, caughtError: Error?) {
+        if caughtError != nil { rejectPictureTrial() }
         let cancelled = Self.connectWasCancelled(by: caughtError, cancelRequested: Self.connectCancelRequested)
         if cancelled {
             // start()'s throw is the user's stop arriving, not a failure to report.
@@ -363,10 +368,12 @@ extension AppModel {
             // Latched once inside the store - repeat edges are no-ops.
             SessionReceiptStore.markSessionLive()
         case .firstFrame:
+            rememberContinuation(on: host)
             noteVideoReceived(from: host)
             if case .connecting = streamPhase { hostPolling.establishedHostID = host.id }
             promoteToStreamingOnFirstFrame()
         case .connectionTerminated(let code, let error):
+            rejectPictureTrial()
             streamPhase = .idle
             nativeHDRActive = false
             showStreamEnded(code: code, error: error, host: host)

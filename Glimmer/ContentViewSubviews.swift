@@ -168,11 +168,9 @@ struct AppIconsRow: View {
         .buttonStyle(LauncherTileStyle(covers: model.launcherStyle == .covers))
         .modifier(LauncherControlFocus(focus: focus, target: .app(app.id), activate: { activate(app) }))
         .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
-        // Only the streaming app stays live; the overflow menu remains openable,
-        // since looking at other apps launches nothing.
-        .disabled((model.isStreaming || model.readinessReason(for: host) != nil) && state == .ready)
-        .help(model.readinessReason(for: host) ?? state.help ?? (model.isStreaming
-            ? "Finish the current stream first" : "Stream \(app.name)"))
+        // A different app remains selectable so its named replacement can be confirmed.
+        .disabled((model.menuStopInProgress || model.readinessReason(for: host) != nil) && state == .ready)
+        .help(model.readinessReason(for: host) ?? state.help ?? "Stream \(app.name)")
         // One name, not glyph + name + play glyph read in turn.
         .accessibilityLabel(app.name)
         .accessibilityValue(state.spoken.value.isEmpty && isRunning(app) ? "Running" : state.spoken.value)
@@ -202,7 +200,7 @@ struct AppIconsRow: View {
                     Label { Text("Stream \(app.name)") } icon: { app.icon }
                         .labelStyle(.titleAndIcon)
                 }
-                .disabled(model.isStreaming || model.readinessReason(for: host) != nil)
+                .disabled(model.menuStopInProgress || model.readinessReason(for: host) != nil)
                 .accessibilityHint(model.readinessReason(for: host) ?? "")
             }
         } label: {
@@ -213,9 +211,7 @@ struct AppIconsRow: View {
         .menuIndicator(.hidden)
         // Glass, not violet: it opens a list rather than streaming.
         .glassSurface(in: .rect(cornerRadius: 14), interactive: true)
-        .help(model.isStreaming
-            ? "Finish the current stream first"
-            : "Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")
+        .help("Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")
         .accessibilityLabel("\(overflowApps.count) more apps")
         .accessibilityHint("Shows the rest of this PC's apps")
     }
