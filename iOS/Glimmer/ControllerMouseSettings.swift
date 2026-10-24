@@ -169,7 +169,7 @@ struct GlimmerSettings: View {
             Toggle("Record diagnostics", isOn: $diagnostics)
         } footer: {
             Text("Saves performance and troubleshooting files on this iPhone for the next stream. "
-                 + "Nothing is uploaded. Development builds enable this by default.")
+                 + "Nothing is uploaded. TestFlight builds turn this on by default.")
         }
     }
 }

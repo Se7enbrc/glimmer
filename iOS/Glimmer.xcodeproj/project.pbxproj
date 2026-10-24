@@ -22,7 +22,9 @@
 		2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */; };
 		348684B76496EAF753290EF6 /* EngineLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC8777C55611710BADD7484 /* EngineLink.swift */; };
 		352C1011524E806B983A697E /* GlimmerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB5FA496B339386824307D80 /* GlimmerApp.swift */; };
+		B426095DE40544C9800A59D3 /* DiagnosticsDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB04CBAA442A417DB7141C7D /* DiagnosticsDefaults.swift */; };
 		448039B562D4A381F641CF03 /* AppDeclarationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */; };
+		80AAC985744D4D0CA0D130C1 /* DiagnosticsDefaultsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B8F39A9BC8494A8BBC0149 /* DiagnosticsDefaultsTests.swift */; };
 		4F9A1E395BAE1D05802CA568 /* CREDITS.md in Resources */ = {isa = PBXBuildFile; fileRef = 405AF81E78D41E1E222D5991 /* CREDITS.md */; };
 		56379B99BE31A1E9E8BAC42F /* ControllerMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36171098F2FC6D807B7809E9 /* ControllerMonitor.swift */; };
 		76D18FAA5093262D2C6C77E9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4E152D5238E668E8A9E5531F /* AppIcon.icon */; };
@@ -90,6 +92,7 @@
 		34C1CD2D3621B447D33B3F8C /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		36171098F2FC6D807B7809E9 /* ControllerMonitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ControllerMonitor.swift; sourceTree = "<group>"; };
 		3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDeclarationTests.swift; sourceTree = "<group>"; };
+		39B8F39A9BC8494A8BBC0149 /* DiagnosticsDefaultsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsDefaultsTests.swift; sourceTree = "<group>"; };
 		3D8BD9F49FCFD5C8571088CE /* Signing.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		405AF81E78D41E1E222D5991 /* CREDITS.md */ = {isa = PBXFileReference; includeInIndex = 1; path = CREDITS.md; sourceTree = "<group>"; };
 		45D50F4C90AB68CB5149E594 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -102,6 +105,7 @@
 		C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineLinkTests.swift; sourceTree = "<group>"; };
 		C27E8A6F7449606A4E16DB8B /* LauncherView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LauncherView.swift; sourceTree = "<group>"; };
 		CB5FA496B339386824307D80 /* GlimmerApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlimmerApp.swift; sourceTree = "<group>"; };
+		BB04CBAA442A417DB7141C7D /* DiagnosticsDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsDefaults.swift; sourceTree = "<group>"; };
 		DBDB247C151A5B0F3BCE13B6 /* App.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
 		EDC8777C55611710BADD7484 /* EngineLink.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineLink.swift; sourceTree = "<group>"; };
 		FAD2215B8AB2557B667379E3 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -229,6 +233,7 @@
 				22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */,
 				C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */,
 				3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */,
+				39B8F39A9BC8494A8BBC0149 /* DiagnosticsDefaultsTests.swift */,
 			);
 			name = GlimmerTests;
 			path = GlimmerTests;
@@ -272,6 +277,7 @@
 				D46ADEF81D9B207FD34CBB22 /* IOSAudio.swift */,
 				EDC8777C55611710BADD7484 /* EngineLink.swift */,
 				CB5FA496B339386824307D80 /* GlimmerApp.swift */,
+				BB04CBAA442A417DB7141C7D /* DiagnosticsDefaults.swift */,
 				C27E8A6F7449606A4E16DB8B /* LauncherView.swift */,
 				34C1CD2D3621B447D33B3F8C /* Info.plist */,
 				8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */,
@@ -401,6 +407,7 @@
 				1A26CF1176BA5F2D37E40F0A /* IOSAudioFixtures.swift in Sources */,
 				2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */,
 				448039B562D4A381F641CF03 /* AppDeclarationTests.swift in Sources */,
+				80AAC985744D4D0CA0D130C1 /* DiagnosticsDefaultsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -435,6 +442,7 @@
 				670FF5C58DCCB38D0C0F55D6 /* IOSAudio.swift in Sources */,
 				348684B76496EAF753290EF6 /* EngineLink.swift in Sources */,
 				352C1011524E806B983A697E /* GlimmerApp.swift in Sources */,
+				B426095DE40544C9800A59D3 /* DiagnosticsDefaults.swift in Sources */,
 				10896918E526BAFB88FC984F /* LauncherView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
