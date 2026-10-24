@@ -459,8 +459,8 @@ final class AppModel {
     /// `notificationTokens` so each is removed from the center that owns it.
     @ObservationIgnored var workspaceTokens: [NSObjectProtocol] = []
 
-    /// Misses in this poll loop. Recent answers or a just-ended stream hold through
-    /// two misses; a third publishes Asleep. Re-arming or a reachable probe resets it.
+    /// Recent answers hold through two misses; a third publishes Asleep. Selection,
+    /// stream teardown and reachable answers reset the streak; activation preserves it.
     @ObservationIgnored var hostUnreachableStreak = 0
 
     /// Consecutive missed probes before the chip shows Asleep while it holds a fresh

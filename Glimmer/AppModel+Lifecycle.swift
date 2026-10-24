@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AppModel+Lifecycle.swift
-//
-//  App-delegate attach, launch bootstrap, the live host-refresh loop, custom-bitrate auto-tracking, and shutdown. Split out of AppModel.swift to keep each unit focused.
-//
+// App lifecycle owns polling, activation and sleep notifications.
 
 import GlimmerEngine
 import Foundation
@@ -154,11 +150,29 @@ extension AppModel {
                 self?.launcherController.refresh()
             }
         })
+        observeHostPollingVisibility(center: nc)
         observeHostPollingSleep()
         // Catch a controller that was already connected at launch (covers both
         // the auto-offer and seeding `controllerConnected`).
         controllerConnected = !GCController.controllers().isEmpty
         maybeOfferRawHID()
+    }
+
+    func observeHostPollingVisibility(center: NotificationCenter) {
+        notificationTokens.append(center.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let window = note.object as? NSWindow else { return }
+            MainActor.assumeIsolated {
+                guard window.identifier?.rawValue == "main" else { return }
+                self?.hostPollingVisibilityChanged(onScreen: window.occlusionState.contains(.visible))
+            }
+        })
+    }
+
+    func hostPollingVisibilityChanged(onScreen: Bool) {
+        // Hiding keeps the low-frequency loop alive; revealing must not wait for its next tick.
+        if onScreen { restartHostStatusPolling() }
     }
 
     struct ActivationContext: Sendable {
@@ -220,6 +234,8 @@ extension AppModel {
             hostPolling.movedHostSearch?.cancel()
             hostPolling.movedHostSearch = nil
             if system {
+                hostLiveStatus = nil
+                hostPolling.provenAwake = nil
                 cancelWakeForSleep()
                 Diag.info("system will sleep - host status polling paused", "Host")
             } else {
