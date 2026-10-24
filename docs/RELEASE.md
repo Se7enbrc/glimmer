@@ -111,7 +111,8 @@ explicit leases on both refs. Concurrent cutters cannot both allocate the
 branch. The reservation covers all Mac publication and iOS delivery of X
 together; there is no automatic expiry or release on cancellation, failure or
 successful publication. Both platform gates require the reservation still to be
-held.
+held. Schema 2 records also contain durable delivery claims, each bound to a
+workflow, run ID, attempt, head SHA and ref.
 
 Keep both branches under the maintainer/RC App write restrictions. All branch
 moves must use the cutter; manual bypass writes can break availability and are
@@ -119,6 +120,25 @@ rejected by subsequent gates. No workflow changes rulesets or credential-bearing
 allowed refs. Before first use, confirm the RC App can atomically update both
 refs under the existing rules. Bootstrap refuses any active Mac or iOS delivery;
 finish the shipping release before deploying this tooling.
+
+The **Candidate delivery admission** controller runs only main's tooling in
+`rc-cut`. It handles requested, in-progress (including reruns) and completed Mac
+Release and iOS TestFlight executions, verifies their live API identity, and
+updates claims with a reservation lease. It never downloads or executes
+candidate artifacts. Its RC App token has only repository contents write and
+Actions read; candidate build jobs keep read-only credentials. Before signing,
+publication or Apple upload, the delivery gate requires its exact claim as well
+as the current candidate analysis verdict. Admission checks wait at most 20
+minutes for admission; missing or failed admission stops delivery without
+credentials. Credential gates wait for their current attempt again on partial
+reruns; a retained earlier wait or approval cannot admit the new attempt.
+
+Completion removes only that exact attempt's claim after GitHub reports it
+completed. Cancellation and failure count as completion, not as permission to
+retire the candidate. A missing completion event leaves a durable claim. Recover
+by dispatching **Candidate delivery admission** on main with the exact `run_id`
+and `attempt`; it rereads GitHub and cannot clear an active attempt. Do not
+manually erase claims. A failed or cancelled controller never frees a hold.
 
 After **all intended Mac and iOS deliveries, including stable promotion and tap
 repair**, are complete, the maintainer runs from a trusted tooling checkout with
@@ -130,15 +150,21 @@ python3 scripts/candidate_reservation.py release FULL_CANDIDATE_SHA
 
 If abandoning X, first cancel its pending workflows and wait for them to stop,
 then run `python3 scripts/candidate_reservation.py abandon FULL_CANDIDATE_SHA`.
-Both commands refuse while any Mac Release or iOS build/delivery run is active,
-including approval waits. Release is an explicit assertion that no further
-platform delivery is intended; absence of a running workflow is not proof of
-publication or Apple's acceptance. These commands close X's delivery gates and
-leave an auditable state transition. They do not delete artifacts, tags or
-releases. Never release while publication repair or iOS delivery is still
-intended. A released or abandoned SHA cannot immediately be reallocated; use a
-new reviewed commit. A moved reservation or candidate ref needs maintainer
-recovery, not a force push to make a gate pass.
+Both commands first atomically fence the reservation as `closing`, denying new
+admissions. A delivery whose claim won the lease first may finish, with its live
+analysis gate still enforced; retirement cannot complete while any claim
+remains. The command also refuses while any Mac Release or iOS build/delivery
+run is active, including approval waits. A failure leaves the fence in place.
+Drain or cancel the admitted attempts, reconcile their completed claims, then
+repeat the same release/abandon command. A closing candidate cannot be reopened
+or replaced. Release is an explicit assertion that no further platform delivery
+is intended; absence of a running workflow is not proof of publication or
+Apple's acceptance. These commands close X's delivery gates and leave an
+auditable state transition. They do not delete artifacts, tags or releases.
+Never release while publication repair or iOS delivery is still intended. A
+released or abandoned SHA cannot immediately be reallocated; use a new reviewed
+commit. A moved reservation or candidate ref needs maintainer recovery, not a
+force push to make a gate pass.
 
 ### iOS TestFlight from the held candidate
 
@@ -568,14 +594,25 @@ anything merely to test selection. Confirm GitHub's ref-scoped open-alert query
 blocks a candidate finding even after a feature fix, accepts a current global
 dismissal, and blocks reopening. Exercise processing delays, missing analysis, a
 newer pending/failed candidate run, and a failed-job rerun retaining the other
-two successful language analyses. Check API permissions and request volume.
+two successful language analyses. Specifically rerun lower-numbered A after
+successful B: pending, failed or cancelled A must close both gates, and an
+upload from A must never join B's successful job, even with overlapping
+timestamps. Confirm the jobs API exposes the successful upload receipt and
+retained producing attempts. Check API permissions and request volume.
 
 Prove that a second cut cannot move the branch during either platform's approval
 wait, both platforms can use X concurrently, and release/abandon refuses active
-runs. After explicit completion, Y can be allocated atomically; stale writers
-and old gates must fail. Confirm the branch protections cover the new
-reservation ref and that an interrupted cut resumes without a second Release.
-Local fixtures do not establish these hosted behaviors.
+runs. Pause retirement at its delivery snapshot and race admission against the
+closing lease: only an already admitted attempt may drain, and retirement must
+wait for its completion. Repeat with concurrent Mac and iOS claims, delayed
+completion events, cancellation and partial job reruns. After explicit
+completion, Y can be allocated atomically; stale writers and old gates must
+fail. Promotion must reject unreserved X, a moved/deleted ref, absent scans or
+an open candidate alert even with valid assets, attestations, unchanged shipped
+inputs and green main. Confirm prerequisite reads still use the read token after
+publication and tag credentials are selected. Confirm the branch protections
+cover the new reservation ref and that an interrupted cut resumes without a
+second Release. Local fixtures do not establish these hosted behaviors.
 
 Do not enable Actions debug logging; release context validation rejects it.
 Never upload temporary credential directories, keychains or raw signing inputs.

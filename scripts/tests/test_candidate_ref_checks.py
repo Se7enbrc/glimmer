@@ -264,3 +264,27 @@ class CandidateRefChecksTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.check()
             self.data[0][field] = saved
+
+    def test_closing_allows_only_the_exact_admitted_delivery_through_the_full_gate(self):
+        identity = {'run': 10, 'attempt': 2, 'sha': SHA, 'ref': REF,
+                    'workflow': '.github/workflows/release.yml'}
+        data = {'schema': 2, 'sha': SHA, 'state': 'closing', 'claims': {'10:2': identity}}
+        original = self.objects
+        def objects(path):
+            result = original(path)
+            if path.startswith('git/commits/'):
+                result['message'] = json.dumps(data)
+            return result
+        env = {'GITHUB_REPOSITORY': CHECKS.REPO, 'GITHUB_EVENT_NAME': 'workflow_dispatch',
+               'GITHUB_RUN_ID': '10', 'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_SHA': SHA,
+               'GITHUB_REF': REF, 'GITHUB_WORKFLOW_REF': CHECKS.REPO + '/' + identity['workflow'] + '@' + REF}
+        with patch.object(CHECKS, 'object_api', side_effect=objects), \
+                patch.object(CHECKS, 'api', side_effect=self.pages), patch.dict(CHECKS.os.environ, env, clear=True):
+            evidence = CHECKS.check(SHA, candidate=True, delivery=True)
+            self.assertEqual(evidence['delivery'], identity)
+            self.assertEqual(evidence['reservation'], 'c' * 40)
+            with self.assertRaises(ValueError):
+                CHECKS.check(SHA, candidate=True)
+            data['claims'] = {}
+            with self.assertRaises(ValueError):
+                CHECKS.check(SHA, candidate=True, delivery=True)

@@ -76,7 +76,7 @@ def source(tag, sha):
     short, build = values["MARKETING_VERSION"], values["CURRENT_PROJECT_VERSION"]
     if tag.rsplit("-rc.", 1)[0] != short or not re.fullmatch(r"[1-9][0-9]*", build):
         raise ValueError("candidate version does not match its tag")
-    command([sys.executable, "scripts/release-checks.py", sha, "--candidate"],
+    command([sys.executable, "scripts/release-checks.py", sha, "--candidate", "--delivery"],
             "candidate reservation or held-ref analysis no longer authorizes promotion", read_only=True)
     return short, build
 

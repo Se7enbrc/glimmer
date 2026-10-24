@@ -253,15 +253,19 @@ def collect(sha, candidate=False):
                          for entry in latest]}
 
 
-def require_candidate_ref(sha):
+def require_candidate_ref(sha, delivery=False):
     ref = object_api("git/ref/heads/release-candidate")
     if ref.get("object", {}).get("sha") != sha or ref.get("object", {}).get("type") != "commit":
         raise ValueError("release-candidate moved or is missing; nothing authorized")
-    return candidate_reservation.require(sha, object_api)
+    return candidate_reservation.require(sha, object_api, delivery=delivery)
 
 
-def check(sha, candidate=False):
-    reservation = require_candidate_ref(sha) if candidate else None
+def check(sha, candidate=False, delivery=False):
+    if delivery and not candidate:
+        raise ValueError("delivery admission requires the candidate gate")
+    if delivery:
+        candidate_reservation.wait(sha, object_api, read_budget)
+    reservation = require_candidate_ref(sha, delivery) if candidate else None
     evidence = collect(sha, candidate)
     ref = evidence["analysis_ref"]
     # Code findings gate a release; repository-posture tools like Scorecard report elsewhere.
@@ -271,8 +275,11 @@ def check(sha, candidate=False):
     if candidate:
         if collect(sha, candidate=True) != evidence:
             raise ValueError("candidate evidence changed during alert lookup")
-        if require_candidate_ref(sha) != reservation:
+        if require_candidate_ref(sha, delivery) != reservation:
             raise ValueError("candidate reservation changed during checks")
+        evidence["reservation"] = reservation
+        if delivery:
+            evidence["delivery"] = candidate_reservation.current_delivery()
     return evidence
 
 
@@ -280,11 +287,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("sha")
     parser.add_argument("--candidate", action="store_true", help="require direct scans on the held candidate ref")
+    parser.add_argument("--delivery", action="store_true", help="require this workflow attempt's durable admission")
     args = parser.parse_args()
     try:
         if not re.fullmatch(r"[0-9a-f]{40}", args.sha):
             raise ValueError("reviewed SHA must be a full lowercase commit SHA")
-        evidence = check(args.sha, candidate=True) if args.candidate else check(args.sha)
+        if args.delivery and not args.candidate:
+            raise ValueError("delivery admission requires the candidate gate")
+        if args.delivery:
+            evidence = check(args.sha, candidate=True, delivery=True)
+        else:
+            evidence = check(args.sha, candidate=True) if args.candidate else check(args.sha)
         if os.environ.get("RELEASE_CHECKS_FILE"):
             Path(os.environ["RELEASE_CHECKS_FILE"]).write_text(json.dumps(evidence) + "\n")
         if os.environ.get("GITHUB_STEP_SUMMARY"):

@@ -39,7 +39,7 @@ jobs:
   tooling:
     if: github.repository == 'Se7enbrc/glimmer'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     outputs:
       sha: ${{ steps.pin.outputs.sha }}
     steps:
@@ -48,6 +48,13 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+      - name: Wait for trusted delivery admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HELD_SHA:
+            ${{ inputs.operation == 'promote' && inputs.candidate_sha ||
+            inputs.expected_sha }}
+        run: python3 scripts/candidate_reservation.py wait "$HELD_SHA"
       - id: pin
         run: printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 

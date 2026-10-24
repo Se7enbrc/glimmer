@@ -160,7 +160,7 @@ class HostedReleaseTests(unittest.TestCase):
     def verified(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
         self.assertEqual([call["args"] for call in self.calls() if call["tool"] == "release-checks.py"][-1],
-                         [SHA, "--candidate"])
+                         [SHA, "--candidate", "--delivery"])
         for part in ("checks", "tests", "asan"):
             output = Path(self.env["GITHUB_OUTPUT"])
             output.write_text("")
@@ -321,7 +321,7 @@ class HostedReleaseTests(unittest.TestCase):
         self.env["FIXTURE_FAIL"] = "git:fetch --quiet origin refs/tags/2026.10.6-rc.1"
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "release-checks.py" for call in self.calls()))
-        self.env["FIXTURE_FAIL"] = "release-checks.py:" + SHA + " --candidate"
+        self.env["FIXTURE_FAIL"] = "release-checks.py:" + SHA + " --candidate --delivery"
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
         self.assertNotEqual(self.run_phase("verify-checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "security" or
@@ -353,8 +353,8 @@ class HostedReleaseTests(unittest.TestCase):
         self.env.update(RELEASE_OPERATION="promote", GITHUB_REF="refs/heads/main")
         self.assertEqual(self.run_phase("checks").returncode, 0)
         checks = [call["args"] for call in self.calls() if call["tool"] == "release-checks.py"]
-        self.assertEqual(checks, [[SHA], ["b" * 40, "--candidate"]])
-        self.env["FIXTURE_FAIL"] = "release-checks.py:" + "b" * 40 + " --candidate"
+        self.assertEqual(checks, [[SHA], ["b" * 40, "--candidate", "--delivery"]])
+        self.env["FIXTURE_FAIL"] = "release-checks.py:" + "b" * 40 + " --candidate --delivery"
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
         self.assertNotEqual(self.run_phase("prepare-promotion").returncode, 0)
         self.assertFalse(any(call["tool"] == "promote-release.py" for call in self.calls()))

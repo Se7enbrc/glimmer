@@ -20,6 +20,7 @@ RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-pub
                  "scripts/ci-release.sh", "scripts/install-ci-scanner.sh", "scripts/release-checks.py",
                  "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py",
                  "scripts/release_candidate_kind.py", "scripts/release_symbols.py", "scripts/candidate_reservation.py",
+                 "scripts/candidate_delivery.py", ".github/workflows/candidate-delivery.yml",
                  ".github/workflows/verify.yml", ".github/workflows/codeql.yml",
                  ".github/workflows/ios-testflight-build.yml", "scripts/ios-testflight.py",
                  "scripts/ios-testflight-artifact.py", "scripts/ios-testflight-sign.py")

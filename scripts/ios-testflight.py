@@ -35,7 +35,8 @@ BUILD_WORKFLOW = '.github/workflows/ios-testflight-build.yml'
 
 def gate(expected, builder=False):
     artifact.require_builder() if builder else artifact.require_dispatch()
-    checks = importlib.import_module('release-checks').check(expected['EXPECTED_SHA'], candidate=True)
+    checks = importlib.import_module('release-checks').check(
+        expected['EXPECTED_SHA'], candidate=True, delivery=not builder)
     output = Path(os.environ['RUNNER_TEMP']) / 'ios-testflight-checks.json'
     output.write_text(json.dumps(checks, sort_keys=True) + '\n')
     return checks

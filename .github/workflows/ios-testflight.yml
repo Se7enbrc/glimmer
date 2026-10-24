@@ -48,7 +48,7 @@ jobs:
     if:
       github.repository == 'Se7enbrc/glimmer' && github.ref == 'refs/heads/main'
     runs-on: macos-26
-    timeout-minutes: 10
+    timeout-minutes: 30
     outputs:
       artifact: ${{ steps.resolve.outputs.artifact }}
       attempt: ${{ steps.resolve.outputs.attempt }}
@@ -63,6 +63,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Wait for trusted delivery admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/candidate_reservation.py wait "$EXPECTED_SHA"
       - name: Require exact-commit Verify and all CodeQL results
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,35 +1,85 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-"""Hold one candidate for Mac publication and iOS delivery until explicit release."""
+"""Hold one candidate and serialize delivery admission with explicit retirement."""
 
 import argparse
 import importlib
 import json
+import os
 import re
 import subprocess
+import time
 
 BRANCH = 'refs/heads/release-candidate'
 RESERVATION = 'refs/heads/candidate-reservation'
 DELIVERIES = ('release.yml', 'ios-testflight-build.yml', 'ios-testflight.yml')
+ADMISSIONS = {'.github/workflows/release.yml': {BRANCH, 'refs/heads/main'},
+              '.github/workflows/ios-testflight.yml': {'refs/heads/main'}}
+
+
+class AdmissionPending(ValueError):
+    """Only the trusted controller may admit this delivery attempt."""
+
+
+def claim_key(delivery):
+    if (not isinstance(delivery, dict) or set(delivery) != {'run', 'attempt', 'sha', 'ref', 'workflow'}
+            or any(type(delivery.get(key)) is not int or delivery[key] < 1 for key in ('run', 'attempt'))
+            or not re.fullmatch(r'[0-9a-f]{40}', delivery.get('sha', ''))
+            or delivery.get('ref') not in ADMISSIONS.get(delivery.get('workflow'), set())):
+        raise ValueError('invalid delivery identity')
+    return f"{delivery['run']}:{delivery['attempt']}"
+
+
+def current_delivery():
+    if (os.environ.get('GITHUB_REPOSITORY') != 'Se7enbrc/glimmer'
+            or os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'):
+        raise ValueError('delivery admission requires an upstream manual workflow')
+    ref = os.environ.get('GITHUB_REF', '')
+    workflow_ref = os.environ.get('GITHUB_WORKFLOW_REF', '')
+    prefix, suffix = 'Se7enbrc/glimmer/', '@' + ref
+    if not workflow_ref.startswith(prefix) or not workflow_ref.endswith(suffix):
+        raise ValueError('delivery workflow ref differs from its execution')
+    delivery = {'run': int(os.environ.get('GITHUB_RUN_ID', '')),
+                'attempt': int(os.environ.get('GITHUB_RUN_ATTEMPT', '')),
+                'sha': os.environ.get('GITHUB_SHA', ''), 'ref': ref,
+                'workflow': workflow_ref[len(prefix):-len(suffix)]}
+    claim_key(delivery)
+    return delivery
 
 
 def record(message):
     data = json.loads(message)
-    if (not isinstance(data, dict) or data.get('schema') != 1
+    if (not isinstance(data, dict) or data.get('schema') not in (1, 2)
             or not re.fullmatch(r'[0-9a-f]{40}', data.get('sha', ''))
-            or data.get('state') not in ('reserved', 'released', 'abandoned')):
+            or data.get('state') not in ('reserved', 'closing', 'released', 'abandoned')):
         raise ValueError('invalid candidate reservation')
+    if data['schema'] == 1 and ('claims' in data or data['state'] == 'closing'):
+        raise ValueError('legacy reservations cannot carry delivery claims or fences')
+    claims = data.get('claims', {} if data['schema'] == 1 else None)
+    if (not isinstance(claims, dict) or any(key != claim_key(value) for key, value in claims.items())
+            or any(value['ref'] == BRANCH and value['sha'] != data['sha'] for value in claims.values())
+            or (data['state'] in ('released', 'abandoned') and claims)):
+        raise ValueError('invalid candidate delivery claims')
+    data['claims'] = claims
     return data
 
 
-def require(sha, object_api):
+def require(sha, object_api, delivery=False):
     ref = object_api('git/ref/heads/candidate-reservation')['object']
     if ref.get('type') != 'commit':
         raise ValueError('candidate reservation is not a commit')
     data = record(object_api(f"git/commits/{ref['sha']}")['message'])
-    if data['sha'] != sha or data['state'] != 'reserved':
+    allowed = ('reserved', 'closing') if delivery else ('reserved',)
+    if data['sha'] != sha or data['state'] not in allowed:
         raise ValueError('candidate is not reserved for Mac and iOS delivery')
+    if delivery:
+        identity = current_delivery()
+        claim = data['claims'].get(claim_key(identity))
+        if claim is None and data['state'] == 'reserved':
+            raise AdmissionPending('waiting for trusted delivery admission')
+        if claim != identity:
+            raise ValueError('this delivery attempt has no matching admission')
     return ref['sha']
 
 
@@ -63,14 +113,15 @@ def quiescent(checks):
             raise ValueError('Mac publication or iOS delivery is pending; finish or cancel it first')
 
 
-def write(refs, sha, state):
+def write(refs, sha, state, claims=None):
     tree = git('mktree', input='')
     parent = ['-p', refs[RESERVATION]] if RESERVATION in refs else []
-    message = json.dumps({'schema': 1, 'sha': sha, 'state': state}, sort_keys=True)
+    message = json.dumps({'schema': 2, 'sha': sha, 'state': state, 'claims': claims if claims is not None else {}}, sort_keys=True)
+    record(message)
     commit = git('commit-tree', tree, *parent, '-m', message)
     command = ['push', '--atomic', f"--force-with-lease={RESERVATION}:{refs.get(RESERVATION, '')}"]
     updates = [f'{commit}:{RESERVATION}']
-    if state == 'reserved':
+    if state == 'reserved' and claims is None:
         command.append(f"--force-with-lease={BRANCH}:{refs.get(BRANCH, '')}")
         updates.append(f'{sha}:{BRANCH}')
     git(*command, 'origin', *updates)
@@ -78,6 +129,8 @@ def write(refs, sha, state):
 
 def reserve(sha, dry_run, checks):
     refs, data = snapshot()
+    if data and data['state'] == 'closing':
+        raise ValueError('candidate is closing; drain admitted deliveries and finish retirement first')
     if data and data['state'] == 'reserved':
         if data['sha'] != sha:
             raise ValueError(f"candidate {data['sha']} is reserved; explicitly release or abandon it first")
@@ -94,27 +147,93 @@ def reserve(sha, dry_run, checks):
     return True
 
 
+def admit(sha, delivery):
+    key = claim_key(delivery)
+    for _ in range(3):
+        refs, data = snapshot()
+        if (not data or data['sha'] != sha or data['state'] not in ('reserved', 'closing')
+                or refs.get(BRANCH) != sha):
+            raise ValueError('candidate is not held for delivery admission')
+        claims = dict(data['claims'])
+        if key in claims:
+            if claims[key] != delivery:
+                raise ValueError('delivery claim identity changed')
+            return
+        if data['state'] != 'reserved':
+            raise ValueError('candidate is closing; new delivery admission is denied')
+        if delivery['ref'] == BRANCH and delivery['sha'] != sha:
+            raise ValueError('candidate delivery source differs from the held ref')
+        claims[key] = delivery
+        try:
+            write(refs, sha, 'reserved', claims)
+            return
+        except ValueError:
+            continue
+    raise ValueError('delivery admission lost its reservation lease; retry the controller')
+
+
+def depart(sha, delivery):
+    key = claim_key(delivery)
+    for _ in range(3):
+        refs, data = snapshot()
+        if not data or data['sha'] != sha or key not in data['claims']:
+            return
+        if data['claims'][key] != delivery:
+            raise ValueError('completed delivery differs from its admission')
+        claims = dict(data['claims'])
+        del claims[key]
+        try:
+            write(refs, sha, data['state'], claims)
+            return
+        except ValueError:
+            continue
+    raise ValueError('delivery completion lost its reservation lease; retry the controller')
+
+
 def finish(sha, state, checks):
     refs, data = snapshot()
-    if not data or data['sha'] != sha or data['state'] != 'reserved' or refs.get(BRANCH) != sha:
+    if (not data or data['sha'] != sha or data['state'] not in ('reserved', 'closing')
+            or refs.get(BRANCH) != sha or state not in ('released', 'abandoned')):
         raise ValueError('only the held candidate can be released or abandoned')
+    if data['state'] == 'reserved':
+        write(refs, sha, 'closing', data['claims'])
+        refs, data = snapshot()
+    if data['sha'] != sha or data['state'] != 'closing' or refs.get(BRANCH) != sha:
+        raise ValueError('candidate changed during retirement')
+    if data['claims']:
+        raise ValueError('admitted deliveries must finish before retirement; candidate remains closing')
     quiescent(checks)
-    write(refs, sha, state)
+    write(refs, sha, state, {})
+
+
+def wait(sha, object_api, budget):
+    deadline = time.monotonic() + 20 * 60
+    with budget(deadline):
+        while time.monotonic() < deadline:
+            try:
+                require(sha, object_api, delivery=True)
+                return
+            except AdmissionPending:
+                time.sleep(min(10, max(0, deadline - time.monotonic())))
+    raise ValueError('delivery admission timed out; inspect the trusted controller')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('release', 'abandon'))
-    parser.add_argument('sha', help='full held SHA; confirms all intended Mac and iOS deliveries are finished')
+    parser.add_argument('operation', choices=('release', 'abandon', 'wait'))
+    parser.add_argument('sha', help='full held candidate SHA')
     args = parser.parse_args()
     try:
         if not re.fullmatch(r'[0-9a-f]{40}', args.sha):
             raise ValueError('candidate SHA must be full lowercase hex')
         checks = importlib.import_module('release-checks')
-        finish(args.sha, 'released' if args.operation == 'release' else 'abandoned', checks)
+        if args.operation == 'wait':
+            wait(args.sha, checks.object_api, checks.read_budget)
+        else:
+            finish(args.sha, 'released' if args.operation == 'release' else 'abandoned', checks)
     except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
         parser.exit(1, f'ERR: {error}\n')
-    print(f'Candidate {args.sha} {args.operation} complete; its delivery gates are now closed.')
+    print(f'Candidate {args.sha}: {args.operation} complete.')
 
 
 if __name__ == '__main__':

@@ -105,7 +105,7 @@ class CandidatePromotionTests(unittest.TestCase):
             self.data["prerelease"] = False
             return ""
         if args[1] == "scripts/release-checks.py":
-            self.assertEqual(args[2:], [SHA, "--candidate"])
+            self.assertEqual(args[2:], [SHA, "--candidate", "--delivery"])
             return ""
         if args[1] == "scripts/update-appcast.py":
             result = subprocess.run([sys.executable, str(SCRIPTS / "update-appcast.py"), *args[2:]],
@@ -170,7 +170,7 @@ class CandidatePromotionTests(unittest.TestCase):
                     fixture.alerts = [{'number': 7}]
                 def candidate_gate(args, message, *, read_only=False):
                     if args[1:2] == ['scripts/release-checks.py']:
-                        self.assertEqual(args[2:], [SHA, '--candidate'])
+                        self.assertEqual(args[2:], [SHA, '--candidate', '--delivery'])
                         self.assertTrue(read_only)
                         fixture.check()
                         return ''

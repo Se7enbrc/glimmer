@@ -231,12 +231,12 @@ case "${1:-}" in
         check_source
         rm -f "$GREEN"
         check_args=("$EXPECTED_SHA")
-        if [ "$OPERATION" = candidate ]; then check_args+=(--candidate); fi
+        if [ "$OPERATION" = candidate ]; then check_args+=(--candidate --delivery); fi
         RELEASE_CHECKS_FILE="$RUNNER_TEMP/glimmer-prerequisites.json" \
             python3 scripts/release-checks.py "${check_args[@]}"
         if [ "$OPERATION" = promote ]; then
             RELEASE_CHECKS_FILE="$RUNNER_TEMP/glimmer-candidate-prerequisites.json" \
-                python3 scripts/release-checks.py "${CANDIDATE_SHA:-}" --candidate
+                python3 scripts/release-checks.py "${CANDIDATE_SHA:-}" --candidate --delivery
         fi
         printf '%s\n' "$EXPECTED_SHA" > "$GREEN"
         ;;

@@ -46,7 +46,7 @@ class CandidateReservationTests(unittest.TestCase):
             for state in ('released', 'abandoned'):
                 with self.subTest(workflow=workflow, state=state), self.assertRaisesRegex(ValueError, 'pending'):
                     reservation.finish(self.sha, state, self.checks)
-        self.assertEqual(reservation.snapshot()[1]['state'], 'reserved')
+        self.assertEqual(reservation.snapshot()[1]['state'], 'closing')
 
     def test_simultaneous_cuts_cannot_replace_the_winning_reservation_or_branch(self):
         refs, _ = reservation.snapshot()
@@ -88,9 +88,26 @@ class CandidateReservationTests(unittest.TestCase):
             self.checks.api.return_value = pages
             with self.assertRaisesRegex(ValueError, 'invalid data'):
                 reservation.finish(self.sha, 'released', self.checks)
-        self.assertEqual(reservation.snapshot()[1]['state'], 'reserved')
+        self.assertEqual(reservation.snapshot()[1]['state'], 'closing')
 
     def test_dry_run_never_allocates_or_moves_refs(self):
         before = self.fixture.remote()
         reservation.reserve(self.sha, True, self.checks)
         self.assertEqual(self.fixture.remote(), before)
+
+    def test_real_ref_lease_serializes_admission_and_retirement(self):
+        reservation.reserve(self.sha, False, self.checks)
+        stale, _ = reservation.snapshot()
+        identity = {'run': 12, 'attempt': 1, 'sha': self.sha, 'ref': reservation.BRANCH,
+                    'workflow': '.github/workflows/release.yml'}
+        reservation.admit(self.sha, identity)
+        with self.assertRaises(ValueError):
+            reservation.write(stale, self.sha, 'closing', {})
+        with self.assertRaisesRegex(ValueError, 'admitted'):
+            reservation.finish(self.sha, 'released', self.checks)
+        current, data = reservation.snapshot()
+        self.assertEqual(data['claims'], {'12:1': identity})
+        self.assertEqual(current[reservation.BRANCH], self.sha)
+        reservation.depart(self.sha, identity)
+        reservation.finish(self.sha, 'released', self.checks)
+        self.assertEqual(reservation.snapshot()[1]['state'], 'released')

@@ -90,7 +90,7 @@ class TestFlightTests(unittest.TestCase):
         with patch.dict(os.environ, {**ENV, 'RUNNER_TEMP': str(self.root)}, clear=True):
             with patch.object(checks, 'check', return_value={'sha': ENV['EXPECTED_SHA'], 'runs': []}) as check:
                 cli.gate(self.expected)
-                check.assert_called_once_with(ENV['EXPECTED_SHA'], candidate=True)
+                check.assert_called_once_with(ENV['EXPECTED_SHA'], candidate=True, delivery=True)
             with patch.object(checks, 'check', side_effect=ValueError('checks not green')):
                 with self.assertRaisesRegex(ValueError, 'checks not green'):
                     cli.gate(self.expected)
