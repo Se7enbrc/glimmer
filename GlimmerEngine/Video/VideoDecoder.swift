@@ -15,6 +15,8 @@ import os
 @MainActor
 public final class VideoDecoder {
 
+    let suppressionSessionGeneration = UUID()
+
     // MARK: Public API
 
     /// Uptime clock for the decode gate's lift stamp; tests script it.

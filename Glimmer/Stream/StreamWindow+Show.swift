@@ -173,7 +173,7 @@ extension StreamWindow {
         }
 
         installLifecycleObservers()
-        refreshPresentationVisibility()
+        refreshPresentationVisibility(reason: .fullScreenSettled)
         // The first show leaves the cursor and the menu bar to the fade-in.
         if !firstShow {
             setCursorHidden(true)

@@ -175,7 +175,7 @@ extension StreamWindow {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, !self.didClose else { return }
-                self.setBackgrounded(true)
+                self.setBackgrounded(true, reason: .miniaturized)
                 self.log.info("Stream window miniaturized - present suppressed until it returns")
             }
         })
@@ -184,34 +184,50 @@ extension StreamWindow {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, !self.didClose else { return }
-                self.setBackgrounded(false)
+                self.setBackgrounded(false, reason: .deminiaturized)
             }
         })
     }
 
     /// Input focus and picture visibility are independent when another display shows the stream.
-    func setBackgrounded(_ backgrounded: Bool) {
+    func setBackgrounded(_ backgrounded: Bool, reason: VideoDecoder.PresentationVisibility.Reason? = nil) {
         userBackgrounded = backgrounded
         onBackgroundedChanged?(backgrounded)
-        refreshPresentationVisibility()
+        refreshPresentationVisibility(reason: reason ?? (backgrounded ? .backgrounded : .foregrounded))
     }
 
     func installPresentationVisibilityObserver(nc: NotificationCenter) {
         keyObservers.append(nc.addObserver(
             forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshPresentationVisibility() }
+            MainActor.assumeIsolated { self?.refreshPresentationVisibility(reason: .occlusionChanged) }
         })
     }
 
-    func refreshPresentationVisibility() {
+    func refreshPresentationVisibility(reason: VideoDecoder.PresentationVisibility.Reason = .unspecified) {
         guard !didClose, !awaitingFirstFrameFadeIn else { return }
+        let visibility = presentationVisibility(reason: reason)
         let suppressed = Self.suppressesPresentation(isVisible: window.isVisible,
             isMiniaturized: window.isMiniaturized, occlusionVisible: window.occlusionState.contains(.visible),
             revealing: presentationRevealInProgress, alpha: window.alphaValue)
         guard presentationSuppressed != suppressed else { return }
         presentationSuppressed = suppressed
-        onPresentationSuppressedChanged?(suppressed)
+        onPresentationSuppressedChanged?(suppressed, visibility)
+    }
+
+    func presentationVisibility(reason: VideoDecoder.PresentationVisibility.Reason) -> VideoDecoder.PresentationVisibility {
+        var inputs = VideoDecoder.PresentationVisibility(reason: reason)
+        inputs.windowVisible = window.isVisible
+        inputs.minimized = window.isMiniaturized
+        inputs.occlusionVisible = window.occlusionState.contains(.visible)
+        inputs.occlusionState = UInt64(window.occlusionState.rawValue)
+        inputs.revealing = presentationRevealInProgress
+        inputs.alphaZero = window.alphaValue <= 0
+        inputs.miniPlayer = isMiniPlayer
+        inputs.appActive = NSApp.isActive
+        inputs.fullScreen = window.styleMask.contains(.fullScreen)
+        inputs.fullScreenTransition = .init(rawValue: streamDelegate.closeState.transition.rawValue)
+        return inputs
     }
 
     nonisolated static func suppressesPresentation(isVisible: Bool, isMiniaturized: Bool,
@@ -318,7 +334,7 @@ extension StreamWindow {
             window.makeKeyAndOrderFront(nil)
         }
         installWindowedLifecycleObservers()
-        setBackgrounded(false)
+        setBackgrounded(false, reason: .fullScreenSettled)
         onDidBecomeReadyForInput?()
         if toMiniPlayer {
             onMiniPlayerChanged?(true)

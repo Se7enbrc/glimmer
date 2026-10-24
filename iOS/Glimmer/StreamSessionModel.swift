@@ -133,7 +133,12 @@ final class StreamSessionModel {
         canStart = active && protectedDataAvailable && returnedInTime
         synchronizeInputFocus()
         guard !phase.isEnded, phase != .stopping else { return }
-        playback?.setVisible?(canStart)
+        var visibility = VideoDecoder.PresentationVisibility(reason: .sceneAvailability)
+        visibility.appActive = active
+        visibility.background = background
+        visibility.protectedDataAvailable = protectedDataAvailable
+        visibility.returnedInTime = returnedInTime
+        playback?.setVisible?(canStart, visibility)
         if !protectedDataAvailable || !returnedInTime { disconnect(); return }
         if !active {
             guard playback != nil, phase != .reconnecting else { disconnect(); return }

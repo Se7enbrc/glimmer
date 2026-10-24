@@ -39,7 +39,7 @@ extension StreamWindow {
         if coverTransition(.firstFrame) == .slide, !userBackgrounded {
             slideCover(entering: true) { [weak self] in
                 self?.applyPresentationOptions(coversNotch: cover)
-                self?.refreshPresentationVisibility()
+                self?.refreshPresentationVisibility(reason: .firstFrameRevealCompleted)
             }
             // Commit the offscreen start before the window turns visible, so
             // the picture never shows unslid for a frame.
@@ -62,7 +62,7 @@ extension StreamWindow {
                 guard !self.didClose, self.coverSlideGeneration == generation else { return }
                 self.presentationRevealInProgress = false
                 self.applyPresentationOptions(coversNotch: cover)
-                self.refreshPresentationVisibility()
+                self.refreshPresentationVisibility(reason: .firstFrameRevealCompleted)
             }
         })
     }

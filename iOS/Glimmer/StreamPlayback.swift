@@ -40,7 +40,7 @@ struct StreamPlayback {
     var input: StreamInput?
     var focusInput: (@MainActor (Bool) -> Void)?
     var format: StreamFormat?
-    var setVisible: (@MainActor (Bool) -> Void)?
+    var setVisible: (@MainActor (Bool, VideoDecoder.PresentationVisibility) -> Void)?
     var observeControllers: (@MainActor (@escaping @MainActor (Bool) -> Void) -> Void)?
 
     static func make(launch: StreamLaunch, surface: StreamSurface,
@@ -80,7 +80,9 @@ struct StreamPlayback {
             try await session.start(appID: launch.appID, configuration: configuration)
         }, stop: { await session.stop() }, screenChanged: { video.pacingScreenDidChange() },
            input: input, focusInput: nativeInput.focus, format: format,
-           setVisible: { video.setPresentSuppressed(!$0) }, observeControllers: nativeInput.observeControllers)
+           setVisible: { visible, inputs in
+               video.setPresentSuppressed(!visible, visibility: inputs, sessionGeneration: session.id)
+           }, observeControllers: nativeInput.observeControllers)
     }
 }
 

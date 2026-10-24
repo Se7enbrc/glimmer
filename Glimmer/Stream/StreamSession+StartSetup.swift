@@ -108,8 +108,8 @@ extension StreamSession {
         dec.attach(to: win.displayLayer)
         // Focus drives the launcher; actual visibility drives decode presentation and power.
         win.onBackgroundedChanged = onBackgroundedChanged
-        win.onPresentationSuppressedChanged = { [weak self, weak dec] suppressed in
-            dec?.setPresentSuppressed(suppressed)
+        win.onPresentationSuppressedChanged = { [weak self, weak dec, id] suppressed, visibility in
+            dec?.setPresentSuppressed(suppressed, visibility: visibility, sessionGeneration: id)
             Task { [weak self] in await self?.refreshPowerAssertion() }
         }
         let inp = InputForwarder()

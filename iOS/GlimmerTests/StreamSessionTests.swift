@@ -149,6 +149,21 @@ struct StreamSessionTests {
         #expect(focus == [false, true, false, true, false, true, false, false])
     }
 
+    @Test func sceneSuppressionForwardsAvailabilityInputs() async throws {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.availabilityChanged(active: false, background: true, protectedDataAvailable: true)
+        let hidden = try #require(fixture.visibilityInputs.last)
+        #expect(hidden.reason == .sceneAvailability && hidden.appActive == false && hidden.background == true)
+        #expect(hidden.protectedDataAvailable == true && hidden.returnedInTime == true)
+        #expect(fixture.visibility.last == false)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        #expect(fixture.visibilityInputs.last?.appActive == true && fixture.visibility.last == true)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
     @Test func videoHasAccessibleShowControlsAction() {
         let model = PlaybackFixture().model()
         let controller = StreamViewController(model: model, close: {})
@@ -516,6 +531,7 @@ final class PlaybackFixture {
     let id = UUID()
     var makes = 0
     var visibility: [Bool] = []
+    var visibilityInputs: [VideoDecoder.PresentationVisibility] = []
     var focusHistory: [Bool] = []
     var completedStops = 0
     var quiesce: (@MainActor @Sendable () -> Void)?
@@ -539,7 +555,10 @@ final class PlaybackFixture {
                 await stop()
                 await MainActor.run { completedStops += 1 }
             }, screenChanged: {}, focusInput: { [self] in focusHistory.append($0) },
-               setVisible: { [self] in visibility.append($0) },
+               setVisible: { [self] visible, inputs in
+                   visibility.append(visible)
+                   visibilityInputs.append(inputs)
+               },
                observeControllers: { [self] changed in
                 connectionChanged = changed
                 changed(controllerConnected)

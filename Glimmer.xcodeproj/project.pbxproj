@@ -671,6 +671,7 @@
 		967AC9F4B747400BA49F0B70 /* StreamInput+ControllerMouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8C3CBBB7FBF488C9D4A7BB7 /* StreamInput+ControllerMouse.swift */; };
 		BC8110662971491390555EBE /* StreamInputMouseModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C7F0E3662674785B95956E5 /* StreamInputMouseModeTests.swift */; };
 		E8102801B /* TelemetryLatency+Stages.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8102801F /* TelemetryLatency+Stages.swift */; };
+		A82010240100000000000001 /* VideoDecoder+SuppressionDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82010240100000000000002 /* VideoDecoder+SuppressionDiagnostics.swift */; };
 		E8102802B /* VideoDecoder+Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8102802F /* VideoDecoder+Configuration.swift */; };
 		E8102803B /* AudioReceiveFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8102803F /* AudioReceiveFailure.swift */; };
 		D1A6202610180000000000B /* GlimmerDiagnosticCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610180000000000F /* GlimmerDiagnosticCapture.swift */; };
@@ -1411,6 +1412,7 @@
 		F8C3CBBB7FBF488C9D4A7BB7 /* StreamInput+ControllerMouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/StreamInput+ControllerMouse.swift"; sourceTree = SOURCE_ROOT; };
 		7C7F0E3662674785B95956E5 /* StreamInputMouseModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/StreamInputMouseModeTests.swift"; sourceTree = SOURCE_ROOT; };
 		E8102801F /* TelemetryLatency+Stages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryLatency+Stages.swift"; sourceTree = SOURCE_ROOT; };
+		A82010240100000000000002 /* VideoDecoder+SuppressionDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+SuppressionDiagnostics.swift"; sourceTree = SOURCE_ROOT; };
 		E8102802F /* VideoDecoder+Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Configuration.swift"; sourceTree = SOURCE_ROOT; };
 		E8102803F /* AudioReceiveFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/AudioReceiveFailure.swift"; sourceTree = SOURCE_ROOT; };
 		D1A6202610180000000000F /* GlimmerDiagnosticCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/CLI/GlimmerDiagnosticCapture.swift"; sourceTree = SOURCE_ROOT; };
@@ -2188,6 +2190,7 @@
 				D6D80A720000000000000026 /* TelemetryCounters+Lifecycle.swift */,
 				D1000FA1 /* TelemetryLatency+Composites.swift */,
 				D1000F11 /* TelemetryLatency+Trace.swift */,
+				A82010240100000000000002 /* VideoDecoder+SuppressionDiagnostics.swift */,
 				E8102802F /* VideoDecoder+Configuration.swift */,
 				E8102803F /* AudioReceiveFailure.swift */,
 				E8102801F /* TelemetryLatency+Stages.swift */,
@@ -3039,6 +3042,7 @@
 				D6D80A720000000000000025 /* TelemetryCounters+Lifecycle.swift in Sources */,
 				D1000FA0 /* TelemetryLatency+Composites.swift in Sources */,
 				D1000F10 /* TelemetryLatency+Trace.swift in Sources */,
+				A82010240100000000000001 /* VideoDecoder+SuppressionDiagnostics.swift in Sources */,
 				E8102802B /* VideoDecoder+Configuration.swift in Sources */,
 				E8102803B /* AudioReceiveFailure.swift in Sources */,
 				E8102801B /* TelemetryLatency+Stages.swift in Sources */,
