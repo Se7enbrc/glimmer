@@ -367,10 +367,10 @@ struct NativeUIRenderTests {
                                    inspect: inspect)
     }
 
-    private func recordController(_ host: UIViewController, name: String, size: CGSize?, dark: Bool,
-                                  portrait: Bool = false, prepare: (() async -> Void)? = nil,
-                                  textSize: DynamicTypeSize = .xxxLarge, landscapeRight: Bool = false,
-                                  inspect: ((UIView) throws -> Void)? = nil) async throws {
+    func recordController(_ host: UIViewController, name: String, size: CGSize?, dark: Bool,
+                          portrait: Bool = false, prepare: (() async -> Void)? = nil,
+                          textSize: DynamicTypeSize = .xxxLarge, landscapeRight: Bool = false,
+                          inspect: ((UIView) throws -> Void)? = nil) async throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
@@ -379,7 +379,12 @@ struct NativeUIRenderTests {
             ? .accessibilityExtraExtraExtraLarge : (textSize == .large ? .large : .extraExtraExtraLarge)
         host.overrideUserInterfaceStyle = dark ? .dark : .light
         let root: UIViewController
-        if let size { root = FixtureViewportController(content: host, size: size) } else { root = host }
+        if let size {
+            root = FixtureViewportController(content: host, size: size)
+            if name.hasPrefix("ipad-") {
+                host.traitOverrides.horizontalSizeClass = size.width < 600 ? .compact : .regular
+            }
+        } else { root = host }
         window.rootViewController = root
         window.makeKeyAndVisible()
         if portrait || size == nil {
@@ -419,7 +424,10 @@ struct NativeUIRenderTests {
             #expect(scene.effectiveGeometry.interfaceOrientation.isLandscape)
             #expect(window.bounds.width > window.bounds.height)
         }
-        let renderer = UIGraphicsImageRenderer(bounds: host.view.bounds)
+        if name.hasPrefix("ipad-") { recordIPadGeometry(host.view, name: name) }
+        let format = UIGraphicsImageRendererFormat()
+        if name.hasPrefix("ipad-") { format.scale = 1 }
+        let renderer = UIGraphicsImageRenderer(bounds: host.view.bounds, format: format)
         var rendered = false
         let image = renderer.image { _ in
             rendered = host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true)

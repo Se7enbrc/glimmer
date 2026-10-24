@@ -47,6 +47,12 @@
                ReferencedContainer = "container:Glimmer.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference skipped = "NO">
+            <BuildableReference BuildableIdentifier = "primary" BlueprintIdentifier = "14758248D427402BB033CEEE"
+               BuildableName = "GlimmerUITests.xctest" BlueprintName = "GlimmerUITests"
+               ReferencedContainer = "container:Glimmer.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

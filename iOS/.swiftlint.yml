@@ -6,6 +6,7 @@ parent_config: ../.swiftlint-rules.yml
 included:
   - Glimmer
   - GlimmerTests
+  - GlimmerUITests
 
 excluded:
   - build

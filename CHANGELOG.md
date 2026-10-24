@@ -86,6 +86,9 @@
   quality choices stay readable in Settings.
 - On iPhone, disconnected messages can scroll at larger text sizes, and
   VoiceOver describes Done as returning to your apps.
+- iPad app buttons keep their grid size with a small library. Large text has
+  more room in PC names, saved-PC actions and stream controls. Connection
+  messages can scroll when space is tight.
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.
 - iPhone audio diagnostics now distinguish missing packets, rejected audio and

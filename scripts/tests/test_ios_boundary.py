@@ -20,7 +20,7 @@ class IOSBoundaryTests(unittest.TestCase):
         cls.project = BOUNDARY.BOUNDARY.load_project(ROOT / "iOS/Glimmer.xcodeproj/project.pbxproj")
         cls.expected = {name: {str(path.relative_to(ROOT / "iOS"))
                               for path in (ROOT / "iOS" / name).rglob("*.swift")}
-                        for name in ("Glimmer", "GlimmerTests")}
+                        for name in ("Glimmer", "GlimmerTests", "GlimmerUITests")}
 
     def setUp(self):
         self.value = copy.deepcopy(self.project)

@@ -46,7 +46,8 @@ struct LauncherGallery: View {
     var body: some View {
         let coverHeight = LauncherGrid.coverHeight(availableHeight: size.height)
         let minimum: CGFloat = style == .buttons ? buttonMinimum : max(coverMinimum, coverHeight * 0.75)
-        let count = LauncherGrid.columns(width: size.width, minimum: minimum, count: model.apps.count)
+        let count = LauncherGrid.columns(width: size.width, minimum: minimum,
+                                         count: style == .buttons ? Int.max : model.apps.count)
         let width: CGFloat = style == .buttons ? size.width
             : min(size.width, CGFloat(count) * minimum + CGFloat(count - 1) * 12)
         let columns = Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: count)

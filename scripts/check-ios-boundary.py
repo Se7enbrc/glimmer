@@ -52,7 +52,7 @@ def validate_project(project, expected):
 def check(root):
     ios = root / "iOS"
     expected = {name: {str(path.relative_to(ios)) for path in (ios / name).rglob("*.swift")}
-                for name in ("Glimmer", "GlimmerTests")}
+                for name in ("Glimmer", "GlimmerTests", "GlimmerUITests")}
     if any(not sources for sources in expected.values()):
         raise ValueError("Missing iOS app or test sources")
     validate_project(BOUNDARY.load_project(ios / "Glimmer.xcodeproj/project.pbxproj"), expected)

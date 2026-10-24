@@ -152,6 +152,7 @@ struct StreamControls: View {
     let model: StreamSessionModel
     let close: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         ZStack {
@@ -204,7 +205,15 @@ struct StreamControls: View {
         }
     }
 
-    private var controls: some View {
+    @ViewBuilder private var controls: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            controlLayout.labelStyle(.titleOnly)
+        } else {
+            controlLayout
+        }
+    }
+
+    private var controlLayout: some View {
         ViewThatFits(in: .horizontal) {
             HStack { controlActions }
             VStack(alignment: .trailing) { controlActions }
@@ -217,8 +226,15 @@ struct StreamControls: View {
                 .buttonStyle(.glass)
                 .accessibilityHint("Returns controller and touch input to the PC.")
         }
-        Button(model.phase.isEnded ? "Done" : "Disconnect", systemImage: "xmark") {
+        Button {
             if model.phase.isEnded { close() } else { model.disconnect() }
+        } label: {
+            Label {
+                Text(model.phase.isEnded ? "Done" : "Disconnect")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "xmark")
+            }
         }
         .buttonStyle(.glass)
         .disabled(model.phase == .stopping)

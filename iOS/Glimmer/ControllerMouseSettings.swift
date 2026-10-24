@@ -135,19 +135,7 @@ private struct GlimmerSettingsPage: View {
     @ViewBuilder private var computerSettings: some View {
         if !model.savedPCs.isEmpty {
             Section("Paired PCs") {
-                ForEach(model.savedPCs) { pc in
-                    let layout = dynamicTypeSize.isAccessibilitySize
-                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-                        : AnyLayout(HStackLayout())
-                    layout {
-                        Label(pc.name, systemImage: "display")
-                            .fixedSize(horizontal: false, vertical: true)
-                        if !dynamicTypeSize.isAccessibilitySize { Spacer() }
-                        Button("Forget…", role: .destructive) { model.requestForget(pc) }
-                            .accessibilityLabel("Forget \(pc.name)")
-                            .disabled(!model.canForgetPC)
-                    }
-                }
+                ForEach(model.savedPCs) { PairedPCRow(pc: $0, model: model) }
             }
         }
         if let failure = model.forgetFailure {
@@ -223,4 +211,26 @@ private struct GlimmerSettingsPage: View {
         }
     }
     #endif
+}
+
+@MainActor
+private struct PairedPCRow: View {
+    let pc: SavedPC
+    let model: LauncherModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let title = Label(pc.name, systemImage: "display")
+            .fixedSize(horizontal: false, vertical: true)
+        let forget = Button("Forget…", role: .destructive) { model.requestForget(pc) }
+            .accessibilityLabel("Forget \(pc.name)")
+            .disabled(!model.canForgetPC)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) { title; forget }
+            } else {
+                HStack { title; Spacer(); forget }
+            }
+        }
+    }
 }
