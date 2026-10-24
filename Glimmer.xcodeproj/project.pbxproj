@@ -742,6 +742,14 @@
 		966232EF57614C298EE9BFD6 /* ControllerDpadSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */; };
 		E87A9A327F0348218C4BA2E5 /* ControllerShoulderGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CC85B1E0714644BBFC1C3E /* ControllerShoulderGeometry.swift */; };
 		10668594F8644C5E802B0541 /* ControllerShoulderControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6EA36684EE48E5B46CE965 /* ControllerShoulderControls.swift */; };
+		6522CA2897C84E85880D35E4 /* BandwidthFacts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E5B3ABC059450A9CE28AAB /* BandwidthFacts.swift */; };
+		DBF4BBA1E4AC4E2C81AFC869 /* BandwidthPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB3736186CB443DC989F3BB6 /* BandwidthPolicy.swift */; };
+		842EB9FFDD854AF78BDF8853 /* BandwidthPolicy+Evidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DFF021186004524A34D5AE4 /* BandwidthPolicy+Evidence.swift */; };
+		0580FD74FBE44CD1922A8181 /* BandwidthPolicyDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78EF2295E63E48AAA739FF84 /* BandwidthPolicyDriver.swift */; };
+		29C536C987C64EFDBF4C26E9 /* BandwidthDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6C8F38A7C4945BA9B103C36 /* BandwidthDecision.swift */; };
+		32ABF7EFA3EF41CD8B0C439C /* BandwidthPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A8BE41BBD645B6BFB5C3BE /* BandwidthPolicyTests.swift */; };
+		36F2C4D5722740A9ABAFEAD5 /* BandwidthActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 233DB1B4C6884DFE94410F95 /* BandwidthActuatorTests.swift */; };
+		9A913317D15D48E1B54D8F33 /* BandwidthTrainEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1538,6 +1546,14 @@
 		B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerDpadSurface.swift"; sourceTree = SOURCE_ROOT; };
 		E0CC85B1E0714644BBFC1C3E /* ControllerShoulderGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerShoulderGeometry.swift"; sourceTree = SOURCE_ROOT; };
 		AE6EA36684EE48E5B46CE965 /* ControllerShoulderControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerShoulderControls.swift"; sourceTree = SOURCE_ROOT; };
+		F5E5B3ABC059450A9CE28AAB /* BandwidthFacts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthFacts.swift"; sourceTree = SOURCE_ROOT; };
+		AB3736186CB443DC989F3BB6 /* BandwidthPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthPolicy.swift"; sourceTree = SOURCE_ROOT; };
+		6DFF021186004524A34D5AE4 /* BandwidthPolicy+Evidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthPolicy+Evidence.swift"; sourceTree = SOURCE_ROOT; };
+		78EF2295E63E48AAA739FF84 /* BandwidthPolicyDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthPolicyDriver.swift"; sourceTree = SOURCE_ROOT; };
+		C6C8F38A7C4945BA9B103C36 /* BandwidthDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/BandwidthDecision.swift"; sourceTree = SOURCE_ROOT; };
+		68A8BE41BBD645B6BFB5C3BE /* BandwidthPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/BandwidthPolicyTests.swift"; sourceTree = SOURCE_ROOT; };
+		233DB1B4C6884DFE94410F95 /* BandwidthActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/BandwidthActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
+		7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthTrainEvidence.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1862,6 +1878,8 @@
 				22786CD127B725B21D9AF285 /* ControllerMappingTests.swift */,
 				7C7F0E3662674785B95956E5 /* StreamInputMouseModeTests.swift */,
 				D587AB431CFF437B859B1C2D /* RouteBitratePolicyTests.swift */,
+				233DB1B4C6884DFE94410F95 /* BandwidthActuatorTests.swift */,
+				68A8BE41BBD645B6BFB5C3BE /* BandwidthPolicyTests.swift */,
 				169353BBFAE64367BE1642EB /* FailureAPITests.swift */,
 				A27101400000000000000001 /* ArtworkAPITests.swift */,
 				2DB8AD75E0FA41669989E5FE /* SessionAPITests.swift */,
@@ -2116,6 +2134,11 @@
 				F8C3CBBB7FBF488C9D4A7BB7 /* StreamInput+ControllerMouse.swift */,
 				1DF214F57A624AA18B39158B /* ControllerMouseMapping.swift */,
 				2BF97748AD5149368A9FDE11 /* RouteBitratePolicy.swift */,
+				7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */,
+				78EF2295E63E48AAA739FF84 /* BandwidthPolicyDriver.swift */,
+				6DFF021186004524A34D5AE4 /* BandwidthPolicy+Evidence.swift */,
+				AB3736186CB443DC989F3BB6 /* BandwidthPolicy.swift */,
+				F5E5B3ABC059450A9CE28AAB /* BandwidthFacts.swift */,
 				0E57A98F6DCF42DCAAB3022A /* StreamFailure.swift */,
 				2821A48E86CE4FBAACDF2304 /* StreamSession+Public.swift */,
 				EFF09B276CF14C56BEFECA98 /* SessionFeedback+Input.swift */,
@@ -2337,6 +2360,7 @@
 				DEC0DE202609221800000001 /* TelemetryExporter+RenderNDJSONLink.swift */,
 				D10000C6 /* TelemetrySessionReport.swift */,
 				D10000C8 /* TelemetrySnapshot.swift */,
+				C6C8F38A7C4945BA9B103C36 /* BandwidthDecision.swift */,
 				D10000CE /* TelemetryExporter+Capture.swift */,
 				ABCD20260609000000001601 /* TelemetryExporter+CaptureExtras.swift */,
 				D10000CA /* TelemetryExporter+RenderNDJSON.swift */,
@@ -2770,6 +2794,8 @@
 				77DB31637950C41A7C275C4D /* ControllerMappingTests.swift in Sources */,
 				BC8110662971491390555EBE /* StreamInputMouseModeTests.swift in Sources */,
 				AE7C6C04693646DFA4647961 /* RouteBitratePolicyTests.swift in Sources */,
+				36F2C4D5722740A9ABAFEAD5 /* BandwidthActuatorTests.swift in Sources */,
+				32ABF7EFA3EF41CD8B0C439C /* BandwidthPolicyTests.swift in Sources */,
 				C8155497DB6E409B93D78556 /* FailureAPITests.swift in Sources */,
 				A27101400000000000000002 /* ArtworkAPITests.swift in Sources */,
 				EC003948DEC9480B9FC1708C /* SessionAPITests.swift in Sources */,
@@ -3023,6 +3049,11 @@
 				967AC9F4B747400BA49F0B70 /* StreamInput+ControllerMouse.swift in Sources */,
 				2A48F2F26CA64FB481D74255 /* ControllerMouseMapping.swift in Sources */,
 				1FBCB82CDB6644B6B684DC53 /* RouteBitratePolicy.swift in Sources */,
+				9A913317D15D48E1B54D8F33 /* BandwidthTrainEvidence.swift in Sources */,
+				0580FD74FBE44CD1922A8181 /* BandwidthPolicyDriver.swift in Sources */,
+				842EB9FFDD854AF78BDF8853 /* BandwidthPolicy+Evidence.swift in Sources */,
+				DBF4BBA1E4AC4E2C81AFC869 /* BandwidthPolicy.swift in Sources */,
+				6522CA2897C84E85880D35E4 /* BandwidthFacts.swift in Sources */,
 				AD7AAC10AE1E470EAF2DA68D /* StreamFailure.swift in Sources */,
 				634F0633281B4BFCAA3D7D09 /* StreamSession+Public.swift in Sources */,
 				F0CEFD9341C1425D858952AD /* SessionFeedback+Input.swift in Sources */,
@@ -3244,6 +3275,7 @@
 				DEC0DE202609221800000002 /* TelemetryExporter+RenderNDJSONLink.swift in Sources */,
 				D10000C7 /* TelemetrySessionReport.swift in Sources */,
 				D10000C9 /* TelemetrySnapshot.swift in Sources */,
+				29C536C987C64EFDBF4C26E9 /* BandwidthDecision.swift in Sources */,
 				D10000CF /* TelemetryExporter+Capture.swift in Sources */,
 				ABCD20260609000000001602 /* TelemetryExporter+CaptureExtras.swift in Sources */,
 				D10000CB /* TelemetryExporter+RenderNDJSON.swift in Sources */,

@@ -150,6 +150,8 @@
 		AFC585F573F4436AAC70BD67 /* ControllerDpadSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6157B25E00E64C8EA422CF21 /* ControllerDpadSurface.swift */; };
 		24515FAF7C6E4E5AA5A42BBA /* ControllerShoulderGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D1B1C261634418B659D5CB /* ControllerShoulderGeometry.swift */; };
 		DEA3E708B2B3486488721058 /* ControllerShoulderControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F37D021E6E54166A96FFD0A /* ControllerShoulderControls.swift */; };
+		CFB1AD00C82D4222AF70ABDE /* BandwidthPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */; };
+		6A7D680A0F1A46C181605D73 /* BandwidthActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C228A78E7CE4F408100275C /* BandwidthActuatorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -322,6 +324,8 @@
 		6157B25E00E64C8EA422CF21 /* ControllerDpadSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerDpadSurface.swift"; sourceTree = SOURCE_ROOT; };
 		F3D1B1C261634418B659D5CB /* ControllerShoulderGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerShoulderGeometry.swift"; sourceTree = SOURCE_ROOT; };
 		7F37D021E6E54166A96FFD0A /* ControllerShoulderControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerShoulderControls.swift"; sourceTree = SOURCE_ROOT; };
+		0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/BandwidthPolicyTests.swift"; sourceTree = SOURCE_ROOT; };
+		9C228A78E7CE4F408100275C /* BandwidthActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/BandwidthActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -437,6 +441,8 @@
 				DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */,
 				B9C36C65CD684E2EB8BCC2EC /* VideoColorPatternTests.swift */,
 				B855180B1A544A85B5CEF0FD /* StreamVideoTests.swift */,
+				9C228A78E7CE4F408100275C /* BandwidthActuatorTests.swift */,
+				0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */,
 				E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */,
 				4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */,
 				1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */,
@@ -722,6 +728,8 @@
 				CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */,
 				AE6A23CC6494422DB3DB8C77 /* VideoColorPatternTests.swift in Sources */,
 				CE05955C447440DD911016EF /* StreamVideoTests.swift in Sources */,
+				6A7D680A0F1A46C181605D73 /* BandwidthActuatorTests.swift in Sources */,
+				CFB1AD00C82D4222AF70ABDE /* BandwidthPolicyTests.swift in Sources */,
 				9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */,
 				BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */,
 				A037E3519F7846D6958E34F0 /* ControllerMouseMotionTests.swift in Sources */,

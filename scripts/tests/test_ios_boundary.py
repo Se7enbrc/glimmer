@@ -31,6 +31,16 @@ class IOSBoundaryTests(unittest.TestCase):
         BOUNDARY.validate_project(self.value, self.expected)
         self.assertEqual(BOUNDARY.check(ROOT), sum(map(len, self.expected.values())))
 
+    def test_shared_replay_is_required(self):
+        replay = next(key for key, item in self.objects.items()
+                      if item["isa"] == "PBXBuildFile"
+                      and self.objects.get(item.get("fileRef"), {}).get("path", "").endswith("BandwidthPolicyTests.swift"))
+        for item in self.objects.values():
+            if item["isa"] == "PBXSourcesBuildPhase" and replay in item["files"]:
+                item["files"].remove(replay)
+        with self.assertRaisesRegex(ValueError, "source membership mismatch"):
+            BOUNDARY.validate_project(self.value, self.expected)
+
     def test_remote_pin_is_rejected(self):
         package = self.object("XCLocalSwiftPackageReference")
         package.update(isa="XCRemoteSwiftPackageReference", repositoryURL="https://example.org/glimmer.git")

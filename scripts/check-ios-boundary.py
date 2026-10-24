@@ -70,8 +70,12 @@ def expected_sources(root):
                                   ["ControllerMappingTests.swift", "ControllerLayoutPersistenceTests.swift",
                                    "ControllerLayoutEscapeTests.swift"])
     # These transport fakes and session tests also compile in the Mac test target.
-    expected["GlimmerTests"].update("../GlimmerTests/" + name for name in (
-        "BitrateActuatorTests.swift", "FakeSunshine.swift", "InputRecordingBackend.swift"))
+    shared = ("BitrateActuatorTests.swift", "FakeSunshine.swift", "InputRecordingBackend.swift",
+              "BandwidthPolicyTests.swift", "BandwidthActuatorTests.swift")
+    for name in shared:
+        if not (root / "GlimmerTests" / name).is_file():
+            raise ValueError(f"Missing shared test source: {name}")
+        expected["GlimmerTests"].add(f"../GlimmerTests/{name}")
     if any(not sources for sources in expected.values()):
         raise ValueError("Missing iOS app or test sources")
     expected["GlimmerTests"].update(SHARED_SOAK_SOURCES)
