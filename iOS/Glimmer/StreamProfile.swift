@@ -5,7 +5,7 @@ import GlimmerEngine
 import UIKit
 
 enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
-    case fullHD60, fullHD120, native120
+    case native120, fullHD60, fullHD120
 
     static let bitrateKbps = 20_000
 

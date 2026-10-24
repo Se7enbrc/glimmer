@@ -67,4 +67,8 @@ struct StreamProfileTests {
                                                 maximumFramesPerSecond: 0)
         }
     }
+
+    @Test func nativeIsTheFirstStreamFormat() {
+        #expect(StreamProfile.allCases.first == .native120)
+    }
 }
