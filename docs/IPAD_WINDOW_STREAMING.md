@@ -105,14 +105,15 @@ at their existing refresh rates uses 13 entries, leaving three. Three useful 60
 Hz window candidates from the Simulator audit are 750 × 972 (small Stage
 Manager), 1366 × 2064 (a Pro 13 tile), and 750 × 1706 (Slide Over).
 
-That would total 90. The mini 5 tile's 1014 × 1290 would be a 91st mode, so
-covering both tiled aspects needs a replacement choice or a separate iPad
-sample. The set would not cover arbitrary resizing, every 1080p profile request,
-or 120 Hz versions of those windows. Window decorations and OS versions can
-change content dimensions. Keep these as candidates until a PC validates
-switching, matching aspect and game behavior. The combined sample needs an
-explicit replacement choice or a separate iPad-focused sample; do not silently
-discard existing modes. This change leaves both XML samples intact.
+That would total 90. The mini 5's Windowed Apps tile requests 1014 × 1536; the
+earlier Stage Manager tile requested 1014 × 1290. Each needs another entry, so
+covering both needs a replacement choice or a separate iPad sample. The set
+would not cover arbitrary resizing, every 1080p profile request, or 120 Hz
+versions of those windows. Window decorations and OS versions can change content
+dimensions. Keep these as candidates until a PC validates switching, matching
+aspect and game behavior. The combined sample needs an explicit replacement
+choice or a separate iPad-focused sample; do not silently discard existing
+modes. This change leaves both XML samples intact.
 
 ## Verification boundary
 
