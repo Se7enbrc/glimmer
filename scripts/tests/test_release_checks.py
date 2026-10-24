@@ -14,6 +14,8 @@ import json
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).parents[1]))
+
 SPEC = importlib.util.spec_from_file_location("release_checks", Path(__file__).parents[1] / "release-checks.py")
 CHECKS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECKS)
