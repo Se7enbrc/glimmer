@@ -54,7 +54,12 @@ struct TouchLayoutEditor: View {
         }
         .coordinateSpace(name: "touch-editor")
         .onAppear { load() }
-        .onChange(of: TouchLayout.family(in: area)) { _, _ in drafts[family] = draft; load() }
+        .onChange(of: area) { _, _ in
+            dragging = false
+            origin = nil
+            drafts[family] = draft
+            load()
+        }
         .confirmationDialog("Reset this app's layout?", isPresented: $resetRequested, titleVisibility: .visible) {
             Button("Reset layout", role: .destructive) { draft = TouchLayout(); select(selected) }
             Button("Cancel", role: .cancel) {}
@@ -72,9 +77,8 @@ struct TouchLayoutEditor: View {
                     Button("Done", action: save).fontWeight(.semibold)
                 }
                 Text(selected.name).font(.subheadline)
-                Slider(value: $size, in: 0.75...1.5, step: 0.05) { Text("Size") }
+                Slider(value: Binding(get: { size }, set: resize), in: 0.75...1.5, step: 0.05) { Text("Size") }
                     .accessibilityValue(size.formatted(.percent.precision(.fractionLength(0))))
-                    .onChange(of: size) { _, value in resize(value) }
                 ViewThatFits(in: .horizontal) {
                     HStack { editingActions }
                     VStack { editingActions }
@@ -138,7 +142,7 @@ struct TouchLayoutEditor: View {
     }
 
     private func finishMove() {
-        if let origin, draft.placement(selected, in: area) != origin {
+        if let origin, draft.editable(in: area).placement(selected, in: area) != origin {
             UISelectionFeedbackGenerator().selectionChanged()
         }
         dragging = false
@@ -153,29 +157,29 @@ struct TouchLayoutEditor: View {
         select(selected)
     }
 
-    private func select(_ element: TouchElement) { selected = element; size = draft.placement(element, in: area).scale }
+    private func select(_ element: TouchElement) {
+        selected = element
+        size = draft.editable(in: area).placement(element, in: area).scale
+    }
 
     private func resize(_ value: Double) {
-        guard value != draft.placement(selected, in: area).scale else { return }
-        draft = draft.editable(in: area)
-        var placement = draft.placement(selected, in: area)
+        var placement = draft.editable(in: area).placement(selected, in: area)
+        guard value != placement.scale else { return }
         placement.scale = value
-        if draft.accepts(selected, placement: placement, in: area) { draft.changes[selected] = placement } else {
-            size = draft.placement(selected, in: area).scale
-        }
+        if let edited = draft.editing(selected, to: placement, in: area) { draft = edited }
+        size = draft.editable(in: area).placement(selected, in: area).scale
     }
 
     private func move(_ element: TouchElement, _ translation: CGSize) {
         if origin == nil {
-            draft = draft.editable(in: area)
             select(element)
-            origin = draft.placement(element, in: area)
+            origin = draft.editable(in: area).placement(element, in: area)
         }
         dragging = true
         guard var placement = origin else { return }
         placement.edge += element.isLeft ? translation.width : -translation.width
         placement.bottom -= translation.height
-        if draft.accepts(element, placement: placement, in: area) { draft.changes[element] = placement }
+        if let edited = draft.editing(element, to: placement, in: area) { draft = edited }
     }
 
     private func nudge(_ element: TouchElement, x: Double, y: Double) {

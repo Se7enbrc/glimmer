@@ -93,6 +93,13 @@ struct TouchLayout: Codable, Equatable {
         return result
     }
 
+    func editing(_ element: TouchElement, to placement: Placement, in area: CGRect) -> TouchLayout? {
+        var edited = editable(in: area)
+        guard edited.accepts(element, placement: placement, in: area) else { return nil }
+        edited.changes[element] = placement
+        return edited
+    }
+
     private func rawFrames(in area: CGRect) -> [TouchElement: CGRect] {
         guard area.width >= 590, area.height >= 330 else { return [:] }
         let expanded = Self.family(in: area) == .expanded

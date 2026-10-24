@@ -19,7 +19,7 @@ final class NativeInputLifetime {
         self.controllers = controllers
         controllers.beforeAttach = { [weak self] in
             guard let self else { return }
-            touch.detach()
+            self.touch?.detach()
         }
         controllers.refreshed = { [weak self] connected in
             guard let self else { return }

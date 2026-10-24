@@ -58,6 +58,22 @@ struct TouchLayoutTests {
         #expect(saved == original)
     }
 
+    @Test func rejectedEditDoesNotReplaceStoredGeometryWithTemporaryClamping() throws {
+        let area = CGRect(x: 0, y: 0, width: 844, height: 369)
+        var saved = TouchLayout()
+        saved.changes[.leftStick] = .init(edge: 700, bottom: 800, scale: 1.5)
+        let original = saved
+        let visible = saved.editable(in: area)
+        let collision = visible.placement(.leftStickButton, in: area)
+        #expect(saved.editing(.leftStick, to: collision, in: area) == nil)
+        #expect(saved == original)
+        var hidden = visible.placement(.leftStick, in: area)
+        hidden.hidden = true
+        let edited = try #require(saved.editing(.leftStick, to: hidden, in: area))
+        #expect(edited.frames(in: area)[.leftStick] == nil)
+        #expect(saved == original)
+    }
+
     @Test func persistenceIsScopedAndForgetRemovesOnlyThatPC() throws {
         let suite = "touch-layout-test.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
