@@ -96,7 +96,19 @@ def latest_run(runs, workflow, sha, workflow_id, candidate=False):
     if not eligible:
         error = ChecksPending if candidate else ValueError
         raise error(f"missing checks: {workflow}")
-    run = max(eligible, key=lambda item: (item.get("run_number", 0), item.get("run_attempt", 0)))
+    # Run numbers do not change on rerun; a queued older run must also close the gate.
+    if any(item.get("status") != "completed" for item in eligible):
+        raise ChecksPending(f"checks are pending: {workflow}")
+    def execution(item):
+        return max(analysis_timestamp(item.get("run_started_at")),
+                   analysis_timestamp(item.get("updated_at")))
+    newest = max(map(execution, eligible))
+    latest = [item for item in eligible if execution(item) == newest]
+    if any(item.get("conclusion") != "success" for item in latest):
+        raise ValueError(f"checks are not green: {workflow}")
+    run = max(latest, key=lambda item: (item.get("run_number", 0), item.get("run_attempt", 0)))
+    if not all(type(run.get(key)) is int and run[key] > 0 for key in ("id", "run_attempt")):
+        raise ValueError("check run has no execution identity")
     if run.get("head_repository", {}).get("full_name") != REPO:
         raise ValueError("checks did not originate from the upstream repository")
     if run.get("event") not in {"push", "pull_request", "workflow_dispatch"}:
@@ -108,7 +120,7 @@ def latest_run(runs, workflow, sha, workflow_id, candidate=False):
     return run
 
 
-def validate_jobs(jobs, required, sha):
+def validate_jobs(jobs, required, sha, run=None):
     validated = {}
     for name in required:
         matches = [job for job in jobs if job.get("name") == name]
@@ -116,7 +128,13 @@ def validate_jobs(jobs, required, sha):
             raise ValueError(f"missing exact-commit job: {name}")
         if matches[0].get("status") != "completed" or matches[0].get("conclusion") != "success":
             raise ValueError(f"job is not green: {name}")
-        validated[name] = matches[0]
+        job = matches[0]
+        if run is not None and (job.get("run_id") != run["id"]
+                                or type(job.get("run_attempt")) is not int
+                                or not 1 <= job["run_attempt"] <= run["run_attempt"]
+                                or job.get("head_branch") != run.get("head_branch")):
+            raise ValueError("job does not belong to the selected run, attempt and ref")
+        validated[name] = job
     return validated
 
 
@@ -157,12 +175,37 @@ def validate_analyses(analyses, jobs, sha, ref, parents):
         created = analysis_timestamp(entry.get("created_at"))
         if created < started:
             raise ValueError("CodeQL analysis predates its successful language job")
+        completed = analysis_timestamp(jobs[CATEGORIES[category]].get("completed_at"))
+        if created > completed:
+            raise ValueError("CodeQL analysis follows its successful language job")
         commit = entry.get("commit_sha")
         if commit != sha and parents.get(commit) != sha:
             raise ValueError("CodeQL analyzed a different commit")
         commits.add(commit)
     if len(commits) != 1:
         raise ValueError("CodeQL languages analyzed different commits")
+
+
+def validate_uploads(analyses, jobs, candidate):
+    for entry in analyses:
+        if type(entry.get("id")) is not int or entry["id"] <= 0:
+            raise ValueError("analysis has no identity")
+        upload = entry.get("sarif_id")
+        if not isinstance(upload, str) or not re.fullmatch(r"[A-Za-z0-9-]+", upload):
+            raise ValueError("analysis has no upload identity")
+        job = jobs[CATEGORIES[entry["category"]]]
+        receipts = [step for step in job.get("steps", [])
+                    if step.get("name", "").startswith("CodeQL upload ")]
+        if (len(receipts) != 1 or receipts[0].get("name") != f"CodeQL upload {upload}"
+                or receipts[0].get("status") != "completed"
+                or receipts[0].get("conclusion") != "success"):
+            raise ValueError("CodeQL upload is not bound to its successful producing job")
+        if candidate:
+            status = object_api(f"code-scanning/sarifs/{upload}")
+            if status.get("processing_status") == "pending":
+                raise ChecksPending("candidate CodeQL upload is processing")
+            if status.get("processing_status") != "complete" or status.get("errors"):
+                raise ValueError("candidate CodeQL upload did not complete")
 
 
 def collect(sha, candidate=False):
@@ -178,9 +221,10 @@ def collect(sha, candidate=False):
             raise ValueError("workflow run search may be truncated; nothing authorized")
         runs = [run for page in pages for run in page.get("workflow_runs", [])]
         run = latest_run(runs, workflow, sha, metadata["id"], candidate)
-        prerequisite_runs.append({"workflow": workflow, "id": run["id"], "attempt": run.get("run_attempt", 1)})
+        prerequisite_runs.append({"workflow": workflow, "id": run["id"], "attempt": run["run_attempt"],
+                                  "sha": sha, "ref": analysis_ref(run)})
         pages = api(f"actions/runs/{run['id']}/jobs?filter=latest&per_page=100")
-        jobs = validate_jobs([job for page in pages for job in page.get("jobs", [])], required, sha)
+        jobs = validate_jobs([job for page in pages for job in page.get("jobs", [])], required, sha, run)
         if workflow.endswith("codeql.yml"):
             codeql_run = run
             codeql_jobs = jobs
@@ -200,19 +244,11 @@ def collect(sha, candidate=False):
     if candidate and any(not entry for entry in latest):
         raise ChecksPending("candidate CodeQL analysis is still missing")
     validate_analyses(analyses, codeql_jobs, sha, ref, parents)
-    if candidate:
-        for entry in latest:
-            if not isinstance(entry.get("id"), int) or entry["id"] <= 0:
-                raise ValueError("candidate analysis has no identity")
-            upload = entry.get("sarif_id")
-            if not isinstance(upload, str) or not re.fullmatch(r"[A-Za-z0-9-]+", upload):
-                raise ValueError("candidate analysis has no upload identity")
-            status = object_api(f"code-scanning/sarifs/{upload}")
-            if status.get("processing_status") == "pending":
-                raise ChecksPending("candidate CodeQL upload is processing")
-            if status.get("processing_status") != "complete" or status.get("errors"):
-                raise ValueError("candidate CodeQL upload did not complete")
-    return {"sha": sha, "runs": prerequisite_runs, "analysis_ref": ref,
+    validate_uploads(latest, codeql_jobs, candidate)
+    producers = [{"category": category, "run": job.get("run_id"),
+                  "attempt": job.get("run_attempt"), "sha": job["head_sha"], "ref": ref}
+                 for category, name in CATEGORIES.items() for job in [codeql_jobs[name]]]
+    return {"sha": sha, "runs": prerequisite_runs, "producers": producers, "analysis_ref": ref,
             "analyses": [{key: entry.get(key) for key in ("id", "sarif_id", "category", "commit_sha")}
                          for entry in latest]}
 

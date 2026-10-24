@@ -88,6 +88,14 @@ private key live in the `rc-cut` environment (no required reviewers) as
 `GLIMMER_RC_APP_CLIENT_ID` and `GLIMMER_RC_APP_PRIVATE_KEY`, synced from Doppler
 like the release secrets.
 
+CodeQL records its `sarif-id` as a successful job step after the extraction
+safeguard. The gate joins that receipt to the selected run ID, producing
+attempt, head SHA and ref, and requires the analysis timestamp inside that job's
+interval. A later rerun of an older run supersedes earlier execution evidence;
+pending, failed or cancelled executions cannot borrow a different run's green
+verdict. Partial reruns may retain successful language jobs only from the same
+run.
+
 ### Shared Mac and iOS reservation
 
 `candidate-reservation` is a durable metadata branch. Its commit message records

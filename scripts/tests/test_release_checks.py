@@ -12,7 +12,9 @@ import sys
 import tempfile
 import json
 import unittest
-from unittest.mock import patch
+import time
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
@@ -28,20 +30,25 @@ def run(**changes):
     return {"id": 1, "workflow_id": 2, "path": WORKFLOW, "head_sha": SHA,
             "head_repository": {"full_name": CHECKS.REPO}, "event": "pull_request",
             "status": "completed", "conclusion": "success", "run_number": 4, "run_attempt": 1,
+            "updated_at": "2026-10-09T20:02:00Z",
             "run_started_at": "2026-10-09T20:00:00Z", "pull_requests": [{"number": 114}], **changes}
 
 
 def analyses(**changes):
     return [{"id": index, "category": category, "analysis_key": f"{WORKFLOW}:analyze",
              "ref": "refs/pull/114/merge", "commit_sha": MERGE, "error": "", "rules_count": 10,
-             "created_at": "2026-10-09T20:01:00Z", **changes}
+             "created_at": "2026-10-09T20:01:00Z", "sarif_id": f"upload-{index}", **changes}
             for index, category in enumerate(sorted(CHECKS.CATEGORIES), 1)]
 
 
 def language_jobs(**changes):
     return {name: {"name": name, "head_sha": SHA, "status": "completed", "conclusion": "success",
-                   "started_at": "2026-10-09T20:00:00Z", **changes}
-            for name in CHECKS.REQUIRED[WORKFLOW]}
+                   "run_id": 1, "run_attempt": 1, "head_branch": None,
+                   "completed_at": "2026-10-09T20:02:00Z",
+                   "started_at": "2026-10-09T20:00:00Z",
+                   "steps": [{"name": f"CodeQL upload upload-{index}",
+                              "status": "completed", "conclusion": "success"}], **changes}
+            for index, name in enumerate(sorted(CHECKS.REQUIRED[WORKFLOW]), 1)}
 
 
 class RequiredChecksTests(unittest.TestCase):
@@ -85,7 +92,8 @@ class RequiredChecksTests(unittest.TestCase):
 
     def test_partial_rerun_accepts_retained_successful_language_analyses(self):
         jobs = language_jobs()
-        jobs["Analyze (swift)"]["started_at"] = "2026-10-09T21:00:00Z"
+        jobs["Analyze (swift)"].update(started_at="2026-10-09T21:00:00Z",
+                                      completed_at="2026-10-09T21:02:00Z")
         data = analyses()
         next(entry for entry in data if entry["category"] == "/language:swift")["created_at"] = "2026-10-09T21:01:00Z"
         CHECKS.validate_analyses(data, jobs, SHA, "refs/pull/114/merge", {MERGE: SHA})
@@ -104,7 +112,8 @@ class RequiredChecksTests(unittest.TestCase):
 
     def test_partial_rerun_passes_complete_gate_unless_alerts_are_open(self):
         jobs = language_jobs()
-        jobs["Analyze (swift)"]["started_at"] = "2026-10-09T21:00:00Z"
+        jobs["Analyze (swift)"].update(started_at="2026-10-09T21:00:00Z",
+                                      completed_at="2026-10-09T21:02:00Z")
         data = analyses()
         next(entry for entry in data if entry["category"] == "/language:swift")["created_at"] = "2026-10-09T21:01:00Z"
         alerts = []
@@ -123,7 +132,8 @@ class RequiredChecksTests(unittest.TestCase):
                                               run_attempt=2, run_started_at="2026-10-09T21:00:00Z")]}]
             if "/jobs?" in path:
                 return [{"jobs": [*jobs.values(), {"name": "macOS", "head_sha": SHA,
-                                                  "status": "completed", "conclusion": "success"}]}]
+                                                  "status": "completed", "conclusion": "success",
+                                                  "run_id": 1, "run_attempt": 2, "head_branch": None}]}]
             if "analyses?" in path:
                 return [data]
             alert_queries.append(path)
@@ -251,9 +261,11 @@ sys.exit(response['returncode'])
         env = patch.dict(CHECKS.os.environ, PATH=str(self.root) + ':' + CHECKS.os.environ['PATH'])
         env.start()
         self.addCleanup(env.stop)
-        sleep = patch('time.sleep')
-        self.sleep = sleep.start()
-        self.addCleanup(sleep.stop)
+        self.sleep = Mock()
+        clock = patch.object(CHECKS, 'time', SimpleNamespace(
+            monotonic=lambda: time.monotonic(), sleep=self.sleep))
+        clock.start()
+        self.addCleanup(clock.stop)
 
     def responses(self, *responses):
         (self.root / 'responses.json').write_text(json.dumps(responses))
