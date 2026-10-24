@@ -12,7 +12,7 @@ struct GlimmerApp: App {
     private let displayActivity = AppDisplayActivity()
 
     init() {
-        UserDefaults.standard.register(defaults: ["telemetryEnabled": AppDisplayActivity.developmentBuild])
+        DiagnosticsDefaults.register()
     }
 
     var body: some Scene {
