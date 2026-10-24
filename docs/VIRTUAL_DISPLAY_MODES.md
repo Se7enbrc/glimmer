@@ -6,19 +6,28 @@ client code and Apple's display specifications. For installation, follow the
 
 ## What Glimmer sends
 
-The following rules describe this checkout, checked on 2026-10-22. Panel tables
+The following rules describe this checkout, checked on 2026-10-24. Panel tables
 below use landscape stream requests and hardware maximum refresh rates. Both
 clients round each requested dimension down to an even number of pixels. Runtime
 display reports remain authoritative.
 
-| Choice                       | Request rule                                                                                                                                                      | Source                                                                                                            |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Mac Sharpest                 | Panel-native pixels from Core Graphics; both dimensions rounded down to even. FPS is `NSScreen.maximumFramesPerSecond`, or 60 if unavailable.                     | [QualityCalculator.swift](../Glimmer/QualityCalculator.swift), `mainDisplayMode`, `effectiveValuesForPreset`      |
-| Mac Balanced                 | Integer half dimensions when both are at least 1280 × 720; otherwise native. Round the result down to even. Same FPS as Sharpest.                                 | [StreamQuality.swift](../GlimmerEngine/Session/StreamQuality.swift), `hidpiSize`, `encodableSize`                 |
-| Mac Custom                   | Width 640–7680, height 480–4320, integer FPS 30–240. Round dimensions down to even. Full screen preserves FPS; windowed caps to the display, with a 30 fps floor. | [bounds](../GlimmerEngine/Models/StreamSizeBounds.swift), [window cap](../Glimmer/Models/StreamDisplayMode.swift) |
-| Mac common-size menu         | 1280 × 720, 1920 × 1080, 2560 × 1440, 3840 × 2160. These change Custom's size, not its FPS.                                                                       | [CommonResolution](../Glimmer/SettingsGeneralStreamingPanes.swift)                                                |
-| iPhone/iPad Native · 120 fps | `max(nativeBounds)` × `min(nativeBounds)`, both rounded down to even; FPS is `min(120, maximumFramesPerSecond)`.                                                  | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift), `resolve`                                              |
-| iPhone/iPad 1080p            | 1920 × 1080 at `min(60, maximumFramesPerSecond)` or `min(120, maximumFramesPerSecond)`. No other quality profiles or half-size choice.                            | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift)                                                         |
+| Choice                  | Request rule                                                                                                                                                      | Source                                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Mac Sharpest            | Panel-native pixels from Core Graphics; both dimensions rounded down to even. FPS is `NSScreen.maximumFramesPerSecond`, or 60 if unavailable.                     | [QualityCalculator.swift](../Glimmer/QualityCalculator.swift), `mainDisplayMode`, `effectiveValuesForPreset`      |
+| Mac Balanced            | Integer half dimensions when both are at least 1280 × 720; otherwise native. Round the result down to even. Same FPS as Sharpest.                                 | [StreamQuality.swift](../GlimmerEngine/Session/StreamQuality.swift), `hidpiSize`, `encodableSize`                 |
+| Mac Custom              | Width 640–7680, height 480–4320, integer FPS 30–240. Round dimensions down to even. Full screen preserves FPS; windowed caps to the display, with a 30 fps floor. | [bounds](../GlimmerEngine/Models/StreamSizeBounds.swift), [window cap](../Glimmer/Models/StreamDisplayMode.swift) |
+| Mac common-size menu    | 1280 × 720, 1920 × 1080, 2560 × 1440, 3840 × 2160. These change Custom's size, not its FPS.                                                                       | [CommonResolution](../Glimmer/SettingsGeneralStreamingPanes.swift)                                                |
+| iPhone Native · 120 fps | `max(nativeBounds)` × `min(nativeBounds)`, both rounded down to even; FPS is `min(120, maximumFramesPerSecond)`.                                                  | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift), `resolve`                                              |
+| iPhone 1080p            | 1920 × 1080 at `min(60, maximumFramesPerSecond)` or `min(120, maximumFramesPerSecond)`. No other quality profiles or half-size choice.                            | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift)                                                         |
+
+For iPad, Native now requests the window's backing-pixel size in its current
+orientation, bounded by shared decoder limits. 1080p preserves that window's
+aspect within 1920 × 1080 (landscape) or 1080 × 1920 (portrait), without
+upscaling unless needed to reach the shared minimum. If the aspect cannot
+satisfy both limits, clamp to legal dimensions and use aspect fill; do not block
+startup. FPS retains the profile/display cap. The tables below describe
+landscape panels; the XML samples do not cover arbitrary windows. See
+[window modes and the 90-mode budget](IPAD_WINDOW_STREAMING.md#pc-display-modes).
 
 Both clients use
 [StreamQuality.encodableSize](../GlimmerEngine/Session/StreamQuality.swift)

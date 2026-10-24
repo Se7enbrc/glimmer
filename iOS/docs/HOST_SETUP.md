@@ -1,8 +1,9 @@
 # Set up the PC for iPhone and iPad
 
 Choose a display mode on the PC that your game supports. Some games crop,
-stretch, or refuse the wider iPhone aspect ratio. Use **1080p** in Settings →
-Quality and 1920 × 1080 on the PC when a game needs 16:9.
+stretch, or refuse the wider iPhone aspect ratio. On iPhone, use **1080p** in
+Settings → Quality and 1920 × 1080 on the PC when a game needs 16:9. On iPad,
+the request follows the window's shape; use a 16:9 window if the game needs it.
 
 Follow the [shared PC setup guide](../../docs/HOST_SETUP.md) to install Sunshine
 and select the right size and refresh rate. For MTT Virtual Display Driver, use
@@ -12,13 +13,22 @@ Mac, iPhone and iPad, use
 
 Software with its own virtual display, such as Apollo, does not need the MTT
 sample configuration. Neither does a PC monitor set to a 16:9 mode. A virtual
-display provides the requested size; it cannot make a game support that aspect
+display supplies additional modes; it cannot make a game support an aspect
 ratio.
 
-In Settings → Quality, **Native · 120 fps** requests this display's landscape
-pixel size rounded down to even dimensions, capped to its maximum frame rate.
-**1080p · 60 fps** and **1080p · 120 fps** request 1920 × 1080, also capped to
-the display. There is no half-resolution or Custom choice.
+On iPhone, **Native · 120 fps** requests the display's landscape pixel size;
+**1080p** requests 1920 × 1080. On iPad, Native requests the window's pixel size
+and 1080p fits the window's shape within 1920 × 1080, or 1080 × 1920 in
+portrait. Both round dimensions down to even pixels and cap FPS to the display.
+There is no half-resolution or Custom choice. At 1080p, very tall windows can
+crop the sides to keep the stream within supported sizes.
+
+An arbitrary iPad window may not match any mode listed by the PC's display.
+Sunshine can scale and pad that desktop inside the requested video size. Glimmer
+fills its window with that video, including any padding already in it. Add a
+matching mode on the PC to remove that padding; the existing samples cover
+landscape panels, not every window size. See the
+[window-mode findings and sample budget](../../docs/IPAD_WINDOW_STREAMING.md#pc-display-modes).
 
 ## Audio and controllers
 
