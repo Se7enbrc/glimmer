@@ -21,6 +21,7 @@ public final class StreamInput: @unchecked Sendable {
     let initialAttempt = UUID()
     var activeAttempt: UUID?
     var rearmOnActivation = false
+    var holdActivation = false
     let emit: @Sendable (Event) -> Void
 
     struct RegistrationState {
@@ -169,6 +170,7 @@ public final class StreamInput: @unchecked Sendable {
     func activate(_ value: Bool, attempt: UUID) {
         core.withLock {
             guard !terminal, activeAttempt == attempt, core.backend != nil else { return }
+            if value && holdActivation { return }
             if value {
                 if rearmOnActivation {
                     for slot in registrations.keys { registrations[slot]?.rearm.suppressHeld() }

@@ -123,6 +123,7 @@
 		ABCD20260609000000000602 /* RtpAudioQueue+Fec.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */; };
 		ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000701 /* AudioDecoder+Meter.swift */; };
 		AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000001 /* AudioDecoder+Engine.swift */; };
+		851374F386A2419FB8B03DAF /* AudioDecoder+Reconnect.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA67908CD62144CBACFBBDAA /* AudioDecoder+Reconnect.swift */; };
 		AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000003 /* AudioDecoder+Decode.swift */; };
 		A0D102202610091545000004 /* AudioDecoder+Spatial.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D102202610091545000003 /* AudioDecoder+Spatial.swift */; };
 		A0D102202610091545000002 /* SpatialAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D102202610091545000001 /* SpatialAudio.swift */; };
@@ -328,6 +329,7 @@
 		D1000F10 /* TelemetryLatency+Trace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000F11 /* TelemetryLatency+Trace.swift */; };
 		D1000FA0 /* TelemetryLatency+Composites.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FA1 /* TelemetryLatency+Composites.swift */; };
 		D1000FB1 /* StreamSession+Reconnect.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FB0 /* StreamSession+Reconnect.swift */; };
+		3BAFF9F5E49D4DCDAA0DA8E7 /* StreamSession+Bitrate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08008BE8C97E4724A4FC9060 /* StreamSession+Bitrate.swift */; };
 		D1000FC1 /* StreamSession+Wake.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000FC0 /* StreamSession+Wake.swift */; };
 		D1A00002 /* AppModel+HostRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A00001 /* AppModel+HostRoute.swift */; };
 		D1A00004 /* AppModel+SessionReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A00003 /* AppModel+SessionReceipt.swift */; };
@@ -441,6 +443,7 @@
 		5E55103026101000000000A1 /* AppModelSunshineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55103026101000000000A2 /* AppModelSunshineTests.swift */; };
 		5E55105026102200000000A1 /* SettingsAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55105026102200000000A2 /* SettingsAccessibilityTests.swift */; };
 		5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */; };
+		2EADF09704EC41BFB1054B22 /* BitrateActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B7A43BA24ED4DB9AA94DFDF /* BitrateActuatorTests.swift */; };
 		5E551020261010000C1C0001 /* TimedDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E551020261010000C1C0002 /* TimedDecisionTests.swift */; };
 		DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000006 /* PairingFlowTests.swift */; };
 		DEC0DE20261010E100000007 /* HostStatusPollerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */; };
@@ -920,6 +923,7 @@
 		ABCD20260609000000000601 /* RtpAudioQueue+Fec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtpAudioQueue+Fec.swift"; sourceTree = "<group>"; };
 		ABCD20260609000000000701 /* AudioDecoder+Meter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Meter.swift"; sourceTree = SOURCE_ROOT; };
 		AC2026083000000000000001 /* AudioDecoder+Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Engine.swift"; sourceTree = SOURCE_ROOT; };
+		EA67908CD62144CBACFBBDAA /* AudioDecoder+Reconnect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Reconnect.swift"; sourceTree = SOURCE_ROOT; };
 		AC2026083000000000000003 /* AudioDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Decode.swift"; sourceTree = SOURCE_ROOT; };
 		A0D102202610091545000003 /* AudioDecoder+Spatial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/AudioDecoder+Spatial.swift"; sourceTree = SOURCE_ROOT; };
 		A0D102202610091545000001 /* SpatialAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/SpatialAudio.swift"; sourceTree = SOURCE_ROOT; };
@@ -1141,6 +1145,7 @@
 		D1000F11 /* TelemetryLatency+Trace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryLatency+Trace.swift"; sourceTree = SOURCE_ROOT; };
 		D1000FA1 /* TelemetryLatency+Composites.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryLatency+Composites.swift"; sourceTree = SOURCE_ROOT; };
 		D1000FB0 /* StreamSession+Reconnect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamSession+Reconnect.swift"; sourceTree = SOURCE_ROOT; };
+		08008BE8C97E4724A4FC9060 /* StreamSession+Bitrate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamSession+Bitrate.swift"; sourceTree = SOURCE_ROOT; };
 		D1000FC0 /* StreamSession+Wake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamSession+Wake.swift"; sourceTree = SOURCE_ROOT; };
 		D1A00001 /* AppModel+HostRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+HostRoute.swift"; sourceTree = "<group>"; };
 		D1A00003 /* AppModel+SessionReceipt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SessionReceipt.swift"; sourceTree = "<group>"; };
@@ -1255,6 +1260,7 @@
 		5E55103026101000000000A2 /* AppModelSunshineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelSunshineTests.swift; sourceTree = "<group>"; };
 		5E55105026102200000000A2 /* SettingsAccessibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsAccessibilityTests.swift; sourceTree = "<group>"; };
 		5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionReconnectFlowTests.swift; sourceTree = "<group>"; };
+		1B7A43BA24ED4DB9AA94DFDF /* BitrateActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/BitrateActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
 		5E551020261010000C1C0002 /* TimedDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimedDecisionTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000006 /* PairingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingFlowTests.swift; sourceTree = "<group>"; };
 		DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostStatusPollerTests.swift; sourceTree = "<group>"; };
@@ -2011,6 +2017,7 @@
 				5E55103026101000000000A2 /* AppModelSunshineTests.swift */,
 				5E55105026102200000000A2 /* SettingsAccessibilityTests.swift */,
 				5E55102026101000000000A4 /* SessionReconnectFlowTests.swift */,
+				1B7A43BA24ED4DB9AA94DFDF /* BitrateActuatorTests.swift */,
 				5E551020261010000C1C0002 /* TimedDecisionTests.swift */,
 				DEC0DE20261010E100000006 /* PairingFlowTests.swift */,
 				DEC0DE20261010E100000008 /* HostStatusPollerTests.swift */,
@@ -2124,6 +2131,7 @@
 				D1000FC0 /* StreamSession+Wake.swift */,
 				D1000084 /* StreamSession+Telemetry.swift */,
 				D1000FB0 /* StreamSession+Reconnect.swift */,
+				08008BE8C97E4724A4FC9060 /* StreamSession+Bitrate.swift */,
 				D1000B04 /* StreamSession+PresentTrip.swift */,
 				D10000A2 /* StreamSession+PresentMetric.swift */,
 				D1000049 /* StreamSession+Lifecycle.swift */,
@@ -2212,6 +2220,7 @@
 				ABCD20260610000000000801 /* AudioDecoder+CushionMemory.swift */,
 				ABCD20260609000000000701 /* AudioDecoder+Meter.swift */,
 				AC2026083000000000000001 /* AudioDecoder+Engine.swift */,
+				EA67908CD62144CBACFBBDAA /* AudioDecoder+Reconnect.swift */,
 				D2C00007 /* OpusDecoder.swift */,
 				A11020261012000300000000 /* AudioOutput+Silence.swift */,
 				EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */,
@@ -2916,6 +2925,7 @@
 				5E55103026101000000000A1 /* AppModelSunshineTests.swift in Sources */,
 				5E55105026102200000000A1 /* SettingsAccessibilityTests.swift in Sources */,
 				5E55102026101000000000A3 /* SessionReconnectFlowTests.swift in Sources */,
+				2EADF09704EC41BFB1054B22 /* BitrateActuatorTests.swift in Sources */,
 				5E551020261010000C1C0001 /* TimedDecisionTests.swift in Sources */,
 				DEC0DE20261010E100000005 /* PairingFlowTests.swift in Sources */,
 				DEC0DE20261010E100000007 /* HostStatusPollerTests.swift in Sources */,
@@ -3028,6 +3038,7 @@
 				D1000FC1 /* StreamSession+Wake.swift in Sources */,
 				D1000085 /* StreamSession+Telemetry.swift in Sources */,
 				D1000FB1 /* StreamSession+Reconnect.swift in Sources */,
+				3BAFF9F5E49D4DCDAA0DA8E7 /* StreamSession+Bitrate.swift in Sources */,
 				D1000B03 /* StreamSession+PresentTrip.swift in Sources */,
 				D10000A1 /* StreamSession+PresentMetric.swift in Sources */,
 				D100004A /* StreamSession+Lifecycle.swift in Sources */,
@@ -3116,6 +3127,7 @@
 				ABCD20260610000000000802 /* AudioDecoder+CushionMemory.swift in Sources */,
 				ABCD20260609000000000702 /* AudioDecoder+Meter.swift in Sources */,
 				AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */,
+				851374F386A2419FB8B03DAF /* AudioDecoder+Reconnect.swift in Sources */,
 				D2C00008 /* OpusDecoder.swift in Sources */,
 				A11020261012000300000001 /* AudioOutput+Silence.swift in Sources */,
 				EE6572F168D7406289351042 /* OpusDecoder+Packet.swift in Sources */,

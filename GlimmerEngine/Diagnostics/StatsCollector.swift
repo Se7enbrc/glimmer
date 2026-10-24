@@ -75,6 +75,7 @@ package final class StatsCollector: @unchecked Sendable {
     /// detect a screen freeze without depending on the pacer's liveness (which
     /// is nil in direct mode - the gap that let the direct path wedge with no
     /// recovery). 0 means we haven't presented our first frame yet.
+    var firstPresentTime: CFAbsoluteTime = 0
     var lastPresentTime: CFAbsoluteTime = 0
     var receivedFrames: UInt64 = 0
     var decodedFrames: UInt64 = 0
@@ -318,6 +319,7 @@ package final class StatsCollector: @unchecked Sendable {
         lastDecodeCallbackTime = 0
         decoderDroppedFrames = 0
         lastDecodedFrameTime = 0
+        firstPresentTime = 0
         lastPresentTime = 0
         windowStart = CACurrentMediaTime()
         hostFrameRate = HostFrameRate(now: windowStart)

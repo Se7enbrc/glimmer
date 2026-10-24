@@ -358,6 +358,7 @@ public final class VideoDecoder {
         set { firstDecodedFrameClaimed.store(newValue, ordering: .releasing) }
     }
     // A live layer replacement must preserve the connection's pending first-frame notification.
+    nonisolated let retainImageForReconnect = Atomic<Bool>(false)
     nonisolated let firstFrameLifecycleGeneration = Atomic<UInt64>(0)
 
     // Each callback retains its matching colour/space pair after unlocking; teardown drains callbacks first.

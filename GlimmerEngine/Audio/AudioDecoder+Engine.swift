@@ -165,6 +165,10 @@ extension AudioDecoder {
                 if halOutput == nil || outputGraphNeedsReconnect {
                     installDeviceListeners()
                     let output = try platform.makeOutput(inputFormat)
+                    if reconnectFadeIn {
+                        output.queue.pointee.fadeGain.store(0, ordering: .relaxed)
+                        reconnectFadeIn = false
+                    }
                     halOutput = output
                     observedRingFrames = 0
                     observedRingSilence = 0

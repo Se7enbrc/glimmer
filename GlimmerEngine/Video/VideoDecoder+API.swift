@@ -228,6 +228,7 @@ extension VideoDecoder {
     /// call it from StreamSession.stop() to guarantee teardown order even when
     /// the backend defers cleanup or has already been stopped.
     public func teardown() {
+        retainImageForReconnect.store(false, ordering: .releasing)
         // Refuse further frame submissions immediately. Set before touching
         // session state so anything in flight on the decode queue bails out.
         isStreaming = false

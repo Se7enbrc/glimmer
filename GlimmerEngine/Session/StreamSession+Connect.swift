@@ -13,7 +13,7 @@ extension StreamSession {
     /// Public callers validate key sizes before this boundary; native launch compatibility is preserved.
     package func makeBackendConfig(
         config: StreamRequest, launch: LaunchResponse, server: ServerInfo,
-        rtt: RttStats? = nil, rttPreLaunch: Bool = false
+        rtt: RttStats? = nil, rttPreLaunch: Bool = false, exactBitrate: Bool = false
     ) -> BackendStreamConfig {
         // Resolve `.auto` from the route we will actually egress on. Without
         // this, `.auto` (STREAM_CFG_AUTO = 2) never equals STREAM_CFG_REMOTE and
@@ -42,7 +42,7 @@ extension StreamSession {
             configured: config.bitrateKbps, path: path)
         // The wired boost assumed Ethernet at both ends; the measured RTT is
         // the host side's answer, and a Wi-Fi hop there takes the boost off.
-        let cappedBitrateKbps = StreamPathMTU.wiredAskKbps(
+        let cappedBitrateKbps = exactBitrate ? config.bitrateKbps : StreamPathMTU.wiredAskKbps(
             capped: pathCappedKbps, boost: config.bitrateBoost, steadyRttMs: path.rttMs)
         if cappedBitrateKbps < pathCappedKbps {
             Diag.notice("Wired bitrate boost withdrawn: steady RTT "
@@ -64,7 +64,7 @@ extension StreamSession {
                 bitrate=\(config.bitrateKbps, privacy: .public)→\(cappedBitrateKbps, privacy: .public)kbps
                 """)
         }
-        if pathCappedKbps < config.bitrateKbps {
+        if !exactBitrate, pathCappedKbps < config.bitrateKbps {
             Diag.notice(
                 "Link quality gate: steady \(path.rttMs.map { String(format: "%.0f", $0) } ?? "?")ms RTT "
                 + "(min \(path.rtt.map { String(format: "%.0f", $0.minMs) } ?? "?")ms, "
@@ -176,6 +176,7 @@ extension StreamSession {
                 try await connectingBackend.startConnectionAsync(server: backendServer, config: backendConfig)
             }
             try checkAttempt(deadline: deadline)
+            if bitrateChange == nil { appliedBitrateKbps = Int(backendConfig.bitrate) }
         } catch {
             // A failed transport follows the session-wide host disposition.
             let code: Int32
@@ -189,7 +190,9 @@ extension StreamSession {
             // while the driver retries. Initial connect failure runs the full teardown.
             if duringReconnect {
                 try checkAttempt(deadline: deadline)
-                if let cancellation = hostDisposition.cancellation { try? await cancellation.cancel(network) }
+                if bitrateChange == nil, let cancellation = hostDisposition.cancellation {
+                    try? await cancellation.cancel(network)
+                }
                 try checkAttempt(deadline: deadline)
                 throw StreamError.sessionFailed(code)
             }

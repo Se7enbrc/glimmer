@@ -190,6 +190,13 @@ public actor StreamSession {
     package var reachedLiveState = false
     /// The episode owns retries while the frame/present watchdogs stay quiet.
     package var isReconnecting = false
+    package var bitrateChange: BitrateChange?
+    package var bitrateTask: Task<Void, Never>?
+    package var bitrateAvailable = true
+    package var preserveGameOnStop = false
+    package var bitrateAudioTail: (id: UUID, attempt: UUID, oldLast: Double)?
+    public internal(set) var appliedBitrateKbps: Int?
+    public internal(set) var lastBitrateChange: BitrateChangeReport?
     /// Attempt counter for the current reconnect episode.
     package var reconnectAttempts = 0
     /// The last attempt's classified failure; a give-up hands it to the launcher so the copy names the fix.

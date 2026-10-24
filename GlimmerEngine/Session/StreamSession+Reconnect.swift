@@ -99,9 +99,8 @@ extension StreamSession {
         await stop(cause: .hostClosedClean)
     }
 
-    /// A reconnect this side chose on a live connection (a bitrate change, a decoder that never decodes
-    /// what arrives). The same episode as a host terminate: the frozen frame holds under the banner and
-    /// video resumes in place; the first `reconnectInPlace` brings the live connection down itself.
+    /// Decoder stalls share the termination recovery owner and retain the native surface.
+    /// Bitrate requests enter through the resume-only actuator instead.
     package func runSelfInitiatedReconnect(
         cause: String, bannerText: String = "Reconnecting…",
         rearmWatchdog: @Sendable (StreamSession) async -> Void = StreamSession.rearmReconnectWatchdog
@@ -117,7 +116,7 @@ extension StreamSession {
     /// Drive a bounded reconnect episode: hold the frozen frame and retry the
     /// in-place rebuild with a short backoff, then resume (`.reconnected`) or,
     /// once the attempts or the awake-time budget run out, tear down for real.
-    private func runReconnectEpisode(
+    package func runReconnectEpisode(
         code: Int32, cause: String, bannerText: String = "Reconnecting…",
         rearmWatchdog: @Sendable (StreamSession) async -> Void = StreamSession.rearmReconnectWatchdog
     ) async {
@@ -126,11 +125,11 @@ extension StreamSession {
         reconnectAttempts = 0
         lastReconnectError = nil
         let budget = ReconnectBudget(seconds: Self.reconnectWindowSeconds)
-        bridge?.emit(.reconnecting)
+        if bitrateChange == nil { bridge?.emit(.reconnecting) }
         // Surface the hold over the frozen frame - the launcher's phase chip is
         // occluded by the fullscreen window, so this banner is the only in-stream
         // signal that we're holding rather than dead. It announces itself.
-        let winForBanner = presentation
+        let winForBanner = bitrateChange == nil ? presentation : nil
         await MainActor.run {
             winForBanner?.showRecovery(bannerText)
         }
@@ -141,11 +140,9 @@ extension StreamSession {
         while isStreaming, !stopInProgress,
               reconnectAttempts < Self.reconnectAttemptCap, let budgetEnd = budget.deadline() {
             reconnectAttempts += 1
-            // Backoff: the host (Sunshine) is mid-restart and its HTTPS endpoint
-            // may not answer for ~3s. A short ramp (0.8s, 1.6s, then 2.4s) keeps
-            // the first resume snappy; launchWithBusyRecovery's own
-            // waitForHostIdle poll absorbs the rest of the host's settle time.
-            let delayMs = UInt64(min(reconnectAttempts, 3)) * 800
+            // A healthy bitrate transition starts immediately. Failed attempts back off while Sunshine settles.
+            let delayMs: UInt64 = bitrateChange != nil && reconnectAttempts == 1
+                ? 0 : UInt64(min(reconnectAttempts, 3)) * 800
             do {
                 let delay = min(Double(delayMs) / 1000, max(0, budgetEnd.timeIntervalSinceNow))
                 try await clock.sleep(.seconds(delay))
@@ -173,7 +170,7 @@ extension StreamSession {
 
         // Exhausted the budget (or the user quit mid-episode). Give up to a real
         // teardown so the launcher shows the session ended.
-        isReconnecting = false
+        defer { isReconnecting = false }
         let winForGiveup = presentation
         await MainActor.run { winForGiveup?.showRecovery(nil) }
         guard isStreaming, !stopInProgress else { return }
@@ -204,6 +201,20 @@ extension StreamSession {
         await rearmWatchdog(self)
         guard isStreaming, !stopInProgress, attempt == attemptID,
               reconnectTermination?.attempt != attempt else { return false }
+        if bitrateChange != nil {
+            publicInput?.resumeAfterReplacement(attempt: attempt)
+            let inp = input
+            let gate = bridge
+            await MainActor.run {
+                if gate?.acceptsInput(attempt: attempt) == true { inp?.setReady(true) }
+            }
+            guard isStreaming, !stopInProgress, attempt == attemptID,
+                  reconnectTermination?.attempt != attempt else { return false }
+        }
+        if bitrateChange != nil {
+            completeBitrateChange(.applied)
+            bitrateChange = nil
+        }
         isReconnecting = false
         reconnectAttempts = 0
         // Connect-start reanchors handshake telemetry, so its established edge cannot count this recovery.
@@ -227,40 +238,45 @@ extension StreamSession {
         return streamError
     }
 
-    /// One attempt: swap in a fresh backend and re-run the handshake, /launch and
-    /// connect while the window, decoder and event stream stay alive. Returns true
-    /// once back up; throws when the PC now runs another app.
+    /// Replace transport without replacing the native surface or input registrations.
     private func reconnectInPlace(deadline: Date) async throws(TakeoverRequired) -> Bool {
         guard !Task.isCancelled, isStreaming, !stopInProgress, Date() < deadline else { return false }
-        await refreshReconnectAsk()
+        if bitrateChange == nil { await refreshReconnectAsk() }
         guard !Task.isCancelled, isStreaming, !stopInProgress, Date() < deadline,
-              let server = reconnectServer,
-              let config = reconnectConfig,
-              let appID = reconnectAppID,
+              let server = reconnectServer, var config = reconnectConfig, let appID = reconnectAppID,
               let win = presentation, let inp = input, let dec = videoDecoder else { return false }
+        if let change = bitrateChange {
+            config.bitrateKbps = change.report.requestedKbps
+            config.bitrateBoost = 1
+        }
+        let setup = SessionMedia(presentation: win, input: inp, video: dec)
+        do {
+            await releaseReconnectInput()
+            try await prepareBitrateMedia()
+            let teardownStart = uptimeSeconds
+            await teardownConnectionForReconnect()
+            bitrateChange?.report.legs["teardown_ms", default: 0] += (uptimeSeconds - teardownStart) * 1_000
+            try checkAttempt(deadline: deadline)
+            let fresh = makeBackend()
+            backend = fresh
+            await bindReplacement(fresh, setup: setup, config: config)
+            try checkAttempt(deadline: deadline)
+            return try await connectReplacement(server: server, appID: appID, config: config,
+                setup: setup, fresh: fresh, deadline: deadline)
+        } catch let takeover as TakeoverRequired {
+            throw takeover
+        } catch {
+            lastReconnectError = Self.reconnectAttemptError(error, pcAnswered: false)
+            return false
+        }
+    }
 
-        // 1. Bring the dead connection fully down (idempotent - onTerminated
-        //    already called stopConnection). Keeps the window/decoder/frozen
-        //    frame, the bridge + event stream, and StreamBridgeContext.current.
-        await teardownConnectionForReconnect()
-
-        // H5: re-check after the teardown await. stop() flips isStreaming/
-        // stopInProgress synchronously before its own first await, so a guard
-        // evaluated ON the actor between awaits reliably observes a teardown that
-        // slipped in. Bail BEFORE building a fresh backend - nothing to clean up.
-        guard !Task.isCancelled, isStreaming, !stopInProgress, Date() < deadline else { return false }
-
-        // 2. Swap in a fresh backend (NativeBackend is one-shot: its connection
-        //    state can't be reused and interrupt() latches permanently). Re-point
-        //    input + decoder on the MainActor so uplink + IDR requests go to the
-        //    new backend, not the dead one.
-        let fresh = makeBackend()
-        self.backend = fresh
+    private func bindReplacement(_ fresh: StreamingBackend, setup: SessionMedia, config: StreamRequest) async {
         attemptID = UUID()
         reconnectTermination = nil
         #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let tracker = FrameTimingTracker.shared {
-            if let pacer = dec.framePacer {
+            if let pacer = setup.video.framePacer {
                 _ = pacer.clearQueue(reason: "telemetry attempt boundary") { tracker.beginAttempt(attemptID) }
             } else {
                 tracker.beginAttempt(attemptID)
@@ -268,93 +284,67 @@ extension StreamSession {
         }
         #endif
         bridge?.beginAttempt(attemptID)
-        publicInput?.rebind(to: fresh, attempt: attemptID)
+        publicInput?.rebind(to: fresh, attempt: attemptID, holdActivation: bitrateChange != nil)
         await MainActor.run {
-            inp.setBackend(fresh)
-            dec.setBackend(fresh)
-            // Re-derive the Cruise ceiling: reconnect reuses the forwarder and
-            // never re-runs StartSetup, so a mid-session resolution change would
-            // otherwise keep a stale gMax.
-            inp.configure(config)
-            // Same reasoning for the absolute pointer's reference frame: a
-            // reconnect at a new resolution would otherwise keep mapping
-            // window points onto the old stream's pixel grid.
+            setup.input.setBackend(fresh)
+            setup.video.setBackend(fresh)
+            setup.input.configure(config)
         }
-
+        guard isStreaming, !stopInProgress, !Task.isCancelled else { return }
         if let bridge {
-            await wireMediaCallbacks(setup: SessionMedia(presentation: win, input: inp, video: dec),
-                bridge: bridge, attempt: attemptID)
+            await wireMediaCallbacks(setup: setup, bridge: bridge, attempt: attemptID,
+                suppressFirstFrame: bitrateChange != nil)
         }
+    }
 
-        // 3. Fresh NetworkClient + full handshake against the restarted host.
+    private func connectReplacement(server: ServerInfo, appID: Int, config: StreamRequest,
+                                    setup: SessionMedia, fresh: StreamingBackend, deadline: Date) async throws -> Bool {
         let net = makeNetwork(server)
-        self.network = net
+        network = net
         await net.setRequestDeadline(deadline)
-        let backendConfig: BackendStreamConfig
         var pcAnswered = false
         do {
             try checkAttempt(deadline: deadline)
-            let serverInfo = try await StreamAttempt.run(until: deadline) {
-                try await net.fetchServerInfo()
-            }
+            let statusStart = uptimeSeconds
+            let serverInfo = try await StreamAttempt.run(until: deadline) { try await net.fetchServerInfo() }
             pcAnswered = true
             try checkAttempt(deadline: deadline)
+            bitrateChange?.report.legs["server_info_ms", default: 0] += (uptimeSeconds - statusStart) * 1_000
             if serverInfo.currentGameID != appID { ownsHostSession = false }
             if hostDisposition.cancellation == nil, serverInfo.currentGameID != 0,
-               serverInfo.currentGameID != appID {
-                throw TakeoverRequired(appID: serverInfo.currentGameID)
+               serverInfo.currentGameID != appID { throw TakeoverRequired(appID: serverInfo.currentGameID) }
+            let launch: LaunchResponse
+            if bitrateChange != nil {
+                launch = try await resumeForBitrateChange(network: net, appID: appID,
+                    config: config, info: serverInfo, deadline: deadline)
+            } else {
+                launch = try await launchWithDeadline(
+                    network: net, appID: appID, config: config, info: serverInfo, deadline: deadline)
             }
-            let launch = try await launchWithDeadline(
-                network: net, appID: appID, config: config, info: serverInfo, deadline: deadline)
             try checkAttempt(deadline: deadline)
             if publicMedia != nil { try launch.validateSessionKey() }
-            // Re-probe the path on reconnect: the route may have moved (the
-            // tunnel-flap case this whole clamp exists for), so remoteness and
-            // the advertised packet size are resolved fresh, never inherited.
-            backendConfig = makeBackendConfig(
-                config: config, launch: launch, server: serverInfo)
-            // duringReconnect: connectBackend's failure path must NOT run the
-            // full stop() (that would blank the frozen frame + bounce to the
-            // launcher) - it cancels the failed launch and throws so we retry.
-            try await connectBackend(
-                serverInfo: serverInfo, launch: launch, backendConfig: backendConfig,
-                setup: SessionMedia(presentation: win, input: inp, video: dec), network: net, duringReconnect: true, deadline: deadline)
+            let backendConfig = makeBackendConfig(config: config, launch: launch, server: serverInfo,
+                                                   exactBitrate: bitrateChange != nil)
+            let transportStart = uptimeSeconds
+            try await connectBackend(serverInfo: serverInfo, launch: launch, backendConfig: backendConfig,
+                setup: setup, network: net, duringReconnect: true, deadline: deadline)
+            bitrateChange?.report.legs["transport_ms", default: 0] += (uptimeSeconds - transportStart) * 1_000
+            fresh.requestIdrFrame()
+            try await waitForBitrateMedia(deadline: deadline)
             try checkAttempt(deadline: deadline)
+            await net.setRequestDeadline(nil)
+            try checkAttempt(deadline: deadline)
+            setup.video.setNegotiatedBitrateKbps(Int(backendConfig.bitrate))
+            return true
         } catch {
             Diag.notice("reconnect attempt failed: \(error, privacy: .private)", "Stream")
             lastReconnectError = Self.reconnectAttemptError(error, pcAnswered: pcAnswered)
             fresh.interruptConnection()
             await net.shutdown()
-            if self.network === net { self.network = nil }
+            if network === net { network = nil }
             if let takeover = error as? TakeoverRequired { throw takeover }
             return false
         }
-
-        // H5: a stop() can land at ANY of the awaits above (~0.8-2.4s of handshake
-        // per attempt, plus the frozen "Reconnecting..." banner invites a quit).
-        // If one did, `fresh` + `net` are now a LIVE ENet/RTP backend on a session
-        // with isStreaming=false and no teardown path - a zombie for the process
-        // lifetime, with the host holding a "busy" session. interruptConnection()
-        // (the permanent latch, drains the receive threads) + drop the client so
-        // no live backend/NetworkClient survives the slipped-in stop. The episode
-        // loop's own re-checks then exit; the existing stop() torn-down everything
-        // else (window/decoder/bridge) already.
-        guard isStreaming, !stopInProgress else {
-            Diag.notice("reconnect: stop slipped in mid-handshake - "
-                + "interrupting the freshly-built backend to kill the zombie connection", "Stream")
-            await tearDownSlippedInReconnect(fresh: fresh, net: net)
-            return false
-        }
-
-        await net.setRequestDeadline(nil)
-        guard isStreaming, !stopInProgress, !Task.isCancelled else { return false }
-        // The overlay and telemetry show what this connection asked for.
-        dec.setNegotiatedBitrateKbps(Int(backendConfig.bitrate))
-
-        // 4. Nudge a keyframe so the fresh VT session repaints over the frozen
-        //    frame promptly (Sunshine sends one at start; cheap insurance).
-        backend.requestIdrFrame()
-        return true
     }
 
     /// The ask for the route the Mac is on now, or nil when unknown (no provider, another PC selected).
@@ -384,26 +374,21 @@ extension StreamSession {
         reconnectConfig?.bitrateBoost = ask.boost
     }
 
-    /// H5 cleanup: a `stop()` slipped in while this attempt was mid-handshake, so
-    /// the just-built `fresh` backend + `net` client are live on an already-ended
-    /// session. Interrupt the backend (permanent latch; drains the receive threads
-    /// so no callback can fire after) and shut the client so the host drops its
-    /// session record. Only nil `self.network` if it's still the one we built - a
-    /// concurrent stop() may have already nil'd it.
-    private func tearDownSlippedInReconnect(fresh: StreamingBackend, net: NetworkClient) async {
-        fresh.interruptConnection()
-        await net.shutdown()
-        if self.network === net { self.network = nil }
-    }
-
-    /// Keep the window, decoders, bridge, event stream and power assertion while replacing transport.
-    /// Do not cancel here: the old connection is gone and Sunshine may have restarted its session.
-    /// launchWithBusyRecovery cancels and launches on the new client after checking ownership.
-    private func teardownConnectionForReconnect() async {
+    /// Releases must be sent while the old uplink still accepts reliable input.
+    private func releaseReconnectInput() async {
+        if bitrateChange != nil { videoDecoder?.retainImageForReconnect.store(true, ordering: .releasing) }
+        if bitrateChange?.inputDisabledAt == nil { bitrateChange?.inputDisabledAt = uptimeSeconds }
         publicInput?.prepareForReplacement(attempt: attemptID)
         let prepared = input
         await MainActor.run { prepared?.quiesce(); prepared?.setReady(false) }
+    }
+
+    private func teardownConnectionForReconnect() async {
         backend.stopConnection()
+        _ = videoDecoder?.framePacer?.clearQueue(reason: "connection replacement")
+        if bitrateChange?.report.attempts == 1 {
+            bitrateChange?.oldLastFrame = videoDecoder?.statsCollector.presentationTimes.last
+        }
         if let net = network { await net.shutdown() }
         network = nil
         #if os(macOS) || GLIMMER_DIAGNOSTICS

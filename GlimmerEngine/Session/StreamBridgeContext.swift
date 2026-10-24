@@ -20,6 +20,13 @@ package final class StreamBridgeContext: @unchecked Sendable {
     private var attemptID = UUID()
     private let sourceLock = NSLock()
     private var eventSource: ObjectIdentifier?
+    private var inputRevoked = false
+
+    package func revokeInput() { sourceLock.withLock { inputRevoked = true } }
+
+    package func acceptsInput(attempt: UUID) -> Bool {
+        sourceLock.withLock { !inputRevoked && attemptID == attempt }
+    }
 
     package var currentAttempt: UUID { sourceLock.withLock { attemptID } }
 

@@ -21,10 +21,14 @@ extension StreamSession {
         guard source === backend, isStreaming, !stopInProgress else { return }
         // Ground truth that we reached a LIVE state; only a full stop resets it.
         reachedLiveState = true
-        let inp = input
+        let inp = bitrateChange == nil ? input : nil
         // FIFO main-queue hop (NOT Task{}) keeps a terminate's setReady(false)
         // from reordering ahead of establish and leaving input disabled.
-        DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(true) } }
+        let gate = bridge
+        let attempt = attemptID
+        DispatchQueue.main.async { MainActor.assumeIsolated {
+            if gate?.acceptsInput(attempt: attempt) == true { inp?.setReady(true) }
+        } }
         #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let state = connectFlowState {
             OSSignposter.network.endInterval(

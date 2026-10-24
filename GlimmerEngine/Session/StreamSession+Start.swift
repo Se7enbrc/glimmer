@@ -18,12 +18,14 @@ extension StreamSession {
                        makeSampler: (@Sendable () -> RttSampler)? = nil,
                        prepare: @escaping @MainActor @Sendable (Int) throws -> SessionMedia) async throws
         -> AsyncStream<StreamEvent>? {
-        guard !publicTerminal, !isStreaming, !stopInProgress else {
+        guard !publicTerminal, !isStreaming, !stopInProgress, !isReconnecting, bitrateTask == nil else {
             throw StreamError.sessionFailed(-1)
         }
         teardown = SharedTeardown()
         stopCause = nil
         ownsHostSession = false
+        appliedBitrateKbps = nil
+        preserveGameOnStop = false
         isStreaming = true
         // Capture launch and teardown even when Cancel prevents the backend handshake.
         services.startLog()
@@ -364,11 +366,12 @@ extension StreamSession {
     }
 
     @MainActor
-    package func wireMediaCallbacks(setup: SessionMedia, bridge: StreamBridgeContext, attempt: UUID) {
+    package func wireMediaCallbacks(setup: SessionMedia, bridge: StreamBridgeContext, attempt: UUID,
+                                    suppressFirstFrame: Bool = false) {
         setup.video.onHDRActiveChanged = { [weak bridge] active in bridge?.emit(.hdrActive(active), attempt: attempt) }
         let firstFrame = setup.presentation.firstFrame
         setup.video.onFirstDecodedFrame = { [weak bridge] in
-            guard bridge?.currentAttempt == attempt else { return }
+            guard bridge?.currentAttempt == attempt, !suppressFirstFrame else { return }
             firstFrame()
             bridge?.emit(.firstFrame, attempt: attempt)
         }

@@ -301,7 +301,7 @@ extension VideoDecoder {
         displayLayerLock.lock(); defer { displayLayerLock.unlock() }
         guard _sampleBufferRenderer === renderer else { return }
         rendererSubmissionGeneration &+= 1
-        if keepingDisplayedImage {
+        if keepingDisplayedImage || retainImageForReconnect.load(ordering: .acquiring) {
             renderer.flush(removingDisplayedImage: false) { }
         } else {
             renderer.flush()

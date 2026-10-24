@@ -37,7 +37,9 @@ extension StreamSession {
         if stopCause == nil { stopCause = cause }
         stopInProgress = true
         isStreaming = false
+        bridge?.revokeInput()
         setWaitingForVideo(false)
+        bitrateTask?.cancel()
         initialServerInfoTask?.cancel()
         launchTask?.cancel()
         let pendingPreparation = mediaPreparation
@@ -182,6 +184,7 @@ extension StreamSession {
         hostSessionClientID = nil
         network = nil
 
+        completeBitrateChange(cause == .userStopped || !bitrateAvailable ? .cancelled : .failed)
         // Close after teardown so the session log records backend, audio and /cancel outcomes.
         services.stopLog()
 
@@ -360,7 +363,7 @@ extension StreamSession {
     private var launchPCKey: String { reconnectServer?.uniqueId ?? "" }
 
     package func settlePendingLaunch(cancel: @escaping @Sendable () async -> Void) async {
-        guard hostDisposition.cancellation != nil else { return }
+        guard hostDisposition.cancellation != nil, !preserveGameOnStop else { return }
         let task = pendingLaunch
         let key = launchPCKey
         let epoch = hostLaunchEpoch

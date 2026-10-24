@@ -69,6 +69,9 @@ def expected_sources(root):
     expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in
                                   ["ControllerMappingTests.swift", "ControllerLayoutPersistenceTests.swift",
                                    "ControllerLayoutEscapeTests.swift"])
+    # These transport fakes and session tests also compile in the Mac test target.
+    expected["GlimmerTests"].update("../GlimmerTests/" + name for name in (
+        "BitrateActuatorTests.swift", "FakeSunshine.swift", "InputRecordingBackend.swift"))
     if any(not sources for sources in expected.values()):
         raise ValueError("Missing iOS app or test sources")
     expected["GlimmerTests"].update(SHARED_SOAK_SOURCES)
