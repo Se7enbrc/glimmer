@@ -8,10 +8,12 @@
 //  gets, the floor, and the connect-time withdrawal when the RTT says Wi-Fi.
 //
 
+@testable import GlimmerEngine
 import Testing
 @testable import Glimmer
 
 struct WiredBitrateTests {
+    private let settings = IsolatedDefaults()
 
     @Test func wiFiAsksForHalfAsMuchAgainUnderTheFormulaCap() {
         #expect(AppModel.wireBitrateKbps(dial: 226_000, codecMultiplier: 0.8, boost: 1, capKbps: 300_000) == 180_800)
@@ -90,7 +92,7 @@ struct WiredBitrateTests {
 
     /// A reconnect rebuilds from the same ask a fresh start on this route sends.
     @MainActor @Test func theReconnectAskIsTheStartsAsk() throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let pc = Host(id: "pc-1", name: "tower", customName: nil, localAddress: "192.0.2.10", manualAddress: nil,
                       apps: [], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
         let start = model.nativeStreamConfig(for: pc)

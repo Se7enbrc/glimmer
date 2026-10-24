@@ -9,6 +9,7 @@
 //  that keep a recording from clashing with another shortcut or with the Mac.
 //
 
+import GlimmerEngine
 import Accessibility
 import AppKit
 import Combine
@@ -108,25 +109,25 @@ struct HotkeyBadge: View {
                     if isCapturing { stop() } else { start() }
                 } label: {
                     Text(displayText)
+                        .transaction { $0.animation = nil }
                         .font(.body.weight(.medium).monospaced())
                         .frame(minWidth: 80, minHeight: 22)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
                         // Capture state tints the glass with the accent color so it
                         // reads as "live", otherwise it's a neutral glass capsule.
-                        .glassEffect(
-                            isCapturing
-                                ? .regular.interactive().tint(Color.accentColor.opacity(0.22))
-                                : .regular.interactive(),
-                            in: .capsule
-                        )
+                        .glassSurface(in: .capsule, tint: isCapturing ? Color.accentColor.opacity(0.22) : nil,
+                                      interactive: true)
                         .overlay(
                             Capsule().stroke(
                                 isCapturing ? Color.accentColor : Color.clear,
                                 lineWidth: 2
                             )
+                            .animation(Motion.fade, value: isCapturing)
                         )
-                        .foregroundStyle(isCapturing ? Color.accentColor : .primary)
+                        .animation(Motion.fade) { content in
+                            content.foregroundStyle(isCapturing ? Color.accentColor : .primary)
+                        }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Change \(label) shortcut")
@@ -139,7 +140,7 @@ struct HotkeyBadge: View {
                     Text("Press Esc to cancel")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                        .transition(.opacity)
+                        .transition(.opacity.animation(Motion.fade))
                 }
             }
             if let problem {
@@ -150,7 +151,6 @@ struct HotkeyBadge: View {
             }
         }
         .onDisappear { stop() }
-        .animation(.snappy(duration: 0.2), value: isCapturing)
     }
 
     private var displayText: String {

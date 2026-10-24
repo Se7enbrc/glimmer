@@ -5,6 +5,7 @@
 //  Glimmer › Install Command Line Tool…: links `glimmer` into /usr/local/bin for
 //  installs Homebrew didn't make, after the administrator prompt macOS shows.
 
+import GlimmerEngine
 import AppKit
 
 @MainActor

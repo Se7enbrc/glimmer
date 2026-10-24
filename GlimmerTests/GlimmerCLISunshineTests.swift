@@ -8,6 +8,7 @@
 //  status the README documents, and the requests that reach the PC. Nothing leaves the process.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import os
 import Testing
@@ -69,7 +70,7 @@ struct GlimmerCLISunshineTests {
         let (status, terminal) = try await run(CLI.list, ["list", "--csv"], on: fixture)
 
         #expect(status == CLI.Exit.ok)
-        #expect(terminal.out == "Name,Address,Status\n\"Tower\",\"192.0.2.10\",\"Hades II running\"\n")
+        #expect(terminal.out == "Name,Address,Status\n\"Tower\",\"192.0.2.10\",\"Ready · 3 ms\"\n")
     }
 
     @Test func listWithNoPairedPCsSaysHowToPairOne() async throws {
@@ -148,6 +149,43 @@ struct GlimmerCLISunshineTests {
             #expect(terminal.err == "No paired PC matches “Den”. Run “glimmer list” to see them, or pair it with “glimmer pair”.\n")
         }
         #expect(sunshine.requests.isEmpty)
+    }
+
+    @Test func jsonListsPCsAndLiveAppsWithStableFields() async throws {
+        let sunshine = FakeSunshine.scripted(["serverinfo": [FakePCModel.serverInfo(game: 7)],
+                                              "applist": [FakePCModel.appList]])
+        let fixture = try FakePCModel("cli-json-lists", sunshine: sunshine)
+        defer { fixture.remove() }
+        try fixture.pairTower()
+        let (status, terminal) = try await run(CLI.list, ["list", "--json"], on: fixture)
+        #expect(status == CLI.Exit.ok && terminal.err.isEmpty)
+        let object = try #require(JSONSerialization.jsonObject(with: Data(terminal.out.utf8)) as? [String: Any])
+        #expect(object["version"] as? Int == 1)
+        let pcs = try #require(object["pcs"] as? [[String: Any]])
+        #expect(pcs.count == 1)
+        #expect(pcs[0]["id"] as? String == "tower-id")
+        #expect(pcs[0]["name"] as? String == "Tower")
+        #expect(pcs[0]["paired"] as? Bool == true)
+        #expect(pcs[0]["default"] as? Bool == true)
+        let running = try #require(pcs[0]["runningApp"] as? [String: Any])
+        #expect(running["id"] as? Int == 7 && running["name"] as? String == "Hades II")
+        let (appsStatus, appsTerminal) = try await run(CLI.list, ["list", "Tower", "--json"], on: fixture)
+        #expect(appsStatus == CLI.Exit.ok && appsTerminal.err.isEmpty)
+        let appsObject = try #require(JSONSerialization.jsonObject(with: Data(appsTerminal.out.utf8)) as? [String: Any])
+        let apps = try #require(appsObject["apps"] as? [[String: Any]])
+        #expect(apps.map { $0["id"] as? Int } == [1, 7, 9])
+        #expect(apps.map { $0["running"] as? Bool } == [false, true, false])
+        #expect(apps.map { $0["hidden"] as? Bool } == [false, false, true])
+        #expect(sunshine.paths == ["serverinfo", "applist", "serverinfo", "applist"])
+    }
+
+    @Test func emptyJSONListHasNoDiagnosticsOrNetworkRequests() async throws {
+        let fixture = try FakePCModel("cli-json-empty", sunshine: FakeSunshine.scripted([:]))
+        defer { fixture.remove() }
+        let (status, terminal) = try await run(CLI.list, ["list", "--json"], on: fixture)
+        #expect(status == CLI.Exit.ok)
+        #expect(terminal.out == "{\"pcs\":[],\"version\":1}\n")
+        #expect(terminal.err.isEmpty && fixture.sunshine.requests.isEmpty)
     }
 
     // MARK: - pair
@@ -246,6 +284,31 @@ struct GlimmerCLISunshineTests {
     }
 
     // MARK: - stream
+
+    @Test func streamReadinessWaitsForBusyToClearWithoutCancellingThePC() async throws {
+        let sunshine = FakeSunshine.scripted([
+            "serverinfo": [FakePCModel.serverInfo(game: 7, state: "SUNSHINE_SERVER_BUSY"), FakePCModel.serverInfo()],
+            "applist": [FakePCModel.appList]
+        ])
+        let fixture = try FakePCModel("cli-readiness", sunshine: sunshine)
+        defer { fixture.remove() }
+        let host = try fixture.pairTower()
+        let live = await CLI.probe(host, model: fixture.model, waitUntilIdle: true)
+        #expect(live?.state == .idle)
+        #expect(sunshine.paths == ["serverinfo", "applist", "serverinfo"])
+    }
+
+    @Test func anIdleStreamProbeAddsNoReadinessRoundTrip() async throws {
+        let sunshine = FakeSunshine.scripted([
+            "serverinfo": [FakePCModel.serverInfo()], "applist": [FakePCModel.appList]
+        ])
+        let fixture = try FakePCModel("cli-already-ready", sunshine: sunshine)
+        defer { fixture.remove() }
+        let host = try fixture.pairTower()
+        let live = await CLI.probe(host, model: fixture.model, waitUntilIdle: true)
+        #expect(live?.state == .idle)
+        #expect(sunshine.paths == ["serverinfo", "applist"])
+    }
 
     @Test func streamingFromAPCThatIsDownSuggestsWakingIt() async throws {
         let fixture = try FakePCModel("cli-stream-down", sunshine: FakeSunshine.scripted([:]), rtt: .unreachable)

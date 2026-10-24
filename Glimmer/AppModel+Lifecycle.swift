@@ -7,6 +7,7 @@
 //  App-delegate attach, launch bootstrap, the live host-refresh loop, custom-bitrate auto-tracking, and shutdown. Split out of AppModel.swift to keep each unit focused.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox
@@ -49,14 +50,14 @@ extension AppModel {
         // before AppModel reads any UserDefaults.
         // Repair login registration after moves and updates without blocking the launcher.
         await LoginItemManager.reconcile()
-        LoginItemManager.syncRelaunchOnLogin(UserDefaults.standard.bool(forKey: "launchAtLogin"))
+        LoginItemManager.syncRelaunchOnLogin(settingsDefaults.bool(forKey: "launchAtLogin"))
         // Same self-heal for the privileged AWDL daemon: an app update / reinstall
         // swaps the bundle (and the daemon binary inside it), which can wedge the
         // SMAppService registration. Re-assert it so the post-update stream uses
         // the new daemon without the user re-toggling anything.
         AWDLHelperManager.shared.reconcileAfterUpdate()
         // Age out old Logs/Glimmer files off the main thread, diagnostics on or off.
-        TelemetryExporter.sweepLogsAtLaunch()
+        TelemetryExporter.sweepLogsAtLaunch(directory: MacTelemetryCapture.logsDirectory)
         log.info("Glimmer stream engine: Swift-native")
         // Seed the Custom fields from the display when Custom is ALREADY the
         // live preset and has no values on record (a preset restored from
@@ -69,7 +70,7 @@ extension AppModel {
         // outlive the display they were derived from. Users who pick Custom in
         // Settings get the same seed for free from `qualityPreset`'s willSet,
         // which prefills the fields from the preset they were leaving.
-        if qualityPreset == .custom, UserDefaults.standard.object(forKey: "customWidth") == nil {
+        if qualityPreset == .custom, settingsDefaults.object(forKey: "customWidth") == nil {
             snapCustomToDisplay()
         }
         persistQualitySettings()
@@ -111,64 +112,34 @@ extension AppModel {
             forName: NSApplication.didBecomeActiveNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
+            // The notification runs on the main queue; capture the click before a task hop can outlive it.
+            let activation = MainActor.assumeIsolated { Self.captureActivation() }
             Task { @MainActor in
                 guard let self else { return }
                 self.loadHosts()
-                // Refresh the host status poller on activation so the chip
-                // updates within one RTT of the user returning, rather than
-                // waiting out the current 10s interval. This is no longer a
-                // "resume" - polling now runs continuously regardless of focus
-                // (see restartHostStatusPolling); restarting here just resets
-                // the streak and fires an immediate probe for snappy feedback.
                 self.restartHostStatusPolling()
-                // If a DualSense is connected and the user hasn't decided on
-                // the raw-HID feature, offer it now (e.g. they returned to the
-                // launcher after plugging it in mid-stream).
                 self.maybeOfferRawHID()
-                // Cmd-Tab back into Glimmer while a stream is parked in the
-                // background should bring the stream forward - but ONLY for a
-                // keyboard-style reactivation (Cmd-Tab). If the user clicked
-                // the launcher window (or its menu) to reach Settings, leave
-                // them there. StreamWindow.swift deliberately avoids a blanket
-                // didBecomeActive resume for this exact reason; we gate on the
-                // triggering event NOT being a mouse click so the launcher
-                // stays reachable mid-stream.
-                guard self.isStreaming, self.nativeStreamBackgrounded else { return }
-                // Resume on Cmd-Tab, not a window click. currentEvent is nil for both,
-                // so the mouse button is the tell: a click-to-activate still has it down.
-                let evType = NSApp.currentEvent?.type
-                let mouseEvent = evType == .leftMouseDown || evType == .leftMouseUp
-                    || evType == .rightMouseDown || evType == .otherMouseDown
-                let viaClick = mouseEvent || NSEvent.pressedMouseButtons != 0
-                if !viaClick {
-                    self.resumeStreamWindow()
-                }
+                InputMonitoring.noticeReturn()
+                guard activation.shouldResumeStream(
+                    streaming: self.isStreaming, backgrounded: self.nativeStreamBackgrounded,
+                    settingsWindowIsKey: Self.settingsWindowIsKey) else { return }
+                self.resumeStreamWindow()
             }
         })
         // Losing focus must not strand a visible chip on Checking. Hidden-but-awake
         // polling also keeps the menu's Wake vs Stream action current; streams and
         // system or display sleep pause it instead.
 
-        // Proactively offer the raw-HID DualSense feature the moment a
-        // DualSense connects while Glimmer is running (once), rather than
-        // burying it in Settings. The same observers keep `controllerConnected`
-        // live so the controller-permission UI shows/hides as pads come and go.
-        //
-        // Mid-stream invariant: plugging a pad in during a live stream must be
-        // SILENT and NON-BLOCKING. This handler only updates
-        // `controllerConnected` and calls `maybeOfferRawHID()`, which is
-        // `!isStreaming`-gated - so the offer alert never fires mid-stream. Even
-        // the "Enable" path (`enableRawHIDFromPrompt`) is now side-effect-free
-        // (no IOHIDRequestAccess, no NSWorkspace.open), so nothing on this path
-        // can block the present thread or flash a System Settings window. If
-        // raw HID is already enabled + granted, the pad attaches silently via
-        // `ControllerForwarder.retain()` - never from here.
+        // Offer Extra DualSense buttons when a DualSense connects, and keep `controllerConnected`
+        // live. Mid-stream this stays silent: the offer is `!isStreaming`-gated, so nothing here
+        // can prompt, open System Settings or block the present path during a stream.
         notificationTokens.append(nc.addObserver(
             forName: .GCControllerDidConnect, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.controllerConnected = !GCController.controllers().isEmpty
+                self.launcherController.refresh()
                 self.maybeOfferRawHID()
             }
         })
@@ -180,6 +151,7 @@ extension AppModel {
             // hop to the next runloop tick so the registry reflects reality.
             Task { @MainActor in
                 self?.controllerConnected = !GCController.controllers().isEmpty
+                self?.launcherController.refresh()
             }
         })
         observeHostPollingSleep()
@@ -187,6 +159,33 @@ extension AppModel {
         // the auto-offer and seeding `controllerConnected`).
         controllerConnected = !GCController.controllers().isEmpty
         maybeOfferRawHID()
+    }
+
+    struct ActivationContext: Sendable {
+        let viaClick: Bool
+        let settingsWindowWasKey: Bool
+
+        nonisolated init(eventType: NSEvent.EventType?, pressedMouseButtons: Int, settingsWindowIsKey: Bool) {
+            let mouseEvents: Set<NSEvent.EventType> = [
+                .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp
+            ]
+            viaClick = eventType.map { mouseEvents.contains($0) } == true || pressedMouseButtons != 0
+            settingsWindowWasKey = settingsWindowIsKey
+        }
+
+        nonisolated func shouldResumeStream(streaming: Bool, backgrounded: Bool,
+                                            settingsWindowIsKey: Bool) -> Bool {
+            streaming && backgrounded && !viaClick && !settingsWindowWasKey && !settingsWindowIsKey
+        }
+    }
+
+    private static var settingsWindowIsKey: Bool {
+        NSApp.keyWindow?.identifier?.rawValue == "com_apple_SwiftUI_Settings_window"
+    }
+
+    private static func captureActivation() -> ActivationContext {
+        ActivationContext(eventType: NSApp.currentEvent?.type, pressedMouseButtons: NSEvent.pressedMouseButtons,
+                          settingsWindowIsKey: settingsWindowIsKey)
     }
 
     /// Close control exchanges synchronously: Sunshine can retain a half-open TLS
@@ -215,6 +214,7 @@ extension AppModel {
     func setHostPollingSleep(system: Bool, sleeping: Bool) {
         if system { hostPolling.systemSleeping = sleeping } else { hostPolling.displaysSleeping = sleeping }
         if sleeping {
+            cancelHostReadiness()
             hostStatusTask?.cancel()
             hostStatusTask = nil
             hostPolling.movedHostSearch?.cancel()

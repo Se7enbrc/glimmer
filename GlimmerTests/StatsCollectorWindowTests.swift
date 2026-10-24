@@ -6,6 +6,7 @@
 //  The stats window: frame rates, host rate, decode EMAs, presents, drops and gaps.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import QuartzCore
 import Testing
@@ -161,6 +162,35 @@ struct StatsCollectorWindowTests {
         #expect((snap.avgDecodeServiceMs ?? -1) >= 0)
         #expect((snap.avgDecodeWaitMs ?? -1) >= 0)
         #expect(stats.decodedFrames == 2)
+    }
+
+    @Test func decodeCompletionMatchesIdentityWhenCallbacksArriveOutOfOrder() {
+        let stats = StatsCollector()
+        let first = StatsCollector.DecodeIdentity(epoch: 7, rtpTimestamp: 0)
+        let second = StatsCollector.DecodeIdentity(epoch: 7, rtpTimestamp: 750)
+        for identity in [first, second] {
+            stats.recordDecodeSubmit(intervalState: OSSignposter.decode.beginInterval("DecodeFrame"), identity: identity)
+        }
+        defer { stats.dropPendingDecodeSubmits() }
+
+        #expect(stats.recordDecodeComplete(dropped: false, identity: second) != nil)
+        #expect(stats.submitFifo.map(\.identity) == [first])
+        #expect(stats.recordDecodeComplete(dropped: false, identity: first) != nil)
+        #expect(stats.submitFifo.isEmpty)
+    }
+
+    @Test func retiredEpochAndEvictedCallbacksCannotConsumeAnotherFramesSubmit() {
+        let stats = StatsCollector()
+        let current = StatsCollector.DecodeIdentity(epoch: 8, rtpTimestamp: 750)
+        let retired = StatsCollector.DecodeIdentity(epoch: 7, rtpTimestamp: 750)
+        stats.recordDecodeSubmit(intervalState: OSSignposter.decode.beginInterval("DecodeFrame"), identity: current)
+        defer { stats.dropPendingDecodeSubmits() }
+
+        #expect(stats.recordDecodeComplete(dropped: true, identity: retired) == nil)
+        #expect(stats.recordDecodeAbandoned(identity: retired) == nil)
+        #expect(stats.submitFifo.map(\.identity) == [current])
+        #expect(stats.recordDecodeAbandoned(identity: current) != nil)
+        #expect(stats.submitFifo.isEmpty)
     }
 
     @Test func theSubmitFifoKeepsTheNewest64AndAbandonTakesTheLast() {

@@ -8,6 +8,7 @@
 //  how host cadence and input latency are attributed, and what the trace keeps.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import QuartzCore
 import Testing
@@ -40,7 +41,7 @@ struct TelemetryRowTests {
     }
 
     @Test func shutdownDropsOnlyExpiredFrames() {
-        let tracker = FrameTimingTracker(sessionId: "test")
+        let tracker = FrameTimingTracker(sessionId: "test", traceDirectory: .temporaryDirectory)
         tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1,
                                 receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
         tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2,
@@ -84,6 +85,39 @@ struct TelemetryRowTests {
         #expect(value("glimmer_present_late_frames") == "1234")
         #expect(value("glimmer_awdl_resuppress_total") == "77")
         #expect(value("glimmer_process_phys_footprint_bytes") == "987654321")
+    }
+
+    @Test func resourceRowsKeepMemoryCategoriesClocksAndLocalThreadIdentity() throws {
+        var resource = ResourceSnapshot(threads: [
+            ThreadResourceSample(name: "main", tid: 42, cpuPercent: 1, qos: 33, qosLabel: "userInteractive"),
+            ThreadResourceSample(name: "unnamed", tid: 0, cpuPercent: 2, qos: 0, qosLabel: "unspecified")])
+        resource.residentSizeBytes = 400
+        resource.compressedBytes = 0
+        resource.internalBytes = 300
+        resource.reusableBytes = 20
+        resource.memoryProbeStatus = "partial"
+        resource.memoryProbeResult = 0
+        resource.sampleUptimeMs = 12345.5
+        resource.sampleDurationMs = 0.125
+        var snapshot = TelemetrySnapshot()
+        snapshot.resource = resource
+        let extras = TelemetrySnapshot.Extras()
+        let encoded = TelemetryRenderer.ndjson(snapshot, extras: extras)
+        let row = try #require(try JSONSerialization.jsonObject(with: Data(encoded.utf8)) as? [String: Any])
+        #expect(row["phys_footprint_bytes"] == nil)
+        #expect((row["resident_size_bytes"] as? NSNumber)?.uint64Value == 400)
+        #expect((row["compressed_bytes"] as? NSNumber)?.uint64Value == 0)
+        #expect((row["internal_bytes"] as? NSNumber)?.uint64Value == 300)
+        #expect((row["reusable_bytes"] as? NSNumber)?.uint64Value == 20)
+        #expect(row["memory_probe_status"] as? String == "partial")
+        #expect((row["resource_sample_t_ms"] as? NSNumber)?.doubleValue == 12345.5)
+        #expect((row["resource_sample_duration_ms"] as? NSNumber)?.doubleValue == 0.125)
+        let threads = try #require(row["threads"] as? [[String: Any]])
+        #expect((threads[0]["tid"] as? NSNumber)?.uint64Value == 42 && threads[1]["tid"] == nil)
+        let prometheus = TelemetryRenderer.prometheus(snapshot, extras: extras)
+        #expect(!prometheus.contains("tid=\"42\""))
+        #expect(!prometheus.contains("glimmer_process_phys_footprint_bytes{"))
+        #expect(prometheus.contains("glimmer_process_resident_size_bytes{") && prometheus.contains("} 400\n"))
     }
 
     @Test func telemetryConnectionSlotsRejectAndRecoverCapacity() {
@@ -150,7 +184,7 @@ struct TelemetryRowTests {
     }
 
     @Test func kernelUdpFullSocketCounterIsReadable() {
-        #expect(TelemetryExporter.udpFullSockTotal() != nil)
+        #expect(MacTelemetryCapture.udpFullSockTotal() != nil)
     }
 
     // MARK: - Host cadence (StatsCollector)
@@ -162,9 +196,10 @@ struct TelemetryRowTests {
             decoder.statsCollector.recordDecodeSubmit(intervalState: state)
         }
         decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 5
+        _ = decoder.reserveDecodeSlot(isIDR: false)
         decoder.releaseInFlightDecode(vtFailed: true)
 
-        #expect(decoder.reserveDecodeSlot(isIDR: true) == .reservedForStallRecreate)
+        #expect(decoder.reserveDecodeSlot(isIDR: true, epoch: 1) == .reservedForStallRecreate)
         await decoder.decodeQueue.drainForTest()
         #expect(decoder.statsCollector.submitFifo.isEmpty)
     }
@@ -309,7 +344,7 @@ struct TelemetryRowTests {
     /// Input-to-photon's host interval is the stats window's p50, published once a
     /// second; assembled frames' RTP deltas no longer keep a second estimate.
     @Test func hostFrameIntervalHasOneSource() {
-        let tracker = FrameTimingTracker(sessionId: "test")
+        let tracker = FrameTimingTracker(sessionId: "test", traceDirectory: .temporaryDirectory)
         tracker.hostFrameIntervalMs = 1_000.0 / 120.0
         for index in 0..<40 {
             let nanos = UInt64(index + 1) * 16_666_667
@@ -329,8 +364,8 @@ struct TelemetryRowTests {
             glassToGlassMs: 18.8, clientLegsMs: 0, rttMs: 0, hostFrameIntervalMs: 0) == 18.8)
     }
 
-    @Test func dropStubsSkipFramesAssembledWhileTheWindowWasHidden() {
-        let tracker = FrameTimingTracker(sessionId: "test")
+    @Test func dropStubsSkipFramesAssembledWhileTheWindowWasHidden() throws {
+        let tracker = FrameTimingTracker(sessionId: "test", traceDirectory: .temporaryDirectory)
         func timing(_ frame: Int32, hidden: Bool) -> FrameTimingTracker.Timing {
             FrameTimingTracker.Timing(frameIndex: frame, receiveNanos: 1, assembleNanos: 2,
                                       frameBytes: 0, isIDR: false, hostEncodeMs: 0,
@@ -340,8 +375,10 @@ struct TelemetryRowTests {
                        (rtp: UInt32(20), timing: timing(2, hidden: false))]
         let lines = tracker.dropStubLines(evicted, hiddenNow: false, evictMs: 5)
         #expect(lines.count == 1)
-        #expect(lines.first?.contains("\"frame\":2,") == true)
-        #expect(lines.first?.contains("\"t_assemble_ms\":0.000,") == true)
+        let line = try #require(lines.first)
+        let row = try #require(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+        #expect(row["frame"] as? Int == 2)
+        #expect(row["t_assemble_ms"] as? Double == 0)
         #expect(tracker.dropStubLines(evicted, hiddenNow: true, evictMs: 5).isEmpty)
     }
 
@@ -363,7 +400,7 @@ struct TelemetryRowTests {
     }
 
     @Test func bookmarkRowSitsOnTheInputRowsClock() throws {
-        let tracker = FrameTimingTracker(sessionId: "test")
+        let tracker = FrameTimingTracker(sessionId: "test", traceDirectory: .temporaryDirectory)
         let line = tracker.bookmarkLine(total: 3, uptimeNanos: 92_230_141_830_000)
         let row = try #require(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
         #expect(row["event"] as? String == "bookmark")

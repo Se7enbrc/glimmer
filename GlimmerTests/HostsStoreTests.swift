@@ -9,19 +9,19 @@
 //  what a PC that replaces the selection gets.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct HostsStoreTests {
+    private let settings = IsolatedDefaults()
 
     private typealias App = AppModel.PairedApp
     private static let desktopStandIn = App(id: 881448767, name: "Desktop", hdr: false, hidden: false)
 
-    /// `domain`, emptied, holding one PC paired as `tower` with `apps` stored. Each test
-    /// passes its own fixed name and removes it after: a fresh name per run would leave a
-    /// plist behind in ~/Library/Preferences every time (see MoonlightQtIdentityImportTests).
+    /// Each test supplies a unique suite and removes it after checking its paired PC.
     private func pairedTower(_ domain: String, apps: [App] = [desktopStandIn]) throws -> UserDefaults {
         let defaults = try #require(UserDefaults(suiteName: domain))
         defaults.removePersistentDomain(forName: domain)
@@ -41,10 +41,10 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func endingAStreamRefreshesTheVisibleLastPlayedDate() throws {
-        let domain = "io.ugfugl.Glimmer.tests.hosts-last-played"
+        let domain = "io.ugfugl.Glimmer.tests.hosts-last-played-\(UUID().uuidString)"
         let defaults = try pairedTower(domain)
         defer { defaults.removePersistentDomain(forName: domain) }
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         defer {
             model.hostStatusTask?.cancel()
             model.hostPolling.movedHostSearch?.cancel()
@@ -59,7 +59,7 @@ struct HostsStoreTests {
     }
 
     @Test func aFreshListReplacesThePairingStandIn() throws {
-        let domain = "io.ugfugl.Glimmer.tests.hosts-fresh-list"
+        let domain = "io.ugfugl.Glimmer.tests.hosts-fresh-list-\(UUID().uuidString)"
         let defaults = try pairedTower(domain)
         defer { defaults.removePersistentDomain(forName: domain) }
         let fresh = [App(id: 1, name: "Desktop", hdr: false, hidden: false),
@@ -71,7 +71,7 @@ struct HostsStoreTests {
     }
 
     @Test func aShorterListLeavesNoStaleApps() throws {
-        let domain = "io.ugfugl.Glimmer.tests.hosts-shorter-list"
+        let domain = "io.ugfugl.Glimmer.tests.hosts-shorter-list-\(UUID().uuidString)"
         let defaults = try pairedTower(domain, apps: [App(id: 1, name: "Desktop", hdr: false, hidden: false),
                                                       App(id: 2, name: "Old Game", hdr: false, hidden: false)])
         defer { defaults.removePersistentDomain(forName: domain) }
@@ -82,7 +82,7 @@ struct HostsStoreTests {
     }
 
     @Test func appsHiddenOnThisMacStayHidden() throws {
-        let domain = "io.ugfugl.Glimmer.tests.hosts-hidden-apps"
+        let domain = "io.ugfugl.Glimmer.tests.hosts-hidden-apps-\(UUID().uuidString)"
         let defaults = try pairedTower(domain, apps: [App(id: 1, name: "Desktop", hdr: false, hidden: true)])
         defer { defaults.removePersistentDomain(forName: domain) }
         #expect(AppModel.storeApps([App(id: 1, name: "Desktop", hdr: false, hidden: false),
@@ -93,7 +93,7 @@ struct HostsStoreTests {
     }
 
     @Test func anEmptyListOrUnknownPCChangesNothing() throws {
-        let domain = "io.ugfugl.Glimmer.tests.hosts-empty-list"
+        let domain = "io.ugfugl.Glimmer.tests.hosts-empty-list-\(UUID().uuidString)"
         let defaults = try pairedTower(domain)
         defer { defaults.removePersistentDomain(forName: domain) }
         #expect(!AppModel.storeApps([], hostID: "TOWER-ID", in: defaults))
@@ -104,7 +104,7 @@ struct HostsStoreTests {
     }
 
     @Test func aMovedPCKeepsTheAddressTheUserTyped() throws {
-        let domain = "io.ugfugl.Glimmer.tests.hosts-moved-pc"
+        let domain = "io.ugfugl.Glimmer.tests.hosts-moved-pc-\(UUID().uuidString)"
         let defaults = try pairedTower(domain)
         defer { defaults.removePersistentDomain(forName: domain) }
         #expect(AppModel.storeAddress("192.0.2.77", hostID: "TOWER-ID", in: defaults))
@@ -144,7 +144,7 @@ struct HostsStoreTests {
     /// With the launcher closed a second miss lands up to two cycles (interval, 2 s
     /// tolerance, 2 s probe) after the last good status. It's still held; a third shows Asleep.
     @MainActor @Test func theClosedLauncherPollHoldsASecondMiss() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.selectedHost = Self.host("tower", address: "192.0.2.10")
         model.hostStatusTask?.cancel()
         defer { model.hostPolling.movedHostSearch?.cancel() }
@@ -167,7 +167,7 @@ struct HostsStoreTests {
 
     @MainActor @Test(arguments: [HostLiveStatus.stale, HostLiveStatus.stale + 1])
     func aSecondMissPublishesAsleepOnlyAfterTheGoodAnswerExpires(age: TimeInterval) async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.selectedHost = Self.host("tower", address: "192.0.2.10")
         model.hostStatusTask?.cancel()
         let now = Date(timeIntervalSince1970: 1_700_000_000)
@@ -186,7 +186,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func aPCThatReplacesTheSelectionGetsAFreshChipAndPoll() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         defer { model.hostStatusTask?.cancel() }
         model.selectedHost = Self.host("tower", address: "192.0.2.10")
         model.hostLiveStatus = HostLiveStatus(hostID: "tower", state: .idle, rttMs: 3,
@@ -204,7 +204,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func reloadingTheSamePCKeepsItsChipAndPoll() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         defer { model.hostStatusTask?.cancel() }
         let tower = Self.host("tower", address: "192.0.2.10")
         model.selectedHost = tower
@@ -218,7 +218,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func pairingKeepsThePollPausedUntilCancelled() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         defer { model.hostStatusTask?.cancel() }
         model.selectedHost = Self.host("tower", address: "192.0.2.10")
         let attempt = model.beginPairing(address: "192.0.2.1")
@@ -229,7 +229,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func aWakePausesOnlyItsOwnPCPoll() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         defer { model.hostStatusTask?.cancel() }
         model.selectedHost = Self.host("tower", address: "192.0.2.10")
         model.wakingHostID = "tower"
@@ -260,7 +260,7 @@ struct HostsStoreTests {
 
     @MainActor @Test(arguments: [true, false])
     func wakeNotificationsClearOnlyTheirOwnPause(systemWakesFirst: Bool) {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let center = NotificationCenter()
         model.observeHostPollingSleep(center: center)
         defer {
@@ -283,7 +283,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func backgroundSleepPostCancelsNetworkWorkBeforeReturning() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let center = SynchronousSleepNotificationCenter()
         model.observeHostPollingSleep(center: center)
         let gates = [PollerCancellationGate(), PollerCancellationGate(), PollerCancellationGate()]
@@ -311,7 +311,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func systemSleepDoesNotReportADirectWakeWaitAsNoAnswer() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = Self.host("pc", address: "192.0.2.10", mac: "aa:bb:cc:dd:ee:ff")
         let poll = PollerCancellationGate()
         let caller = Task {
@@ -335,7 +335,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func displaySleepCancelsMovedHostSearchAndLeavesWakeWorkRunning() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let center = NotificationCenter()
         model.observeHostPollingSleep(center: center)
         let movedHostProbe = PollerCancellationGate()
@@ -363,7 +363,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func activationPreservesAndConsumesTheSettleDeadline() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.selectedHost = Self.host("pc", address: "192.0.2.10")
         defer { model.hostStatusTask?.cancel() }
         let firstSleep = PollerCancellationGate()
@@ -389,7 +389,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func failedConnectionsDoNotProveTheSelectedPCIsAwake() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.selectedHost = Self.host("pc", address: "192.0.2.10")
         defer { model.hostStatusTask?.cancel() }
         model.restartHostStatusPolling(afterStream: true)
@@ -397,7 +397,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func aStreamProvesItsPCDespiteASelectionChange() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let streamed = Self.host("streamed", address: "192.0.2.10")
         model.selectedHost = streamed
         defer { model.hostStatusTask?.cancel() }
@@ -409,7 +409,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func anUnreachablePollWithoutARouteDoesNothing() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.selectedHost = Self.host("pc", address: "192.0.2.10")
         model.hostStatusTask?.cancel()
         model.hostUnreachableStreak = 2
@@ -426,7 +426,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func sleepDuringMissPublicationCannotStartANewSearch() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.selectedHost = Self.host("pc", address: "192.0.2.10")
         model.hostStatusTask?.cancel()
         let entered = DispatchSemaphore(value: 0)
@@ -450,10 +450,10 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func cancellationDuringTheSavedAddressProbeCannotPersistOrReload() async throws {
-        let domain = "io.ugfugl.Glimmer.tests.cancel-address-probe"
+        let domain = "io.ugfugl.Glimmer.tests.cancel-address-probe-\(UUID().uuidString)"
         let defaults = try pairedTower(domain)
         defer { defaults.removePersistentDomain(forName: domain) }
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = Self.host("TOWER-ID", address: "192.0.2.10")
         model.selectedHost = host
         model.hostStatusTask?.cancel()
@@ -470,7 +470,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func systemSleepCancelsADirectWakeAfterItsPCDisappears() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = Self.host("pc", address: "192.0.2.10", mac: "aa:bb:cc:dd:ee:ff")
         let sent = DispatchSemaphore(value: 0)
         let task = Task {
@@ -496,7 +496,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func overlappingWaitsCancelEveryAddressSearchSynchronously() async throws {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let host = Self.host("pc", address: "192.0.2.10", mac: "aa:bb:cc:dd:ee:ff")
         let searches = [PollerCancellationGate(), PollerCancellationGate()]
         let polls = [PollerCancellationGate(), PollerCancellationGate()]
@@ -520,7 +520,7 @@ struct HostsStoreTests {
     }
 
     @MainActor @Test func cancellingAWaitPropagatesImmediatelyToItsSearch() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let search = PollerCancellationGate()
         let poll = PollerCancellationGate()
         let task = Task {

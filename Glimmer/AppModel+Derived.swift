@@ -26,14 +26,15 @@ extension AppModel {
     }
 
     /// The PC this Mac is streaming from or connecting to; nil when idle.
-    var streamingHostID: String? {
-        isStreaming ? lastLaunchAttempt?.host.id : nil
-    }
+    var streamingHost: Host? { isStreaming ? lastLaunchAttempt?.host : nil }
+
+    var streamingHostID: String? { streamingHost?.id }
 
     /// The launcher's chip for `host` from the poll alone; a reading taken
     /// for another PC is ignored.
     func polledChip(for host: Host) -> ChipPresentation {
-        ChipPresentation(live: hostLiveStatus?.hostID == host.id ? hostLiveStatus : nil)
+        if let reason = readinessReason(for: host) { return .checkingReadiness(reason: reason) }
+        return ChipPresentation(live: hostLiveStatus?.hostID == host.id ? hostLiveStatus : nil)
     }
 
     /// Bring the stream window back from the background. Called by the

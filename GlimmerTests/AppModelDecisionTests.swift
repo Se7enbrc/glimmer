@@ -9,11 +9,45 @@
 //  and the session receipt's key and wording. No model, defaults or network.
 //
 
+@testable import GlimmerEngine
 import Foundation
+import AppKit
 import Testing
 @testable import Glimmer
 
 struct AppModelDecisionTests {
+
+    @Test(arguments: [NSEvent.EventType.leftMouseDown, .leftMouseUp, .rightMouseDown,
+                      .rightMouseUp, .otherMouseDown, .otherMouseUp])
+    func clickingAnAppWindowNeverResumesTheParkedStream(event: NSEvent.EventType) {
+        let activation = AppModel.ActivationContext(eventType: event, pressedMouseButtons: 0,
+                                                     settingsWindowIsKey: false)
+        #expect(activation.shouldResumeStream(streaming: true, backgrounded: true, settingsWindowIsKey: false)
+            == false)
+    }
+
+    @Test func activationKeepsTheClickEvenWhenItsEventWasUnavailable() {
+        let activation = AppModel.ActivationContext(eventType: nil, pressedMouseButtons: 1,
+                                                     settingsWindowIsKey: false)
+        #expect(activation.shouldResumeStream(streaming: true, backgrounded: true, settingsWindowIsKey: false)
+            == false)
+    }
+
+    @Test func settingsOwnsFocusAtEitherSideOfDeferredActivation() {
+        let fromSettings = AppModel.ActivationContext(eventType: nil, pressedMouseButtons: 0,
+                                                       settingsWindowIsKey: true)
+        let fromKeyboard = AppModel.ActivationContext(eventType: nil, pressedMouseButtons: 0,
+                                                       settingsWindowIsKey: false)
+        #expect(fromSettings.shouldResumeStream(streaming: true, backgrounded: true, settingsWindowIsKey: false)
+            == false)
+        #expect(fromKeyboard.shouldResumeStream(streaming: true, backgrounded: true, settingsWindowIsKey: true)
+            == false)
+        #expect(fromKeyboard.shouldResumeStream(streaming: true, backgrounded: true, settingsWindowIsKey: false))
+        #expect(fromKeyboard.shouldResumeStream(streaming: false, backgrounded: true, settingsWindowIsKey: false)
+            == false)
+        #expect(fromKeyboard.shouldResumeStream(streaming: true, backgrounded: false, settingsWindowIsKey: false)
+            == false)
+    }
 
     private func decision(_ mode: BitrateMode, dial: Int = 226_000, codec: Double = 0.8,
                           boost: Double = 1, gate: Double? = nil) -> BitrateDecision {

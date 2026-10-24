@@ -11,6 +11,7 @@
 //  against CryptoKit with the matching IV, the framing the production code documents.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 import CryptoKit
@@ -290,8 +291,8 @@ struct StreamCryptoTests {
     }
 
     @Test func encryptedVideoAdvertisesRoomForItsHeader() {
-        #expect(VideoDecryptor.packetSize(1392, encryptionFeaturesEnabled: 7) == 1360)
-        #expect(VideoDecryptor.packetSize(1392, encryptionFeaturesEnabled: 5) == 1392)
+        #expect(VideoPacketLayout.packetSize(1392, encryptionFeaturesEnabled: 7) == 1360)
+        #expect(VideoPacketLayout.packetSize(1392, encryptionFeaturesEnabled: 5) == 1392)
     }
 }
 

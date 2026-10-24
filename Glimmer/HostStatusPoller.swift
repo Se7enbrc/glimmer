@@ -3,11 +3,16 @@
 
 // Readiness polling holds recent answers through transient network and stream teardown blips.
 
+import GlimmerEngine
 import AppKit
 import Foundation
+import Observation
 
-@MainActor
+@Observable @MainActor
 final class HostPollingState {
+    var readinessReasons: [String: String] = [:]
+    @ObservationIgnored var readinessTasks: [String: Task<Void, Never>] = [:]
+    var videoReceivedFrom: Set<String> = []
     var systemSleeping = false
     var displaysSleeping = false
     var settleUntil = Date.distantPast
@@ -46,6 +51,8 @@ extension AppModel {
         // requests; an activation must not re-arm it. A wake holds only its own PC's poll.
         guard pairingAttempt == nil, wakingHostID != host.id else { return }
 
+        beginHostReadiness(for: host, afterStream: afterStream && lastLaunchAttempt?.host.id == host.id)
+
         // Fresh poll loop → fresh unreachable streak. A miss accrued against
         // the previous host (or before a stream) must not count toward
         // `asleepProbeThreshold` for this loop.
@@ -55,6 +62,8 @@ extension AppModel {
             // A selection change cannot publish this PC's answer onto another PC.
             let pollHostID = host.id
             guard await self?.waitForPollSettle(sleep: sleep) == true else { return }
+            await self?.hostPolling.readinessTasks[pollHostID]?.value
+            guard !Task.isCancelled else { return }
             var appListFor: Int?
             var noPathRetry = Self.noPathRetrySeconds
             while !Task.isCancelled {
@@ -245,15 +254,14 @@ extension AppModel {
             if await refreshAppList(for: host) { fetchedFor = running }
             if Task.isCancelled { return fetchedFor }
         }
-        let name = (selectedHost?.apps ?? host.apps).first { $0.id == running }?.name
-        let state: HostLiveStatus.State = running == 0 ? .idle
-            : name.map { .streamingApp(name: $0) } ?? .streamingUnknownApp(id: running)
+        let state = Self.liveState(info, apps: selectedHost?.apps ?? host.apps)
         await publishLiveStatus(HostLiveStatus(
             hostID: hostID,
             state: state,
             rttMs: rttMs,
             sunshineVersion: info.appVersion,
-            capturedAt: Date()
+            capturedAt: Date(),
+            runningAppID: running == 0 ? nil : running
         ), expectedHostID: hostID)
         return fetchedFor
     }
@@ -275,6 +283,75 @@ extension AppModel {
             guard let self, !Task.isCancelled, !self.hostPollingPausedForSleep else { return }
             guard let host = self.selectedHost, host.id == expectedHostID else { return }
             self.hostLiveStatus = status
+        }
+    }
+}
+
+extension AppModel {
+    func readinessReason(for host: Host) -> String? {
+        hostPolling.readinessReasons[host.id]
+    }
+
+    var selectedReadinessReason: String? {
+        selectedHost.flatMap { readinessReason(for: $0) }
+    }
+
+    /// A separate bounded task survives the ordinary chip poller's activation and launch restarts.
+    func beginHostReadiness(for host: Host, afterStream: Bool = false) {
+        guard hostPolling.readinessTasks[host.id] == nil, !hostPollingPausedForSleep else { return }
+        let reason = afterStream ? "Finishing the last stream…" : "Checking the PC…"
+        hostPolling.readinessReasons[host.id] = reason
+        let server = nativeServerInfo(for: host)
+        let makeClient = makeNetwork
+        hostPolling.readinessTasks[host.id] = Task { [weak self] in
+            let client = makeClient(server)
+            let deadline = Date().addingTimeInterval(5)
+            await client.setRequestDeadline(deadline)
+            let answer = await Self.pollReadiness(until: deadline, fetch: {
+                try await client.fetchServerInfo(timeout: 1, diagnosePinnedFailure: false)
+            }, busy: { [weak self] in
+                self?.hostPolling.readinessReasons[host.id] = afterStream
+                    ? "Finishing the last stream…" : "Waiting for the PC…"
+            })
+            await client.shutdown()
+            guard !Task.isCancelled, let self else { return }
+            if let answer {
+                let state = Self.liveState(answer, apps: host.apps)
+                await publishLiveStatus(HostLiveStatus(
+                    hostID: host.id, state: state, rttMs: nil, sunshineVersion: answer.appVersion,
+                    capturedAt: Date(), runningAppID: answer.currentGameID == 0 ? nil : answer.currentGameID
+                ), expectedHostID: host.id)
+            }
+            hostPolling.readinessReasons[host.id] = nil
+            hostPolling.readinessTasks[host.id] = nil
+        }
+    }
+
+    nonisolated static func liveState(_ info: ServerInfo, apps: [LibraryApp]) -> HostLiveStatus.State {
+        if isReadyForStream(info) { return .idle }
+        let name = apps.first { $0.id == info.currentGameID }?.name
+        return name.map { .streamingApp(name: $0) } ?? .streamingUnknownApp(id: info.currentGameID)
+    }
+
+    nonisolated static func isReadyForStream(_ info: ServerInfo) -> Bool {
+        HostReadiness.isReadyForStream(info)
+    }
+
+    static func pollReadiness(
+        until deadline: Date,
+        fetch: @escaping @Sendable () async throws -> ServerInfo,
+        busy: () -> Void = {},
+        now: () -> Date = Date.init,
+        sleep: (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
+    ) async -> ServerInfo? {
+        await HostReadiness.pollReadiness(until: deadline, fetch: fetch, busy: busy, now: now, sleep: sleep)
+    }
+
+    func cancelHostReadiness(for hostID: String? = nil) {
+        let ids = hostID.map { [$0] } ?? Array(hostPolling.readinessTasks.keys)
+        for id in ids {
+            hostPolling.readinessTasks.removeValue(forKey: id)?.cancel()
+            hostPolling.readinessReasons[id] = nil
         }
     }
 }

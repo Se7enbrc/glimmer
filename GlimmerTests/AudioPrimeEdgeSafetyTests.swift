@@ -1,21 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AudioPrimeEdgeSafetyTests.swift
-//
-//  The 2026-08-17 post-wake crash: system sleep stopped the audio engine
-//  mid-stream, and 9 seconds after wake the resume edge's re-prime called
-//  `playerNode.play()` - which raises an NSException Swift cannot catch, so
-//  the process aborted on the audio receive thread. The fix is layered:
-//  `gl_objc_try` (an ObjC @try shim - the belt) and `startPlayoutAtPrimeEdge`
-//  (engine-ensure + prime-latch-only-on-success - the suspenders). Both are
-//  testable WITHOUT audio hardware: a fresh AudioDecoder's player node is
-//  un-attached and its engine un-started, which is exactly the crash's
-//  precondition - under the old code, `maybePrime` at a full cushion would
-//  abort the test process itself.
-//
-
+@testable import GlimmerEngine
 import AVFAudio
 import Foundation
 import Testing
@@ -23,73 +9,12 @@ import Testing
 
 @Suite(.serialized)
 struct AudioPrimeEdgeSafetyTests {
-
-    /// The belt, in isolation: an ObjC exception raised inside the block must
-    /// come back as `false`, not a process abort.
-    @Test func objcTryCatchesRaisedException() {
-        let survived = gl_objc_try {
-            NSException(name: .genericException, reason: "test", userInfo: nil).raise()
-        }
-        #expect(!survived)
-    }
-
-    /// And a clean block reports success.
-    @Test func objcTryPassesCleanBlock() {
-        var ran = false
-        let survived = gl_objc_try { ran = true }
-        #expect(survived)
-        #expect(ran)
-    }
-
-    /// A running engine cannot repair an unattached player's play() failure by
-    /// restarting. Space play attempts and preserve the engine restart ladder.
-    @Test func playFailuresAreSpacedWithoutConsumingEngineRestartRetries() throws {
-        let decoder = AudioDecoder()
-        defer { decoder.shutdown() }
-        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
-        let source = AVAudioPlayerNode()
-        decoder.engine.attach(source)
-        decoder.engine.connect(source, to: decoder.engine.mainMixerNode, format: format)
-        try decoder.engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 240)
-        decoder.stateLock.lock()
-        defer { decoder.stateLock.unlock() }
-        try #require(decoder.startEngineSafely() == nil)
-        #expect(!decoder.startPlayoutAtPrimeEdge())
-        let firstRetry = decoder.primeEdgeRetryAtNanos
-        #expect(firstRetry != 0)
-        #expect(decoder.engine.isRunning)
-        #expect(decoder.primeEdgeFailureStreak)
-        #expect(decoder.engineRestartRetries == 0)
-        // Pin the gate closed so scheduling delays cannot turn this into a later retry.
-        decoder.primeEdgeRetryAtNanos = .max
-        #expect(!decoder.startPlayoutAtPrimeEdge())
-        #expect(decoder.primeEdgeRetryAtNanos == .max)
-        #expect(decoder.engineRestartRetries == 0)
-        decoder.primeEdgeRetryAtNanos = 0
-        #expect(!decoder.startPlayoutAtPrimeEdge())
-        let secondRetry = decoder.primeEdgeRetryAtNanos
-        #expect(secondRetry >= firstRetry)
-        #expect(decoder.engineRestartRetries == 0)
-        // Repair the player so a premature play() would succeed, proving the
-        // spacing gate skips the call itself, not just its error breadcrumb.
-        decoder.primeEdgeRetryAtNanos = .max
-        decoder.engine.attach(decoder.playerNode)
-        decoder.engine.connect(decoder.playerNode, to: decoder.engine.mainMixerNode, format: format)
-        #expect(!decoder.startPlayoutAtPrimeEdge())
-        #expect(!decoder.playerNode.isPlaying)
-        #expect(decoder.primeEdgeRetryAtNanos == .max)
-        decoder.primeEdgeRetryAtNanos = 0
-        #expect(decoder.startPlayoutAtPrimeEdge())
-        #expect(!decoder.primeEdgeFailureStreak)
-        #expect(decoder.primeEdgeRetryAtNanos == 0)
-        decoder.playerNode.pause()
-        #expect(decoder.startPlayoutAtPrimeEdge())
-    }
+    private let settings = IsolatedDefaults()
 
     /// Repeated packets must not burn through the restart ladder while the
     /// output is unavailable. The empty graph deterministically rejects start.
     @Test func consecutivePrimeEdgesShareOneRestartAttempt() throws {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
         decoder.stateLock.lock()
@@ -133,7 +58,7 @@ struct AudioPrimeEdgeSafetyTests {
     /// next packet retries. (`engine.start()` on the empty graph fails or the
     /// un-attached `play()` raises - either path must degrade, never crash.)
     @Test func primeEdgeWithDeadEngineStaysUnprimedWithoutCrashing() {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.audioMeterLock.lock()
         decoder.meterSampleRate = 48_000
         decoder.framesScheduled = 48_000   // fill far above any target

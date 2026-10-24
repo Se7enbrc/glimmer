@@ -17,6 +17,7 @@
 //  the next `/launch`.
 //
 
+import GlimmerEngine
 import AppKit
 import Foundation
 
@@ -25,7 +26,7 @@ enum TerminationGate {
     /// `/cancel`) before exiting anyway. Two seconds covers a LAN round trip
     /// with a wide margin and is short enough that a dead host doesn't make
     /// Cmd-Q feel broken.
-    static let stopBoundSeconds: TimeInterval = 2.0
+    static let stopBoundSeconds = SessionDeadline.stopBoundSeconds
 
     /// The reply to `applicationShouldTerminate`: defer while a session object
     /// exists (live, connecting, or still tearing down), else quit now.
@@ -33,48 +34,9 @@ enum TerminationGate {
         hasSession ? .terminateLater : .terminateNow
     }
 
-    /// Run `operation` and return true if it finished within `seconds`, false
-    /// if the deadline won. Deliberately NOT a task group: a group scope waits
-    /// for every child before returning, so a stop wedged on a dead host would
-    /// pin the caller past the bound - the exact thing this exists to prevent.
-    /// The loser is cancelled best-effort; a stop that is still running when
-    /// the process exits is fine (the host times the session out on its own).
     static func runBounded(
         seconds: TimeInterval, _ operation: @escaping @Sendable () async -> Void
     ) async -> Bool {
-        let finisher = FirstFinisher()
-        let work = Task { await operation(); await finisher.finish(completed: true) }
-        let timer = Task {
-            try? await Task.sleep(for: .seconds(seconds))
-            await finisher.finish(completed: false)
-        }
-        let completed = await finisher.outcome
-        work.cancel()
-        timer.cancel()
-        return completed
-    }
-}
-
-/// First-writer-wins latch: the first `finish` resumes the single pending
-/// `outcome` read; later finishes are dropped. Actor-isolated so the two racing
-/// tasks can't both resume the continuation.
-private actor FirstFinisher {
-    private var result: Bool?
-    private var waiter: CheckedContinuation<Bool, Never>?
-
-    func finish(completed: Bool) {
-        guard result == nil else { return }
-        result = completed
-        if let waiter {
-            self.waiter = nil
-            waiter.resume(returning: completed)
-        }
-    }
-
-    var outcome: Bool {
-        get async {
-            if let result { return result }
-            return await withCheckedContinuation { continuation in waiter = continuation }
-        }
+        await SessionDeadline.runBounded(seconds: seconds, operation)
     }
 }

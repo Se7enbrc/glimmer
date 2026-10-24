@@ -12,10 +12,12 @@
 import AppKit
 import QuartzCore
 import Testing
+@testable import GlimmerEngine
 @testable import Glimmer
 
 @MainActor
 struct StreamSignalTests {
+    private let settings = IsolatedDefaults()
 
     @MainActor private final class Spoken {
         var lines: [String] = []
@@ -29,6 +31,19 @@ struct StreamSignalTests {
         pill.announce = { spoken.lines.append($0) }
         pill.attach(to: host)
         return (pill, host, spoken)
+    }
+
+    @Test func pillVisibilityUsesTheSharedExplicitFade() throws {
+        let (pill, _, _) = banner()
+        pill.setText("Reconnecting…")
+        pill.setVisible(true)
+        let fade = try #require(pill.layer.animation(forKey: "visibility") as? CABasicAnimation)
+        #expect(fade.duration == Motion.short)
+        #expect(fade.toValue as? Int == 1)
+        pill.setVisible(false)
+        pill.setVisible(true)
+        #expect(!pill.layer.isHidden)
+        #expect(pill.layer.opacity == 1)
     }
 
     private let longText = "Weak connection. Lowering quality to 150 Mbps… and then some more words"
@@ -67,14 +82,19 @@ struct StreamSignalTests {
     // MARK: Linger hint
 
     /// A pill that stays up earns the way out; a fresh show starts without it.
-    @Test func aStuckPillSaysHowToLeave() async {
+    @Test func aStuckPillSaysHowToLeave() throws {
         let (pill, _, _) = banner()
-        pill.lingerDelay = 0
+        var callbacks: [@MainActor () -> Void] = []
+        pill.scheduleLingerDelay = { delay, action in
+            #expect(delay == 5)
+            callbacks.append(action)
+        }
         pill.lingerHint = { "Press ⌃⌥Q to stop streaming" }
         pill.setText("Reconnecting…")
         pill.setVisible(true)
         #expect(pill.displayedText == "Reconnecting…")
-        try? await Task.sleep(for: .milliseconds(50))
+        let linger = try #require(callbacks.first)
+        linger()
         #expect(pill.displayedText == "Reconnecting… · Press ⌃⌥Q to stop streaming")
 
         pill.setText("Waiting for video…")
@@ -82,28 +102,35 @@ struct StreamSignalTests {
 
         pill.setVisible(false)
         pill.setVisible(true)
+        linger()
         #expect(pill.displayedText == "Waiting for video…")
     }
 
     /// A pill hidden before its linger delay never grows the hint.
-    @Test func aHiddenPillDoesNotLinger() async {
+    @Test func aHiddenPillDoesNotLinger() throws {
         let (pill, _, _) = banner()
-        pill.lingerDelay = 0.02
+        var callback: (@MainActor () -> Void)?
+        pill.scheduleLingerDelay = { delay, action in
+            #expect(delay == 5)
+            callback = action
+        }
         pill.lingerHint = { "Press ⌃⌥Q to stop streaming" }
         pill.setText("Reconnecting…")
         pill.setVisible(true)
         pill.setVisible(false)
-        try? await Task.sleep(for: .milliseconds(80))
+        let linger = try #require(callback)
+        linger()
         #expect(pill.displayedText == "Reconnecting…")
     }
 
     /// Pills without a hint (the network pill) never change their text.
-    @Test func aPillWithoutAHintNeverGrows() async {
+    @Test func aPillWithoutAHintNeverGrows() {
         let (pill, _, _) = banner()
-        pill.lingerDelay = 0
+        var scheduled = false
+        pill.scheduleLingerDelay = { _, _ in scheduled = true }
         pill.setText("Stream stuttering")
         pill.setVisible(true)
-        try? await Task.sleep(for: .milliseconds(50))
+        #expect(!scheduled)
         #expect(pill.displayedText == "Stream stuttering")
     }
 
@@ -168,15 +195,18 @@ struct StreamSignalTests {
     @Test func backgroundBeforeDecoderAdoptionReleasesDisplayAssertion() async {
         let decoder = VideoDecoder()
         decoder.setPresentSuppressed(true)
-        let session = StreamSession()
-        let (beforeAdoption, afterAdoption) = await session.checkEarlyBackgroundAdoption(decoder)
+        let native = MacSessionServices()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, audioDecoder: AudioDecoder(defaults: settings.defaults),
+            services: native.services(), backend: MacTransport.makeBackend(),
+            makeNetwork: { NetworkClient(server: $0) }, makeBackend: { MacTransport.makeBackend() })
+        let (beforeAdoption, afterAdoption) = await session.checkEarlyBackgroundAdoption(decoder, native: native)
         #expect(!beforeAdoption)
         #expect(afterAdoption)
         decoder.teardown()
     }
 
     @Test func resettingStallLatchesClearsEveryLatch() async {
-        let session = StreamSession()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         await session.setStallLatchesForTesting()
         await session.resetStallLatches()
         #expect(!session.didLogDecodeOnlyStall)
@@ -225,6 +255,14 @@ struct StreamSignalTests {
         #expect(![traffic, frame, lost, other].contains { $0.localizedCaseInsensitiveContains("host") })
     }
 
+    @Test func aKnownVideoPathAsksForRetryInsteadOfFirewallChanges() {
+        let message = AppModel.streamEndedMessage(code: -100, hostName: "Den PC", hasReceivedVideo: true)
+        #expect(message == "Den PC didn't start sending video. Try again.")
+        #expect(!message.contains("firewall"))
+        #expect(AppModel.streamEndedMessage(code: -100, hostName: "Den PC", hasReceivedVideo: false)
+            .contains("UDP port 47998"))
+    }
+
     // MARK: Stats HUD
 
     /// With Differentiate Without Color on, warning and critical values are
@@ -253,20 +291,17 @@ private extension StreamSession {
 }
 
 extension StreamSession {
-    func checkEarlyBackgroundAdoption(_ decoder: VideoDecoder) -> (Bool, Bool) {
+    func checkEarlyBackgroundAdoption(_ decoder: VideoDecoder, native: MacSessionServices) -> (Bool, Bool) {
         isStreaming = true
-        powerAssertion = ProcessInfo.processInfo.beginActivity(
-            options: Self.sessionActivityOptions(hidden: false),
-            reason: "Testing stream visibility")
+        beginPowerAssertion()
         defer {
-            if let powerAssertion { ProcessInfo.processInfo.endActivity(powerAssertion) }
-            powerAssertion = nil
+            endPowerAssertion()
             videoDecoder = nil
             isStreaming = false
         }
         refreshPowerAssertion()
-        let beforeAdoption = powerAssertionHidden
+        let beforeAdoption = native.isHidden
         adoptVideoDecoder(decoder)
-        return (beforeAdoption, powerAssertionHidden)
+        return (beforeAdoption, native.isHidden)
     }
 }

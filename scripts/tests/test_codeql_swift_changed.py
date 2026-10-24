@@ -14,6 +14,9 @@ SPEC.loader.exec_module(CHANGED)
 
 
 class SwiftScanScopeTests(unittest.TestCase):
+    def test_engine_only_changes_require_the_scan(self):
+        self.assertTrue(CHANGED.must_scan(["GlimmerEngine/Protocol/EnetWire.swift"]))
+
     def test_anything_the_traced_build_reads_needs_the_scan(self):
         for path in ("Glimmer/Stream/VideoDecoder.swift", "helper/main.swift", "LoginHelper/main.swift",
                      "Glimmer.xcodeproj/project.pbxproj",
@@ -31,6 +34,13 @@ class SwiftScanScopeTests(unittest.TestCase):
             "README.md", "docs/RELEASE.md", "CHANGELOG.md", "scripts/release-checks.py",
             "scripts/tests/test_release.py", "GlimmerTests/FramePacerTests.swift", "fuzz/rtsp.swift",
             ".github/workflows/verify.yml", "index.html", "website/site.css", "renovate.json"]))
+
+    def test_ios_and_shared_package_changes_run_both_apps(self):
+        for path in ("iOS/Glimmer/IOSAppModel.swift", "iOS/Glimmer.xcodeproj/project.pbxproj",
+                     "iOS/Glimmer.xcodeproj/xcshareddata/xcschemes/Glimmer-iOS.xcscheme",
+                     "iOS/Makefile", "Package.swift", "scripts/apple-apps.mk"):
+            with self.subTest(path=path):
+                self.assertTrue(CHANGED.must_scan([path]))
 
     def test_an_empty_or_blank_list_scans(self):
         self.assertTrue(CHANGED.must_scan([]))

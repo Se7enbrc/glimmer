@@ -3,6 +3,7 @@
 
 // Wake and Connect work and notifications share per-model cancellation state.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import UserNotifications
@@ -69,6 +70,7 @@ extension AppModel {
         wakingHostID = host.id
         wakeFailedHostID = nil
         wakeFailureReason = nil
+        cancelHostReadiness(for: host.id)
         hostStatusTask?.cancel()
         hostStatusTask = nil
         WakeNotifier.shared.prepare(for: self, host: host)

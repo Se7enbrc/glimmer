@@ -2,10 +2,13 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import AVFoundation
+@testable import GlimmerEngine
 import Testing
 @testable import Glimmer
 
 struct AudioPacketSpliceTests {
+    private let settings = IsolatedDefaults()
+
     private func buffer(channels: Int = 2, frames: Int = 240,
                         sample: (Int, Int) -> Float) throws -> AVAudioPCMBuffer {
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000,
@@ -78,15 +81,12 @@ struct AudioPacketSpliceTests {
     }
 
     @Test func stallRecoveryDiscardsTheOldJoin() throws {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         defer { decoder.shutdown() }
         let skipped = try buffer { _, _ in -0.5 }
         let next = try buffer { _, _ in 0.5 }
         decoder.inputFormat = skipped.format
-        decoder.engine.attach(decoder.playerNode)
-        decoder.engine.connect(decoder.playerNode, to: decoder.engine.mainMixerNode, format: skipped.format)
-        try decoder.engine.enableManualRenderingMode(.offline, format: skipped.format, maximumFrameCount: 240)
-        try decoder.engine.start()
+        decoder.startOutput = { _ in noErr }
         decoder.stateLock.withLock {
             decoder.packetSplice.skip(skipped)
             decoder.audioMeterLock.withLock { decoder.playoutStallPending = true }

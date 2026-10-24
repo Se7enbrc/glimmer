@@ -9,6 +9,7 @@
 //  of TroubleshootingPane.swift to keep each file focused.
 //
 
+import GlimmerEngine
 import AppKit
 import GameController
 import SwiftUI
@@ -165,6 +166,7 @@ struct ControllerInputTest: View {
             }
         }
         .onAppear {
+            model.launcherController.testingChanged(true)
             let monitor = ControllerMonitor(isStreaming: { model.isStreaming })
             monitor.start()
             self.monitor = monitor
@@ -172,6 +174,7 @@ struct ControllerInputTest: View {
         .onDisappear {
             monitor?.stop()
             monitor = nil
+            model.launcherController.testingChanged(false)
         }
         .onChange(of: model.isStreaming) { _, _ in monitor?.streamingChanged() }
     }

@@ -8,7 +8,8 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 bad=0
 while IFS= read -r f; do
+    [ -f "$f" ] || continue
     [ "$f" = Glimmer/Stream/HIDGamepad/GameControllerDB+Data.swift ] && continue
     head -n 3 "$f" | grep -q 'SPDX-License-Identifier: ' || { echo "missing SPDX header: $f" >&2; bad=1; }
-done < <(git ls-files '*.swift' '*.h' '*.sh' '*.py' '*.js' Makefile '.github/workflows/*.yml')
+done < <(git ls-files '*.swift' '*.h' '*.sh' '*.py' '*.js' '*Makefile' '*.mk' '.github/workflows/*.yml')
 exit "$bad"

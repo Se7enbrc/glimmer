@@ -12,6 +12,7 @@
 import Foundation
 import Testing
 
+@testable import GlimmerEngine
 @testable import Glimmer
 
 // VideoDecoder.init() is MainActor-isolated; convertAnnexBToAVCC itself is

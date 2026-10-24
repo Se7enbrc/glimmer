@@ -8,6 +8,7 @@
 //  a key-frame row that says whether it was asked for, and a row per long gap.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -30,7 +31,7 @@ struct VideoRecoveryEventTests {
     }
 
     @Test func rfiRecoveryLeavesExplicitIdrRequestForTheIdr() {
-        let tracker = FrameTimingTracker(sessionId: "test")
+        let tracker = FrameTimingTracker(sessionId: "test", traceDirectory: .temporaryDirectory)
         FrameTimingTracker.installForTesting(tracker)
         TelemetryCounters.shared.p2.reset()
         defer {

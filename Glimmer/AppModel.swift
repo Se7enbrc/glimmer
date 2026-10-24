@@ -18,6 +18,7 @@
 //    * HostStatusPoller.swift - periodic readiness-chip polling Task
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox
@@ -48,7 +49,11 @@ final class AppModel {
     var selectedHost: Host? { didSet { selectionChanged(from: oldValue) } }
 
     // Stream lifecycle
-    var isStreaming = false
+    var isStreaming = false {
+        didSet { launcherController.streamingChanged(isStreaming) }
+    }
+    @ObservationIgnored let launcherController = LauncherController()
+    @ObservationIgnored lazy var launcherArtCache = LauncherArtCache(base: supportBase)
     /// Active native session, retained while streaming.
     @ObservationIgnored var nativeSession: StreamSession?
     /// A command-line launch waiting for its route, before a session exists.
@@ -76,7 +81,7 @@ final class AppModel {
         didSet {
             // Persist explicit preset changes here. Recomputing for a display
             // change must not rewrite the saved choice.
-            UserDefaults.standard.set(qualityPreset.rawValue, forKey: "qualityPreset")
+            settingsDefaults.set(qualityPreset.rawValue, forKey: "qualityPreset")
             persistQualitySettings()
         }
     }
@@ -84,19 +89,19 @@ final class AppModel {
     // Custom overrides (used only when qualityPreset == .custom)
     var customWidth: Int = 1920 {
         didSet {
-            UserDefaults.standard.set(customWidth, forKey: "customWidth")
+            settingsDefaults.set(customWidth, forKey: "customWidth")
             if qualityPreset == .custom { persistQualitySettings() }
         }
     }
     var customHeight: Int = 1080 {
         didSet {
-            UserDefaults.standard.set(customHeight, forKey: "customHeight")
+            settingsDefaults.set(customHeight, forKey: "customHeight")
             if qualityPreset == .custom { persistQualitySettings() }
         }
     }
     var customFPS: Int = 60 {
         didSet {
-            UserDefaults.standard.set(customFPS, forKey: "customFPS")
+            settingsDefaults.set(customFPS, forKey: "customFPS")
             if qualityPreset == .custom { persistQualitySettings() }
         }
     }
@@ -109,19 +114,19 @@ final class AppModel {
     /// HDR under every preset, on by default; off offers no 10-bit format (SDR).
     var streamHDR: Bool = true {
         didSet {
-            UserDefaults.standard.set(streamHDR, forKey: "streamHDR")
+            settingsDefaults.set(streamHDR, forKey: "streamHDR")
             persistQualitySettings()
         }
     }
 
     // Defaults
     var defaultLaunchApp: String = "Desktop" {
-        didSet { UserDefaults.standard.set(defaultLaunchApp, forKey: "defaultLaunchApp") }
+        didSet { settingsDefaults.set(defaultLaunchApp, forKey: "defaultLaunchApp") }
     }
     /// Play the stream's sound on the PC instead of this Mac. Read at stream
     /// start (localAudioPlayMode), so a change applies to the next stream.
     var muteMacWhileStreaming: Bool = false {
-        didSet { UserDefaults.standard.set(muteMacWhileStreaming, forKey: "muteMacWhileStreaming") }
+        didSet { settingsDefaults.set(muteMacWhileStreaming, forKey: "muteMacWhileStreaming") }
     }
 
     /// Connection lifecycle published from the native engine. Drives the
@@ -145,9 +150,7 @@ final class AppModel {
     /// The PC the error is about, which a mid-connect switch can leave unselected.
     var nativeStreamErrorHostID: String?
 
-    enum StreamErrorKind {
-        case unreachable, pairing, other
-    }
+    typealias StreamErrorKind = StreamFailure.Category
 
     /// Effective HDR-active state from the native engine. True only when the
     /// host signalled HDR mode AND the bitstream is 10-bit AND the Metal
@@ -171,6 +174,7 @@ final class AppModel {
     /// or Wi-Fi glyph), independent of the gate-on telemetry probe. Re-pointed from
     /// `selectedHost`'s didSet whenever the route address changes.
     let hostRoute = HostRouteMonitor()
+    let streamRoute = HostRouteMonitor(samplingWiFi: false)
 
     /// Latest reachability + activity snapshot for the selected host. Drives
     /// the launcher's readiness chip ("Ready · 12 ms", "Streaming Helldivers 2",
@@ -184,6 +188,9 @@ final class AppModel {
     /// dialog to this; confirming calls `stream(app:on:)`, cancelling clears it.
     /// nil = no takeover pending (the common case streams straight through).
     var pendingTakeover: PendingTakeover?
+    @ObservationIgnored var postCommandReply: ([String: String]) -> Void = {
+        CommandChannel.post(CommandChannel.reply, $0)
+    }
     struct PendingTakeover: Equatable {
         let app: LibraryApp
         let host: Host
@@ -197,19 +204,24 @@ final class AppModel {
     var menuStopInProgress = false
     var statsOverlayShown = false
     var menuDetails: StreamStatsSnapshot?
+    var menuResolution: (width: Int, height: Int)?
     var menuBarControllers: [MenuBarController] = []
     var pairSheetShown = false
+    var pairSheetOwner: PairingPresentationOwner?
+    @ObservationIgnored weak var pairSheetWindow: NSWindow?
+    /// True from a controller's first launcher command until focus clears.
+    var launcherControllerNavigating = false
     var pairSheetHost: Host?
     @ObservationIgnored var menuRefreshTimer: Timer?
 
     var showStreamStats: Bool = false {
-        didSet { UserDefaults.standard.set(showStreamStats, forKey: "showStreamStats") }
+        didSet { settingsDefaults.set(showStreamStats, forKey: "showStreamStats") }
     }
 
     /// Persist the HUD position and apply it to an active stream.
     var streamStatsCorner: StatsOverlayCorner = .topLeft {
         didSet {
-            UserDefaults.standard.set(streamStatsCorner.rawValue, forKey: "streamStatsCorner")
+            settingsDefaults.set(streamStatsCorner.rawValue, forKey: "streamStatsCorner")
             if let session = nativeSession {
                 let corner = streamStatsCorner
                 Task { await session.setStatsOverlayCorner(corner) }
@@ -222,7 +234,7 @@ final class AppModel {
     /// UserDefaults persistence happens in didSet.
     var statsOverlayPreset: StatsOverlayPreset = .minimal {
         didSet {
-            UserDefaults.standard.set(
+            settingsDefaults.set(
                 statsOverlayPreset.rawValue, forKey: "statsOverlayPreset")
         }
     }
@@ -235,7 +247,7 @@ final class AppModel {
     var statsOverlayCustomRows: Set<StatsRow.Kind> = StatsOverlayDefaults.initialCustomRows {
         didSet {
             let raw = statsOverlayCustomRows.map(\.rawValue)
-            UserDefaults.standard.set(raw, forKey: "statsOverlayCustomRows")
+            settingsDefaults.set(raw, forKey: "statsOverlayCustomRows")
         }
     }
 
@@ -247,7 +259,7 @@ final class AppModel {
     var statsThresholds: StatsThresholds = .default {
         didSet {
             if let data = try? JSONEncoder().encode(statsThresholds) {
-                UserDefaults.standard.set(data, forKey: "statsThresholds")
+                settingsDefaults.set(data, forKey: "statsThresholds")
             }
         }
     }
@@ -256,7 +268,7 @@ final class AppModel {
         didSet {
             // Historical UserDefaults key - previously-stored chords still decode.
             if let data = try? JSONEncoder().encode(quitHotkey) {
-                UserDefaults.standard.set(data, forKey: "quitHotkey")
+                settingsDefaults.set(data, forKey: "quitHotkey")
             }
         }
     }
@@ -267,19 +279,19 @@ final class AppModel {
             // session-scope override, the defaults checkbox is the
             // persistent surface.
             if let data = try? JSONEncoder().encode(statsHotkey) {
-                UserDefaults.standard.set(data, forKey: "statsHotkey")
+                settingsDefaults.set(data, forKey: "statsHotkey")
             }
         }
     }
 
     var captureSysKeys: Bool = false {
-        didSet { UserDefaults.standard.set(captureSysKeys, forKey: "captureSysKeys") }
+        didSet { settingsDefaults.set(captureSysKeys, forKey: "captureSysKeys") }
     }
     var streamCoversNotch: Bool = true {
-        didSet { UserDefaults.standard.set(streamCoversNotch, forKey: "streamCoversNotch") }
+        didSet { settingsDefaults.set(streamCoversNotch, forKey: "streamCoversNotch") }
     }
     var streamUsesFullScreenSpace: Bool = false {
-        didSet { UserDefaults.standard.set(streamUsesFullScreenSpace, forKey: "streamUsesFullScreenSpace") }
+        didSet { settingsDefaults.set(streamUsesFullScreenSpace, forKey: "streamUsesFullScreenSpace") }
     }
     /// The Custom preset's "Show the stream in a window" choice: full screen
     /// (the default) or a normal titled window at Custom's own resolution,
@@ -289,14 +301,14 @@ final class AppModel {
     /// the display, so a flip recomputes the "Your next stream" summary.
     var streamDisplayMode: StreamDisplayMode = StreamDisplayMode.defaultMode {
         didSet {
-            UserDefaults.standard.set(streamDisplayMode.rawValue, forKey: StreamDisplayMode.defaultsKey)
+            settingsDefaults.set(streamDisplayMode.rawValue, forKey: StreamDisplayMode.defaultsKey)
             if qualityPreset == .custom { persistQualitySettings() }
         }
     }
     /// Highest quality (the default) takes the route and radio boosts;
     /// Bandwidth saver keeps the lighter ask. Read at session start.
     var bitrateMode: BitrateMode = BitrateMode.defaultMode {
-        didSet { UserDefaults.standard.set(bitrateMode.rawValue, forKey: BitrateMode.defaultsKey) }
+        didSet { settingsDefaults.set(bitrateMode.rawValue, forKey: BitrateMode.defaultsKey) }
     }
     /// Window-mode pointer chord (default ⌃⌥R): a TOGGLE - hands the mouse to
     /// the game for mouselook, and takes it back. The pointer is normally
@@ -307,7 +319,7 @@ final class AppModel {
     var releasePointerHotkey: HotkeyChord = .defaultReleasePointer {
         didSet {
             if let data = try? JSONEncoder().encode(releasePointerHotkey) {
-                UserDefaults.standard.set(data, forKey: "releasePointerHotkey")
+                settingsDefaults.set(data, forKey: "releasePointerHotkey")
             }
         }
     }
@@ -316,7 +328,7 @@ final class AppModel {
     var miniPlayerHotkey: HotkeyChord = .defaultMiniPlayer {
         didSet {
             if let data = try? JSONEncoder().encode(miniPlayerHotkey) {
-                UserDefaults.standard.set(data, forKey: "miniPlayerHotkey")
+                settingsDefaults.set(data, forKey: "miniPlayerHotkey")
             }
         }
     }
@@ -331,7 +343,7 @@ final class AppModel {
     /// as Show-Keyboard). The 400ms dwell guards a mid-game trip; "None" disables.
     var controllerQuitChord: ControllerQuitChord = .l3r3 {
         didSet {
-            UserDefaults.standard.set(controllerQuitChord.rawValue, forKey: "controllerQuitChord")
+            settingsDefaults.set(controllerQuitChord.rawValue, forKey: "controllerQuitChord")
         }
     }
 
@@ -340,7 +352,7 @@ final class AppModel {
     var customControllerChord: Set<ControllerButton> = [] {
         didSet {
             if let data = try? JSONEncoder().encode(customControllerChord) {
-                UserDefaults.standard.set(data, forKey: "customControllerChord")
+                settingsDefaults.set(data, forKey: "customControllerChord")
             }
         }
     }
@@ -357,9 +369,9 @@ final class AppModel {
     /// permission, so it's OFF by default and only enabled explicitly from
     /// Settings ▸ Troubleshooting after an up-front explanation. The key is
     /// also read directly by `DualSenseHID.isEnabled` from non-UI code.
-    var rawHIDControllerEnabled: Bool = UserDefaults.standard.bool(forKey: "rawHIDControllerEnabled") {
+    var rawHIDControllerEnabled: Bool = false {
         didSet {
-            UserDefaults.standard.set(rawHIDControllerEnabled, forKey: "rawHIDControllerEnabled")
+            settingsDefaults.set(rawHIDControllerEnabled, forKey: "rawHIDControllerEnabled")
         }
     }
 
@@ -370,9 +382,9 @@ final class AppModel {
     /// Telemetry toggle lives INSIDE this pane, so it can't gate its own reveal -
     /// hence a separate, plainly-debug-only UserDefault). Persisted so a power
     /// user who revealed it keeps it across launches.
-    var showDiagnostics: Bool = TelemetryGate.diagnosticsVisible() {
+    var showDiagnostics: Bool = false {
         didSet {
-            UserDefaults.standard.set(showDiagnostics, forKey: "showDiagnostics")
+            settingsDefaults.set(showDiagnostics, forKey: "showDiagnostics")
         }
     }
 
@@ -381,9 +393,9 @@ final class AppModel {
     /// pane. Changing it applies on the NEXT stream - the exporter snapshots the
     /// gate when a session starts. Mirrors the raw key `TelemetryGate` reads so
     /// the UI toggle and the engine agree.
-    var telemetryEnabled: Bool = UserDefaults.standard.bool(forKey: "telemetryEnabled") {
+    var telemetryEnabled: Bool = false {
         didSet {
-            UserDefaults.standard.set(telemetryEnabled, forKey: "telemetryEnabled")
+            settingsDefaults.set(telemetryEnabled, forKey: "telemetryEnabled")
         }
     }
 
@@ -398,9 +410,9 @@ final class AppModel {
 
     /// Whether the user has answered the auto-offer (Enable or Cancel) - so we
     /// only proactively ask once. They can still flip the Settings toggle.
-    var rawHIDPromptAnswered: Bool = UserDefaults.standard.bool(forKey: "rawHIDPromptAnswered") {
+    var rawHIDPromptAnswered: Bool = false {
         didSet {
-            UserDefaults.standard.set(rawHIDPromptAnswered, forKey: "rawHIDPromptAnswered")
+            settingsDefaults.set(rawHIDPromptAnswered, forKey: "rawHIDPromptAnswered")
         }
     }
 
@@ -476,6 +488,7 @@ final class AppModel {
     var displayInfoRevision: Int = 0
 
     isolated deinit {
+        streamRoute.monitor(address: nil)
         for token in workspaceTokens { NSWorkspace.shared.notificationCenter.removeObserver(token) }
         // Drain NotificationCenter observer tokens we registered with the
         // closure form - without this they outlive the manager and keep the
@@ -489,54 +502,53 @@ final class AppModel {
         let tokens = notificationTokens
         for token in tokens { NotificationCenter.default.removeObserver(token) }
         hostStatusTask?.cancel()
+        for task in hostPolling.readinessTasks.values { task.cancel() }
     }
 
-    init() {
+    init(defaults: UserDefaults = .standard) {
+        settingsDefaults = defaults
+        hostsDefaults = defaults
+        _rawHIDControllerEnabled = defaults.bool(forKey: "rawHIDControllerEnabled")
+        _rawHIDPromptAnswered = defaults.bool(forKey: "rawHIDPromptAnswered")
+        _telemetryEnabled = defaults.bool(forKey: "telemetryEnabled")
+        _showDiagnostics = TelemetryGate.diagnosticsVisible(defaults: defaults)
         // Observation setters can run during initialization. Restore quality's
         // backing storage so entering Custom cannot overwrite saved dimensions
         // before they are read, or persist defaults the user never chose.
-        muteMacWhileStreaming = UserDefaults.standard.bool(forKey: "muteMacWhileStreaming")
-        defaultLaunchApp = UserDefaults.standard.string(forKey: "defaultLaunchApp") ?? defaultLaunchApp
-        _qualityPreset = Self.persistedQualityPreset() ?? _qualityPreset
-        // Width/height/fps are clamped on read: builds whose Quality pane
-        // clamped on Return only could persist out-of-range values via a
-        // focus-loss commit (0 self-heals via persistedPositiveInt; 1000 Hz
-        // did not). Bounds mirror QualityPane's clamp helpers.
-        _customWidth = min(max(Self.persistedPositiveInt("customWidth") ?? _customWidth, 640), 7680)
-        _customHeight = min(max(Self.persistedPositiveInt("customHeight") ?? _customHeight, 480), 4320)
-        _customFPS = min(max(Self.persistedPositiveInt("customFPS") ?? _customFPS, 30), 240)
-        streamHDR = Self.persistedBool("streamHDR") ?? streamHDR
-        captureSysKeys = Self.persistedBool("captureSysKeys") ?? captureSysKeys
-        streamCoversNotch = Self.persistedBool("streamCoversNotch") ?? streamCoversNotch
-        streamUsesFullScreenSpace = Self.persistedBool("streamUsesFullScreenSpace") ?? streamUsesFullScreenSpace
+        muteMacWhileStreaming = settingsDefaults.bool(forKey: "muteMacWhileStreaming")
+        defaultLaunchApp = settingsDefaults.string(forKey: "defaultLaunchApp") ?? defaultLaunchApp
+        _qualityPreset = Self.persistedQualityPreset(defaults: defaults) ?? _qualityPreset
+        // Clamp legacy custom values to the bounds used by QualityPane.
+        _customWidth = min(max(Self.persistedPositiveInt("customWidth", defaults: defaults) ?? _customWidth, 640), 7680)
+        _customHeight = min(max(Self.persistedPositiveInt("customHeight", defaults: defaults) ?? _customHeight, 480), 4320)
+        _customFPS = min(max(Self.persistedPositiveInt("customFPS", defaults: defaults) ?? _customFPS, 30), 240)
+        streamHDR = Self.persistedBool("streamHDR", defaults: defaults) ?? streamHDR
+        captureSysKeys = Self.persistedBool("captureSysKeys", defaults: defaults) ?? captureSysKeys
+        streamCoversNotch = Self.persistedBool("streamCoversNotch", defaults: defaults) ?? streamCoversNotch
+        streamUsesFullScreenSpace = Self.persistedBool("streamUsesFullScreenSpace",
+            defaults: defaults) ?? streamUsesFullScreenSpace
         // Registered default (GlimmerApp) answers the absent-key case; an
         // unrecognised raw value lands on the default rather than guessing.
         streamDisplayMode = StreamDisplayMode.persisted(
-            rawValue: UserDefaults.standard.string(forKey: StreamDisplayMode.defaultsKey))
-        bitrateMode = BitrateMode.persisted(rawValue: UserDefaults.standard.string(forKey: BitrateMode.defaultsKey))
-        releasePointerHotkey = Self.persistedDecoded("releasePointerHotkey", HotkeyChord.self) ?? releasePointerHotkey
-        miniPlayerHotkey = Self.persistedDecoded("miniPlayerHotkey", HotkeyChord.self) ?? miniPlayerHotkey
-        showStreamStats = Self.persistedBool("showStreamStats") ?? showStreamStats
-        streamStatsCorner = .persisted()
-        // Stats overlay preset. Key-absence means the user never touched
-        // the Settings picker (didSet is suppressed here and the picker is
-        // the only post-init writer), so absent keeps the .minimal default
-        // declared above - deliberately no migration shim. Existing
-        // installs decode their saved choice; an unrecognised raw value
-        // (downgrade from a build that added a preset) falls back to
-        // .minimal silently.
-        statsOverlayPreset = Self.persistedRawValue("statsOverlayPreset", StatsOverlayPreset.self) ?? statsOverlayPreset
-        // Custom-row set. Decode each persisted string back to a
-        // StatsRow.Kind; an unknown kind (downgrade from a future build)
-        // gets silently dropped rather than aborting the load. Empty /
-        // missing → keep the default initial set already set on the
-        // property.
-        statsOverlayCustomRows = Self.persistedCustomRows() ?? statsOverlayCustomRows
-        statsThresholds = Self.persistedStatsThresholds()
-        quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self) ?? quitHotkey
-        statsHotkey = Self.persistedDecoded("statsHotkey", HotkeyChord.self) ?? statsHotkey
-        controllerQuitChord = Self.persistedRawValue("controllerQuitChord", ControllerQuitChord.self) ?? controllerQuitChord
-        customControllerChord = Self.persistedDecoded("customControllerChord", Set<ControllerButton>.self) ?? customControllerChord
+            rawValue: settingsDefaults.string(forKey: StreamDisplayMode.defaultsKey))
+        bitrateMode = BitrateMode.persisted(rawValue: settingsDefaults.string(forKey: BitrateMode.defaultsKey))
+        releasePointerHotkey = Self.persistedDecoded("releasePointerHotkey", HotkeyChord.self,
+            defaults: defaults) ?? releasePointerHotkey
+        miniPlayerHotkey = Self.persistedDecoded("miniPlayerHotkey", HotkeyChord.self,
+            defaults: defaults) ?? miniPlayerHotkey
+        showStreamStats = Self.persistedBool("showStreamStats", defaults: defaults) ?? showStreamStats
+        streamStatsCorner = .persisted(defaults: defaults)
+        // Missing or unknown overlay preferences keep their declared defaults.
+        statsOverlayPreset = Self.persistedRawValue("statsOverlayPreset", StatsOverlayPreset.self,
+            defaults: defaults) ?? statsOverlayPreset
+        statsOverlayCustomRows = Self.persistedCustomRows(defaults: defaults) ?? statsOverlayCustomRows
+        statsThresholds = Self.persistedStatsThresholds(defaults: defaults)
+        quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self, defaults: defaults) ?? quitHotkey
+        statsHotkey = Self.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults) ?? statsHotkey
+        controllerQuitChord = Self.persistedRawValue("controllerQuitChord", ControllerQuitChord.self,
+            defaults: defaults) ?? controllerQuitChord
+        customControllerChord = Self.persistedDecoded("customControllerChord", Set<ControllerButton>.self,
+            defaults: defaults) ?? customControllerChord
         hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
     }
 
@@ -545,7 +557,8 @@ final class AppModel {
     @ObservationIgnored var makeNetwork: @Sendable (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) }
     @ObservationIgnored var measureRTT: @Sendable (String, Int, Int) async -> HostReachability.Outcome =
         HostReachability.measureRTT
-    @ObservationIgnored var hostsDefaults: UserDefaults = .standard
+    @ObservationIgnored let settingsDefaults: UserDefaults
+    @ObservationIgnored var hostsDefaults: UserDefaults
     @ObservationIgnored var supportBase: URL?
 
     /// The launch the user last asked for, so Retry repeats exactly that.

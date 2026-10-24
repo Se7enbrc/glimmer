@@ -200,6 +200,7 @@ class AppcastTests(unittest.TestCase):
             floor = plistlib.load(stream)["LSMinimumSystemVersion"]
         self.assertEqual(self.run_feed(*NEW)[0], 0)
         self.assertEqual(self.items()[0].findtext(f"{{{SPARKLE}}}minimumSystemVersion"), floor)
+        self.assertNotEqual(floor, "26.0")
         self.assertEqual(self.items()[1].findtext(f"{{{SPARKLE}}}minimumSystemVersion"), "26.0")
 
     def test_reused_or_regressing_build_is_refused(self):

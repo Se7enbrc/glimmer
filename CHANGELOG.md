@@ -1,5 +1,165 @@
 # Changelog
 
+## 2026.10.8 - Unreleased
+
+### Features
+
+- Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
+  Sequoia, windows and controls use the system's standard materials in place of
+  Liquid Glass.
+
+- iPhone and iPad releases now use the same calendar version as the Mac app.
+
+- On iPhone, use the launcher and Settings in portrait or landscape. Streams
+  stay in landscape, and menus can rotate again after disconnecting.
+
+- Manual diagnostic builds can record a detailed performance session and export
+  a local evidence bundle that identifies missing or incomplete measurements.
+  These builds are separate from automatic updates.
+
+- Stop the current stream and quit its game on the PC from a `glimmer://stop`
+  link, `glimmer stop` or the Stop Streaming shortcut.
+
+- Smoother motion when the PC can't hold your display's refresh rate. On a
+  variable-refresh display, refresh changes settle before taking effect and stay
+  in a high range to reduce brightness flicker. On a fixed display, repeated
+  frames are spaced evenly. When you switch away, Glimmer leaves the display's
+  refresh rate to macOS.
+
+- Quieter, more consistent transitions across the launcher, stream and settings,
+  including Reduce Motion.
+- Open a stream, wake a PC or ask to quit a PC app with a `glimmer://` link.
+  Quitting still asks before closing the game.
+- The command line can list PCs and apps and report the current stream as
+  versioned JSON for launchers and scripts.
+
+- The full-screen stream slides away when it ends, the way it slid in, instead
+  of fading. Reduce Motion keeps the fade.
+- Steam shows its own logo in the launcher, the menu and the PC list, instead of
+  a generic controller.
+- Hold Menu, Options or Start for a moment, then release it to use the
+  controller as a mouse. On DualSense and DualShock 4, move one finger on the
+  touchpad to point, move two to scroll, and click with one or two fingers for a
+  left or right click. Hold and release again to return to the game.
+- Nintendo controllers send each button in the position of an Xbox controller's
+  by default. “Use Nintendo button layout” in Input settings matches A, B, X and
+  Y by their labels for all Nintendo-layout controllers. Single Joy-Con sides
+  keep their positional layout.
+
+- Choose Buttons or Covers for each PC in its Launcher menu in Settings › PCs.
+  Pairing offers the choice when the PC has apps beyond Desktop and Steam Big
+  Picture. Existing PCs keep Buttons.
+- Use a controller to choose apps and switch PCs in the launcher. The d-pad or
+  left stick moves focus, A or Cross opens the selection, and B or Circle
+  dismisses a dialog. Raw-HID-only controllers don't navigate the launcher yet.
+- Type composed text with macOS input methods and the character viewer. Accents
+  and Option-letter combinations compose while the pointer is free, including in
+  windowed games. Use the capture shortcut (⌃P by default) to send them as keys.
+  Captured controls always use physical keys, even with an input method
+  selected. Committed text stays ahead of the keys typed after it.
+- The capture shortcut (⌃P by default) switches fullscreen between captured game
+  controls and a free pointer. Every app starts captured, including Desktop.
+- The readiness chip shows Ready and latency when the PC is reachable.
+
+### Bug fixes
+
+- On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
+  with an error explaining how to try again.
+- iPhone audio diagnostics now distinguish missing packets, rejected audio and
+  silent output, helping locate streams that have video but no sound.
+
+- Use a controller to open pairing, choose a PC and finish pairing.
+- Opening pairing from another window brings the current pairing flow forward.
+- The menu bar keeps the streaming PC's name and network when another PC is
+  selected.
+- The live stream's mode stays accurate when settings for the next stream
+  change.
+- Custom resolution and refresh-rate fields have distinct VoiceOver labels.
+- VoiceOver can read the metrics shown in Stream stats.
+- Pointer shortcut help now describes capture and release in full screen as well
+  as a window.
+
+- Recover from video decoder stalls without accumulating old frames.
+- Resume audio promptly after a long network interruption.
+- Keep AV1 colours correct when the PC changes between SDR and HDR during a
+  stream.
+- Apply HDR colour and brightness metadata even when the PC sends it during
+  connection setup.
+- On iPhone and iPad, a paired PC stays available in Settings even if loading
+  its apps fails or is cancelled, so you can still forget it and pair again.
+- Stream failures on iPhone and iPad explain blocked ports, protected content
+  and pairing recovery instead of showing generic connection advice.
+- Controller input on iPhone and iPad no longer waits for interface work, and
+  callbacks queued before leaving play cannot replay after you resume.
+
+- Keep fallback video playback in step when the game's frame rate changes.
+- Resume after a brief video stall without rapidly displaying queued frames.
+- Keep retrying video recovery when the first frame never reaches the screen.
+- Avoid a backward frame flash when video playback switches into or out of
+  recovery.
+- Prevent delayed video frames from briefly replacing a newer image.
+
+- On iPhone and iPad, Native quality rounds the stream size down to even pixels
+  so the PC can encode displays with odd pixel dimensions.
+- Keep pending video frames bounded if presentation briefly stalls, and release
+  them promptly when the stream stops or resets.
+- Clicking Settings while a stream is in the background keeps Settings in front.
+- On iPhone, cancel a pending PC connection without waiting for it to time out.
+- Diagnostic captures use short, verified recordings and report interrupted
+  exports explicitly. Hitch summaries include the moments before the bookmark.
+
+- Keep decoded frames in order when a delayed display tick overlaps a newly
+  submitted frame. Let the hardware decoder choose its own thread count.
+- Optional diagnostics retain decode timing for discarded frames and identify
+  where the client drops them. Trace formatting runs in the background.
+- Keep old video work from carrying into a replacement stream, and retire
+  decoder backlog correctly when recovery replaces a decode session.
+- Keep audio packets in order when a PC's error-correction layout is
+  incompatible. Temporary audio socket pressure retries; a permanent failure is
+  reported.
+
+- Recover from a temporarily stalled video renderer without asking the PC for an
+  unnecessary keyframe. Failed renderers still use the full recovery path.
+
+- After a stream ends, Glimmer briefly waits for the PC to finish before
+  offering another stream. The launcher explains the wait, and command-line
+  launches wait too.
+- If a PC that has streamed video before sends none, the message asks you to try
+  again instead of changing the firewall.
+- Optional diagnostics report GPU power in watts alongside time awake, so
+  low-clock activity is not mistaken for heavy GPU use.
+
+- Returning to a full-screen stream waits for its transition to settle before
+  resuming video. A missed animation callback no longer leaves the window
+  transparent.
+
+- Idle controller mouse mode no longer keeps polling, and hidden stream windows
+  skip stats-overlay updates. Audio avoids repeated device queries while sound
+  is playing.
+
+- Controller capture and input sending have dedicated threads to keep controls
+  responsive when other apps are busy. Optional diagnostics now measure input
+  delays from the device event through network submission.
+
+- Keys and mouse or controller buttons no longer stay held after a slowdown,
+  lost input event or reconnect. Releases recover when the connection returns.
+  Held keys work without Input Monitoring, and pasted text releases held input
+  before it is sent. Controllers keep their type after the PC reconnects.
+
+- Audio recovers from output changes and sleep while keeping spatial playback
+  and native surround sound. Stereo follows the speaker pair selected in macOS.
+
+- Audio has more protection from other work when the Mac is busy. Switching
+  between speakers and headphones no longer holds up incoming sound.
+
+- Stream diagnostics no longer count packets that arrive late from an earlier
+  frame as lost.
+- SDR colour from the PC is no longer oversaturated.
+- Turning on a controller that needs Input Monitoring shows macOS's own
+  permission prompt instead of opening System Settings on top of it. Once you
+  allow it, the controller starts working when you come back to Glimmer, with no
+  relaunch.
+
 ## 2026.10.7 - 2026-10-11
 
 ### Bug fixes

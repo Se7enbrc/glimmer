@@ -28,6 +28,13 @@ class VerifyScopeTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(CHANGED.must_build([path, "docs/README.md"]))
 
+    def test_ios_and_shared_package_changes_run_both_apps(self):
+        for path in ("iOS/Glimmer/IOSAppModel.swift", "iOS/Glimmer.xcodeproj/project.pbxproj",
+                     "iOS/Glimmer.xcodeproj/xcshareddata/xcschemes/Glimmer-iOS.xcscheme",
+                     "iOS/Makefile", "Package.swift", "scripts/apple-apps.mk"):
+            with self.subTest(path=path):
+                self.assertTrue(CHANGED.must_build([path]))
+
     def test_an_empty_or_blank_list_builds(self):
         self.assertTrue(CHANGED.must_build([]))
         self.assertTrue(CHANGED.must_build(["", "  \n"]))

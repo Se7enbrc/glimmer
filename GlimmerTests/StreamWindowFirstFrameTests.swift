@@ -16,6 +16,53 @@ import Testing
 @MainActor
 struct StreamWindowFirstFrameTests {
 
+    @Test func firstPictureWaitsForNativeSpaceSettlement() {
+        let stream = StreamWindow()
+        stream.coversNotch = false
+        stream.awaitingFirstFrameFadeIn = true
+        stream.streamDelegate.closeState.transition = .entering
+        stream.fadeInOnFirstFrame()
+        #expect(stream.pendingFirstFrameReveal)
+        #expect(stream.awaitingFirstFrameFadeIn)
+        #expect(stream.cursorHideCount == 0)
+        stream.streamDelegate.closeState.transition = .idle
+        stream.streamDelegate.onFullScreenSettled?()
+        #expect(!stream.pendingFirstFrameReveal)
+        #expect(!stream.awaitingFirstFrameFadeIn)
+    }
+
+    @Test func aDroppedSpaceSettlementCannotStrandTheFirstPicture() throws {
+        let stream = StreamWindow()
+        var settle: (@MainActor () -> Void)?
+        stream.scheduleCoverSettlement = { delay, action in
+            #expect(delay == 1.5)
+            settle = action
+        }
+        stream.coversNotch = false
+        stream.awaitingFirstFrameFadeIn = true
+        stream.streamDelegate.closeState.transition = .entering
+        stream.fadeInOnFirstFrame()
+        #expect(stream.pendingFirstFrameReveal)
+        #expect(stream.awaitingFirstFrameFadeIn)
+        let fallback = try #require(settle)
+        fallback()
+        #expect(!stream.pendingFirstFrameReveal)
+        #expect(!stream.awaitingFirstFrameFadeIn)
+    }
+
+    @Test func closeDuringNativeEntryNeverRevealsAPendingPicture() {
+        let stream = StreamWindow()
+        stream.coversNotch = false
+        stream.awaitingFirstFrameFadeIn = true
+        stream.streamDelegate.closeState.transition = .entering
+        stream.fadeInOnFirstFrame()
+        stream.didClose = true
+        stream.streamDelegate.closeState.transition = .idle
+        stream.streamDelegate.onFullScreenSettled?()
+        #expect(stream.awaitingFirstFrameFadeIn)
+        #expect(stream.cursorHideCount == 0)
+    }
+
     @Test(arguments: [false, true])
     func eachDisplayTypeRetainsItsFullScreenChoice(usesSpace: Bool) {
         #expect(AppModel.streamCoversNotch(displayHasNotch: false, coversNotch: false,
@@ -336,6 +383,37 @@ struct StreamWindowFirstFrameTests {
         #expect(NSCursor.current === NSCursor.arrow)
     }
 
+    @Test func fullscreenAbsolutePointerHidesTheMacCursor() {
+        let stream = StreamWindow()
+        stream.fullscreenRelativePointer = false
+        let view = StreamInputView()
+        stream.window.contentView = view
+        defer { stream.setCursorHidden(false) }
+        stream.setCursorHidden(true)
+        stream.reassertCursorHiddenIfNeeded()
+        #expect(stream.cursorHideCount == 1)
+        #expect(NSCursor.current !== NSCursor.arrow)
+        stream.setCursorHidden(false)
+        #expect(stream.cursorHideCount == 0)
+        #expect(NSCursor.current === NSCursor.arrow)
+    }
+
+    @Test func fullscreenCaptureReleaseKeepsTheAbsolutePointerHiddenOnlyWhileFocused() {
+        let stream = StreamWindow()
+        stream.awaitingFirstFrameFadeIn = true
+        stream.window.contentView = StreamInputView()
+        stream.fullscreenRelativePointer = false
+        defer { stream.setCursorHidden(false) }
+        stream.setPointerCaptured(false, isKeyWindow: true)
+        #expect(stream.cursorHideCount == 0)
+        stream.awaitingFirstFrameFadeIn = false
+        stream.setPointerCaptured(false, isKeyWindow: true)
+        #expect(stream.cursorHideCount == 1)
+        stream.setPointerCaptured(false, isKeyWindow: false)
+        #expect(stream.cursorHideCount == 0)
+        #expect(NSCursor.current === NSCursor.arrow)
+    }
+
     @Test func repeatedDisplayHidesReleaseTheirImageAndCountTogether() throws {
         let stream = StreamWindow()
         let view = StreamInputView()
@@ -408,6 +486,7 @@ private final class MotionRecorder: StreamInputViewDelegate {
     func streamViewPointerDidEnter(_ view: StreamInputView) {}
     func streamViewPointerDidExit(_ view: StreamInputView) {}
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool { false }
+    func streamView(_ view: StreamInputView, commitText text: String) {}
     func streamViewPaste(_ view: StreamInputView) {}
 
     @Test func noEscapeChordLeavesTheSpace() {

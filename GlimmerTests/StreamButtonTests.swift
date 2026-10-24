@@ -15,6 +15,7 @@ import Testing
 
 @MainActor
 struct StreamButtonTests {
+    private let settings = IsolatedDefaults()
 
     /// Text column inside the 380 pt capsule: 22 pt padding each side, then
     /// the power glyph as the button draws it and 10 pt of spacing.
@@ -45,7 +46,7 @@ struct StreamButtonTests {
 
     /// Stop Waiting during the bursts ends the wake at once, and not as a failure.
     @Test func aStoppedWakeEndsAtOnceWithoutAFailure() async {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         let wake = Task { await model.sendWakeAndWait(pc, waitSeconds: 90) { _, _ in 1 } }
         wake.cancel()
         let outcome = await wake.value
@@ -62,7 +63,7 @@ struct StreamButtonTests {
     /// The engine re-runs its connect stages during a reconnect; they mustn't
     /// turn the line back into a first connect.
     @Test func aReconnectKeepsItsLineThroughTheEngineStages() {
-        let model = AppModel()
+        let model = AppModel(defaults: settings.defaults)
         model.handleNativeEvent(.reconnecting, host: pc)
         model.handleNativeEvent(.stageStarting(name: "RTSP handshake"), host: pc)
         #expect(model.streamPhase == .connecting(stage: "Reconnecting to Tower…"))

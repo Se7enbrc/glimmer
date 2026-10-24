@@ -9,16 +9,18 @@
 //  trims fire, persists a window mean, and remembers skew per output device.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct AudioResamplerHoldTests {
+    private let settings = IsolatedDefaults()
 
     /// An engaged loop with no recent event: re-prime long ago, setpoint settled
     /// at `targetMs`, no trim, and the 4Hz rate limit open.
     private func steadyDecoder(targetMs: Double = 100, integralPpm: Double = 0) -> AudioDecoder {
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.audioMeterLock.lock()
         decoder.resamplerIntegralPpm = integralPpm
         decoder.resamplerSetpointMs = targetMs
@@ -67,7 +69,7 @@ struct AudioResamplerHoldTests {
     /// value at the moment the window closes.
     @Test func savesTheWindowMeanNotTheSnapshot() {
         let key = AudioDecoder.resamplerSkewKey(host: "test-pc", deviceUID: "test-\(UUID().uuidString)")
-        defer { UserDefaults.standard.removeObject(forKey: key) }
+        defer { settings.defaults.removeObject(forKey: key) }
         let decoder = steadyDecoder(integralPpm: -450)
         decoder.audioMeterLock.lock()
         decoder.resamplerSkewMemoryKey = key
@@ -75,8 +77,9 @@ struct AudioResamplerHoldTests {
         decoder.resamplerQuietTicks = 199
         decoder.audioMeterLock.unlock()
         decoder.driveResampler(fillMs: 100, targetMs: 100, engaged: true)
+        AudioDiagnostics.queue.sync {}
         let expectedMean = (-100 * 199 - 450) / 200.0
-        #expect(abs(AudioDecoder.loadResamplerSkewSeed(key: key) - expectedMean) < 0.1)
+        #expect(abs(AudioDecoder.loadResamplerSkewSeed(key: key, defaults: settings.defaults) - expectedMean) < 0.1)
     }
 
     @Test func skewMemoryIsPerOutputDevice() throws {
@@ -99,7 +102,7 @@ struct AudioResamplerHoldTests {
     /// so nothing more is saved this session; a same-device notification is a no-op.
     @Test func outputDeviceChangeStopsSavingForTheSession() {
         let speakers = AudioDecoder.resamplerSkewKey(host: "pc", deviceUID: "speakers")
-        let decoder = AudioDecoder()
+        let decoder = AudioDecoder(defaults: settings.defaults)
         decoder.audioMeterLock.lock()
         decoder.cushionHostLabel = "pc"
         decoder.resamplerSkewMemoryKey = speakers

@@ -1,0 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// Set DEVELOPMENT_TEAM in the ignored Signing.local.xcconfig for device builds.
+DEVELOPMENT_TEAM =
+#include? "Signing.local.xcconfig"

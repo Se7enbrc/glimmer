@@ -6,12 +6,50 @@
 //  Latency histogram buckets, the in-flight frame map, cadence and trace lines.
 //
 
+import GlimmerEngine
+import CoreMedia
 import Foundation
 import Testing
 @testable import Glimmer
 
 @Suite(.serialized)
 struct LatencyTrackerTests {
+
+    @Test func attemptBoundariesKeepOldIdentityAndRetireRecentHiddenFrames() throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let oldAttempt = UUID(), newAttempt = UUID()
+        let counters = TelemetryCounters()
+        counters.setPresentSuppressed(true)
+        let tracker = FrameTimingTracker(sessionId: "attempts", traceDirectory: directory,
+                                        now: { 1_000_000_100 }, counters: counters, attemptID: oldAttempt)
+        tracker.traceWriter.start(isoStamp: "attempts")
+        tracker.recordAssembled(rtpTimestamp: 90, frameIndex: 1,
+                                receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_001)
+        let capturedAttempt = tracker.attemptForFrame(rtpTimestamp: 90)
+        tracker.beginAttempt(newAttempt)
+        tracker.recordAssembled(rtpTimestamp: 90, frameIndex: 2,
+                                receiveNanos: 1_000_000_010, assembleNanos: 1_000_000_011)
+        tracker.recordCallbackFinished(rtpTimestamp: 90, entryNanos: 1_000_000_020, attemptID: capturedAttempt)
+        #expect(tracker.finishUnresolved(reason: .sessionEnd) == 1)
+        #expect(tracker.finishUnresolved(reason: .sessionEnd) == 0)
+        tracker.traceWriter.stop()
+        let text = try String(contentsOf: directory.appendingPathComponent("telemetry-frames-attempts.ndjson"),
+                              encoding: .utf8)
+        let rows = try text.split(separator: "\n").map {
+            try #require(JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])
+        }
+        #expect(rows.count == 3)
+        #expect(rows[0]["reason"] as? String == "attempt_end")
+        #expect(rows[0]["trace_attempt"] as? String == oldAttempt.uuidString)
+        #expect(rows[0]["assembled_hidden"] as? Bool == true)
+        #expect(rows[1]["event"] as? String == "decode_callback_finished")
+        #expect(rows[1]["trace_attempt"] as? String == oldAttempt.uuidString)
+        #expect(rows[2]["reason"] as? String == "session_end")
+        #expect(rows[2]["trace_attempt"] as? String == newAttempt.uuidString)
+        #expect(rows[2]["frame"] as? Int == 2)
+        #expect(tracker.traceWriter.status.complete)
+    }
 
     // MARK: - Histogram stage
 
@@ -86,14 +124,14 @@ struct LatencyTrackerTests {
     // MARK: - In-flight map
 
     @Test func rtpTimestampZeroIsNeverTracked() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         tracker.recordAssembled(rtpTimestamp: 0, frameIndex: 1,
                                 receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
         #expect(tracker.flushRemainingDrops(nowNanos: 100_000_000_000) == 0)
     }
 
     @Test func aPresentedFrameLeavesTheMapSoItIsNeverCountedAsADrop() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         tracker.recordAssembled(rtpTimestamp: 7, frameIndex: 1,
                                 receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
         tracker.recordAssembled(rtpTimestamp: 8, frameIndex: 2,
@@ -104,7 +142,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func reassemblingTheSameTimestampReplacesTheEntryInsteadOfDuplicatingIt() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         for _ in 0..<3 {
             tracker.recordAssembled(rtpTimestamp: 5, frameIndex: 1,
                                     receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
@@ -113,7 +151,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func theMapNeverHoldsMoreThan256FramesAndEvictsTheOldest() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         for index in 0..<300 {
             let nanos = 1_000_000_000 + UInt64(index)
             tracker.recordAssembled(rtpTimestamp: UInt32(index + 1), frameIndex: Int32(index),
@@ -124,7 +162,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func aFrameOlderThanTwoSecondsIsEvictedWhenTheNextOneArrives() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         tracker.recordAssembled(rtpTimestamp: 1, frameIndex: 1,
                                 receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_000)
         tracker.recordAssembled(rtpTimestamp: 2, frameIndex: 2,
@@ -137,7 +175,7 @@ struct LatencyTrackerTests {
     // MARK: - Cadence
 
     @Test func cadenceObservesTheGapBetweenAssembledFramesAndSkipsStalls() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         for (index, nanos) in [100_000_000, 110_000_000, 120_000_000, 2_000_000_000].enumerated() {
             tracker.recordAssembled(rtpTimestamp: UInt32(index + 1), frameIndex: Int32(index),
                                     receiveNanos: UInt64(nanos), assembleNanos: UInt64(nanos))
@@ -154,8 +192,18 @@ struct LatencyTrackerTests {
         #expect(tracker.outputCadence.snapshot().count == UInt64.zero)
     }
 
+    @Test func delayedCallbackRecordingDoesNotRewindTheCadenceAnchor() {
+        let tracker = FrameTimingTracker(sessionId: "reordered", traceDirectory: .temporaryDirectory)
+        tracker.recordOutput(rtpTimestamp: 2, uptimeNanos: 200_000_000)
+        tracker.recordOutput(rtpTimestamp: 1, uptimeNanos: 100_000_000)
+        tracker.recordOutput(rtpTimestamp: 3, uptimeNanos: 300_000_000)
+        let cadence = tracker.outputCadence.snapshot()
+        #expect(cadence.count == 1)
+        #expect(cadence.sumMs == 100)
+    }
+
     @Test func hostFrameIntervalIsReadBackAsWritten() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         #expect(tracker.hostFrameIntervalMs == 0)
         tracker.hostFrameIntervalMs = 8.33
         #expect(tracker.hostFrameIntervalMs == 8.33)
@@ -164,7 +212,7 @@ struct LatencyTrackerTests {
     // MARK: - IDR round trip
 
     @Test func idrRoundTripKeepsOnlyFiniteNonNegativeValues() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         tracker.recordIdrRoundTrip(frameIndex: 1, roundTripMs: 30)
         tracker.recordIdrRoundTrip(frameIndex: 2, roundTripMs: 0)
         tracker.recordIdrRoundTrip(frameIndex: 3, roundTripMs: -1)
@@ -178,7 +226,7 @@ struct LatencyTrackerTests {
     // MARK: - Composites
 
     @Test func glassToGlassAddsHostEncodeHalfTheRttAndThePipeline() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         let counters = TelemetryCounters.shared
         let previous = counters.rttMs
         defer { counters.setRttMs(previous) }
@@ -196,7 +244,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func inputToPhotonIsConsumedOncePerInputAndNeedsALaterPresent() {
-        let tracker = FrameTimingTracker(sessionId: "t")
+        let tracker = FrameTimingTracker(sessionId: "t", traceDirectory: .temporaryDirectory)
         let counters = TelemetryCounters.shared
         let previousRtt = counters.rttMs
         defer { counters.setRttMs(previousRtt) }
@@ -216,8 +264,89 @@ struct LatencyTrackerTests {
 
     // MARK: - Trace lines
 
+    @Test func rendererStatePreservesInvalidTimingAndDoesNotConsumeLatencyFrames() throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tracker = FrameTimingTracker(sessionId: "state", traceDirectory: directory,
+                                        now: { 2_000_000_000 }, counters: TelemetryCounters())
+        tracker.traceWriter.start(isoStamp: "state")
+        tracker.recordAssembled(rtpTimestamp: 900, frameIndex: 10,
+                                receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_001)
+        tracker.recordRendererState(.init(
+            phase: .backpressureBegan, status: 1, ready: false, requiresFlush: true,
+            generation: 3, rejectedFrames: 1, pts: .invalid, displayImmediately: false))
+        tracker.recordRendererState(.init(
+            phase: .backpressureEnded, status: 1, ready: true, requiresFlush: false,
+            generation: 3, rejectedFrames: 50, pts: CMTime(value: 900, timescale: 90_000),
+            displayImmediately: true))
+        tracker.recordRendererState(.init(
+            phase: .flushReturned, status: 1, ready: false, requiresFlush: true, generation: nil))
+        tracker.traceWriter.stop()
+        let trace = try String(contentsOf: directory.appendingPathComponent("telemetry-frames-state.ndjson"),
+                               encoding: .utf8)
+        let rows = try trace.split(separator: "\n").map { line in
+            try #require(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+        }
+        try #require(rows.count == 3)
+        #expect(rows.allSatisfy { $0["event"] as? String == "renderer_state" })
+        #expect(rows.allSatisfy { $0["t_ms"] as? Double == 2000 })
+        #expect(rows[0]["phase"] as? String == "backpressure_began")
+        #expect(rows[0]["pts_numeric"] as? Bool == false)
+        #expect(rows[0]["requires_flush"] as? Bool == true)
+        #expect(rows[1]["pts_numeric"] as? Bool == true)
+        #expect(rows[1]["pts_value"] as? Int == 900)
+        #expect(rows[1]["pts_timescale"] as? Int == 90_000)
+        #expect(rows[1]["rejected_frames"] as? Int == 50)
+        #expect(rows[1]["display_immediately"] as? Bool == true)
+        #expect(rows[2]["phase"] as? String == "flush_returned")
+        #expect(rows[2]["ready"] as? Bool == false)
+        #expect(rows[2]["generation"] == nil)
+        #expect(rows[2]["pts_numeric"] == nil)
+        #expect(tracker.histograms.endToEnd.snapshot().count == UInt64.zero)
+        #expect(tracker.flushRemainingDrops(nowNanos: 4_000_000_000) == 1)
+    }
+
+    @Test func rendererDecisionsRetainFrameIdentityWithoutConsumingFramesOrAddingLatency() throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let counters = TelemetryCounters()
+        let tracker = FrameTimingTracker(sessionId: "decisions", traceDirectory: directory,
+                                        now: { 1_500_000_000 }, counters: counters)
+        tracker.traceWriter.start(isoStamp: "test")
+        tracker.recordAssembled(rtpTimestamp: 900, frameIndex: 10,
+                                receiveNanos: 1_000_000_000, assembleNanos: 1_000_000_001)
+        tracker.recordRendererDecision(.repaintEnqueued, rtpTimestamp: 900)
+        counters.setPresentSuppressed(true)
+        counters.setDecodeGated(true)
+        for decision in FrameTimingTracker.RendererDecision.allCases {
+            tracker.recordRendererDecision(decision, rtpTimestamp: 900)
+        }
+        tracker.traceWriter.stop()
+        let trace = try String(contentsOf: directory.appendingPathComponent("telemetry-frames-test.ndjson"),
+                               encoding: .utf8)
+        let rows = try trace.split(separator: "\n").map { line in
+            try #require(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+        }
+        #expect(rows.count == FrameTimingTracker.RendererDecision.allCases.count + 1)
+        #expect(rows.first?["suppressed"] as? Bool == false)
+        #expect(rows.first?["decode_gated"] as? Bool == false)
+        for (row, decision) in zip(rows.dropFirst(), FrameTimingTracker.RendererDecision.allCases) {
+            #expect(row["session"] as? String == "decisions")
+            #expect(row["event"] as? String == "renderer_decision")
+            #expect(row["decision"] as? String == decision.rawValue)
+            #expect(row["rtp"] as? UInt32 == 900)
+            #expect(row["t_ms"] as? Double == 1500)
+            #expect(row["suppressed"] as? Bool == true)
+            #expect(row["decode_gated"] as? Bool == true)
+            #expect(row["t_present_ms"] == nil)
+        }
+        #expect(tracker.histograms.endToEnd.snapshot().count == UInt64.zero)
+        #expect(tracker.histograms.outputToPresent.snapshot().count == UInt64.zero)
+        #expect(tracker.flushRemainingDrops(nowNanos: 4_000_000_000) == 1)
+    }
+
     @Test func traceLineListsEveryFieldInOrder() {
-        let tracker = FrameTimingTracker(sessionId: "s1")
+        let tracker = FrameTimingTracker(sessionId: "s1", traceDirectory: .temporaryDirectory)
         let line = tracker.renderTraceLine(FrameTimingTracker.TraceRecord(
             frameIndex: 12, rtpTimestamp: 900, frameBytes: 4096, isIDR: true,
             presentUptimeMs: 1234.5, isResumePresent: true,
@@ -230,7 +359,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func traceLineOmitsMissingStagesZeroBytesAndNonFiniteValues() throws {
-        let tracker = FrameTimingTracker(sessionId: "s1")
+        let tracker = FrameTimingTracker(sessionId: "s1", traceDirectory: .temporaryDirectory)
         let line = tracker.renderTraceLine(FrameTimingTracker.TraceRecord(
             frameIndex: 3, rtpTimestamp: 5, frameBytes: 0, isIDR: false,
             presentUptimeMs: 10, isResumePresent: false,
@@ -243,7 +372,7 @@ struct LatencyTrackerTests {
     }
 
     @Test func dropStubNamesTheFurthestStageTheFrameReached() {
-        let tracker = FrameTimingTracker(sessionId: "s1")
+        let tracker = FrameTimingTracker(sessionId: "s1", traceDirectory: .temporaryDirectory)
         func timing(submit: UInt64, output: UInt64, idr: Bool) -> FrameTimingTracker.Timing {
             var timing = FrameTimingTracker.Timing(
                 frameIndex: 4, receiveNanos: 1, assembleNanos: 2_000_000, frameBytes: 0,
@@ -258,15 +387,19 @@ struct LatencyTrackerTests {
             (rtp: 3, timing: timing(submit: 5, output: 6, idr: true))
         ], hiddenNow: false, evictMs: 9)
         #expect(lines.count == 3)
-        #expect(lines[0] == "{\"session\":\"s1\",\"event\":\"frame_drop\",\"frame\":4,\"rtp\":1,"
-            + "\"type\":\"p\",\"stage\":\"assembled\",\"t_assemble_ms\":2,\"t_evict_ms\":9}")
+        #expect(lines[0].contains("\"event\":\"frame_expired\""))
+        #expect(lines[0].contains("\"stage\":\"assembled\""))
+        #expect(lines[0].contains("\"t_ms\":9"))
+        #expect(!lines[0].contains("t_output_ms"))
+        #expect(lines[2].contains("t_submit_ms"))
+        #expect(lines[2].contains("t_output_ms"))
         #expect(lines[1].contains("\"stage\":\"submitted\""))
         #expect(lines[2].contains("\"stage\":\"decoded\""))
         #expect(lines[2].contains("\"type\":\"idr\""))
     }
 
     @Test func bookmarkLineCarriesTheRunningTotalAndTheClock() {
-        let tracker = FrameTimingTracker(sessionId: "s1")
+        let tracker = FrameTimingTracker(sessionId: "s1", traceDirectory: .temporaryDirectory)
         #expect(tracker.bookmarkLine(total: 3, uptimeNanos: 1_500_000_000)
             == "{\"session\":\"s1\",\"event\":\"bookmark\",\"bookmark_total\":3,\"t_ms\":1500}")
     }

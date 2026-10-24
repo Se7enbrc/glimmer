@@ -133,5 +133,6 @@ struct SettingsRoot: View {
             .navigationTitle(selection.title)
         }
         .navigationSplitViewStyle(.balanced)
+        .modifier(PairingPresentation(owner: .settings))
     }
 }

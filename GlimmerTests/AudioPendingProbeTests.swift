@@ -8,6 +8,7 @@
 //  instead of warning once at 3s and going quiet for the rest of the stream.
 //
 
+@testable import GlimmerEngine
 import Testing
 @testable import Glimmer
 

@@ -7,6 +7,7 @@
 //  Stream lifecycle, pairing, Sunshine web UI and menu-bar accessors.
 //
 
+import GlimmerEngine
 import Foundation
 import AppKit
 import AudioToolbox
@@ -79,6 +80,7 @@ extension AppModel {
         let attempt = PairingAttempt(address: address)
         pairingAttempt = attempt
         pairingPhase = .idle
+        cancelHostReadiness()
         hostStatusTask?.cancel()
         hostStatusTask = nil
         return attempt

@@ -8,6 +8,7 @@
 //  cushion memory and the frame trace file, each on a scratch suite and temp directory.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -170,14 +171,29 @@ struct PinnedCertPersistenceTests {
         #expect(try String(contentsOf: pin(store, "AAA"), encoding: .utf8) == "LEGACY")
     }
 
+    @Test func unavailableMacPathRetainsLegacyAuthenticationAndRejectsUnpair() throws {
+        let store = try IsolatedStore("pin-unavailable-path")
+        defer { store.remove() }
+        store.defaults.set("LEGACY", forKey: "glimmer.pinnedCert.AAA")
+        let unavailable: (URL?) throws -> URL = { _ in throw CocoaError(.fileReadNoPermission) }
+        #expect(PinnedCertStore.load(forHostID: "AAA", defaults: store.defaults,
+                                    base: store.directory, resolveBase: unavailable) == "LEGACY")
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == "LEGACY")
+        #expect(throws: CocoaError(.fileReadNoPermission)) {
+            try PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults,
+                                       base: store.directory, resolveBase: unavailable)
+        }
+        #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == "LEGACY")
+    }
+
     @Test func deletingWipesBothStoresAndAHostIDCannotEscapeTheDirectory() throws {
         let store = try IsolatedStore("pin-delete")
         defer { store.remove() }
         try PinnedCertStore.store(pem: "PEM-A", forHostID: "../../evil", defaults: store.defaults, base: store.directory)
         #expect(FileManager.default.fileExists(atPath: pin(store, ".._.._evil").path))
         store.defaults.set("LEGACY", forKey: "glimmer.pinnedCert.AAA")
-        PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults, base: store.directory)
-        PinnedCertStore.delete(forHostID: "../../evil", defaults: store.defaults, base: store.directory)
+        try PinnedCertStore.delete(forHostID: "AAA", defaults: store.defaults, base: store.directory)
+        try PinnedCertStore.delete(forHostID: "../../evil", defaults: store.defaults, base: store.directory)
         #expect(store.defaults.string(forKey: "glimmer.pinnedCert.AAA") == nil)
         #expect(PinnedCertStore.load(forHostID: "../../evil", defaults: store.defaults, base: store.directory) == nil)
     }
@@ -334,7 +350,8 @@ struct CushionMemoryPersistenceTests {
     @Test func aSeedWithNoMemoryStartsColdFromTheBase() throws {
         let store = try IsolatedStore("cushion-seed")
         defer { store.remove() }
-        let seed = AudioDecoder.loadCushionSeed(defaults: store.defaults)
+        let seed = AudioDecoder.loadCushionSeed(
+            environment: AudioEnvironment(host: "den", link: "unknown", jitterMs: 0), defaults: store.defaults)
         #expect(!seed.fromMemory)
         #expect(seed.floorMs == 0)
         #expect(seed.targetMs >= AudioDecoder.playoutCushionBaseMs)
@@ -344,7 +361,49 @@ struct CushionMemoryPersistenceTests {
 struct FrameTraceFilePersistenceTests {
 
     private func traceFiles(_ dir: URL) throws -> [String] {
-        try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
+        try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { !$0.hasSuffix("-manifest.json") }.sorted()
+    }
+
+    private func traceRows(_ text: String) throws -> [[String: Any]] {
+        try text.split(separator: "\n").map {
+            try #require(JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any])
+        }
+    }
+
+    @Test func failedWritesAreCountedAndCannotProduceACompleteCapture() throws {
+        let store = try IsolatedStore("trace-write-failure")
+        defer { store.remove() }
+        let writer = FrameTraceWriter(directory: store.directory, sessionId: "failure", write: { _, _ in
+            throw CocoaError(.fileWriteUnknown)
+        })
+        writer.start(isoStamp: "failure")
+        writer.append("{}")
+        writer.stop()
+        #expect(writer.status.acceptedRecords == 1)
+        #expect(writer.status.unwrittenRecords == 1)
+        #expect(writer.status.writtenRecords == 0)
+        #expect(writer.status.writeFailures == 1)
+        #expect(!writer.status.complete)
+        let data = try Data(contentsOf: store.directory.appendingPathComponent("telemetry-frames-failure-manifest.json"))
+        let row = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(row["closed"] as? Bool == true)
+        #expect(row["complete"] as? Bool == false)
+        #expect(row["first_unwritten_sequence"] as? Int == 1)
+    }
+
+    @Test func retentionPreservesTheFirstSegmentAndReportsRemovedSequences() throws {
+        let store = try IsolatedStore("trace-retention")
+        defer { store.remove() }
+        let writer = FrameTraceWriter(directory: store.directory, maxFileBytes: 1, maxRetainedSegments: 2)
+        writer.start(isoStamp: "retention")
+        for _ in 0..<3 { writer.append("{}"); writer.flush() }
+        writer.stop()
+        #expect(writer.status.segments.map(\.index) == [0, 3])
+        #expect(writer.status.prunedRecords == 2)
+        #expect(writer.status.firstPrunedSequence == 2)
+        #expect(writer.status.lastPrunedSequence == 3)
+        #expect(!writer.status.complete)
+        #expect(try traceFiles(store.directory).count == 2)
     }
 
     @Test func linesLandInOrderInTheNamedFile() throws {
@@ -357,7 +416,69 @@ struct FrameTraceFilePersistenceTests {
         #expect(try traceFiles(store.directory) == ["telemetry-frames-T1.ndjson"])
         let text = try String(contentsOf: store.directory.appendingPathComponent("telemetry-frames-T1.ndjson"),
                               encoding: .utf8)
-        #expect(text == (0..<5).map { "{\"n\":\($0)}" }.joined(separator: "\n") + "\n")
+        let rows = try traceRows(text)
+        #expect(rows.compactMap { $0["n"] as? Int } == Array(0..<5))
+        #expect(rows.compactMap { $0["trace_seq"] as? Int } == Array(1...5))
+        #expect(writer.status.closed && writer.status.complete)
+    }
+
+    @Test func typedFramesKeepTheirPlaceAmongEvents() throws {
+        let store = try IsolatedStore("trace-typed")
+        defer { store.remove() }
+        let writer = FrameTraceWriter(directory: store.directory)
+        writer.append("{\"event\":\"before\"}")
+        writer.appendFrame(FrameTimingTracker.TraceRecord(
+            frameIndex: 42, rtpTimestamp: 900, frameBytes: 200, isIDR: false,
+            presentUptimeMs: 123.25, isResumePresent: false, submitToOutput: 1.5), sessionId: "typed")
+        writer.append("{\"event\":\"after\"}")
+        writer.start(isoStamp: "typed")
+        writer.stop()
+        let file = store.directory.appendingPathComponent("telemetry-frames-typed.ndjson")
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+        #expect(lines.count == 3)
+        #expect(lines.first?.contains("\"event\":\"before\"") == true)
+        #expect(lines.last?.contains("\"event\":\"after\"") == true)
+        let row = try #require(JSONSerialization.jsonObject(with: Data(lines[1].utf8)) as? [String: Any])
+        #expect(row["session"] as? String == "typed")
+        #expect(row["frame"] as? Int == 42)
+        #expect(row["submit_to_output_ms"] as? Double == 1.5)
+    }
+
+    @Test func overflowReportsLostRecordsAndPreservesSurvivorOrder() throws {
+        let store = try IsolatedStore("trace-overflow")
+        defer { store.remove() }
+        let writer = FrameTraceWriter(directory: store.directory)
+        for index in 0..<10_003 { writer.append("{\"n\":\(index)}") }
+        writer.start(isoStamp: "overflow")
+        writer.stop()
+        let file = store.directory.appendingPathComponent("telemetry-frames-overflow.ndjson")
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+        #expect(lines.count == 10_001)
+        let rows = try traceRows(lines.joined(separator: "\n"))
+        #expect(rows.first?["dropped_records"] as? Int == 3)
+        #expect(rows.first?["first_lost_seq"] as? Int == 1)
+        #expect(rows.first?["last_lost_seq"] as? Int == 3)
+        #expect(rows.dropFirst().compactMap { $0["n"] as? Int } == Array(3..<10_003))
+        #expect(writer.status.overflowRecords == 3)
+        #expect(!writer.status.complete)
+    }
+
+    @Test func stoppingDrainsAcceptedRecordsAndRejectsLaterAppends() throws {
+        let store = try IsolatedStore("trace-stop")
+        defer { store.remove() }
+        let writer = FrameTraceWriter(directory: store.directory)
+        writer.append("{\"event\":\"accepted\"}")
+        writer.start(isoStamp: "stop")
+        writer.stop()
+        writer.append("{\"event\":\"late\"}")
+        writer.stop()
+        let file = store.directory.appendingPathComponent("telemetry-frames-stop.ndjson")
+        let text = try String(contentsOf: file, encoding: .utf8)
+        let rows = try traceRows(text)
+        #expect(rows.count == 1)
+        #expect(rows.first?["event"] as? String == "accepted")
+        #expect(writer.status.acceptedRecords == 1)
+        #expect(writer.status.complete)
     }
 
     @Test func crossingTheSizeCapOpensTheNextSegment() throws {

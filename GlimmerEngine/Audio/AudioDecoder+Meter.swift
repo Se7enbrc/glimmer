@@ -1,0 +1,504 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+//
+//  AudioDecoder+Meter.swift
+//
+//  The P1 AUDIO playout meter + cushion machinery: the meter's tunables, the
+//  schedule-side trim-toward-target / over-run gates and drift re-baseline, the
+//  completion-side playhead + under-run edge (with its rate-limited
+//  route-carrying NOTICE) + adaptive cushion grow/decay, the published
+//  audio-state gauge, and the playout-stall watchdog's detection half. Split
+//  from AudioDecoder.swift - same idiom as the FramePacer split, to
+//  keep that file under the length limit. The stored meter state stays on
+//  the class (stored properties can't live in extensions); see the property
+//  docs there for the locking + design rationale.
+//
+//  Its two siblings, split off for the same length reason: the decode-path
+//  pre-roll arbiter + re-prime silence backfill in AudioDecoder+Prime.swift, and
+//  the default-output-route sampler the breadcrumbs read in
+//  AudioDecoder+Route.swift.
+//
+
+import Foundation
+
+extension AudioDecoder {
+
+    // MARK: - Tunables (the knobs of THIS file's machinery, plus the prime /
+    // re-prime pair AudioDecoder+Prime.swift reads - they interlock with the
+    // gates here, so they stay beside them; the cushion ladder's base/step/cap
+    // and the over-run ceiling stay with the design narrative in
+    // AudioDecoder.swift, the decay clock with its arbitration in
+    // AudioDecoder+CushionMemory.swift)
+
+    /// Hysteresis (ms) the backlog must sit ABOVE the cushion target before the
+    /// steady-state trim engages (~3 packets). Without it the trim fires on every
+    /// packet the moment the backlog touches target, machine-gunning the post-gap
+    /// catch-up clump into back-to-back mid-stream 5ms chops (audible crackle -
+    /// Opus is stateful).
+    static let playoutTrimHysteresisMs: Double = 15
+    /// Minimum spacing (ns) between trims: at most one 5ms chop per ~100ms, so a
+    /// standing excess bleeds off at ~50ms/s through normal playback instead of
+    /// being spliced out all at once.
+    static let playoutTrimMinIntervalNanos: UInt64 = 100_000_000
+    /// Grace (ns) after a (re-)prime arm during which BOTH backlog gates (trim +
+    /// over-run ceiling) stand down. The post-drain catch-up clump IS the cushion
+    /// rebuild the link just proved it needs - chopping it re-creates the very gap
+    /// it follows. The ceiling resumes after the grace as the true bad-link backstop.
+    /// DOUBLES as the backfill deadline: a re-prime reaching grace expiry with fill
+    /// still a step short of target hands the measured deficit to the silence
+    /// backfill (`backfillCushion`) - by then the clump had its full window.
+    static let reprimeGraceNanos: UInt64 = 250_000_000
+    /// Playout-stall watchdog threshold (ns): wall time with ZERO completion
+    /// progress before a backlog-gate drop declares the node stalled. 3s is far
+    /// past any legitimate pause - the deepest cushion is 300ms of 5ms buffers,
+    /// so a consuming node completes every few ms; only a node that stopped
+    /// pulling (output device slept/vanished - the 2026-08-12 overnight wedge,
+    /// 9h silent with 200 pkt/s arriving) goes 3s dark while drops fire.
+    static let playoutStallThresholdNanos: UInt64 = 3_000_000_000
+    /// Minimum spacing (ns) between stall-recovery rebuilds: a truly dead
+    /// output device RETRIES on this cadence ("never a permanent give-up")
+    /// instead of thrashing the node/engine per dropped packet.
+    static let stallRecoveryRetryNanos: UInt64 = 5_000_000_000
+    /// Safety fallback FLOOR: prime (start playback) after at most this many
+    /// buffers regardless of the measured cushion, so a very low-bitrate /
+    /// near-silent stream (where the depth never reaches the target before
+    /// completions drain it) never wedges un-started. 12 buffers ≈ 60ms; for a
+    /// deeper SEEDED target, `maybePrime` scales the count up to the target so
+    /// the seed isn't paid away - worst ~160ms, tiny vs the <1s cold budget.
+    static let primeFallbackBufferCount: UInt64 = 12
+    /// Minimum spacing (ns) between under-run NOTICE lines (Diag ring + session
+    /// file). The `audio_underrun_total` counter stays exact; this bounds only
+    /// the BREADCRUMB rate so a cascade can't flood the 2000-entry Diag ring -
+    /// edges suppressed by the limit ride the next line as a count.
+    static let underrunNoticeMinIntervalNanos: UInt64 = 1_000_000_000
+    /// Near-miss fill thresholds (ms): a steady-state trough below the first
+    /// latches one `audioNearMissTotal` count; fill must recover above the
+    /// second to re-arm, so one dip counts exactly once.
+    static let nearMissFillMs: Double = 15
+    static let nearMissRearmFillMs: Double = 30
+
+    /// Startup floor-learning gate (ns after the cold-start prime): the host
+    /// feeds sub-realtime for its first seconds and the wifi link runs its own
+    /// warm-up (EnvSignal co-gap cautions to ~t+80s measured 2026-07-21, with
+    /// ramp under-runs at t+67-77s teaching the floor past the old 45s gate).
+    /// 90s covers the measured ramp with margin. Target ratchet + underrun
+    /// counting stay live; only the floor EWMA waits.
+    static let startupFloorGateNanos: UInt64 = 90_000_000_000
+    /// At most one under-run grow per this window (ns): a cascade of drains in
+    /// one episode is one piece of evidence, not ten.
+    static let cushionGrowMinIntervalNanos: UInt64 = 10_000_000_000
+
+    // MARK: - P1 AUDIO meter (buffer fill / under-run / over-run / A/V drift)
+
+    /// Account one decoded buffer about to be scheduled. Returns true iff it should
+    /// be DROPPED - either TRIMMED back toward the steady-state cushion target, or
+    /// (for bad links) dropped at the hard over-run ceiling. On the decode path under
+    /// the tiny meter lock (never `stateLock`). Stamps the playout-start anchor on the
+    /// first buffer.
+    func meterRegisterScheduleOrOverrun(frames: UInt64) -> Bool {
+        audioMeterLock.lock()
+        let aheadFrames = framesScheduled &- framesPlayed
+        let aheadMs = meterSampleRate > 0 ? Double(aheadFrames) / meterSampleRate * 1000.0 : 0
+        // (a) STEADY-STATE TRIM-TOWARD-TARGET. Once primed and running (not mid-
+        // (re)prime: `primed && !playoutDrained`), keep the scheduled-ahead backlog
+        // clipped to the adaptive cushion target. The ROOT cause of the ~235ms pin was
+        // that the cap governed only PRE-ROLL: after an early underrun grew the cushion
+        // (or receive ran a touch ahead), the backlog had no trim/decay and stayed deep
+        // forever. Here, when the queue holds a hysteresis band ABOVE target, we
+        // decline to enqueue this newest packet so the playhead walks the backlog back
+        // down. Each trim is a mid-stream 5ms splice (Opus is stateful), so two extra
+        // guards keep the walk-down inaudible: the rate limit (one trim per ~100ms -
+        // excess bleeds at ~50ms/s through playback instead of back-to-back chops) and
+        // the post-(re)prime grace (the catch-up clump after a drain IS the cushion
+        // rebuild; chopping it re-creates the gap it follows). Counted as a TRIM
+        // (`audioTrimTotal`) - a DESIGNED latency-bounding drop, deliberately split
+        // from the over-run ceiling's pathology counter so the two can never be
+        // conflated again. Gated on `primed` so it never starves the pre-roll, and on
+        // `!playoutDrained` so a segment rebuilding its cushion after a drain isn't
+        // trimmed before it can re-prime.
+        // NEAR-MISS latch (margin telemetry): steady-state fill dipping under
+        // ~15ms without fully draining - erosion visible BEFORE it's audible.
+        // Latched per dip (re-arms above 30ms) so one trough counts once. The
+        // counter is a leaf atomic, safe under the meter lock.
+        if primed && !playoutDrained {
+            if aheadMs < Self.nearMissFillMs {
+                if !nearMissLatched {
+                    nearMissLatched = true
+                    TelemetryCounters.shared.audioNearMissTotal.increment()
+                    AudioPipelineTelemetry.shared.noteNearMiss()
+                }
+            } else if aheadMs > Self.nearMissRearmFillMs {
+                nearMissLatched = false
+            }
+        }
+        if primed && !playoutDrained && aheadMs >= playoutTargetMs + Self.playoutTrimHysteresisMs {
+            // Clock reads live only inside the would-trim/would-drop branches - the
+            // steady-state path at/below target stays clock-free.
+            let now = DispatchTime.now().uptimeNanoseconds
+            if now >= gateGraceUntilNanos && now &- lastTrimNanos >= Self.playoutTrimMinIntervalNanos {
+                lastTrimNanos = now
+                noteDropForStallWatchdogLocked(now: now)
+                audioMeterLock.unlock()
+                TelemetryCounters.shared.audioTrimTotal.increment()
+                return true
+            }
+            // In grace or rate-limited: fall through and schedule. The backlog rides
+            // above target briefly; the next eligible trim takes the excess back down.
+        }
+        // (b) HARD OVER-RUN ceiling backstop - the dogshit-link safeguard. The trim
+        // above holds steady state at the target; this only fires if the link is bad
+        // enough that the backlog blew past the ceiling anyway (e.g. before prime, or
+        // a burst). It too stands down during the post-(re)prime grace - a max-deep
+        // cushion rebuild may legitimately overshoot the ceiling for a moment - and it
+        // is the ONLY branch still counted as an over-run (ceiling = pathology,
+        // trim = design).
+        if playoutStarted && aheadMs > effectiveOverrunCeilingMs {
+            let now = DispatchTime.now().uptimeNanoseconds
+            if now >= gateGraceUntilNanos {
+                noteDropForStallWatchdogLocked(now: now)
+                audioMeterLock.unlock()
+                TelemetryCounters.shared.audioOverrunTotal.increment()
+                return true
+            }
+        }
+        // Drift anchor (re-)baseline: on the very FIRST start, and on every RESTART
+        // after a drain (`playoutDrained`). Anchoring the wall clock AND the
+        // media-played reference here makes the drift metric measure only the
+        // current continuous-playout segment - so the wall-vs-media gap that
+        // accrued while the queue sat drained is NOT folded into drift (the
+        // +6448ms step-jump). Cheap: a couple of stores under the lock we already
+        // hold, at the schedule edge only.
+        var settled: (memoryWrite: CushionMemoryWrite?, deadAirGapMs: Double?) = (nil, nil)
+        if !playoutStarted || playoutDrained {
+            if let failedTargetMs = pendingUnderrunTargetMs {
+                pendingUnderrunTargetMs = nil
+                settled = settleUnderrunLocked(failedTargetMs: failedTargetMs, now: DispatchTime.now().uptimeNanoseconds)
+            }
+            // COLD-START arm vs mid-stream RE-prime - captured BEFORE the start
+            // flag flips. The cold path keeps its paused pre-roll + buffer-count
+            // fallback; a re-prime instead takes the grace-then-backfill rebuild
+            // in `maybePrime` (the node never paused, so only a catch-up clump or
+            // the backfill can restore standing fill).
+            rebuildIsReprime = playoutStarted
+            playoutStarted = true
+            driftAnchorNanos = DispatchTime.now().uptimeNanoseconds
+            driftAnchorFramesPlayed = framesPlayed
+            resamplerDriftWindow = ResamplerDriftWindow()
+            resamplerSkewConverged = false
+            // Stall watchdog: the arm edge IS progress (a paused cold pre-roll or
+            // a post-recovery rebuild starts its 3s clock here, not at zero), and
+            // a recovery episode ends at the edge it exists to reach.
+            lastPlayoutProgressNanos = driftAnchorNanos
+            meterRecovering = false
+            // COLD START: arm the floor-learning gate. Drains inside the host's
+            // boot-ramp window (paced sub-realtime inflow) must not teach the
+            // per-link floor - see cushionNoteUnderrunLocked.
+            if !rebuildIsReprime {
+                floorLearnGateUntilNanos = driftAnchorNanos &+ Self.startupFloorGateNanos
+            }
+            // Arm the gate grace on this same edge (cold start or post-drain
+            // restart): the next ~250ms of arrivals are the cushion (re)build - the
+            // catch-up clump the link just proved it needs - so neither the trim nor
+            // the ceiling may chop them. Reuses the clock read above. A drain
+            // recurring inside an open grace re-arms it: each new gap earns its own
+            // clump window (the jittery-link rebuild path), and `maybePrime`'s
+            // backfill waits on the freshest deadline - measured drains space
+            // out seconds apart, far beyond the grace, so the backfill still lands.
+            gateGraceUntilNanos = driftAnchorNanos &+ Self.reprimeGraceNanos
+            // A drain (or the cold start) means the cushion is empty: re-arm the
+            // pre-roll STATE MACHINE so the backlog gates stand down while the
+            // cushion rebuilds (post-gap catch-up clump, or the grace-expiry
+            // silence backfill when none forms). The node itself keeps playing -
+            // the completion path makes no AV calls (it races teardown), so there
+            // is no paused pre-roll on re-arm. `primed` is only cleared on the
+            // EDGE (the first schedule after a drain) so we don't re-prime
+            // mid-segment; the under-run completion handler counts the gap.
+            if primed {
+                primed = false
+                rePrimeCount &+= 1
+            }
+            buffersSinceArm = 0
+        }
+        underrunArrivalGapNanos = 0
+        framesScheduled &+= frames
+        buffersSinceArm &+= 1
+        // A new buffer is queued behind the playhead → no longer drained; re-arm
+        // the under-run edge so the NEXT drain counts.
+        playoutDrained = false
+        audioMeterLock.unlock()
+        if let gapMs = settled.deadAirGapMs {
+            TelemetryCounters.shared.audioUnderrunDeadairTotal.increment()
+            AudioDiagnostics.notice("audio under-run was dead air: \(Int(gapMs.rounded()))ms arrival gap, "
+                + "cushion unchanged", "Stream")
+        }
+        if let write = settled.memoryWrite { commitCushionMemory(write) }
+        return false
+    }
+
+    /// Consume ring observations off the render thread. Only a callback-confirmed shortage is
+    /// underrun evidence; teardown and graph replacement cannot teach the cushion. The optional
+    /// verdict keeps legacy policy tests independent of hardware and ring storage.
+    func meterCompleteOnePlayout(frames: UInt64, isSilence: Bool = false,
+                                 confirmedUnderrun: Bool? = nil, minimumFillFrames: Int? = nil,
+                                 counters: TelemetryCounters = .shared) {
+        audioMeterLock.lock()
+        framesPlayed &+= frames
+        // Stall-watchdog heartbeat: a completion IS consumption. One clock read
+        // per completion (~200Hz) - the same budget as the trough math below.
+        lastPlayoutProgressNanos = DispatchTime.now().uptimeNanoseconds
+        // A corrector-inserted silence buffer finished: release its resident
+        // contribution so the av_skew fill correction tracks only buffered silence.
+        if isSilence {
+            pendingSilenceFrames = pendingSilenceFrames >= frames ? pendingSilenceFrames &- frames : 0
+        }
+        // A delayed observer can run after refills; only the callback knows the actual trough.
+        let aheadFrames = framesScheduled &- framesPlayed
+        let rate = meterSampleRate
+        let trough = minimumFillFrames.map(Double.init) ?? Double(aheadFrames)
+        let fillMs = rate > 0 ? trough / rate * 1000.0 : 0
+        // The same trough is the decay window's NEAR-MISS evidence (the
+        // limit-cycle fix): a dip inside one step of empty must hold depth.
+        let stopping = meterShutdown || meterRecovering
+        if !stopping, rate > 0, fillMs < quietWindowMinFillMs { quietWindowMinFillMs = fillMs }
+        // Teardown and recovery discard PCM without a real shortage. Gate their evidence so short
+        // sessions cannot ratchet and persist a deeper cushion just by stopping. Consumption still reconciles.
+        let drainedNow = confirmedUnderrun ?? (framesPlayed >= framesScheduled)
+        let isUnderrunEdge = drainedNow && !playoutDrained && !stopping
+        if drainedNow { playoutDrained = true }
+        var emitNotice = false
+        var noticeRoute = ""
+        var noticeTargetMs = 0.0
+        var noticeSuppressed: UInt64 = 0
+        var memoryWrite: CushionMemoryWrite?
+        if isUnderrunEdge {
+            let now = DispatchTime.now().uptimeNanoseconds
+            // The gap that caused this drain is still open: grow or dead air is settled at the next
+            // schedule, once the packet that ends it has said how long it was.
+            pendingUnderrunTargetMs = playoutTargetMs
+            // Every under-run (capped or not) restarts the decay quiet window: depth
+            // is held by recurring evidence, decayed only by its sustained absence.
+            quietSinceNanos = now
+            // Under-run NOTICE breadcrumb (rate-limited; counters stay exact): the
+            // session log carried ZERO under-run lines, so a cascade's trigger
+            // class (BT detach? hidden-window QoS?) was unattributable postmortem.
+            // The route rides along from the listener-maintained cache - a plain
+            // String read; this thread makes no CoreAudio/AV calls.
+            if quietSinceNanos &- lastUnderrunNoticeNanos >= Self.underrunNoticeMinIntervalNanos {
+                lastUnderrunNoticeNanos = quietSinceNanos
+                emitNotice = true
+                noticeRoute = audioRouteCache
+                noticeTargetMs = playoutTargetMs
+                noticeSuppressed = underrunNoticesSuppressed
+                underrunNoticesSuppressed = 0
+            } else {
+                underrunNoticesSuppressed &+= 1
+            }
+        } else if !stopping, playoutTargetMs > Self.playoutCushionBaseMs {
+            // DECAY: a grown cushion is temporary, never a permanent pin - but
+            // the bare 60s clock was a measured limit cycle (it stepped INTO
+            // the ambient loss floor every ~90s). The step now also requires a
+            // clean near-miss window and clearance over the learned floor; the
+            // floor's own slow decay keeps every hold temporary. Arbitration +
+            // jittery-link rationale: AudioDecoder+CushionMemory.swift. One
+            // clock read per completion, only while elevated.
+            memoryWrite = cushionQuietAdjustLocked(now: DispatchTime.now().uptimeNanoseconds)
+        }
+        audioMeterLock.unlock()
+        if rate > 0 {
+            counters.noteAudioBufferFill(ms: fillMs)
+        }
+        if isUnderrunEdge {
+            TelemetryCounters.shared.audioUnderrunTotal.increment()
+            if emitNotice {
+                emitUnderrunNotice(route: noticeRoute, targetMs: noticeTargetMs, suppressed: noticeSuppressed)
+            }
+        }
+        // Rare learn/decay edges persist off the lock (UserDefaults + gauge).
+        if let memoryWrite { commitCushionMemory(memoryWrite) }
+        publishAudioState()
+    }
+
+    /// Render + emit the under-run NOTICE (post-lock - Diag only: a lock + string
+    /// + os_log, never an AV/CoreAudio call; this runs on the player's completion
+    /// thread). The ordinal reads the just-incremented session counter so log
+    /// lines and `audio_underrun_total` cross-reference 1:1.
+    private func emitUnderrunNotice(route: String, targetMs: Double, suppressed: UInt64) {
+        let ordinal = TelemetryCounters.shared.audioUnderrunTotal.value
+        let backlog = suppressed > 0 ? " (+\(suppressed) since last line)" : ""
+        AudioDiagnostics.notice(
+            "audio under-run #\(ordinal)\(backlog) - playout drained to empty; route \(route, privacy: .private), "
+            + "cushion target \(Int(targetMs))ms",
+            "Stream")
+    }
+
+    /// Publish the live audio playout state (buffer fill + audio clock drift) to
+    /// the always-live telemetry gauge. Called off the per-sample inner loop (at
+    /// schedule + at completion); the exporter reads it at 1Hz. The audio clock
+    /// drift is the audio-playout-vs-WALL-CLOCK slip: wall-clock elapsed since
+    /// playout started minus the audio media duration actually played (net of the
+    /// buffer cushion). It measures the audio device clock against real time - it
+    /// is NOT a cross-stream A/V delta (nothing here compares against the video
+    /// present clock), so it's named honestly for what it is. A growing positive
+    /// value means the audio clock is running slow relative to wall time.
+    func publishAudioState(now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
+        audioMeterLock.lock()
+        // Later route or resampler work must not add its latency to this snapshot's drift.
+        let observedAtNanos = now
+        let aheadFrames = framesScheduled &- framesPlayed
+        let residentSilenceFrames = pendingSilenceFrames
+        let rate = meterSampleRate
+        let started = playoutStarted
+        let anchorNanos = driftAnchorNanos
+        let anchorFramesPlayed = driftAnchorFramesPlayed
+        let playedFrames = framesPlayed
+        let rePrimes = rePrimeCount
+        let engineUp = engineRunning
+        // The adaptive cushion target rides the same gauge: its VALUE only moves
+        // on the cold grow/decay edges, but carrying it here (one load under the
+        // lock already held) is what lets every exported row judge fill AGAINST
+        // target - without it a fill hugging a flat ceiling is indistinguishable
+        // from the old disguised-permanent-give-up re-pin.
+        let targetMs = playoutTargetMs
+        let cushionMaxMs = effectiveCushionMaxMs
+        // Engage the drift resampler only in steady playout - the SAME gate the trim
+        // uses (Meter trim path). During pre-roll / re-prime / drain the rebuild
+        // machinery owns recovery and driveResampler slews the rate back to 1.0.
+        let resamplerEngaged = primed && !playoutDrained
+        // One Bool under the lock already held: the cushion memory's one-shot
+        // link resolve (the route probe feeds ~1-2s after audio bring-up).
+        let needsLinkResolve = !cushionLinkResolved
+        audioMeterLock.unlock()
+        if needsLinkResolve { linkResolveSource.add(data: 1) }
+        guard rate > 0 else { return }
+        // Surface resident corrector-silence to the A/V-skew meter so it subtracts
+        // it from buffer fill: the silence is buffered media the audio RTP clock
+        // never advanced past, so counting it makes audio read falsely "late".
+        AudioVideoSkewStore.shared.setResidentSilenceMs(
+            Double(residentSilenceFrames) / rate * 1000.0)
+
+        let bufferFillMs = Double(aheadFrames) / rate * 1000.0
+        // Drive the drift-tracking resampler (self-rate-limited to ~4Hz inside):
+        // steers the varispeed rate by the buffer-fill error to absorb the host↔Mac
+        // clock skew. Its PI state is audioMeterLock-guarded (two callers).
+        driveResampler(fillMs: bufferFillMs, targetMs: targetMs, engaged: resamplerEngaged)
+        var driftMs: Double?
+        // Measure drift over the CURRENT playout segment only: wall and media-played
+        // are both relative to the segment anchor (re-baselined on each restart),
+        // so a prior drain's wall-vs-media gap is excluded rather than pinned.
+        if started, anchorNanos != 0, playedFrames >= anchorFramesPlayed {
+            if observedAtNanos >= anchorNanos {
+                let wallElapsedMs = Double(observedAtNanos &- anchorNanos) / 1_000_000.0
+                let segmentFramesPlayed = playedFrames &- anchorFramesPlayed
+                let mediaPlayedMs = Double(segmentFramesPlayed) / rate * 1000.0
+                // Slip of media-played behind wall time, net of the steady buffer
+                // cushion the player intentionally holds ahead - so a constant
+                // cushion reads ~0 and only a genuine drift trend shows.
+                driftMs = wallElapsedMs - mediaPlayedMs - bufferFillMs
+            }
+        }
+        // A segment restart can race this snapshot. Only its own samples may
+        // update the recent-drift window; both callers share the meter lock.
+        audioMeterLock.lock()
+        if anchorNanos == driftAnchorNanos {
+            let driftBounded = driftMs.map {
+                resamplerDriftWindow.observe(driftMs: $0, now: observedAtNanos)
+            } ?? true
+            resamplerSkewConverged = abs(resamplerIntegralPpm) <= Self.cushionReleaseSkewPpm && driftBounded
+        }
+        let appliedPpm = resamplerEpsPpm
+        audioMeterLock.unlock()
+        TelemetryCounters.shared.setAudioState(
+            TelemetryCounters.AudioState(
+                bufferFillMs: bufferFillMs,
+                playoutTargetMs: targetMs,
+                audioClockDriftMs: driftMs,
+                // The windowed MIN rides its own reset-on-read window
+                // (`takeAudioBufferFillMinMs`), not this last-writer-wins gauge, so
+                // it isn't carried here; the exporter pulls it directly.
+                bufferFillMinMs: nil,
+                rePrimeTotal: rePrimes,
+                // The resampler's applied rate offset - makes the loop visible vs av_skew noise.
+                resamplerPpm: appliedPpm,
+                // Engine-running mirror: 1 = HAL output up. Catches the post-
+                // reconnect "packets flow but playout dead" latch in one query.
+                engineRunning: engineUp,
+                cushionMaxMs: cushionMaxMs))
+    }
+
+    // MARK: - Playout-stall watchdog (detection + recovery)
+    //
+    // MEASURED FAULT (2026-08-12, a 9h18m host-idle overnight): when audio
+    // resumed, the player node consumed ZERO frames (drift math: ~5000ms wall −
+    // 0 media − 171ms fill = the 4829ms the gauge froze at) while 200 pkt/s
+    // decoded into the backlog gates - the scheduled-ahead backlog pinned above
+    // the over-run ceiling, EVERY packet dropped (190/s ceiling + 10/s
+    // rate-limited trims = the full packet rate), `publishAudioState` never ran
+    // again (it sits behind a successful schedule), and the session stayed
+    // silent until reconnect. The H3/H4 config-change hop never fired, so
+    // nothing noticed "scheduling continuously, consuming nothing." This
+    // watchdog closes that class terminally: the DROP branches (the wedge's own
+    // symptom) latch a stall verdict when consumption has been dark past the
+    // threshold, and the decode path rebuilds the output the way a reconnect
+    // proved effective - node stop, engine ensure-running, pre-roll re-arm.
+    // The rebuild itself (`recoverIfPlayoutStalled`) lives in
+    // AudioDecoder+Engine.swift with the H3/H4 recovery it mirrors (it needs the
+    // engine members).
+
+    /// Latch the stall verdict from a DROP branch (meter lock held, clock
+    /// already read). Consumption dark past the threshold + retry spacing
+    /// respected ⇒ the next decode-path packet runs the rebuild. `playoutStarted`
+    /// plus the arm-edge progress stamp keep a paused cold pre-roll (completions
+    /// legitimately silent) from ever reading as a stall - and a pre-roll never
+    /// reaches a drop branch anyway (fill < target ≤ ceiling, trim gated on
+    /// `primed`).
+    private func noteDropForStallWatchdogLocked(now: UInt64) {
+        guard playoutStarted, lastPlayoutProgressNanos != 0,
+              now &- lastPlayoutProgressNanos >= Self.playoutStallThresholdNanos,
+              now &- stallRecoveryLastAttemptNanos >= Self.stallRecoveryRetryNanos
+        else { return }
+        playoutStallPending = true
+    }
+
+    /// Packet flow resumed after a multi-second arrival gap (host-idle silence -
+    /// the receiver's gap tracker calls this on the recvQueue, so NO AV calls).
+    /// Hygiene, not recovery: force the drained latch so the NEXT schedule takes
+    /// the (re)arm edge - drift segment re-anchored (a 9h idle otherwise reads
+    /// as multi-second "drift", railing the resampler-converged verdict and
+    /// pinning the cushion deep), gate grace armed so the catch-up clump isn't
+    /// chopped, cushion rebuilt. Almost always a no-op: a ≥2s gap has long
+    /// since drained the ≤300ms cushion and the completion path latched
+    /// `playoutDrained` itself - this catches the drain edge going MISSING
+    /// (frozen completions), the wedge's precursor.
+    public func notePacketFlowResumed(afterGapMs: Double) {
+        audioMeterLock.lock()
+        let acted = playoutStarted && !playoutDrained
+        if acted { playoutDrained = true }
+        audioMeterLock.unlock()
+        if acted {
+            AudioDiagnostics.notice("audio flow resumed after \(Int(afterGapMs.rounded()))ms gap "
+                + "with the drain edge missing - forcing the re-arm (drift "
+                + "re-anchor + cushion rebuild)", "Stream.Audio")
+        }
+    }
+
+    /// Keep the longest gap until scheduling settles it, even when arrival precedes drain observation.
+    /// Repair-held packets can arrive before the worker or monitor notices the shortage.
+    public func noteArrivalGap(nanos: UInt64) {
+        audioMeterLock.lock()
+        underrunArrivalGapNanos = max(underrunArrivalGapNanos, nanos)
+        audioMeterLock.unlock()
+    }
+
+    /// The first schedule after an under-run knows the gap that ended it. One longer than the deepest
+    /// cushion this link may hold was dead air and teaches nothing; otherwise grow a step and learn.
+    private func settleUnderrunLocked(failedTargetMs: Double, now: UInt64) -> (CushionMemoryWrite?, Double?) {
+        let gapMs = Double(underrunArrivalGapNanos) / 1_000_000
+        if gapMs > effectiveCushionMaxMs { return (nil, gapMs) }
+        if playoutTargetMs < effectiveCushionMaxMs, now &- lastCushionGrowNanos >= Self.cushionGrowMinIntervalNanos {
+            playoutTargetMs = min(playoutTargetMs + Self.playoutCushionStepMs, effectiveCushionMaxMs)
+            lastCushionGrowNanos = now
+        }
+        return (cushionNoteUnderrunLocked(now: now, failedTargetMs: failedTargetMs), nil)
+    }
+}

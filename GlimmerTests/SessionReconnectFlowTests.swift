@@ -8,6 +8,7 @@
 //  engines: what each terminate asks the PC, when it relaunches, retries or ends, and what it says.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import os
 import Testing
@@ -42,6 +43,7 @@ struct SessionReconnectFlowTests {
         let supply: BackendSupply
         let clock: ScriptedClock
         let events: AsyncStream<StreamEvent>
+        let window: StreamWindow
 
         /// Ends the session and returns every event it emitted, in order.
         func finish() async -> [String] {
@@ -54,15 +56,17 @@ struct SessionReconnectFlowTests {
 
     private func live(
         _ script: [String: [Result<ControlTransport.Response, StreamError>]],
-        failing: Int = 0, config: StreamConfig = SessionFlow.config
+        failing: Int = 0, config: StreamConfig = SessionFlow.config,
+        hostDisposition: StreamHostDisposition = .cancelOwnedHostSession
     ) async -> Live {
         let sunshine = FakeSunshine.scripted(script)
         let supply = BackendSupply(failing: failing)
         let clock = ScriptedClock()
-        let session = StreamSession(backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
+        let session = StreamSession(
+            hostDisposition: hostDisposition, backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
                                     makeBackend: { supply.make() }, clock: clock.session)
-        let events = await session.goLive(server: SessionFlow.pairedPC(), config: config, appID: Self.appID)
-        return Live(session: session, sunshine: sunshine, supply: supply, clock: clock, events: events)
+        let (events, window) = await session.goLive(server: SessionFlow.pairedPC(), config: config, appID: Self.appID)
+        return Live(session: session, sunshine: sunshine, supply: supply, clock: clock, events: events, window: window)
     }
 
     fileprivate static func label(_ event: StreamEvent) -> String {
@@ -101,6 +105,43 @@ struct SessionReconnectFlowTests {
         #expect(live.supply.backends.count == 2)
         #expect(live.supply.backends.map(\.startedServers.count) == [1, 1])
         #expect(await live.finish() == ["reconnecting", "reconnected"])
+    }
+
+    @Test(arguments: [StreamHostDisposition.disconnectOnly, .cancelOwnedHostSession])
+    func failedReconnectTransportHonorsHostDisposition(disposition: StreamHostDisposition) async {
+        let live = await live(["cancel": [SessionFlow.cancelled]], hostDisposition: disposition)
+        await #expect(throws: StreamError.self) {
+            try await live.session.failReconnectTransport(network: live.sunshine.client(SessionFlow.pairedPC()))
+        }
+        #expect(live.sunshine.paths == (disposition == .disconnectOnly ? [] : ["cancel"]))
+        _ = await live.finish()
+    }
+
+    @Test func localRecoveryFailureRetriesWithoutCancellingTheRunningGame() async {
+        let live = await live(["serverinfo": [SessionFlow.running(7)], "resume": [SessionFlow.launched]],
+                              failing: 1, hostDisposition: .disconnectOnly)
+        await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
+        #expect(live.sunshine.paths == ["serverinfo", "resume", "serverinfo", "resume"])
+        #expect(await live.finish() == ["reconnecting", "reconnected"])
+        #expect(!live.sunshine.paths.contains("cancel"))
+    }
+
+    @Test func localRecoveryGiveUpLeavesTheGameRunning() async {
+        let cap = StreamSession.reconnectAttemptCap
+        let live = await live(["serverinfo": [SessionFlow.running(7)], "resume": [SessionFlow.launched]],
+                              failing: cap, hostDisposition: .disconnectOnly)
+        await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
+        #expect(live.sunshine.paths == Array(repeating: ["serverinfo", "resume"], count: cap).flatMap { $0 })
+        #expect(await live.finish() == ["reconnecting", "terminated(-1)"])
+        #expect(!live.sunshine.paths.contains("cancel"))
+    }
+
+    @Test func localRecoveryCannotReplaceAnotherGame() async {
+        let live = await live(["serverinfo": [SessionFlow.running(9)]], hostDisposition: .disconnectOnly)
+        await live.session.handleHostTerminate(code: StreamSession.deadPeerTerminationCode)
+        #expect(await live.finish() == ["reconnecting", "terminated(0)"])
+        #expect(live.sunshine.paths == ["serverinfo"])
+        #expect(live.supply.backends.map(\.startedServers.count) == [0])
     }
 
     /// The PC sent the terminate and no longer runs the game: it ended the session on purpose, so
@@ -172,6 +213,78 @@ struct SessionReconnectFlowTests {
         #expect(await live.finish() == ["reconnecting", "reconnected"])
     }
 
+    @Test(arguments: [false, true])
+    func stopDuringWatchdogRearmCannotPublishReconnect(stopCompleted: Bool) async throws {
+        let live = await live([:])
+        let presentation = try #require(await live.session.presentation)
+        let armEntered = SafetyTestGate()
+        let armRelease = SafetyTestGate()
+        let closeEntered = SafetyTestGate()
+        let closeRelease = SafetyTestGate()
+        await MainActor.run {
+            presentation.waitForVisualClose = {
+                await closeEntered.open()
+                await closeRelease.wait()
+            }
+        }
+        let attempt = await live.session.prepareReconnectCompletionTest()
+        let reconnects = TelemetryCounters.shared.reconnectTotal.value
+        let completion = Task {
+            await live.session.finishReconnect(attempt: attempt, rearmWatchdog: { _ in
+                await armEntered.open()
+                await armRelease.wait()
+            })
+        }
+        await armEntered.wait()
+        let stopping = Task { await live.session.stop() }
+        await closeEntered.wait()
+        if stopCompleted {
+            await closeRelease.open()
+            await stopping.value
+        }
+        await armRelease.open()
+        _ = await completion.value
+        #expect(TelemetryCounters.shared.reconnectTotal.value == reconnects)
+        #expect(live.session.didLogDecodeOnlyStall)
+        await closeRelease.open()
+        await stopping.value
+        #expect(await live.finish().isEmpty)
+    }
+
+    @Test(arguments: [1, StreamSession.reconnectAttemptCap])
+    func terminatedReplacementRetriesWithinTheEpisode(failures: Int) async throws {
+        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+                               "cancel": [SessionFlow.cancelled]])
+        let rearms = AtomicCounter()
+        let reconnects = TelemetryCounters.shared.reconnectTotal.value
+        await live.session.runSelfInitiatedReconnect(cause: "test", rearmWatchdog: { session in
+            rearms.increment()
+            if rearms.value <= failures {
+                await session.terminateReplacementDuringRearm(code: StreamSession.deadPeerTerminationCode)
+            }
+        })
+        let exhausted = failures == StreamSession.reconnectAttemptCap
+        #expect(live.supply.backends.count == (exhausted ? failures : failures + 1))
+        #expect(TelemetryCounters.shared.reconnectTotal.value == reconnects + (exhausted ? 0 : 1))
+        let seen = await live.finish().filter { $0 != "other" }
+        #expect(seen == ["reconnecting", exhausted ? "terminated(-1)" : "reconnected"])
+    }
+
+    @Test func terminalReplacementFailureEndsTheEpisodeWithItsOwnCode() async {
+        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+                               "cancel": [SessionFlow.cancelled]])
+        let code = StreamSession.protectedContentTerminationCode
+        let reconnects = TelemetryCounters.shared.reconnectTotal.value
+        await live.session.runSelfInitiatedReconnect(cause: "test", rearmWatchdog: { session in
+            await session.terminateReplacementDuringRearm(code: code)
+        })
+        #expect(live.supply.backends.count == 1)
+        #expect(TelemetryCounters.shared.reconnectTotal.value == reconnects)
+        #expect(await !live.session.isStreaming)
+        let seen = await live.finish().filter { $0 != "other" }
+        #expect(seen == ["reconnecting", "terminated(\(code))"])
+    }
+
     // MARK: - Frame watchdog
 
     /// A connection that never decodes a frame ends ten seconds after the arm, not before, with a
@@ -208,7 +321,7 @@ struct SessionReconnectFlowTests {
         #expect(live.sunshine.paths == ["serverinfo", "launch"])
         #expect(await live.session.reconnectConfig?.bitrateKbps == 50_400)
         #expect(await live.session.downshift.stepsDown == 1)
-        #expect(await live.session.bannerText() == "Weak connection. Lowering quality to 50 Mbps…")
+        #expect(await live.window.reconnectBanner.displayedText == "Weak connection. Lowering quality to 50 Mbps…")
         #expect(await live.finish() == ["reconnecting", "reconnected"])
     }
 
@@ -229,32 +342,61 @@ struct SessionReconnectFlowTests {
 
 private extension StreamSession {
     /// A session that reached its live state: subsystems up, a bridge carrying the event stream.
-    func goLive(server: ServerInfo, config: StreamConfig, appID: Int) async -> AsyncStream<StreamEvent> {
+    func goLive(server: ServerInfo, config: StreamConfig, appID: Int) async -> (AsyncStream<StreamEvent>, StreamWindow) {
         isStreaming = true
         reachedLiveState = true
         reconnectServer = server
-        reconnectConfig = config
+        reconnectConfig = config.request
         reconnectAppID = appID
         let (window, input, decoder) = await MainActor.run {
             (StreamWindow(displayMode: .window), InputForwarder(), VideoDecoder())
         }
-        self.window = window
-        self.input = input
+        self.presentation = await SessionPresentation(window)
+        self.input = await SessionInputHooks(input)
         videoDecoder = decoder
-        let bridge = StreamBridgeContext(session: self, videoDecoder: decoder, audioDecoder: audioDecoder,
-                                         inputForwarder: input)
+        let bridge = StreamBridgeContext(session: self, videoDecoder: decoder, audioDecoder: audioDecoder)
         let (stream, continuation) = AsyncStream<StreamEvent>.makeStream()
         bridge.eventContinuation = continuation
         self.bridge = bridge
-        return stream
+        return (stream, window)
+    }
+
+    func failReconnectTransport(network: NetworkClient) async throws {
+        guard let presentation, let input, let videoDecoder, let server = reconnectServer,
+              let config = reconnectConfig else { throw StreamError.launchFailed("Missing test setup") }
+        backend = InputRecordingBackend(connectFailure: .sessionFailed(-1))
+        let launch = LaunchResponse(sessionURL: SessionFlow.sessionURL, gcmKey: Data(), gcmKeyId: Data())
+        let backendConfig = makeBackendConfig(config: config, launch: launch, server: server)
+        try await connectBackend(serverInfo: server, launch: launch, backendConfig: backendConfig,
+            setup: SessionMedia(presentation: presentation, input: input, video: videoDecoder), network: network, duringReconnect: true)
+    }
+
+    func terminateReplacementDuringRearm(code: Int32) async {
+        let replacement = NativeBackend()
+        backend = replacement
+        bridge?.setEventSource(replacement, attempt: attemptID)
+        let events = NativeConnectionEvents(bridge: bridge, backend: replacement)
+        events.connectionStarted()
+        await events.drainSessionEvents()
+        do {
+            let enet = try EnetFixture.channel()
+            replacement.wireVideoControl(enet: enet, events: events)
+            enet.onTerminated?(code)
+            await events.drainSessionEvents()
+            #expect(replacement.withState { replacement.interrupted })
+        } catch {
+            Issue.record("Could not create control channel: \(error)")
+        }
     }
 
     func forgetLiveState() { reachedLiveState = false }
 
     func markRemotePath() { isRemotePathSession = true }
 
-    func bannerText() async -> String? {
-        let window = window
-        return await MainActor.run { window?.reconnectBanner.displayedText }
+    func prepareReconnectCompletionTest() -> UUID {
+        isReconnecting = true
+        didLogDecodeOnlyStall = true
+        bridge?.beginAttempt(attemptID)
+        return attemptID
     }
 }

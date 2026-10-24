@@ -17,7 +17,7 @@ on:
         required: true
         type: string
       marketing_version:
-        description: iOS version, for example 0.1.1
+        description: Shared CalVer, for example 2026.10.8
         required: true
         type: string
       build_number:

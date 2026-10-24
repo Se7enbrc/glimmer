@@ -25,8 +25,8 @@ certificates, passwords or provisioning profiles into an issue or chat.
    values in environment secrets, using the existing approved secret-management
    process. Never expose them as repository variables.
 5. Create an **Internal** TestFlight group. Initially add only the maintainer
-   and select builds manually. Review the app's encryption answers before making
-   the first processed build available.
+   and enable automatic internal distribution if desired. Review the app's
+   encryption answers before making the first processed build available.
 
 Internal testers must be eligible App Store Connect users. Internal builds are
 available for 90 days. See Apple's
@@ -60,9 +60,10 @@ device or automatically repair account signing state.
    bootstrap release tooling.
 2. Require successful Verify and all three CodeQL analyses for the exact source
    commit, with no unresolved CodeQL alerts. Use the complete 40-character SHA.
-3. Choose the iOS marketing version and an unused, increasing build number.
-   Check App Store Connect before dispatching. A retry after Apple accepts an
-   upload must not overwrite or silently reuse that build number.
+3. Use the shared CalVer from `Glimmer/Version.xcconfig` and choose an unused,
+   increasing iOS build number. The archive rejects a different marketing
+   version. Check App Store Connect before dispatching. A retry after Apple
+   accepts an upload must not overwrite or silently reuse that build number.
 4. Dispatch **iOS TestFlight Build** on the candidate branch whose HEAD is that
    exact SHA, with the version and build number. The builder rejects `main` and
    the repository's default branch. It checks out only its own workflow commit,
@@ -73,8 +74,9 @@ device or automatically repair account signing state.
    exact producing attempt and immutable archive artifact. Review its source
    identity and verification evidence before approving the protected job.
 6. After Apple processes the upload, review its status and compliance questions,
-   then add the build to **Internal**. Enter a short **What to Test**
-   description covering the actual changes and known limitations.
+   then confirm availability in **Internal** (automatic distribution is enabled
+   for the initial maintainer group). Enter a short **What to Test** description
+   covering the actual changes and known limitations.
 
 The internal-only export must not be used for external testing or App Store
 release. A future public release needs a separate reviewed distribution path.
@@ -136,7 +138,5 @@ lists as requiring no App Store Connect encryption documentation. The maintainer
 must confirm that classification and intended distribution before answering.
 Encryption exists; do not answer that the app has none.
 
-Follow the candidate branch's Simulator and hardware verification instructions
-before accepting a beta for wider testing. The
-[repository contribution guide](../../docs/CONTRIBUTING.md) covers shared
-checks.
+Continue with [Simulator and hardware verification](../CONTRIBUTING.md) before
+accepting a beta for wider testing.

@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AppModel+Commands.swift
-//
-//  The running app's side of `glimmer stream` and `glimmer quit`: requests
-//  arrive over distributed notifications and go through the launcher's own
-//  entry points. Also quitting a PC's running app without streaming into it.
-//
+// Automation requests share the launcher entry points and the running session.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 import Observation
@@ -50,8 +45,8 @@ final class CommandStreamEnd {
 }
 
 /// Plain string dictionaries keyed by a request id, posted with immediate
-/// delivery so an inactive app still hears them. No URL scheme on purpose:
-/// a web page can't start a stream.
+/// delivery so an inactive app still hears them. URL requests use this same
+/// dispatch, with confirmation kept inside the app.
 enum CommandChannel {
     private static let prefix = Bundle.main.bundleIdentifier ?? "io.ugfugl.Glimmer"
     static let request = Notification.Name(prefix + ".command")
@@ -61,6 +56,7 @@ enum CommandChannel {
         static let id = "id"
         static let verb = "verb"
         static let host = "host"
+        static let pc = "pc"
         static let app = "app"
         static let takeover = "takeover"
         static let event = "event"
@@ -83,6 +79,9 @@ enum CommandChannel {
         case rejected(String)
         case ready
         case stop
+        case stopStreaming(String?)
+        case wake(Host)
+        case status
         case notMine
     }
 
@@ -99,7 +98,12 @@ enum CommandChannel {
     static func decide(
         _ info: [String: String], handled: inout Set<String>, hosts: [Host], streamingFrom: String?
     ) -> Decision? {
-        guard let id = info[Key.id], let hostID = info[Key.host], handled.insert(id).inserted else { return nil }
+        guard let id = info[Key.id] else { return nil }
+        // Status is read-only and polled often; don't retain every sample's request ID.
+        if info[Key.verb] == "status" { return .status }
+        guard handled.insert(id).inserted else { return nil }
+        if info[Key.verb] == "stop" { return .stopStreaming(info[Key.pc]) }
+        guard let hostID = info[Key.host] else { return nil }
         switch info[Key.verb] {
         case "check":
             return streamingFrom == nil ? .ready : .rejected(alreadyStreaming)
@@ -113,6 +117,9 @@ enum CommandChannel {
             return .stream(app, on: host, takeover: info[Key.takeover] == "1")
         case "quit":
             return streamingFrom == hostID ? .stop : .notMine
+        case "wake":
+            guard let host = hosts.first(where: { $0.id == hostID }) else { return .notMine }
+            return .wake(host)
         default:
             return nil
         }
@@ -135,9 +142,15 @@ extension AppModel {
         }
     }
 
-    func handleCommand(_ info: [String: String]) {
+    func handleCommand(_ info: [String: String], fromURL: Bool = false,
+                       confirmQuit: ((LibraryApp, Host) -> Void)? = nil) {
+        if fromURL, info[CommandChannel.Key.verb] == "quit",
+           let host = hosts.first(where: { $0.id == info[CommandChannel.Key.host] }) {
+            confirmURLQuit(on: host, confirm: confirmQuit)
+            return
+        }
         // A PC paired from the command line since launch is only in defaults.
-        if info[CommandChannel.Key.verb] == "stream" { loadHosts() }
+        if !fromURL, info[CommandChannel.Key.verb] == "stream" { loadHosts() }
         guard let id = info[CommandChannel.Key.id],
               let decision = CommandChannel.decide(
                 info, handled: &Self.handledCommandIDs, hosts: hosts,
@@ -145,17 +158,39 @@ extension AppModel {
         else { return }
         switch decision {
         case .stream(let app, let host, let takeover):
-            Diag.notice("Stream requested from the command line", "Stream")
+            Diag.notice(fromURL ? "Stream requested from a URL" : "Stream requested from the command line", "Stream")
             // The terminal settled the takeover; an older unanswered prompt no longer applies.
             pendingTakeover = nil
             selectHost(host)
-            beginCommandStream(id, app: app, on: host, takeover: takeover)
+            beginCommandStream(id, app: app, on: host, takeover: !fromURL && takeover)
         case .rejected(let why):
             replyToCommand(id, CommandChannel.Event.rejected, why)
         case .ready:
             replyToCommand(id, CommandChannel.Event.accepted)
         case .stop:
             stopForCommand(id)
+        case .stopStreaming(let pc):
+            Task {
+                let result = await stopActiveStream(matching: pc, source: fromURL ? "a URL" : "the command line")
+                if fromURL, result != .stopped {
+                    Diag.notice("Ignored a stop URL without a matching active stream", "Commands")
+                }
+                replyToCommand(id, result.rawValue)
+            }
+        case .wake(let host):
+            Task {
+                await CLITerminal.$write.withValue({ _, _ in }, operation: {
+                    _ = await GlimmerCLI.wake(.init(verb: .wake, arguments: [host.id]), model: self)
+                })
+            }
+        case .status:
+            Task {
+                do {
+                    replyToCommand(id, CommandChannel.Event.accepted, try await commandStatusJSON())
+                } catch {
+                    replyToCommand(id, CommandChannel.Event.rejected, "Couldn't read the stream status. Try again.")
+                }
+            }
         case .notMine:
             replyToCommand(id, CommandChannel.Event.notMine)
         }
@@ -170,6 +205,7 @@ extension AppModel {
         request.task = Task {
             defer { request.task = nil }
             if let waitForRoute { await waitForRoute() } else { await awaitRouteSettled(for: host) }
+            if !Task.isCancelled { await hostPolling.readinessTasks[host.id]?.value }
             // A cancelled wait may still resume after a newer request took its place.
             guard !Task.isCancelled, pendingCommandStream === request else { return }
             pendingCommandStream = nil
@@ -254,7 +290,7 @@ extension AppModel {
         info[CommandChannel.Key.id] = id
         info[CommandChannel.Key.event] = event
         if let detail { info[CommandChannel.Key.detail] = detail }
-        CommandChannel.post(CommandChannel.reply, info)
+        postCommandReply(info)
     }
 
     /// "live" at the first decoded frame (with the connect timings), then
@@ -324,5 +360,18 @@ extension AppModel {
     static func quitFailureMessage(for error: Error, hostName: String) -> String {
         if case .launchFailed(let detail) = error as? StreamError { return detail }
         return connectFailure(for: error, hostName: hostName).message
+    }
+
+    /// Match the session's PC, even when the launcher has selected a different one.
+    func stopActiveStream(matching pc: String? = nil, source: String) async -> CommandStopResult {
+        guard nativeSession != nil, !menuStopInProgress else { return .noActiveStream }
+        if let pc {
+            guard let active = lastLaunchAttempt?.host, GlimmerCLI.matchHost(pc, in: [active]) != nil else {
+                return .pcMismatch
+            }
+        }
+        guard let stop = stopStreamFromMenu(source: source) else { return .noActiveStream }
+        await stop.value
+        return .stopped
     }
 }

@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+import Foundation
+
+/// One thread's resource line for the per-thread CPU / QoS view. `cpuPercent` is
+/// percent of one core (matching `ProcessMetrics`); `qos` is the thread's QoS
+/// class INTENT (the P-vs-E tier the scheduler honours); `name` is our own thread
+/// label so the hot line is self-describing.
+package struct ThreadResourceSample: Sendable {
+
+    package init(
+        name: String,
+        tid: UInt64,
+        cpuPercent: Double,
+        qos: Int,
+        qosLabel: String
+    ) {
+        self.name = name
+        self.tid = tid
+        self.cpuPercent = cpuPercent
+        self.qos = qos
+        self.qosLabel = qosLabel
+    }
+
+    /// Our thread name (e.g. "Glimmer.enetControl") or, for an unnamed
+    /// dispatch-queue worker, the queue label the OS exposes. Empty if neither is
+    /// available - then `tid` disambiguates.
+    package var name: String
+    /// Kernel thread id (`thread_identifier_info.thread_id`) - a stable per-thread
+    /// label so an unnamed thread is still a distinct, attributable series.
+    package var tid: UInt64
+    /// Kernel decaying CPU estimate, percent of one core; not an exact one-second interval.
+    package var cpuPercent: Double
+    /// QoS class ordinal (the raw `qos_class_t`): 33 user-interactive, 25
+    /// user-initiated, 21 default, 17 utility, 9 background, 0 unspecified. The
+    /// P-core-tier INTENT - a hot thread here should be 25/33 (P-tier).
+    package var qos: Int
+    /// Compact QoS label for the dashboard ("userInteractive" / "utility" / ...).
+    package var qosLabel: String
+}
+
+/// One ~1Hz RESOURCE sample: the per-thread CPU/QoS lines, the process memory
+/// footprint, and the AC-vs-battery power-source state. Plain value type built on
+/// the exporter queue; rendered to both wire forms.
+package struct ResourceSnapshot: Sendable {
+
+    package init(
+        threads: [ThreadResourceSample] = [],
+        physFootprintBytes: UInt64? = nil,
+        onBattery: Bool? = nil,
+        batteryCharging: Bool? = nil
+    ) {
+        self.threads = threads
+        self.physFootprintBytes = physFootprintBytes
+        self.onBattery = onBattery
+        self.batteryCharging = batteryCharging
+    }
+
+    /// The per-thread lines, sorted hottest-first so the top entries are the ones
+    /// worth labelling. Capped (see `ResourceTelemetry.maxThreadsEmitted`) so a
+    /// transient thread storm can't bloat a scrape - the cap keeps the busiest.
+    package var threads: [ThreadResourceSample] = []
+    /// Kernel physical footprint only; never substituted with resident bytes. These VM categories overlap.
+    package var physFootprintBytes: UInt64?
+    package var residentSizeBytes: UInt64?
+    package var compressedBytes: UInt64?
+    package var internalBytes: UInt64?
+    package var reusableBytes: UInt64?
+    /// Success, partial SDK payload, or failed Mach probe. Missing fields remain absent.
+    package var memoryProbeStatus: String?
+    package var memoryProbeResult: Int?
+    /// Monotonic start and elapsed cost of the complete resource probe, in milliseconds.
+    package var sampleUptimeMs: Double?
+    package var sampleDurationMs: Double?
+    /// True iff the Mac is on battery (the streaming machine unplugged - a power
+    /// budget the scheduler may clamp, correlating with a perf dip). nil if the
+    /// power source can't be read (e.g. a desktop with no battery → reads AC).
+    package var onBattery: Bool?
+    /// True iff a battery exists and is charging (so "on AC, charging" vs "on AC,
+    /// full" is distinguishable). nil when there is no battery.
+    package var batteryCharging: Bool?
+
+    /// A stable, non-empty label for one thread's metric series: the thread name
+    /// when we have one, else "unnamed". Unnamed workers are folded into a single
+    /// aggregate upstream (`sampleThreads`), so per-tid labels never reach a series.
+    package func threadLabel(_ thread: ThreadResourceSample) -> String {
+        thread.name.isEmpty ? "unnamed" : thread.name
+    }
+}

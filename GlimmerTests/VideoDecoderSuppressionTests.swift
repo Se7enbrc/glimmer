@@ -8,6 +8,7 @@
 //  keyframe, plus the layer-stall observers that self-heal the present path.
 //
 
+@testable import GlimmerEngine
 import AVFoundation
 import CoreMedia
 import Foundation
@@ -54,6 +55,7 @@ struct VideoDecoderSuppressionTests {
         #expect(decoder.statsCollector.gapJudgingExcluded)
         #expect(decoder.decodeGateTimer != nil)
         #expect(backend.idrRequests == 0)
+        #expect(decoder.rendererPresentationState == .init(generation: 1, suppressed: true))
 
         decoder.setPresentSuppressed(false)
         decoder.setPresentSuppressed(false)
@@ -62,6 +64,7 @@ struct VideoDecoderSuppressionTests {
         #expect(!decoder.statsCollector.gapJudgingExcluded)
         #expect(decoder.decodeGateTimer == nil)
         #expect(backend.idrRequests == 1)
+        #expect(decoder.rendererPresentationState == .init(generation: 2, suppressed: false))
     }
 
     /// After a gated span the resync latch owns the refocus keyframe: no second request,
@@ -170,6 +173,7 @@ struct VideoDecoderSuppressionTests {
         }
         try #require(pacer.queue.count == 2)
         decoder.inFlightDecodes = decoder.maxInFlightDecodeCeiling
+        decoder.decodeReservations[0] = VideoDecoder.DecodeReservations(queued: decoder.maxInFlightDecodeCeiling)
 
         decoder.presentSuppressedLock.lock()
         decoder._presentSuppressed = true

@@ -11,12 +11,25 @@
 //  no clock.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import CoreGraphics
 import Testing
 @testable import Glimmer
 
 struct WindowPointerTests {
+
+    @Test func pointerPolicyUsesAbsoluteOnlyWhenFreeAndRequested() {
+        for windowed in [false, true] {
+            for captured in [false, true] {
+                for relative in [false, true] {
+                    let absolute = InputForwarder.usesAbsolutePointer(
+                        windowed: windowed, captured: captured, fullscreenRelative: relative)
+                    #expect(absolute == (!captured && (windowed || !relative)))
+                }
+            }
+        }
+    }
 
     // MARK: Motion queue ordering
 

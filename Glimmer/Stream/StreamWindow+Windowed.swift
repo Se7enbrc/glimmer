@@ -28,6 +28,7 @@
 //  out lives in StreamWindow+PointerAffordances.swift.
 //
 
+import GlimmerEngine
 import AppKit
 
 extension StreamWindow {
@@ -136,19 +137,20 @@ extension StreamWindow {
     /// The delegate's close request (red button / Cmd-W). Handed to the
     /// session's stop() via `onCloseRequested`; nothing is closed here.
     func handleUserCloseRequest() {
-        guard displayMode == .window, !didClose else { return }
+        guard !didClose else { return }
         log.info("Stream window close requested by the user - stopping the session")
         onCloseRequested?()
     }
 
-    /// InputForwarder's capture edge in window mode. Visibility stays with the
-    /// single `setCursorHidden` owner; the per-view transparent cursor
-    /// backstop is switched with it so a free pointer shows the arrow over the
-    /// picture and a captured one never can. Entering capture spends one of
-    /// the hint's few shows - the only teaching surface left now that the grab
-    /// is the pointer being over the window rather than a control to press.
-    func setPointerCaptured(_ captured: Bool) {
-        guard displayMode == .window, !didClose else { return }
+    /// Cursor ownership stays here for both presentations; startup waits for a picture.
+    func setPointerCaptured(_ captured: Bool, isKeyWindow: Bool? = nil) {
+        guard !didClose else { return }
+        if displayMode == .fullScreen {
+            let forwardingAbsolute = !fullscreenRelativePointer
+                && (isKeyWindow ?? window.isKeyWindow) && !userBackgrounded
+            setCursorHidden((captured || forwardingAbsolute) && !awaitingFirstFrameFadeIn)
+            return
+        }
         setCursorHidden(captured)
         updateMiniPlayerControls()
         if captured {
@@ -203,17 +205,20 @@ extension StreamWindow {
     }
 
     func refreshPresentationVisibility() {
-        guard !didClose, !awaitingFirstFrameFadeIn, window.alphaValue > 0 else { return }
+        guard !didClose, !awaitingFirstFrameFadeIn else { return }
         let suppressed = Self.suppressesPresentation(isVisible: window.isVisible,
-            isMiniaturized: window.isMiniaturized, occlusionVisible: window.occlusionState.contains(.visible))
+            isMiniaturized: window.isMiniaturized, occlusionVisible: window.occlusionState.contains(.visible),
+            revealing: presentationRevealInProgress, alpha: window.alphaValue)
         guard presentationSuppressed != suppressed else { return }
         presentationSuppressed = suppressed
         onPresentationSuppressedChanged?(suppressed)
     }
 
     nonisolated static func suppressesPresentation(isVisible: Bool, isMiniaturized: Bool,
-                                                   occlusionVisible: Bool) -> Bool {
-        !isVisible || isMiniaturized || !occlusionVisible
+                                                   occlusionVisible: Bool, revealing: Bool = false,
+                                                   alpha: CGFloat = 1) -> Bool {
+        // Resume must flush and enqueue into the opaque resting surface, after cover motion ends.
+        !isVisible || isMiniaturized || !occlusionVisible || revealing || alpha <= 0
     }
 
     // MARK: - Path B Space exit → window (issue #84)
@@ -243,9 +248,6 @@ extension StreamWindow {
     }
 
     private func logSpaceExit() {
-        let event = NSApp.currentEvent
-        let isKeyEvent = event?.type == .keyDown || event?.type == .keyUp || event?.type == .flagsChanged
-        let keyCode = isKeyEvent ? event.map { String($0.keyCode) } ?? "none" : "none"
         let frames = Thread.callStackSymbols.filter {
             $0.split(whereSeparator: \.isWhitespace).dropFirst().first != "AppKit"
         }.prefix(2).joined(separator: " | ")
@@ -253,9 +255,15 @@ extension StreamWindow {
         let streamWindow = window as? KeyableWindow
         let source = streamWindow?.fullScreenExitSource ?? "unobserved"
         streamWindow?.fullScreenExitSource = "unobserved"
-        Diag.notice("Space exit: type=\(event.map { String($0.type.rawValue) } ?? "none") keyCode=\(keyCode) "
-            + "modifiers=\(event?.modifierFlags.rawValue ?? 0) responder=\(responder) "
-            + "source=\(source) frames=\(frames)", "Stream.Window")
+        Diag.notice(Self.spaceExitMessage(eventType: NSApp.currentEvent?.type, responder: responder,
+            source: source, frames: frames), "Stream.Window")
+    }
+
+    static func spaceExitMessage(
+        eventType: NSEvent.EventType?, responder: String, source: String, frames: String
+    ) -> DiagMessage {
+        "Space exit: type=\(eventType.map { String($0.rawValue) } ?? "none") responder=\(responder) "
+            + "source=\(source) frames=\(frames)"
     }
 
     /// Full screen is ending (a Space exit under way, or the mini player

@@ -8,6 +8,7 @@
 //  floor, and the default chord's place in the family.
 //
 
+import GlimmerEngine
 import CoreGraphics
 import Testing
 @testable import Glimmer

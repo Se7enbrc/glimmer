@@ -46,13 +46,18 @@ def archive(source, destination, expected):
                             text=True, check=True, timeout=30).stdout.strip()
     if actual != expected['EXPECTED_SHA'] or destination.exists():
         raise ValueError('source differs from the approved SHA or archive already exists')
+    config = (source / 'Glimmer/Version.xcconfig').read_text()
+    version = re.search(r'^MARKETING_VERSION\s*=\s*(\d{4}\.\d+\.\d+)\s*$', config, re.M)
+    if version is None or version[1] != expected['IOS_VERSION']:
+        raise ValueError('iOS version must match the reviewed source CalVer')
     compiler = toolchain()
     derived = destination.parent / 'ios-testflight-derived'
     command = ['xcodebuild', '-project', str(source / 'iOS/Glimmer.xcodeproj'), '-scheme', 'Glimmer-iOS',
                '-configuration', 'Release', '-destination', 'generic/platform=iOS',
                '-derivedDataPath', str(derived), '-archivePath', str(destination),
                'CODE_SIGNING_ALLOWED=NO', 'DEBUG_INFORMATION_FORMAT=dwarf-with-dsym',
-               'SWIFT_ACTIVE_COMPILATION_CONDITIONS=', 'SWIFT_TREAT_WARNINGS_AS_ERRORS=YES',
+               'SWIFT_ACTIVE_COMPILATION_CONDITIONS=', 'SWIFT_SUPPRESS_WARNINGS=NO',
+               'SWIFT_TREAT_WARNINGS_AS_ERRORS=YES',
                'GCC_TREAT_WARNINGS_AS_ERRORS=YES', f"MARKETING_VERSION={expected['IOS_VERSION']}",
                f"CURRENT_PROJECT_VERSION={expected['IOS_BUILD_NUMBER']}", 'archive']
     log = destination.parent / 'ios-testflight-archive.log'

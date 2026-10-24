@@ -9,6 +9,7 @@
 //  queue's non-empty clock the present watchdog reads.
 //
 
+@testable import GlimmerEngine
 import CoreMedia
 import Foundation
 import os
@@ -182,8 +183,7 @@ struct FramePacerTests {
         #expect(presents.withLock { $0 } == 2)
     }
 
-    /// Only a plausible lead counts as a tick's pending scanout; a lead past 1s
-    /// is a timebase jump the due gate's clamp must still recover.
+    /// Only a plausible lead counts as a tick's pending scanout.
     @Test func tickScanoutLeadBounds() {
         #expect(FramePacer.tickOwnsScanout(now: 100, scanout: 100.008))
         #expect(!FramePacer.tickOwnsScanout(now: 100, scanout: 99.99))
@@ -191,14 +191,19 @@ struct FramePacerTests {
         #expect(!FramePacer.tickOwnsScanout(now: 100, scanout: .nan))
     }
 
-    @Test func dueGateRecoversFromTimebaseJumps() throws {
+    @Test func backwardTimebaseNeedsExplicitResetButForwardGapRecovers() throws {
         let pacer = try makePacer(fps: 120, queued: 1)
         pacer.lastPresentMediaTime = 1_000
         pacer.lock.lock()
-        let result = pacer.dequeueDueFrameLocked(
+        let stale = pacer.dequeueDueFrameLocked(
+            targetTimestamp: 5, vsyncInterval: 1.0 / 120, effectiveTarget: 1)
+        #expect(stale.toPresent == nil)
+        #expect(pacer.lastPresentMediaTime == 1_000)
+        pacer.resetCadenceBaseLocked()
+        let reset = pacer.dequeueDueFrameLocked(
             targetTimestamp: 5, vsyncInterval: 1.0 / 120, effectiveTarget: 1)
         pacer.lock.unlock()
-        #expect(result.toPresent != nil)
+        #expect(reset.toPresent != nil)
         #expect(pacer.lastPresentMediaTime == 5)
 
         let overdue = try makePacer(fps: 120, queued: 1)

@@ -1,77 +1,42 @@
----
-description: The direction for Glimmer and the decisions that guide it.
-icon: route
----
+# Roadmap
 
-# What comes next
-
-Glimmer is a Mac-native client for Sunshine, for people with a Mac and a gaming
-PC who want to play their PC games on the Mac, at a desk on Ethernet or on the
-couch on Wi-Fi. Success is a player forgetting it is a stream, and the app
-feeling like part of macOS
-([PRODUCT](https://github.com/Se7enbrc/glimmer/blob/main/PRODUCT.md)).
-
-This page covers at least the next year. It states direction, not promises: no
-item has a date, and any item may change with a release.
+See where Glimmer is heading before proposing a change. This covers at least the
+next year, with no delivery dates or feature promises.
 
 ## Next year
 
-Each item names the evidence it comes from.
+Expect work to stay focused on stream quality and a native Mac experience.
 
-- **Stream fidelity on Wi-Fi.** Keep tuning pacing, audio buffering and quality
-  recovery against real-stream telemetry, with the couch on Wi-Fi as the harder
-  case. Source:
-  [PRODUCT](https://github.com/Se7enbrc/glimmer/blob/main/PRODUCT.md) users and
-  principles; recurring Wi-Fi, pacing and audio fixes in
-  [CHANGELOG](https://github.com/Se7enbrc/glimmer/blob/main/CHANGELOG.md)
-  2026.10.3 to 2026.10.6.
-- **Clear failures and recovery.** Every way a stream fails says what happened
-  and the one thing to do next, and safeguards recover rather than give up.
-  Source: CHANGELOG 2026.10.3 and 2026.10.4.
-- **Keep pace with Sunshine, macOS and dependencies.** Track current, unmodified
-  Sunshine and new macOS releases, and keep dependencies updated through
-  Renovate. Source:
-  [AGENTS](https://github.com/Se7enbrc/glimmer/blob/main/AGENTS.md) product
-  decisions; issue #42.
-- **Test coverage.** Measure per-component coverage before setting any gate,
-  then add tests for missing paths. Source:
-  [security roadmap](SECURITY_ROADMAP.md) item 1.
-- **Sanitizers and fuzzing.** Keep the protocol fuzz tests running under
-  AddressSanitizer in `make verify` and retain hosted results for each release.
-  Source: security roadmap item 2.
-- **Reproducible builds.** Make release metadata deterministic and compare two
-  independent clean builds. Source: security roadmap item 3.
-- **Source and release evidence.** Per-file copyright and licence notices, and
-  documented verification steps for every distributed artifact. Source: security
-  roadmap item 4.
-- **Network protocol assessment.** Document what stock Sunshine encrypts and
-  what it does not, without requiring a patched PC. Source: security roadmap,
-  `crypto_used_network`.
-
-- **Apple TV, and possibly iPhone.** Bring the same native streaming engine to
-  Apple TV, and consider an iPhone client, which Moonlight already offers there.
-  Source: maintainer direction.
+| Direction                 | Intended result and evidence                                                                                                                                                              |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wi-Fi fidelity            | Smoother pacing, audio buffering and quality recovery, measured on real streams. [Product principles](https://github.com/Se7enbrc/glimmer/blob/main/PRODUCT.md) and recent release fixes. |
+| Clear failures            | A useful next step when a stream fails, with safeguards that recover. [Changelog](https://github.com/Se7enbrc/glimmer/blob/main/CHANGELOG.md).                                            |
+| Compatibility             | Keep pace with current Sunshine, macOS and dependencies. [Project rules](https://github.com/Se7enbrc/glimmer/blob/main/AGENTS.md).                                                        |
+| Test coverage             | Measure each component and test missing paths before setting a gate. [Security roadmap](SECURITY_ROADMAP.md).                                                                             |
+| Parser assurance          | Retain ASan/fuzz results, notices and release-verification evidence. [Security roadmap](SECURITY_ROADMAP.md).                                                                             |
+| Reproducibility           | Extend unsigned local comparisons to hosted builds and normalized published artifacts. [Release process](RELEASE.md#4-reproducible-payload).                                              |
+| Protocol assessment       | Keep encryption/integrity limits current without requiring a patched Sunshine. [Security model](SECURITY.md).                                                                             |
+| Homebrew main cask        | Move beyond the project tap when eligible, keeping a transition period. [Homebrew policy](https://docs.brew.sh/Package-Acceptance-Policy).                                                |
+| Apple TV, possibly iPhone | Explore the native engine on Apple TV and consider iPhone, following maintainer direction. These are not available clients.                                                               |
 
 ## Out of scope
 
-These are settled decisions. A pull request is not the place to reopen them.
+Keep proposals within these settled product decisions.
 
-- A Metal renderer. The renderer is `AVSampleBufferDisplayLayer`.
-- Controlling Game Mode through private APIs or by rewriting the signed
-  Info.plist. macOS owns the Game Mode switch.
-- Any feature that needs a patched or modified Sunshine on the PC.
-- NVIDIA GameStream. Glimmer supports Sunshine only and tells the player when a
-  PC still runs GameStream (CHANGELOG 2026.9.7).
-- Web views, Electron or cross-platform UI layers.
-- Analytics, tracking or third-party network calls.
-- A second command-line implementation or wrapper script. The `glimmer` command
-  lives in the app binary.
-- Intel Macs and macOS versions before 26. On the Mac, Glimmer is Apple Silicon
-  only, macOS 26 and later.
-- Paid features. Glimmer is free, and every feature belongs to every user.
+| Area             | Boundary                                                                      |
+| ---------------- | ----------------------------------------------------------------------------- |
+| Mac support      | Apple Silicon, macOS 15.7 or later; no Intel or older-macOS client.           |
+| PC software      | Current, unmodified Sunshine; no NVIDIA GameStream or patched-PC requirement. |
+| Interface        | SwiftUI/AppKit and system controls; no web views or cross-platform UI.        |
+| Rendering        | `AVSampleBufferDisplayLayer`; no Metal renderer.                              |
+| Game Mode        | macOS controls it; no private APIs or signed-plist edits.                     |
+| Automation       | One Swift command-line implementation in the app binary.                      |
+| Business/privacy | Every feature free; no analytics, tracking or unrelated network calls.        |
 
 ## How this changes
 
-The maintainer updates this page with any release that changes direction, and
-reviews it at least once a year. Proposals start as issues the maintainer agrees
-to; see [CONTRIBUTING](CONTRIBUTING.md).
+Open an issue explaining what you want to do and what gets in the way.
+
+The maintainer reviews this direction at least yearly and updates it when a
+release changes the plan. Agree on an approach before starting a contribution;
+see the [developer guide](CONTRIBUTING.md).

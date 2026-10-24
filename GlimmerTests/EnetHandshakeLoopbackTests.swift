@@ -8,11 +8,13 @@
 //  a forged VERIFY_CONNECT refused, and NativeBackend's input landing on its per-class channels.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 struct EnetHandshakeLoopbackTests {
+    private let settings = IsolatedDefaults()
 
     private static func channel(to peer: EnetLoopbackPeer, connectData: UInt32 = 0) throws -> EnetControlChannel {
         EnetControlChannel(host: "127.0.0.1", port: peer.udp.port, controlConnectData: connectData,
@@ -64,6 +66,56 @@ struct EnetHandshakeLoopbackTests {
         #expect(starts.map(\.channel) == [Enet.ctrlChannelGeneric, Enet.ctrlChannelGeneric])
         #expect(starts.map(\.type) == [0x0302, 0x0307])
         #expect(starts.map(\.payload) == [[0, 0], [0]])
+    }
+
+    @MainActor @Test func initialHDRReachesDecoderDuringControlHandshake() async throws {
+        var payload = [UInt8](repeating: 0, count: 27)
+        payload[0] = 1
+        payload[1] = 1
+        payload[17] = 0xE8
+        payload[18] = 0x03
+        let replies = try (1...2).map { sequence in
+            EnetFixture.reliable(relSeq: UInt16(sequence),
+                try EnetFixture.sealed(CtrlV2.hdrInfo, payload, seq: UInt32(sequence)))
+        }
+        let peer = try #require(EnetLoopbackPeer(startReplies: replies))
+        defer { peer.stop() }
+        let backend = NativeBackend()
+        defer { backend.stopConnection() }
+        let decoder = VideoDecoder()
+        decoder.backend = backend
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: backend)
+        let activations = AtomicCounter()
+        var feedback = SessionFeedback()
+        feedback.activated = { _ in activations.increment() }
+        let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
+                                         audioDecoder: AudioDecoder(defaults: settings.defaults), feedback: feedback)
+        bridge.setEventSource(backend)
+        let (stream, continuation) = AsyncStream.makeStream(of: StreamEvent.self)
+        bridge.eventContinuation = continuation
+        let config = BackendStreamConfig(
+            width: 1920, height: 1080, fps: 60, bitrate: 20000, packetSize: 1392,
+            streamingRemotely: 0, audioConfiguration: 0, supportedVideoFormats: 1,
+            clientRefreshRateX100: 6000, colorSpace: 0, colorRange: 0, encryptionFlags: 0,
+            remoteInputAesKey: EnetFixture.key, remoteInputAesIv: [])
+        let handshake = RtspHandshakeResult(
+            audioPort: 0, videoPort: 0, controlPort: peer.udp.port, controlConnectData: 0,
+            sessionId: "", negotiatedVideoFormat: 1, encryptionFeaturesSupported: 0,
+            encryptionFeaturesEnabled: RtspClient.ssEncControlV2, referenceFrameInvalidationSupported: false)
+        try await backend.performControlStage(handshake: handshake, config: config, host: .ipv4(.loopback),
+            events: NativeConnectionEvents(bridge: bridge, backend: backend))
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        continuation.finish()
+        var modes: [Bool] = []
+        for await event in stream {
+            if case .hdrModeChanged(let enabled) = event { modes.append(enabled) }
+        }
+        #expect(modes == [true])
+        #expect(decoder.hdrEnabled)
+        #expect(decoder.hdrMetadataStore.snapshot.mdcv?.suffix(8) == Data([0, 0x98, 0x96, 0x80, 0, 0, 0, 0]))
+        #expect(activations.value == 0)
     }
 
     @Test func forgedVerifyConnectFailsTheConnectStage() async throws {

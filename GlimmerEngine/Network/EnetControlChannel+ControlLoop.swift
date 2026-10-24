@@ -1,0 +1,317 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+// SPDX-FileCopyrightText: 2002-2024 Lee Salzman
+
+//
+//  EnetControlChannel+ControlLoop.swift
+//
+//  The persistent post-START_B control loop: the two keepalives (app-level
+//  periodic ping + transport ENet PING), dead-peer detection, reliable
+//  retransmits, and the 1Hz health snapshot. Split out of EnetControlChannel.swift
+//  to keep each unit focused; see that file for the shared stored state.
+//
+
+import Foundation
+
+extension EnetControlChannel {
+    /// Wrap-safe ms from `then` to `now`, or 0 when `then` is ahead: a stamp written
+    /// under stateLock after `now` was sampled must never read as a 49-day silence.
+    static func msSince(_ then: UInt32, now: UInt32) -> UInt32 {
+        let elapsed = now &- then
+        return elapsed < 0x8000_0000 ? elapsed : 0
+    }
+
+    // MARK: - Persistent control loop (post-START_B)
+
+    /// Mutable cursor for the control-loop's per-iteration bookkeeping. Lives in a
+    /// struct so the async and synchronous loop runners share one tick body.
+    struct ControlLoopState {
+        var lastPeriodicPingMs: UInt32 = 0
+        var lastHealthSnapshotMs: UInt32 = 0
+        /// How long the loop may wait for a recovery wake before the next tick.
+        var nextWaitMs = EnetControlChannel.controlTickMs
+    }
+
+    /// The control loop's idle tick; a recovery request wakes it sooner.
+    static let controlTickMs: UInt32 = 20
+
+    /// Latch the peer dead exactly once, whichever path sees it first (socket
+    /// failure, ACK silence, host DISCONNECT or TERMINATION): logs `reason` and
+    /// fires onTerminated(code). Later reports of the same death are no-ops.
+    func declarePeerDead(code: Int32, reason: DiagMessage) {
+        let first = withState { () -> Bool in
+            let wasAlive = !disconnected
+            disconnected = true
+            return wasAlive
+        }
+        guard first else { return }
+        Diag.error(reason, Self.logCategory)
+        onTerminated?(code)
+    }
+
+    /// One tick's reliable-command health, read under a SINGLE stateLock
+    /// acquisition so every field describes the same instant (the dead-peer
+    /// cutoff, the backpressure gate, and the near-miss edge must all agree).
+    /// A named struct rather than a 5-tuple; the fields and their order are
+    /// exactly what the withState block used to return.
+    private struct AckHealth {
+        let sinceLastAck: UInt32
+        let unackedCount: Int
+        let oldestUnackedMs: UInt32
+        let rttMs: Double
+        let haveRtt: Bool
+    }
+
+    /// Prime the keepalive clocks. Anchors the ACK-silence clock at loop start so a
+    /// freshly-connected peer isn't immediately considered stale, and sends the
+    /// first periodic ping immediately so the host keeps video flowing without
+    /// waiting a full interval.
+    func startControlLoop() -> ControlLoopState {
+        Diag.notice("ENet control loop started (keepalives active)", Self.logCategory)
+        withState {
+            lastAckRecvMs = serviceTimeMs
+        }
+        // Send the first ping immediately so the host keeps video flowing.
+        sendPeriodicPing()
+        var state = ControlLoopState()
+        state.lastPeriodicPingMs = serviceTimeMs
+        return state
+    }
+
+    /// One control-loop iteration: dead-peer detection, the two keepalives,
+    /// retransmits, and the 1Hz health snapshot. Returns false when the loop
+    /// should STOP (peer disconnected or declared dead). Holds stateLock only for
+    /// brief reads/writes and NEVER across a send - sends happen outside withState.
+    func controlLoopTick(_ state: inout ControlLoopState) -> Bool {
+        let dead = withState { disconnected }
+        if dead {
+            Diag.error("ENet control loop ending: peer disconnected", Self.logCategory)
+            return false
+        }
+
+        let now = serviceTimeMs
+
+        // (0) Dead-peer detection at ENet's 10s envelope. The host can silently
+        // reset our peer WITHOUT sending DISCONNECT/TERMINATION; if we have
+        // reliable commands in flight and haven't seen a matched ACK for the full
+        // ackSilenceDeadMs (= ENet's peer timeout), the peer is genuinely gone.
+        // A shorter window would kill a recoverable blip - moonlight rides those
+        // out by retransmitting, never self-terminating early, and so do we.
+        let health = withState { () -> AckHealth in
+            let sampleTime = serviceTimeMs
+            let sinceAck = Self.msSince(lastAckRecvMs, now: sampleTime)
+            let oldest = sentReliable.map { Self.msSince($0.firstSentAtMs, now: sampleTime) }.max() ?? 0
+            return AckHealth(sinceLastAck: sinceAck, unackedCount: sentReliable.count,
+                             oldestUnackedMs: oldest, rttMs: roundTripTime,
+                             haveRtt: hasRttSample)
+        }
+        // RTT-relative input backpressure (do-no-harm on a stable link): mark the
+        // host "behind" ONLY on sustained ACK silence relative to RTT, never on a
+        // clean link where ACKs return within ~one RTT. Read lock-free by the 1ms
+        // InputBatcher flush. floor when no RTT sample yet (handshake/early).
+        let bpThreshold = health.haveRtt
+            ? max(Self.backpressureAckSilenceFloorMs,
+                  Self.backpressureRttMultiple * UInt32(min(health.rttMs, 1000)))
+            : Self.backpressureAckSilenceFloorMs
+        reliableBackloggedFlag.store(health.unackedCount > 0 && health.sinceLastAck > bpThreshold,
+                                     ordering: .relaxed)
+
+        // ACK-silence NEAR-MISS: count once per EDGE silence (reliables outstanding)
+        // crosses a deep RTT multiple short of the dead-peer cutoff - the recovered
+        // blip that cutoff never records. Edge-armed, so one near-miss = one count.
+        let nearMissThreshold = health.haveRtt
+            ? min(Self.ackSilenceDeadMs - 1,
+                  max(Self.ackSilenceNearMissFloorMs,
+                      Self.ackSilenceNearMissRttMultiple * UInt32(min(health.rttMs, 1000))))
+            : Self.ackSilenceNearMissFloorMs
+        if health.unackedCount > 0 && health.sinceLastAck >= nearMissThreshold {
+            if !ackSilenceNearMissArmed {
+                ackSilenceNearMissArmed = true
+                TelemetryCounters.shared.ackSilenceNearMissTotal.increment()
+            }
+        } else if ackSilenceNearMissArmed {
+            ackSilenceNearMissArmed = false
+        }
+
+        let stalled = health.sinceLastAck >= Self.ackSilenceDeadMs || health.oldestUnackedMs >= Self.ackSilenceDeadMs
+        if health.unackedCount > 0 && stalled {
+            declarePeerDead(code: -1, reason: "ENet peer silent: no ACK in \(health.sinceLastAck)ms with "
+                + "\(health.unackedCount) reliable command(s) outstanding "
+                + "(oldest \(health.oldestUnackedMs)ms) - host silently reset peer; terminating")
+            return false
+        }
+
+        // (A) app-level periodic ping every 100ms - the Sunshine stream keepalive
+        // that keeps video flowing.
+        if now &- state.lastPeriodicPingMs >= Enet.periodicPingIntervalMs {
+            sendPeriodicPing()
+            state.lastPeriodicPingMs = now
+        }
+
+        // (B) transport ENet ping if we haven't sent anything in 500ms.
+        let idleMs = withState { Self.msSince(lastSendMs, now: serviceTimeMs) }
+        if idleMs >= Enet.pingIntervalMs {
+            sendEnetPing()
+        }
+
+        // Drain coalesced IDR/RFI requests (moonlight's requestIdrFrameFunc): a request
+        // wakes the loop and leaves at once, and repeats of each kind stay 20 ms apart,
+        // so a per-failed-frame IDR storm sends no more than the old tick did.
+        state.nextWaitMs = drainPendingRecoveryRequests()
+
+        // Reliable retransmits (covers both ping types + IDR/RFI/LTR).
+        checkRetransmit()
+
+        // (C) 1Hz health snapshot - the host-timeout fingerprint is
+        // sentReliable.count climbing + oldestUnacked/sinceLastAck crossing
+        // ~5000ms right before a stall. Lands in the in-app LogStore. DEBUG
+        // (demoted from NOTICE, log diet): this exact data now rides every
+        // telemetry row (enet_sent_reliable / oldest_unacked / since_last_ack)
+        // where the trend is actually read, and at NOTICE the 1Hz line put
+        // 9,614 copies in one 2.7h session file. The ring/os_log still carry
+        // it live; the dead-peer/stall paths keep their own ERROR lines.
+        if now &- state.lastHealthSnapshotMs >= Self.healthSnapshotIntervalMs {
+            Diag.debug("ENet health: sentReliable=\(health.unackedCount) "
+                + "oldestUnackedMs=\(health.oldestUnackedMs) sinceLastAckMs=\(health.sinceLastAck)",
+                Self.logCategory)
+            state.lastHealthSnapshotMs = now
+        }
+        return true
+    }
+
+    /// The persistent post-connect loop, on NativeBackend's DEDICATED Thread (not the pool):
+    /// ticks controlLoopTick, then blocks on `recoveryWake` (an IDR/RFI request ends the wait
+    /// early), so keepalives and ACKs never starve behind main-thread input. Ends on interrupt().
+    func runControlLoopSync() {
+        var state = startControlLoop()
+        while !interrupted.isSet {
+            if !controlLoopTick(&state) { break }
+            _ = recoveryWake.wait(timeout: .now() + .milliseconds(Int(state.nextWaitMs)))
+        }
+        Diag.notice("ENet control loop stopped", Self.logCategory)
+    }
+
+    /// (A) App-level periodic ping (lossStatsThreadFunc, ControlStream.c:1388).
+    /// Payload built LE: BbPut16(4) then BbPut32(0) = [04 00 00 00 00 00 00 00].
+    /// Encrypted control-V2 type 0x0200 on channel 0, RELIABLE (so RTT is
+    /// recomputed on its ACK). Fire-and-track - don't block the loop on its ACK.
+    func sendPeriodicPing() {
+        let payload: [UInt8] = [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        do {
+            _ = try sendEncryptedControl(
+                type: CtrlV2.periodicPing, payload: payload,
+                channel: Enet.ctrlChannelGeneric, label: "PERIODIC_PING")
+        } catch {
+            Diag.error("ENet periodic ping failed: \(error, privacy: .private)", Self.logCategory)
+        }
+    }
+
+    /// WAKE re-anchor + solicited ping. The dead-peer clock (`lastAckRecvMs`) is
+    /// the service clock, which PAUSES during system sleep, so a post-sleep
+    /// `sinceLastAck` measures from before the nap and would falsely read fresh.
+    /// Re-anchor it to NOW so the silence probe measures awake-silence-from-wake,
+    /// then send an immediate transport ping to solicit a fresh ACK.
+    func reanchorAckAndPing() {
+        withState { lastAckRecvMs = serviceTimeMs }
+        guard !interrupted.isSet, !withState({ disconnected }) else { return }
+        sendEnetPing()
+    }
+
+    /// (B) Transport ENet PING (enet_peer_ping, peer.c:446): command
+    /// PING|FLAG_ACKNOWLEDGE = 0x85, channel 0xFF, peer-counter relSeq, empty
+    /// body. RELIABLE - tracked in sentReliable for ACK/retransmit.
+    func sendEnetPing() {
+        let relSeq: UInt16 = withState {
+            // 16-bit ENet reliable seq - wrap (&+), don't trap. The PING fires
+            // ~2/s, so plain + would overflow-crash after ~9h of streaming.
+            peerOutgoingReliableSeq &+= 1
+            return peerOutgoingReliableSeq
+        }
+        var cmd = ByteWriter()
+        cmd.u8(Enet.cmdPing | Enet.flagAcknowledge) // 0x85
+        cmd.u8(Enet.peerChannelID)                  // 0xFF
+        cmd.u16BE(relSeq)
+        let commandBytes = cmd.bytes
+        withState {
+            let nowMs = serviceTimeMs
+            sentReliable.append(SentReliable(
+                channelID: Enet.peerChannelID, reliableSequenceNumber: relSeq,
+                commandBytes: commandBytes, sentAtMs: nowMs, firstSentAtMs: nowMs,
+                attempts: 1))
+            unackedReliables.increment() // mirror sentReliable.count
+        }
+        sendDatagram(wrapDatagram(commands: [commandBytes], sentTime: true))
+        Diag.debug("ENet ping sent (relSeq=\(relSeq))", Self.logCategory)
+    }
+
+    /// Retain every reliable command until ACK or connection teardown, with adaptive backoff.
+    /// Coalesce due retransmits under the MTU; attempts never evict individual commands.
+    func checkRetransmit() {
+        stateLock.lock()
+        if disconnected { stateLock.unlock(); return }
+        let now = serviceTimeMs
+        // ADAPTIVE RTO base (was a flat Enet.defaultRoundTripTimeMs=500): once we
+        // have a real RTT sample, derive the base timeout from the channel's own
+        // EWMA RTT + variance (the same 1/8-mean 1/4-var estimate handleAcknowledge
+        // maintains and estimatedRtt() surfaces) instead of a LAN-tuned constant.
+        // base = srtt + 4*rttvar (Jacobson/Karels), clamped to [floor, ceil]:
+        //   floor 60ms keeps us from retransmitting faster than ~1 RTT on a fast
+        //   link (a sub-floor RTO spuriously resends in-flight commands), and ceil
+        //   1000ms caps the slow-link base before backoff. Read under the SAME
+        //   stateLock the rest of this method holds. Before the first ACK
+        //   (hasRttSample == false) fall back to the original 500ms base so an
+        //   un-sampled peer behaves exactly as before. The existing exponential
+        //   backoff (<< min(attempts,4)) is then applied unchanged.
+        let rtoBaseMs: UInt32
+        if hasRttSample {
+            let base = roundTripTime + 4 * rttVariance
+            rtoBaseMs = UInt32(min(max(base, 60), 1000))
+        } else {
+            rtoBaseMs = Enet.defaultRoundTripTimeMs
+        }
+        var resends: [[UInt8]] = []
+        // Attempts only cap backoff. The control loop reconnects after ten seconds
+        // without progress, including a stuck channel while other channels still ACK.
+        for i in sentReliable.indices {
+            let timeout = rtoBaseMs * UInt32(1 << min(sentReliable[i].attempts, 4))
+            if now &- sentReliable[i].sentAtMs >= timeout {
+                resends.append(sentReliable[i].commandBytes)
+                sentReliable[i].sentAtMs = now
+                sentReliable[i].attempts += 1
+            }
+        }
+        stateLock.unlock()
+
+        // P1 NETWORK telemetry: count this tick's reliable retransmits (the climb
+        // that precedes a control-stream stall, paired with the oldest-unacked
+        // trend the 1Hz health snapshot already surfaces). Always-live integer add
+        // at the already-rare retransmit site (sub-2Hz on a healthy link); the
+        // exporter only reads it when telemetry is on. Done outside stateLock so the
+        // counter's own lock never nests under stateLock.
+        if !resends.isEmpty {
+            TelemetryCounters.shared.enetRetransmitTotal.increment(by: UInt64(resends.count))
+        }
+
+        // Coalesce the due resends into MTU-bounded datagrams (wrapDatagram takes
+        // multiple commands). The 4-byte header (peerID + sentTime) is the max
+        // overhead since these always carry a sent-time.
+        let headerOverhead = 4
+        let maxPayload = Int(Enet.defaultMTU) - headerOverhead
+        var batch: [[UInt8]] = []
+        var batchLen = 0
+        for cmd in resends {
+            if !batch.isEmpty && batchLen + cmd.count > maxPayload {
+                sendDatagram(wrapDatagram(commands: batch, sentTime: true))
+                batch.removeAll(keepingCapacity: true)
+                batchLen = 0
+            }
+            batch.append(cmd)
+            batchLen += cmd.count
+        }
+        if !batch.isEmpty {
+            sendDatagram(wrapDatagram(commands: batch, sentTime: true))
+        }
+    }
+}

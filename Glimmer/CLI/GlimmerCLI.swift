@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  GlimmerCLI.swift
-//
-//  `glimmer <verb> ...`: moonlight-style commands run by the app binary itself,
-//  headless, through the app's own model. Text goes to stdout and stderr, the
-//  result to the exit code. Verbs live in GlimmerCLI+*.swift.
-//
+// The app binary also runs headless verbs through the same model and command channel.
 
+import GlimmerEngine
 import AppKit
 import Foundation
 
@@ -16,7 +11,7 @@ import Foundation
 enum GlimmerCLI {
 
     enum Verb: String, Sendable {
-        case pair, list, stream, quit, wake, help
+        case pair, list, status, stream, stop, quit, wake, diagnostics, help
     }
 
     /// Exit codes shared by every verb.
@@ -26,6 +21,7 @@ enum GlimmerCLI {
         static let usage: Int32 = 2
         static let unreachable: Int32 = 3
         static let notPaired: Int32 = 4
+        static let noActiveStream: Int32 = 5
     }
 
     struct Command: Equatable, Sendable {
@@ -40,13 +36,16 @@ enum GlimmerCLI {
     }
 
     nonisolated private static let allowedFlags: [Verb: Set<String>] = [
-        .list: ["--csv"],
+        .list: ["--csv", "--json"],
+        .status: ["--json"],
+        .stop: ["--json"],
         .stream: ["--force", "--wait", "--exit-after-first-frame", "--json"],
         .wake: ["--wait"]
     ]
 
     nonisolated private static let arity: [Verb: ClosedRange<Int>] = [
-        .pair: 1...1, .list: 0...1, .stream: 1...2, .quit: 1...1, .wake: 1...1, .help: 0...1
+        .status: 0...0, .pair: 1...1, .list: 0...1, .stream: 1...2,
+        .stop: 0...1, .quit: 1...1, .wake: 1...1, .diagnostics: 3...3, .help: 0...1
     ]
 
     nonisolated static let usage = """
@@ -54,19 +53,24 @@ enum GlimmerCLI {
 
         Commands:
           pair <address> [--pin NNNN]    Pair with a PC running Sunshine
-          list [<pc>] [--csv]            List paired PCs, or the apps on one PC
+          list [<pc>] [--csv|--json]     List paired PCs, or the apps on one PC
+          status [--json]                Show this Mac's current stream
           stream <pc> [<app>]            Stream an app in Glimmer (default: the running app,
                                          else Settings › General › Start with)
             --force                      Quit an app already running on the PC without asking
             --wait                       Return when the stream ends
             --exit-after-first-frame     Return when the first frame arrives
             --json                       Print connect timings as one JSON line
+          stop [<pc>] [--json]           Stop this Mac's stream and quit its app on the PC
           quit <pc>                      Quit the app running on a PC
           wake <pc> [--wait]             Send Wake on LAN, and wait for the PC to answer
+          diagnostics capture <pid> <directory>   Record 30 seconds of System Trace locally
+          diagnostics bundle <session> <directory> Export a session's diagnostic evidence
           help                           Show this help
 
         <pc> is a paired PC's name or address. Run glimmer with no command to open the app.
-        Exit status: 0 success, 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired.
+        Exit status: 0 success, 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired,
+                     5 no active stream.
         """
 
     /// Run as `glimmer` (the cask's link), it's always the CLI; otherwise a bare
@@ -105,6 +109,9 @@ enum GlimmerCLI {
         guard arity[verb]?.contains(command.arguments.count) == true else {
             throw UsageError(message: "Wrong arguments for “glimmer \(verb.rawValue)”. Run “glimmer help”.")
         }
+        if command.flags.isSuperset(of: ["--csv", "--json"]) {
+            throw UsageError(message: "Choose either --csv or --json.")
+        }
         return command
     }
 
@@ -133,6 +140,9 @@ enum GlimmerCLI {
             printLine(usage)
             return Exit.ok
         }
+        if command.verb == .status { return await status(command) }
+        if command.verb == .stop { return await stop(command) }
+        if command.verb == .diagnostics { return await diagnostics(command) }
         // The app's launch order minus the UI. AppModel reads the screen, which
         // registers this process with the window server as Glimmer, so first
         // keep it out of the Dock and Cmd-Tab.
@@ -143,13 +153,14 @@ enum GlimmerCLI {
         model.loadHosts()
         // The restored selection starts the launcher's poll loop; verbs probe on demand.
         model.hostStatusTask?.cancel()
+        model.cancelHostReadiness()
         switch command.verb {
         case .pair: return await pair(command, model: model)
         case .list: return await list(command, model: model)
         case .stream: return await stream(command, model: model)
         case .quit: return await quit(command, model: model)
         case .wake: return await wake(command, model: model)
-        case .help: return Exit.ok
+        case .status, .stop, .diagnostics, .help: return Exit.ok
         }
     }
 
@@ -181,13 +192,20 @@ enum GlimmerCLI {
     /// One readiness probe through the launcher's own poller, in place of the loop
     /// a selection starts. A first poll that learns the PC's MAC reloads the host
     /// list and resets the selection, dropping its result; one retry covers that.
-    static func probe(_ host: Host, model: AppModel) async -> HostLiveStatus? {
+    static func probe(_ host: Host, model: AppModel, waitUntilIdle: Bool = false) async -> HostLiveStatus? {
         for _ in 0..<2 {
             model.selectedHost = model.hosts.first { $0.id == host.id } ?? host
             model.hostStatusTask?.cancel()
+            model.cancelHostReadiness()
             model.hostLiveStatus = nil
             _ = await model.pollHostStatusOnce(for: host.id, appListFor: nil)
-            if let live = model.hostLiveStatus, live.hostID == host.id { return live }
+            if let live = model.hostLiveStatus, live.hostID == host.id {
+                if waitUntilIdle, AppModel.occupant(of: live.state) != nil {
+                    model.beginHostReadiness(for: host)
+                    await model.hostPolling.readinessTasks[host.id]?.value
+                }
+                return model.hostLiveStatus
+            }
         }
         return nil
     }

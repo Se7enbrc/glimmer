@@ -1,10 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import AppKit
 import Testing
 @testable import Glimmer
 
 struct StreamWindowCloseTests {
+    @MainActor @Test(arguments: [StreamDisplayMode.window, .fullScreen])
+    func userCloseAlwaysRequestsSessionStop(mode: StreamDisplayMode) {
+        let stream = StreamWindow()
+        stream.displayMode = mode
+        stream.streamDelegate.displayMode = mode
+        stream.streamDelegate.onCloseRequested = { stream.handleUserCloseRequest() }
+        stream.window.delegate = stream.streamDelegate
+        var stops = 0
+        stream.onCloseRequested = { stops += 1 }
+        stream.window.performClose(nil)
+        #expect(stops == 1)
+        #expect(!stream.didClose)
+        #expect(!stream.userBackgrounded)
+        stream.streamDelegate.onCloseRequested = nil
+    }
+
     @Test func aSettledSpaceExitsBeforeFading() {
         var state = StreamWindowCloseState()
         #expect(state.nextAction(isFullScreen: true) == .exitSpace)

@@ -114,13 +114,13 @@ HELPER_SRCS   := helper/Protocol.swift Glimmer/AWDLProcess.swift helper/AWDLSupp
 HELPER_PLIST  := helper/$(HELPER_LABEL).plist
 HELPER_BIN    := $(DERIVED)/$(HELPER_LABEL)
 HELPER_SDK    := $(shell xcrun --sdk macosx --show-sdk-path)
-HELPER_TARGET := arm64-apple-macos26.0
+HELPER_TARGET := arm64-apple-macos15.7
 HELPER_BUNDLE := $(GLIMMER_APP_SRC)/Contents/Library/LaunchServices/Glimmer Network Helper.app
 
 .PHONY: all release install reinstall uninstall clean app sign sign-bundle open \
         helper-build embed-helper \
         profile profile-signposts setup-notary notarize notarize-bundle dmg dmg-background sparkle-zip dist preflight \
-        codesign-setup codesign-teardown ensure-signing dev test test-asan \
+        codesign-setup codesign-teardown ensure-signing dev test test-asan test-build test-run \
         creds-init enable-telem disable-telem release-publish sparkle-keys \
         guard-clean-tree guard-release-version appcast-feed check verify test-scripts brew-bump rc
 
@@ -153,6 +153,24 @@ test:
 	  $(if $(COVERAGE),-enableCodeCoverage YES -resultBundlePath $(DERIVED)/coverage/swift/glimmer.xcresult); \
 	  status=$$?; $(if $(COVERAGE),[ $$status -ne 0 ] || python3 scripts/coverage-report.py swift || status=$$?;) \
 	  $(UNREGISTER_BUILDS); exit $$status
+
+# The unit tests built once and run elsewhere: Verify builds them with the pinned
+# Xcode and runs them on the oldest supported macOS, whose image can't compile them.
+test-build:
+	@scripts/generate-build-info.sh
+	xcodebuild build-for-testing -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+	  -xcconfig $(STREAM_XCCONFIG) \
+	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS'
+	@# The tests link this Xcode's Swift Testing; ship it, since the runner's Xcode may be older.
+	@platform="$$(xcrun --sdk macosx --show-sdk-platform-path)/Developer"; \
+	  ditto "$$platform/Library/Frameworks/Testing.framework" "$(DERIVED)/Build/Products/Debug/Testing.framework" && \
+	  ditto "$$platform/usr/lib/lib_TestingInterop.dylib" "$(DERIVED)/Build/Products/Debug/lib_TestingInterop.dylib"
+	@$(UNREGISTER_BUILDS)
+
+test-run:
+	@set -- "$(DERIVED)"/Build/Products/*.xctestrun; test -f "$$1" || { echo "ERR: run make test-build first" >&2; exit 1; }; \
+	  xcodebuild test-without-building -xctestrun "$$1" -destination 'platform=macOS' $(TEST_FLAGS); \
+	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
 
 # Exercise untrusted protocol input with memory error detection enabled.
 test-asan:
@@ -478,7 +496,9 @@ check:
 	@echo "▶ Check (workflows + lint --strict + release-tool tests)..."
 	@actionlint
 	@scripts/check-spdx.sh
-	@swiftlint lint --strict --quiet
+	@python3 scripts/check-engine-boundary.py
+	@python3 scripts/check-ios-boundary.py
+	@scripts/lint-swift.sh lint --strict --quiet
 	@$(MAKE) test-scripts
 
 # Fixture repositories need git's own discovery; a hook's GIT_DIR would aim them at this one.
@@ -594,3 +614,5 @@ disable-telem:
 	@[ -x scripts/telem-client.sh ] && scripts/telem-client.sh disable || true
 	@defaults write io.ugfugl.Glimmer telemetryEnabled -bool NO
 	@echo "  ✓ app telemetry exporter OFF - relaunch Glimmer to pick it up"
+
+include scripts/apple-apps.mk

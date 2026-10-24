@@ -18,6 +18,7 @@
 //  Nothing here changes streaming behaviour; it's all observation/opt-in.
 //
 
+import GlimmerEngine
 import AppKit
 import SwiftUI
 
@@ -67,7 +68,8 @@ struct DiagnosticsPane: View {
                             Text("Performance telemetry").fontWeight(.medium)
                             Text("Exposes per-second stream metrics over a local "
                                 + "Prometheus endpoint and an NDJSON log, plus a "
-                                + "richer per-session diagnostic log. Off by default; "
+                                + "richer per-session diagnostic log. "
+                                + (DiagnosticBuild.isEnabled ? "On by default in this diagnostic build; " : "Off by default; ")
                                 + "carries only performance numbers, never secrets.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
@@ -142,11 +144,11 @@ struct DiagnosticsPane: View {
     /// Show the path with a leading `~` instead of the absolute home so it reads
     /// cleanly and matches how the doc comments refer to it.
     private var abbreviatedLogPath: String {
-        (TelemetryExporter.logsDirectory.path as NSString).abbreviatingWithTildeInPath
+        (MacTelemetryCapture.logsDirectory.path as NSString).abbreviatingWithTildeInPath
     }
 
     private func revealLogDir() {
-        let dir = TelemetryExporter.logsDirectory
+        let dir = MacTelemetryCapture.logsDirectory
         // Create it if it doesn't exist yet (telemetry may never have run) so
         // the reveal lands somewhere instead of silently no-opping.
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

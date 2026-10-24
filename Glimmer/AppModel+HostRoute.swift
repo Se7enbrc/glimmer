@@ -9,6 +9,7 @@
 //  StreamRouteProbe; a Wi-Fi route adds a 1 Hz PHY-rate read off the main thread.
 //
 
+import GlimmerEngine
 import Foundation
 import Network
 import SwiftUI
@@ -25,11 +26,20 @@ final class HostRouteMonitor {
     /// (utun/ipsec - Network.framework's `.other`) and `unknown` (no route /
     /// not yet resolved) both render as NO glyph: absent knowledge stays
     /// unlabelled, never guessed.
-    enum RouteClass {
-        case wired, wifi, tunnel, unknown
-    }
+    typealias RouteClass = RouteBitratePolicy.Route
 
     private(set) var routeClass: RouteClass = .unknown
+    private let samplingWiFi: Bool
+
+    init(samplingWiFi: Bool = true) {
+        self.samplingWiFi = samplingWiFi
+    }
+
+    func receiveRoute(_ fresh: RouteClass) {
+        if samplingWiFi, (fresh == .wifi) != (routeClass == .wifi) { setPhySampling(fresh == .wifi) }
+        if routeClass == .wired, fresh != .wired { onLeftWired?() }
+        routeClass = fresh
+    }
 
     /// Median of the last ten 1 Hz PHY-rate reads while the route is Wi-Fi;
     /// nil otherwise. A single read can catch a rate-adaptation dip (206 Mbps
@@ -127,9 +137,7 @@ final class HostRouteMonitor {
             let fresh = Self.classify(path)
             Task { @MainActor [weak self] in
                 guard let self, self.generation == gen else { return }
-                if (fresh == .wifi) != (self.routeClass == .wifi) { self.setPhySampling(fresh == .wifi) }
-                if self.routeClass == .wired, fresh != .wired { self.onLeftWired?() }
-                self.routeClass = fresh
+                self.receiveRoute(fresh)
             }
         }
         conn.betterPathUpdateHandler = { [weak self] better in

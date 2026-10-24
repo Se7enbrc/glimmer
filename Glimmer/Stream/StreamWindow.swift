@@ -1,47 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamWindow.swift
-//
-//  Fullscreen NSWindow hosting the AVSampleBufferDisplayLayer that
-//  VideoDecoder enqueues decoded sample buffers into. Owned by StreamSession.
-//  Captures the cursor while frontmost, releases it when the user invokes
-//  the quit hotkey.
-//
-//  Why AVSampleBufferDisplayLayer and not CAMetalLayer
-//  ---------------------------------------------------
-//  We tried - three times - to get correct HDR out of a CAMetalLayer driven
-//  by a custom MSL fragment shader doing BT.2020 NCL YUV→RGB + range
-//  scaling. On the a 4K@240 HDR1000 panel, every variant landed somewhere
-//  on the same wrong axis: overbright midtones, washed highlights, milky
-//  blacks. moonlight-qt on the same display, host, and content shows inky
-//  blacks and proper bright highlights.
-//
-//  The reason: on macOS, moonlight-qt's HDR-correct path is not
-//  `vt_metal.mm` (its Metal-shader fallback). The default macOS path is
-//  `vt_avsamplelayer.mm`, which sidesteps Metal entirely. It hands the OS a
-//  CVPixelBuffer wrapped in a CMSampleBuffer and lets AVFoundation +
-//  CoreAnimation do colorspace conversion, PQ EOTF application, and EDR
-//  tone-mapping against the display's actual peak luminance. There is no
-//  shader. There is no manual CSC. The OS owns the pipeline end-to-end.
-//
-//  When you write PQ-encoded BT.2020 codes into a CAMetalLayer with a
-//  custom shader, even with all the right metadata (itur_2100_PQ
-//  colorspace, EDRMetadata, wantsExtendedDynamicRangeContent), the
-//  compositor still has to reverse-engineer what the shader did. The
-//  AVSampleBufferDisplayLayer path skips that round trip: the
-//  CVPixelBuffer carries primaries / transfer / matrix attachments,
-//  the CMFormatDescription carries mastering-display + content-light
-//  metadata, and the layer's colorspace tells the compositor exactly
-//  how to interpret the bits. No guesswork, no shader-vs-OS fight.
-//
-//  This is the same architectural choice moonlight-qt made on macOS and
-//  the reason their HDR output is correct on the same panel.
-//
-//  Full screen has two paths, picked in show() by `coversNotch`. A (default):
-//  a borderless window at mainMenuWindow + 1 with [.hideMenuBar, .hideDock] and
-//  no Space. B: a Space via toggleFullScreen with the auto-hide options.
+// AVSampleBufferDisplayLayer lets macOS own PQ conversion and EDR tone mapping; custom Metal washed out 4K240 HDR.
+// Pixel-buffer attachments and format metadata preserve that pipeline without manual color conversion.
+// StreamSession owns this cursor-capturing window; coversNotch selects a borderless cover or a full-screen Space.
 
 import AppKit
 import AVFoundation
@@ -87,6 +49,7 @@ public final class StreamWindow {
     /// sole caller is the capture edge in StreamWindow+Windowed.swift, which
     /// full screen never reaches.
     public let captureHintBanner: StreamBannerLayer
+    var streamToastGeneration: UInt64 = 0
     let displayView: DisplayContainerView
     /// The NSView hosting the AVSampleBufferDisplayLayer. Exposed so the
     /// session can bind the FramePacer's CADisplayLink to this view's screen
@@ -126,6 +89,8 @@ public final class StreamWindow {
     /// aborted Path-B session.
     var enterFullScreenObserver: NSObjectProtocol?
     var didClose = false
+    var visualCloseFinished = false
+    var visualCloseWaiters: [CheckedContinuation<Void, Never>] = []
 
     /// `NSApplication.presentationOptions` we observed at `show()` time, so we
     /// can restore exactly that on `close()` rather than guessing at a sane
@@ -150,6 +115,7 @@ public final class StreamWindow {
 
     /// Window-mode title ("Tower - Desktop"). Ignored by the borderless cover.
     public var windowTitle: String = ""
+    var fullscreenRelativePointer = true
 
     /// The window as a small floating panel (StreamWindow+MiniPlayer.swift).
     /// A window-mode variant: `displayMode` reads `.window` while it is on.
@@ -208,6 +174,8 @@ public final class StreamWindow {
     /// Called when displays wake, even if the screen signature is unchanged.
     public var onDisplaysWoke: (@MainActor () -> Void)?
 
+    var presentationRevealInProgress = false
+    var pendingFirstFrameReveal = false
     /// Set by show(), cleared by the first-frame fade-in. Until then the window
     /// is invisible and passes clicks through to the launcher's Cancel, and it
     /// takes neither the pointer nor the menu bar.
@@ -244,6 +212,13 @@ public final class StreamWindow {
 
     /// Bumped by every cover slide and reset; a superseded slide's completion bails.
     var coverSlideGeneration = 0
+    var scheduleCoverSettlement: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, settle in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: settle)
+    }
+    var runSlideAnimation: @MainActor (@MainActor () -> Void, @escaping @MainActor () -> Void) -> Void =
+        StreamWindow.runSlideAnimation
+    var runFadeAnimation: @MainActor (NSWindow, CGFloat, @escaping @MainActor () -> Void) -> Void =
+        StreamWindow.runFadeAnimation
 
     /// Called once the window is on screen and key, and again by the first-frame
     /// fade-in: InputForwarder installs its first responder, then takes the
@@ -392,6 +367,10 @@ public final class StreamWindow {
         // full initialization because it captures self.
         delegate.onCloseRequested = { [weak self] in self?.handleUserCloseRequest() }
         delegate.onMiniPlayerExitRequested = { [weak self] in self?.leaveMiniPlayer() }
+        delegate.onFullScreenSettled = { [weak self] in
+            guard let self, self.pendingFirstFrameReveal else { return }
+            self.fadeInOnFirstFrame()
+        }
     }
 
     /// Strong ref so the window delegate isn't deallocated mid-stream

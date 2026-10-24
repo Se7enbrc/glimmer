@@ -95,13 +95,13 @@ repos:
         # dirty file is caught too. Repo root comes from `git rev-parse`.
         entry:
           bash -c 'set -e; ROOT=$(git rev-parse --show-toplevel);
-          CFG="$ROOT/.swiftlint.yml"; BEFORE=$(git -C "$ROOT" diff -- "*.swift"
-          "*.swiftinterface" | shasum -a 256); swiftlint --fix --quiet --config
-          "$CFG"; AFTER=$(git -C "$ROOT" diff -- "*.swift" "*.swiftinterface" |
-          shasum -a 256); if [ "$BEFORE" != "$AFTER" ]; then echo "swiftlint
-          --fix rewrote files. Review the diff and re-add them:" >&2; git -C
-          "$ROOT" diff --stat -- "*.swift" >&2 || true; exit 1; fi; swiftlint
-          lint --strict --quiet --config "$CFG"'
+          LINT="$ROOT/scripts/lint-swift.sh"; BEFORE=$(git -C "$ROOT" diff --
+          "*.swift" "*.swiftinterface" | shasum -a 256); "$LINT" --fix --quiet;
+          AFTER=$(git -C "$ROOT" diff -- "*.swift" "*.swiftinterface" | shasum
+          -a 256); if [ "$BEFORE" != "$AFTER" ]; then echo "swiftlint --fix
+          rewrote files. Review the diff and re-add them:" >&2; git -C "$ROOT"
+          diff --stat -- "*.swift" >&2 || true; exit 1; fi; "$LINT" lint
+          --strict --quiet'
         language: system
         types: [swift]
         pass_filenames: false

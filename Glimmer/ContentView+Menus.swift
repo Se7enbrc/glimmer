@@ -9,22 +9,24 @@
 //  visible menu button. The menu bar item's panel lives in MenuBarPanel.swift.
 //
 
+import GlimmerEngine
 import AppKit
 import SwiftUI
 
 // MARK: - Shared per-host menu
 
 /// Actions for a paired host, one item list for the right-click menu and the
-/// visible menu button. Carries its own dialogs, alerts and pair sheet;
-/// needs the AppModel in the environment.
+/// visible menu button. Dialogs stay local; pairing has one shared owner.
+/// Needs the AppModel in the environment.
 private struct HostContextMenu: ViewModifier {
     let host: Host
     /// Turns the content into a menu button instead of adding a right-click menu.
     let asButton: Bool
     @Environment(AppModel.self) private var model
     @State private var showUnpairConfirm = false
+    @State private var showUnpairFailure = false
     @State private var showRename = false
-    @State private var showPairAgain = false
+    @Environment(\.pairingOwner) private var pairingOwner
     @State private var draftName = ""
     @State private var codecPref: HostCodecPreference
     /// The app the Quit item named when it was chosen; nil when the PC didn't say.
@@ -99,15 +101,17 @@ private struct HostContextMenu: ViewModifier {
             isPresented: $showUnpairConfirm,
             titleVisibility: .visible
         ) {
-            Button("Unpair", role: .destructive) { model.unpair(host) }
+            Button("Unpair", role: .destructive) {
+                do { try model.unpair(host) } catch { showUnpairFailure = true }
+            }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Glimmer will forget \(host.displayName). You can pair it again at any time.")
         }
-        // Lands on the PIN step; pairing re-pins the PC's certificate. Settings'
-        // PC list has no launcher sheet to hand this to, so it carries its own.
-        .sheet(isPresented: $showPairAgain) {
-            PairSheet(repairing: host).environment(model)
+        .alert(AppModel.forgetFailureTitle(host.displayName), isPresented: $showUnpairFailure) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(AppModel.forgetFailureRecovery)
         }
     }
 
@@ -132,6 +136,12 @@ private struct HostContextMenu: ViewModifier {
         // Several surfaces mount this menu; reload at present-time so a
         // change on one is reflected in the other's checkmark.
         .onAppear { codecPref = HostCodecPreference.load(for: host.id) }
+        Picker("Launcher", selection: Binding(
+            get: { model.hosts.first(where: { $0.id == host.id })?.launcherStyle ?? host.launcherStyle },
+            set: { model.setLauncherStyle($0, for: host) })) {
+            ForEach(LauncherStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.menu)
         // Wake on LAN needs the MAC Sunshine reports; without one the switch
         // is off and disabled, and its title and tooltip say why.
         let hasMac = WakeOnLAN.normalizeMac(host.macAddress) != nil
@@ -144,18 +154,19 @@ private struct HostContextMenu: ViewModifier {
         .help(hasMac ? "" : AppModel.wakeNoMacMessage(host.displayName))
         Divider()
         Button {
-            showPairAgain = true
+            model.requestPairing(for: host, owner: pairingOwner)
         } label: {
             Label("Pair Again…", systemImage: "key")
         }
         .disabled(isStreamingThisPC)
-        // Only while the chip says an app is running; `app` is nil when the PC didn't name it.
-        if !isStreamingThisPC, case .streamingElsewhere(let app) = model.polledChip(for: host) {
+        // Only a fresh reading from this PC can offer a quit.
+        if !isStreamingThisPC, let live = model.hostLiveStatus, HostLiveStatus.isFresh(live, for: host.id),
+           let occupant = AppModel.occupant(of: live.state) {
             Button {
-                quitApp = app
+                quitApp = occupant
                 showQuitConfirm = true
             } label: {
-                Label("Quit \(app ?? "the Running App") on \(host.displayName)…", systemImage: "xmark.circle")
+                Label("Quit \(occupant ?? "the Running App") on \(host.displayName)…", systemImage: "xmark.circle")
             }
         }
         Button(role: .destructive) {

@@ -9,12 +9,14 @@
 //  protocol's default async connect.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
 
 @MainActor
 struct BackendGlueTests {
+    private let settings = IsolatedDefaults()
 
     private func label(_ event: StreamEvent) -> String {
         switch event {
@@ -31,10 +33,9 @@ struct BackendGlueTests {
 
     /// With no session left to classify it, a terminate still reaches the UI.
     @Test func eventsReachTheBridgeStreamInOrder() async {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         let bridge = StreamBridgeContext(
-            session: session, videoDecoder: VideoDecoder(), audioDecoder: AudioDecoder(),
-            inputForwarder: InputForwarder())
+            session: session, videoDecoder: VideoDecoder(), audioDecoder: AudioDecoder(defaults: settings.defaults))
         let (stream, continuation) = AsyncStream.makeStream(of: StreamEvent.self)
         bridge.eventContinuation = continuation
         bridge.session = nil
@@ -58,8 +59,9 @@ struct BackendGlueTests {
 
     @Test func bridgePointerResolvesToTheSameBridge() {
         let bridge = StreamBridgeContext(
-            session: StreamSession(backend: InputRecordingBackend()), videoDecoder: VideoDecoder(),
-            audioDecoder: AudioDecoder(), inputForwarder: InputForwarder())
+            session: StreamSession(
+                hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend()), videoDecoder: VideoDecoder(),
+            audioDecoder: AudioDecoder(defaults: settings.defaults))
         let pointer = Unmanaged.passUnretained(bridge).toOpaque()
         #expect(StreamBridgeContext.from(pointer) === bridge)
         #expect(StreamBridgeContext.from(nil) == nil)
@@ -99,4 +101,163 @@ struct BackendGlueTests {
         #expect(started.serverCodecModeRaw == 0x0101)
         #expect(backend.enetHealth() == nil)
     }
+}
+
+extension BackendGlueTests {
+    @Test func retiredAttemptCannotApplyQueuedHdrOrFeedbackBeforeSourceSwap() async {
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
+        let decoder = VideoDecoder()
+        let activations = AtomicCounter()
+        var feedback = SessionFeedback()
+        feedback.activated = { _ in activations.increment() }
+        let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
+                                         audioDecoder: AudioDecoder(defaults: settings.defaults), feedback: feedback)
+        let backend = NativeBackend()
+        bridge.setEventSource(backend)
+        let events = NativeConnectionEvents(bridge: bridge, backend: backend)
+        events.setHdrMode(true)
+        events.controllersActivated()
+        #expect(activations.value == 1)
+        bridge.beginAttempt(UUID())
+        events.controllersActivated()
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(activations.value == 1)
+        #expect(!decoder.hdrEnabled)
+    }
+
+    @Test func obsoleteBackendCannotPublishHdrOrAudioIntoReplacement() async {
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
+        let decoder = VideoDecoder()
+        let bridge = StreamBridgeContext(session: session, videoDecoder: decoder,
+                                         audioDecoder: AudioDecoder(defaults: settings.defaults))
+        let old = NativeBackend()
+        let replacement = NativeBackend()
+        let (stream, continuation) = AsyncStream.makeStream(of: StreamEvent.self)
+        bridge.eventContinuation = continuation
+        bridge.setEventSource(old)
+        let events = NativeConnectionEvents(bridge: bridge, backend: old)
+        events.setHdrMode(true)
+        bridge.setEventSource(replacement)
+        events.setHdrMode(false)
+        events.audioFailed("stale audio")
+        events.connectionStarted()
+        continuation.finish()
+        var received: [String] = []
+        for await event in stream { received.append(label(event)) }
+        #expect(received == ["hdr true"])
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(!decoder.hdrEnabled)
+    }
+}
+
+struct NativeBackendTeardownTests {
+    @Test func stopJoinsVideoStartupBeforeTheSinkCanBeReused() async throws {
+        let backend = NativeBackend()
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let stopEntered = DispatchSemaphore(value: 0)
+        let stopped = DispatchSemaphore(value: 0)
+        let sink = TeardownVideoSink(onSetup: {
+            entered.signal()
+            release.wait()
+        }, onCleanup: {})
+        backend.attachVideoSink(sink)
+        let config = BackendStreamConfig(
+            width: 1920, height: 1080, fps: 60, bitrate: 20000, packetSize: 1392,
+            streamingRemotely: 0, audioConfiguration: 0, supportedVideoFormats: 1,
+            clientRefreshRateX100: 6000, colorSpace: 0, colorRange: 0, encryptionFlags: 0,
+            remoteInputAesKey: [UInt8](repeating: 0, count: 16), remoteInputAesIv: [])
+        let handshake = RtspHandshakeResult(
+            audioPort: 0, videoPort: 0, controlPort: 0, controlConnectData: 0,
+            sessionId: "", negotiatedVideoFormat: 1, encryptionFeaturesSupported: 0,
+            encryptionFeaturesEnabled: 0, referenceFrameInvalidationSupported: false)
+        let enet = EnetControlChannel(host: .ipv4(.loopback), port: 0,
+                                      controlConnectData: 0, crypto: try ControlCrypto(rikey: config.remoteInputAesKey))
+        backend.withState { backend.enetChannel = enet }
+        let startup = Task.detached {
+            try await backend.startVideoStage(handshake: handshake, config: config,
+                                              host: .ipv4(.loopback), events: NativeConnectionEvents())
+        }
+        defer { release.signal() }
+        try #require(await entered.waitAsync(for: .seconds(5)) == .success)
+        backend.interruptConnection()
+        Thread {
+            stopEntered.signal()
+            backend.stopConnection()
+            stopped.signal()
+        }.start()
+        try #require(await stopEntered.waitAsync(for: .seconds(5)) == .success)
+        #expect(await stopped.waitAsync(for: .milliseconds(100)) == .timedOut)
+        release.signal()
+        try #require(await stopped.waitAsync(for: .seconds(5)) == .success)
+        await #expect(throws: (any Error).self) { try await startup.value }
+        sink.start()
+        #expect(backend.withState { backend.videoReceiver == nil && backend.videoSink == nil })
+    }
+
+    @Test func overlappingStopWaitsForTheFirstResourceCleanup() async throws {
+        let backend = NativeBackend()
+        let cleanupEntered = DispatchSemaphore(value: 0)
+        let cleanupRelease = DispatchSemaphore(value: 0)
+        let firstFinished = DispatchSemaphore(value: 0)
+        let secondEntered = DispatchSemaphore(value: 0)
+        let secondFinished = DispatchSemaphore(value: 0)
+        let cleanups = AtomicCounter()
+        let sink = TeardownVideoSink {
+            cleanups.increment()
+            cleanupEntered.signal()
+            cleanupRelease.wait()
+        }
+        backend.attachVideoSink(sink)
+        Thread { backend.stopConnection(); firstFinished.signal() }.start()
+        defer { cleanupRelease.signal() }
+        try #require(await cleanupEntered.waitAsync(for: .seconds(5)) == .success)
+        Thread {
+            secondEntered.signal()
+            backend.stopConnection()
+            secondFinished.signal()
+        }.start()
+        try #require(await secondEntered.waitAsync(for: .seconds(5)) == .success)
+        #expect(await secondFinished.waitAsync(for: .milliseconds(100)) == .timedOut)
+        cleanupRelease.signal()
+        #expect(await firstFinished.waitAsync(for: .seconds(5)) == .success)
+        #expect(await secondFinished.waitAsync(for: .seconds(5)) == .success)
+        #expect(cleanups.value == 1)
+    }
+
+    @Test func aCleanupCallbackCanReenterStopWithoutRepeatingCleanup() async throws {
+        let backend = NativeBackend()
+        let cleanups = AtomicCounter()
+        let finished = DispatchSemaphore(value: 0)
+        let sink = TeardownVideoSink {
+            cleanups.increment()
+            backend.stopConnection()
+        }
+        backend.attachVideoSink(sink)
+        Thread { backend.stopConnection(); finished.signal() }.start()
+        try #require(await finished.waitAsync(for: .seconds(5)) == .success)
+        #expect(cleanups.value == 1)
+    }
+}
+
+private final class TeardownVideoSink: VideoSink {
+    private let onSetup: @Sendable () -> Void
+    private let onCleanup: @Sendable () -> Void
+    init(onSetup: @escaping @Sendable () -> Void = {}, onCleanup: @escaping @Sendable () -> Void) {
+        self.onSetup = onSetup
+        self.onCleanup = onCleanup
+    }
+    var capabilities: Int32 { 0 }
+    func setup(videoFormat: Int32, width: Int32, height: Int32, redrawRate: Int32) -> Int32 {
+        onSetup()
+        return 0
+    }
+    func start() {}
+    func stop() {}
+    func cleanup() { onCleanup() }
+    func submitDecodeUnit(_ unit: DecodeUnit) -> Int32 { StreamProtocol.DR_OK }
 }

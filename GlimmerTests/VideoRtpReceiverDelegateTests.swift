@@ -8,6 +8,7 @@
 //  forward, frames handed to the sink, and the IDR requests a struggling decoder triggers.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -19,13 +20,18 @@ struct VideoRtpReceiverDelegateTests {
         private let lock = NSLock()
         private var frames: [Int32] = []
         private let result: Int32
-        init(result: Int32 = StreamProtocol.DR_OK) { self.result = result }
+        private let onSubmit: @Sendable () -> Void
+        init(result: Int32 = StreamProtocol.DR_OK, onSubmit: @escaping @Sendable () -> Void = {}) {
+            self.result = result
+            self.onSubmit = onSubmit
+        }
         var capabilities: Int32 { 0 }
         func setup(videoFormat: Int32, width: Int32, height: Int32, redrawRate: Int32) -> Int32 { 0 }
         func start() {}
         func stop() {}
         func cleanup() {}
         func submitDecodeUnit(_ unit: DecodeUnit) -> Int32 {
+            onSubmit()
             lock.lock(); frames.append(unit.frameNumber); lock.unlock()
             return result
         }
@@ -96,5 +102,45 @@ struct VideoRtpReceiverDelegateTests {
         receiver.depacketizerNeedsIdr()
         #expect(requests.idr == 1)
         #expect(sink.submitted().isEmpty)
+    }
+
+    @Test func stopJoinsAdmittedSubmissionAndRejectsOldFramesAfterSinkReuse() async throws {
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let submitted = DispatchSemaphore(value: 0)
+        let stopEntered = DispatchSemaphore(value: 0)
+        let stopped = DispatchSemaphore(value: 0)
+        let admissions = AtomicCounter()
+        let sink = RecordingSink {
+            admissions.increment()
+            if admissions.value == 1 {
+                entered.signal()
+                release.wait()
+            }
+        }
+        let receiver = Self.receiver(sink, Requests())
+        Thread {
+            receiver.depacketizerDidAssembleFrame(Self.unit(1))
+            submitted.signal()
+        }.start()
+        defer { release.signal() }
+        try #require(await entered.waitAsync(for: .seconds(5)) == .success)
+        Thread {
+            stopEntered.signal()
+            receiver.stop()
+            stopped.signal()
+        }.start()
+        try #require(await stopEntered.waitAsync(for: .seconds(5)) == .success)
+        #expect(await stopped.waitAsync(for: .milliseconds(100)) == .timedOut)
+        release.signal()
+        try #require(await stopped.waitAsync(for: .seconds(5)) == .success)
+        try #require(await submitted.waitAsync(for: .seconds(5)) == .success)
+        sink.stop()
+        sink.cleanup()
+        sink.start()
+        let replacement = Self.receiver(sink, Requests())
+        replacement.depacketizerDidAssembleFrame(Self.unit(2))
+        receiver.depacketizerDidAssembleFrame(Self.unit(3))
+        #expect(sink.submitted() == [1, 2])
     }
 }

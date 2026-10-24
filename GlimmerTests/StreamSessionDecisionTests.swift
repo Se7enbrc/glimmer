@@ -8,6 +8,7 @@
 //  gate, the backend config mapping and the attempt guard, on a fake backend.
 //
 
+@testable import GlimmerEngine
 import Foundation
 import Testing
 @testable import Glimmer
@@ -21,7 +22,7 @@ struct PresentRecoveryLadderTests {
         StreamSession.presentTripLastClearedAt = .nan
         let decoder = VideoDecoder()
         decoder.backend = recorder
-        return (StreamSession(backend: recorder), decoder)
+        return (StreamSession(hostDisposition: .cancelOwnedHostSession, backend: recorder), decoder)
     }
 
     private func trip(
@@ -45,18 +46,49 @@ struct PresentRecoveryLadderTests {
         #expect(session.pacingGiveUpCount == 0)
     }
 
-    /// A refusing renderer gets the flush and keyframe, twice, before the give-up.
-    @Test func refusingRendererGetsTheFlushMedicineTwice() {
+    /// Readiness-only recovery preserves the healthy decode chain through both flush attempts.
+    @Test func refusingRendererFlushesWithoutRequestingKeyframes() {
         let (session, decoder) = makeSession()
         let refusing = trip(stalled: true, rejecting: true)
         session.escalatePresentRecovery(dec: decoder, trip: refusing, stalledFor: 0.3)
         #expect(session.lastPresentRecoveryStage == 1)
-        #expect(recorder.idrRequests == 1)
+        #expect(recorder.idrRequests == 0)
         session.escalatePresentRecovery(dec: decoder, trip: refusing, stalledFor: 0.6)
         #expect(session.lastPresentRecoveryStage == 2)
-        #expect(recorder.idrRequests == 2)
+        #expect(recorder.idrRequests == 0)
         session.escalatePresentRecovery(dec: decoder, trip: refusing, stalledFor: 0.9)
-        #expect(recorder.idrRequests == 2)
+        #expect(recorder.idrRequests == 0)
+    }
+
+    @Test func rendererOnlyGiveUpDoesNotRequestAKeyframe() {
+        let (session, decoder) = makeSession()
+        let refusing = trip(stalled: true, rejecting: true)
+        session.escalatePresentRecovery(
+            dec: decoder, trip: refusing, stalledFor: StreamSession.presentGiveUpThreshold)
+        #expect(session.lastPresentRecoveryStage == 3)
+        #expect(session.pacingGiveUpCount == 1)
+        #expect(recorder.idrRequests == 0)
+    }
+
+    @Test func rendererStarvationAtEmptyQueueDoesNotRequestAKeyframe() {
+        let (session, decoder) = makeSession()
+        let starving = StreamSession.PresentTrip(
+            linkDead: false, presentStalled: false, tickDeficit: false,
+            rendererRejecting: true, rendererStarved: true)
+        session.escalatePresentRecovery(dec: decoder, trip: starving, stalledFor: 0.3)
+        #expect(session.lastPresentRecoveryStage == 1)
+        #expect(recorder.idrRequests == 0)
+    }
+
+    @Test(arguments: [false, true])
+    func mixedTickAndRendererFaultKeepsKeyframeRecovery(giveUp: Bool) {
+        let (session, decoder) = makeSession()
+        let mixed = StreamSession.PresentTrip(
+            linkDead: false, presentStalled: false, tickDeficit: true,
+            rendererRejecting: true, rendererStarved: true)
+        session.escalatePresentRecovery(
+            dec: decoder, trip: mixed, stalledFor: giveUp ? StreamSession.presentGiveUpThreshold : 0.3)
+        #expect(recorder.idrRequests == 1)
     }
 
     @Test func deadLinkGoesStraightToDrainAndRebuild() {
@@ -172,12 +204,30 @@ struct SessionConnectMappingTests {
         gcmKeyId: Data([1, 2, 3, 4]))
     private let server = ServerInfo(address: "192.0.2.1", uniqueId: "pc", serverName: "Den PC")
 
+    @Test(arguments: [StreamProtocol.VIDEO_FORMAT_H264, StreamProtocol.VIDEO_FORMAT_H265,
+                      StreamProtocol.VIDEO_FORMAT_H265_MAIN10, StreamProtocol.VIDEO_FORMAT_AV1_MAIN8,
+                      StreamProtocol.VIDEO_FORMAT_AV1_MAIN10])
+    func rec709FullReachesTheBackendAndSDP(_ format: Int32) async throws {
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
+        var config = StreamConfig(width: 1920, height: 1080, fps: 60, bitrateKbps: 20_000)
+        config.remoteness = .local
+        let backend = await session.makeBackendConfig(config: config.request, launch: launch, server: server)
+        #expect(backend.colorSpace == 1 && backend.colorRange == 1)
+        let builder = SdpBuilder(config: backend, videoPort: 47998, urlSafeAddr: "192.0.2.1",
+                                 addrFamilyToken: "IPv4", negotiatedVideoFormat: format,
+                                 encryptionFeaturesEnabled: 0)
+        let sdp = try #require(String(data: builder.build(), encoding: .utf8))
+        #expect(sdp.contains("a=x-nv-video[0].encoderCscMode:3 \r\n"))
+        let depth = format & StreamProtocol.VIDEO_FORMAT_MASK_10BIT != 0 ? 1 : 0
+        #expect(sdp.contains("a=x-nv-video[0].dynamicRangeMode:\(depth) \r\n"))
+    }
+
     /// An explicit route is honoured without a probe, and re-latched on every build.
     @Test func explicitRouteSetsPacketSizeAndTheDownshiftTier() async {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         var config = StreamConfig(width: 2560, height: 1440, fps: 120, bitrateKbps: 80_000)
         config.remoteness = .remote
-        let remote = await session.makeBackendConfig(config: config, launch: launch, server: server)
+        let remote = await session.makeBackendConfig(config: config.request, launch: launch, server: server)
         #expect(remote.packetSize == Int32(StreamPathMTU.remotePacketSize))
         #expect(remote.streamingRemotely == StreamProtocol.STREAM_CFG_REMOTE)
         #expect(remote.bitrate == 80_000)
@@ -188,14 +238,14 @@ struct SessionConnectMappingTests {
         #expect(await session.isRemotePathSession)
 
         config.remoteness = .local
-        let local = await session.makeBackendConfig(config: config, launch: launch, server: server)
+        let local = await session.makeBackendConfig(config: config.request, launch: launch, server: server)
         #expect(local.packetSize == 1392)
         #expect(local.streamingRemotely == StreamProtocol.STREAM_CFG_LOCAL)
         #expect(await !session.isRemotePathSession)
     }
 
     @Test func attemptsStopWhenNotStreamingOrPastTheDeadline() async throws {
-        let session = StreamSession(backend: InputRecordingBackend())
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
         await #expect(throws: CancellationError.self) { try await session.checkAttempt() }
         await session.markStreamingForAttemptTest()
         try await session.checkAttempt(deadline: .distantFuture)

@@ -131,12 +131,12 @@ decoration.
 
 The launcher is one sheet of frosted glass, sized to its content. The PC's name
 is its title and its switcher, the specs sit under the name, and each app is a
-violet button that streams it. There is no card inside the window: the window is
-the surface. Four looks have been tried and rejected: a neutral grey card (the
-"grey blob"), a narrow centred column in a wide card, a washed-out mauve card
-(the accent at low opacity over grey reads dusty), and a dark violet card lit
-from below, which read as flashy. The app icon is final and is not redrawn,
-recoloured or reinterpreted.
+button that streams it, using violet Buttons or artwork in Covers. There is no
+card inside the window: the window is the surface. Four looks have been tried
+and rejected: a neutral grey card (the "grey blob"), a narrow centred column in
+a wide card, a washed-out mauve card (the accent at low opacity over grey reads
+dusty), and a dark violet card lit from below, which read as flashy. The app
+icon is final and is not redrawn, recoloured or reinterpreted.
 
 **Key Characteristics:**
 
@@ -149,7 +149,8 @@ recoloured or reinterpreted.
   explaining.
 - Continuous (squircle) corners, concentric where one shape sits in another.
 - Windows sized to their content; no empty space, no stretched columns.
-- Motion is snappy and short, and every pulse or bounce respects Reduce Motion.
+- Motion is snappy and short, happens only when something changes, and never
+  repeats or runs continuously; Reduce Motion drops bounce and movement.
 
 ## Colors
 
@@ -254,8 +255,11 @@ lights on the leading edge and the Settings gear on the trailing edge. Under it,
 PC's name with the spec line under it, a flexible gap and the readiness chip); a
 two-column grid of app buttons with 10pt gutters; the state button, only when
 the PC needs something other than a stream; and the "Last played" footer. The
-grid shows at most four cells; beyond four apps, the fourth is a menu of the
-rest.
+Buttons grid shows at most four cells; beyond four apps, the fourth is a menu of
+the rest. Each PC can instead use Covers: one to four columns, at most two
+visible rows, with vertical scrolling for more apps. Covers use artwork from the
+PC, or a violet glyph fallback, with the app name and running state below. The
+width stays 580pt in either style.
 
 Settings is a standard split view (sidebar plus a grouped Form) in its own
 window, with a minimum size of 680 by 540pt. The menu bar panel is 300pt wide.
@@ -304,17 +308,18 @@ downward. No coloured glows, no inner shadows, no upward light.
 
 ## Shapes
 
-Every corner is continuous (a squircle), never circular. Radii nest where one
-shape sits inside another (the menu bar panel's cards, the pair sheet's panels).
-Capsules mark a single action or a single state (the state button, the readiness
-chip, the toast, the gear). Rounded rectangles mark containers and the app
-buttons: 6pt for glyph chips in the sidebar and menu bar, 8pt for small controls
-and badges, 10pt for the pair sheet's rows, 12pt for inset panels, 14pt for the
-launcher's app buttons and 16pt for PC tiles. Borders are hairline strokes at
-0.5pt and low opacity, used only where material alone would disappear (the
-toast, the empty state's medallion); the primary surface carries a 1pt lit rim.
-Heavier strokes carry state: 1pt red on the failure banner, a 2pt accent ring on
-a recording hotkey.
+Rounded rectangles use continuous corners (squircles); single-action controls
+and status chips use capsules. Radii nest where one shape sits inside another
+(the menu bar panel's cards, the pair sheet's panels). Capsules mark a single
+action or a single state (the state button, the readiness chip, the toast, the
+gear). Rounded rectangles mark containers and the app buttons: 6pt for glyph
+chips in the sidebar and menu bar, 8pt for small controls and badges, 10pt for
+the pair sheet's rows, 12pt for inset panels, 14pt for the launcher's app
+buttons and 16pt for PC tiles. Borders are hairline strokes at 0.5pt and low
+opacity, used only where material alone would disappear (the toast, the empty
+state's medallion); the primary surface carries a 1pt lit rim. Heavier strokes
+carry state: 1pt red on the failure banner, a 2pt accent ring on a recording
+hotkey.
 
 ### Named Rules
 
@@ -328,16 +333,18 @@ does.
 
 Tactile and confident: the things on screen that ask to be pressed.
 
-- **App buttons (`AppTileStyle`):** the launcher's main actions. 60pt tall with
-  a 14pt radius, a 20pt glyph, the app name in bold headline, and a play glyph
-  trailing at 75%, all white on the primary surface. One click streams that app,
-  and Return streams the Start with app while the PC is ready. The app that is
-  launching or streaming carries its own state, with the readiness chip as the
-  status: during a slow connect or a reconnect its play glyph becomes a spinner
-  and a click or Escape is the way out; while its stream window is hidden it
-  stays violet, reads “Back to Stream” in place of its play glyph, and a click
-  or Return goes back to the stream. The other app buttons dim while a stream
-  exists.
+- **App buttons (`LauncherTileStyle`, using `AppTileStyle` for Buttons):** the
+  launcher's main actions. Buttons are 60pt tall with a 14pt radius, a 20pt
+  glyph, the app name in headline, and a play glyph trailing at 75%, all white
+  on the primary surface. One click streams that app. While the PC is ready,
+  Return prefers the running app, otherwise Start with, when its tile is
+  visible. The app that is launching or streaming carries its own state, with
+  the readiness chip as the status: during a slow connect or a reconnect its
+  play glyph becomes a spinner and a click or Escape is the way out; while its
+  stream window is hidden it stays violet, reads “Back to Stream” in place of
+  its play glyph, and a click or Return goes back to the stream. The other app
+  buttons dim while a stream exists. Covers keep the same button actions, with
+  artwork and labels below.
 - **State button (`StreamButtonStyle`):** a capsule at least 46pt tall, with
   22pt of horizontal and 12pt of vertical padding, white title2 semibold label.
   It appears under the app buttons only when the PC needs something other than a
@@ -346,8 +353,8 @@ Tactile and confident: the things on screen that ask to be pressed.
   bar or Shortcuts. A fast connect shows nothing: both wait out a 400ms hold.
   The same style is the menu bar panel's primary button, "Pair a PC…" and the
   pair sheet's main action.
-- **Pressed:** scales to 0.985 over a 0.15s snappy spring; no colour change.
-  Disabled drops to 55% opacity.
+- **Pressed:** scales to 0.985 over a 0.18s snappy animation; Reduce Motion
+  removes the scale and animation. Disabled drops to 55% opacity.
 - **Secondary:** standard AppKit and SwiftUI buttons (bordered, borderless or
   plain) with no custom style. "Pair a PC…" in Settings is a standard button
   with a plus glyph.
@@ -368,7 +375,8 @@ Tactile and confident: the things on screen that ask to be pressed.
   in title semibold with the spec line under it, and the readiness chip on the
   trailing edge. With more than one PC paired, the name is a menu with a chevron
   that lists the PCs with a checkmark on the selected one. Right-click opens the
-  PC's own menu (rename, codec, Wake on LAN, unpair).
+  PC's own menu (rename, codec, launcher style, Wake on LAN, pair again, quit
+  the running app and unpair).
 
 ### Cards / Containers
 
@@ -408,9 +416,13 @@ Tactile and confident: the things on screen that ask to be pressed.
 
 - **Settings sidebar:** the standard source list, each row with an SF Symbol on
   a 6pt coloured glyph chip.
-- **Stream menu:** in the main menu bar: Stream, Mini Player and Stop Streaming,
-  then the PCs with a checkmark on the selected one and ⌘1 to ⌘9. The PCs lock
-  while a stream is running.
+- **Stream menu:** the primary stream action, Mini Player and Stop Streaming,
+  then the PCs with a checkmark on the selected one and ⌘1 to ⌘9. Choosing
+  another PC leaves the current stream running, just like the header's switcher.
+- **Controller navigation:** the d-pad or left stick moves focus, the bottom
+  face button selects, and the right face button dismisses. Navigation uses
+  GameController pads while the launcher or its sheet has focus and no stream or
+  controller test is active. Raw-HID-only pads do not navigate here.
 - **Toolbar:** only the Settings gear, on the trailing edge; the PC switcher is
   the header's name.
 - **Menu bar panel:** 300pt wide, with cards on 12pt quaternary fill, each
@@ -441,9 +453,10 @@ Tactile and confident: the things on screen that ask to be pressed.
   equal to the layout gap, and never wrap filled controls in one: it composites
   the glass over their labels.
 - **Do** nest radii concentrically wherever one shape sits inside another.
-- **Do** animate state with `.snappy` (0.3 to 0.35s, extra bounce 0.1). Under
-  Reduce Motion the extra bounce is 0, slides become fades, and every pulse and
-  bounce is off.
+- **Do** use `Motion`: layout changes use `.smooth` over 0.3s, content fades use
+  0.18s, and overlays use `.snappy` over 0.3s with extra bounce 0.1. Reduce
+  Motion removes layout and press animation, replaces overlay slides with fades,
+  and disables pulses and bounces.
 - **Do** use the `display` glyph for a PC, everywhere a PC is drawn.
 - **Do** disable (55% opacity) rather than hide the app buttons while a stream
   is running.

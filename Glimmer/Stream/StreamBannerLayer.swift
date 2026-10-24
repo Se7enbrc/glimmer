@@ -44,6 +44,9 @@ public final class StreamBannerLayer {
     /// stream says how to leave it. Nil for pills that never linger.
     var lingerHint: (@MainActor () -> String)?
     var lingerDelay: TimeInterval = 5
+    var scheduleLingerDelay: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, action in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: action)
+    }
     /// VoiceOver can't focus a CALayer, so shown and changed text is announced.
     var announce: @MainActor (String) -> Void = { AccessibilityNotification.Announcement($0).post() }
 
@@ -68,6 +71,8 @@ public final class StreamBannerLayer {
         bg.addSublayer(dot)
 
         let text = CATextLayer()
+        // Wording has its own transition; an implicit contents fade can outlive a hidden pill.
+        text.actions = StatsOverlayLayer.disabledActions
         text.contentsScale = bg.contentsScale
         text.isWrapped = false
         text.truncationMode = .end
@@ -99,7 +104,7 @@ public final class StreamBannerLayer {
     /// The text the pill shows right now, linger hint included.
     var displayedText: String { (textLayer.string as? String) ?? "" }
 
-    /// Fade the pill in (true) or out (false) over 200ms.
+    /// Short fades keep reconnect and pointer hints quiet, including under Reduce Motion.
     public func setVisible(_ show: Bool) {
         if show == visible { return }
         visible = show
@@ -112,7 +117,13 @@ public final class StreamBannerLayer {
             scheduleLinger()
         }
         CATransaction.begin()
-        CATransaction.setAnimationDuration(0.2)
+        CATransaction.setDisableActions(true)
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = layer.presentation()?.opacity ?? layer.opacity
+        fade.toValue = show ? 1 : 0
+        fade.duration = Motion.short
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        let generation = showGeneration
         if show {
             layer.isHidden = false
             layer.opacity = 1
@@ -121,10 +132,16 @@ public final class StreamBannerLayer {
             // raced in during the fade sets visible=true, so a stale completion can't
             // un-hide a shown pill - and a real hide always lands.
             CATransaction.setCompletionBlock { [weak self] in
-                if self?.visible == false { self?.layer.isHidden = true }
+                guard let self, !self.visible, self.showGeneration == generation else { return }
+                // Finish the fade without leaving an implicit order-out transition on the hidden pill.
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                self.layer.isHidden = true
+                CATransaction.commit()
             }
             layer.opacity = 0
         }
+        layer.add(fade, forKey: "visibility")
         CATransaction.commit()
     }
 
@@ -133,15 +150,41 @@ public final class StreamBannerLayer {
     private func render() {
         var shown = baseText
         if lingered, let hint = lingerHint?() { shown += " · \(hint)" }
+        let oldFrame = layer.presentation()?.frame ?? layer.frame
+        let changesVisibleText = visible && displayedText != shown && !displayedText.isEmpty
         textLayer.string = shown
         if let host = layer.superlayer { layoutInHost(host) }
+        if changesVisibleText {
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = Motion.short
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            textLayer.add(fade, forKey: "wording")
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                animateBounds(from: oldFrame)
+            }
+        }
         if visible { announce(shown) }
+    }
+
+    private func animateBounds(from frame: CGRect) {
+        for (key, start, end) in [
+            ("bounds", NSValue(rect: CGRect(origin: .zero, size: frame.size)), NSValue(rect: layer.bounds)),
+            ("position", NSValue(point: CGPoint(x: frame.midX, y: frame.midY)), NSValue(point: layer.position))
+        ] {
+            let animation = CABasicAnimation(keyPath: key)
+            animation.fromValue = start
+            animation.toValue = end
+            animation.duration = Motion.short
+            animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.add(animation, forKey: key)
+        }
     }
 
     private func scheduleLinger() {
         guard lingerHint != nil else { return }
         let generation = showGeneration
-        DispatchQueue.main.asyncAfter(deadline: .now() + lingerDelay) { [weak self] in
+        scheduleLingerDelay(lingerDelay) { [weak self] in
             guard let self, self.visible, self.showGeneration == generation else { return }
             self.lingered = true
             self.render()

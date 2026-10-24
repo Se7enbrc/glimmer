@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
+import AppKit
+import AVFoundation
 import Foundation
+import QuartzCore
 import Testing
 import os
 @testable import Glimmer
@@ -16,6 +20,8 @@ struct RendererTelemetryTests {
             var probes = 0
             var loads = 0
             var callbacks: [@Sendable (RendererPerformanceValues?) -> Void] = []
+            var transitions: [RendererPathTransition] = []
+            var presentation = RendererPresentationState()
         }
         let state = OSAllocatedUnfairLock(initialState: State())
 
@@ -25,12 +31,15 @@ struct RendererTelemetryTests {
                 return value.identity
             }
             guard let identity else { return nil }
-            return RendererPerformanceSource(identity: identity) { [self] completion in
+            return RendererPerformanceSource(identity: identity, presentation: state.withLock { $0.presentation },
+                                             reportTransition: { [self] transition in
+                state.withLock { $0.transitions.append(transition) }
+            }, load: { [self] completion in
                 state.withLock { value in
                     value.loads += 1
                     value.callbacks.append(completion)
                 }
-            }
+            })
         }
 
         func complete(_ values: RendererPerformanceValues?) {
@@ -44,6 +53,154 @@ struct RendererTelemetryTests {
         RendererPerformanceValues(frames: frames, dropped: dropped, optimized: optimized, delaySeconds: delay)
     }
 
+    @Test func resumedSamePathReportsAfterAFullIntervalAndHonorsThrottle() {
+        var tracker = RendererPathTracker()
+        #expect(tracker.observe(values(100, optimized: 100), now: 0) == nil)
+        #expect(tracker.observe(values(100), now: 1) != nil)
+        tracker.rebaseline(reportResume: true)
+        #expect(tracker.observe(values(100), now: 2) == nil)
+        tracker.rebaseline()
+        #expect(tracker.observe(values(0), now: 6) == nil)
+        let resumed = tracker.observe(values(100), now: 7)
+        #expect(resumed?.summary == "resume->composited frames=100 optimized=0 suppressed=0")
+        #expect(tracker.observe(values(100), now: 8) == nil)
+        tracker.rebaseline(reportResume: true)
+        #expect(tracker.observe(values(100, optimized: 100), now: 12)?.isResume == true)
+    }
+
+    @Test(arguments: [false, true])
+    func resumeDiscardsSpanningReplyAndReportsUnchangedPath(shortHide: Bool) {
+        let queue = DispatchQueue(label: "renderer-resume-test")
+        let probe = Probe()
+        let sampler = RendererTelemetry(queue: queue, probe: { probe.source() })
+        _ = queue.sync { sampler.sample() }
+        probe.complete(values(100))
+        _ = queue.sync { sampler.sample() }
+        if !shortHide {
+            probe.state.withLock { $0.presentation = .init(generation: 1, suppressed: true) }
+            _ = queue.sync { sampler.sample() }
+        }
+        probe.state.withLock { $0.presentation = .init(generation: 2, suppressed: false) }
+        probe.complete(values(200))
+        #expect(queue.sync { sampler.sample().cumulative } == nil)
+        probe.complete(values(300))
+        #expect(queue.sync { sampler.sample().status } == .baseline)
+        #expect(probe.state.withLock { $0.transitions.isEmpty })
+        probe.complete(values(400))
+        queue.sync {}
+        #expect(probe.state.withLock { $0.transitions.map(\.summary) }
+            == ["resume->composited frames=100 optimized=0 suppressed=0"])
+    }
+
+    @Test func pathTransitionsUseIntervalMajorityAndIgnoreEmptyOrInvalidSamples() {
+        var tracker = RendererPathTracker()
+        #expect(tracker.observe(values(100, optimized: 51), now: 0) == nil)
+        #expect(tracker.observe(values(0), now: 1) == nil)
+        #expect(tracker.observe(values(10, optimized: 11), now: 2) == nil)
+        #expect(tracker.observe(values(100, optimized: 50), now: .nan) == nil)
+        let composited = tracker.observe(values(100, optimized: 50), now: 3)
+        #expect(composited == RendererPathTransition(
+            fromOptimized: true, toOptimized: false, frames: 100, optimized: 50, suppressed: 0))
+        #expect(tracker.observe(values(100, optimized: 0), now: 9) == nil)
+        let optimized = tracker.observe(values(3, optimized: 2), now: 10)
+        #expect(optimized?.summary == "composited->optimized frames=3 optimized=2 suppressed=0")
+    }
+
+    @Test func pathFlappingIsThrottledAndReportsSuppressedFlipsWithActualDirection() {
+        var tracker = RendererPathTracker()
+        #expect(tracker.observe(values(100, optimized: 100), now: 0) == nil)
+        #expect(tracker.observe(values(100), now: 1)?.suppressed == 0)
+        #expect(tracker.observe(values(100, optimized: 100), now: 2) == nil)
+        #expect(tracker.observe(values(100), now: 3) == nil)
+        #expect(tracker.observe(values(100, optimized: 100), now: 5.999) == nil)
+        let transition = tracker.observe(values(100), now: 6)
+        #expect(transition?.fromOptimized == true)
+        #expect(transition?.toOptimized == false)
+        #expect(transition?.suppressed == 3)
+        #expect(tracker.observe(values(100), now: 20) == nil)
+        #expect(tracker.observe(values(100, optimized: 100), now: 21)?.suppressed == 0)
+    }
+
+    @Test func rebaselineDoesNotInventTransitionsOrBypassThrottle() {
+        var tracker = RendererPathTracker()
+        #expect(tracker.observe(values(10, optimized: 10), now: 0) == nil)
+        #expect(tracker.observe(values(10), now: 1) != nil)
+        tracker.rebaseline()
+        #expect(tracker.observe(values(10, optimized: 10), now: 2) == nil)
+        #expect(tracker.observe(values(10), now: 3) == nil)
+        #expect(tracker.observe(values(10, optimized: 10), now: 6)?.suppressed == 1)
+    }
+
+    @Test func completedSamplesReportTransitionsBeforeTheNextExporterTick() {
+        let queue = DispatchQueue(label: "renderer-transition-test")
+        let probe = Probe()
+        let sampler = RendererTelemetry(queue: queue, probe: { probe.source() })
+        for counts in [(100, 100), (200, 200), (300, 200)] {
+            _ = queue.sync { sampler.sample() }
+            probe.complete(values(UInt64(counts.0), optimized: UInt64(counts.1)))
+            queue.sync {}
+        }
+        let transitions = probe.state.withLock { $0.transitions }
+        #expect(transitions.count == 1)
+        #expect(transitions.first?.summary == "optimized->composited frames=100 optimized=0 suppressed=0")
+        _ = queue.sync { sampler.sample() }
+        queue.sync { sampler.stop() }
+        probe.complete(values(400, optimized: 300))
+        queue.sync {}
+        #expect(probe.state.withLock { $0.transitions } == transitions)
+    }
+
+    @MainActor @Test func bookmarkCapturesLayerStateBeforeLaterChanges() throws {
+        let stream = StreamWindow()
+        let time = DispatchTime.now()
+        let prefix = "BOOKMARK context t_ms=\(Double(time.uptimeNanoseconds) / 1_000_000.0) "
+        stream.displayLayer.opacity = 0.75
+        stream.logBookmarkContext(at: time, hdrInput: true)
+        stream.displayLayer.opacity = 0.25
+        let message = try #require(LogStore.shared.snapshot().last { $0.message.hasPrefix(prefix) }?.message)
+        #expect(message.contains("video={opacity=0.75"))
+        #expect(message.contains("hdrInput=true"))
+        #expect(!message.contains("video={opacity=0.25"))
+    }
+
+    @MainActor @Test func rendererSnapshotIncludesVisibleOverlayTreeAndPublicSafeLayerState() {
+        let stream = StreamWindow()
+        let video = stream.displayLayer
+        let overlay = CALayer()
+        overlay.name = "Private PC name"
+        overlay.opacity = 0.75
+        let child = CALayer()
+        overlay.addSublayer(child)
+        let hidden = CALayer()
+        hidden.isHidden = true
+        hidden.addSublayer(CALayer())
+        video.addSublayer(overlay)
+        video.addSublayer(hidden)
+        overlay.add(CABasicAnimation(keyPath: "opacity"), forKey: "Private animation name")
+        let root = CALayer()
+        root.addSublayer(video)
+        let above = CALayer()
+        above.zPosition = 1
+        root.insertSublayer(above, at: 0)
+        let below = CALayer()
+        below.zPosition = -1
+        root.addSublayer(below)
+        video.mask = CALayer()
+        video.cornerRadius = 4
+        video.transform = CATransform3DMakeTranslation(2, 0, 0)
+        let overlays = stream.rendererVisibleOverlays()
+        #expect(overlays.count == 3)
+        #expect(overlays.contains { $0.contains("opacity=0.75,hidden=false,animated=true") })
+        #expect(overlays.contains { $0.hasPrefix("ancestor0/0:") })
+        let snapshot = stream.rendererDiagnosticSnapshot(hdrInput: false)
+        for field in ["level=", "occlusion=", "key=", "fullscreen=borderless", "cursorVisible=true",
+                      "cursorSource=owned", "mask=CALayer", "cornerRadius=4.0", "transform=[",
+                      "filters=[]", "currentEDR=", "hdrInput=false", "hdrOutput=false", "displayID="] {
+            #expect(snapshot.contains(field), "Missing \(field)")
+        }
+        #expect(!snapshot.contains("Private"))
+    }
+
     @Test func disabledExporterNeverQueriesRenderer() {
         let probe = Probe()
         let source = TelemetrySource(
@@ -51,7 +208,8 @@ struct RendererTelemetryTests {
             presentationLateDrops: { 0 }, presentationGaps: { 0 }, estimatedRtt: { nil },
             enetHealth: { nil }, pacingLiveness: { nil }, inFlightDecodeBacklog: { 0 },
             refreshWindow: { nil }, displayProbe: { nil }, rendererProbe: { probe.source() })
-        let exporter = TelemetryExporter.makeIfEnabled(source: source, serverName: "test", enabled: false)
+        let exporter = TelemetryExporter.makeIfEnabled(source: source, serverName: "test",
+                                                       outputDirectory: .temporaryDirectory, enabled: false)
         #expect(exporter == nil)
         #expect(probe.state.withLock { $0.probes } == 0)
         #expect(probe.state.withLock { $0.loads } == 0)

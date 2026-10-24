@@ -8,6 +8,7 @@
 //  pacing bring-up and fallback, and the RTP clock recovered from a sample's PTS.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreMedia
@@ -60,6 +61,7 @@ struct VideoDecoderLifecycleTests {
         decoder.vpsData = Data([3])
         decoder.cachedHDRFormatDescription = try VideoDecoderHDRTests.formatDescription()
         decoder.inFlightDecodes = 3
+        decoder.decodeReservations[0] = VideoDecoder.DecodeReservations(queued: 3)
         decoder.lastVtDecodeFailed = true
 
         decoder.cleanup()
@@ -81,6 +83,54 @@ struct VideoDecoderLifecycleTests {
         #expect(decoder.inFlightDecodeBacklog() == 0)
         #expect(decoder.statsCollector.decoderDropCount() == 1)
         #expect(decoder.decodeGateDisposition(isIDR: false) == .resyncToIdr)
+    }
+
+    @Test func staleDecodeRetirementsCannotConsumeTheRecoveryIdrSlot() {
+        let decoder = VideoDecoder()
+        decoder.statsCollector.lastDecodedFrameTime = CACurrentMediaTime() - 5
+        #expect(decoder.reserveDecodeSlot(isIDR: false, epoch: 1) == .reserved)
+        #expect(decoder.beginSubmittedDecode(epoch: 1))
+        decoder.lastVtDecodeFailed = true
+        #expect(decoder.reserveDecodeSlot(isIDR: true, epoch: 2) == .reservedForStallRecreate)
+
+        #expect(!decoder.releaseInFlightDecode(epoch: 1, submitted: true, vtFailed: true))
+        #expect(!decoder.releaseInFlightDecode(epoch: 1))
+        #expect(!decoder.beginSubmittedDecode(epoch: 1))
+        #expect(decoder.inFlightDecodeBacklog() == 1)
+        #expect(!decoder.lastVtDecodeFailed)
+        #expect(decoder.beginSubmittedDecode(epoch: 2))
+        #expect(decoder.releaseInFlightDecode(epoch: 2, submitted: true, vtFailed: false))
+        #expect(decoder.inFlightDecodeBacklog() == 0)
+    }
+
+    @Test func invalidationRetiresSubmittedWorkButPreservesQueuedFrames() {
+        let decoder = VideoDecoder()
+        for epoch in [UInt(1), 1, 2] {
+            #expect(decoder.reserveDecodeSlot(isIDR: false, epoch: epoch) == .reserved)
+        }
+        #expect(decoder.beginSubmittedDecode(epoch: 1))
+
+        decoder.retireInvalidatedDecodes()
+
+        #expect(decoder.inFlightDecodeBacklog() == 2)
+        #expect(!decoder.releaseInFlightDecode(epoch: 1, submitted: true))
+        #expect(decoder.releaseInFlightDecode(epoch: 1))
+        #expect(decoder.beginSubmittedDecode(epoch: 2))
+        #expect(decoder.releaseInFlightDecode(epoch: 2, submitted: true))
+        #expect(decoder.inFlightDecodeBacklog() == 0)
+        #expect(decoder.decodeReservations.isEmpty)
+    }
+
+    @Test func anOlderIdrEpochCannotOverwriteTheCurrentDecodeVerdict() {
+        let decoder = VideoDecoder()
+        for epoch in [UInt(1), 2] {
+            #expect(decoder.reserveDecodeSlot(isIDR: false, epoch: epoch) == .reserved)
+            #expect(decoder.beginSubmittedDecode(epoch: epoch))
+        }
+        #expect(decoder.releaseInFlightDecode(epoch: 2, submitted: true, vtFailed: true))
+        #expect(decoder.releaseInFlightDecode(epoch: 1, submitted: true, vtFailed: false))
+        #expect(decoder.lastVtDecodeFailed)
+        #expect(decoder.inFlightDecodeBacklog() == 0)
     }
 
     // MARK: Sink
@@ -160,15 +210,16 @@ struct VideoDecoderLifecycleTests {
     }
 
     /// The next session must start cold: an SDR stream after HDR must not inherit PQ state.
-    @Test func teardownClearsEveryHDRCache() {
+    @Test func teardownClearsEveryHDRCache() throws {
         let decoder = VideoDecoder()
         decoder.attach(to: AVSampleBufferDisplayLayer())
         decoder.hdrEnabled = true
         decoder.hdrMetadataStore.publish(HDRMetadata(mdcv: Data([1]), contentLightLevel: nil))
-        decoder.lastColorSpaceKey = "itur_2100_PQ"
-        decoder.lastColorSpace = CGColorSpace(name: CGColorSpace.itur_2100_PQ)
-        decoder.didLogFirstPixelBufferProbe = true
-        decoder.didConfigureLayerOnce = true
+        decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_H265_MAIN10
+        let buffer = try makeTaggedPixelBuffer()
+        let color = decoder.resolveColorDescription(for: buffer, controlHDR: true)
+        decoder.attachColorAndHDRMetadata(to: buffer, color: color)
+        #expect(decoder.beginColorProbe(buffer, color: color, controlHDR: true) != nil)
         decoder.didFireFirstDecodedFrame = true
         decoder.isStreaming = true
 
@@ -177,8 +228,9 @@ struct VideoDecoderLifecycleTests {
         #expect(!decoder.isStreaming)
         #expect(!decoder.hdrEnabled)
         #expect(decoder.hdrMetadataStore.snapshot == .empty)
-        #expect(decoder.lastColorSpaceKey == nil && decoder.lastColorSpace == nil)
-        #expect(!decoder.didLogFirstPixelBufferProbe && !decoder.didConfigureLayerOnce)
+        #expect(decoder.lastColorSpace == nil)
+        #expect(decoder.resolvedColor.withLock { $0 == nil })
+        #expect(decoder.colorProbeState.withLock { $0 == nil })
         #expect(!decoder.didFireFirstDecodedFrame)
         #expect(decoder.displayLayer == nil && decoder.sampleBufferRenderer == nil)
     }
@@ -199,7 +251,7 @@ struct VideoDecoderLifecycleTests {
         let first = try #require(decoder.framePacer)
         #expect(first.running && first.presentSuppressed)
         #expect(!first.tickDeficit.warmingUp)
-        #expect(decoder.pacingDrivingView === view)
+        #expect(decoder.pacingDisplay != nil)
         #expect(!decoder.reenablePacing(configuredFps: 120))
 
         decoder.disablePacingFallbackToDirect(reason: "test")
@@ -240,6 +292,25 @@ struct VideoDecoderLifecycleTests {
 
         #expect(backend.idrRequests == 1)
         #expect(rebuilds == 0)
+    }
+
+    @Test func readinessRecoveryAcceptsDecodedFrameWithoutAKeyframe() throws {
+        let decoder = VideoDecoder()
+        decoder.attach(to: AVSampleBufferDisplayLayer())
+        defer { decoder.teardown() }
+        let backend = InputRecordingBackend()
+        decoder.setBackend(backend)
+        decoder.isStreaming = true
+        var rebuilds = 0
+        decoder.rebuildDisplayLayerHook = { rebuilds += 1; return nil }
+
+        decoder.recoverPresentPath(reason: "renderer_reject", requestKeyframe: false)
+        let presented = decoder.presentFrame(try Self.readySample())
+
+        #expect(presented)
+        #expect(backend.idrRequests == 0)
+        #expect(rebuilds == 0)
+        #expect(decoder.secondsSinceLastPresentedFrame() < 60)
     }
 
     // MARK: RTP clock

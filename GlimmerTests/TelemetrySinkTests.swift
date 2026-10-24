@@ -6,7 +6,9 @@
 //  NDJSON file, event rows, bookmark and session report, plus the StreamSession start/stop wiring.
 //
 
+@testable import GlimmerEngine
 import Foundation
+import os
 import Testing
 @testable import Glimmer
 
@@ -28,12 +30,38 @@ final class TelemetrySinkTests {
         try? FileManager.default.removeItem(at: dir)
     }
 
-    private func exporter(in directory: URL? = nil, counters: TelemetryCounters = TelemetryCounters())
+    private func exporter(in directory: URL? = nil, counters: TelemetryCounters = TelemetryCounters(),
+                          diagnostic: Bool = false)
         -> TelemetryExporter {
         TelemetryExporter.captureBaselines = TelemetryExporter.CaptureBaselines()
+        var source = TelemetryListenerTests.source()
+        source.capture.configuration.diagnosticBuild = diagnostic
         return TelemetryExporter(
-            source: TelemetryListenerTests.source(), serverName: "Den PC", outputDirectory: directory ?? dir,
+            source: source, serverName: "Den PC", outputDirectory: directory ?? dir,
             counters: counters, port: 0, listenOnLAN: false)
+    }
+
+    @Test(arguments: [false, true])
+    func clockAnchorsAreDiagnosticOnlyAndBracketEmission(_ diagnostic: Bool) throws {
+        let exporter = exporter(diagnostic: diagnostic)
+        exporter.workQueue.sync {
+            exporter.openNDJSONFile()
+            var readings: [UInt64] = [100, 300]
+            exporter.recordClockAnchor(now: { readings.removeFirst() })
+            exporter.stopped = true
+            exporter.recordClockAnchor(now: { Issue.record("Stopped exporter sampled clock"); return 400 })
+            try? exporter.fileHandle?.close()
+        }
+        let rows = try rows(exporter)
+        #expect(rows.count == (diagnostic ? 1 : 0))
+        if diagnostic {
+            let anchor = try #require(rows.first)
+            #expect(anchor["event"] as? String == "clock_anchor")
+            #expect(anchor["session"] as? String == exporter.sessionId)
+            #expect(anchor["anchor_id"] as? Int == 1)
+            #expect(anchor["uptime_before_ns"] as? Int == 100)
+            #expect(anchor["uptime_after_ns"] as? Int == 300)
+        }
     }
 
     private func lines(_ exporter: TelemetryExporter) throws -> [String] {
@@ -108,6 +136,37 @@ final class TelemetrySinkTests {
             exporter.appendNDJSON("{\"n\":3}")
         }
         #expect(try lines(exporter) == ["{\"n\":1}"])
+        exporter.workQueue.sync { exporter.writeEvidenceManifest() }
+        let receipt = try TelemetryRenderFixtures.row(String(contentsOf:
+            dir.appendingPathComponent("telemetry-evidence-\(exporter.sessionId).json"), encoding: .utf8))
+        #expect(receipt["rows_written"] as? Int == 1)
+        #expect(receipt["rows_failed"] as? Int == 2)
+        #expect(receipt["write_failures"] as? Int == 1)
+        #expect(receipt["report_file"] is NSNull)
+    }
+
+    @Test func stopSealsEvidenceOnceWithTheFinalReport() throws {
+        let exporter = exporter()
+        exporter.workQueue.sync {
+            exporter.openNDJSONFile()
+            exporter.appendNDJSON("{\"session\":\"\(exporter.sessionId)\",\"event\":\"test\"}")
+        }
+        exporter.stop()
+        let url = dir.appendingPathComponent("telemetry-evidence-\(exporter.sessionId).json")
+        let data = try Data(contentsOf: url)
+        let receipt = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(receipt["closed"] as? Bool == true)
+        #expect(receipt["session"] as? String == exporter.sessionId)
+        #expect(receipt["rows_written"] as? Int == 1)
+        #expect(receipt["rows_failed"] as? Int == 0)
+        #expect(receipt["write_failures"] as? Int == 0)
+        let report = try #require(receipt["report_file"] as? String)
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent(report).path))
+        exporter.stop()
+        exporter.recordBookmark()
+        exporter.workQueue.sync { }
+        #expect(exporter.workQueue.sync { exporter.ndjsonRowsFailed } == 0)
+        #expect(try Data(contentsOf: url) == data)
     }
 
     // MARK: - Session report
@@ -158,6 +217,20 @@ final class TelemetrySinkTests {
         #expect(row["bookmark_total"] as? Int == 2)
         #expect(row["session"] as? String == exporter.sessionId)
         #expect(counters.bookmarkTotal.value == 2)
+    }
+
+    @Test func bookmarkUsesCapturedTimeInsteadOfTheLaterWriteTime() throws {
+        let exporter = exporter()
+        exporter.workQueue.sync { exporter.openNDJSONFile() }
+        defer { exporter.workQueue.sync { try? exporter.fileHandle?.close() } }
+        let time = DispatchTime(uptimeNanoseconds: exporter.connectInstant.uptimeNanoseconds + 1_250_000_000)
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        // The event is queued behind this block; both clocks must survive the asynchronous write.
+        exporter.workQueue.sync { _ = exporter.recordBookmark(at: time, date: date) }
+        let row = try #require(try rows(exporter).first)
+        #expect(row["ts"] as? String == "2023-11-14T22:13:20Z")
+        #expect(row["t_connect_s"] as? Double == 1.25)
+        #expect(row["bookmark_total"] as? Int == 1)
     }
 
     @Test func liveEventsNeedARunningExporter() {
@@ -212,19 +285,67 @@ final class TelemetrySinkTests {
     // MARK: - StreamSession wiring
 
     @Test func sessionWithTheGateOffBuildsNothing() async {
-        let session = StreamSession()
+        let captures = OSAllocatedUnfairLock(initialState: 0)
+        var services = SessionServices()
+        services.makeCapture = {
+            captures.withLock { $0 += 1 }
+            return TelemetryCapture()
+        }
+        let session = Self.telemetrySession(services: services)
         let decoder = await VideoDecoder()
-        await session.startTelemetryExporter(decoder: decoder, serverName: "Den PC", enabled: false) { _, _ in
+        await session.startTelemetryExporter(decoder: decoder, serverName: "Den PC", enabled: false, make: { _, _ in
             Issue.record("built an exporter with telemetry off")
             return nil
-        }
+        })
         #expect(await session.telemetryExporter == nil)
+        #expect(captures.withLock { $0 } == 0)
         await session.recordTelemetryBookmark()
         await session.stopTelemetryExporter()
     }
 
+    @Test func stopDuringNativeSnapshotPreventsLateCaptureAndExporterCreation() async {
+        let captures = OSAllocatedUnfairLock(initialState: 0)
+        let exporters = OSAllocatedUnfairLock(initialState: 0)
+        var services = SessionServices()
+        services.makeCapture = {
+            captures.withLock { $0 += 1 }
+            return TelemetryCapture()
+        }
+        services.makeExporter = { _, _ in
+            exporters.withLock { $0 += 1 }
+            return nil
+        }
+        let session = Self.telemetrySession(services: services)
+        let decoder = await VideoDecoder()
+        let entered = AsyncStream<Void>.makeStream()
+        let release = DispatchSemaphore(value: 0)
+        let starting = Task {
+            await session.startTelemetryExporter(
+                decoder: decoder, serverName: "Den PC", enabled: true,
+                readPresentation: { _, fallback in
+                    entered.continuation.yield(())
+                    entered.continuation.finish()
+                    #expect(release.wait(timeout: .now() + 10) == .success)
+                    return (nil, fallback)
+                })
+        }
+        for await _ in entered.stream { break }
+        await session.stopTelemetryExporter()
+        release.signal()
+        await starting.value
+        #expect(captures.withLock { $0 } == 0)
+        #expect(exporters.withLock { $0 } == 0)
+        #expect(await session.telemetryExporter == nil)
+    }
+
+    private static func telemetrySession(services: SessionServices) -> StreamSession {
+        StreamSession(hostDisposition: .disconnectOnly, audioDecoder: AudioDecoder(), services: services,
+                      backend: InputRecordingBackend(), makeNetwork: { NetworkClient(server: $0) },
+                      makeBackend: { InputRecordingBackend() })
+    }
+
     @Test func sessionStartsTheExporterWithTheDecodersShapeAndStopsIt() async throws {
-        let session = StreamSession()
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         let decoder = await VideoDecoder()
         decoder.streamWidth = 3840
         decoder.streamHeight = 2160
@@ -232,14 +353,14 @@ final class TelemetrySinkTests {
         decoder.streamVideoFormat = StreamProtocol.VIDEO_FORMAT_MASK_AV1
         let counters = TelemetryCounters()
         let dir = dir
-        await session.startTelemetryExporter(decoder: decoder, serverName: "Den PC", enabled: true) { source, name in
+        await session.startTelemetryExporter(decoder: decoder, serverName: "Den PC", enabled: true, make: { source, name in
             #expect(name == "Den PC")
             #expect(source.displayMode == StreamDisplayMode.defaultMode.rawValue)
             #expect(source.stream?.width == 3840 && source.stream?.height == 2160 && source.stream?.fps == 120)
             #expect(source.stream?.codec == "av1" && source.stream?.bitrate == nil)
             return TelemetryExporter(source: source, serverName: name, outputDirectory: dir,
                                      counters: counters, port: 0, listenOnLAN: false)
-        }
+        })
         let exporter = try #require(await session.telemetryExporter)
         _ = try await TelemetryListenerTests.readyPort(exporter)
         await session.recordTelemetryBookmark()

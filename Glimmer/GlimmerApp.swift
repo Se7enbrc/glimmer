@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import AppKit
 import ServiceManagement
 import SwiftUI
@@ -63,7 +64,8 @@ struct GlimmerApp: App {
     /// reaches EXISTING users, where a hard-coded `false` fallback only ever
     /// reached fresh installs.
     @MainActor
-    static func registerDefaults(defaults: UserDefaults = .standard) {
+    static func registerDefaults(defaults: UserDefaults = .standard,
+                                 diagnosticBuild: Bool = DiagnosticBuild.isEnabled) {
         defaults.register(defaults: [
             // Default-ON prefs. disableMouseAccelWhileStreaming linearizes the
             // system pointer acceleration while the stream window is focused so
@@ -83,11 +85,11 @@ struct GlimmerApp: App {
             // Fire the present tick on a private high-QoS run loop (not .main)
             // so a busy main thread can't starve the CADisplayLink callback.
             // Flip false for an instant fallback to the main-runloop tick.
-            FramePacer.tickOffMainDefaultsKey: true,
+            MacPacer.tickOffMainDefaultsKey: true,
             // Give that tick thread Mach time-constraint (real-time) scheduling
             // so the CPU can't preempt it under load. Flip false to fall back to
             // plain userInteractive (the pre-realtime behavior) without a rebuild.
-            PacerTickThread.realtimeDefaultsKey: true,
+            MacPacer.realtimeDefaultsKey: true,
             // AppModel's own bare-bool reads. All OFF today - the Mac keeps its
             // volume during a stream, raw HID stays behind its explicit opt-in
             // (it needs Input Monitoring), the auto-offer hasn't been answered,
@@ -96,8 +98,8 @@ struct GlimmerApp: App {
             "muteMacWhileStreaming": false,
             "rawHIDControllerEnabled": false,
             "rawHIDPromptAnswered": false,
-            "showDiagnostics": false,
-            "telemetryEnabled": false,
+            "showDiagnostics": diagnosticBuild,
+            "telemetryEnabled": diagnosticBuild,
             // "Show the stream": full screen unless the user picks Window. The
             // registered value keeps the raw read and AppModel's declared
             // default in agreement (see StreamDisplayMode.defaultMode).
@@ -115,10 +117,10 @@ struct GlimmerApp: App {
                 // 532pt content + 24pt margins per side = 580. This MUST equal the
                 // connect surface's real width (its .horizontal padding): a floor
                 // below it leaves the window a range to be dragged through.
-                .frame(minWidth: 580)
+                .frame(minWidth: LauncherLayout.windowWidth)
                 // Frosted Liquid Glass is the launcher's surface: see-through enough to show
                 // colour behind it, blurred enough that text behind turns to colour.
-                .containerBackground(for: .window) { Color.clear.glassEffect(.regular, in: .rect) }
+                .glassWindowBackground()
         }
         .windowStyle(.hiddenTitleBar)
         // Exactly its content, never draggable bigger: nothing in the launcher grows, so a
@@ -245,8 +247,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // A stream started from the menu bar needs the Dock icon; its end
             // may leave nothing to come back to. The first value is launch state.
             Task { [weak self] in
-                for await _ in Observations({ mgr.isStreaming }).dropFirst() {
-                    self?.refreshActivationPolicy()
+                if #available(macOS 26, *) {
+                    for await _ in Observations({ mgr.isStreaming }).dropFirst() {
+                        self?.refreshActivationPolicy()
+                    }
+                } else {
+                    var launch = true
+                    await forEachTrackedValue({ mgr.isStreaming }, perform: { _ in
+                        if launch { launch = false } else { self?.refreshActivationPolicy() }
+                    })
                 }
             }
         }
@@ -289,6 +298,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !updater.sessionInProgress { updater.checkForUpdatesInBackground() }
     }
     #endif
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let model = model ?? Self.boundManager else { return }
+        Task {
+            await model.startBootstrap().value
+            for url in urls { model.handleCommandURL(url) }
+        }
+    }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Keep the menu bar item alive when all windows close.

@@ -8,6 +8,8 @@
 //  PC list and pins in a scratch store: the requests sent, the state left behind, and the copy shown.
 //
 
+@testable import GlimmerEngine
+import AppKit
 import Foundation
 import Testing
 @testable import Glimmer
@@ -19,13 +21,14 @@ struct FakePCModel {
     nonisolated static let desktop = AppModel.PairedApp(id: 1, name: "Desktop", hdr: false, hidden: false)
 
     let store: IsolatedStore
-    let model = AppModel()
+    let model: AppModel
     let sunshine: FakeSunshine
 
     init(_ name: String, sunshine: FakeSunshine, rtt: HostReachability.Outcome = .reachable(rttMs: 3),
          identity: (certPEM: String, keyPEM: String)? = nil) throws {
         store = try IsolatedStore("sunshine-\(name)")
         self.sunshine = sunshine
+        model = AppModel(defaults: store.defaults)
         model.hostsDefaults = store.defaults
         model.supportBase = store.directory
         model.makeNetwork = { sunshine.client($0, identity: identity) }
@@ -44,6 +47,7 @@ struct FakePCModel {
 
     /// Stops the poll a selection starts, so only the test's own requests reach the fake.
     func settle() {
+        model.cancelHostReadiness()
         model.hostStatusTask?.cancel()
         model.hostPolling.movedHostSearch?.cancel()
     }
@@ -84,6 +88,41 @@ struct FakePCModel {
 struct AppModelSunshineTests {
 
     // MARK: - Pairing
+
+    @Test func anotherPairRequestKeepsThePresentedPCAndAttemptUntilDismissal() throws {
+        let fixture = try FakePCModel("pair-presentation", sunshine: .scripted([:]))
+        defer { fixture.remove() }
+        let first = try fixture.pairTower()
+        let second = Host(id: "second", name: "Second", customName: nil, localAddress: "192.0.2.11",
+                          manualAddress: nil, apps: first.apps, lastConnected: nil, serverCertPEM: nil,
+                          appVersion: nil, macAddress: nil)
+        let model = fixture.model
+        model.requestPairing(for: first)
+        let window = PairingOwnerTestWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
+        model.pairSheetWindow = window
+        let attempt = model.beginPairing(address: AppModel.routeAddress(first))
+        model.pairingPhase = .awaitingPin
+        model.requestPairing(for: second, owner: .settings)
+        #expect(model.pairSheetHost?.id == first.id)
+        #expect(model.pairingAttempt == attempt)
+        #expect(model.pairingPhase == .awaitingPin)
+        #expect(window.focusRequests == 1)
+        model.pairingAttempt = nil
+        model.pairingPhase = .success
+        model.requestPairing(for: second, owner: .settings)
+        #expect(model.pairSheetHost?.id == first.id)
+        model.pairSheetShown = false
+        model.requestPairing(for: second, owner: .settings)
+        #expect(model.pairSheetHost?.id == first.id)
+        model.finishPairingPresentation(owner: .launcher)
+        model.requestPairing(for: second, owner: .settings)
+        #expect(model.pairSheetHost?.id == second.id)
+        #expect(model.pairSheetOwner == .settings)
+        model.finishPairingPresentation(owner: .launcher)
+        #expect(model.pairSheetOwner == .settings)
+        model.finishPairingPresentation(owner: .settings)
+        #expect(!model.pairSheetShown)
+    }
 
     @Test func theRightPinPairsSavesAndPinsThePCWithItsApps() async throws {
         let hostIdentity = try await EphemeralCryptoIdentity.make(bits: 2048)
@@ -288,8 +327,9 @@ struct AppModelSunshineTests {
         #expect(model.nativeSession == nil)
         // A failed connect stamps its attempt in the model's own store.
         #expect(fixture.store.defaults.object(forKey: "glimmer.lastConnected.tower-id") is Date)
-        #expect(sunshine.paths == ["serverinfo", "serverinfo"])
-        #expect(sunshine.requests.map(\.tls) == [true, false])
+        #expect(Array(sunshine.paths.prefix(2)) == ["serverinfo", "serverinfo"])
+        #expect(sunshine.requests.prefix(2).map(\.tls) == [true, false])
+        #expect(sunshine.requests.dropFirst(2).allSatisfy { $0.path == "/serverinfo" && $0.tls })
     }
 
     @Test func aPCRunningGameStreamIsRefusedWithTheSharedSunshineCopy() async throws {
@@ -305,7 +345,7 @@ struct AppModelSunshineTests {
 
         #expect(model.nativeStreamError == AppModel.needsSunshineMessage("Tower"))
         #expect(model.nativeStreamErrorKind == .pairing)
-        #expect(sunshine.paths == ["serverinfo"])
+        #expect(!sunshine.paths.isEmpty && sunshine.paths.allSatisfy { $0 == "serverinfo" })
         #expect(!sunshine.paths.contains("launch"))
     }
 
@@ -325,4 +365,10 @@ struct AppModelSunshineTests {
         #expect(sunshine.requests.isEmpty)
         model.isStreaming = false
     }
+}
+
+@MainActor
+private final class PairingOwnerTestWindow: NSWindow {
+    var focusRequests = 0
+    override func makeKeyAndOrderFront(_ sender: Any?) { focusRequests += 1 }
 }

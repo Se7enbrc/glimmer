@@ -1,0 +1,403 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+// SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
+
+//
+//  RtpAudioReceiver.swift
+//
+//  Owns the audio UDP flow for the Swift-native backend: ONE UNCONNECTED POSIX
+//  UDP socket (bind a wildcard ephemeral local port; NEVER connect()) used for
+//  BOTH the periodic ping (sendto host:audioPort) and RTP receive (recvfrom from
+//  ANY source). The host sources audio RTP from a port != audioPort and aims it
+//  at the ping's UDP source port, so a *connected* NWConnection would silently
+//  drop audio - exactly the bug VideoRtpReceiver was built to avoid. This MIRRORS
+//  VideoRtpReceiver's socket/ping pattern. Source: AudioStream.c
+//  (AudioReceiveThreadProc + AudioPingThreadProc) + RtpAudioQueue.c.
+//
+//  Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
+//
+//  PING (AudioStream.c:38-65): a 20-byte SS_PING, SETUP-audio's 16-byte X-SS-Ping-Payload then a big-endian
+//  sequence number from 1: a fast-start burst, then EnvSignalController's steady cadence. Sunshine aims audio
+//  at the ping's source port only once it has one, so ping and receive MUST share one socket.
+//
+//  RECEIVE (AudioStream.c:239-383): drop runts (< 12 bytes), byteswap the RTP header, feed the queue and
+//  decode, AES-CBC decrypting first when SS_ENC_AUDIO is on. A backlog-aware startup gate replaces the C's
+//  fixed 500ms drop, which cost live audio because Sunshine paces audio from seq ~0 (see the gate docs).
+//
+//  Teardown is bounded: stop() only raises the stop flag. The receive loop polls it every 100ms
+//  (SO_RCVTIMEO) and the ping thread every wake; each holds the receiver while it uses the fd,
+//  so deinit closes it once, after both have exited, as VideoRtpReceiver does.
+//
+//  Code map (this type is split across same-module extension files)
+//  ----------------------------------------------------------------
+//    * RtpAudioReceiver.swift             - the class decl, stored state, the
+//                                           StartupPacing enum, init, lifecycle.
+//    * RtpAudioReceiver+Receive.swift     - the receive loop / datagram path.
+//    * RtpAudioReceiver+Socket.swift      - the unconnected-UDP socket bring-up.
+//    * RtpAudioReceiver+Ping.swift        - the burst→steady keepalive thread.
+//    * RtpAudioReceiver+StartupGate.swift - the backlog-aware startup gate.
+//    * RtpAudioReceiver+Decrypt.swift     - the decode hand-off + AES-CBC path.
+//    * RtpAudioReceiver+Events.swift      - the audio_ttf / audio_pending rows.
+//    * RtpAudioReceiver+Telemetry.swift   - the per-window receive-quality fold.
+
+import Foundation
+import Network
+import Darwin
+
+// Lifecycle calls serialize startup/shutdown and join the decode worker before sink cleanup.
+// Packet, reorder and decrypt state belong to that worker; arrival stamps and ping state have separate owners.
+final class RtpAudioReceiver: @unchecked Sendable {
+    static let cat = "NativeAudio"
+
+    // Access note: many members below are module-internal (not private) so the
+    // same-module split files (+Receive / +Socket / +Ping / +StartupGate /
+    // +Decrypt / +Events / +Telemetry - see the code map above) can reach them.
+    // The threading contracts are unchanged: each field's docs say which thread
+    // owns it.
+
+    let host: NWEndpoint.Host
+    let audioPort: UInt16
+    let pingPayload: [UInt8]   // 16 bytes
+    let audioPacketDuration: Int
+    private let opusConfig: OpusConfig
+    private let audioConfig: Int32
+
+    // Audio encryption (AES-128-CBC), on whenever the host offered SS_ENC_AUDIO.
+    let audioEncryption: Bool
+    /// First-failure latch so a key mismatch logs once, not at packet rate. Decode-worker confined.
+    var loggedDecryptFailure = false
+    var decryptScratch = [UInt8](repeating: 0, count: 1416)
+    let aesKey: [UInt8]      // remoteInputAesKey (16 bytes)
+    let avRiKeyId: UInt32    // BE32 of the first 4 bytes of remoteInputAesIv
+
+    weak var sink: NativeAudioSink?
+
+    /// Dedicated high-priority queue for the RTP receive loop. `.userInteractive`
+    /// so recvfrom is never starved behind default-QoS work - the same
+    /// scheduler-starvation bug the video path hit and fixed (see
+    /// VideoRtpReceiver.recvQueue). A default-QoS queue (the prior value) let
+    /// the receive loop get preempted under load for 70-215ms at a time, which
+    /// let the kernel socket buffer back up and serviced the 5ms audio packets
+    /// in bursts - draining the playout cushion (audible gap), then slamming the
+    /// catch-up clump into the playout trim gates (audible crackle).
+    let recvQueue = DispatchQueue(
+        label: "io.ugfugl.Glimmer.audiortp", qos: .userInteractive)
+    /// Unconnected bound UDP socket fd (bind wildcard ephemeral; recvfrom any).
+    var fd: Int32 = -1
+    /// Precomputed destination (host:audioPort) for the ping sendto.
+    var destAddr = sockaddr_storage()
+    var destAddrLen: socklen_t = 0
+    var pingThread: Thread?
+    // Created before receive begins; stop joins it before sink cleanup. Queue/startup state belongs to this worker.
+    lazy var decodeWorker = AudioPacketWorker(configureThread: configureThread) { [weak self] packet, arrival in
+        guard let self else { return }
+        if packet.isEmpty {
+            self.resolveStartupPacingOnIdle(now: arrival)
+        } else {
+            self.handleDatagram(packet, count: packet.count, arrival: arrival)
+        }
+    }
+    let interrupted = ManagedAtomicFlag()
+    let receiveFailure = AudioReceiveFailure()
+    // Installed before startReceive; only the receive queue invokes it.
+    var onReceiveFailed: (@Sendable (Int32) -> Void)?
+    var loggedReceivePressure = false // receive-queue confined
+    private let lifecycleLock = NSRecursiveLock()
+
+    // `internal` so the RtpAudioReceiver+Telemetry extension can read `queue.stats`
+    // for the per-window receive-quality fold; touched only on the decode worker.
+    var queue: RtpAudioQueue!
+    var recoveredPacket: [UInt8] = []
+
+    // Datagram-processing state belongs to the decode worker; +Receive contains its packet handler.
+    var receivedDataFromPeer = false
+    var loggedFirstPacket = false
+
+    // --- Backlog-aware startup gate (decode-worker confined, one-shot). ---
+    // moonlight-common-c discards a fixed 500ms of audio at start because GFE
+    // pre-buffers samples before the client is ready. Sunshine never front-loads:
+    // audio arrives at real-time pace from seq ~0 (proven on this host's session
+    // data), so the fixed drop was throwing away half a second of LIVE audio
+    // every session - over half the <1s time-to-first-audio budget. Instead we
+    // MEASURE the first window's arrival pacing: a live source can only deliver
+    // ~1x real time (one packetDuration of audio per packetDuration of wall
+    // clock), so ≥2x sustained across ~100ms proves a flushed backlog (a
+    // GFE-style host pre-buffer, or our own SO_RCVBUF holding early-start
+    // arrivals) - and only then do we drop, and only the measured stale excess,
+    // keeping the decision window's worth (already decoded) as the playout
+    // cushion. Cost on the hot path: integer counts per packet plus a clock
+    // read only at the window edges (and per packet during a burst drain,
+    // which is over in a few ms); once latched, a single enum compare.
+    enum StartupPacing {
+        /// First window after the first data packet: decode everything (paced is
+        /// the proven norm, and withholding live audio is exactly the cost this
+        /// gate removes) while counting the arrival pacing.
+        case measuring
+        /// Burst verdict: a backlog is flushing - discard decodes until the
+        /// backlog-ahead estimate stops growing (the live edge).
+        case draining
+        /// Verdict latched (one-shot); the gate is a single compare per packet.
+        case decided
+    }
+    var startupPacing: StartupPacing = .measuring
+    /// Data (type-97) packets since the first one - arrived audio-ms is this ×
+    /// `audioPacketDuration`. FEC datagrams carry no audio-ms and are never
+    /// counted (under loss the pacing estimate then reads LOW, biasing toward
+    /// the paced verdict - the safe direction: nothing gets dropped).
+    var startupDataPackets = 0
+    /// Monotonic stamp of the first data packet - the pacing clock's zero.
+    var startupFirstDataNanos: UInt64 = 0
+    /// Backlog-ahead estimate (arrived-audio-ms − elapsed-ms) at the previous
+    /// drain packet; the drain stops the moment this stops growing.
+    var startupPrevAheadMs = 0.0
+    /// Queue outputs the drain discarded at the decode hand-off - the verdict
+    /// log's and audio_ttf's dropped_ms is this × `audioPacketDuration`.
+    var startupDroppedPackets = 0
+    /// Latched verdict, kept for the audio_ttf event fields.
+    var startupVerdictBurst = false
+
+    // --- P1 AUDIO telemetry: ~1s metrics window (Track B, opt-in). The audio
+    // receive-quality totals are folded into the always-live `TelemetryCounters`
+    // once per window - NOT per packet - so the hot per-datagram path stays a
+    // straight decode. We read RtpAudioQueue's cumulative `Stats` (which it
+    // already maintains) and publish the per-window DELTAS, exactly mirroring how
+    // the video receive path batches its receive-quality totals. All touched only
+    // on the decode worker, so no lock is needed here. The flush
+    // logic lives in RtpAudioReceiver+Telemetry.swift (extensions can't hold stored
+    // state, so the fields stay here `internal` while the method moves out - which
+    // keeps this file under the SwiftLint length limit, like the video split). ---
+    var audioMetricsWindowStartNanos: UInt64 = 0
+    static let audioMetricsWindowNanos: UInt64 = 1_000_000_000  // 1s
+    /// Arrival gap (ns) past which the next datagram is a FLOW-RESUME edge
+    /// (host-idle silence ended) rather than link jitter - matches the skew
+    /// store's 2s pair-anchor freshness horizon, the sibling that already
+    /// treats a ≥2s-dark stream as a segment boundary.
+    static let flowResumeGapNanos: UInt64 = 2_000_000_000
+    /// Last-flushed cumulative RtpAudioQueue stats, so each window publishes the
+    /// delta into the monotonic TelemetryCounters audio totals.
+    var lastFlushedAudioPackets: UInt32 = 0
+    var lastFlushedFecRecovered: UInt32 = 0
+    /// Unrecovered audio-loss this window, counted as the PLC placeholders the
+    /// queue emits for missing data shards FEC couldn't recover - the precise
+    /// audible-gap count (one per data packet the user won't hear). Folded into the
+    /// loss total each window, then zeroed.
+    var audioLostInWindow: Int = 0
+    /// Last datagram-arrival instant (uptime ns) for the per-socket GAP-EVENT
+    /// counters (the audio leg of the 20/50/100ms family); 0 until the first
+    /// datagram. Only recvQueue touches this stamp.
+    var lastDatagramArrivalNanos: UInt64 = 0
+    var lastProcessedArrivalNanos: UInt64 = 0
+
+    // Ping/receive bring-up latches. `pingStarted`/`receiveStarted` make
+    // startPing()/startReceive() idempotent so the early-start (mid-handshake)
+    // and the post-connect path can't double-open the socket or double-init the
+    // sink. `pingCount` is owned by the ping thread.
+    private var pingStarted = false
+    private var receiveStarted = false
+    var pingCount: UInt32 = 0
+    var initialized = false
+
+    // --- Time-to-first-packet metric (Track B; logged via Diag since we don't
+    // own StatsCollector). `pingStartTimeUs` is stamped by the ping thread when
+    // the first ping goes out; `pingsSent` mirrors pingCount so the recv thread
+    // can read "pings until first RTP". Both cross the ping↔recv thread boundary,
+    // so they're atomics. The recv thread reads them when the first RTP arrives. ---
+    let pingStartTimeUs = AtomicUInt64()
+    let pingsSent = AtomicUInt64()
+
+    /// Cross-thread first-RTP latch for the silent-audio probe: SET on the first
+    /// audio RTP datagram (any type). `receivedDataFromPeer` carries the same
+    /// fact but is confined to the packet worker, so the probe reads this independent latch.
+    let firstRtpReceived = ManagedAtomicFlag()
+    /// `audio_ttf` event fields stashed at the first-DATAGRAM latch and emitted
+    /// at the startup-pacing verdict (≲200ms later), so one event row carries
+    /// both honest TTF spans plus the gate's verdict. Decode-worker confined.
+    var firstRtpPingToRtpMs: Double?
+    var firstRtpPings: UInt64 = 0
+    /// Consecutive ping sendto() failures - for STREAK-EDGE logging only (first
+    /// failure + recovery, never per packet). Owned by the ping thread.
+    var pingSendFailureStreak = UdpPinger.SendFailureStreak()
+
+    static let maxPacketSize = RtpAudioQueue.maxPacketSize
+
+    /// Startup-pacing decision window: enough audio-ms that a PACED flow through
+    /// this link's clumpy radio (routine 40-110ms coalesced deliveries) still
+    /// averages out to ~1x - a live source only EMITS ~100ms of audio in 100ms
+    /// no matter how delivery clumps - while a real backlog flush lands the
+    /// whole window in a few ms. Small enough that the kept window doubles as a
+    /// healthy playout cushion (between the decoder's 30ms base and 150ms cap).
+    private static let startupDecisionWindowMs = 100
+    /// The decision window in data packets (set from audioPacketDuration; ~20 at
+    /// 5ms). Min 2 so the rate comparison always has an interval to measure.
+    let startupDecisionPackets: Int
+    /// Burst-verdict floor for the measured rate (arrived-audio-ms ÷
+    /// elapsed-wall-ms) across the decision window. A live source physically
+    /// cannot sustain >1x - clumpy radio delivery re-times packets WITHIN the
+    /// window but cannot mint extra audio-ms across it - so ≥2x sustained
+    /// means at least half the window pre-existed it: a backlog. The worst
+    /// misread (a delivery clump landing exactly at audio start) costs a few
+    /// ms of drain overshoot (see updateStartupPacing), never a permanent
+    /// give-up - the gate latches and gets out of the way either way.
+    static let startupBurstRateFloor = 2.0
+
+    // Audio ping cadence (the fast-start burst). moonlight sends a steady 500ms
+    // keepalive; we BURST the first ~2s every 80ms so the host receives a ping
+    // (and starts aiming audio) within a few tens of ms of the socket opening,
+    // then settle to the steady keepalive (Sunshine times out if it stops).
+    // The steady tail is CONDITIONAL: the loop wakes at the fast quantum
+    // (steadyIntervalSec = UdpPinger.steadyPingIntervalSeconds, the 75ms
+    // Wi-Fi-doze keepalive - WHY/VERDICT/COST live on that dial) and gates
+    // each send on EnvSignalController.steadyPingInterval(), which relaxes to
+    // UdpPinger.relaxedPingIntervalSeconds (500ms, upstream's rate) on a
+    // confirmed-wired route or active-input clear wifi play. The burst stays
+    // a separate, UNCONDITIONAL connect-time mechanism either way: its job is
+    // the first-ping latency, not the radio-doze hold, and no cadence policy
+    // change must ever slow it down.
+    static let burstIntervalSec = 0.08
+    static let burstDurationSec = 2.0
+    static let steadyIntervalSec = UdpPinger.steadyPingIntervalSeconds
+
+    /// Silent-audio probe delay: how long after the receive path comes up (the
+    /// post-connect bring-up, when video is starting - the closest
+    /// receiver-visible proxy for "video started") before flagging that no audio
+    /// RTP has arrived. Host cold-start audio bring-up of 4-40s is the observed
+    /// norm; the probe only makes the silence VISIBLE - the ping loop keeps
+    /// retrying regardless (it never gives up).
+    static let audioPendingProbeSeconds = 3.0
+
+    /// `host` is an IP literal from RTSP, `audioPort` SETUP-audio's (fallback 48000), `pingPayload` X-SS-Ping-Payload's
+    /// 16 bytes; `opusConfig.samplesPerFrame` is 48 × `audioPacketDuration` ms. `aesKey` and
+    /// `aesIvId` (remoteInputAesKey/Iv, whose first 4 bytes seed the IV) are used only when `audioEncryption` is on.
+    private let configureThread: @Sendable () -> Void
+
+    let platform: TransportPlatform
+
+    init(host: NWEndpoint.Host,
+         audioPort: UInt16,
+         pingPayload: [UInt8],
+         audioPacketDuration: Int,
+         opusConfig: OpusConfig,
+         audioConfig: Int32,
+         audioEncryption: Bool,
+         aesKey: [UInt8],
+         aesIvId: [UInt8],
+         sink: NativeAudioSink,
+         platform: TransportPlatform = TransportPlatform(),
+         configureThread: @escaping @Sendable () -> Void = {}) {
+        self.configureThread = configureThread
+        self.platform = platform
+        self.host = host
+        self.audioPort = audioPort
+        self.pingPayload = pingPayload
+        self.audioPacketDuration = max(1, audioPacketDuration)
+        self.opusConfig = opusConfig
+        self.audioConfig = audioConfig
+        self.audioEncryption = audioEncryption
+        self.aesKey = aesKey
+        self.sink = sink
+
+        // avRiKeyId = BE32 of the first 4 bytes of remoteInputAesIv (AudioStream.c:80-82).
+        var keyId: UInt32 = 0
+        for i in 0..<4 where i < aesIvId.count {
+            keyId = (keyId << 8) | UInt32(aesIvId[i])
+        }
+        self.avRiKeyId = keyId
+
+        // Backlog-aware startup gate window, in data packets (see the gate state
+        // docs; replaces the C's fixed 500ms drop, AudioStream.c:248).
+        self.startupDecisionPackets =
+            max(2, Self.startupDecisionWindowMs / self.audioPacketDuration)
+        self.queue = RtpAudioQueue(audioPacketDuration: self.audioPacketDuration)
+        recoveredPacket.reserveCapacity(Self.maxPacketSize + RtpAudioQueue.fixedRtpHeaderSize)
+    }
+
+    // MARK: - Lifecycle
+
+    /// FAST-START (at SETUP-audio, before PLAY): open the socket and start the burst ping, as moonlight's
+    /// notifyAudioPortNegotiationComplete() does, since Sunshine won't aim audio at us until it has one.
+    /// Audio that lands first waits in SO_RCVBUF, and the startup gate drops that stale burst. Idempotent.
+    func startPing() throws {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard !interrupted.isSet else { return }
+        if pingStarted { return }
+        try openSocket()
+        pingStarted = true
+        // P1 AUDIO cold-start anchor: stamp STREAM START the instant the audio
+        // socket opens (mid-handshake, the earliest well-defined audio start), so
+        // the first-decoded-audio metric measures the true cold-start window (the
+        // known ~5-7s-on-lossy-link issue). Always-live + idempotent; read only
+        // when telemetry is on.
+        TelemetryCounters.shared.anchorAudioStreamStart()
+        startPingLoop()
+        Diag.notice("NativeAudio ping started → \(host, privacy: .private):\(audioPort) "
+            + "(burst \(Int(Self.burstIntervalSec * 1000))ms for "
+            + "\(Int(Self.burstDurationSec))s → steady conditional "
+            + "\(Int(Self.steadyIntervalSec * 1000))ms fast / "
+            + "\(Int(UdpPinger.relaxedPingIntervalSeconds * 1000))ms relaxed)", Self.cat)
+    }
+
+    /// RECEIVE phase (post-connect): initialize the decoder/engine and start the
+    /// recv loop. The ping must already be running (startPing); if it isn't (e.g.
+    /// the early-start path was skipped) we bring it up here for safety. Idempotent.
+    func startReceive() throws {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard !interrupted.isSet else { return }
+        if let error = receiveFailure.failure {
+            throw EnetError.socketFailure("audio receive failed (errno \(error)); reconnect to retry")
+        }
+        if receiveStarted { return }
+        // The ping side normally started mid-handshake; ensure the socket is open.
+        if !pingStarted { try startPing() }
+
+        // Configure the decoder/engine before any audio is dispatched.
+        if let sink {
+            let rc = sink.initialize(audioConfig: audioConfig, opus: opusConfig)
+            if rc != 0 {
+                Diag.error("NativeAudio sink initialize failed (\(rc))", Self.cat)
+                throw EnetError.socketFailure("audio sink initialize failed (\(rc))")
+            }
+            initialized = true
+        }
+        receiveStarted = true
+        decodeWorker.start()
+        startReceiveLoop()
+        armAudioPendingProbe()
+        Diag.notice("NativeAudio receive started → \(host, privacy: .private):\(audioPort) "
+            + "(packetDuration=\(audioPacketDuration)ms, "
+            + "\(audioEncryption ? "AES-CBC" : "plaintext"))", Self.cat)
+    }
+
+    /// Convenience: bring up both phases at once (ping + receive). Retained for
+    /// callers/tests that don't split the bring-up across the handshake.
+    func start() throws {
+        try startPing()
+        try startReceive()
+    }
+
+    func stop() {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        guard interrupted.testAndSet() else { return }
+        receiveFailure.cancel()
+        // Preserve the stream-end instant as the next session's idle anchor.
+        TelemetryCounters.shared.audioTtf.markStreamEnd()
+        pingThread = nil // the dedicated ping thread exits on the interrupted flag
+        decodeWorker.stop()
+        if initialized {
+            sink?.cleanup()
+            initialized = false
+        }
+    }
+
+    /// The only close: a close in stop() raced the loops, and a reconnect's new socket could
+    /// reuse the number. Both loops hold `self` while they use the fd, so this runs after both.
+    deinit {
+        if receiveStarted { decodeWorker.requestStop() }
+        if fd >= 0 { close(fd) }
+    }
+
+    // +Receive owns the socket producer and worker-side packet handler; +Telemetry folds worker-owned stats.
+}
