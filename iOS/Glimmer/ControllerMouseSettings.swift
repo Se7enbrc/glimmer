@@ -23,11 +23,6 @@ struct GlimmerSettings: View {
     let model: LauncherModel
     var addPC: () -> Void = {}
     var pairPC: (HostDiscovery.Discovered) -> Void = { _ in }
-    @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
-    @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
-    #if GLIMMER_DIAGNOSTICS
-    @AppStorage("telemetryEnabled") private var diagnostics = true
-    #endif
     @Environment(\.dismiss) private var dismiss
     enum Page: String, CaseIterable, Identifiable {
         case general, quality, pcs, input
@@ -87,6 +82,27 @@ struct GlimmerSettings: View {
     }
 
     func settingsPage(_ page: Page) -> some View {
+        GlimmerSettingsPage(profile: $profile, stick: $stick, model: model,
+                            addPC: addPC, pairPC: pairPC, page: page)
+    }
+}
+
+@MainActor
+private struct GlimmerSettingsPage: View {
+    @Binding var profile: StreamProfile
+    @Binding var stick: ControllerMouseStick
+    let model: LauncherModel
+    let addPC: () -> Void
+    let pairPC: (HostDiscovery.Discovered) -> Void
+    let page: GlimmerSettings.Page
+    @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
+    @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
+    #if GLIMMER_DIAGNOSTICS
+    @AppStorage("telemetryEnabled") private var diagnostics = true
+    #endif
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
         Form {
             switch page {
             case .general:
@@ -120,9 +136,13 @@ struct GlimmerSettings: View {
         if !model.savedPCs.isEmpty {
             Section("Paired PCs") {
                 ForEach(model.savedPCs) { pc in
-                    HStack {
+                    let layout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                        : AnyLayout(HStackLayout())
+                    layout {
                         Label(pc.name, systemImage: "display")
-                        Spacer()
+                            .fixedSize(horizontal: false, vertical: true)
+                        if !dynamicTypeSize.isAccessibilitySize { Spacer() }
                         Button("Forget…", role: .destructive) { model.requestForget(pc) }
                             .accessibilityLabel("Forget \(pc.name)")
                             .disabled(!model.canForgetPC)
@@ -150,15 +170,21 @@ struct GlimmerSettings: View {
 
     private var streamSettings: some View {
         Section {
-            Picker("Stream format", selection: $profile) {
-                ForEach(StreamProfile.allCases) { option in Text(option.label).tag(option) }
-            }
+            if dynamicTypeSize.isAccessibilitySize {
+                streamFormatPicker.pickerStyle(.inline)
+            } else { streamFormatPicker }
         } header: {
             Text("Stream")
         } footer: {
             Text("Native matches this display's full resolution. The PC needs the same display mode. "
                  + "Some games need 16:9. Choose 1080p if the picture looks wrong. "
                  + "Changes apply to the next stream.")
+        }
+    }
+
+    private var streamFormatPicker: some View {
+        Picker("Stream format", selection: $profile) {
+            ForEach(StreamProfile.allCases) { option in Text(option.label).tag(option) }
         }
     }
 
