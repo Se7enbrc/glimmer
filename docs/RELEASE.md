@@ -270,21 +270,46 @@ links and writes through symlink parents are rejected. Signing policy
 entitlements must match main; land signing-policy changes on main before making
 a candidate that depends on them.
 
-Signing calls `notarize-bundle`, whose dependency graph cannot compile or embed
-the helper. Tooling, entitlements and packaging scripts come from main, never
-from the transferred bundle. The candidate's version config and changelog are
-read as data from its exact Git commit. Apple credentials are decoded under
-`RUNNER_TEMP` with private permissions and removed with the temporary keychain
-before packaging. Cleanup failure blocks packaging. An unconditional cleanup
-step also runs when the job finishes.
+Signing calls `notarize-bundle`, creates the DMG, then calls `notarize-dmg`;
+none of these targets compile or embed the helper. Tooling, entitlements and
+packaging scripts come from main, never from the transferred bundle. The
+candidate's version config and changelog are read as data from its exact Git
+commit. Apple credentials are decoded under `RUNNER_TEMP` with private
+permissions and removed with the temporary keychain after DMG stapling and
+before ZIP packaging, final hashes or attestation. Cleanup failure blocks that
+handoff. An unconditional cleanup step also runs when the job finishes. The
+package phase preserves the finished DMG; it must never recreate it.
+
+The DMG uses the same Developer ID Application identity and temporary keychain
+as the app, a secure timestamp, and identifier `io.ugfugl.Glimmer.dmg`. It has
+no app entitlements. After the app is notarized and stapled, the compressed DMG
+is signed, submitted with `notarytool --wait`, required to return `Accepted`,
+and stapled. Apple recommends signing nested containers and notarizing the
+outermost distribution in
+[Packaging Mac software for distribution](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution).
+We retain the app's ZIP submission for the separate Sparkle distribution and
+submit the signed DMG as its own distribution. Apple's
+[custom notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
+explains stapling the app before creating the final ZIP; ZIPs cannot themselves
+be stapled. The DMG's ticket is stapled directly to the image.
+
+This adds one serial DMG upload and notary wait per candidate, plus signing and
+stapling. Apple's queue time is variable; there is no measured Glimmer duration
+yet. The run summary records the DMG packaging/signing/notarization/stapling
+duration. The signing job retains its 45-minute timeout; measure both
+submissions in hosted acceptance before deciding whether that budget needs to
+change.
 
 The protected runner never launches the transferred app or helper. Their
 Gatekeeper, signature, notarization and launch probes, plus verification of the
 Sparkle update signature, run on another fresh runner without the release
-environment. Those checks gate publication. No build or release job restores a
-cache. The approved workflow, main's tooling, reviewed source and dependencies
-remain trusted: a digest binds the handoff, it does not make a malicious build
-trustworthy. This is not a SLSA-level claim.
+environment. That validate stage also checks the DMG with
+`codesign --verify --strict`,
+`spctl -a -t open --context context:primary-signature`, and
+`xcrun stapler validate`. Any failure blocks publication. No build or release
+job restores a cache. The approved workflow, main's tooling, reviewed source and
+dependencies remain trusted: a digest binds the handoff, it does not make a
+malicious build trustworthy. This is not a SLSA-level claim.
 
 Only the signing job has `id-token: write` and `attestations: write`. The pinned
 `actions/attest` action attests the final DMG and ZIP using the candidate
@@ -303,13 +328,26 @@ Developer ID, notarization and Sparkle signatures. See
 [GitHub's artifact attestation guide](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
 
 Land these workflow and tooling changes on main before dispatching a candidate
-with them. The candidate cutter refuses differences from main in either release
-workflow or the release scripts executed by candidate jobs and their imported
-helpers. This check runs before moving the candidate branch or creating a tag.
-Review the candidate SHA and pinned tooling SHA before approving. Keep the
-`release` environment's reviewer, allowed branches (`main` and
-`release-candidate`) and disabled administrator bypass. Do not change `rc-cut`:
-its main-only environment and separate App retain their existing roles.
+with them, then sync main into the release branch. DMG signing lands after
+2026.10.8; do not retrofit or replace its accepted assets. The candidate cutter
+refuses differences from main in either release workflow or the release scripts
+executed by candidate jobs and their imported helpers. This check runs before
+moving the candidate branch or creating a tag. Review the candidate SHA and
+pinned tooling SHA before approving. Keep the `release` environment's reviewer,
+allowed branches (`main` and `release-candidate`) and disabled administrator
+bypass. Do not change `rc-cut`: its main-only environment and separate App
+retain their existing roles.
+
+For the first hosted candidate with DMG signing, record both notary submissions
+as accepted, credential cleanup, and all three DMG validation results. Download
+the published DMG and repeat those read-only checks; `codesign -dv --verbose=2`
+must show the app's Developer ID authority/team and a timestamp. Verify the
+attestation against that final stapled file. On a separate Mac, test a fresh
+quarantined download offline, including opening the image and launching its
+installed app. Confirm the ZIP's app and helper still pass their existing
+checks. After acceptance, promotion and a publication retry must preserve both
+asset digests. The unsigned-payload reproducibility comparison below is
+unchanged; DMG signatures and tickets remain outside that comparison.
 
 ### E. Publication and Homebrew recovery
 
