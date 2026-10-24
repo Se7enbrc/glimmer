@@ -81,7 +81,7 @@ struct AppDeclarationTests {
         ])
     }
 
-    @Test func onlyTheWindowContainingTheStreamLocksLandscape() throws {
+    @Test func onlyAnIPhoneWindowContainingTheStreamLocksLandscape() throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let menu = UIViewController()
         let window = UIWindow(windowScene: scene)
@@ -99,8 +99,10 @@ struct AppDeclarationTests {
         stream.didMove(toParent: menu)
         stream.beginAppearanceTransition(true, animated: false)
         stream.endAppearanceTransition()
-        #expect(AppDelegate.orientationMask(for: window) == .landscape)
-        #expect(stream.supportedInterfaceOrientations == .landscape)
+        let streaming: UIInterfaceOrientationMask = window.traitCollection.userInterfaceIdiom == .pad
+            ? .all : .landscape
+        #expect(AppDelegate.orientationMask(for: window) == streaming)
+        #expect(stream.supportedInterfaceOrientations == streaming)
         let other = UIWindow(windowScene: scene)
         other.frame = window.frame
         other.rootViewController = UIViewController()

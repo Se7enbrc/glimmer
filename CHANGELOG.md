@@ -86,6 +86,9 @@
   quality choices stay readable in Settings.
 - On iPhone, disconnected messages can scroll at larger text sizes, and
   VoiceOver describes Done as returning to your apps.
+- iPad streams can start in portrait, Split View and narrow windows, using the
+  window's shape and resolution within the selected quality limit.
+
 - iPad app buttons keep their grid size with a small library. Large text has
   more room in PC names, saved-PC actions and stream controls. Connection
   messages can scroll when space is tight.

@@ -261,12 +261,13 @@ struct NativeUIRenderTests {
             try await waitForUIState("The stream did not start in the presented window.") {
                 stream.phase == .connecting
             }
-            if window.traitCollection.userInterfaceIdiom != .pad {
+            let pad = window.traitCollection.userInterfaceIdiom == .pad
+            if !pad {
                 try await waitForOrientation(scene, portrait: false, controller: player)
                 #expect(player.view.bounds.width > player.view.bounds.height)
             }
             stream.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
-            #expect(AppDelegate.orientationMask(for: window) == .landscape)
+            #expect(AppDelegate.orientationMask(for: window) == (pad ? .all : .landscape))
             try recordPhase(player.view, name: "orientation-stream-presented")
         } catch { captureError = error }
         stream.disconnect()

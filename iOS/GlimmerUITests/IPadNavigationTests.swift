@@ -5,6 +5,76 @@ import XCTest
 
 @MainActor
 final class IPadNavigationTests: XCTestCase {
+    func testStreamStartsInPortraitAndResizedWindows() {
+        let app = XCUIApplication()
+        app.launchEnvironment["GLIMMER_UI_TESTING"] = "stream"
+        if let mode = ProcessInfo.processInfo.environment["GLIMMER_NATIVE_WINDOW_MODE"] {
+            inspectSystemStream(mode, app: app)
+            return
+        }
+        app.launch()
+        defer { app.terminate() }
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            XCUIDevice.shared.orientation = orientation
+            XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 10))
+            app.buttons["Desktop"].tap()
+            XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["Disconnect"].isHittable)
+            recordScreen(app, name: "whole-window-native-stream-\(orientation.rawValue)")
+            app.buttons["Disconnect"].tap()
+            XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 10))
+        }
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let window = app.windows.firstMatch
+            window.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.99))
+                .press(forDuration: 0.3, thenDragTo: window.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)))
+        }
+        app.buttons["Desktop"].tap()
+        XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 10))
+        recordScreen(app, name: "whole-window-native-resize-request")
+    }
+
+    private func inspectSystemStream(_ mode: String, app: XCUIApplication) {
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        settings.activate()
+        let multitasking = settings.buttons["Multitasking & Gestures"]
+        if multitasking.waitForExistence(timeout: 5) { multitasking.tap() }
+        let choice = "com.apple.settings.multitaskingAndGestures."
+            + (mode == "stage" ? "stageManager" : "windowedApps")
+        let option = settings.descendants(matching: .any).matching(identifier: choice).firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 5))
+        option.tap()
+        app.launch()
+        defer { app.terminate() }
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 10))
+        recordScreen(app, name: "whole-window-\(mode)-initial")
+        let window = app.windows.firstMatch
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.99))
+            .press(forDuration: 0.3, thenDragTo: window.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)))
+        if mode != "stage" {
+            let system = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let controls = system.buttons["window-controls:io.ugfugl.Glimmer.iOS"]
+            XCTAssertTrue(controls.waitForExistence(timeout: 5))
+            controls.tap()
+            system.buttons["Zoom-button"].press(forDuration: 1)
+            let item = system.descendants(matching: .any)
+                .matching(identifier: mode == "slide" ? "Enter Slide Over" : "Left and Right").firstMatch
+            XCTAssertTrue(item.waitForExistence(timeout: 5))
+            item.tap()
+        }
+        recordScreen(app, name: "whole-window-\(mode)-launcher")
+        app.buttons["Desktop"].tap()
+        XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Disconnect"].isHittable)
+        XCTAssertLessThan(app.windows.firstMatch.frame.width, app.windows.firstMatch.frame.height)
+        recordScreen(app, name: "whole-window-\(mode)-stream")
+        app.buttons["Disconnect"].tap()
+        XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 10))
+    }
+
     func testLauncherSettingsAndAddressEntry() throws {
         let app = XCUIApplication()
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "empty"

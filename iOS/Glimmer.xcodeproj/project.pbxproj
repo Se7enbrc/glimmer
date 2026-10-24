@@ -76,6 +76,8 @@
 			isa = PBXBuildFile;
 			fileRef = 87663570874C427BB408C4D9;
 		};
+		6890117473FC46DDBF9A0388 /* StreamWindowResize.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2348C9B108F9477C9930E31B /* StreamWindowResize.swift */; };
+		CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -174,6 +176,8 @@
 			path = GlimmerUITests.xctest;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
+		2348C9B108F9477C9930E31B /* StreamWindowResize.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamWindowResize.swift; sourceTree = "<group>"; };
+		DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamWindowResizeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -262,6 +266,7 @@
 				155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */,
 				91AEBC7BEEA8D776F94EE649 /* StreamSessionTests+Background.swift */,
 				DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */,
+				DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */,
 				E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */,
 				4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */,
 				1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */,
@@ -304,6 +309,7 @@
 				E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */,
 				57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */,
 				5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */,
+				2348C9B108F9477C9930E31B /* StreamWindowResize.swift */,
 				D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */,
 				6D57DEF880324835B4BA487E /* LauncherGallery.swift */,
 				A49D3096BFB64C23AE91AC56 /* ControllerMouseSettings.swift */,
@@ -472,6 +478,7 @@
 				F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */,
 				A7AC93D39FA963B32B3BFBB6 /* StreamSessionTests+Background.swift in Sources */,
 				00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */,
+				CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */,
 				9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */,
 				BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */,
 				A037E3519F7846D6958E34F0 /* ControllerMouseMotionTests.swift in Sources */,
@@ -505,6 +512,7 @@
 				D2CF67DA276842128B900E3A /* StreamSessionFailureCopy.swift in Sources */,
 				902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */,
 				FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */,
+				6890117473FC46DDBF9A0388 /* StreamWindowResize.swift in Sources */,
 				A3D372A8CF7E4C02AC0926B7 /* StreamBackgroundGrace.swift in Sources */,
 				E5079E847C204146BDF540F1 /* LauncherGallery.swift in Sources */,
 				46257D27DA574232935DD699 /* ControllerMouseSettings.swift in Sources */,

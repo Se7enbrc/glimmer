@@ -42,7 +42,9 @@ final class StreamViewController: GCEventViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        traitCollection.userInterfaceIdiom == .pad ? .all : .landscape
+    }
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
 
@@ -90,6 +92,7 @@ final class StreamViewController: GCEventViewController {
         // iPad windows can remain tall even when the scene requests landscape.
         guard traitCollection.userInterfaceIdiom == .pad || view.bounds.width > view.bounds.height else { return }
         model.start(surface: surface)
+        model.windowChanged(surface: surface)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -140,6 +143,7 @@ final class StreamViewController: GCEventViewController {
         var owner: UIViewController = self
         while let parent = owner.parent { owner = parent }
         owner.setNeedsUpdateOfSupportedInterfaceOrientations()
+        guard traitCollection.userInterfaceIdiom != .pad else { return }
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape)) { error in
             Logger(subsystem: "io.ugfugl.Glimmer", category: "Display")
                 .error("Display rotation failed: \(error.localizedDescription, privacy: .private)")

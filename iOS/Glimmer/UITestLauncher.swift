@@ -12,7 +12,8 @@ enum UITestLauncher {
         guard environment["GLIMMER_UI_TESTING"] != nil || environment["XCTestConfigurationFilePath"] != nil else {
             return nil
         }
-        let count = environment["GLIMMER_UI_TESTING"] == "one" ? 1
+        let streaming = environment["GLIMMER_UI_TESTING"] == "stream"
+        let count = environment["GLIMMER_UI_TESTING"] == "one" || streaming ? 1
             : environment["GLIMMER_UI_TESTING"] == "many" ? 12 : 0
         let pcs = (0..<count).map { index in
             var server = ServerInfo(address: "pc.invalid", uniqueId: "fixture-\(index)",
@@ -33,7 +34,15 @@ enum UITestLauncher {
                        server: server)
         }, pair: { pc, _ in pc }, apps: { _ in apps }, remember: { _ in pcs }, protectedDataChanged: { _ in },
            lastConnectedPCID: { pcs.first?.id }, artwork: { _, _ in Data() }, makeSession: { launch in
-            StreamSessionModel(launch: launch, makePlayback: { _, _, _ in throw CancellationError() })
+            StreamSessionModel(launch: launch, makePlayback: { launch, surface, _ in
+                guard streaming else { throw CancellationError() }
+                let id = UUID()
+                let events = AsyncStream<StreamSession.Update>.makeStream()
+                return StreamPlayback(id: id, events: events.stream, start: {
+                    events.continuation.yield(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+                }, stop: { events.continuation.finish() }, screenChanged: {},
+                   format: try launch.profile.resolve(surface: surface))
+            })
         })
         return LauncherModel(calls: calls, discoveryEnabled: false)
     }

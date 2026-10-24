@@ -55,9 +55,16 @@ that inspired Glimmer; it is not the protocol's name.
 
 The iPhone and iPad app requires iOS or iPadOS 26 or later. It shares the Mac
 app's Swift engine and uses SwiftUI and UIKit for pairing, the launcher and
-streaming. Menus work in portrait or landscape; streaming stays in landscape and
-supports physical controller input. Disconnecting leaves the game running on the
-PC.
+streaming. Menus work in portrait or landscape. iPhone streams use landscape;
+iPad streams fill their window in any orientation, including narrow windows.
+Native requests the window's pixel size; 1080p fits that aspect within its
+quality limit. Both support physical controllers. Disconnecting leaves the game
+running on the PC.
+
+An iPad resize must use the shared resume-only format transition after the
+window settles, preserving the running game and session settings. The
+[window streaming contract](docs/IPAD_WINDOW_STREAMING.md) records the pending
+shared-actuator integration and PC display-mode limits.
 
 Distribution is internal TestFlight only so far, with no App Store release. tvOS
 and visionOS are possible future ports.

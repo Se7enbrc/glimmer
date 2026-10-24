@@ -97,12 +97,16 @@ Before accepting UI, inspect light/dark appearance, large Dynamic Type,
 VoiceOver, keyboard focus, iPhone and iPad, both landscape directions, safe-area
 Disconnect button, status/home indicator behavior and menu rotation after
 streaming. The iPhone launcher, settings, pairing and address entry support
-portrait and both landscape orientations. Streams request landscape while
+portrait and both landscape orientations. iPhone streams request landscape while
 presented; dismissing them releases that restriction for their window. iPad
-declares all orientations for system windowing without the deprecated fullscreen
-compatibility key. Native UI rendering tests attach PNGs to the test result
-bundle; CI retains those bundles in the `ios-Simulator-results` artifact.
-Inspect the images before claiming visual acceptance.
+streams retain all orientations and use their view's backing-pixel size,
+including narrow windows. Check portrait, Split View, Slide Over and Stage
+Manager sizes. The [resize contract](../docs/IPAD_WINDOW_STREAMING.md) tracks
+the shared format actuator integration. iPad declares all orientations for
+system windowing without the deprecated fullscreen compatibility key. Native UI
+rendering tests attach PNGs to the test result bundle; CI retains those bundles
+in the `ios-Simulator-results` artifact. Inspect the images before claiming
+visual acceptance.
 
 Pairing recovery must preserve other PCs and reject forgetting during a stream
 or while protected data is unavailable. Verify Cancel, successful forgetting,

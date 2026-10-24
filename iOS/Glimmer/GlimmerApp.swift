@@ -65,6 +65,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     static func orientationMask(for window: UIWindow?) -> UIInterfaceOrientationMask {
+        if window?.traitCollection.userInterfaceIdiom == .pad { return .all }
         if let window, let root = window.rootViewController, containsStream(root, in: window) { return .landscape }
         return menuOrientations(for: window?.traitCollection.userInterfaceIdiom ?? UIDevice.current.userInterfaceIdiom)
     }

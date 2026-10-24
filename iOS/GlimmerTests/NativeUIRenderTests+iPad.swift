@@ -107,16 +107,57 @@ extension NativeUIRenderTests {
                          size: size, dark: dark, textSize: textSize)
     }
 
+    @Test(arguments: [false, true], [DynamicTypeSize.large, .accessibility5])
+    func iPadWholeWindowInventory(dark: Bool, textSize: DynamicTypeSize) async throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let screen = scene.screen.bounds.size
+        let portrait = CGSize(width: min(screen.width, screen.height), height: max(screen.width, screen.height))
+        let layouts: [(String, CGSize)] = [
+            ("portrait", portrait), ("landscape", CGSize(width: portrait.height, height: portrait.width)),
+            ("stage-minimum", CGSize(width: 375, height: 486)), ("stage-medium", CGSize(width: 640, height: 600)),
+            ("split", CGSize(width: 507, height: 645)), ("slide-over", CGSize(width: 375, height: 853))
+        ]
+        for (name, size) in layouts {
+            let id = UUID()
+            let model = StreamSessionModel(launch: testLaunch(), makePlayback: { launch, surface, _ in
+                StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+                               format: try launch.profile.resolve(surface: surface))
+            })
+            let controller = StreamViewController(model: model, close: {})
+            controller.traitOverrides.userInterfaceIdiom = .pad
+            let label = "ipad-whole-window-\(name)-\(dark ? "dark" : "light")-"
+                + (textSize == .large ? "default" : "ax5")
+            try await recordController(controller, name: label, size: size, dark: dark, prepare: {
+                #expect(model.phase == .connecting)
+                #expect(controller.surface.bounds.size == size)
+                #expect(controller.surface.displayLayer.frame == controller.surface.bounds)
+                #expect(controller.surface.displayLayer.videoGravity == .resizeAspectFill)
+                let pattern = WindowPatternView(frame: controller.surface.bounds)
+                pattern.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                controller.surface.addSubview(pattern)
+                model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+                model.showControls()
+                Attachment.record(Array("Requested: \(model.requestedFormat?.summary ?? "none")".utf8),
+                                  named: "\(label)-request.txt")
+            }, textSize: textSize)
+            model.stop()
+            await model.waitUntilStopped()
+        }
+    }
+
     @Test func iPadNarrowStreamInventory() async throws {
         let id = UUID()
-        let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
+        let model = StreamSessionModel(launch: testLaunch(), makePlayback: { launch, surface, _ in
             StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
-                           format: StreamFormat(width: 1920, height: 1080, fps: 60))
+                           format: try launch.profile.resolve(surface: surface))
         })
         let controller = StreamViewController(model: model, close: {})
         try await recordController(controller, name: "ipad-native-narrow-stream", size: CGSize(width: 320, height: 600),
                                    dark: true, prepare: {
             Attachment.record(Array("phase: \(model.phase)".utf8), named: "ipad-native-narrow-stream-phase.txt")
+            if controller.traitCollection.userInterfaceIdiom == .pad {
+                #expect(model.phase == .connecting)
+            }
         })
         #expect(controller.view.bounds.size == CGSize(width: 320, height: 600))
         model.stop()
@@ -179,5 +220,29 @@ extension NativeUIRenderTests {
         contentSizeCategory: \(traits.preferredContentSizeCategory.rawValue)
         """
         Attachment.record(Array(details.utf8), named: "\(name)-geometry.txt")
+    }
+}
+
+@MainActor
+private final class WindowPatternView: UIView {
+    override func draw(_ rect: CGRect) {
+        UIColor.black.setFill()
+        UIRectFill(bounds)
+        let colors: [UIColor] = [.systemIndigo, .systemTeal, .systemBlue, .systemPurple]
+        for row in 0..<8 {
+            for column in 0..<8 {
+                colors[(row + column) % colors.count].withAlphaComponent(0.35).setFill()
+                UIRectFill(CGRect(x: CGFloat(column) * bounds.width / 8, y: CGFloat(row) * bounds.height / 8,
+                                 width: bounds.width / 8, height: bounds.height / 8))
+            }
+        }
+        UIColor.white.setStroke()
+        let border = UIBezierPath(rect: bounds.insetBy(dx: 2, dy: 2))
+        border.lineWidth = 4
+        border.stroke()
+        let text = "Simulator layout fixture"
+        let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 12),
+                                                       .foregroundColor: UIColor.white]
+        (text as NSString).draw(at: CGPoint(x: 12, y: bounds.maxY - 24), withAttributes: attributes)
     }
 }

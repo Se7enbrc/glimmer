@@ -93,10 +93,8 @@ struct StreamSessionTests {
         window.addSubview(surface)
         defer { surface.removeFromSuperview() }
         let playback = try StreamPlayback.make(launch: testLaunch(), surface: surface) { quiesces += 1 }
-        let pixels = scene.screen.nativeBounds.size
-        #expect(playback.format == StreamFormat(width: Int(max(pixels.width, pixels.height)),
-                                                height: Int(min(pixels.width, pixels.height)),
-                                                fps: min(120, scene.screen.maximumFramesPerSecond)))
+        let expected = try testLaunch().profile.resolve(surface: surface)
+        #expect(playback.format == expected)
         await playback.stop()
         await playback.stop()
         #expect(quiesces == 1)
@@ -415,7 +413,8 @@ struct StreamSessionTests {
         #expect(surface.clipsToBounds)
         let model = PlaybackFixture().model()
         let controller = StreamViewController(model: model, close: {})
-        #expect(controller.supportedInterfaceOrientations == .landscape)
+        #expect(controller.supportedInterfaceOrientations
+            == (controller.traitCollection.userInterfaceIdiom == .pad ? .all : .landscape))
         #expect(controller.prefersStatusBarHidden)
         #expect(controller.prefersHomeIndicatorAutoHidden)
         controller.startWhenReady()

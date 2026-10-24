@@ -3,6 +3,7 @@
 
 import GlimmerEngine
 import SwiftUI
+import UIKit
 
 enum ControllerMouseStick: String, CaseIterable, Identifiable, Sendable {
     case left, right
@@ -171,9 +172,7 @@ private struct GlimmerSettingsPage: View {
         } header: {
             Text("Stream")
         } footer: {
-            Text("Native matches this display's full resolution. The PC needs the same display mode. "
-                 + "Some games need 16:9. Choose 1080p if the picture looks wrong. "
-                 + "Changes apply to the next stream.")
+            Text(streamExplanation)
         }
     }
 
@@ -181,6 +180,15 @@ private struct GlimmerSettingsPage: View {
         Picker("Stream format", selection: $profile) {
             ForEach(StreamProfile.allCases) { option in Text(option.label).tag(option) }
         }
+    }
+
+    private var streamExplanation: String {
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            return "Native requests this window's resolution. 1080p limits resolution. "
+                + "The PC needs a matching display mode to avoid black bars. Changes apply to the next stream."
+        }
+        return "Native matches this display's full resolution. The PC needs the same display mode. "
+            + "Some games need 16:9. Choose 1080p if the picture looks wrong. Changes apply to the next stream."
     }
 
     @ViewBuilder private var controllerSettings: some View {
