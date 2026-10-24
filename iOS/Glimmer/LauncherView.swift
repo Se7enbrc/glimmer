@@ -58,7 +58,8 @@ struct LauncherView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Settings", systemImage: "gearshape") { showingSettings = true }
-                        .disabled(model.busy)
+                        .keyboardShortcut(",", modifiers: .command)
+                        .disabled(model.busy || addingPC || model.pairing != nil || model.stream != nil)
                 }
             }
         }

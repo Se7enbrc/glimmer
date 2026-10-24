@@ -89,6 +89,8 @@
 - iPad app buttons keep their grid size with a small library. Large text has
   more room in PC names, saved-PC actions and stream controls. Connection
   messages can scroll when space is tight.
+- Open iPhone and iPad Settings with Command-comma and close them with
+  Command-period.
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.
 - iPhone audio diagnostics now distinguish missing packets, rejected audio and

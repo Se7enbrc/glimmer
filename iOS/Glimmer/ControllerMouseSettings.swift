@@ -76,7 +76,9 @@ struct GlimmerSettings: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+                }
             }
         }
     }

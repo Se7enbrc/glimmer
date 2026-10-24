@@ -100,6 +100,23 @@ final class IPadNavigationTests: XCTestCase {
         }
     }
 
+    func testSettingsKeyboardCommands() {
+        let app = XCUIApplication()
+        app.launchEnvironment["GLIMMER_UI_TESTING"] = "empty"
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+        // Establish the simulated hardware keyboard before testing app shortcuts.
+        app.typeKey(.shift, modifierFlags: [])
+        app.activate()
+        app.typeKey(",", modifierFlags: .command)
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        recordScreen(app, name: "settings-keyboard-open")
+        app.typeKey(".", modifierFlags: .command)
+        XCTAssertTrue(app.navigationBars["Settings"].waitForNonExistence(timeout: 5))
+        recordScreen(app, name: "settings-keyboard-close")
+    }
+
     func testDefaultTextKeepsPCNamesVisible() {
         let app = XCUIApplication()
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "many"
