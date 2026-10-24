@@ -94,6 +94,7 @@ final class RtpAudioQueue {
     static let payloadTypeFec: UInt8 = 127    // RTP_PAYLOAD_TYPE_FEC
 
     /// Per-stream cumulative counters (LiGetRTPAudioStats parity, subset).
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     struct Stats {
         var packetCountAudio: UInt32 = 0
         var packetCountFec: UInt32 = 0
@@ -105,6 +106,7 @@ final class RtpAudioQueue {
     }
 
     var stats = Stats()
+    #endif
 
     // The synthesized/parsed FEC header common to every shard of a block.
     struct FecHeader {
@@ -425,7 +427,9 @@ final class RtpAudioQueue {
     private func addWithoutFec(_ packet: [UInt8], rtp: RtpHeader) -> RtpaResult {
         guard rtp.packetType == Self.payloadTypeAudio, fallbackPacket == nil else { return .none }
         guard packet.count > Self.fixedRtpHeaderSize, packet.count <= Self.maxPacketSize else {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             stats.packetCountInvalid &+= 1
+            #endif
             return .none
         }
         if !fallbackStarted {
@@ -438,9 +442,13 @@ final class RtpAudioQueue {
                 nextRtpSequenceNumber = rtp.sequenceNumber
             }
         }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         stats.packetCountAudio &+= 1
+        #endif
         guard !Self.isBefore16(rtp.sequenceNumber, nextRtpSequenceNumber) else {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             stats.packetCountOOS &+= 1
+            #endif
             return .none
         }
         let gap = Int(rtp.sequenceNumber &- nextRtpSequenceNumber)
@@ -496,7 +504,9 @@ final class RtpAudioQueue {
         // Upstream also adds the block's 20 ms here, in µs units, so 20 µs: the window is the slack alone.
         let windowUs = UInt64(oosWaitTimeMs * 1000)
         if !receivedOosData || (nowUs &- head.queueTimeUs) > windowUs {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             stats.packetCountFecFailed += 1
+            #endif
             // Play out the block with PLC placeholders for the missing packets.
             head.allowDiscontinuity = true
         }

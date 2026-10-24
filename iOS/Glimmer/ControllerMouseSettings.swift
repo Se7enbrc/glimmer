@@ -25,10 +25,15 @@ struct GlimmerSettings: View {
     var pairPC: (HostDiscovery.Discovered) -> Void = { _ in }
     @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
     @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
-    @AppStorage("telemetryEnabled") private var diagnostics = false
+    #if GLIMMER_DIAGNOSTICS
+    @AppStorage("telemetryEnabled") private var diagnostics = true
+    #endif
     @Environment(\.dismiss) private var dismiss
     enum Page: String, CaseIterable, Identifiable {
-        case general, quality, pcs, input, diagnostics
+        case general, quality, pcs, input
+        #if GLIMMER_DIAGNOSTICS
+        case diagnostics
+        #endif
         var id: Self { self }
         var title: String {
             switch self {
@@ -36,7 +41,9 @@ struct GlimmerSettings: View {
             case .quality: "Quality"
             case .pcs: "PCs"
             case .input: "Input"
+            #if GLIMMER_DIAGNOSTICS
             case .diagnostics: "Diagnostics"
+            #endif
             }
         }
         var symbol: String {
@@ -45,7 +52,9 @@ struct GlimmerSettings: View {
             case .quality: "gauge.with.dots.needle.67percent"
             case .pcs: "display"
             case .input: "gamecontroller"
+            #if GLIMMER_DIAGNOSTICS
             case .diagnostics: "stethoscope"
+            #endif
             }
         }
     }
@@ -89,7 +98,9 @@ struct GlimmerSettings: View {
             case .quality: streamSettings
             case .pcs: computerSettings
             case .input: controllerSettings
+            #if GLIMMER_DIAGNOSTICS
             case .diagnostics: diagnosticSettings
+            #endif
             }
         }
         .navigationTitle(page.title)
@@ -176,12 +187,14 @@ struct GlimmerSettings: View {
         }
     }
 
+    #if GLIMMER_DIAGNOSTICS
     private var diagnosticSettings: some View {
         Section {
             Toggle("Record diagnostics", isOn: $diagnostics)
         } footer: {
-            Text("Saves performance and troubleshooting files on this iPhone for the next stream. "
-                 + "Nothing is uploaded. TestFlight builds turn this on by default.")
+            Text("Saves performance and troubleshooting files on this device for the next stream. "
+                 + "Nothing is uploaded. Beta builds turn this on by default.")
         }
     }
+    #endif
 }

@@ -10,6 +10,7 @@ import Foundation
 
 /// A run of frames that needed Reed-Solomon recovery, summarized once the run
 /// has been quiet for a while instead of logging a line per frame.
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 struct FecRecoveryEpisode {
     private(set) var frames = 0
     private var shards = 0
@@ -37,6 +38,8 @@ struct FecRecoveryEpisode {
             + "worst parity margin \(minMargin), over \((lastUs &- startUs) / 1000) ms"
     }
 }
+
+#endif
 
 extension RtpVideoQueue {
 
@@ -149,6 +152,7 @@ extension RtpVideoQueue {
     /// Count this frame's recovery for the metrics and the open episode. The first
     /// recovery of a stream logs on its own; later ones log as an episode summary.
     private func logFecRecovery() {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         currentFrameNeededFec = true
         let recovered = bufferDataPackets - receivedDataPackets
         let margin = bufferParityPackets - recovered
@@ -158,6 +162,7 @@ extension RtpVideoQueue {
             loggedFirstFecRecovery = true
             Diag.notice("NativeVideo first FEC recovery: \(recovered) shards, frame \(currentFrameNumber)", Self.cat)
         }
+        #endif
     }
 
     /// FEC cannot recover every header field. Rebuild those from the block and
@@ -246,9 +251,11 @@ extension RtpVideoQueue {
 
         // Metrics: tally one completed frame and whether it needed FEC recovery
         // (any of its multi-FEC blocks). The latch is cleared per frame.
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         framesInWindow += 1
         if currentFrameNeededFec { fecRecoveredFramesInWindow += 1 }
         currentFrameNeededFec = false
+        #endif
     }
 
     /// Hand one completed packet to the depacketizer.

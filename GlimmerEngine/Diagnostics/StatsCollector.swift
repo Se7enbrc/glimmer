@@ -8,6 +8,7 @@
 import Foundation
 import QuartzCore
 import os
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 package final class StatsCollector: @unchecked Sendable {
 
     package init() {}
@@ -504,3 +505,48 @@ package final class StatsCollector: @unchecked Sendable {
             lateByHostPercent: presents > 0 ? Double(hostTimedLatePresents) / Double(presents) * 100.0 : nil)
     }
 }
+#else
+/// Production keeps only watchdog clocks. All state is protected by lock.
+package final class StatsCollector: @unchecked Sendable {
+    private let lock = OSAllocatedUnfairLock()
+    private var lastDecodedFrameTime: Double = 0
+    private var lastPresentTime: Double = 0
+
+    package struct HostCadence: Sendable {
+        package var intervalP50Ms: Double
+        package var intervalP95Ms: Double
+        package var unevenPairs: UInt64
+        package var lateByHostPercent: Double?
+    }
+
+    package init() {}
+    package func receivedBytesSnapshot() -> UInt64 { 0 }
+    package func recordReceivedFrame(bytes: Int, isIDR: Bool = false, ptsUs: UInt64 = 0,
+                                     frameNumber: Int32, hostProcessingLatency: UInt16 = 0) {}
+    package func recordDecodedFrame() { lock.withLock { lastDecodedFrameTime = CACurrentMediaTime() } }
+    package func recordRendererEnqueue() { lock.withLock { lastPresentTime = CACurrentMediaTime() } }
+    package func secondsSinceLastDecodedFrame() -> Double {
+        lock.withLock { lastDecodedFrameTime > 0 ? CACurrentMediaTime() - lastDecodedFrameTime : .infinity }
+    }
+    package func secondsSinceLastPresent() -> Double {
+        lock.withLock { lastPresentTime > 0 ? CACurrentMediaTime() - lastPresentTime : .infinity }
+    }
+    package func resetForConnection() {
+        lock.withLock { lastDecodedFrameTime = 0; lastPresentTime = 0 }
+    }
+    package func dropPendingDecodeSubmits() {}
+    package func recordDecoderDiscard() {}
+    package func recordRendererBackpressureDrop() {}
+    package func recordPresentationLateDrop() {}
+    package func recordPresentationGap() {}
+    package func recordPacingDepth(_ depth: Int) {}
+    package func setGapJudgingExcluded(_ excluded: Bool) {}
+    package func recordPresent(cadenceErrorMs: Double, hostPTSSeconds: Double = .nan,
+                               streamIntervalMs: Double = 0, refreshMs: Double = 0) {}
+    package func snapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot { StreamStatsSnapshot() }
+    package func decoderDropCount() -> UInt64 { 0 }
+    package func backpressureDropCount() -> UInt64 { 0 }
+    package func presentationLateDropCount() -> UInt64 { 0 }
+    package func presentationGapCount() -> UInt64 { 0 }
+}
+#endif

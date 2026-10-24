@@ -7,6 +7,7 @@ import VideoToolbox
 extension VideoDecoder {
     /// Leave codec threading to VideoToolbox; the optional thread-count hint does not promise ordering.
     nonisolated func configureDecompressionSession(_ session: VTDecompressionSession) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let fields = Self.configureSessionProperties(
             set: { key, value in VTSessionSetProperty(session, key: key, value: value) },
             supported: {
@@ -19,8 +20,13 @@ extension VideoDecoder {
             read: { Self.readSessionNumber(session, key: $0) })
         Diag.notice("Decoder configuration: \(fields.joined(separator: ","))", "Stream.VideoDecoder")
         TelemetryExporter.recordEvent(fields)
+        #else
+        VTSessionSetProperty(session, key: kVTDecompressionPropertyKey_RealTime, value: kCFBooleanTrue)
+        VTSessionSetProperty(session, key: kVTDecompressionPropertyKey_MaximizePowerEfficiency, value: kCFBooleanFalse)
+        #endif
     }
 
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     /// Injectable property access keeps configuration coverage independent of hardware availability.
     nonisolated static func configureSessionProperties(
         set: (CFString, CFBoolean) -> OSStatus,
@@ -69,4 +75,5 @@ extension VideoDecoder {
         let number = value?.takeRetainedValue() as? NSNumber
         return (status, number)
     }
+    #endif
 }

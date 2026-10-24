@@ -19,7 +19,9 @@ struct AudioPCMQueue: ~Copyable {
     let minimumFill = Atomic<Int>(Int.max)
     let enabled = Atomic<Bool>(false)
     let muted = Atomic<Bool>(false)
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     let outputProbe = AudioOutputProbe()
+    #endif
     // Only the render callback touches this latch, and only after initialization.
     let drained = Atomic<Bool>(false)
 
@@ -132,6 +134,8 @@ func renderAudioPCM(_ context: UnsafeMutableRawPointer, _ flags: UnsafeMutablePo
     guard let buffers else { return kAudio_ParamError }
     let queue = context.assumingMemoryBound(to: AudioPCMQueue.self)
     let status = queue.pointee.render(frames: Int(frames), buffers: buffers)
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     if status == noErr { queue.pointee.outputProbe.captureInput(buffers, frames: frames) }
+    #endif
     return status
 }

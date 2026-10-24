@@ -103,11 +103,13 @@ extension StreamSession {
         // would show as a runaway-open span in Instruments. Closing here
         // with outcome=aborted is the universal cleanup for every stop
         // path (user quit, connection terminated, startConnection error).
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let state = connectFlowState {
             OSSignposter.network.endInterval(
                 "ConnectFlow", state, "outcome=aborted")
             connectFlowState = nil
         }
+        #endif
 
         // Teardown order: stop the backend (drains its threads), take down what
         // the user sees, shut audio, /cancel, then release the bridge. Its refs
@@ -287,8 +289,10 @@ extension StreamSession {
     ) async throws -> LaunchResponse {
         let client = await network.clientUniqueID
         try checkAttempt(deadline: deadline)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let start = Date()
         defer { ConnectTimingTelemetry.shared.recordLaunchLeg(launchMs: Date().timeIntervalSince(start) * 1000) }
+        #endif
         let response = try await launchAndRecordOwnership(client: client, appID: appID) {
             try await network.launch(appID: appID, config: config)
         }
@@ -371,10 +375,14 @@ extension StreamSession {
     ) async throws -> LaunchResponse {
         try checkAttempt(deadline: deadline)
         guard let cancellation = hostDisposition.cancellation else { throw CancellationError() }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let start = Date()
+        #endif
         try await cancellation.cancel(network)
         try checkAttempt(deadline: deadline)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         ConnectTimingTelemetry.shared.recordLaunchLeg(cancelMs: Date().timeIntervalSince(start) * 1000)
+        #endif
         try await waitForHostIdle(network: network, deadline: deadline)
         try checkAttempt(deadline: deadline)
         return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
@@ -383,16 +391,20 @@ extension StreamSession {
     private func waitForHostIdle(network: NetworkClient, deadline: Date) async throws {
         let start = Date()
         let idleDeadline = min(deadline, start.addingTimeInterval(5))
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         var polls = 0
         defer {
             ConnectTimingTelemetry.shared.recordLaunchLeg(
                 launchBusyWaitMs: Date().timeIntervalSince(start) * 1000, busyPollCount: polls)
         }
+        #endif
         while Date() < idleDeadline {
             try checkAttempt(deadline: deadline)
             try await Task.sleep(for: .milliseconds(250))
             try checkAttempt(deadline: deadline)
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             polls += 1
+            #endif
             let info = try await network.fetchServerInfo()
             try checkAttempt(deadline: deadline)
             if info.currentGameID == 0, !info.isBusy { return }

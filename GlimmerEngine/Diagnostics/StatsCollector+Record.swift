@@ -8,6 +8,7 @@ import Foundation
 import QuartzCore
 import os
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 extension StatsCollector {
 
     /// Sunshine's timed captures exclude its repeats when timing is available.
@@ -465,3 +466,4 @@ extension StatsCollector {
         lastHostDeltaMs = deltaMs
     }
 }
+#endif

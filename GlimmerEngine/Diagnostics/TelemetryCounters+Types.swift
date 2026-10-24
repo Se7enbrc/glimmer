@@ -22,22 +22,21 @@ import os
 
 extension TelemetryCounters {
 
-    /// One monotonic counter. os_unfair_lock-guarded UInt64 - matches the codebase's
-    /// existing AtomicCounter style; the few inc/read sites are not a tight inner
-    /// loop (per loss event / per frame, never per packet on the hot path).
-    package final class Counter: @unchecked Sendable {
-        private let lock = os_unfair_lock_t.allocate(capacity: 1)
-        private var total: UInt64 = 0
-        package init() { lock.initialize(to: os_unfair_lock_s()) }
-        deinit { lock.deallocate() }
-        package func increment(by amount: UInt64 = 1) {
-            os_unfair_lock_lock(lock); total &+= amount; os_unfair_lock_unlock(lock)
+    /// Diagnostic totals have no storage in production; control totals explicitly retain it.
+    package final class Counter: Sendable {
+        private let storage: OSAllocatedUnfairLock<UInt64>?
+
+        package init(operational: Bool = false) {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            storage = OSAllocatedUnfairLock(initialState: 0)
+            #else
+            storage = operational ? OSAllocatedUnfairLock(initialState: 0) : nil
+            #endif
         }
-        package var value: UInt64 {
-            os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
-            return total
-        }
-        package func reset() { os_unfair_lock_lock(lock); total = 0; os_unfair_lock_unlock(lock) }
+
+        package func increment(by amount: UInt64 = 1) { storage?.withLock { $0 &+= amount } }
+        package var value: UInt64 { storage?.withLock { $0 } ?? 0 }
+        package func reset() { storage?.withLock { $0 = 0 } }
     }
 
     /// Gap (seconds) of input silence after which the next event is an idle→active

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 import Foundation
 
 extension DiagnosticEvidence {
@@ -176,3 +177,5 @@ extension DiagnosticEvidence {
         }
     }
 }
+
+#endif

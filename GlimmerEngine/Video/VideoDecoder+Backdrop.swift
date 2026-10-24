@@ -4,6 +4,7 @@
 // Samples the picture's brightness behind the stats HUD so the overlay can pick light or dark ink.
 // Runs on the present path after the renderer has the frame, at most 4 Hz, luma plane only.
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 import CoreGraphics
 import CoreMedia
 import CoreVideo
@@ -161,3 +162,5 @@ extension VideoDecoder {
         return min(nits / 203, 1)
     }
 }
+
+#endif

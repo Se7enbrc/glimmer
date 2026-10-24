@@ -152,7 +152,8 @@ struct StreamSessionTests {
     @Test func sceneSuppressionForwardsAvailabilityInputs() async throws {
         let fixture = PlaybackFixture()
         // Without granted background time, leaving disconnects and the return is never forwarded.
-        fixture.backgroundCalls = .init(begin: { _ in .init(rawValue: 42) }, end: { _ in }, now: { 0 })
+        fixture.backgroundCalls = .init(begin: { _ in .init(rawValue: 42) }, end: { _ in },
+                                         now: { 0 }, sleep: { throw CancellationError() })
         let model = fixture.model()
         model.start(surface: StreamSurface())
         model.availabilityChanged(active: false, background: true, protectedDataAvailable: true)
@@ -484,13 +485,4 @@ actor StreamTestGate {
         for waiter in waiters { waiter.resume() }
         waiters = []
     }
-}
-
-@MainActor
-func testLaunch() -> StreamLaunch {
-    let server = ServerInfo(address: "pc.invalid", uniqueId: "test-pc", serverName: "Test PC")
-    let identity = IdentityManager(defaultsSuite: "io.ugfugl.Glimmer.tests.unused",
-                                   supportBase: URL(fileURLWithPath: "/unused"), protectedDataAvailable: { false })
-    return StreamLaunch(network: NetworkClient(server: server, identity: identity, deviceName: "Test device"),
-                        pcID: server.uniqueId, pcName: server.serverName, appID: 1, appName: "Test game")
 }

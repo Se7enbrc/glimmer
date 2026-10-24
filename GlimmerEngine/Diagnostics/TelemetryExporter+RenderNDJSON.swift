@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 //
 //  TelemetryExporter+RenderNDJSON.swift
 //
@@ -553,3 +554,5 @@ extension TelemetryRenderer {
         return "\(sign)\(scaled / 1_000).\(padding)\(fraction)"
     }
 }
+
+#endif

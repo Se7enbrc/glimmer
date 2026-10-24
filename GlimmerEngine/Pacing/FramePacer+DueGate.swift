@@ -153,9 +153,11 @@ extension FramePacer {
     func presentBackoffAndYield(_ beat: BackoffBeat) {
         recordPresentationDiscards(beat.dropped, reason: .backoff)
         stats.recordPacingDepth(0)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.render.emitEvent(
             "PacerBackoffDropToNewest",
             "discarded=\(beat.droppedCount, privacy: .public)")
+        #endif
         guard let willPresent else { return }
         if willPresent(beat.newest.sampleBuffer) {
             noteFramePresented(beat.newest.sampleBuffer)
@@ -450,11 +452,7 @@ extension FramePacer {
         // owns sample lifetime; ARC frees the trimmed buffers when `trimmed`
         // goes out of scope).
         recordPresentationDiscards(trimmed, reason: .trim)
-        if !trimmed.isEmpty {
-            OSSignposter.render.emitEvent(
-                "PacerTrim",
-                "count=\(trimmed.count, privacy: .public) depthAfter=\(sampledDepth, privacy: .public)")
-        }
+        recordTrim(count: trimmed.count, depth: sampledDepth)
 
         // ---- Presentation-late trim is NOT an IDR trigger ----
         //
@@ -482,9 +480,11 @@ extension FramePacer {
             return
         }
         noteFramePresented(entry.sampleBuffer)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let cadence = lastPresentInterPresentDelta()
         stats.recordPresent(cadenceErrorMs: cadence.error * 1000.0, hostPTSSeconds: entry.hostPTSSeconds,
                             streamIntervalMs: cadence.streamInterval * 1000.0, refreshMs: vsyncInterval * 1000.0)
+        #endif
     }
 
     /// The two per-tick PRESENT-signal recordings, folded into one call so neither
@@ -521,6 +521,7 @@ extension FramePacer {
     /// Kept off `releaseDueFrame` so its branch doesn't grow that already-large
     /// function's complexity/body. Called OFF the gate's lock (caller unlocked).
     func recordOverTargetReleaseIfNeeded(_ gate: DueGateResult, depth: Int) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let forced = gate.forcedOverTarget
         let released = gate.toPresent != nil
         var streakSnapshot = 0
@@ -541,9 +542,20 @@ extension FramePacer {
         guard forced else { return }
         TelemetryCounters.shared.pacerOverTargetReleaseTotal.increment()
         if shouldSignpost {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             OSSignposter.render.emitEvent(
                 "PacerOverTargetRelease",
                 "streak=\(streakSnapshot, privacy: .public) depth=\(depth, privacy: .public)")
+            #endif
         }
+        #endif
+    }
+
+    private func recordTrim(count: Int, depth: Int) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        if count > 0 {
+            OSSignposter.render.emitEvent("PacerTrim", "count=\(count, privacy: .public) depthAfter=\(depth, privacy: .public)")
+        }
+        #endif
     }
 }

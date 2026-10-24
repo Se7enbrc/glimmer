@@ -1,14 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  LogStore.swift
-//
-//  The troubleshooting log: a ring the in-app viewer reads, mirrored to os_log and
-//  the session file. Private values reach only the viewer; os_log and the file,
-//  which people attach to issues, show "<private>".
-//
-
 import Foundation
 import os
 import Synchronization
@@ -42,6 +34,7 @@ package enum LogLevel: Int, Comparable, Sendable, CaseIterable {
     }
 }
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 /// One entry in the troubleshooting log.
 package struct LogEntry: Identifiable, Sendable {
 
@@ -174,6 +167,8 @@ package final class LogStore: Sendable {
     }
 }
 
+#endif
+
 /// Terse façade: `Diag.info("Connecting to \(address, privacy: .private)", "Stream")`.
 /// Interpolations take Logger's `privacy:` argument and default to public; a
 /// private value reaches only the in-app viewer, never the system log or session file.
@@ -181,23 +176,53 @@ package enum Diag {
     package static func debug(
         _ message: DiagMessage,
         _ category: String
-    ) { LogStore.shared.log(.debug, message, category: category) }
+    ) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        LogStore.shared.log(.debug, message, category: category)
+        #else
+        Logger(subsystem: "io.ugfugl.Glimmer", category: category).debug("\(message.systemLogText, privacy: .public)")
+        #endif
+    }
     package static func info(
         _ message: DiagMessage,
         _ category: String
-    ) { LogStore.shared.log(.info, message, category: category) }
+    ) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        LogStore.shared.log(.info, message, category: category)
+        #else
+        Logger(subsystem: "io.ugfugl.Glimmer", category: category).info("\(message.systemLogText, privacy: .public)")
+        #endif
+    }
     package static func notice(
         _ message: DiagMessage,
         _ category: String
-    ) { LogStore.shared.log(.notice, message, category: category) }
+    ) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        LogStore.shared.log(.notice, message, category: category)
+        #else
+        Logger(subsystem: "io.ugfugl.Glimmer", category: category).notice("\(message.systemLogText, privacy: .public)")
+        #endif
+    }
     package static func warn(
         _ message: DiagMessage,
         _ category: String
-    ) { LogStore.shared.log(.warning, message, category: category) }
+    ) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        LogStore.shared.log(.warning, message, category: category)
+        #else
+        Logger(subsystem: "io.ugfugl.Glimmer", category: category).warning("\(message.systemLogText, privacy: .public)")
+        #endif
+    }
     package static func error(
         _ message: DiagMessage,
         _ category: String
-    ) { LogStore.shared.log(.error, message, category: category) }
+    ) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        LogStore.shared.log(.error, message, category: category)
+        #else
+        Logger(subsystem: "io.ugfugl.Glimmer", category: category).error("\(message.systemLogText, privacy: .public)")
+        #endif
+    }
 }
 
 /// Logger's spelling, so a Diag line reads like the `log` line beside it.
@@ -270,6 +295,7 @@ package struct DiagMessage: ExpressibleByStringInterpolation, Sendable {
     }
 }
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 // MARK: - Per-session file sink (gate-checked, buffered, off the hot path)
 
 /// While a telemetry session runs, mirrors Diag's redacted text (INFO+, DEBUG with
@@ -440,3 +466,5 @@ package final class SessionLogFileSink: @unchecked Sendable {
         }
     }
 }
+
+#endif

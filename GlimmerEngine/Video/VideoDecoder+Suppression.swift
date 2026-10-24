@@ -32,7 +32,9 @@ extension VideoDecoder {
 
         if suppressed {
             // Arm the pacer before draining so racing submits count as suppressed, not late drops.
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             OSSignposter.render.emitEvent("PresentSuppressed", "state=on")
+            #endif
             TelemetryCounters.shared.setPresentSuppressed(true)
             statsCollector.setGapJudgingExcluded(true)
             framePacer?.setPresentSuppressed(true)
@@ -43,7 +45,9 @@ extension VideoDecoder {
             armDecodeGateTimer()
         } else {
             // Keep the freshest frame for the first visible tick, then reuse flush/rebuild/IDR recovery.
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             OSSignposter.render.emitEvent("PresentSuppressed", "state=off")
+            #endif
             TelemetryCounters.shared.setPresentSuppressed(false)
             statsCollector.setGapJudgingExcluded(false)
             framePacer?.setPresentSuppressed(false)
@@ -203,7 +207,9 @@ extension VideoDecoder {
         presentSuppressedLock.unlock()
         guard engage else { return }
         log.notice("Decode gated (hidden past gate delay) - AUs dropped before VideoToolbox; receive/RFI + audio continue")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.decode.emitEvent("DecodeGate", "state=on")
+        #endif
         Diag.notice("decode gated after 2s hidden; receive+audio continue", "Stream")
         // Mirror the edge into the telemetry gauge (the setPresentSuppressed
         // discipline): the per-second record self-labels a gated span without
@@ -231,7 +237,9 @@ extension VideoDecoder {
         presentSuppressedLock.unlock()
         guard wasGated else { return false }
         log.notice("Decode gate lifted on refocus - resyncing to next IDR")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.decode.emitEvent("DecodeGate", "state=off")
+        #endif
         Diag.notice("decode gate lifted on refocus - resync to next IDR", "Stream")
         // Gauge mirror of the lift edge (see the engage edge for the WHY).
         TelemetryCounters.shared.setDecodeGated(false)
@@ -266,7 +274,9 @@ extension VideoDecoder {
         presentSuppressedLock.unlock()
         guard wasGated else { return }
         log.notice("Decode gate cleared on connection stop - frame watchdog owns teardown from here")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.decode.emitEvent("DecodeGate", "state=off")
+        #endif
         Diag.notice("decode gate cleared on connection stop - teardown watchdog unblocked", "Stream")
         // Gauge mirror of the clear edge (the liftDecodeGate discipline).
         TelemetryCounters.shared.setDecodeGated(false)
@@ -335,10 +345,14 @@ extension VideoDecoder {
                     else { return }
                     if self.presentSuppressed {
                         // Hidden: cheap flush only, no IDR (resync owns the IDR).
+                        #if os(macOS) || GLIMMER_DIAGNOSTICS
                         OSSignposter.render.emitEvent("LayerRequiresFlush", "suppressed=true")
+                        #endif
                         self.flushRenderer(renderer)
                     } else {
+                        #if os(macOS) || GLIMMER_DIAGNOSTICS
                         OSSignposter.render.emitEvent("LayerRequiresFlush", "suppressed=false")
+                        #endif
                         self.recoverPresentPath(reason: "requires_flush")
                     }
                 }
@@ -359,7 +373,9 @@ extension VideoDecoder {
                     guard let self, self.attachmentGeneration == generation else { return }
                     self.log.warning(
                         "Layer failedToDecode (\(errDesc, privacy: .private)) - proactive present-path self-heal")
+                    #if os(macOS) || GLIMMER_DIAGNOSTICS
                     OSSignposter.render.emitEvent("LayerFailedToDecode", "")
+                    #endif
                     self.recoverPresentPath(reason: "failed_to_decode")
                 }
             })

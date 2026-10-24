@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 // Network metric families share one PromBuilder so transport health and radio gauges form one document.
 
 import Foundation
@@ -229,3 +230,5 @@ extension TelemetryRenderer {
             wifi.noiseDbm.map(Double.init), labels: labels)
     }
 }
+
+#endif

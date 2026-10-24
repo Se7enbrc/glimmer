@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 //
 //  TelemetryExporter+CaptureExtras.swift
 //
@@ -336,3 +337,5 @@ extension TelemetryExporter {
     // One active exporter owns these baselines; only its serial workQueue reads or mutates them.
     nonisolated(unsafe) static var captureBaselines = CaptureBaselines()
 }
+
+#endif

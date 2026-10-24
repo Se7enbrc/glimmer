@@ -47,6 +47,7 @@ public actor PairingClient {
     private func runPairingFlow(pin: String) async throws -> ServerInfo {
 
         // Keep the interval and per-round events so Instruments identifies a stalled pairing step.
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let pairingSignpostID = OSSignposter.pairing.makeSignpostID()
         let pairingIntervalState = OSSignposter.pairing.beginInterval(
             "PairingFlow",
@@ -63,6 +64,9 @@ public actor PairingClient {
                 pairingIntervalState,
                 "outcome=\(pairingOutcome, privacy: .public)")
         }
+        #else
+        let pairingSignpostID = OSSignpostID.invalid
+        #endif
 
         // Send salt and the client cert. The returned PC cert is only a proposal until the PIN/RSA proof.
         let salt = try Self.randomBytes(16)
@@ -142,7 +146,9 @@ public actor PairingClient {
         server.pairStatus = .paired
 
         log.info("Pairing succeeded for \(self.server.address, privacy: .private)")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         pairingOutcome = "success"
+        #endif
         return server
     }
 
@@ -233,10 +239,12 @@ public actor PairingClient {
         timeout: TimeInterval = NetworkClient.pairTimeout,
         failureMessage: String
     ) async throws -> XMLNode {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.pairing.emitEvent(
             "PairingStep",
             id: signpostID,
             "step=\(stepLabel)")
+        #endif
         var fullQuery = ["devicename": network.deviceName(), "updateState": "1"]
         for (key, value) in query { fullQuery[key] = value }
         let response = try await network.request(

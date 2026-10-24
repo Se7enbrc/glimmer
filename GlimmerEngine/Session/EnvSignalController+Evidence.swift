@@ -261,6 +261,7 @@ extension EnvSignalController {
         stateChangesTotal.increment()
         Diag.notice("ENV \(previous.label) → \(next.label) (\(reason)) - gates keepalive "
             + "cadence + reconciler headroom", Self.cat)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         var fields = [
             "\"event\":\"env_state\"",
             "\"from\":\"\(previous.label)\"",
@@ -285,6 +286,7 @@ extension EnvSignalController {
             fields.append("\"tx_rate_session_p95_mbps\":\(TelemetryRenderer.jsonNumber(p95))")
         }
         TelemetryExporter.recordEvent(fields)
+        #endif
     }
 
     // MARK: - Session-relative percentiles

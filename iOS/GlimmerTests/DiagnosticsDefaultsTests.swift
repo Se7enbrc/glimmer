@@ -2,78 +2,81 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import Foundation
-import StoreKit
+@testable import GlimmerEngine
 import Testing
 @testable import Glimmer
 
 @MainActor
 struct DiagnosticsDefaultsTests {
-    private let suite = "io.ugfugl.Glimmer.diagnostics-tests.\(UUID().uuidString)"
-    private let defaults: UserDefaults
-
-    init() throws {
-        defaults = try #require(UserDefaults(suiteName: suite))
-    }
-
-    @Test(arguments: [
-        (AppStore.Environment.sandbox, true), (.production, false), (.xcode, true),
-        (nil, false), (AppStore.Environment(rawValue: "unknown"), false)
-    ] as [(AppStore.Environment?, Bool)])
-    func environmentDefault(environment: AppStore.Environment?, expected: Bool) async {
+    @Test(arguments: [nil, false, true] as [Bool?])
+    func savedPreferenceCannotGrantDiagnostics(saved: Bool?) throws {
+        let suite = "io.ugfugl.Glimmer.diagnostics-tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let check = DiagnosticsDefaults.register(defaults: defaults, development: false) { environment }
-        #expect(defaults.bool(forKey: "telemetryEnabled") == false)
-        await check.value
-        #expect(defaults.bool(forKey: "telemetryEnabled") == expected)
-        #expect(defaults.persistentDomain(forName: suite)?["telemetryEnabled"] == nil)
-    }
-
-    @Test func developmentEnablesImmediatelyWithoutStoreKit() async {
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let check = DiagnosticsDefaults.register(defaults: defaults, development: true) {
-            Issue.record("Development builds should not need a StoreKit check.")
-            throw CancellationError()
+        if let saved { defaults.set(saved, forKey: "telemetryEnabled") }
+        DiagnosticsDefaults.register(defaults: defaults)
+        #if GLIMMER_DIAGNOSTICS
+        #expect(DiagnosticsAvailability.compiledIn)
+        #expect(DiagnosticsAvailability.isEnabled(defaults: defaults) == (saved ?? true))
+        #expect(DiagnosticsDefaults.directory != nil)
+        #else
+        #expect(DiagnosticsAvailability.compiledIn == false)
+        #expect(DiagnosticsAvailability.isEnabled(defaults: defaults) == false)
+        #expect(DiagnosticsDefaults.directory == nil)
+        for override in [nil, "1", "unknown"] as [String?] {
+            #expect(TelemetryGate.isEnabled(defaults: defaults, environmentValue: override) == false)
         }
-        #expect(defaults.bool(forKey: "telemetryEnabled"))
-        await check.value
-        #expect(defaults.bool(forKey: "telemetryEnabled"))
+        #endif
+        #expect(defaults.persistentDomain(forName: suite)?["telemetryEnabled"] as? Bool == saved)
     }
 
-    @Test func failedCheckLeavesDiagnosticsOff() async {
-        defer { defaults.removePersistentDomain(forName: suite) }
-        await DiagnosticsDefaults.register(defaults: defaults, development: false) {
-            throw CancellationError()
-        }.value
-        #expect(defaults.bool(forKey: "telemetryEnabled") == false)
-        #expect(defaults.persistentDomain(forName: suite)?["telemetryEnabled"] == nil)
+    #if !GLIMMER_DIAGNOSTICS
+    @Test func productionLeavesPreviousFilesUntouchedEvenWithForcedEnable() throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let previous = directory.appendingPathComponent("previous-session.log")
+        let contents = Data("existing beta diagnostics".utf8)
+        try contents.write(to: previous)
+        let services = SessionServices.recording(directory: directory, enabled: true)
+        services.startLog()
+        services.stopLog()
+        #expect(try Data(contentsOf: previous) == contents)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [previous.lastPathComponent])
+    }
+    #endif
+
+    @Test func controlMeasurementsSurviveBothFlavours() {
+        let operational = TelemetryCounters.Counter(operational: true)
+        let diagnostic = TelemetryCounters.Counter()
+        operational.increment(by: 7)
+        diagnostic.increment(by: 7)
+        #expect(operational.value == 7)
+        #if GLIMMER_DIAGNOSTICS
+        #expect(diagnostic.value == 7)
+        #else
+        #expect(diagnostic.value == 0)
+        #endif
+        let stats = StatsCollector()
+        #expect(stats.secondsSinceLastDecodedFrame().isInfinite)
+        #expect(stats.secondsSinceLastPresent().isInfinite)
+        stats.recordReceivedFrame(bytes: 128, frameNumber: 1)
+        stats.recordDecodedFrame()
+        stats.recordRendererEnqueue()
+        #expect(stats.receivedBytesSnapshot() == (DiagnosticsAvailability.compiledIn ? 128 : 0))
+        #expect(stats.secondsSinceLastDecodedFrame().isFinite)
+        #expect(stats.secondsSinceLastPresent().isFinite)
+        stats.resetForConnection()
+        #expect(stats.receivedBytesSnapshot() == (DiagnosticsAvailability.compiledIn ? 128 : 0))
+        #expect(stats.secondsSinceLastDecodedFrame().isInfinite)
+        #expect(stats.secondsSinceLastPresent().isInfinite)
     }
 
-    @Test(arguments: [false, true], [false, true])
-    func savedChoiceSurvives(enabled: Bool, development: Bool) async {
-        defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(enabled, forKey: "telemetryEnabled")
-        let check = DiagnosticsDefaults.register(defaults: defaults, development: development) { .sandbox }
-        #expect(defaults.bool(forKey: "telemetryEnabled") == enabled)
-        await check.value
-        #expect(defaults.bool(forKey: "telemetryEnabled") == enabled)
-        #expect(defaults.persistentDomain(forName: suite)?["telemetryEnabled"] as? Bool == enabled)
-    }
-
-    @Test func choiceMadeDuringCheckSurvives() async {
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let gate = StreamTestGate()
-        let check = DiagnosticsDefaults.register(defaults: defaults, development: false) {
-            await gate.wait()
-            return .sandbox
-        }
-        await gate.waitUntilEntered()
-        #expect(defaults.bool(forKey: "telemetryEnabled") == false)
-        defaults.set(false, forKey: "telemetryEnabled")
-        await gate.release()
-        await check.value
-        #expect(defaults.bool(forKey: "telemetryEnabled") == false)
-        #expect(defaults.persistentDomain(forName: suite)?["telemetryEnabled"] as? Bool == false)
-        defaults.removeObject(forKey: "telemetryEnabled")
-        #expect(defaults.bool(forKey: "telemetryEnabled"))
+    @Test func settingsMatchCompiledFlavour() {
+        #if GLIMMER_DIAGNOSTICS
+        #expect(GlimmerSettings.Page.allCases.map(\.rawValue).contains("diagnostics"))
+        #else
+        #expect(GlimmerSettings.Page.allCases.map(\.rawValue).contains("diagnostics") == false)
+        #endif
     }
 }

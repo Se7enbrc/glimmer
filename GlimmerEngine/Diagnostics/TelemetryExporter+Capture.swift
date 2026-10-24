@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 // Capture runs only on the serial workQueue while opt-in export is enabled.
 // Snapshots reuse StatsCollector locking and counters batched off the hot path.
 // Section fills and cross-tick baselines live in CaptureSections and CaptureExtras.
@@ -477,3 +478,5 @@ extension TelemetryExporter {
         }
     }
 }
+
+#endif

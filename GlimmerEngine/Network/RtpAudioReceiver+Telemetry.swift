@@ -27,6 +27,7 @@
 
 import Foundation
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 extension RtpAudioReceiver {
 
     /// Fold this window's audio receive-quality into the always-live telemetry
@@ -58,3 +59,4 @@ extension RtpAudioReceiver {
         }
     }
 }
+#endif

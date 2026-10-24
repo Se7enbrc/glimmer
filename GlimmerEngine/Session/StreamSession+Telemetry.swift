@@ -1,20 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  StreamSession+Telemetry.swift
-//
-//  Wires the opt-in `TelemetryExporter` onto a live session. Split out of
-//  StreamSession.swift so the gating + reader-closure construction lives in one
-//  focused unit; see TelemetryExporter.swift for the exporter itself and the
-//  gate/safety contract.
-//
-//  GATING: the exporter is built ONLY when the opt-in gate is on (default OFF),
-//  so a normal session allocates NOTHING here and there is no per-tick cost. The
-//  reader closures are `@Sendable` and capture the live backend + decoder so the
-//  exporter's own background queue never reaches into actor-isolated state.
-//
-
 import Foundation
 
 extension StreamSession {
@@ -22,6 +8,7 @@ extension StreamSession {
     /// Build + start the telemetry exporter iff enabled. No-op (and no
     /// allocation) when the gate is off. Called from `start()` once the
     /// connection is up and the decoder/backend are live. Tests pass `enabled` and `make`.
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     package func startTelemetryExporter(
         decoder: VideoDecoder, serverName: String, enabled: Bool = TelemetryGate.isEnabled,
         readPresentation: @MainActor @Sendable (SessionPresentation?, String)
@@ -83,6 +70,10 @@ extension StreamSession {
         services.bookmarkHint()
     }
 
+    #else
+    package func startTelemetryExporter(decoder: VideoDecoder, serverName: String) async {}
+    #endif
+
     /// Reset telemetry and anchor the P2 handshake timeline at the connect START
     /// edge, before any receiver can latch a one-shot. A session's first connect
     /// resets everything; an in-place reconnect keeps the totals and first handshake.
@@ -91,11 +82,15 @@ extension StreamSession {
             now: TelemetryCounters.monotonicNowNanos(), reconnecting: isReconnecting)
         if !isReconnecting {
             // Isolates the launch-path leg (click → connect-start); no-op without a click.
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             ConnectTimingTelemetry.shared.markConnectStart()
+            #endif
         }
         // Pre-start EVENT pen: anything still buffered belongs to a dead
         // session - forget it so this session's exporter can't flush it.
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         TelemetryExporter.resetPreStartEventBuffer()
+        #endif
         // Latch the host for the stream-route probe (stream_link/stream_if):
         // the exporter is built long after the address is known, so the
         // connect edge hands it over (one String store, always-live).
@@ -106,6 +101,7 @@ extension StreamSession {
     /// Latches the per-session reason ordinal (first concrete wins) and bumps the
     /// process-global tally once. Always-live; no-op-safe.
     package func noteTelemetryDisconnect(_ reason: DisconnectReason) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         // Bump the global once, keyed by the latched reason (a host terminate may
         // have latched it first). The per-terminate latch deliberately does NOT
         // count, so a recovered silent-reconnect blip never inflates the tally.
@@ -114,20 +110,25 @@ extension StreamSession {
         if let latched = p2.countGlobalReasonOnce() {
             TelemetryCounters.shared.disconnectByReason.increment(latched)
         }
+        #endif
     }
 
     /// Preserve the input-time bookmark across the session actor hop; telemetry-off is a no-op.
     package func recordTelemetryBookmark(at time: DispatchTime = .now(), date: Date = Date()) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard let exporter = telemetryExporter else { return }
         let marker = exporter.recordBookmark(at: time, date: date)
         audioDecoder.requestOutputDiagnostic(bookmark: marker)
+        #endif
     }
 
     /// Stop + drop the telemetry exporter, if one is running. Idempotent. Called
     /// from `stop()` teardown.
     package func stopTelemetryExporter() {
         telemetryGeneration &+= 1
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         telemetryExporter?.stop()
         telemetryExporter = nil
+        #endif
     }
 }

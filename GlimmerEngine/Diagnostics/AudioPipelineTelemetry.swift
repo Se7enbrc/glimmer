@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
+
 import Foundation
 import os
 import Synchronization
 
 /// Independent locks keep receive, decode and render observations out of each other's critical sections.
+package typealias AudioPipelineInstrumentation = AudioPipelineTelemetry
+
 package final class AudioPipelineTelemetry: Sendable {
 
     package init() {}
@@ -157,3 +161,11 @@ package final class AudioPipelineTelemetry: Sendable {
         window.withLock { $0 = Window() }
     }
 }
+
+#endif
+
+#if !os(macOS) && !GLIMMER_DIAGNOSTICS
+package enum AudioPipelineInstrumentation: Sendable {
+    package static var shared: AudioPipelineInstrumentation? { nil }
+}
+#endif

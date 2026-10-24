@@ -146,7 +146,9 @@ final class IOSControllerCapture {
         if calls.motion != nil { descriptor.capabilities.formUnion(motion.capabilities) }
         if calls.battery != nil, let battery { descriptor.capabilities.formUnion(battery.capabilities) }
         guard let registration = calls.register(descriptor) else { return }
+        #if GLIMMER_DIAGNOSTICS
         recordCapabilities(pad: pad, descriptor: descriptor)
+        #endif
         calls.feedback?(registration, feedback)
         calls.motion?(registration, motion)
         if let battery { calls.battery?(registration, battery) }
@@ -163,8 +165,9 @@ final class IOSControllerCapture {
         }
     }
 
+    #if GLIMMER_DIAGNOSTICS
     private func recordCapabilities(pad: GCExtendedGamepad, descriptor: ControllerDescriptor) {
-        guard UserDefaults.standard.bool(forKey: "telemetryEnabled") else { return }
+        guard DiagnosticsAvailability.isEnabled() else { return }
         let values: [String: Any] = [
             "kind": String(describing: descriptor.kind),
             "face_symbols": [pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY].map {
@@ -180,6 +183,8 @@ final class IOSControllerCapture {
             try? data.write(to: directory.appendingPathComponent("controller-capabilities.json"), options: .atomic)
         }
     }
+
+    #endif
 
     private func install(_ entry: Attached) {
         let registration = entry.registration

@@ -4,6 +4,10 @@
 
 ### Features
 
+- The production iPhone and iPad app no longer includes diagnostic recording.
+  Beta builds keep local diagnostics on by default, with an option to turn them
+  off.
+
 - Open Support and the Privacy Policy from Settings on iPhone and iPad, or
   Settings → About on Mac.
 

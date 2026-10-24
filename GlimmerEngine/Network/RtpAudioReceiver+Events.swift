@@ -30,6 +30,7 @@ extension RtpAudioReceiver {
     /// once from `latchStartupVerdict` (the verdict is why the row is deferred
     /// past the first-decoded latch at all).
     func emitAudioTtfEvent() {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         var fields = ["\"event\":\"audio_ttf\""]
         if let pingMs = firstRtpPingToRtpMs {
             fields.append(String(format: "\"ping_to_rtp_ms\":%.1f", pingMs))
@@ -74,6 +75,7 @@ extension RtpAudioReceiver {
         // over_target keys on the user-facing span (fallback: the ping span).
         fields.append("\"over_target\":\((connectMs ?? firstRtpPingToRtpMs ?? 0) > 1000)")
         emitAudioEvent(fields)
+        #endif
     }
 
     /// Silent-audio re-check cadence after the first probe: a 30s notice (past a
@@ -92,6 +94,7 @@ extension RtpAudioReceiver {
     /// `nextAudioPendingProbeSeconds` until audio lands or the stream stops. Runs off
     /// `recvQueue` (the receive loop owns it), so it reads the `firstRtpReceived` latch.
     func armAudioPendingProbe(after elapsed: Double = 0) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let due = Self.nextAudioPendingProbeSeconds(after: elapsed)
         DispatchQueue.global(qos: .utility).asyncAfter(
             deadline: .now() + (due - elapsed)
@@ -99,11 +102,13 @@ extension RtpAudioReceiver {
             guard let self, self.audioPendingProbeFired(due: due) else { return }
             self.armAudioPendingProbe(after: due)
         }
+        #endif
     }
 
     /// One probe at `due` seconds: report the silence, and say whether to re-arm (false once
     /// audio arrived or the stream stopped). The timer's body; tests call it directly.
     func audioPendingProbeFired(due: Double) -> Bool {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard !interrupted.isSet, !firstRtpReceived.isSet, receiveFailure.failure == nil else { return false }
         let pings = pingsSent.load()
         if due == Self.audioPendingProbeSeconds {
@@ -119,6 +124,9 @@ extension RtpAudioReceiver {
                 + "(\(pings) pings sent; compare receive/decrypt counters; still retrying)", Self.cat)
         }
         return true
+        #else
+        return false
+        #endif
     }
 
     /// EVENT carrier, two sinks like the exporter's bookmark events (NOTICE line
@@ -135,7 +143,9 @@ extension RtpAudioReceiver {
     /// the sink hops onto the exporter queue); called from the receive thread
     /// (audio_ttf) and the pending probe (audio_pending).
     private func emitAudioEvent(_ fields: [String]) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         Diag.notice("EVENT {\(fields.joined(separator: ","))}", Self.cat)
         TelemetryExporter.recordEvent(fields)
+        #endif
     }
 }

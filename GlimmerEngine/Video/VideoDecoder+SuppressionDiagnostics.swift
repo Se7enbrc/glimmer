@@ -38,13 +38,16 @@ extension VideoDecoder {
     }
 
     func recordSuppressionEdge(_ suppressed: Bool, visibility: PresentationVisibility, sessionGeneration: UUID?) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let fields = Self.suppressionFields(suppressed, visibility: visibility,
             sessionGeneration: sessionGeneration ?? suppressionSessionGeneration,
             presentationGeneration: rendererPresentationState.generation, uptimeNanos: now())
         Diag.notice("Presentation suppression: {\(fields.joined(separator: ","))}", "Stream")
         TelemetryExporter.recordEvent(fields)
+        #endif
     }
 
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     nonisolated static func suppressionFields(_ suppressed: Bool, visibility: PresentationVisibility,
                                               sessionGeneration: UUID, presentationGeneration: UInt64,
                                               uptimeNanos: UInt64) -> [String] {
@@ -70,4 +73,5 @@ extension VideoDecoder {
         row.addBool("returned_in_time", visibility.returnedInTime)
         return row.fields
     }
+    #endif
 }

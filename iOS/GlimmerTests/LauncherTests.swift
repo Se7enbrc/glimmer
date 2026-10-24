@@ -524,3 +524,12 @@ final class LauncherFixture {
             discoveryEnabled: false)
     }
 }
+
+@MainActor
+func testLaunch() -> StreamLaunch {
+    let server = ServerInfo(address: "pc.invalid", uniqueId: "test-pc", serverName: "Test PC")
+    let identity = IdentityManager(defaultsSuite: "io.ugfugl.Glimmer.tests.unused",
+                                   supportBase: URL(fileURLWithPath: "/unused"), protectedDataAvailable: { false })
+    return StreamLaunch(network: NetworkClient(server: server, identity: identity, deviceName: "Test device"),
+                        pcID: server.uniqueId, pcName: server.serverName, appID: 1, appName: "Test game")
+}

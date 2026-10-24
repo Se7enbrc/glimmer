@@ -258,6 +258,7 @@ extension StreamSession {
         self.backend = fresh
         attemptID = UUID()
         reconnectTermination = nil
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let tracker = FrameTimingTracker.shared {
             if let pacer = dec.framePacer {
                 _ = pacer.clearQueue(reason: "telemetry attempt boundary") { tracker.beginAttempt(attemptID) }
@@ -265,6 +266,7 @@ extension StreamSession {
                 tracker.beginAttempt(attemptID)
             }
         }
+        #endif
         bridge?.beginAttempt(attemptID)
         publicInput?.rebind(to: fresh, attempt: attemptID)
         await MainActor.run {
@@ -404,10 +406,12 @@ extension StreamSession {
         backend.stopConnection()
         if let net = network { await net.shutdown() }
         network = nil
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let state = connectFlowState {
             OSSignposter.network.endInterval("ConnectFlow", state, "outcome=reconnect")
             connectFlowState = nil
         }
+        #endif
     }
 }
 

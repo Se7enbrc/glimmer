@@ -25,10 +25,12 @@ extension StreamSession {
         // FIFO main-queue hop (NOT Task{}) keeps a terminate's setReady(false)
         // from reordering ahead of establish and leaving input disabled.
         DispatchQueue.main.async { MainActor.assumeIsolated { inp?.setReady(true) } }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let state = connectFlowState {
             OSSignposter.network.endInterval(
                 "ConnectFlow", state, "outcome=established")
             connectFlowState = nil
         }
+        #endif
     }
 }

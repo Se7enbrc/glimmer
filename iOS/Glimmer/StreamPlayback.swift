@@ -70,8 +70,7 @@ struct StreamPlayback {
             quiesce: { nativeInput.focus(false); quiesce() }, finalDispose: { nativeInput.stop() })
         let (session, input) = StreamSession.make(media: media, network: launch.network,
                                                   hostDisposition: .disconnectOnly,
-            diagnosticsDirectory: URL.applicationSupportDirectory
-                .appendingPathComponent("Diagnostics", isDirectory: true))
+            diagnosticsDirectory: DiagnosticsDefaults.directory)
         input.setStopChord(.menuOptionsShoulders)
         input.setControllerMouseMapping(launch.mouseStick.mapping)
         nativeInput.controllers = IOSControllerCapture(input: input)

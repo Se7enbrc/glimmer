@@ -1,44 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TelemetrySessionEvents.swift
-//
-//  P2 SESSION-LIFECYCLE telemetry plumbing for the opt-in exporter, split out of
-//  TelemetryCounters.swift so that file stays focused on the per-frame/per-event
-//  counters + gauges and both stay under the file-length budget. Four signals
-//  live here, all built on the SAME always-live-counter / 1Hz-read discipline as
-//  the rest of the rig (see TelemetryCounters.swift for the gate/safety contract):
-//
-//    * CONNECT-HANDSHAKE breakdown - per-stage timing of the connect sequence
-//      (RTSP → control setup → ENet connect → first video frame), captured once
-//      per connect from the stage events the engine already fires, emitted to the
-//      Prometheus body + the NDJSON (as an event line) + the session report.
-//    * RECONNECT count + disconnect REASON - a monotonic reconnect counter and
-//      the last terminate reason as an enum ordinal, captured at the
-//      connection-terminated edge (always-live integer/enum store, off any hot
-//      path - a terminate is the rarest event there is).
-//    * IDR/RFI ROUND-TRIP - time from our requestIdrFrame/RFI SEND to the
-//      resulting IDR/recovery frame ARRIVING. Both ends are client-side: we stamp
-//      the send instant (gate-on only) and measure the delta when the IDR lands,
-//      feeding a histogram + the per-frame trace.
-//    * CORRUPTION/ARTIFACT heuristic - a cheap, sampled corruption counter
-//      derived from signals the engine ALREADY computes (VT decode-status error /
-//      FrameDropped bit, depacketizer discontinuity). NO per-pixel scan; the
-//      detector is a hot-path-safe integer add at an already-rare event site.
-//
-//  GATING + HOT-PATH SAFETY (load-bearing): the counters/enum stores are
-//  unconditional sub-µs integer/enum writes at already-rare lifecycle/recovery
-//  sites (a connect stage edge, a terminate, an IDR request) - gating them would
-//  buy nothing. The IDR-RTT SEND stamp is taken only when the latency tracker
-//  exists (gate-on), so the OFF path pays one optional load. The handshake-stage
-//  capture is a small map keyed by stage name, only touched on the (rare) stage
-//  edges. Nothing here is on the per-frame decode/pace path, and nothing takes a
-//  proven hot-path lock.
-//
-//  SECRET-FREE: every value is a millisecond duration, an integer count, an enum
-//  ordinal, or a fixed stage label - nothing that could carry a secret/host id.
-//
+// Lifecycle measurements are compiled only for Mac and diagnostic iOS builds.
+// Disconnect reasons also describe operational session termination.
 
 import Foundation
 import os
@@ -99,6 +63,7 @@ package enum DisconnectReason: Int, Sendable {
 /// is DELIBERATELY kept out of `resetForNewSession`, so it survives the <1ms
 /// exporter teardown that races the 1s scrape - the next session re-serves it.
 /// `@unchecked Sendable`: each `Counter` is self-locked.
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 package final class DisconnectReasonCounters: @unchecked Sendable {
 
     package init() {}
@@ -378,6 +343,8 @@ package struct IdrRoundTripSnapshot: Sendable {
     package var lastRoundTripMs: Double?
 }
 
+#endif
+
 // MARK: - TelemetryCounters: P2 session-lifecycle state
 
 extension TelemetryCounters {
@@ -397,6 +364,7 @@ extension TelemetryCounters {
     /// All P2 session-lifecycle state behind one lock. `@unchecked Sendable`: the
     /// single `os_unfair_lock` guards every field; last-writer-wins is correct for
     /// 1Hz-sampled gauges, and the rare lifecycle/recovery writers never contend.
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     package final class P2State: @unchecked Sendable {
         private let lock = os_unfair_lock_t.allocate(capacity: 1)
         package init() { lock.initialize(to: os_unfair_lock_s()) }
@@ -572,4 +540,5 @@ extension TelemetryCounters {
             return Double(end &- start) / 1_000_000.0
         }
     }
+    #endif
 }

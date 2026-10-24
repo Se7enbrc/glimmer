@@ -12,11 +12,14 @@ extension AudioDecoder {
 
     /// Caller holds stateLock. One queued capture coalesces transitions and bookmark ranges.
     func queueOutputDiagnosticLocked(bookmark: UInt64? = nil) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard TelemetryGate.isEnabled, !isShutdown, inputFormat != nil,
               outputDiagnosticRequests.request(bookmark: bookmark) else { return }
         enqueueOutputDiagnostic(generation: engineRestartGeneration)
+        #endif
     }
 
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     private func enqueueOutputDiagnostic(generation: UInt64) {
         routeListenerQueue.async { [weak self] in self?.captureOutputDiagnostic(generation: generation) }
     }
@@ -54,6 +57,7 @@ extension AudioDecoder {
         }
         if outputDiagnosticRequests.finish() { enqueueOutputDiagnostic(generation: generation) }
     }
+    #endif
 }
 
 /// Constant storage regardless of request rate; a snapshot names every coalesced bookmark's range.
@@ -106,6 +110,7 @@ struct AudioOutputDiagnostic {
     var routeChanged = false
 
     func fields(bookmarks: AudioOutputDiagnosticRequests.Bookmarks) -> [String] {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         var fields = ["\"event\":\"audio_output_state\"",
                       "\"reason\":\"\(bookmarks.last == nil ? "configuration" : "bookmark")\"",
                       "\"output_channels\":\(channels)", "\"stream_muted\":\(muted)",
@@ -121,5 +126,8 @@ struct AudioOutputDiagnostic {
         if let first = bookmarks.first { fields.append("\"bookmark_first\":\(first)") }
         if let last = bookmarks.last { fields.append("\"bookmark_total\":\(last)") }
         return fields
+        #else
+        return []
+        #endif
     }
 }

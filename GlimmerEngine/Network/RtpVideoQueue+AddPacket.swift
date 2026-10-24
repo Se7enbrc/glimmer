@@ -222,7 +222,9 @@ extension RtpVideoQueue {
             // Advancing to a NEW frame: reset the per-frame FEC-recovery latch
             // (a recovery in a previous frame's earlier block must not leak into
             // this frame's metric if that frame was dropped before submitting).
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             currentFrameNeededFec = false
+            #endif
 
             // Whole-frame loss detection (non-contiguous frameIndex).
             if currentFrameNumber &+ 1 != frameIndex || !reportedLostFrame {

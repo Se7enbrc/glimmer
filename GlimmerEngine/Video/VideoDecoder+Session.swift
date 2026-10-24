@@ -72,14 +72,18 @@ extension VideoDecoder {
         // HW decoder bring-up can't run until the first SPS/PPS, so this create
         // lands on the critical first-frame leg. Measure it: a signpost interval
         // for Instruments + a wall-clock ms gauge (glimmer_vt_session_create_ms).
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let createSignpostState = OSSignposter.decode.beginInterval("VTSessionCreate")
         let createStart = CFAbsoluteTimeGetCurrent()
+        #endif
         let (status, sessionOut) = makeSession(formatDesc, decoderSpec, destImageBufferAttrs, callback)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let createMs = (CFAbsoluteTimeGetCurrent() - createStart) * 1000.0
         OSSignposter.decode.endInterval(
             "VTSessionCreate", createSignpostState,
             "status=\(status, privacy: .public) ms=\(createMs, privacy: .public)")
         TelemetryCounters.shared.setVtSessionCreateMs(createMs)
+        #endif
 
         guard status == noErr, let session = sessionOut else {
             // No session means no callback will ever consume the refcon -
@@ -140,7 +144,9 @@ extension VideoDecoder {
 
     nonisolated static let decompressionOutputCallback:
         VTDecompressionOutputCallback = { outputRefCon, frameRefCon, status, infoFlags, imageBuffer, presentationTimeStamp, _ in
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             let callbackEntry = DispatchTime.now().uptimeNanoseconds
+            #endif
             guard let outputRefCon else { return }
             let decoder = Unmanaged<VideoDecoder>.fromOpaque(outputRefCon)
                 .takeUnretainedValue()
@@ -149,8 +155,9 @@ extension VideoDecoder {
             let failed = status != noErr || imageBuffer == nil
             let epoch = UInt(bitPattern: frameRefCon)
             guard decoder.releaseInFlightDecode(epoch: epoch, submitted: true, vtFailed: failed) else { return }
-            let tracker = FrameTimingTracker.shared
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             let rtpTimestamp = VideoDecoder.rtpTimestamp(from: presentationTimeStamp)
+            let tracker = FrameTimingTracker.shared
             let traceAttempt = tracker?.attemptForFrame(rtpTimestamp: rtpTimestamp)
             tracker?.recordOutput(rtpTimestamp: rtpTimestamp, uptimeNanos: callbackEntry,
                                   status: status, flags: infoFlags.rawValue,
@@ -159,6 +166,7 @@ extension VideoDecoder {
                 tracker?.recordCallbackFinished(rtpTimestamp: rtpTimestamp, entryNanos: callbackEntry,
                                                 attemptID: traceAttempt)
             }
+            #endif
 
             // A frame VT failed leaves every later P-frame referencing a hole:
             // resync to the next IDR (a no-op if an IDR has been fed since).
@@ -168,6 +176,7 @@ extension VideoDecoder {
 
             // Every live output completes its own submit, including drops and failures.
             let dropped = infoFlags.contains(.frameDropped) || status != noErr || imageBuffer == nil
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             let intervalState = decoder.statsCollector.recordDecodeComplete(
                 dropped: dropped, identity: StatsCollector.DecodeIdentity(epoch: epoch, rtpTimestamp: rtpTimestamp))
 
@@ -202,6 +211,7 @@ extension VideoDecoder {
                 // white/purple-flash-class tell; see noteCorruptionIfDecodeError).
                 VideoDecoder.noteCorruptionIfDecodeError(status: status)
             }
+            #endif
 
             guard !dropped, let imageBuffer else { return }
             // Stamp the decoded-frame timestamp so the StreamSession
@@ -258,6 +268,7 @@ extension VideoDecoder {
         // enqueue happens later in `presentFrame`, which re-reads displayLayer.
         guard displayLayer != nil else { return }
 
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let enqueueSignpostID = OSSignposter.render.makeSignpostID()
         let enqueueIntervalState = OSSignposter.render.beginInterval(
             "EnqueueFrame",
@@ -265,14 +276,19 @@ extension VideoDecoder {
         defer {
             OSSignposter.render.endInterval("EnqueueFrame", enqueueIntervalState)
         }
+        #endif
 
         let controlHDR = hdrEnabled
         let color = resolveColorDescription(for: pixelBuffer, controlHDR: controlHDR)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let probe = beginColorProbe(pixelBuffer, color: color, controlHDR: controlHDR)
+        #endif
         // Match the PC's pixel geometry rather than VT's display-aspect hint.
         CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferPixelAspectRatioKey)
         attachColorAndHDRMetadata(to: pixelBuffer, color: color)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         finishColorProbe(probe, pixelBuffer: pixelBuffer)
+        #endif
 
         var fmtDesc: CMVideoFormatDescription?
         if let cached = cachedHDRFormatDescription,
@@ -318,7 +334,9 @@ extension VideoDecoder {
         guard let sb = sampleBuffer else { return }
         let route = presentationRoute()
         if let pacer = route.pacer {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             FrameTimingTracker.shared?.recordPacerSubmitted(rtpTimestamp: Self.rtpTimestamp(from: hostPTS))
+            #endif
             pacer.submit(sb, hostPTS: hostPTS)
         } else {
             _ = presentFrame(sb, modeGeneration: route.generation)

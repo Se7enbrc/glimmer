@@ -40,15 +40,21 @@ extension RtpAudioQueue {
     /// Synthesize the FEC-block key from an audio data packet (:214-238).
     private func audioFecBlockKey(packet: [UInt8], rtp: RtpHeader) -> FecBlockKey? {
         if packet.count < Self.fixedRtpHeaderSize {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             stats.packetCountInvalid += 1
+            #endif
             return nil
         }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         stats.packetCountAudio += 1
+        #endif
 
         // Track out-of-sequence data to tune FEC give-up timing (:214-230).
         if !synchronizing && Self.isBefore16(rtp.sequenceNumber, oldestRtpBaseSequenceNumber) {
             lastOosSequenceNumber = rtp.sequenceNumber
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             stats.packetCountOOS += 1
+            #endif
             if !receivedOosData {
                 receivedOosData = true
             }
@@ -70,10 +76,14 @@ extension RtpAudioQueue {
     /// Parse the FEC-block key from an explicit AUDIO_FEC_HEADER (:252-278).
     private func parsedFecBlockKey(packet: [UInt8]) -> FecBlockKey? {
         if packet.count < Self.fixedRtpHeaderSize + Self.audioFecHeaderSize {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             stats.packetCountFecInvalid += 1
+            #endif
             return nil
         }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         stats.packetCountFec += 1
+        #endif
 
         // Parse + byteswap the AUDIO_FEC_HEADER (BE→host, :252-256).
         let off = Self.fixedRtpHeaderSize
@@ -88,14 +98,18 @@ extension RtpAudioQueue {
 
         // Validate the FEC shard index to prevent OOB (:258-265).
         if fecShardIndex >= UInt8(Self.fecShards) {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             stats.packetCountFecInvalid += 1
+            #endif
             return nil
         }
 
         // FEC blocks start on a dataShards boundary (:267-278). One stray packet
         // costs only itself; only a streak marks the PC's layout incompatible.
         if baseSeqNum % UInt16(Self.dataShards) != 0 {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             stats.packetCountFecInvalid += 1
+            #endif
             noteLayoutMismatch("parity base seq \(baseSeqNum) is not \(Self.dataShards)-aligned")
             return nil
         }
@@ -148,7 +162,9 @@ extension RtpAudioQueue {
                 // Block size must match to safely copy shards (:311-321). The C
                 // disables FEC on the first mismatch; here only a streak does.
                 if existing.blockSize != blockSize {
+                    #if os(macOS) || GLIMMER_DIAGNOSTICS
                     stats.packetCountFecInvalid += 1
+                    #endif
                     TelemetryCounters.shared.audioFecMismatchTotal.increment()
                     noteLayoutMismatch("a \(existing.blockSize)B block got a \(blockSize)B shard "
                         + "(base seq \(fecBlockBaseSeqNum))")
@@ -245,7 +261,9 @@ extension RtpAudioQueue {
         for index in 0..<Self.dataShards { block.marks[index] = 0 }
 
         if block.dataShardsReceived != Self.dataShards {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             stats.packetCountFecRecovered += UInt32(Self.dataShards - block.dataShardsReceived)
+            #endif
         }
         return true
     }

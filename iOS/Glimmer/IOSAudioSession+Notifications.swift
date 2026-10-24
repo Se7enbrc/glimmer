@@ -106,9 +106,11 @@ extension IOSAudioSession {
             case .route: break
             }
             generation &+= 1
+            #if GLIMMER_DIAGNOSTICS
             AudioPlatform.recordSessionDiagnostic(
                 "iOS audio session event: \(String(describing: event)) generation=\(generation) "
                 + "active=\(active) interrupted=\(interrupted) services_lost=\(servicesLost)")
+            #endif
             if case .route = event { return routeListener ?? deviceListener }
             return deviceListener ?? routeListener
         }

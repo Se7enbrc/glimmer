@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 //
 //  TelemetryExporter+RenderVideo.swift
 //
@@ -387,3 +388,5 @@ extension TelemetryRenderer {
                             Double(state.maxRefreshHz), labels: screenLabels)
     }
 }
+
+#endif

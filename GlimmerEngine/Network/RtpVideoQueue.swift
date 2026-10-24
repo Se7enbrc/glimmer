@@ -104,10 +104,12 @@ final class RtpVideoQueue {
     var reportedLostFrame = false
     var bufferFirstRecvTimeUs: UInt64 = 0
 
-    var loggedFirstFecRecovery = false
     var loggedBadFecGeometry = false
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    var loggedFirstFecRecovery = false
     /// The open run of FEC-recovered frames; summarized from maybeLogMetrics once idle.
     var fecEpisode = FecRecoveryEpisode()
+    #endif
     /// Cauchy matrices by shard geometry: consecutive frames mostly share one, so a
     /// recovery reuses it instead of rebuilding it. Cleared at the cap.
     var reedSolomonCache: [Int: ReedSolomon] = [:]
@@ -166,11 +168,13 @@ final class RtpVideoQueue {
     private var haveLastTransit = false
     /// Frames seen vs. frames that needed Reed-Solomon recovery in the window.
     /// `internal`: tallied by submitCompletedFrame in the reconstruct extension.
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     var framesInWindow = 0
     var fecRecoveredFramesInWindow = 0
     /// Whether the CURRENT frame needed FEC recovery (latched in reconstructFrame,
     /// counted once when the frame is submitted/dropped).
     var currentFrameNeededFec = false
+    #endif
     /// Datagrams seen in the window (for a packets/s sanity figure).
     var packetsInWindow = 0
     // Module-internal: the ReorderStats extension reads the window anchor.
@@ -201,8 +205,9 @@ final class RtpVideoQueue {
     /// can't see for us. The exporter derives the loss RATE as
     /// lost / (lost + received) (received = the videoPacketsTotal delta), i.e.
     /// lost / expected, without a separate expected counter.
-    var windowLostPreFec = 0
     var windowOutOfOrder = 0
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    var windowLostPreFec = 0
     var windowDuplicate = 0
     /// FEC observability (read-only): the smallest parity headroom seen on a
     /// FEC-recovered frame this window (parity − data deficit), tracked in
@@ -237,6 +242,7 @@ final class RtpVideoQueue {
     /// gauge each ~2s window alongside the FEC health snapshot).
     var reorderDispSessionMaxMs: Double = 0
     var reorderDispSessionMaxPackets = 0
+    #endif
     /// Fixed history survives reporting windows so duplicates cannot cancel real loss.
     var recentSeqOrder = [UInt16](repeating: 0, count: recentSeqCapacity)
     var recentSeqBits = [UInt64](repeating: 0, count: 1024)
@@ -263,9 +269,11 @@ final class RtpVideoQueue {
     // find + an integer bump - no per-packet allocation or sort on the hot path. ---
     var lastArrivalUs: UInt64 = 0
     var haveLastArrival = false
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     var gapBuckets = [Int](repeating: 0, count: RtpVideoQueue.gapBoundsUs.count + 1)
     var gapCount = 0
     var gapMaxUs: Double = 0
+    #endif
     /// Ascending upper bounds (µs) for the gap histogram. Spans sub-100µs
     /// (back-to-back wire packets at 4K240 ~ tens of µs apart) through a few ms
     /// (a microburst stall between bursts). The implicit top bucket catches
@@ -405,6 +413,7 @@ final class RtpVideoQueue {
     /// FEC-recovery rate (fraction of frames that needed Reed-Solomon recovery),
     /// and the packet rate. Resets the window afterward.
     private func maybeLogMetrics(nowUs: UInt64) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard nowUs &- metricsWindowStartUs >= Self.metricsWindowUs else { return }
         let windowSec = Double(nowUs &- metricsWindowStartUs) / 1_000_000.0
         let pps = windowSec > 0 ? Double(packetsInWindow) / windowSec : 0
@@ -480,6 +489,16 @@ final class RtpVideoQueue {
         for index in gapBuckets.indices { gapBuckets[index] = 0 }
         gapCount = 0
         gapMaxUs = 0
+        #else
+        guard nowUs &- metricsWindowStartUs >= Self.metricsWindowUs else { return }
+        let counters = TelemetryCounters.shared
+        counters.videoPacketsTotal.increment(by: UInt64(max(0, packetsInWindow)))
+        counters.videoPacketsOutOfOrderTotal.increment(by: UInt64(max(0, windowOutOfOrder)))
+        counters.setRecvJitterMs(jitterUs / 1000.0)
+        packetsInWindow = 0
+        windowOutOfOrder = 0
+        metricsWindowStartUs = nowUs
+        #endif
     }
 
     // MARK: - little-endian read

@@ -21,7 +21,9 @@ import os
 extension VideoDecoder {
 
     package func toggleStatsOverlay() {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         statsOverlayEnabled.toggle()
+        #endif
     }
 
     /// Read the current accumulator state for the stats overlay. Returns a
@@ -39,6 +41,7 @@ extension VideoDecoder {
     /// every call. Defaults to 0 (reset-every-read) to preserve every existing
     /// caller's behaviour.
     package func statsSnapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         var snap = statsCollector.snapshot(minWindowSeconds: minWindowSeconds)
         snap.videoCodec = Self.codecDisplayName(for: streamVideoFormat)
         if streamFps > 0 {
@@ -72,6 +75,9 @@ extension VideoDecoder {
             droppedPct=\(snap.decoderDroppedPercent ?? 0, privacy: .public)
             """)
         return snap
+        #else
+        return StreamStatsSnapshot()
+        #endif
     }
 
     nonisolated static func codecDisplayName(for format: Int32) -> String? {
@@ -251,8 +257,10 @@ extension VideoDecoder {
         displayInfo = { nil }
         onFirstDecodedFrame = nil
         onHDRActiveChanged = nil
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         colorDisplayProbeTask?.cancel()
         colorDisplayProbeTask = nil
+        #endif
 
         // Drain any in-flight decode operations before invalidating the
         // session - VTDecompressionSessionWaitForAsynchronousFrames blocks
@@ -280,7 +288,9 @@ extension VideoDecoder {
             self.colorAttachmentCache.withLock { $0 = nil }
             self.resolvedColor.withLock { $0 = nil }
             self.hdrEnabled = false
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             self.colorProbeState.withLock { $0 = nil }
+            #endif
             self.didFireFirstDecodedFrame = false
         }
 

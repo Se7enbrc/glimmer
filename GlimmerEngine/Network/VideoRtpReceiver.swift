@@ -66,7 +66,9 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     private var pingCount: UInt32 = 0
     private var pingSendFailureStreak = UdpPinger.SendFailureStreak()
     /// The open RFI loss episode, if any (receive thread only; +Recovery).
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     var lossEpisode = VideoLossEpisode()
+    #endif
 
     // SO_RCVBUF bandwidth-delay-product sizing (see openSocket). Kept LOCAL to
     // this file (not EnetWire) so the change stays self-contained.
@@ -234,9 +236,11 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         }
         guard bound else { close(sock); throw EnetError.socketFailure("bind() errno \(errno)") }
 
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if !SocketTimestamp.enable(on: sock) {
             Diag.notice("Kernel receive timestamps unavailable errno \(errno)", Self.cat)
         }
+        #endif
         fd = sock
         Diag.info("NativeVideo UDP socket ready (peer IP filtered, any source port) "
             + "→ \(host, privacy: .private):\(videoPort)",
@@ -449,6 +453,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         // submit/output stages record against it. us → ns (the upstream stamps
         // are `uptimeNanoseconds / 1000`, so ×1000 recovers the same monotonic
         // clock the later stages read).
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let tracker = FrameTimingTracker.shared {
             tracker.recordAssembled(
                 rtpTimestamp: unit.rtpTimestamp,
@@ -465,6 +470,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             if isIDR { noteKeyFrame(unit, tracker: tracker) }
         }
         if lossEpisode.isOpen { closeLossEpisode(at: unit, isIDR: isIDR) }
+        #endif
         let result = sink.submitDecodeUnit(unit)
         if result == StreamProtocol.DR_NEED_IDR {
             // Three producers share this return (VideoDecoder+Decode.swift
