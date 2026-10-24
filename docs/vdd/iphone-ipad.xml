@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- MTT VDD 25.7.23. Save as C:\VirtualDisplayDriver\vdd_settings.xml. -->
-<!-- 74 modes; budget: 90 modes. Count every resolution x refresh combination. -->
+<!-- 75 modes; budget: 90 modes. Count every resolution x refresh combination. -->
 <!-- Coverage, omissions and sources: ../VIRTUAL_DISPLAY_MODES.md. Setup: ../HOST_SETUP.md. -->
 <vdd_settings>
     <monitors><count>1</count></monitors>
@@ -149,6 +149,11 @@
         <resolution>
             <width>1334</width><height>938</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
+        </resolution>
+        <!-- iPhone Duo (iOS 27.1 Simulator inner display): measured Native quality, even landscape pixels. -->
+        <resolution>
+            <width>2852</width><height>2006</height>
+            <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPhone Duo (cover display): native landscape, Native quality. -->
         <resolution>

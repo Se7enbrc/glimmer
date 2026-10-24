@@ -63,6 +63,9 @@
 
 ### Bug fixes
 
+- The iPhone/iPad virtual display sample now includes the Native resolution
+  requested by the open iPhone Duo in the iOS 27.1 Simulator.
+
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.
 - iPhone audio diagnostics now distinguish missing packets, rejected audio and
