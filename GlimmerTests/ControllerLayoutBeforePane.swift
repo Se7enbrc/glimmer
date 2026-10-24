@@ -56,7 +56,7 @@ struct ControllerLayoutBeforePane: View {
             }
 
             Section("Stop streaming with a controller") {
-                Picker("Hold to stop streaming", selection: $model.controllerQuitChord) {
+                Picker("Hold to stop streaming", selection: .constant(ControllerQuitChord.l3r3)) {
                     ForEach(ControllerQuitChord.allCases, id: \.self) { chord in
                         Text(chord.displayName).tag(chord)
                     }
@@ -137,8 +137,5 @@ struct ControllerLayoutBeforePane: View {
         .animation(Motion.layout(reduceMotion: reduceMotion), value: model.rawHIDControllerEnabled)
         .onAppear { nintendoPresence.start() }
         .onDisappear { nintendoPresence.stop() }
-        .sheet(isPresented: $showChordCapture) {
-            ChordCaptureSheet().environment(model)
-        }
     }
 }

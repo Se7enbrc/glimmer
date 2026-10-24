@@ -93,7 +93,6 @@ struct ControllerLayoutCaptureSheet: View {
     let layout: ControllerLayout
     @State var capture: ControllerLayoutCapture
     @State private var failure: String?
-    @State private var saving = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -109,9 +108,6 @@ struct ControllerLayoutCaptureSheet: View {
                                 .accessibilityAddTraits(.updatesFrequently)
                             Text("Only \(device.name) is being recorded.")
                                 .foregroundStyle(.secondary)
-                            if capture.finished {
-                                Text(capture.shortcut.map(\.layoutName).sorted().joined(separator: " + "))
-                            }
                         }
                         if let failure { Section { Text(failure).foregroundStyle(.red) } }
                     }
@@ -119,11 +115,6 @@ struct ControllerLayoutCaptureSheet: View {
                     .navigationTitle("Press a control")
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                        if capture.finished {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Save") { saveShortcut() }.disabled(saving)
-                            }
-                        }
                     }
                 }
             }
@@ -153,23 +144,5 @@ struct ControllerLayoutCaptureSheet: View {
         #else
         .handlesGameControllerEvents(matching: capture.finished ? [] : .gamepad)
         #endif
-    }
-
-    private func saveShortcut() {
-        saving = true
-        Task {
-            do {
-                let available = Set(device.controls.map(\.id))
-                let shortcuts = ControllerLayoutShortcuts(stop: capture.shortcut)
-                try shortcuts.validate(available: available)
-                try await model.saveShortcuts(.init(owner: device.owner, shortcuts: shortcuts, available: available))
-                dismiss()
-            } catch ControllerLayoutError.invalidBindings {
-                failure = "Use at least two buttons, and keep Show controls available."
-            } catch {
-                failure = "Couldn't save the shortcut. Try again."
-            }
-            saving = false
-        }
     }
 }

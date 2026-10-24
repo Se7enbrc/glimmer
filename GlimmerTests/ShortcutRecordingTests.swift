@@ -82,9 +82,11 @@ struct ShortcutRecordingTests {
         #expect(problem(chord(ctrl: true, alt: true, "1")) == nil)
     }
 
-    @Test func controllerChordNeedsTwoButtons() {
-        #expect(!ChordCaptureSheet.canSave([]))
-        #expect(!ChordCaptureSheet.canSave([.r2]))
-        #expect(ChordCaptureSheet.canSave([.l3, .r3]))
+    @Test func controllerStopRequiresAllFourFixedButtons() {
+        let required: Set<ControllerButton> = [.l1, .r1, .options, .create]
+        #expect(ControllerChord.satisfied(.startSelectL1R1, custom: [], held: required))
+        for missing in required {
+            #expect(ControllerChord.satisfied(.startSelectL1R1, custom: [], held: required.subtracting([missing])) == false)
+        }
     }
 }

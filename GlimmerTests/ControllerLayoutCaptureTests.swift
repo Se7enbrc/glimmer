@@ -37,7 +37,7 @@ struct ControllerLayoutCaptureTests {
     @Test func heldOnEntryMustReleaseAndCaptureCompletesOnlyAfterFreshPressAndRelease() {
         let harness = Harness()
         harness.state.withLock { $0.sample.buttons = ControllerMappedButton.a.rawValue }
-        let capture = ControllerLayoutCapture(input: harness.source(), mode: .control)
+        let capture = ControllerLayoutCapture(input: harness.source())
         capture.start(cancel: {})
         #expect(capture.message == "Release the controls to begin.")
         harness.send(.init(), at: 1)
@@ -52,7 +52,7 @@ struct ControllerLayoutCaptureTests {
 
     @Test func ambiguousPressDoesNotSelectAControlAndCanBeRetried() {
         let harness = Harness()
-        let capture = ControllerLayoutCapture(input: harness.source(), mode: .control)
+        let capture = ControllerLayoutCapture(input: harness.source())
         capture.start(cancel: {})
         harness.send(.init(buttons: ControllerMappedButton.a.rawValue | ControllerMappedButton.b.rawValue), at: 1)
         #expect(capture.message == "Press one control at a time.")
@@ -67,7 +67,7 @@ struct ControllerLayoutCaptureTests {
 
     @Test func analogCaptureIgnoresDriftAndWaitsForNeutral() {
         let harness = Harness()
-        let capture = ControllerLayoutCapture(input: harness.source(), mode: .control)
+        let capture = ControllerLayoutCapture(input: harness.source())
         capture.start(cancel: {})
         var sample = ControllerMappingSample()
         sample.analog[2] = 4000
@@ -84,7 +84,7 @@ struct ControllerLayoutCaptureTests {
 
     @Test func callbacksQueuedBeforeCancellationCannotChangeTheDraft() {
         let harness = Harness()
-        let capture = ControllerLayoutCapture(input: harness.source(), mode: .control)
+        let capture = ControllerLayoutCapture(input: harness.source())
         capture.start(cancel: {})
         let late = harness.state.withLock { $0.receive }
         harness.send(.init(buttons: ControllerMappedButton.a.rawValue), at: 1)
@@ -95,16 +95,16 @@ struct ControllerLayoutCaptureTests {
         #expect(harness.state.withLock { $0.releases } == 1)
     }
 
-    @Test func overlappingShortcutIsCapturedWithoutSavingAndEscapeCancels() throws {
+    @Test func protectedEscapeCancelsControlCapture() throws {
         let harness = Harness()
-        let capture = ControllerLayoutCapture(input: harness.source(), mode: .shortcut)
+        let capture = ControllerLayoutCapture(input: harness.source())
         var cancelled = false
         capture.start { cancelled = true }
         let pair = ControllerMappedButton.menu.rawValue | ControllerMappedButton.options.rawValue
         harness.send(.init(buttons: pair), at: 10)
         harness.send(.init(), at: 11.1)
         #expect(cancelled)
-        #expect(capture.shortcut.isEmpty)
+        #expect(capture.source == nil)
         capture.stop()
     }
 }

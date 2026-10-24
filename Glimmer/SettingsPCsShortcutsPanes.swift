@@ -158,7 +158,6 @@ struct ShortcutsPane: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
-    @State private var showChordCapture = false
     @State private var nintendoPresence = NintendoControllerPresence()
     // Default-ON: no acceleration curve in game, Tracking Speed kept (macOS linear
     // scaling). Key mirrors MouseAccelerationControl.enabledDefaultsKey.
@@ -213,24 +212,8 @@ struct ShortcutsPane: View {
             }
 
             Section("Stop streaming with a controller") {
-                // Hold-to-quit chord on the gamepad. Fires the same path as
-                // the keyboard quit hotkey above - useful for couch
-                // streaming where the keyboard isn't reachable.
-                Picker("Hold to stop streaming", selection: $model.controllerQuitChord) {
-                    ForEach(ControllerQuitChord.allCases, id: \.self) { chord in
-                        Text(chord.displayName).tag(chord)
-                    }
-                }
-                if model.controllerQuitChord == .custom {
-                    HStack {
-                        Text(model.customControllerChord.isEmpty
-                             ? "No chord recorded yet"
-                             : ControllerButton.describe(model.customControllerChord))
-                            .foregroundStyle(model.customControllerChord.isEmpty ? .secondary : .primary)
-                        Spacer()
-                        Button("Record…") { showChordCapture = true }
-                    }
-                }
+                ControllerLayoutShortcutSummary()
+                NavigationLink("Controller layouts") { ControllerLayoutsView() }
                 // RawHIDControl while off is its "Turn On…" button and explainer.
                 if chordNeedsExtraButtons {
                     HStack(spacing: 8) {
@@ -241,10 +224,6 @@ struct ShortcutsPane: View {
                         RawHIDControl()
                     }
                 }
-                Text("Hold these buttons together on the controller for a moment to stop streaming. "
-                    + "L3 + R3 by default; the keyboard shortcut above always works too.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             // Raw-HID DualSense reader. Shown when a pad is connected or the
@@ -263,10 +242,6 @@ struct ShortcutsPane: View {
             }
 
             NintendoLayoutSettings(isConnected: nintendoPresence.isConnected)
-
-            Section("Controllers") {
-                NavigationLink("Controller layouts") { ControllerLayoutsView() }
-            }
 
             Section("macOS keys") {
                 Toggle(isOn: $model.captureSysKeys) {
@@ -311,9 +286,6 @@ struct ShortcutsPane: View {
             ControllerLayoutsModel.shared.games = model.controllerLayoutGames()
         }
         .onDisappear { nintendoPresence.stop() }
-        .sheet(isPresented: $showChordCapture) {
-            ChordCaptureSheet().environment(model)
-        }
     }
 }
 

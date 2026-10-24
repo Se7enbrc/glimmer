@@ -10,6 +10,14 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct ControllerLayoutOwnershipTests {
+    @Test func persistedQuitPreferencesCannotChangeTheFixedStopChord() {
+        let settings = IsolatedDefaults()
+        settings.defaults.set("none", forKey: "controllerQuitChord")
+        let model = AppModel(defaults: settings.defaults)
+        #expect(model.controllerQuitChord == .startSelectL1R1)
+        #expect(model.customControllerChord.isEmpty)
+    }
+
     @Test func closingWhileLayoutsLoadDoesNotStartDeviceObservationAfterDismissal() async throws {
         let identity = ControllerLayoutIdentity(category: "fixture", profile: "physical", controls: [])
         let record = ControllerLayoutRecord(key: .init(owner: .type(identity.type), scope: .allGames),

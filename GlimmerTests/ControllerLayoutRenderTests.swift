@@ -47,7 +47,7 @@ struct ControllerLayoutRenderTests {
         let source = ControllerLayoutCaptureSource(controls: controls, extras: ["rear"], read: { .init() },
                                                    acquire: { _ in {} })
         try await record(ControllerLayoutCaptureSheet(model: model, device: device, scope: game.id, layout: layout,
-            capture: .init(input: source, mode: .control)), name: "after-capture-\(style)", dark: dark)
+            capture: .init(input: source)), name: "after-capture-\(style)", dark: dark)
         #if os(macOS)
         let settings = IsolatedDefaults()
         let app = AppModel(defaults: settings.defaults)

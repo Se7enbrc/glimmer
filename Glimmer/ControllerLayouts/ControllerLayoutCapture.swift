@@ -34,25 +34,20 @@ struct ControllerLayoutCaptureSource {
 
 @MainActor @Observable
 final class ControllerLayoutCapture {
-    enum Mode { case control, shortcut }
     private(set) var message = "Release the controls to begin."
     private(set) var source: ControllerLayoutSource?
-    private(set) var shortcut: Set<ControllerLayoutSource> = []
     private(set) var finished = false
     private var waitingForNeutral = true
     private var candidate: ControllerLayoutSource?
-    private var chord: Set<ControllerLayoutSource> = []
     private var escape: ControllerEscapeGesture?
     private var release: (() -> Void)?
-    private let mode: Mode
     private let input: ControllerLayoutCaptureSource
     private var onCancel: (() -> Void)?
     private var epoch = UUID()
     private let ownership = UUID()
 
-    init(input: ControllerLayoutCaptureSource, mode: Mode) {
+    init(input: ControllerLayoutCaptureSource) {
         self.input = input
-        self.mode = mode
         if let chord = try? ControllerPhysicalChord(
             sources: ControllerLayoutShortcuts.escape(available: Set(input.controls.map(\.id))), extras: input.extras) {
             escape = ControllerEscapeGesture(chord: chord)
@@ -96,23 +91,15 @@ final class ControllerLayoutCapture {
     private func receive(_ sample: ControllerMappingSample, at now: TimeInterval) {
         guard !finished else { return }
         if escape?.update(sample, at: now) == true { onCancel?(); return }
-        let active = activeControls(sample, threshold: waitingForNeutral || candidate != nil || !chord.isEmpty ? 0.2 : 0.6)
+        let active = activeControls(sample, threshold: waitingForNeutral || candidate != nil ? 0.2 : 0.6)
         if waitingForNeutral {
             if active.isEmpty {
                 waitingForNeutral = false
-                message = mode == .control ? "Press the button you want to change." : "Hold the buttons together, then release."
+                message = "Press the button you want to change."
             }
             return
         }
-        if mode == .shortcut {
-            if active.isEmpty, !chord.isEmpty {
-                shortcut = chord
-                finished = true
-                message = "Shortcut captured. Review it before saving."
-            } else if chord.isEmpty || chord.isSubset(of: active) {
-                chord = active
-            }
-        } else if let candidate {
+        if let candidate {
             if active.isEmpty {
                 source = candidate
                 finished = true
@@ -141,7 +128,7 @@ final class ControllerLayoutCapture {
                 }
             case .trigger(let trigger) where Double(sample.analog[trigger.rawValue]) >= 255 * threshold:
                 result.insert(control.id)
-            case .axis(let axis) where mode == .control && Double(abs(sample.analog[axis.rawValue])) >= 32767 * threshold:
+            case .axis(let axis) where Double(abs(sample.analog[axis.rawValue])) >= 32767 * threshold:
                 result.insert(control.id)
             default: break
             }

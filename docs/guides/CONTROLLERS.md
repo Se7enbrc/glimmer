@@ -37,14 +37,14 @@ share a layout with others of the same type; the editor says when this applies.
 
 ## Keep Glimmer's controls available
 
-With a custom layout or shortcut, hold Menu + Options for one second, then
-release to show controller layouts. Controllers without that pair use Menu +
-left stick button, or both stick buttons. The editor shows the available pair.
-This shortcut always uses physical controls and cannot be remapped.
+With a custom layout, hold Menu + Options for one second, then release to show
+controller layouts. Controllers without that pair use Menu + left stick button,
+or both stick buttons. The editor shows the available pair. This shortcut always
+uses physical controls and cannot be remapped.
 
-Choose **Change stop shortcut…** to record a separate stop chord. A conflicting
-default stop chord is inactive while the protected shortcut is in use. Game
-layouts never change mouse mode or turn a PC button into a Glimmer shortcut.
+Hold **L1 + R1 + Start + Select** together to stop streaming. This chord is
+fixed on every device and cannot be remapped. Game layouts never change mouse
+mode or turn a PC button into a Glimmer shortcut.
 
 ## Navigate the launcher
 
@@ -77,9 +77,10 @@ streams/tests. Other pads and Extra DualSense buttons need Input Monitoring.
 
 {% hint style="warning" %}
 
-Save first. Hold L3 + R3 for half a second to stop and quit the PC app.
+Save first. Hold L1 + R1 + Start + Select together for half a second to stop
+streaming.
 
 {% endhint %}
 
 Next:
-[alternate chords and DualSense requirements](../SHORTCUTS.md#controller-stop-shortcut).
+[controller button names and DualSense requirements](../SHORTCUTS.md#controller-stop-shortcut).

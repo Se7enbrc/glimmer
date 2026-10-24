@@ -12,12 +12,8 @@ public struct ControllerLayoutConfiguration: Sendable {
                 available: Set<ControllerLayoutSource>, extras: [String] = []) throws {
         plan = try layout.map { try ControllerMappingPlan(layout: $0, available: available, extras: extras) }
         escape = try ControllerPhysicalChord(sources: ControllerLayoutShortcuts.escape(available: available), extras: extras)
-        if let shortcuts {
-            try shortcuts.validate(available: available)
-            stop = try ControllerPhysicalChord(sources: shortcuts.stop, extras: extras)
-        } else {
-            stop = nil
-        }
+        // Older libraries may contain custom shortcuts; they never override the protected stop chord.
+        stop = try ControllerPhysicalChord(sources: ControllerLayoutShortcuts.fixedStop, extras: [])
     }
 }
 

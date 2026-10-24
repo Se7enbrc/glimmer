@@ -98,24 +98,6 @@ final class ControllerLayoutsModel {
         try await commit(next)
     }
 
-    func saveShortcuts(_ record: ControllerShortcutRecord) async throws {
-        guard loaded, !saving else { throw ControllerLayoutError.invalidDocument }
-        saving = true
-        defer { saving = false }
-        var next = library
-        try next.saveShortcuts(record)
-        try await commit(next)
-    }
-
-    func resetShortcuts(for owner: ControllerLayoutOwner) async throws {
-        guard loaded, !saving else { throw ControllerLayoutError.invalidDocument }
-        saving = true
-        defer { saving = false }
-        var next = library
-        next.removeShortcuts(for: owner)
-        try await commit(next)
-    }
-
     private func commit(_ next: ControllerLayoutLibrary) async throws {
         var next = next
         next.games = Array(games.prefix(1024))

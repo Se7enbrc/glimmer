@@ -344,28 +344,8 @@ final class AppModel {
     }
     /// The running stream is showing as the mini player.
     var isMiniPlayer = false
-    /// Controller-side quit chord - fires the same path as `quitHotkey`
-    /// from the keyboard, but driven by a multi-button hold on the
-    /// gamepad. Defaults to L3 + R3 (click both sticks): native on every pad (no
-    /// Create/Share/Mute, which macOS drops on a DualSense), and - unlike a
-    /// shoulder+trigger chord - its partials don't leak a host combo as you press
-    /// in (L1+R1+L2+R2 assembles through LB+RB+LT, which Steam Big Picture reads
-    /// as Show-Keyboard). The 400ms dwell guards a mid-game trip; "None" disables.
-    var controllerQuitChord: ControllerQuitChord = .l3r3 {
-        didSet {
-            settingsDefaults.set(controllerQuitChord.rawValue, forKey: "controllerQuitChord")
-        }
-    }
-
-    /// User-recorded buttons backing the `.custom` quit chord (press the buttons,
-    /// we store them - issue #9). Persisted as JSON.
-    var customControllerChord: Set<ControllerButton> = [] {
-        didSet {
-            if let data = try? JSONEncoder().encode(customControllerChord) {
-                settingsDefaults.set(data, forKey: "customControllerChord")
-            }
-        }
-    }
+    var controllerQuitChord: ControllerQuitChord { .startSelectL1R1 }
+    var customControllerChord: Set<ControllerButton> { [] }
 
     /// Live "is any game controller connected" flag, driven by the
     /// `GCControllerDidConnect` / `GCControllerDidDisconnect` observers in
@@ -556,10 +536,6 @@ final class AppModel {
         statsThresholds = Self.persistedStatsThresholds(defaults: defaults)
         quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self, defaults: defaults) ?? quitHotkey
         statsHotkey = Self.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults) ?? statsHotkey
-        controllerQuitChord = Self.persistedRawValue("controllerQuitChord", ControllerQuitChord.self,
-            defaults: defaults) ?? controllerQuitChord
-        customControllerChord = Self.persistedDecoded("customControllerChord", Set<ControllerButton>.self,
-            defaults: defaults) ?? customControllerChord
         hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
     }
 

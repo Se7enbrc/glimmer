@@ -4,6 +4,10 @@
 import Foundation
 
 public struct ControllerLayoutShortcuts: Codable, Equatable, Sendable {
+    public static let fixedStop: Set<ControllerLayoutSource> = [
+        .button(.leftShoulder), .button(.rightShoulder), .button(.menu), .button(.options)
+    ]
+
     public var stop: Set<ControllerLayoutSource>
 
     public init(stop: Set<ControllerLayoutSource> = []) { self.stop = stop }

@@ -53,7 +53,6 @@ struct ControllerLayoutEditor: View {
     @State private var editingID = UUID()
     @State private var selected: ControllerLayoutControl?
     @State private var capturing = false
-    @State private var capturingShortcut = false
     @State private var resetting = false
     @State private var standardReset = false
     @State private var failure: String?
@@ -121,10 +120,7 @@ struct ControllerLayoutEditor: View {
             ControllerLayoutAssignment(model: model, device: device, scope: scope, control: control, layout: layout)
         }
         .sheet(isPresented: $capturing) {
-            captureSheet(shortcut: false)
-        }
-        .sheet(isPresented: $capturingShortcut) {
-            captureSheet(shortcut: true)
+            captureSheet
         }
         .confirmationDialog(scope == .allGames ? "Use system layout?" : "Use All games?",
                             isPresented: $resetting, titleVisibility: .visible) {
@@ -182,19 +178,9 @@ struct ControllerLayoutEditor: View {
             let escape = ControllerLayoutShortcuts.escape(available: Set(device.controls.map(\.id)))
             LabeledContent("Show controls", value: escape.isEmpty ? "Use the keyboard or touch controls" :
                 escape.map(\.layoutName).sorted().joined(separator: " + "))
-            Text("With a custom layout or shortcut, hold for one second, then release. This shortcut can't be changed.")
+            Text("With a custom layout, hold for one second, then release. This shortcut can't be changed.")
                 .font(.footnote).foregroundStyle(.secondary)
-            ControllerLayoutShortcutSummary(model: model, device: device)
-            Button("Change stop shortcut…") { capturingShortcut = true }
-                .disabled(device.captureSource == nil || !device.connected)
-            Button("Use default stop shortcut") {
-                Task {
-                    do { try await model.resetShortcuts(for: device.owner) } catch {
-                        failure = "Couldn't save the shortcut. Try again."
-                    }
-                }
-            }
-            .disabled(!model.library.shortcuts.contains { $0.owner == device.owner })
+            ControllerLayoutShortcutSummary()
         }
     }
 
@@ -215,10 +201,10 @@ struct ControllerLayoutEditor: View {
         }
     }
 
-    @ViewBuilder private func captureSheet(shortcut: Bool) -> some View {
+    @ViewBuilder private var captureSheet: some View {
         if let input = device.captureSource {
             ControllerLayoutCaptureSheet(model: model, device: device, scope: scope, layout: layout,
-                capture: ControllerLayoutCapture(input: input, mode: shortcut ? .shortcut : .control))
+                capture: ControllerLayoutCapture(input: input))
         }
     }
 }

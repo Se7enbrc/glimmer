@@ -79,12 +79,11 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
     func install(_ state: InputForwarder.AttachedController) {
         guard !ControllerLayoutEditing.active, let forwarder, let controller = state.controller else { return }
         let model = ControllerLayoutsModel.shared
-        guard model.loaded, !model.library.records.isEmpty || !model.library.shortcuts.isEmpty else { return }
+        guard model.loaded, !model.library.records.isEmpty else { return }
         guard let reader = ControllerLayoutReader(controller) else { return }
         let record = model.library.resolve(reader.identity, scope: scope)
-        let shortcuts = model.library.shortcuts(for: reader.identity)
-        guard record != nil || shortcuts != nil else { return }
-        guard let configuration = try? ControllerLayoutConfiguration(layout: record?.layout, shortcuts: shortcuts,
+        guard record != nil else { return }
+        guard let configuration = try? ControllerLayoutConfiguration(layout: record?.layout, shortcuts: nil,
             available: reader.available, extras: reader.extras) else { return }
         let core = forwarder.inputCore
         let id = ObjectIdentifier(controller)
@@ -150,14 +149,13 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         releaseHID(state.device.id)
         guard !ControllerLayoutEditing.active, let forwarder else { return }
         let model = ControllerLayoutsModel.shared
-        guard model.loaded, !model.library.records.isEmpty || !model.library.shortcuts.isEmpty else { return }
+        guard model.loaded, !model.library.records.isEmpty else { return }
         let pad = state.device
         let identity = HIDControllerLayouts.identity(pad)
         let record = model.library.resolve(identity, scope: scope)
-        let shortcuts = model.library.shortcuts(for: identity)
-        guard record != nil || shortcuts != nil else { return }
+        guard record != nil else { return }
         let available = Set(HIDControllerLayouts.controls(pad).map(\.id))
-        guard let configuration = try? ControllerLayoutConfiguration(layout: record?.layout, shortcuts: shortcuts,
+        guard let configuration = try? ControllerLayoutConfiguration(layout: record?.layout, shortcuts: nil,
             available: available, extras: pad.layoutExtras.map(\.name)) else { return }
         let core = forwarder.inputCore
         let slot = state.slot
