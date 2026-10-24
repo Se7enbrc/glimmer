@@ -46,7 +46,8 @@ struct StreamPlayback {
     static func make(launch: StreamLaunch, surface: StreamSurface,
                      quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {
         let format = try launch.profile.resolve(surface: surface)
-        let configuration = format.configuration
+        let headroom = surface.window?.windowScene?.screen.potentialEDRHeadroom ?? 1
+        let configuration = format.configuration(potentialEDRHeadroom: Double(headroom))
         let video = VideoDecoder(configuration: configuration, displayInfo: { [weak surface] in
             guard let screen = surface?.window?.windowScene?.screen else { return nil }
             return VideoDisplayInfo(currentHeadroom: Double(screen.currentEDRHeadroom),

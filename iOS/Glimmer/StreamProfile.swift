@@ -56,8 +56,10 @@ struct StreamFormat: Hashable, Sendable {
 
     var summary: String { "\(width) × \(height) · \(fps) fps" }
     var pacingFPS: Int32 { Int32(fps) }
-    var configuration: StreamConnection.Configuration {
-        StreamConnection.Configuration(width: width, height: height, fps: fps, bitrateKbps: StreamProfile.bitrateKbps,
-                                       videoFormats: .h264, audio: .stereo)
+    func configuration(potentialEDRHeadroom: Double,
+                       hardwareFormats: VideoFormats = .hardwareSupported) -> StreamConnection.Configuration {
+        let formats = hardwareFormats.forDisplay(potentialEDRHeadroom: potentialEDRHeadroom)
+        return StreamConnection.Configuration(width: width, height: height, fps: fps,
+            bitrateKbps: StreamProfile.bitrateKbps, videoFormats: formats, audio: .stereo)
     }
 }

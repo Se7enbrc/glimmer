@@ -71,6 +71,8 @@
 		610DFE85BF994F3ABF7A541A /* IOSControllerSensorsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */; };
 		FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */; };
 		00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */; };
+		AE6A23CC6494422DB3DB8C77 /* VideoColorPatternTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9C36C65CD684E2EB8BCC2EC /* VideoColorPatternTests.swift */; };
+		CE05955C447440DD911016EF /* StreamVideoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B855180B1A544A85B5CEF0FD /* StreamVideoTests.swift */; };
 		38C80A9D0A874449A43CE593 /* AddPCView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */; };
 		9A840CDBA4454BB792C44D65 = {
 			isa = PBXBuildFile;
@@ -164,6 +166,8 @@
 		7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerSensorsTests.swift"; sourceTree = "<group>"; };
 		5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamProfile.swift"; sourceTree = "<group>"; };
 		DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamProfileTests.swift"; sourceTree = "<group>"; };
+		B9C36C65CD684E2EB8BCC2EC /* VideoColorPatternTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/VideoColorPatternTests.swift"; sourceTree = SOURCE_ROOT; };
+		B855180B1A544A85B5CEF0FD /* StreamVideoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/StreamVideoTests.swift"; sourceTree = SOURCE_ROOT; };
 		E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AddPCView.swift"; sourceTree = "<group>"; };
 		87663570874C427BB408C4D9 = {
 			isa = PBXFileReference;
@@ -269,6 +273,8 @@
 				91AEBC7BEEA8D776F94EE649 /* StreamSessionTests+Background.swift */,
 				DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */,
 				DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */,
+				B9C36C65CD684E2EB8BCC2EC /* VideoColorPatternTests.swift */,
+				B855180B1A544A85B5CEF0FD /* StreamVideoTests.swift */,
 				E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */,
 				4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */,
 				1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */,
@@ -483,6 +489,8 @@
 				A7AC93D39FA963B32B3BFBB6 /* StreamSessionTests+Background.swift in Sources */,
 				00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */,
 				CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */,
+				AE6A23CC6494422DB3DB8C77 /* VideoColorPatternTests.swift in Sources */,
+				CE05955C447440DD911016EF /* StreamVideoTests.swift in Sources */,
 				9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */,
 				BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */,
 				A037E3519F7846D6958E34F0 /* ControllerMouseMotionTests.swift in Sources */,

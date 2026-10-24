@@ -22,6 +22,8 @@ class IOSBoundaryTests(unittest.TestCase):
                               for path in (ROOT / "iOS" / name).rglob("*.swift")}
                         for name in ("Glimmer", "GlimmerTests", "GlimmerUITests")}
 
+        cls.expected["GlimmerTests"].add("../GlimmerTests/VideoColorPatternTests.swift")
+
     def setUp(self):
         self.value = copy.deepcopy(self.project)
         self.objects = self.value["objects"]
