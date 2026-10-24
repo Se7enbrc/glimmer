@@ -39,8 +39,10 @@ final class StreamSurface: UIView {
         return displayLayer
     }
 
-    // iPhone and iPad share one rule: fill the window, cropping edges after an aspect change.
-    private let presentationGravity = AVLayerVideoGravity.resizeAspectFill
+    // Device windows fill like iPhone, cropping after an aspect change; an external display keeps every edge.
+    private var presentationGravity: AVLayerVideoGravity {
+        window?.windowScene?.session.role == .windowExternalDisplayNonInteractive ? .resizeAspect : .resizeAspectFill
+    }
 
     private func configureDisplayLayer() {
         displayLayer.videoGravity = presentationGravity

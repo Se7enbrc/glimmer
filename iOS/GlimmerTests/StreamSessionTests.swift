@@ -403,7 +403,7 @@ struct StreamSessionTests {
         #expect(replacement.frame == surface.bounds && surface.clipsToBounds)
     }
 
-    @Test func streamSurfaceFillsVideoAndSupportsBothLandscapeOrientations() {
+    @Test func streamSurfaceFitsVideoAndSupportsBothLandscapeOrientations() {
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 800, height: 400))
         surface.layoutIfNeeded()
         #expect(surface.displayLayer.frame == surface.bounds)

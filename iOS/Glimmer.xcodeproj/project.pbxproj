@@ -81,6 +81,8 @@
 		CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */; };
 		CC4120261024000000000001 /* StreamDisplayModes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4120261024000000000002 /* StreamDisplayModes.swift */; };
 		CC4120261024000000000003 /* iphone-ipad.xml in Resources */ = {isa = PBXBuildFile; fileRef = CC4120261024000000000004 /* iphone-ipad.xml */; };
+		106C7EC9D1E1487BAF6C2359 /* StreamDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF7BE61574AE4D52A1AE9CDE /* StreamDisplayTests.swift */; };
+		8E0BB801DA9F44F09FBDE727 /* StreamDisplayRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 048B943867A648E2BDDB0D5B /* StreamDisplayRenderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -184,6 +186,8 @@
 		DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamWindowResizeTests.swift; sourceTree = "<group>"; };
 		CC4120261024000000000002 /* StreamDisplayModes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayModes.swift; sourceTree = "<group>"; };
 		CC4120261024000000000004 /* iphone-ipad.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "../../docs/vdd/iphone-ipad.xml"; sourceTree = "<group>"; };
+		EF7BE61574AE4D52A1AE9CDE /* StreamDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayTests.swift; sourceTree = "<group>"; };
+		048B943867A648E2BDDB0D5B /* StreamDisplayRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamDisplayRenderTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -271,6 +275,8 @@
 				D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */,
 				155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */,
 				91AEBC7BEEA8D776F94EE649 /* StreamSessionTests+Background.swift */,
+				EF7BE61574AE4D52A1AE9CDE /* StreamDisplayTests.swift */,
+				048B943867A648E2BDDB0D5B /* StreamDisplayRenderTests.swift */,
 				DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */,
 				DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */,
 				B9C36C65CD684E2EB8BCC2EC /* VideoColorPatternTests.swift */,
@@ -487,6 +493,8 @@
 				40E56A34C6B84BFD97F585B0 /* PairingRecoveryTests.swift in Sources */,
 				F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */,
 				A7AC93D39FA963B32B3BFBB6 /* StreamSessionTests+Background.swift in Sources */,
+				106C7EC9D1E1487BAF6C2359 /* StreamDisplayTests.swift in Sources */,
+				8E0BB801DA9F44F09FBDE727 /* StreamDisplayRenderTests.swift in Sources */,
 				00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */,
 				CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */,
 				AE6A23CC6494422DB3DB8C77 /* VideoColorPatternTests.swift in Sources */,

@@ -2,6 +2,9 @@
 
 ## 2026.10.8 (build 3, unreleased)
 
+- Streams on an external display show the whole picture without cropping when
+  the display has a different shape.
+
 - iPhone and iPad releases now use Glimmer's shared calendar version.
 
 - Forget a PC from Settings and pair again after resetting Sunshine. Other saved
