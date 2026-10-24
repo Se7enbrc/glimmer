@@ -38,8 +38,10 @@ The engine always comes from this same checkout's root package.
   60 fps and stereo; higher modes need sustained hardware measurements.
 - Leaving the foreground releases input immediately. A finite background task
   allows at most 15 seconds to return before local teardown; lock, system
-  expiration or denied execution ends it earlier. Never quit the game on the PC
-  or add an ongoing background streaming, polling or telemetry service.
+  expiration or denied execution ends it earlier. Teardown quits the game by
+  default; “Leave games running when you disconnect” preserves it. Explicit Quit
+  always remains available. Add no ongoing background streaming, polling or
+  telemetry service.
 - Run `make app`, `make test`, `make check`. See CONTRIBUTING.md for Simulator
   and device verification. All Make targets are unsigned and never install the
   app. Do not sign, provision, install, publish or change keychains without

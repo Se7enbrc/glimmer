@@ -14,6 +14,14 @@
   available, with 10-bit HDR on supported displays and H.264 fallback.
 - iPhone and iPad can send the streamed picture to a connected display while
   keeping controls on the device. iPad streams also fit Stage Manager windows.
+- Disconnecting now quits the game on the PC on both Mac and iPhone/iPad,
+  including after the iOS background grace period. Turn on “Leave games running
+  when you disconnect” for games and PCs that handle a change in screen size.
+
+- Running games offer Resume or Continue here and Quit. Choosing another app
+  offers to quit the running game and start the new one. Continuation keeps a
+  known stream size and fits the picture; a different size is an explicit
+  choice.
 
 - Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
   Sequoia, windows and controls use the system's standard materials in place of
@@ -28,8 +36,8 @@
   a local evidence bundle that identifies missing or incomplete measurements.
   These builds are separate from automatic updates.
 
-- Stop the current stream and quit its game on the PC from a `glimmer://stop`
-  link, `glimmer stop` or the Stop Streaming shortcut.
+- Stop the current stream from a `glimmer://stop` link, `glimmer stop` or the
+  Stop Streaming shortcut. These actions follow your disconnect setting.
 
 - Smoother motion when the PC can't hold your display's refresh rate. On a
   variable-refresh display, refresh changes settle before taking effect and stay

@@ -219,9 +219,10 @@ Represent foreground, temporary inactivity, background, route loss, and
 protected-data unavailability explicitly. Temporary inactivity immediately
 releases input; returning must not replay held state. On background or screen
 lock, stop local streaming work and release resources. Returning offers a
-controlled resume/reconnect. Local disconnect and quitting the PC application
-are distinct actions; backgrounding must not silently quit the player's game.
-Document the existing Sunshine cancellation semantics before changing them.
+controlled resume/reconnect when the game remains running. Local teardown quits
+the PC game by default. The optional leave-running setting applies equally to
+manual disconnect, background grace and lock teardown; explicit Quit remains
+available regardless of that setting.
 
 Use structured cancellation and a session generation to reject old callbacks.
 Stop receive work before releasing its sinks and bridge. Remove display links,

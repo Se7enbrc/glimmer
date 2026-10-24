@@ -62,8 +62,10 @@ the window's pixel size as its target and chooses the closest mode listed in
 `docs/vdd/iphone-ipad.xml`. 1080p requests 1920 × 1080. All requests respect the
 display's refresh limit and share the same codec, HDR and quality rules. A
 connected external display can show the whole picture while the device keeps the
-controls. Both support physical controllers. Disconnecting leaves the game
-running on the PC.
+controls. Both support physical controllers. Disconnecting quits the game on the
+PC by default. “Leave games running when you disconnect” enables continuation
+for games and PCs that handle a screen-size change. Running games offer Resume
+or Continue here and an explicit Quit action on both platforms.
 
 Rotation and window resizing keep the current stream format, as iPhone does
 today. Video fills the new bounds, cropping edges when the aspect changes. A new
