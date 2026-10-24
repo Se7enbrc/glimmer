@@ -99,8 +99,7 @@ struct AppDeclarationTests {
         stream.didMove(toParent: menu)
         stream.beginAppearanceTransition(true, animated: false)
         stream.endAppearanceTransition()
-        let streaming: UIInterfaceOrientationMask = window.traitCollection.userInterfaceIdiom == .pad
-            ? .all : .landscape
+        let streaming = AppDelegate.streamOrientations(for: window.traitCollection.userInterfaceIdiom)
         #expect(AppDelegate.orientationMask(for: window) == streaming)
         #expect(stream.supportedInterfaceOrientations == streaming)
         let other = UIWindow(windowScene: scene)
@@ -146,6 +145,8 @@ struct AppDeclarationTests {
         #expect(packaged["UIRequiresFullScreen"] == nil)
         #expect(AppDelegate.menuOrientations(for: .phone) == .allButUpsideDown)
         #expect(AppDelegate.menuOrientations(for: .pad) == .all)
+        #expect(AppDelegate.streamOrientations(for: .phone) == .landscape)
+        #expect(AppDelegate.streamOrientations(for: .pad) == .all)
         #expect(AppDelegate().application(.shared, supportedInterfaceOrientationsFor: nil)
             == AppDelegate.menuOrientations(for: UIDevice.current.userInterfaceIdiom))
         #expect(info["LSSupportsGameMode"] as? Bool == true)

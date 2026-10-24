@@ -82,7 +82,13 @@
 		CC4120261024000000000001 /* StreamDisplayModes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4120261024000000000002 /* StreamDisplayModes.swift */; };
 		CC4120261024000000000003 /* iphone-ipad.xml in Resources */ = {isa = PBXBuildFile; fileRef = CC4120261024000000000004 /* iphone-ipad.xml */; };
 		106C7EC9D1E1487BAF6C2359 /* StreamDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF7BE61574AE4D52A1AE9CDE /* StreamDisplayTests.swift */; };
+		30DF5DF2DB3A49AF95CF00C3 /* StreamDisplayGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5648C90AB5D14927899ED5EB /* StreamDisplayGeometry.swift */; };
+		A51AFF9A315143B9A97DE8D0 /* StreamDisplayGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F59986B2668A4ADAA0BDA4A8 /* StreamDisplayGeometryTests.swift */; };
 		8E0BB801DA9F44F09FBDE727 /* StreamDisplayRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 048B943867A648E2BDDB0D5B /* StreamDisplayRenderTests.swift */; };
+		06B884AEC0A0442A816ACD1D /* StreamOutputCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12625EF14E6340CDBB34192D /* StreamOutputCoordinator.swift */; };
+		B4D8A1F4662A448B88A9ABCC /* StreamDisplayMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E6D3B59D0034724BF096CCA /* StreamDisplayMode.swift */; };
+		C98A81575E2E43DB9264E7A7 /* ExternalStreamSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 561F95F4E6DA4B03A68B34D7 /* ExternalStreamSceneDelegate.swift */; };
+		B5BF87137D7941F0B279F257 /* ExternalStreamOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21AF75350764B66B907C5FE /* ExternalStreamOutputTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -187,7 +193,13 @@
 		CC4120261024000000000002 /* StreamDisplayModes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayModes.swift; sourceTree = "<group>"; };
 		CC4120261024000000000004 /* iphone-ipad.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "../../docs/vdd/iphone-ipad.xml"; sourceTree = "<group>"; };
 		EF7BE61574AE4D52A1AE9CDE /* StreamDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayTests.swift; sourceTree = "<group>"; };
+		5648C90AB5D14927899ED5EB /* StreamDisplayGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamDisplayGeometry.swift"; sourceTree = "<group>"; };
+		F59986B2668A4ADAA0BDA4A8 /* StreamDisplayGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamDisplayGeometryTests.swift"; sourceTree = "<group>"; };
 		048B943867A648E2BDDB0D5B /* StreamDisplayRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamDisplayRenderTests.swift"; sourceTree = "<group>"; };
+		12625EF14E6340CDBB34192D /* StreamOutputCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamOutputCoordinator.swift"; sourceTree = "<group>"; };
+		5E6D3B59D0034724BF096CCA /* StreamDisplayMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamDisplayMode.swift"; sourceTree = "<group>"; };
+		561F95F4E6DA4B03A68B34D7 /* ExternalStreamSceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExternalStreamSceneDelegate.swift"; sourceTree = "<group>"; };
+		C21AF75350764B66B907C5FE /* ExternalStreamOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExternalStreamOutputTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -276,7 +288,9 @@
 				155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */,
 				91AEBC7BEEA8D776F94EE649 /* StreamSessionTests+Background.swift */,
 				EF7BE61574AE4D52A1AE9CDE /* StreamDisplayTests.swift */,
+				F59986B2668A4ADAA0BDA4A8 /* StreamDisplayGeometryTests.swift */,
 				048B943867A648E2BDDB0D5B /* StreamDisplayRenderTests.swift */,
+				C21AF75350764B66B907C5FE /* ExternalStreamOutputTests.swift */,
 				DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */,
 				DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */,
 				B9C36C65CD684E2EB8BCC2EC /* VideoColorPatternTests.swift */,
@@ -316,6 +330,10 @@
 				1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */,
 				087279E7E4417E5B10AADB05 /* LauncherServices.swift */,
 				5A97E5B4E562286545BA6412 /* StreamView.swift */,
+				5648C90AB5D14927899ED5EB /* StreamDisplayGeometry.swift */,
+				12625EF14E6340CDBB34192D /* StreamOutputCoordinator.swift */,
+				5E6D3B59D0034724BF096CCA /* StreamDisplayMode.swift */,
+				561F95F4E6DA4B03A68B34D7 /* ExternalStreamSceneDelegate.swift */,
 				11C92E9EC00985D64D0C1CC7 /* StreamSurface.swift */,
 				F08434884699435EA80067AB /* StreamTouchCapture.swift */,
 				5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */,
@@ -494,7 +512,9 @@
 				F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */,
 				A7AC93D39FA963B32B3BFBB6 /* StreamSessionTests+Background.swift in Sources */,
 				106C7EC9D1E1487BAF6C2359 /* StreamDisplayTests.swift in Sources */,
+				A51AFF9A315143B9A97DE8D0 /* StreamDisplayGeometryTests.swift in Sources */,
 				8E0BB801DA9F44F09FBDE727 /* StreamDisplayRenderTests.swift in Sources */,
+				B5BF87137D7941F0B279F257 /* ExternalStreamOutputTests.swift in Sources */,
 				00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */,
 				CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */,
 				AE6A23CC6494422DB3DB8C77 /* VideoColorPatternTests.swift in Sources */,
@@ -525,6 +545,10 @@
 				AF9547F4F7817E3F82B8F721 /* LauncherModel.swift in Sources */,
 				83B27EBA9F210DF76B77D772 /* LauncherServices.swift in Sources */,
 				53442F74573A5960DB86B797 /* StreamView.swift in Sources */,
+				30DF5DF2DB3A49AF95CF00C3 /* StreamDisplayGeometry.swift in Sources */,
+				06B884AEC0A0442A816ACD1D /* StreamOutputCoordinator.swift in Sources */,
+				B4D8A1F4662A448B88A9ABCC /* StreamDisplayMode.swift in Sources */,
+				C98A81575E2E43DB9264E7A7 /* ExternalStreamSceneDelegate.swift in Sources */,
 				9A28A0B31BBB599B016AAED4 /* StreamSurface.swift in Sources */,
 				2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */,
 				2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */,

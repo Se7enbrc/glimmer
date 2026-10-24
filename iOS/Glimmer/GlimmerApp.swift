@@ -64,10 +64,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         idiom == .pad ? .all : .allButUpsideDown
     }
 
+    static func streamOrientations(for idiom: UIUserInterfaceIdiom) -> UIInterfaceOrientationMask {
+        idiom == .pad ? .all : .landscape
+    }
+
     static func orientationMask(for window: UIWindow?) -> UIInterfaceOrientationMask {
-        if window?.traitCollection.userInterfaceIdiom == .pad { return .all }
-        if let window, let root = window.rootViewController, containsStream(root, in: window) { return .landscape }
-        return menuOrientations(for: window?.traitCollection.userInterfaceIdiom ?? UIDevice.current.userInterfaceIdiom)
+        let idiom = window?.traitCollection.userInterfaceIdiom ?? UIDevice.current.userInterfaceIdiom
+        if let window, let root = window.rootViewController, containsStream(root, in: window) {
+            return streamOrientations(for: idiom)
+        }
+        return menuOrientations(for: idiom)
     }
 
     private static func containsStream(_ controller: UIViewController, in window: UIWindow) -> Bool {

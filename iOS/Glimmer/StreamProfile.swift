@@ -41,10 +41,7 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
     @MainActor
     func resolve(surface: StreamSurface) throws -> StreamFormat {
         guard let screen = surface.window?.windowScene?.screen else { throw Failure.displayUnavailable }
-        let scale = screen.nativeScale
-        return try resolve(windowPixels: CGSize(width: surface.bounds.width * scale,
-                                                 height: surface.bounds.height * scale),
-                           maximumFramesPerSecond: screen.maximumFramesPerSecond)
+        return try resolve(windowPixels: surface.streamPixels, maximumFramesPerSecond: screen.maximumFramesPerSecond)
     }
 }
 

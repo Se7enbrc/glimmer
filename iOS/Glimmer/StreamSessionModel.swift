@@ -25,7 +25,9 @@ final class StreamSessionModel {
     private let backgroundGrace: StreamBackgroundGrace
     private(set) var canStart = true
     private(set) var controlsVisible = true
+    private(set) var externalDisplayActive = false
     var inputCaptureChanged: ((Bool) -> Void)?
+    var presentationEnded: (() -> Void)?
     var inputFocused: Bool { canStart && phase == .streaming && !controlsVisible && !captureSuspended }
     var streamInput: StreamInput? { playback?.input }
     nonisolated let launch: StreamLaunch
@@ -61,6 +63,7 @@ final class StreamSessionModel {
             }
         } catch {
             phase = .ended("Couldn't prepare this display. Close the stream and try again.")
+            presentationEnded?()
             return
         }
         self.playback = playback
@@ -113,6 +116,7 @@ final class StreamSessionModel {
             return
         }
         phase = .ended(endingMessage ?? "Disconnected from \(launch.pcName).")
+        presentationEnded?()
         mouseControllers.removeAll()
         controllerConnected = false
         modeNoticeTask?.cancel()
@@ -174,6 +178,17 @@ final class StreamSessionModel {
     }
 
     func screenChanged() { playback?.screenChanged() }
+
+    func prepareForDisplayChange() {
+        playback?.focusInput?(false)
+        inputCaptureChanged?(false)
+    }
+
+    func finishDisplayChange(external: Bool) {
+        externalDisplayActive = external
+        screenChanged()
+        synchronizeInputFocus()
+    }
 
     func waitUntilStartFinishes() async { await startTask?.value }
 

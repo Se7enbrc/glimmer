@@ -12,8 +12,10 @@ iPhone streams stay in landscape; menus can rotate again after disconnecting.
 iPad streams start in either orientation and fill the whole window, including
 Split View and Stage Manager. This build keeps the initial stream size after a
 window resize, matching iPhone rotation. The picture fills the new window and
-can crop at the edges. The app opts into iOS Game Mode; the system controls its
-activation.
+can crop at the edges. A connected external display can show the whole picture
+while the device keeps the controls. See
+[external display validation](docs/EXTERNAL_DISPLAYS.md) for hardware checks.
+The app opts into iOS Game Mode; the system controls its activation.
 
 The launcher shows the PC, its requested stream settings and its app buttons.
 The last connected PC loads automatically, including after disconnecting. With

@@ -243,7 +243,9 @@ struct NativeUIRenderTests {
         window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
         launcher.setNeedsUpdateOfSupportedInterfaceOrientations()
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        if scene.traitCollection.userInterfaceIdiom != .pad {
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        }
         try await waitForOrientation(scene, portrait: true, controller: launcher)
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
         model.select(fixture.saved)
@@ -267,7 +269,9 @@ struct NativeUIRenderTests {
                 #expect(player.view.bounds.width > player.view.bounds.height)
             }
             stream.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
-            #expect(AppDelegate.orientationMask(for: window) == (pad ? .all : .landscape))
+            #expect(AppDelegate.orientationMask(for: window)
+                == AppDelegate.streamOrientations(for: window.traitCollection.userInterfaceIdiom))
+            #expect(player.view.bounds.size == window.bounds.size)
             try recordPhase(player.view, name: "orientation-stream-presented")
         } catch { captureError = error }
         stream.disconnect()
@@ -278,15 +282,17 @@ struct NativeUIRenderTests {
         #expect(model.hasActiveStream == false)
         #expect(AppDelegate.orientationMask(for: window).contains(.portrait))
         // Model a subsequent phone rotation; production must release its lock without a test invalidation.
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        if scene.traitCollection.userInterfaceIdiom != .pad {
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        }
         try await waitForOrientation(scene, portrait: true, controller: launcher)
-        #expect(launcher.view.bounds.height > launcher.view.bounds.width)
+        #expect(launcher.view.bounds.size == window.bounds.size)
         try await waitForLauncherLayout(launcher, window: window)
         try recordPhase(launcher.view, name: "orientation-launcher-after-disconnect")
         if let captureError { throw captureError }
     }
 
-    @Test(arguments: ["connecting", "streaming", "playing", "waiting", "mouse", "mouse-controls",
+    @Test(arguments: ["connecting", "streaming", "playing", "external", "waiting", "mouse", "mouse-controls",
                       "reconnecting", "ended"])
     func streamControls(state: String) async throws {
         let id = UUID()
@@ -296,12 +302,13 @@ struct NativeUIRenderTests {
                            observeControllers: { $0(true) })
         })
         model.start(surface: StreamSurface())
-        if ["streaming", "playing", "waiting", "mouse", "mouse-controls"].contains(state) {
+        if ["streaming", "playing", "external", "waiting", "mouse", "mouse-controls"].contains(state) {
             model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
             model.receive(.init(sessionID: id, attemptID: UUID(), event: .input(.controllersActive(true))))
         }
-        if ["playing", "waiting", "mouse"].contains(state) { model.resumeInput() }
+        if ["playing", "external", "waiting", "mouse"].contains(state) { model.resumeInput() }
         if state == "streaming" || state == "mouse-controls" { model.showControls() }
+        if state == "external" { model.finishDisplayChange(external: true) }
         let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
         if state.hasPrefix("mouse") {
             let controller = try #require(connection.input.registerController(
@@ -333,7 +340,7 @@ struct NativeUIRenderTests {
 
     @Test func actualSimulatorScenePresentsRecovery() async throws {
         let (model, controller) = recoveryController()
-        try await recordController(controller, name: "recovery-simulator-landscape", size: nil, dark: true)
+        try await recordController(controller, name: "recovery-simulator-window", size: nil, dark: true)
         model.stop()
         await model.waitUntilStopped()
     }
@@ -418,7 +425,7 @@ struct NativeUIRenderTests {
             #expect(host.children.allSatisfy { $0.view.bounds.size == expectedSize })
             #expect(host.children.allSatisfy { $0.traitCollection.userInterfaceStyle == .dark })
         }
-        if portrait {
+        if portrait, scene.traitCollection.userInterfaceIdiom != .pad {
             #expect(scene.effectiveGeometry.interfaceOrientation == .portrait)
             #expect(window.bounds.height > window.bounds.width)
         }
@@ -494,6 +501,12 @@ struct NativeUIRenderTests {
 
     private func waitForOrientation(_ scene: UIWindowScene, portrait: Bool,
                                     controller: UIViewController) async throws {
+        if scene.traitCollection.userInterfaceIdiom == .pad {
+            await finishTransition(controller)
+            controller.view.layoutIfNeeded()
+            #expect(controller.view.bounds.size == scene.effectiveGeometry.coordinateSpace.bounds.size)
+            return
+        }
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         func matches() -> Bool {
             let orientation = scene.effectiveGeometry.interfaceOrientation

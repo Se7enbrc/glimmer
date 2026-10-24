@@ -29,12 +29,13 @@ final class StreamViewController: GCEventViewController {
     let surface = StreamSurface()
     private(set) var presentationActive = false
     private let overlay: UIHostingController<StreamControls>
+    private let outputs: StreamOutputCoordinator
     private(set) var touchCapture: StreamTouchCapture?
-    private var screenIdentity: ObjectIdentifier?
     private weak var presentationWindow: UIWindow?
 
-    init(model: StreamSessionModel, close: @escaping () -> Void) {
+    init(model: StreamSessionModel, close: @escaping () -> Void, outputs: StreamOutputCoordinator = .shared) {
         self.model = model
+        self.outputs = outputs
         overlay = UIHostingController(rootView: StreamControls(model: model, close: close))
         super.init(nibName: nil, bundle: nil)
     }
@@ -43,7 +44,7 @@ final class StreamViewController: GCEventViewController {
     required init?(coder: NSCoder) { nil }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        traitCollection.userInterfaceIdiom == .pad ? .all : .landscape
+        AppDelegate.streamOrientations(for: traitCollection.userInterfaceIdiom)
     }
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
@@ -53,6 +54,14 @@ final class StreamViewController: GCEventViewController {
         controllerUserInteractionEnabled = true
         view.backgroundColor = .black
         view.addSubview(surface)
+        surface.displayChanged = { [weak self] in
+            self?.model.screenChanged()
+            self?.startWhenReady()
+        }
+        model.presentationEnded = { [weak self] in
+            guard let self else { return }
+            outputs.end(self)
+        }
         overlay.overrideUserInterfaceStyle = .dark
         addChild(overlay)
         overlay.view.backgroundColor = .clear
@@ -75,22 +84,18 @@ final class StreamViewController: GCEventViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        surface.frame = view.bounds
+        if surface.superview === view { surface.frame = view.bounds }
         overlay.view.frame = view.bounds
-        if let screen = view.window?.windowScene?.screen {
-            let identity = ObjectIdentifier(screen)
-            if screenIdentity != identity {
-                screenIdentity = identity
-                model.screenChanged()
-            }
-        }
         startWhenReady()
     }
 
     func startWhenReady() {
-        guard isViewLoaded, view.window != nil, view.bounds.width > 0, view.bounds.height > 0 else { return }
-        // iPad windows can remain tall even when the scene requests landscape.
-        guard traitCollection.userInterfaceIdiom == .pad || view.bounds.width > view.bounds.height else { return }
+        guard isViewLoaded, view.window != nil else { return }
+        guard !model.phase.isEnded, model.phase != .stopping else { outputs.end(self); return }
+        outputs.update(self)
+        guard surface.window != nil, surface.bounds.width > 0, surface.bounds.height > 0,
+              traitCollection.userInterfaceIdiom == .pad || model.externalDisplayActive
+                || view.bounds.width > view.bounds.height else { return }
         model.start(surface: surface)
     }
 
@@ -98,6 +103,7 @@ final class StreamViewController: GCEventViewController {
         super.viewWillDisappear(animated)
         presentationActive = false
         model.stop()
+        outputs.end(self)
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -113,11 +119,11 @@ final class StreamViewController: GCEventViewController {
     private func installInputCapture() {
         touchCapture = StreamTouchCapture(view: view, actions: .init(move: { [weak self] delta, time in
             guard let self else { return }
-            let scale = surface.window?.windowScene?.screen.scale ?? 1
-            model.streamInput?.movePointer(dx: Double(delta.x * scale), dy: Double(delta.y * scale), capturedAt: time)
+            let motion = pointerMotion(delta)
+            model.streamInput?.movePointer(dx: Double(motion.x), dy: Double(motion.y), capturedAt: time)
         }, scroll: { [weak self] delta, time in
             guard let self else { return }
-            let scale = surface.window?.windowScene?.screen.scale ?? 1
+            let scale = view.traitCollection.displayScale
             model.streamInput?.scroll(x: Double(-delta.x * scale), y: Double(delta.y * scale),
                                      precise: true, capturedAt: time)
         }, click: { [weak model] secondary, time in
@@ -135,8 +141,15 @@ final class StreamViewController: GCEventViewController {
         }]
     }
 
+    private func pointerMotion(_ delta: CGPoint) -> CGPoint {
+        guard let format = model.requestedFormat else { return .zero }
+        return StreamDisplayGeometry.relativeMotion(delta, viewSize: view.bounds.size,
+            streamSize: CGSize(width: format.width, height: format.height))
+    }
+
     private func updateOrientation() {
-        guard let window = view.window, window.isKeyWindow, let scene = window.windowScene else { return }
+        guard let window = view.window, window.isKeyWindow, window.traitCollection.userInterfaceIdiom != .pad,
+              let scene = window.windowScene else { return }
         presentationWindow = window
         window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
         var owner: UIViewController = self
@@ -260,6 +273,11 @@ struct StreamControls: View {
         case .ended(let message):
             Text(message).multilineTextAlignment(.center).padding(32)
         case .streaming:
+            if model.externalDisplayActive, !model.controlsVisible {
+                Label("Playing on the connected display", systemImage: "display")
+                    .foregroundStyle(.secondary)
+                    .accessibilityAction(named: "Show controls", model.showControls)
+            }
             if model.controlsVisible {
                 ScrollView {
                     VStack(spacing: 12) {

@@ -89,7 +89,7 @@ struct StreamSessionTests {
         var quiesces = 0
         let scene = try await testWindowScene()
         let window = UIWindow(windowScene: scene)
-        let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 852, height: 393))
+        let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 320, height: 180))
         window.addSubview(surface)
         defer { surface.removeFromSuperview() }
         let playback = try StreamPlayback.make(launch: testLaunch(), surface: surface) { quiesces += 1 }
@@ -403,7 +403,7 @@ struct StreamSessionTests {
         #expect(replacement.frame == surface.bounds && surface.clipsToBounds)
     }
 
-    @Test func streamSurfaceFitsVideoAndSupportsBothLandscapeOrientations() {
+    @Test func streamSurfaceFitsVideoAndSupportsWindowOrientations() {
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 800, height: 400))
         surface.layoutIfNeeded()
         #expect(surface.displayLayer.frame == surface.bounds)
@@ -412,7 +412,7 @@ struct StreamSessionTests {
         let model = PlaybackFixture().model()
         let controller = StreamViewController(model: model, close: {})
         #expect(controller.supportedInterfaceOrientations
-            == (controller.traitCollection.userInterfaceIdiom == .pad ? .all : .landscape))
+            == AppDelegate.streamOrientations(for: controller.traitCollection.userInterfaceIdiom))
         #expect(controller.prefersStatusBarHidden)
         #expect(controller.prefersHomeIndicatorAutoHidden)
         controller.startWhenReady()
@@ -487,9 +487,13 @@ actor StreamTestGate {
 @MainActor
 func testWindowScene() async throws -> UIWindowScene {
     let activations = NotificationCenter.default.notifications(named: UIScene.didActivateNotification).map { _ in () }
-    if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first { return scene }
+    func application() -> UIWindowScene? {
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.session.role == .windowApplication }
+    }
+    if let scene = application() { return scene }
     for await _ in activations {
-        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first { return scene }
+        if let scene = application() { return scene }
     }
     throw CancellationError()
 }

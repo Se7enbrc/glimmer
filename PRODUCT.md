@@ -60,8 +60,10 @@ iPad streams fill their window in any orientation, including narrow windows.
 Both use the same ordered choices: Native, 1080p 60 and 1080p 120. Native uses
 the window's pixel size as its target and chooses the closest mode listed in
 `docs/vdd/iphone-ipad.xml`. 1080p requests 1920 × 1080. All requests respect the
-display's refresh limit and share the same codec, HDR and quality rules. Both
-support physical controllers. Disconnecting leaves the game running on the PC.
+display's refresh limit and share the same codec, HDR and quality rules. A
+connected external display can show the whole picture while the device keeps the
+controls. Both support physical controllers. Disconnecting leaves the game
+running on the PC.
 
 Rotation and window resizing keep the current stream format, as iPhone does
 today. Video fills the new bounds, cropping edges when the aspect changes. A new

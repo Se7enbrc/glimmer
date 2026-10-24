@@ -12,6 +12,8 @@
   Settings → About on Mac.
 - iPhone and iPad can negotiate HEVC and AV1 when hardware decoding is
   available, with 10-bit HDR on supported displays and H.264 fallback.
+- iPhone and iPad can send the streamed picture to a connected display while
+  keeping controls on the device. iPad streams also fit Stage Manager windows.
 
 - Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
   Sequoia, windows and controls use the system's standard materials in place of
