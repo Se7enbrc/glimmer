@@ -53,6 +53,18 @@ extension NativeUIRenderTests {
         }
     }
 
+    @Test(arguments: ["portrait", "landscape", "narrow", "medium"], [false, true])
+    func iPadLabelInventory(layout: String, dark: Bool) async throws {
+        let size = try iPadViewport(layout: layout)
+        for textSize in [DynamicTypeSize.large, .accessibility5] {
+            let label = "ipad-\(layout)-\(dark ? "dark" : "light")-\(textSize == .large ? "default" : "ax5")"
+            try await iPadLauncherInventory(label: label, size: size, dark: dark, textSize: textSize)
+            let model = iPadLibrary(count: 12)
+            try await record(GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model),
+                             name: "\(label)-settings", size: size, dark: dark, textSize: textSize)
+        }
+    }
+
     private func iPadViewport(layout: String) throws -> CGSize? {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let bounds = scene.screen.bounds

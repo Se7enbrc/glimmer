@@ -56,13 +56,17 @@ struct LauncherGallery: View {
                 if style == .buttons {
                     Button { model.launch(app) } label: {
                         HStack(spacing: 12) {
-                            AppGlyph(name: app.name).font(.system(size: 20)).accessibilityHidden(true)
+                            if !dynamicTypeSize.isAccessibilitySize {
+                                AppGlyph(name: app.name).font(.system(size: 20)).accessibilityHidden(true)
+                            }
                             Text(app.name).fontWeight(.semibold)
                                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .multilineTextAlignment(.leading)
                             Spacer(minLength: 0)
-                            Image(systemName: "chevron.right").font(.caption).accessibilityHidden(true)
+                            if !dynamicTypeSize.isAccessibilitySize {
+                                Image(systemName: "chevron.right").font(.caption).accessibilityHidden(true)
+                            }
                         }
                         .frame(maxWidth: .infinity, minHeight: buttonHeight, alignment: .leading)
                         .padding(8)

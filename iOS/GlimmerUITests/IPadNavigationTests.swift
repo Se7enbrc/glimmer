@@ -153,6 +153,30 @@ final class IPadNavigationTests: XCTestCase {
         XCTAssertTrue(forget.isHittable)
     }
 
+    func testWindowLargestTextKeepsSettingsRowsReadable() {
+        let app = XCUIApplication()
+        app.launchEnvironment["GLIMMER_UI_TESTING"] = "many"
+        app.launchArguments = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+        if app.windows.firstMatch.frame.width > 450 {
+            let window = app.windows.firstMatch
+            window.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.99))
+                .press(forDuration: 0.3, thenDragTo: window.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)))
+        }
+        app.scrollViews.firstMatch.swipeUp()
+        let desktop = app.buttons.matching(identifier: "Desktop").firstMatch
+        XCTAssertTrue(desktop.waitForExistence(timeout: 5))
+        recordScreen(app, name: "largest-text-short-app-name")
+        app.buttons["Settings"].tap()
+        let general = app.buttons["General"]
+        XCTAssertTrue(general.waitForExistence(timeout: 5))
+        recordScreen(app, name: "largest-text-short-settings-name")
+        XCTAssertLessThan(general.frame.height, 110)
+    }
+
     private func recordScreen(_ app: XCUIApplication, name: String) {
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = name

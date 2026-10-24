@@ -24,6 +24,7 @@ struct GlimmerSettings: View {
     var addPC: () -> Void = {}
     var pairPC: (HostDiscovery.Discovered) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     enum Page: String, CaseIterable, Identifiable {
         case general, quality, pcs, input
         #if GLIMMER_DIAGNOSTICS
@@ -60,7 +61,11 @@ struct GlimmerSettings: View {
                 Section {
                     ForEach(Page.allCases) { page in
                         NavigationLink { settingsPage(page) } label: {
-                            Label(page.title, systemImage: page.symbol)
+                            if dynamicTypeSize.isAccessibilitySize {
+                                Text(page.title)
+                            } else {
+                                Label(page.title, systemImage: page.symbol)
+                            }
                         }
                     }
                 }
