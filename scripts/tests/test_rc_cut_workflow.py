@@ -49,6 +49,14 @@ class RCCutWorkflowTests(unittest.TestCase):
         self.assertIn("github.ref == 'refs/heads/main'", source.split("  cut:", 1)[1])
         self.assertIn("environment: rc-cut", source)
 
+    def test_candidate_scans_have_separate_concurrency_and_complete_processing(self):
+        for name in ('verify.yml', 'codeql.yml'):
+            source = (WORKFLOW.parent / name).read_text()
+            concurrency = source.split('\nconcurrency:\n', 1)[1].split('\njobs:', 1)[0]
+            self.assertIn('${{ github.ref }}', concurrency)
+        self.assertIn('wait-for-processing: true', (WORKFLOW.parent / 'codeql.yml').read_text())
+        self.assertIn('timeout-minutes: 55', WORKFLOW.read_text())
+
     def test_workflow_run_head_is_a_candidate_only_when_the_pr_targets_main(self):
         source = WORKFLOW.read_text()
         start = source.index("          ready=false")

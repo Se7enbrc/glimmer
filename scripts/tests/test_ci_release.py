@@ -159,6 +159,8 @@ class HostedReleaseTests(unittest.TestCase):
 
     def verified(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
+        self.assertEqual([call["args"] for call in self.calls() if call["tool"] == "release-checks.py"][-1],
+                         [SHA, "--candidate", "--delivery"])
         for part in ("checks", "tests", "asan"):
             output = Path(self.env["GITHUB_OUTPUT"])
             output.write_text("")
@@ -319,7 +321,7 @@ class HostedReleaseTests(unittest.TestCase):
         self.env["FIXTURE_FAIL"] = "git:fetch --quiet origin refs/tags/2026.10.6-rc.1"
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "release-checks.py" for call in self.calls()))
-        self.env["FIXTURE_FAIL"] = "release-checks.py:" + SHA
+        self.env["FIXTURE_FAIL"] = "release-checks.py:" + SHA + " --candidate --delivery"
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
         self.assertNotEqual(self.run_phase("verify-checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "security" or
@@ -346,6 +348,16 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual(clone["args"][2], "https://github.com/Se7enbrc/homebrew-glimmer.git")
         tap = next(call for call in self.calls() if call["tool"] == "homebrew-bump.sh")
         self.assertEqual(tap["args"], ["2026.10.6", "2026.10.6-rc.1"])
+
+    def test_promotion_checks_main_and_candidate_before_authorizing_any_phase(self):
+        self.env.update(RELEASE_OPERATION="promote", GITHUB_REF="refs/heads/main")
+        self.assertEqual(self.run_phase("checks").returncode, 0)
+        checks = [call["args"] for call in self.calls() if call["tool"] == "release-checks.py"]
+        self.assertEqual(checks, [[SHA], ["b" * 40, "--candidate", "--delivery"]])
+        self.env["FIXTURE_FAIL"] = "release-checks.py:" + "b" * 40 + " --candidate --delivery"
+        self.assertNotEqual(self.run_phase("checks").returncode, 0)
+        self.assertNotEqual(self.run_phase("prepare-promotion").returncode, 0)
+        self.assertFalse(any(call["tool"] == "promote-release.py" for call in self.calls()))
 
     def test_failed_precommit_stops_before_verify_and_cannot_authorize_build(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)

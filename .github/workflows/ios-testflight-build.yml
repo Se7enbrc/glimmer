@@ -7,7 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       expected_sha:
-        description: Reviewed candidate branch HEAD with green Verify and CodeQL
+        description:
+          Reserved release-candidate HEAD with direct Verify and CodeQL
         required: true
         type: string
       marketing_version:
@@ -38,9 +39,8 @@ env:
 jobs:
   archive:
     if: >-
-      github.repository == 'Se7enbrc/glimmer' && github.ref != 'refs/heads/main'
-      && github.ref != format('refs/heads/{0}',
-      github.event.repository.default_branch)
+      github.repository == 'Se7enbrc/glimmer' && github.ref ==
+      'refs/heads/release-candidate'
     runs-on: macos-26
     timeout-minutes: 40
     steps:
