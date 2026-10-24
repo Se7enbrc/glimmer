@@ -6,7 +6,7 @@ import UIKit
 @MainActor
 final class TouchTrigger: UISlider {
     let inputTracking: TouchTracking
-    private let label = UILabel()
+    private let label = TouchGlyphLabel()
 
     init(_ element: TouchElement) {
         inputTracking = TouchTracking(element)
@@ -34,9 +34,9 @@ final class TouchTrigger: UISlider {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        TouchAppearance.apply(to: self, pressed: value > 0)
+        let colors = TouchAppearance.apply(to: self, pressed: value > 0)
         label.frame = bounds
-        label.textColor = tintColor
+        label.colors = colors
         accessibilityValue = "\(Int(value * 100))%"
     }
 

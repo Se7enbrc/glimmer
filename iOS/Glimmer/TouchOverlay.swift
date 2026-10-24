@@ -89,10 +89,22 @@ private struct TouchMenuStyle: ButtonStyle {
         let colors = TouchAppearance.colors(style: colorScheme == .dark ? .dark : .light,
                                            contrast: contrast == .increased, opaque: reduceTransparency,
                                            pressed: configuration.isPressed)
-        configuration.label.frame(width: 44, height: 44).contentShape(.rect)
-            .foregroundStyle(Color(uiColor: colors.glyph))
+        configuration.label.labelStyle(TouchMenuLabelStyle(colors: colors))
+            .frame(width: 44, height: 44).contentShape(.rect)
             .background(Color(uiColor: colors.fill), in: .circle)
-            .overlay { Circle().stroke(Color(uiColor: colors.border), lineWidth: 1) }
+            .overlay { Circle().stroke(Color(uiColor: colors.border), lineWidth: contrast == .increased ? 2 : 0.75) }
+    }
+}
+
+private struct TouchMenuLabelStyle: LabelStyle {
+    let colors: TouchAppearance.Colors
+
+    func makeBody(configuration: Configuration) -> some View {
+        Label { configuration.title } icon: {
+            if let image = TouchAppearance.symbol("ellipsis", colors: colors) {
+                Image(uiImage: image)
+            }
+        }.labelStyle(.iconOnly)
     }
 }
 

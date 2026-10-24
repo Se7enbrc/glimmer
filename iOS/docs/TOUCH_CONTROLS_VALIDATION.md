@@ -38,13 +38,13 @@ renderer remain excluded.
 ## Correctness and build
 
 The Simulator warning-as-error build succeeds with Swift 6 strict concurrency.
-The final appearance correctness run passes 161 tests in 18 suites, including
-ownership, timestamps, unchanged-sample suppression, stale generations, physical
-admission ordering, focus rearming, native accessibility activation/release,
-geometry, persistence and session behavior. Eleven existing native UI tests also
-pass, covering launcher, settings, recovery and stream states. The final scene
-capture tests also assert identical control frames before and after entering
-mouse mode.
+The preceding light appearance correctness run passes 161 tests in 18 suites,
+including ownership, timestamps, unchanged-sample suppression, stale
+generations, physical admission ordering, focus rearming, native accessibility
+activation/release, geometry, persistence and session behavior. Eleven existing
+native UI tests also pass, covering launcher, settings, recovery and stream
+states. The final scene capture tests also assert identical control frames
+before and after entering mouse mode.
 
 The first-frame regression was observed failing against the original policy
 before the fix. A later test caught editor state surviving teardown; the final
@@ -176,6 +176,41 @@ footage, HDR measurements or proof of every game's legibility. No product
 strings are added. The input submission path, frame geometry and previous
 latency/idle measurements are unchanged; no new timing or sustained-energy claim
 is made.
+
+## Translucency refinement
+
+The later maintainer review asks both appearances to recede. Resting fills now
+use 22% light and 18% dark alpha, with 20% outlines and quieter glyphs. Active
+controls gain contrast only while held. Glyph edges use cached text and SF
+Symbol rasters, preserving bright-frame legibility without live blur, layer
+shadows or an additional visible glyph layer. Geometry, input and menu policy
+are unchanged. The earlier light-palette screenshots and contrast claims above
+are historical; the new boards live in `shots-48/phase2/translucent/`.
+
+The new regression fails on the preceding palettes. The final correctness run
+passes 163 tests in 18 suites. Tests cover resting/active alpha, accessibility
+overrides, glyph-to-edge contrast over 21 neutral frame levels, native label
+edges, raster reuse and held-input continuity. This contrast check describes the
+glyph edge, not the control fill or every game's legibility. The small-phone,
+Max, iPad and Duo boards include bright and dim sample frames. Actual
+device/posture gaps remain as listed above.
+
+The updated idle fixture passes both appearances over static and 60 Hz video
+surfaces. Untouched and held controls record zero recurring root layouts, draws
+and input submissions. Static visible/held CPU is 0.21–0.26% of one host core;
+video visible/held CPU is 6.36–6.66%. These short Simulator intervals do not
+prove sustained GPU or device power. The glyphs use cached images and no layer
+shadow.
+
+Three paired input-timing runs per load retain matched stage counts and zero
+dropped records. Median capture-to-send p95 differences are −0.001 ms idle,
+−0.016 ms for input and +0.028 ms under main-thread work. This fixture measures
+submission, not UIKit rendering or physical touch latency. Full CSVs and the 22
+comparison boards are retained in the translucency evidence folder.
+
+No product strings are added or changed. The native controls retain their
+accessibility names and actions. No setting, animation, timer, display link,
+engine policy or Version.xcconfig change is introduced.
 
 ## Integration ownership
 

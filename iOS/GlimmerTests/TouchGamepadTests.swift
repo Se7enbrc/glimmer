@@ -10,6 +10,17 @@ import UIKit
 
 @MainActor
 struct TouchGamepadTests {
+    @Test(arguments: [UIUserInterfaceStyle.light, .dark])
+    func restingControlsRevealTheGameAndOnlyActiveControlsGainContrast(style: UIUserInterfaceStyle) {
+        let rest = TouchAppearance.colors(style: style, contrast: false, opaque: false, pressed: false)
+        let active = TouchAppearance.colors(style: style, contrast: false, opaque: false, pressed: true)
+        #expect(rest.fill.cgColor.alpha <= 0.25)
+        #expect(rest.border.cgColor.alpha <= 0.25)
+        #expect(rest.glyph.cgColor.alpha <= 0.8)
+        #expect(active.fill.cgColor.alpha > rest.fill.cgColor.alpha && active.fill.cgColor.alpha < 0.5)
+        #expect(active.glyph.cgColor.alpha > rest.glyph.cgColor.alpha)
+    }
+
     @Test func lightButtonsUseLightSurfacesAndDarkTitles() throws {
         let button = TouchButton(.a)
         button.overrideUserInterfaceStyle = .light
@@ -24,30 +35,60 @@ struct TouchGamepadTests {
         #expect(red < 0.2)
     }
 
-    @Test(arguments: [false, true])
-    func lightGlyphsKeepTextContrastOverBrightAndDarkVideo(pressed: Bool) throws {
+    @Test(arguments: [UIUserInterfaceStyle.light, .dark], [false, true])
+    func glyphEdgesStayLegibleAcrossVideoLuminance(style: UIUserInterfaceStyle, pressed: Bool) throws {
         for contrast in [false, true] {
             for opaque in [false, true] {
-                let colors = TouchAppearance.colors(style: .light, contrast: contrast, opaque: opaque, pressed: pressed)
-                for background in [SIMD3<Double>(repeating: 0), SIMD3<Double>(repeating: 1)] {
-                    let surface = try composite(colors.fill, over: background)
+                let colors = TouchAppearance.colors(style: style, contrast: contrast, opaque: opaque, pressed: pressed)
+                for level in stride(from: 0.0, through: 1.0, by: 0.05) {
+                    let surface = try composite(colors.fill, over: SIMD3<Double>(repeating: level))
                     let thumb = try composite(colors.thumb, over: surface)
                     for base in [surface, thumb] {
-                        let glyph = try composite(colors.glyph, over: base)
-                        #expect((luminance(base) + 0.05) / (luminance(glyph) + 0.05) >= 4.5)
+                        let glyph = luminance(try composite(colors.glyph, over: base))
+                        let edge = luminance(try composite(colors.edge, over: base))
+                        #expect((max(glyph, edge) + 0.05) / (min(glyph, edge) + 0.05) >= 4.5)
                     }
                 }
             }
         }
     }
 
-    @Test(arguments: [false, true])
-    func darkPaletteRetainsItsExistingColors(pressed: Bool) {
-        let colors = TouchAppearance.colors(style: .dark, contrast: false, opaque: false, pressed: pressed)
-        #expect(colors.fill == UIColor.black.withAlphaComponent(pressed ? 0.65 : 0.26))
-        #expect(colors.glyph == UIColor.white.withAlphaComponent(0.85))
-        #expect(colors.border == UIColor.white.withAlphaComponent(0.38))
-        #expect(colors.thumb == UIColor.white.withAlphaComponent(0.24))
+    @Test(arguments: [UIUserInterfaceStyle.light, .dark])
+    func accessibilityCanStrengthenTheTranslucentPalette(style: UIUserInterfaceStyle) {
+        let rest = TouchAppearance.colors(style: style, contrast: false, opaque: false, pressed: false)
+        let contrast = TouchAppearance.colors(style: style, contrast: true, opaque: false, pressed: false)
+        let opaque = TouchAppearance.colors(style: style, contrast: false, opaque: true, pressed: false)
+        #expect(contrast.glyph.cgColor.alpha == 1 && contrast.edge.cgColor.alpha == 1)
+        #expect(contrast.fill.cgColor.alpha > rest.fill.cgColor.alpha)
+        #expect(opaque.fill.cgColor.alpha == 1)
+    }
+
+    @Test(arguments: [UIUserInterfaceStyle.light, .dark])
+    func nativeTitlesHaveAnEdgeAndSymbolsReuseTheirRaster(style: UIUserInterfaceStyle) throws {
+        let colors = TouchAppearance.colors(style: style, contrast: false, opaque: false, pressed: false)
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.overrideUserInterfaceStyle = style
+        let owner = UIViewController()
+        window.rootViewController = owner
+        let button = TouchButton(.a)
+        owner.view.addSubview(button)
+        window.isHidden = false
+        defer { window.isHidden = true }
+        button.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
+        button.layoutIfNeeded()
+        #expect(button.traitCollection.userInterfaceStyle == style)
+        let label = try #require(button.subviews.compactMap { $0 as? TouchGlyphLabel }.first)
+        #expect(label.colors == colors && label.text == "A")
+        #expect(button.titleLabel?.bounds.isEmpty == true && button.accessibilityLabel == TouchElement.a.name)
+        let text = try #require(TouchAppearance.text("A", font: label.font, colors: colors))
+        #expect(text === TouchAppearance.text("A", font: label.font, colors: colors))
+        for name in ["ellipsis", "plus", "line.3.horizontal", "rectangle.on.rectangle"] {
+            let first = try #require(TouchAppearance.symbol(name, colors: colors))
+            #expect(first.renderingMode == .alwaysOriginal)
+            #expect(first === TouchAppearance.symbol(name, colors: colors))
+        }
+        #expect(button.layer.shadowOpacity == 0)
     }
 
     @Test func appearanceChangesPreserveHeldInputAndHitFrames() async throws {
@@ -77,7 +118,10 @@ struct TouchGamepadTests {
         window.layoutIfNeeded()
         #expect(view.controls.mapValues(\.frame) == frames)
         #expect(submissions == sent && capture.enabled && button.isHighlighted)
-        #expect(button.backgroundColor == UIColor.black.withAlphaComponent(0.65))
+        let heldColors = TouchAppearance.colors(style: .dark, contrast: false, opaque: false, pressed: true)
+        #expect(button.backgroundColor == heldColors.fill)
+        let label = try #require(button.subviews.compactMap { $0 as? TouchGlyphLabel }.first)
+        #expect(label.colors == heldColors)
         window.overrideUserInterfaceStyle = .light
         window.layoutIfNeeded()
         #expect(view.controls.mapValues(\.frame) == frames && submissions == sent)

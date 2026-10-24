@@ -60,41 +60,103 @@ final class TouchTracking {
 
 @MainActor
 enum TouchAppearance {
-    struct Colors {
+    struct Colors: Hashable {
         let fill: UIColor
         let glyph: UIColor
+        let edge: UIColor
         let border: UIColor
         let thumb: UIColor
     }
 
+    private enum Glyph: Hashable {
+        case symbol(String)
+        case text(String, UIFont)
+    }
+    private struct GlyphKey: Hashable {
+        let glyph: Glyph
+        let colors: Colors
+    }
+    // Callers use the fixed gamepad glyphs and mouse-mode labels, never video or arbitrary user text.
+    private static var glyphs: [GlyphKey: UIImage] = [:]
+
     static func colors(style: UIUserInterfaceStyle, contrast: Bool, opaque: Bool, pressed: Bool) -> Colors {
-        if style == .dark {
-            return Colors(fill: .black.withAlphaComponent(opaque ? 1 : (pressed ? 0.65 : 0.26)),
-                          glyph: .white.withAlphaComponent(contrast ? 1 : 0.85),
-                          border: .white.withAlphaComponent(contrast ? 1 : 0.38),
-                          thumb: .white.withAlphaComponent(0.24))
-        }
-        let traits = UITraitCollection(userInterfaceStyle: .light)
+        let dark = style == .dark
+        let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+        let background = UIColor.systemBackground.resolvedColor(with: traits)
         let foreground = UIColor.label.resolvedColor(with: traits)
-        // Static system fills preserve contrast over video without a live backdrop effect.
-        return Colors(fill: UIColor.systemBackground.resolvedColor(with: traits)
-                        .withAlphaComponent(opaque ? 1 : (pressed || contrast ? 0.94 : 0.82)),
-                      glyph: foreground.withAlphaComponent(contrast ? 1 : 0.90),
-                      border: foreground.withAlphaComponent(contrast ? 1 : 0.45),
-                      thumb: UIColor.systemFill.resolvedColor(with: traits))
+        let fill = contrast ? 0.5 : pressed ? (dark ? 0.34 : 0.38) : (dark ? 0.18 : 0.22)
+        return Colors(fill: background.withAlphaComponent(opaque ? 1 : fill),
+                      glyph: foreground.withAlphaComponent(contrast ? 1 : pressed ? 0.94 : dark ? 0.76 : 0.70),
+                      edge: background.withAlphaComponent(contrast ? 1 : pressed ? 0.90 : 0.78),
+                      border: foreground.withAlphaComponent(contrast ? 0.65 : pressed ? 0.35 : 0.20),
+                      thumb: background.withAlphaComponent(contrast ? 0.35 : pressed ? 0.18 : 0.10))
     }
 
     @discardableResult static func apply(to control: UIControl, pressed: Bool = false) -> Colors {
         let contrast = control.traitCollection.accessibilityContrast == .high
-        let dark = control.traitCollection.userInterfaceStyle == .dark
         let colors = colors(style: control.traitCollection.userInterfaceStyle, contrast: contrast,
                             opaque: UIAccessibility.isReduceTransparencyEnabled, pressed: pressed)
         control.backgroundColor = colors.fill
         control.layer.borderColor = colors.border.cgColor
-        control.layer.borderWidth = contrast ? 2 : 1
+        control.layer.borderWidth = contrast ? 2 : 0.75
         control.tintColor = colors.glyph
-        (control as? UIButton)?.setTitleColor(dark ? .white : colors.glyph, for: .normal)
+        (control as? UIButton)?.setTitleColor(colors.glyph, for: .normal)
         control.layer.cornerRadius = min(control.bounds.width, control.bounds.height) / 2
         return colors
+    }
+
+    static func symbol(_ name: String, colors: Colors) -> UIImage? {
+        image(for: .symbol(name), colors: colors)
+    }
+
+    static func text(_ title: String, font: UIFont, colors: Colors) -> UIImage? {
+        image(for: .text(title, font), colors: colors)
+    }
+
+    private static func image(for glyph: Glyph, colors: Colors) -> UIImage? {
+        let key = GlyphKey(glyph: glyph, colors: colors)
+        if let image = glyphs[key] { return image }
+        guard let source = source(for: glyph) else { return nil }
+        let bounds = CGRect(origin: .zero, size: CGSize(width: source.size.width + 2, height: source.size.height + 2))
+        // Rasterize the whole silhouette once; font-path strokes expose interior seams in some letters.
+        let image = UIGraphicsImageRenderer(bounds: bounds).image { _ in
+            let edge = source.withTintColor(colors.edge, renderingMode: .alwaysOriginal)
+            for offset in [CGPoint(x: -0.6, y: 0), CGPoint(x: 0.6, y: 0),
+                           CGPoint(x: 0, y: -0.6), CGPoint(x: 0, y: 0.6)] {
+                edge.draw(at: CGPoint(x: 1 + offset.x, y: 1 + offset.y))
+            }
+            source.withTintColor(colors.glyph, renderingMode: .alwaysOriginal).draw(at: CGPoint(x: 1, y: 1))
+        }.withRenderingMode(.alwaysOriginal)
+        glyphs[key] = image
+        return image
+    }
+
+    private static func source(for glyph: Glyph) -> UIImage? {
+        switch glyph {
+        case .symbol(let name):
+            let size: CGFloat = name == "plus" ? 32 : 17
+            return UIImage(systemName: name, withConfiguration:
+                UIImage.SymbolConfiguration(pointSize: size, weight: .semibold))
+        case .text(let title, let font):
+            guard !title.isEmpty else { return nil }
+            let text = NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: UIColor.white])
+            let size = text.size()
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: ceil(size.width), height: ceil(size.height)))
+            return renderer.image { _ in
+                text.draw(at: .zero)
+            }
+        }
+    }
+}
+
+@MainActor
+final class TouchGlyphLabel: UILabel {
+    var colors: TouchAppearance.Colors? {
+        didSet { if colors != oldValue { setNeedsDisplay() } }
+    }
+
+    override func drawText(in rect: CGRect) {
+        guard let text, let colors, let image = TouchAppearance.text(text, font: font, colors: colors) else { return }
+        image.draw(at: CGPoint(x: (bounds.width - image.size.width) / 2, y: (bounds.height - image.size.height) / 2))
     }
 }

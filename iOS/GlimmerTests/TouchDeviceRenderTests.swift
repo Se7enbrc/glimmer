@@ -52,8 +52,9 @@ struct TouchDeviceRenderTests {
         model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
         var playingFrames: [TouchElement: CGRect]?
         for state in ["before", "after", "editor", "physical", "show-menu", "override",
-                      "hide-menu", "hidden", "disconnected", "bright", "dim", "mouse"] {
-            sample.rootView = TouchSampleFrame(exposure: state == "bright" ? 0.9 : state == "dim" ? -0.75 : 0)
+                      "hide-menu", "hidden", "disconnected", "bright", "bright-active", "dim", "dim-active", "mouse"] {
+            let exposure = state.hasPrefix("bright") ? 0.9 : state.hasPrefix("dim") ? -0.75 : 0
+            sample.rootView = TouchSampleFrame(exposure: exposure)
                 .ignoresSafeArea()
             transition(state, model: model, capture: capture, presence: presence)
             model.editingTouchControls = state == "editor"
@@ -62,6 +63,7 @@ struct TouchDeviceRenderTests {
                 model.receive(.init(sessionID: id, attemptID: UUID(),
                                     event: .input(.mouseMode(registration, enabled: true))))
             }
+            pressFixture(in: host, active: state.hasSuffix("active"))
             window.layoutIfNeeded()
             try await Task.sleep(for: .milliseconds(250))
             #expect(window.bounds.width > window.bounds.height)
@@ -79,6 +81,13 @@ struct TouchDeviceRenderTests {
         await connection.stop()
     }
 
+    private func pressFixture(in host: StreamViewController, active: Bool) {
+        guard let button = touchView(in: host.view)?.controls[.a] as? TouchButton,
+              let action = button.accessibilityCustomActions?[active ? 0 : 1] else { return }
+        _ = action.actionHandler?(action)
+        #expect(button.isHighlighted == active)
+    }
+
     private func verifyAppearance(_ host: StreamViewController, dark: Bool) throws -> [TouchElement: CGRect] {
         let view = try #require(touchView(in: host.view))
         #expect(view.traitCollection.userInterfaceStyle == (dark ? .dark : .light))
@@ -86,6 +95,10 @@ struct TouchDeviceRenderTests {
         var red: CGFloat = 0
         #expect(button.titleColor(for: .normal)?.getRed(&red, green: nil, blue: nil, alpha: nil) == true)
         #expect(dark ? red > 0.8 : red < 0.2)
+        let colors = TouchAppearance.colors(style: dark ? .dark : .light,
+                                           contrast: false, opaque: false, pressed: false)
+        let label = try #require(button.subviews.compactMap { $0 as? TouchGlyphLabel }.first)
+        #expect(label.colors == colors)
         return view.controls.mapValues(\.frame)
     }
 

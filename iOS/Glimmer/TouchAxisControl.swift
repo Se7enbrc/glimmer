@@ -9,7 +9,7 @@ final class TouchAxisControl: UIControl {
     private let thumb = UIView()
     private let symbol = UIImageView(image: UIImage(systemName: "plus"))
     private let cross = CAShapeLayer()
-    private let modeLabel = UILabel()
+    private let modeLabel = TouchGlyphLabel()
     private var value = CGPoint.zero
 
     init(_ element: TouchElement) {
@@ -53,12 +53,15 @@ final class TouchAxisControl: UIControl {
                                y: bounds.midY - value.y * bounds.height * 0.3)
         thumb.backgroundColor = colors.thumb
         thumb.layer.cornerRadius = diameter / 2
-        thumb.layer.borderWidth = 1
-        thumb.layer.borderColor = tintColor.cgColor
+        thumb.layer.borderWidth = layer.borderWidth
+        thumb.layer.borderColor = colors.border.cgColor
         symbol.frame = bounds.insetBy(dx: 20, dy: 20)
-        symbol.tintColor = tintColor
+        if inputTracking.element == .dpad {
+            let image = TouchAppearance.symbol("plus", colors: colors)
+            if symbol.image !== image { symbol.image = image }
+        }
         modeLabel.frame = CGRect(x: 0, y: bounds.midY - 10, width: bounds.width, height: 20)
-        modeLabel.textColor = tintColor
+        modeLabel.colors = colors
         if inputTracking.element == .dpad {
             if cross.frame != bounds {
                 cross.frame = bounds

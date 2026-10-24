@@ -6,12 +6,16 @@ import UIKit
 @MainActor
 final class TouchButton: UIButton {
     let inputTracking: TouchTracking
+    private let glyph = TouchGlyphLabel()
 
     init(_ element: TouchElement) {
         inputTracking = TouchTracking(element)
         super.init(frame: .zero)
         setTitle(element.title, for: .normal)
-        titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        glyph.font = .systemFont(ofSize: 16, weight: .semibold)
+        glyph.isUserInteractionEnabled = false
+        glyph.isAccessibilityElement = false
+        addSubview(glyph)
         if element == .menu || element == .options {
             setTitle(nil, for: .normal)
             let symbol = element == .menu ? "line.3.horizontal" : "rectangle.on.rectangle"
@@ -29,7 +33,21 @@ final class TouchButton: UIButton {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    override func layoutSubviews() { super.layoutSubviews(); TouchAppearance.apply(to: self, pressed: isHighlighted) }
+    // Keep UIButton's title semantics while the styled label supplies its single visible glyph layer.
+    override func titleRect(forContentRect contentRect: CGRect) -> CGRect { .zero }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let colors = TouchAppearance.apply(to: self, pressed: isHighlighted)
+        glyph.frame = bounds
+        if glyph.text != title(for: .normal) { glyph.text = title(for: .normal) }
+        glyph.colors = colors
+        if inputTracking.element == .menu || inputTracking.element == .options {
+            let name = inputTracking.element == .menu ? "line.3.horizontal" : "rectangle.on.rectangle"
+            let image = TouchAppearance.symbol(name, colors: colors)
+            if self.image(for: .normal) !== image { setImage(image, for: .normal) }
+        }
+    }
 
     override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
         let accepted = inputTracking.begin(at: touch.location(in: self), size: bounds.size, timestamp: touch.timestamp)

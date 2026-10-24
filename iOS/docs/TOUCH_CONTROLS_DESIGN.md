@@ -210,18 +210,24 @@ layouts. Do not auto-create records for every game launch.
 
 ## Appearance, accessibility and haptics
 
-During play, use static translucent system neutral fills, semantic labels and a
-contrasting edge. Light appearance uses an 82% system background fill, dark
-labels at 90%, and a dark 45% edge. Pressed and Increase Contrast light fills
-rise to 94%; Reduce Transparency makes the fill opaque. The dark palette keeps
-its existing 26% fill, 65% pressed fill and white glyphs. These are design
-tokens, not user settings.
+During play, use static low-alpha system neutral fills. Resting light controls
+use 22% fill and dark controls 18%, with 20% outlines and softer glyphs at 70%
+and 76%. Active controls rise to 38% light or 34% dark fill and 94% glyphs only
+while held, then return immediately. There is no idle fade or animation.
+
+A fine opposite-tone edge keeps glyphs legible over bright and dark frames.
+Native labels draw cached glyph images into their existing text layers; SF
+Symbols use small cached rasters with the edge baked in. This adds no layer
+shadow, live blur or frame sampling. Stick thumbs use a quiet 10% fill at rest.
+Increase Contrast strengthens the palette; Reduce Transparency makes control
+fills opaque. These are design tokens, not settings.
 
 The stream follows system appearance. Light controls look light over bright and
-dark game frames; dark controls retain their existing appearance. The ellipsis
-keeps its existing frame and position while adopting the same palette. The
-editor and stream menu use the system's materials in the current appearance.
-This approved refinement replaces the original always-dark recommendation.
+dark game frames; dark controls use the corresponding translucent dark fill. The
+ellipsis keeps its existing frame and position while adopting the same palette.
+The editor and stream menu use the system's materials in the current appearance.
+These approved refinements replace the original always-dark recommendation and
+the subsequent heavier light fills.
 
 The light pause/status surface uses regular system material behind its text. It
 is absent during gameplay; the dark pause surface retains its existing style.

@@ -12,11 +12,12 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct TouchIdleEvidenceTests {
-    @Test(arguments: [false, true])
-    func visibleAndHeldControlsDoNotScheduleRecurringWork(movingVideo: Bool) async throws {
+    @Test(arguments: [false, true], [UIUserInterfaceStyle.light, .dark])
+    func visibleAndHeldControlsDoNotScheduleRecurringWork(movingVideo: Bool, style: UIUserInterfaceStyle) async throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.keyWindow
         let window = UIWindow(windowScene: scene)
+        window.overrideUserInterfaceStyle = style
         let owner = TouchIdleHost()
         window.rootViewController = owner
         window.makeKeyAndVisible()
@@ -82,8 +83,8 @@ struct TouchIdleEvidenceTests {
                 + "\(video.submitted - startVideo)")
             if let contact { capture.end(contact, at: ProcessInfo.processInfo.systemUptime) }
         }
-        Attachment.record(Array((lines.joined(separator: "\n") + "\n").utf8),
-                          named: "touch-idle-\(movingVideo ? "video" : "static").csv")
+        let name = "touch-idle-\(style == .dark ? "dark" : "light")-\(movingVideo ? "video" : "static").csv"
+        Attachment.record(Array((lines.joined(separator: "\n") + "\n").utf8), named: name)
         capture.detach()
         await connection.stop()
     }
