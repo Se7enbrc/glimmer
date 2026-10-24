@@ -104,6 +104,8 @@
 - Diagnostics describes saved files correctly on both iPhone and iPad.
 - Streams on an external display show the whole picture without cropping when
   the display has a different shape.
+- Avoid unnecessary video processing while you briefly switch away from a
+  stream.
 
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.

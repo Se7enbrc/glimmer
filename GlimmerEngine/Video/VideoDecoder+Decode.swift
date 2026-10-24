@@ -137,7 +137,7 @@ extension VideoDecoder {
     /// `decodeQueue` so recvfrom never waits on VideoToolbox. Returns DR_OK unless a sustained stall, a
     /// post-gate P-frame or an armed resync latch needs the depacketizer to wait for an IDR.
     nonisolated func decodeAssembledFrame(
-        pictureData: Data, newSps: Data?, newPps: Data?, newVps: Data?,
+        pictureData: @autoclosure () -> Data, newSps: Data?, newPps: Data?, newVps: Data?,
         isIDR: Bool, rtpTimestamp: UInt32, totalLength: Int32
     ) -> Int32 {
         // ---- Hidden-window decode gate (suppression stage 2 - see the
@@ -235,7 +235,7 @@ extension VideoDecoder {
         }
 
         let pending = PendingDecode(
-            pictureData: pictureData, newSps: newSps, newPps: newPps, newVps: newVps,
+            pictureData: pictureData(), newSps: newSps, newPps: newPps, newVps: newVps,
             isIDR: isIDR, rtpTimestamp: rtpTimestamp, totalLength: totalLength, epoch: epoch,
             forceSessionRecreate: forceSessionRecreate)
 
