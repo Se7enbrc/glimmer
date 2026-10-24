@@ -19,7 +19,7 @@ extension InputForwarder {
     /// A ⌘ key equivalent, offered before the main menu sees it. Claimed and
     /// forwarded to the PC only while ⌘ is.
     func streamView(_ view: StreamInputView, handleKeyEquivalent event: NSEvent) -> Bool {
-        if consumeStopShortcut(event) { return true }
+        if consumeStopShortcut(event, entry: "performKeyEquivalent") { return true }
         if view.hasMarkedText(), !event.modifierFlags.isDisjoint(with: [.command, .control]) {
             view.cancelComposition()
         }
