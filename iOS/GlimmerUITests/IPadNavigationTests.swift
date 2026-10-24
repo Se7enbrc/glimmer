@@ -62,8 +62,14 @@ final class IPadNavigationTests: XCTestCase {
             system.buttons["Zoom-button"].press(forDuration: 1)
             let item = system.descendants(matching: .any)
                 .matching(identifier: mode == "slide" ? "Enter Slide Over" : "Left and Right").firstMatch
-            XCTAssertTrue(item.waitForExistence(timeout: 5))
-            item.tap()
+            let exitSlide = system.descendants(matching: .any).matching(identifier: "Exit Slide Over").firstMatch
+            if mode == "slide", exitSlide.exists {
+                recordScreen(system, name: "whole-window-slide-already-active")
+                app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.85)).tap()
+            } else {
+                XCTAssertTrue(item.waitForExistence(timeout: 5))
+                item.tap()
+            }
         }
         recordScreen(app, name: "whole-window-\(mode)-launcher")
         app.buttons["Desktop"].tap()
