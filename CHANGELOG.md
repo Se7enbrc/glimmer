@@ -66,6 +66,8 @@
 - Returning to Glimmer keeps the launcher ready when the PC answered recently,
   while checking its status in the background. A running game no longer makes
   the launcher wait for the PC to become idle.
+- On iPad, streams start in tall or square windows and keep the whole picture
+  visible when the window is resized.
 
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.

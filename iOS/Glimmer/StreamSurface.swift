@@ -25,6 +25,7 @@ final class StreamSurface: UIView {
         super.layoutSubviews()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        displayLayer.videoGravity = presentationGravity
         displayLayer.frame = bounds
         CATransaction.commit()
     }
@@ -38,8 +39,12 @@ final class StreamSurface: UIView {
         return displayLayer
     }
 
+    private var presentationGravity: AVLayerVideoGravity {
+        traitCollection.userInterfaceIdiom == .pad ? .resizeAspect : .resizeAspectFill
+    }
+
     private func configureDisplayLayer() {
-        displayLayer.videoGravity = .resizeAspectFill
+        displayLayer.videoGravity = presentationGravity
         displayLayer.frame = bounds
         displayLayer.backgroundColor = UIColor.black.cgColor
         layer.addSublayer(displayLayer)

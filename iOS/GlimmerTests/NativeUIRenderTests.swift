@@ -181,6 +181,36 @@ struct NativeUIRenderTests {
                          size: nil, dark: false, portrait: true)
     }
 
+    @Test(arguments: [CGSize(width: 400, height: 700), CGSize(width: 600, height: 600),
+                      CGSize(width: 900, height: 500)], [false, true])
+    func streamStartsInUsableWindow(size: CGSize, dark: Bool) async throws {
+        let fixture = PlaybackFixture()
+        fixture.controllerConnected = true
+        let model = fixture.model()
+        let controller = StreamViewController(model: model, close: {})
+        let pad = UIDevice.current.userInterfaceIdiom == .pad
+        let shouldStart = pad || size.width > size.height
+        let name = "window-\(Int(size.width))-\(Int(size.height))-\(dark ? "dark" : "light")"
+        try await recordController(controller, name: name, size: size, dark: dark, prepare: {
+            #expect(fixture.makes == (shouldStart ? 1 : 0))
+            #expect(model.phase == (shouldStart ? .connecting : .idle))
+            #expect(controller.surface.displayLayer.videoGravity == (pad ? .resizeAspect : .resizeAspectFill))
+            if fixture.makes == 1 {
+                model.receive(fixture.update(.firstFrame))
+                model.showControls()
+            }
+            controller.view.frame.size = CGSize(width: size.height, height: size.width)
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
+            controller.startWhenReady()
+            if shouldStart { #expect(fixture.makes == 1) }
+            let replacement = controller.surface.replaceDisplayLayer { _ in }
+            #expect(replacement.videoGravity == (pad ? .resizeAspect : .resizeAspectFill))
+        })
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
     @Test func actualLauncherAllowsPortraitAfterStreamDismissal() async throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.keyWindow
@@ -213,14 +243,19 @@ struct NativeUIRenderTests {
         var captureError: Error?
         do {
             try await waitForUIState("The launcher's stream cover did not appear.") {
-                launcher.presentedViewController != nil && stream.phase == .connecting
+                launcher.presentedViewController != nil
             }
             let player = try #require(launcher.presentedViewController)
-            try await waitForOrientation(scene, portrait: false, controller: player)
+            try await waitForUIState("The stream did not start in the presented window.") {
+                stream.phase == .connecting
+            }
+            if window.traitCollection.userInterfaceIdiom != .pad {
+                try await waitForOrientation(scene, portrait: false, controller: player)
+                #expect(player.view.bounds.width > player.view.bounds.height)
+            }
             stream.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
             #expect(AppDelegate.orientationMask(for: window) == .landscape)
-            #expect(player.view.bounds.width > player.view.bounds.height)
-            try recordPhase(player.view, name: "orientation-stream-landscape")
+            try recordPhase(player.view, name: "orientation-stream-presented")
         } catch { captureError = error }
         stream.disconnect()
         try await waitForUIState("The launcher's stream cover did not dismiss.") {
@@ -283,7 +318,7 @@ struct NativeUIRenderTests {
         await model.waitUntilStopped()
     }
 
-    @Test func actualSimulatorScenePresentsRecoveryInLandscape() async throws {
+    @Test func actualSimulatorScenePresentsRecovery() async throws {
         let (model, controller) = recoveryController()
         try await recordController(controller, name: "recovery-simulator-landscape", size: nil, dark: true)
         model.stop()
@@ -354,7 +389,7 @@ struct NativeUIRenderTests {
             #expect(scene.effectiveGeometry.interfaceOrientation == .portrait)
             #expect(window.bounds.height > window.bounds.width)
         }
-        if size == nil, host is StreamViewController {
+        if size == nil, host is StreamViewController, window.traitCollection.userInterfaceIdiom != .pad {
             #expect(scene.effectiveGeometry.interfaceOrientation.isLandscape)
             #expect(window.bounds.width > window.bounds.height)
         }
