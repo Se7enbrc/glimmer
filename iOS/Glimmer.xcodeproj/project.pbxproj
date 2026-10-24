@@ -113,6 +113,11 @@
 		9E12EE79B752454994A3EDBF /* NativeInputLifetime.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED971F0EC0A74A1390A03CC6 /* NativeInputLifetime.swift */; };
 		548C531EFF2940A894E74BE3 /* TouchGamepadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */; };
 		1AFD56F03E7B48E790FB679C /* TouchLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF8C717822E54668881721CD /* TouchLayoutTests.swift */; };
+		DFD1E8AB957B4248801A929E /* TouchRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564C2513232040DDA240E15E /* TouchRenderTests.swift */; };
+		EC0C3550ABCC46ABA0E937F7 /* TouchInputEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C84049618503434691CEAC5B /* TouchInputEvidenceTests.swift */; };
+		CF8FB8B4432F487FB40E8472 /* TouchIdleEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B67E7156E5409AA9F9708C /* TouchIdleEvidenceTests.swift */; };
+		20A5B2E0106945C889D94DD5 /* TouchDeviceRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265BEE350AD240AE9718A4D2 /* TouchDeviceRenderTests.swift */; };
+		54B75E820761434DAFC10CD7 /* TouchEvidenceVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A53E4B24FC641FA9C4B7BE8 /* TouchEvidenceVideo.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -248,6 +253,11 @@
 		ED971F0EC0A74A1390A03CC6 /* NativeInputLifetime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeInputLifetime.swift"; sourceTree = "<group>"; };
 		F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchGamepadTests.swift"; sourceTree = "<group>"; };
 		FF8C717822E54668881721CD /* TouchLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchLayoutTests.swift"; sourceTree = "<group>"; };
+		564C2513232040DDA240E15E /* TouchRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchRenderTests.swift"; sourceTree = "<group>"; };
+		C84049618503434691CEAC5B /* TouchInputEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchInputEvidenceTests.swift"; sourceTree = "<group>"; };
+		00B67E7156E5409AA9F9708C /* TouchIdleEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchIdleEvidenceTests.swift"; sourceTree = "<group>"; };
+		265BEE350AD240AE9718A4D2 /* TouchDeviceRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchDeviceRenderTests.swift"; sourceTree = "<group>"; };
+		6A53E4B24FC641FA9C4B7BE8 /* TouchEvidenceVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchEvidenceVideo.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -329,6 +339,11 @@
 			isa = PBXGroup;
 			children = (
 				78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */,
+				6A53E4B24FC641FA9C4B7BE8 /* TouchEvidenceVideo.swift */,
+				265BEE350AD240AE9718A4D2 /* TouchDeviceRenderTests.swift */,
+				00B67E7156E5409AA9F9708C /* TouchIdleEvidenceTests.swift */,
+				C84049618503434691CEAC5B /* TouchInputEvidenceTests.swift */,
+				564C2513232040DDA240E15E /* TouchRenderTests.swift */,
 				FF8C717822E54668881721CD /* TouchLayoutTests.swift */,
 				F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */,
 				B9E83A47F40A43F29D3B8CE0 /* TouchSessionTests.swift */,
@@ -577,6 +592,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				4474E8B9FD1A47A480A396C4 /* NativeUIRenderTests+IPhone.swift in Sources */,
+				54B75E820761434DAFC10CD7 /* TouchEvidenceVideo.swift in Sources */,
+				20A5B2E0106945C889D94DD5 /* TouchDeviceRenderTests.swift in Sources */,
+				CF8FB8B4432F487FB40E8472 /* TouchIdleEvidenceTests.swift in Sources */,
+				EC0C3550ABCC46ABA0E937F7 /* TouchInputEvidenceTests.swift in Sources */,
+				DFD1E8AB957B4248801A929E /* TouchRenderTests.swift in Sources */,
 				1AFD56F03E7B48E790FB679C /* TouchLayoutTests.swift in Sources */,
 				548C531EFF2940A894E74BE3 /* TouchGamepadTests.swift in Sources */,
 				DEBAC36260FA4390952C9D1E /* TouchSessionTests.swift in Sources */,
@@ -848,6 +868,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				OTHER_SWIFT_FLAGS = "$(inherited) $(GLIMMER_INPUT_EVIDENCE_FLAGS)";
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -877,6 +898,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				OTHER_SWIFT_FLAGS = "$(inherited) $(GLIMMER_INPUT_EVIDENCE_FLAGS)";
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
