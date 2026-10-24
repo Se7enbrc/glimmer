@@ -61,6 +61,13 @@ def check(root):
     expected = {name: {str(path.relative_to(ios)) for path in (ios / name).rglob("*.swift")}
                 for name in ("Glimmer", "GlimmerTests", "GlimmerUITests")}
     expected["GlimmerTests"].add("../GlimmerTests/VideoColorPatternTests.swift")
+    expected["Glimmer"].update("../" + str(path.relative_to(root))
+                               for path in (root / "Glimmer/ControllerLayouts").glob("*.swift"))
+    expected["GlimmerTests"].update("../GlimmerTests/" + name for name in
+                                  ["ControllerLayoutRenderTests.swift", "ControllerLayoutCaptureTests.swift"])
+    expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in
+                                  ["ControllerMappingTests.swift", "ControllerLayoutPersistenceTests.swift",
+                                   "ControllerLayoutEscapeTests.swift"])
     if any(not sources for sources in expected.values()):
         raise ValueError("Missing iOS app or test sources")
     expected["GlimmerTests"].update(SHARED_SOAK_SOURCES)

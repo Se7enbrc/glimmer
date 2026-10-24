@@ -18,6 +18,7 @@ final class LauncherModel {
     private(set) var discovered: [HostDiscovery.Discovered] = []
     var apps: [HostApp] = []
     private(set) var selectedName: String?
+    var controllerLayoutPC: SavedPC? { selection }
     var busy = false
     private(set) var discoveryDenied = false
     var message: String?

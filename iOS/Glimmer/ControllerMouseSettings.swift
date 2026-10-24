@@ -171,6 +171,12 @@ private struct GlimmerSettingsPage: View {
     }
 
     @ViewBuilder private var controllerSettings: some View {
+        Section("Controllers") {
+            NavigationLink("Controller layouts") {
+                ControllerLayoutsView()
+                    .onAppear { model.prepareControllerLayoutGames() }
+            }
+        }
         Section {
             Toggle(isOn: $touchMouseEnabled) {
                 VStack(alignment: .leading, spacing: 4) {

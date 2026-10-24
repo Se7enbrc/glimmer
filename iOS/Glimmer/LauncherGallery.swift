@@ -74,9 +74,11 @@ struct LauncherGallery: View {
                     .buttonStyle(.glassProminent)
                     .buttonBorderShape(.roundedRectangle)
                     .disabled(model.busy)
+                    .modifier(IOSControllerLayoutAppMenu(model: model, app: app))
                 } else {
                     LauncherCover(model: model, app: app,
                                   height: max(1, (width - CGFloat(count - 1) * 12) / CGFloat(count)) / 0.75)
+                        .modifier(IOSControllerLayoutAppMenu(model: model, app: app))
                 }
             }
         }
