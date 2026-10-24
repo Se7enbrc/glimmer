@@ -59,6 +59,7 @@ struct StreamPlayback {
     var setVisible: (@MainActor (Bool, VideoDecoder.PresentationVisibility) -> Void)?
     var observeControllers: (@MainActor (@escaping @MainActor (Bool) -> Void) -> Void)?
     var touchGamepad: TouchGamepadCapture?
+    var showTouchControls: (@MainActor (Bool) -> Void)?
 
     static func make(launch: StreamLaunch, surface: StreamSurface,
                      quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {
@@ -108,6 +109,7 @@ struct StreamPlayback {
            }, input: input, focusInput: nativeInput.focus, format: format,
            setVisible: { visible, inputs in
                video.setPresentSuppressed(!visible, visibility: inputs, sessionGeneration: session.id)
-           }, observeControllers: nativeInput.observeControllers, touchGamepad: nativeInput.touch)
+           }, observeControllers: nativeInput.observeControllers, touchGamepad: nativeInput.touch,
+           showTouchControls: nativeInput.showTouchControls)
     }
 }

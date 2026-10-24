@@ -9,6 +9,7 @@ final class NativeInputLifetime {
     private(set) var touch: TouchGamepadCapture?
     private var focused = false
     private var physical = false
+    private var touchRequested = false
     private var focusRevision: UInt64 = 0
 
     func start(input: StreamInput, controllers suppliedControllers: IOSControllerCapture? = nil,
@@ -18,9 +19,10 @@ final class NativeInputLifetime {
         self.touch = touch
         self.controllers = controllers
         controllers.beforeAttach = { [weak self] in
-            guard let self else { return }
+            guard let self, !touchRequested else { return }
             self.touch?.detach()
         }
+        // The overlay registers directly with StreamInput and never enters native controller discovery.
         controllers.refreshed = { [weak self] connected in
             guard let self else { return }
             physical = connected
@@ -39,8 +41,13 @@ final class NativeInputLifetime {
         reconcileTouch()
     }
 
+    func showTouchControls(_ requested: Bool) {
+        touchRequested = requested
+        reconcileTouch()
+    }
+
     private func reconcileTouch() {
-        if physical { touch?.detach() } else {
+        if physical && !touchRequested { touch?.detach() } else {
             touch?.attach()
             touch?.setEnabled(focused)
         }
@@ -51,6 +58,7 @@ final class NativeInputLifetime {
     func stop() {
         focused = false
         physical = false
+        touchRequested = false
         touch?.detach()
         controllers?.stop()
         controllers = nil

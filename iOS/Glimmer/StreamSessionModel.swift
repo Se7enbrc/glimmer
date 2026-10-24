@@ -45,7 +45,8 @@ final class StreamSessionModel {
     var touchGamepad: TouchGamepadCapture? { playback?.touchGamepad }
     var editingTouchControls = false
     private(set) var touchGeometryUsable = true
-    var touchControlsVisible: Bool { inputFocused && !controllerConnected }
+    private(set) var touchControlsRequested = false
+    var touchControlsVisible: Bool { inputFocused && (!controllerConnected || touchControlsRequested) }
     var touchMouseActive: Bool {
         guard let registration = touchGamepad?.registration else { return false }
         return mouseControllers.contains(registration)
@@ -162,6 +163,8 @@ final class StreamSessionModel {
     private func complete() {
         backgroundGrace.finish()
         editingTouchControls = false
+        touchControlsRequested = false
+        playback?.showTouchControls?(false)
         if phase.isEnded {
             if let endingMessage { phase = .ended(endingMessage) }
             return
@@ -222,6 +225,12 @@ final class StreamSessionModel {
         synchronizeInputFocus()
     }
 
+    func toggleTouchControls() {
+        guard controllerConnected, phase == .streaming else { return }
+        touchControlsRequested.toggle()
+        playback?.showTouchControls?(touchControlsRequested)
+    }
+
     private func controllerConnectionChanged(_ connected: Bool) {
         guard !phase.isEnded, controllerConnected != connected else { return }
         controllerConnected = connected
@@ -255,6 +264,7 @@ final class StreamSessionModel {
     private func receiveInput(_ event: StreamInput.Event) {
         switch event {
         case .stopRequested: disconnect()
+        // Engine activity includes the touch registration; only native discovery reports physical presence.
         case .controllersActive: break
         case .mouseMode(let controller, let enabled):
             if enabled { mouseControllers.insert(controller) } else { mouseControllers.remove(controller) }

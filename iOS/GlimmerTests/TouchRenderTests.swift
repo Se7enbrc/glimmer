@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import SwiftUI
 import Testing
 @testable import Glimmer
@@ -76,6 +77,38 @@ struct TouchRenderTests {
             TouchSampleFrame()
             TouchLayoutEditor(launch: testLaunch(), area: area, close: {}).dynamicTypeSize(.accessibility5)
         }, name: "editor-largest-text", size: CGSize(width: 844, height: 390), dark: true)
+    }
+
+    @Test(arguments: viewports, [false, true])
+    func physicalControllerOverride(viewport: Viewport, dark: Bool) async throws {
+        let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
+        let capture = TouchGamepadCapture(input: connection.input)
+        let id = UUID()
+        let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+                           focusInput: { capture.setEnabled($0) }, observeControllers: { $0(true) },
+                           touchGamepad: capture, showTouchControls: { requested in
+                               if requested { capture.attach() } else { capture.detach() }
+                           })
+        })
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        defer { capture.detach(); model.stop() }
+        model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+        for state in ["physical", "show-menu", "override", "hide-menu"] {
+            if state.hasSuffix("menu") { model.showControls() }
+            if state == "override" { model.toggleTouchControls(); model.resumeInput() }
+            let view = ZStack {
+                TouchSampleFrame()
+                StreamControls(model: model, close: {}).environment(\.colorScheme, .dark)
+            }
+            let size = viewport.fold ? CGSize(width: viewport.size.width, height: 395) : viewport.size
+            try await record(view, name: "override-\(viewport.name)-\(dark ? "dark" : "light")-\(state)",
+                             size: size, dark: dark)
+        }
+        model.stop()
+        await model.waitUntilStopped()
+        await connection.stop()
     }
 
     private func record(_ content: some View, name: String, size: CGSize, dark: Bool) async throws {

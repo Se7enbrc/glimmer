@@ -58,17 +58,30 @@ sliders and sheets/popovers. The custom work is layout, continuous-axis tracking
 and touch ownership. Encoding, coalescing, focus suppression, release recovery,
 controller mouse mapping and transport remain in the existing engine.
 
+## Per-session override
+
+The approved Phase 2 refinement keeps physical-controller play clear by default:
+touch is the mouse and the gamepad overlay is absent. The stream's **…** menu
+shows **Show touch controls** only while a supported physical controller is
+connected. It enables a separate touch player; **Hide touch controls** restores
+the default. The choice survives reconnects within this stream and resets at
+stream end. It is not a Settings preference or a saved-layout property.
+
+The custom overlay registers directly with StreamInput, never with
+GameController discovery. Engine controller activity must not be used as
+physical presence, because it includes this touch player.
+
 ## First frame and physical handoff
 
 - At the first usable frame, show touch game controls and enable input when no
   supported physical controller is present. Do not require Resume on every
   controller-free launch. Desktop starts the same way; touch mouse remains
   available in the unoccupied center.
-- When a supported physical controller connects, synchronously reject new touch
-  game input, release the touch registration, remove its hit targets and visual
-  controls, then accept physical input. No fade or deliberate debounce. The next
-  rendered frame should be clear. The OS notification itself has delivery
-  latency.
+- Unless the per-session override is selected, when a supported physical
+  controller connects, synchronously reject new touch game input, release the
+  touch registration, remove its hit targets and visual controls, then accept
+  physical input. No fade or deliberate debounce. The next rendered frame should
+  be clear. The OS notification itself has delivery latency.
 - When the last supported physical controller disconnects, restore the saved
   touch layout immediately. Existing fingers must lift before controlling it. A
   controller without a usable extended gamepad must not strand the player.
@@ -362,6 +375,5 @@ Version.xcconfig changes were performed. The local documentation commit uses
 normal hooks, without bypassing checks. Full `make verify` is excluded because
 this task expressly prohibits Mac unit tests.
 
-Next: [review the phone board](assets/touch-controls/board-iphone-small.jpg) and
-approve or revise the design. Phase 2 begins only after explicit maintainer
-approval.
+Next:
+[review the implementation and remaining acceptance evidence](TOUCH_CONTROLS_VALIDATION.md).

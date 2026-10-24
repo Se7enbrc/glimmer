@@ -10,7 +10,8 @@ energy still have gaps.
 
 - Touch gameplay starts with the first usable frame without a physical
   controller. Physical admission retires touch input before registering the
-  controller. Explicit stream menus remain paused through handoff.
+  controller unless the stream-only override was explicitly selected. Explicit
+  stream menus remain paused through handoff.
 - Native UIButton, UIControl and UISlider controls submit complete normalized
   samples synchronously with original touch timestamps. Ownership survives
   movement and rejects stale contacts after cancellation. Fixed sticks, diagonal
@@ -37,7 +38,7 @@ renderer remain excluded.
 ## Correctness and build
 
 The Simulator warning-as-error build succeeds with Swift 6 strict concurrency.
-The approved-source correctness run passes 155 tests in 18 suites, including
+The final override correctness run passes 157 tests in 18 suites, including
 ownership, timestamps, unchanged-sample suppression, stale generations, physical
 admission ordering, focus rearming, native accessibility activation/release,
 geometry, persistence and session behavior. Eleven existing native UI tests also
@@ -156,15 +157,20 @@ policy are unchanged. A quality notice must use overlay placement to avoid
 moving held touch targets. The disconnect documentation retains the branch's
 existing behavior and will need reconciliation with that separate change.
 
-Concurrent manual Show/Hide touch controls and simultaneous physical/touch
-registration edits are preserved unstaged in four files. They are not part of
-the approved automatic-handoff commits. Earlier native-UI captures reflect that
-working-tree variant where a physical controller is selected. The final
-approved-source build uses Swift's file overlay for the four affected sources,
-matching their committed contents without changing the working tree. Binary
-symbol inspection confirms the manual toggle is absent; the approved native-UI
-suite passes separately. `manual-override-review.patch` isolates the retained
-difference.
+The per-session override is now approved and committed. Its stream-menu item
+appears only while streaming with a physical controller. It enables a separate
+touch registration and clears on local stop and remote stream end. Physical
+presence comes only from native discovery, never the engine's aggregate activity
+flag or the overlay's registration. Tests cover two controllers, partial and
+last detach, reconnect, distinct player slots, local/remote teardown and
+lifetime reuse.
+
+The earlier source-overlay build and preserved manual patch remain historical
+evidence. Final override builds use the working sources directly, without a file
+overlay. The reset regression was recorded failing before the fix. Updated
+Simulator captures show default mouse-only play, Show/Hide menu items,
+concurrent touch play and restoration after the last physical controller
+disconnects.
 
 No Mac unit tests, real-device runs, signing changes, push or Version.xcconfig
 changes were performed. Normal commit hooks remain enabled.

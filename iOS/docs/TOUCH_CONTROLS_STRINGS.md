@@ -29,10 +29,10 @@ Test-only art says “ALPINE RUN” and “Illustrative sample frame”. Test
 assertions, CSV headings, test names, storage keys, SF Symbol identifiers and
 the named SwiftUI coordinate space are developer evidence, not product copy.
 
-The concurrently present, unstaged manual override adds “Show touch controls”
-and “Hide touch controls”. Those two strings are not in the approved
-automatic-handoff commits; they are listed here so the working-tree difference
-is explicit.
+The per-session stream menu adds “Show touch controls” and “Hide touch
+controls”. The item appears only during streaming with a physical controller
+connected. The choice resets when the stream ends and has no Settings
+counterpart.
 
 Next:
 [review implementation evidence and remaining acceptance gaps](TOUCH_CONTROLS_VALIDATION.md).

@@ -2,13 +2,19 @@
 
 The first video frame goes straight into play. Touch game controls appear when
 no supported physical controller is connected. Connecting a controller releases
-and hides touch controls before hardware input begins; removing the last one
-restores touch play. Opening the stream menu releases PC input. Resume returns
-input to the PC; connecting a controller never dismisses an explicitly opened
-menu. Disconnect quits the game on the PC unless Leave games running when you
-disconnect is on.
+and hides touch controls before hardware input begins by default; removing the
+last one restores touch play. With hardware connected, touch remains a mouse.
+Opening the stream menu releases PC input. Resume returns input to the PC;
+connecting a controller never dismisses an explicitly opened menu. Disconnect
+quits the game on the PC unless Leave games running when you disconnect is on.
 
 ## Touch game controls
+
+For another player without a controller, open the stream's **…** menu and choose
+**Show touch controls**, then **Resume**. This item appears only while a
+physical controller is connected. **Hide touch controls** restores mouse-only
+touch. The choice lasts for this stream, including controller reconnects, and
+resets when the stream ends. It does not change Settings or the saved layout.
 
 Use the fixed sticks, directional pad, face and shoulder buttons, triggers,
 stick clicks, Options and Menu. Press a trigger fully, then drag inward to

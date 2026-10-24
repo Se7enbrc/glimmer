@@ -263,10 +263,17 @@ struct StreamControls: View {
     }
 
     private var controlLayout: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack { controlActions }
-            HStack { controlActions }.labelStyle(.iconOnly)
-            VStack(alignment: .trailing) { controlActions }
+        VStack(alignment: .trailing) {
+            ViewThatFits(in: .horizontal) {
+                HStack { controlActions }
+                HStack { controlActions }.labelStyle(.iconOnly)
+                VStack(alignment: .trailing) { controlActions }
+            }
+            if model.phase == .streaming, model.controllerConnected {
+                Button(model.touchControlsRequested ? "Hide touch controls" : "Show touch controls",
+                       systemImage: "gamecontroller", action: model.toggleTouchControls)
+                    .buttonStyle(.glass)
+            }
         }.padding()
     }
 
