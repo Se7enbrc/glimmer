@@ -96,6 +96,12 @@ pending, failed or cancelled executions cannot borrow a different run's green
 verdict. Partial reruns may retain successful language jobs only from the same
 run.
 
+Stable promotion keeps main's prerequisite gate and also rechecks the held
+candidate SHA before tag creation, publication and tap authorization. Valid
+attestations and unchanged shipped inputs do not replace the current candidate
+reservation, direct scans or ref-scoped alert verdict. Keep X reserved until its
+intended promotion and any publication or tap repair finish.
+
 ### Shared Mac and iOS reservation
 
 `candidate-reservation` is a durable metadata branch. Its commit message records
@@ -114,8 +120,9 @@ allowed refs. Before first use, confirm the RC App can atomically update both
 refs under the existing rules. Bootstrap refuses any active Mac or iOS delivery;
 finish the shipping release before deploying this tooling.
 
-After **all intended Mac and iOS deliveries** are complete, the maintainer runs
-from a trusted tooling checkout with the normal origin credentials:
+After **all intended Mac and iOS deliveries, including stable promotion and tap
+repair**, are complete, the maintainer runs from a trusted tooling checkout with
+the normal origin credentials:
 
 ```bash
 python3 scripts/candidate_reservation.py release FULL_CANDIDATE_SHA

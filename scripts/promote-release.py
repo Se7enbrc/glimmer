@@ -27,8 +27,11 @@ SHIPPED = ("Glimmer", "GlimmerEngine", "helper", "LoginHelper", "Glimmer.xcodepr
 FEED_BRANCH = "appcast"
 
 
-def command(args, message):
-    result = subprocess.run(args, capture_output=True, text=True, timeout=120)
+def command(args, message, *, read_only=False):
+    environment = os.environ.copy()
+    if read_only:
+        environment['GH_TOKEN'] = environment.get('RELEASE_READ_TOKEN', environment.get('GH_TOKEN', ''))
+    result = subprocess.run(args, capture_output=True, text=True, timeout=120, env=environment)
     if result.returncode:
         raise ValueError(message)
     return result.stdout
@@ -73,6 +76,8 @@ def source(tag, sha):
     short, build = values["MARKETING_VERSION"], values["CURRENT_PROJECT_VERSION"]
     if tag.rsplit("-rc.", 1)[0] != short or not re.fullmatch(r"[1-9][0-9]*", build):
         raise ValueError("candidate version does not match its tag")
+    command([sys.executable, "scripts/release-checks.py", sha, "--candidate"],
+            "candidate reservation or held-ref analysis no longer authorizes promotion", read_only=True)
     return short, build
 
 

@@ -349,6 +349,16 @@ class HostedReleaseTests(unittest.TestCase):
         tap = next(call for call in self.calls() if call["tool"] == "homebrew-bump.sh")
         self.assertEqual(tap["args"], ["2026.10.6", "2026.10.6-rc.1"])
 
+    def test_promotion_checks_main_and_candidate_before_authorizing_any_phase(self):
+        self.env.update(RELEASE_OPERATION="promote", GITHUB_REF="refs/heads/main")
+        self.assertEqual(self.run_phase("checks").returncode, 0)
+        checks = [call["args"] for call in self.calls() if call["tool"] == "release-checks.py"]
+        self.assertEqual(checks, [[SHA], ["b" * 40, "--candidate"]])
+        self.env["FIXTURE_FAIL"] = "release-checks.py:" + "b" * 40 + " --candidate"
+        self.assertNotEqual(self.run_phase("checks").returncode, 0)
+        self.assertNotEqual(self.run_phase("prepare-promotion").returncode, 0)
+        self.assertFalse(any(call["tool"] == "promote-release.py" for call in self.calls()))
+
     def test_failed_precommit_stops_before_verify_and_cannot_authorize_build(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
         self.env["FIXTURE_FAIL"] = "pre-commit:run --all-files"
