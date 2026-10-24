@@ -23,6 +23,13 @@ struct ControllerLayoutDevice: Identifiable {
     let nintendoLabels: Bool
     var hidID: UInt64?
     var captureSource: ControllerLayoutCaptureSource?
+    var savedCategory: String?
+
+    var category: String { controller?.productCategory ?? savedCategory ?? name }
+
+    var diagramFamily: ControllerDiagramFamily {
+        .identify(category: category, name: name, controls: controls)
+    }
 
     var connected: Bool { controller != nil || hidID != nil }
     var isSharedType: Bool {
@@ -165,7 +172,7 @@ final class ControllerLayoutsModel {
                 identity: nil, owner: record.key.owner, reader: nil, controller: nil,
                 controls: record.controls.isEmpty ? record.layout.bindings.map {
                     .init(id: $0.source, name: $0.source.layoutName, symbol: $0.source.layoutSymbol)
-                } : record.controls, nintendoLabels: false))
+                } : record.controls, nintendoLabels: false, savedCategory: record.category))
         }
         self.devices = devices
     }
@@ -174,7 +181,8 @@ final class ControllerLayoutsModel {
         if let current = devices.first(where: { $0.id == device.id }) { return current }
         guard device.connected else { return device }
         return ControllerLayoutDevice(id: device.id, name: device.name, identity: device.identity,
-            owner: device.owner, reader: nil, controller: nil, controls: device.controls, nintendoLabels: device.nintendoLabels)
+            owner: device.owner, reader: nil, controller: nil, controls: device.controls,
+            nintendoLabels: device.nintendoLabels, savedCategory: device.category)
     }
 
     func resolved(_ device: ControllerLayoutDevice, scope: ControllerLayoutScope) -> ControllerLayoutRecord? {

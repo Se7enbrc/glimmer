@@ -85,10 +85,27 @@ struct ControllerLayoutPersistenceTests {
         }
     }
 
+    @Test func olderRecordsWithoutCategoryStillLoad() throws {
+        let value = record(.type(identity().type), .allGames)
+        let data = try JSONEncoder().encode(value)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["category"] == nil)
+        #expect(try JSONDecoder().decode(ControllerLayoutRecord.self, from: data) == value)
+    }
+
+    @Test func olderControlMetadataWithoutPositionStillLoads() throws {
+        let control = ControllerLayoutControl(id: .extra("unknown"), name: "Extra button", symbol: "button.horizontal")
+        let encoded = try JSONEncoder().encode(control)
+        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(object["position"] == nil)
+        #expect(try JSONDecoder().decode(ControllerLayoutControl.self, from: encoded) == control)
+    }
+
     @Test func disconnectedControlNamesAndGlyphsSurvivePersistence() throws {
         var record = record(.type(identity().type), .allGames)
+        record.category = "DualSense"
         record.controls = [.init(id: .button(.a), name: "Cross", symbol: "xmark.circle"),
-                           .init(id: .extra("rear"), name: "Left rear button", symbol: "1.circle")]
+                           .init(id: .extra("rear"), name: "Left rear button", symbol: "1.circle", position: .backLeftPrimary)]
         let library = ControllerLayoutLibrary(records: [record])
         try library.validate()
         let data = try JSONEncoder().encode(library)

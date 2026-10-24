@@ -64,7 +64,7 @@ def check(root):
     expected["Glimmer"].update("../" + str(path.relative_to(root))
                                for path in (root / "Glimmer/ControllerLayouts").glob("*.swift"))
     expected["GlimmerTests"].update("../GlimmerTests/" + name for name in
-                                  ["ControllerLayoutRenderTests.swift", "ControllerLayoutCaptureTests.swift"])
+                                  ["ControllerLayoutRenderTests.swift", "ControllerLayoutCaptureTests.swift", "ControllerDiagramTests.swift"])
     expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in
                                   ["ControllerMappingTests.swift", "ControllerLayoutPersistenceTests.swift",
                                    "ControllerLayoutEscapeTests.swift"])

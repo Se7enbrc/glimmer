@@ -42,14 +42,21 @@ public struct ControllerLayoutBinding: Equatable, Codable, Sendable {
 }
 
 public struct ControllerLayoutControl: Identifiable, Hashable, Codable, Sendable {
+    public enum Position: String, Codable, Sendable {
+        case backLeftPrimary, backRightPrimary, backLeftSecondary, backRightSecondary
+        case topLeftInner, topRightInner
+    }
+
     public let id: ControllerLayoutSource
     public let name: String
     public let symbol: String
+    public let position: Position?
 
-    public init(id: ControllerLayoutSource, name: String, symbol: String) {
+    public init(id: ControllerLayoutSource, name: String, symbol: String, position: Position? = nil) {
         self.id = id
         self.name = name
         self.symbol = symbol
+        self.position = position
     }
 }
 

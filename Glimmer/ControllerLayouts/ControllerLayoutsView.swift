@@ -78,7 +78,9 @@ struct ControllerLayoutEditor: View {
                     .disabled(device.captureSource == nil || !device.connected)
             }
             if !typeSize.isAccessibilitySize, !device.controls.isEmpty {
-                Section { ControllerLayoutDiagram(controls: device.controls) { selected = $0 } }
+                Section {
+                    ControllerLayoutDiagram(family: device.diagramFamily, controls: device.controls) { selected = $0 }
+                }
                     .accessibilityHidden(true)
             }
             Section {
@@ -195,7 +197,10 @@ struct ControllerLayoutEditor: View {
                 available.contains(.button($0))
             }, extras: device.captureSource?.extras ?? [])
             standard.bindings.removeAll { !available.contains($0.source) }
-            do { try await model.save(.init(key: key, name: device.name, layout: standard, controls: device.controls)) } catch {
+            do {
+                try await model.save(.init(key: key, name: device.name, layout: standard,
+                                           controls: device.controls, category: device.category))
+            } catch {
                 failure = "Couldn't save the layout. Try again."
             }
         }
@@ -206,45 +211,5 @@ struct ControllerLayoutEditor: View {
             ControllerLayoutCaptureSheet(model: model, device: device, scope: scope, layout: layout,
                 capture: ControllerLayoutCapture(input: input))
         }
-    }
-}
-
-struct ControllerLayoutDiagram: View {
-    let controls: [ControllerLayoutControl]
-    var select: (ControllerLayoutControl) -> Void
-
-    private let rows: [[ControllerMappedButton]] = [
-        [.leftShoulder, .menu, .options, .rightShoulder], [.up, .y], [.left, .down, .right, .x, .a, .b],
-        [.leftStick, .rightStick], [.paddle1, .paddle2, .paddle3, .paddle4]
-    ]
-
-    var body: some View {
-        VStack(spacing: 8) {
-            ForEach(rows.indices, id: \.self) { index in
-                HStack(spacing: 12) {
-                    ForEach(rows[index], id: \.self) { button in
-                        if let control = controls.first(where: { $0.id == .button(button) }) {
-                            Button { select(control) } label: {
-                                Image(systemName: control.symbol).font(.title2).frame(minWidth: 44, minHeight: 44)
-                            }
-                            .buttonStyle(.borderless)
-                            .help(control.name)
-                        }
-                    }
-                }
-            }
-            let extras = controls.filter { if case .extra = $0.id { return true }; return false }
-            if !extras.isEmpty {
-                Text("Extra buttons").font(.caption).foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 110))]) {
-                    ForEach(extras) { control in
-                        Button { select(control) } label: {
-                            Label(control.name, systemImage: control.symbol).frame(minHeight: 44)
-                        }
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
     }
 }

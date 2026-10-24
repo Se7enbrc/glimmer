@@ -66,7 +66,7 @@ struct ControllerLayoutAssignment: View {
             draft.assign(control.id, to: destination)
             do {
                 try await model.save(.init(key: .init(owner: device.owner, scope: scope), name: device.name,
-                                           layout: draft, controls: device.controls))
+                                           layout: draft, controls: device.controls, category: device.category))
                 dismiss()
             } catch {
                 failure = "Couldn't save the layout. Try again."

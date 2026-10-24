@@ -110,8 +110,18 @@ final class ControllerLayoutReader: @unchecked Sendable {
 
         mutating func add(_ source: ControllerLayoutSource, element: any GCPhysicalInputElement) {
             controls.append(.init(id: source, name: element.localizedName ?? source.layoutName,
-                                  symbol: element.sfSymbolsName ?? source.layoutSymbol))
+                                  symbol: element.sfSymbolsName ?? source.layoutSymbol,
+                                  position: ControllerLayoutReader.position(aliases: element.aliases)))
         }
+    }
+
+    static func position(aliases: Set<String>) -> ControllerLayoutControl.Position? {
+        let positions: [(GCButtonElementName, ControllerLayoutControl.Position)] = [
+            (.backLeftButton(position: 0), .backLeftPrimary), (.backRightButton(position: 0), .backRightPrimary),
+            (.backLeftButton(position: 1), .backLeftSecondary), (.backRightButton(position: 1), .backRightSecondary),
+            (.leftBumper, .topLeftInner), (.rightBumper, .topRightInner)
+        ]
+        return positions.first { aliases.contains($0.0.rawValue) }?.1
     }
 
     private static func discover(_ input: GCControllerLiveInput) -> Discovery {

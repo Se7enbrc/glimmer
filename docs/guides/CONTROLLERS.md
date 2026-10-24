@@ -22,6 +22,10 @@ You can also choose a control from the diagram or list. Sticks can swap axes or
 reverse direction; triggers and extra buttons appear when the connection exposes
 them. **No action** disables a control for the PC.
 
+The diagram follows the controller family. Choose **Back** for exposed rear
+buttons and paddles. If a connection doesn't report a button's position, use the
+list or press the button to capture it.
+
 A game layout starts as a copy of All games. Later changes to All games leave
 that copy alone. **Use All games…** removes the game's override. **Use system
 layout…** restores Apple's mapping for All games and keeps custom game layouts.

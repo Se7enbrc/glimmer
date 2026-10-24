@@ -48,14 +48,16 @@ struct ControllerLayoutBoundaryTests {
 
     @Test func outputButtonsCannotTriggerLocalStop() throws {
         let (core, backend) = rig()
-        core.snapshot.chord = .l3r3
+        core.snapshot.chord = .startSelectL1R1
         let config = try ControllerLayoutConfiguration(layout: .init(bindings: [
-            .init(.button(.a), .button(.leftStick)), .init(.button(.b), .button(.rightStick))
-        ]), shortcuts: nil, available: [.button(.a), .button(.b), .button(.menu), .button(.options)])
+            .init(.button(.a), .button(.menu)), .init(.button(.b), .button(.options)),
+            .init(.button(.x), .button(.leftShoulder)), .init(.button(.y), .button(.rightShoulder))
+        ]), shortcuts: nil, available: Set(ControllerMappedButton.allCases.map { .button($0) }))
         core.configureLayout(config, slot: 0, held: .init(), at: 0)
-        core.receive(slot: 0, buttons: StreamProtocol.A_FLAG | StreamProtocol.B_FLAG,
+        core.receive(slot: 0, buttons: StreamProtocol.A_FLAG | StreamProtocol.B_FLAG | StreamProtocol.X_FLAG | StreamProtocol.Y_FLAG,
                      analog: InputCore.neutral, capturedAt: 1)
-        #expect(backend.calls.last?.buttons == StreamProtocol.LS_CLK_FLAG | StreamProtocol.RS_CLK_FLAG)
+        #expect(backend.calls.last?.buttons == StreamProtocol.PLAY_FLAG | StreamProtocol.BACK_FLAG
+            | StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG)
         #expect(core.chordSlots.isEmpty)
     }
 

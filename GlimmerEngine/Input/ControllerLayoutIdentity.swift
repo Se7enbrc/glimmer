@@ -72,12 +72,15 @@ public struct ControllerLayoutRecord: Codable, Equatable, Sendable {
     public var name: String
     public var layout: ControllerLayout
     public var controls: [ControllerLayoutControl]
+    public var category: String?
 
-    public init(key: ControllerLayoutKey, name: String, layout: ControllerLayout, controls: [ControllerLayoutControl] = []) {
+    public init(key: ControllerLayoutKey, name: String, layout: ControllerLayout,
+                controls: [ControllerLayoutControl] = [], category: String? = nil) {
         self.key = key
         self.name = name
         self.layout = layout
         self.controls = controls
+        self.category = category
     }
 }
 
@@ -137,7 +140,9 @@ public struct ControllerLayoutLibrary: Codable, Equatable, Sendable {
         }
         for record in records {
             try record.key.validate()
-            guard record.name.utf8.count <= 256 else { throw ControllerLayoutError.invalidDocument }
+            guard record.name.utf8.count <= 256, (record.category?.utf8.count ?? 0) <= 256 else {
+                throw ControllerLayoutError.invalidDocument
+            }
             try record.layout.validate()
             try ControllerLayout(bindings: record.controls.map { .init($0.id, .disabled) }).validate()
             guard record.controls.allSatisfy({ $0.name.utf8.count <= 256 && $0.symbol.utf8.count <= 128 }) else {

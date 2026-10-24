@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ShortcutRecordingTests.swift
-//
-//  The recorder rules: a keyboard shortcut can't be ⇧ alone, a main-menu
-//  shortcut, or a copy of another one, and a controller chord needs two buttons.
-//
+// Keyboard recording avoids reserved keys; the controller stop chord stays fixed.
 
 import GlimmerEngine
 import AppKit

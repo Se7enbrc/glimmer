@@ -56,6 +56,7 @@ enum HIDControllerLayouts {
         return ControllerLayoutDevice(id: "hid:\(pad.id)", name: pad.name, identity: identity,
             owner: identity.hardware.map { .hardware($0) } ?? .type(identity.type), reader: nil, controller: nil,
             controls: controls, nintendoLabels: NintendoControllerType.identify(pad) != nil
-                && UserDefaults.standard.bool(forKey: "nintendoButtonLayout"), hidID: pad.id, captureSource: source)
+                && UserDefaults.standard.bool(forKey: "nintendoButtonLayout"), hidID: pad.id, captureSource: source,
+            savedCategory: pad.mapping.isHeuristic ? nil : pad.mapping.name)
     }
 }

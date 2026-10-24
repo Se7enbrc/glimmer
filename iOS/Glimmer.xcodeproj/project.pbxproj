@@ -134,6 +134,9 @@
 		DFF8B6DF512A17FFE0F2F0FD /* ControllerLayoutPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 274787A400D70EA06F8D14C4 /* ControllerLayoutPersistenceTests.swift */; };
 		A0E02F4F853173A2E82B830A /* ControllerLayoutEscapeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0279B56219E39DE8B0E7D75 /* ControllerLayoutEscapeTests.swift */; };
 		549C8756973A8B3B2F9D80E0 /* ControllerLayoutBeforeSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50083031CBD23FA2005B76B4 /* ControllerLayoutBeforeSettings.swift */; };
+		754B8A3DB3F6137CE99DB4A6 /* ControllerDiagramGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0D6053323DDA9B9E9B045F /* ControllerDiagramGeometry.swift */; };
+		AC3D71723C87AA05D590B304 /* ControllerLayoutDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB23EA1F483F54E8A8E253B0 /* ControllerLayoutDiagram.swift */; };
+		38FF5BA317EAB7535622EE67 /* ControllerDiagramTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF6E1D4A71F05874BA58C03 /* ControllerDiagramTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -290,6 +293,9 @@
 		274787A400D70EA06F8D14C4 /* ControllerLayoutPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/ControllerLayoutPersistenceTests.swift"; sourceTree = SOURCE_ROOT; };
 		A0279B56219E39DE8B0E7D75 /* ControllerLayoutEscapeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/ControllerLayoutEscapeTests.swift"; sourceTree = SOURCE_ROOT; };
 		50083031CBD23FA2005B76B4 /* ControllerLayoutBeforeSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutBeforeSettings.swift"; sourceTree = SOURCE_ROOT; };
+		1F0D6053323DDA9B9E9B045F /* ControllerDiagramGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerDiagramGeometry.swift"; sourceTree = SOURCE_ROOT; };
+		AB23EA1F483F54E8A8E253B0 /* ControllerLayoutDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutDiagram.swift"; sourceTree = SOURCE_ROOT; };
+		BAF6E1D4A71F05874BA58C03 /* ControllerDiagramTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerDiagramTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -379,6 +385,7 @@
 				FF8C717822E54668881721CD /* TouchLayoutTests.swift */,
 				F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */,
 				B9E83A47F40A43F29D3B8CE0 /* TouchSessionTests.swift */,
+				BAF6E1D4A71F05874BA58C03 /* ControllerDiagramTests.swift */,
 				50083031CBD23FA2005B76B4 /* ControllerLayoutBeforeSettings.swift */,
 				A0279B56219E39DE8B0E7D75 /* ControllerLayoutEscapeTests.swift */,
 				274787A400D70EA06F8D14C4 /* ControllerLayoutPersistenceTests.swift */,
@@ -448,6 +455,8 @@
 				4C8FAAD8CDA94E67B8FAD847 /* TouchGamepadCapture.swift */,
 				73CC95F8EC63419BB7F0CE6A /* TouchGamepadState.swift */,
 				39635D55176B424A921A367A /* TouchElement.swift */,
+				AB23EA1F483F54E8A8E253B0 /* ControllerLayoutDiagram.swift */,
+				1F0D6053323DDA9B9E9B045F /* ControllerDiagramGeometry.swift */,
 				2B4B2F8017E0FB2092F9C0E4 /* ControllerLayoutShortcutSummary.swift */,
 				E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */,
 				E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */,
@@ -648,6 +657,7 @@
 				1AFD56F03E7B48E790FB679C /* TouchLayoutTests.swift in Sources */,
 				548C531EFF2940A894E74BE3 /* TouchGamepadTests.swift in Sources */,
 				DEBAC36260FA4390952C9D1E /* TouchSessionTests.swift in Sources */,
+				38FF5BA317EAB7535622EE67 /* ControllerDiagramTests.swift in Sources */,
 				549C8756973A8B3B2F9D80E0 /* ControllerLayoutBeforeSettings.swift in Sources */,
 				A0E02F4F853173A2E82B830A /* ControllerLayoutEscapeTests.swift in Sources */,
 				DFF8B6DF512A17FFE0F2F0FD /* ControllerLayoutPersistenceTests.swift in Sources */,
@@ -708,6 +718,8 @@
 				91EC65E9AF4A45B4A3D97340 /* TouchGamepadCapture.swift in Sources */,
 				F61CCAED0B834DEE848A5BD2 /* TouchGamepadState.swift in Sources */,
 				B31A7ED272F743128976E242 /* TouchElement.swift in Sources */,
+				AC3D71723C87AA05D590B304 /* ControllerLayoutDiagram.swift in Sources */,
+				754B8A3DB3F6137CE99DB4A6 /* ControllerDiagramGeometry.swift in Sources */,
 				A1C2C5E3D10A1AC79DB000E4 /* ControllerLayoutShortcutSummary.swift in Sources */,
 				94F7B1607EBE0F53941883A9 /* ControllerLayoutEditing.swift in Sources */,
 				BBDF302987FAF9F7402A6D84 /* ControllerLayoutNavigation.swift in Sources */,
