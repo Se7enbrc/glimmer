@@ -9,6 +9,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4474E8B9FD1A47A480A396C4 /* NativeUIRenderTests+IPhone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */; };
 		9D8E655FEF584B17AD847218 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */; };
 		40E56A34C6B84BFD97F585B0 /* PairingRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */; };
 		9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */; };
@@ -82,6 +83,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests+IPhone.swift"; sourceTree = "<group>"; };
 		8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingRecoveryTests.swift; sourceTree = "<group>"; };
 		E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherGalleryTests.swift"; sourceTree = "<group>"; };
@@ -217,6 +219,7 @@
 		94A1479D3C65CC3651C769B5 /* GlimmerTests */ = {
 			isa = PBXGroup;
 			children = (
+				78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */,
 				2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */,
 				69AB6019C55BC9409A7FA80F /* LauncherTests.swift */,
 				D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */,
@@ -392,6 +395,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4474E8B9FD1A47A480A396C4 /* NativeUIRenderTests+IPhone.swift in Sources */,
 				E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */,
 				7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */,
 				40E56A34C6B84BFD97F585B0 /* PairingRecoveryTests.swift in Sources */,

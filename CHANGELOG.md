@@ -80,6 +80,8 @@
 - PlayStation controllers, including the PlayStation Backbone, are identified
   consistently on Mac, iPhone and iPad so compatible PC games can show matching
   button prompts.
+- On iPhone, larger text has more room for PC names and full app titles. Steam's
+  launcher icon stays visible at every text size.
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.
 - iPhone audio diagnostics now distinguish missing packets, rejected audio and

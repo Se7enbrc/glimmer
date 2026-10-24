@@ -10,6 +10,7 @@ struct LauncherView: View {
     private let styleOverride: LauncherStyle?
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var controllers = ControllerMonitor()
     @State private var model: LauncherModel
     @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
@@ -100,11 +101,20 @@ struct LauncherView: View {
     }
 
     private var pcHeader: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image(systemName: Self.pcSymbol)
-                .font(.largeTitle)
-                .foregroundStyle(Color("AccentColor"))
-                .accessibilityHidden(true)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 16))
+        return layout {
+            HStack {
+                Image(systemName: Self.pcSymbol)
+                    .font(dynamicTypeSize.isAccessibilitySize ? .system(size: 30) : .largeTitle)
+                    .foregroundStyle(Color("AccentColor"))
+                    .accessibilityHidden(true)
+                if dynamicTypeSize.isAccessibilitySize {
+                    Spacer(minLength: 0)
+                    controllerBadge
+                }
+            }
             VStack(alignment: .leading, spacing: 6) {
                 Menu {
                     ForEach(model.savedPCs) { pc in
@@ -114,8 +124,11 @@ struct LauncherView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(model.selectedName ?? "Choose a PC").font(.title2).bold()
-                        Image(systemName: "chevron.down").font(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Image(systemName: "chevron.down")
+                            .font(dynamicTypeSize.isAccessibilitySize ? .system(size: 13) : .caption)
                     }
+                    .multilineTextAlignment(.leading)
                     .foregroundStyle(Color.primary)
                 }
                 .disabled(model.busy)
@@ -125,11 +138,17 @@ struct LauncherView: View {
                     Text("Pair with a PC running Sunshine in Settings.").foregroundStyle(.secondary)
                 }
             }
-            Spacer(minLength: 0)
-            if controllers.controllers.contains(where: \.hasExtendedGamepad) {
-                Image(systemName: "gamecontroller").foregroundStyle(.secondary)
-                    .accessibilityLabel("Controller connected")
+            if !dynamicTypeSize.isAccessibilitySize {
+                Spacer(minLength: 0)
+                controllerBadge
             }
+        }
+    }
+
+    @ViewBuilder private var controllerBadge: some View {
+        if controllers.controllers.contains(where: \.hasExtendedGamepad) {
+            Image(systemName: "gamecontroller").foregroundStyle(.secondary)
+                .accessibilityLabel("Controller connected")
         }
     }
 

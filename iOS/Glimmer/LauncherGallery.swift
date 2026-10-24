@@ -25,7 +25,8 @@ struct AppGlyph: View {
 
     var body: some View {
         if name.localizedCaseInsensitiveContains("steam") {
-            Image("steam")
+            // This custom symbol supplies only a medium master.
+            Image("steam").imageScale(.medium)
         } else {
             Image(systemName: name.lowercased() == "desktop" ? "macwindow" : "gamecontroller.fill")
         }
@@ -37,6 +38,7 @@ struct LauncherGallery: View {
     let model: LauncherModel
     let style: LauncherStyle
     let size: CGSize
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var buttonMinimum: CGFloat = 220
     @ScaledMetric(relativeTo: .body) private var buttonHeight: CGFloat = 44
     @ScaledMetric(relativeTo: .body) private var coverMinimum: CGFloat = 128
@@ -53,8 +55,11 @@ struct LauncherGallery: View {
                 if style == .buttons {
                     Button { model.launch(app) } label: {
                         HStack(spacing: 12) {
-                            AppGlyph(name: app.name).accessibilityHidden(true)
-                            Text(app.name).fontWeight(.semibold).lineLimit(2)
+                            AppGlyph(name: app.name).font(.system(size: 20)).accessibilityHidden(true)
+                            Text(app.name).fontWeight(.semibold)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.right").font(.caption).accessibilityHidden(true)
                         }
@@ -80,6 +85,7 @@ struct LauncherCover: View {
     let model: LauncherModel
     let app: HostApp
     let height: CGFloat
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var image: CGImage?
 
     var body: some View {
@@ -96,7 +102,10 @@ struct LauncherCover: View {
                     .frame(height: height)
                     .clipped()
                     .clipShape(.rect(cornerRadius: 14))
-                Text(app.name).font(.headline).foregroundStyle(.primary).lineLimit(2)
+                Text(app.name).font(.headline).foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

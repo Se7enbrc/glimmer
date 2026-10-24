@@ -356,28 +356,42 @@ struct NativeUIRenderTests {
         return (model, controller)
     }
 
-    private func record<Content: View>(_ content: Content, name: String, size: CGSize?, dark: Bool,
-                                       textSize: DynamicTypeSize = .xxxLarge, portrait: Bool = false,
-                                       prepare: (() async -> Void)? = nil) async throws {
+    func record<Content: View>(_ content: Content, name: String, size: CGSize?, dark: Bool,
+                               textSize: DynamicTypeSize = .xxxLarge, portrait: Bool = false,
+                               landscapeRight: Bool = false,
+                               prepare: (() async -> Void)? = nil,
+                               inspect: ((UIView) throws -> Void)? = nil) async throws {
         let host = UIHostingController(rootView: content.dynamicTypeSize(textSize))
-        try await recordController(host, name: name, size: size, dark: dark, portrait: portrait, prepare: prepare)
+        try await recordController(host, name: name, size: size, dark: dark, portrait: portrait,
+                                   prepare: prepare, textSize: textSize, landscapeRight: landscapeRight,
+                                   inspect: inspect)
     }
 
     private func recordController(_ host: UIViewController, name: String, size: CGSize?, dark: Bool,
-                                  portrait: Bool = false, prepare: (() async -> Void)? = nil) async throws {
+                                  portrait: Bool = false, prepare: (() async -> Void)? = nil,
+                                  textSize: DynamicTypeSize = .xxxLarge, landscapeRight: Bool = false,
+                                  inspect: ((UIView) throws -> Void)? = nil) async throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
         window.frame = scene.effectiveGeometry.coordinateSpace.bounds
-        window.traitOverrides.preferredContentSizeCategory = .extraExtraExtraLarge
+        window.traitOverrides.preferredContentSizeCategory = textSize == .accessibility5
+            ? .accessibilityExtraExtraExtraLarge : (textSize == .large ? .large : .extraExtraExtraLarge)
         host.overrideUserInterfaceStyle = dark ? .dark : .light
         let root: UIViewController
         if let size { root = FixtureViewportController(content: host, size: size) } else { root = host }
         window.rootViewController = root
         window.makeKeyAndVisible()
-        if portrait {
+        if portrait || size == nil {
             root.setNeedsUpdateOfSupportedInterfaceOrientations()
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            let landscape: UIInterfaceOrientationMask = landscapeRight ? .landscapeRight : .landscapeLeft
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: portrait ? .portrait : landscape))
+            try await waitForOrientation(scene, portrait: portrait, controller: root)
+            if landscapeRight {
+                try await waitForUIState("The scene did not rotate to landscape right.") {
+                    scene.effectiveGeometry.interfaceOrientation == .landscapeRight
+                }
+            }
         }
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
         root.view.setNeedsLayout()
@@ -415,6 +429,13 @@ struct NativeUIRenderTests {
         let data = try #require(image.pngData())
         #expect(data.count > 1_000)
         Attachment.record(Array(data), named: "\(name)-large-text.png")
+        try inspect?(host.view)
+        if size == nil {
+            let traits = host.traitCollection
+            let geometry = "bounds=\(host.view.bounds); safeArea=\(host.view.safeAreaInsets); "
+                + "sizeClass=\(traits.horizontalSizeClass.rawValue),\(traits.verticalSizeClass.rawValue)"
+            Attachment.record(geometry, named: "\(name)-geometry.txt")
+        }
     }
 
     private func recordPhase(_ view: UIView, name: String) throws {
