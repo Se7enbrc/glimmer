@@ -72,6 +72,76 @@ struct DiagnosticEvidenceTests {
         #expect(summary.contains("10 seconds before and 2 seconds after"))
     }
 
+    @Test func twoSecondSuppressionSeparatesTrimsReplacementsAndDecodeGatedWork() throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source"), output = root.appendingPathComponent("bundle")
+        let samples: [[String: Any]] = [
+            ["session": session, "event": "bookmark", "t_ms": 2000],
+            ["session": session, "t_ms": 1000, "drops_decode_gated_total": 0],
+            ["session": session, "event": "presentation_suppression", "t_ms": 1000, "suppressed": true],
+            ["session": session, "t_ms": 3000, "drops_decode_gated_total": 0],
+            ["session": session, "t_ms": 4000, "drops_decode_gated_total": 120],
+            ["session": session, "event": "presentation_suppression", "t_ms": 4000, "suppressed": false]
+        ]
+        let data = try samples.reduce(into: Data()) { result, row in
+            result.append(try JSONSerialization.data(withJSONObject: row))
+            result.append(10)
+        }
+        try data.write(to: source.appendingPathComponent("telemetry-test.ndjson"))
+        let receipt = source.appendingPathComponent("telemetry-evidence-\(session).json")
+        var metadata = try DiagnosticEvidence.metadata(receipt)
+        metadata["rows_written"] = samples.count
+        try writeJSON(metadata, to: receipt)
+        let writer = FrameTraceWriter(directory: source, sessionId: session, now: { 1_000_000_000 })
+        writer.start(isoStamp: "test")
+        for (index, stamp) in [900, 1000, 2000, 2999].enumerated() {
+            writer.appendStage(.init(event: .pacerDiscard, rtpTimestamp: UInt32(index + 1),
+                uptimeNanos: UInt64(stamp) * 1_000_000, reason: index == 0 ? .trim : .suppressed,
+                attemptID: UUID().uuidString), sessionId: session)
+        }
+        writer.appendFrame(.init(frameIndex: 10, rtpTimestamp: 900, frameBytes: 100, isIDR: false,
+            presentUptimeMs: 4500, isResumePresent: false, outputToPresent: 2,
+            attemptID: UUID().uuidString), sessionId: session)
+        writer.stop()
+        try DiagnosticEvidence.bundle(sessionID: session, source: source, output: output)
+        let report = try manifest(output)
+        #expect(report["complete"] as? Bool == true)
+        let counts = try #require(report["counts"] as? [String: Int])
+        #expect(counts["trace_pacer_discard_trim"] == 1)
+        #expect(counts["trace_pacer_discard_suppressed"] == 3)
+        #expect(counts["decode_gated_work"] == 120)
+        #expect(counts["trace_pacer_discard"] == nil)
+        let bookmarks = try #require(report["bookmarks"] as? [[String: Any]])
+        let window = try #require(bookmarks.first?["counts"] as? [String: Int])
+        #expect(window["trace_pacer_discard_trim"] == 1)
+        #expect(window["trace_pacer_discard_suppressed"] == 3)
+        #expect(window["decode_gated_work"] == 120)
+        let summary = try String(contentsOf: output.appendingPathComponent("summary.md"), encoding: .utf8)
+        #expect(summary.contains("trace_pacer_discard_trim: 1"))
+        #expect(summary.contains("trace_pacer_discard_suppressed: 3"))
+        #expect(summary.contains("decode_gated_work: 120"))
+        #expect(summary.contains("Suppressed replacements and decode-gated work are intentional"))
+    }
+
+    @Test func bookmarkDecodeGatedWorkSubtractsEarlierSuppression() {
+        let context = DiagnosticEvidence.Context(session: session, source: .temporaryDirectory, output: .temporaryDirectory)
+        context.bookmarks = [.init(timeMs: 20_000)]
+        for (stamp, total) in [(9000.0, UInt64(500)), (10_000.0, 502), (21_000.0, 510), (23_000.0, 520)] {
+            DiagnosticEvidence.observeWindows(["t_ms": stamp, "drops_decode_gated_total": total],
+                                               frame: false, context: context)
+        }
+        #expect(context.bookmarks[0].counts["decode_gated_work"] == 10)
+    }
+
+    @Test(arguments: ["overflow", "backoff", "recovery", "stopped", "rebind", "cleared", "unknown", "PC name"])
+    func discardRollupsKeepReasonsBoundedAndSeparate(reason: String) {
+        let context = DiagnosticEvidence.Context(session: session, source: .temporaryDirectory, output: .temporaryDirectory)
+        DiagnosticEvidence.observe(["event": "pacer_discard", "reason": reason], frame: true, context: context)
+        let safeReason = reason == "PC name" ? "unknown" : reason
+        #expect(context.counts == ["trace_pacer_discard_\(safeReason)": 1])
+    }
+
     @Test(arguments: [false, true])
     func bookmarkCopiesWithDifferentTimestampPrecisionShareOneWindow(legacy: Bool) throws {
         let context = DiagnosticEvidence.Context(session: session, source: .temporaryDirectory, output: .temporaryDirectory)

@@ -1,39 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  VideoDecoder+Suppression.swift
-//
-//  Intentional non-presentation handling: the proactive root-cause half of the
-//  "rfis/idrs and backflows happen when the window isn't focused" fix.
-//
-//  When the stream window is backgrounded / occluded / minimized while the
-//  stream keeps running (the user Cmd-Tabbed to the launcher, moved the window
-//  to a second display that's asleep, etc.), the present path stops retiring
-//  frames - an off-screen window's CADisplayLink stops firing and an occluded
-//  AVSampleBufferVideoRenderer stops draining - so the decode backlog and the
-//  pacer FIFO fill up even though the wire is perfectly healthy. The decode side
-//  must NOT misread that intentional non-present backlog as packet loss and spam
-//  IDR/RFI. This file owns:
-//
-//   * `setPresentSuppressed` - the present-suppressed state transition, with a
-//     drain-to-newest on enter (no IDR) and, on exit, a flush + single-IDR
-//     resync that keeps the retained newest frame for an instant repaint.
-//   * the DECODE GATE (stage 2) - after `decodeGateDelaySeconds` of CONTINUOUS
-//     suppression, stop feeding compressed AUs to VideoToolbox entirely
-//     (decoding 4K120 at ~30% CPU for a pacer that discards every frame is
-//     pure waste). Receive/depacketize/RFI and audio keep flowing untouched;
-//     on resume the gate lifts unconditionally and the first fed frame is
-//     forced to be an IDR via the depacketizer's existing wait-for-IDR gate.
-//   * the PROACTIVE layer-stall observers (renderer requires-flush + layer
-//     failed-to-decode) that reflush sub-frame, before the present watchdog.
-//
-//  The NON-LOSS IDR sources (decode-backlog drop-to-IDR in VideoDecoder+Decode,
-//  pacing-overflow IDR in VideoDecoder+Session) are gated on `presentSuppressed`;
-//  GENUINE on-wire loss detection (the depacketizer's gap detection → RFI/IDR)
-//  is NEVER gated by it. See VideoDecoder.swift for the `presentSuppressed`
-//  state + the observer-token storage.
-//
+// Hidden presentation retains the newest image, then gates decode after the existing delay.
 
 import AVFoundation
 import Foundation
@@ -47,7 +15,8 @@ extension VideoDecoder {
     /// requests one keyframe through the existing recovery path; duplicate visibility notifications
     /// must not repeat either edge. Network-loss recovery remains independent of this gate.
     @MainActor
-    public func setPresentSuppressed(_ suppressed: Bool) {
+    public func setPresentSuppressed(_ suppressed: Bool, visibility: PresentationVisibility = .init(),
+                                     sessionGeneration: UUID? = nil) {
         displayLayerLock.lock()
         presentSuppressedLock.lock()
         let changed = _presentSuppressed != suppressed
@@ -59,15 +28,11 @@ extension VideoDecoder {
         presentSuppressedLock.unlock()
         displayLayerLock.unlock()
         guard changed else { return }
+        recordSuppressionEdge(suppressed, visibility: visibility, sessionGeneration: sessionGeneration)
 
         if suppressed {
             // Arm the pacer before draining so racing submits count as suppressed, not late drops.
-            // Keep both the Diag breadcrumb and gauge: hidden playback must remain visible in captures.
-            log.notice("Present suppressed (window backgrounded/occluded) - draining FIFO to newest, IDR escalation off")
             OSSignposter.render.emitEvent("PresentSuppressed", "state=on")
-            Diag.notice(
-                "present suppressed (window backgrounded/occluded) - pacer holds newest frame only, IDR escalation off",
-                "Stream")
             TelemetryCounters.shared.setPresentSuppressed(true)
             statsCollector.setGapJudgingExcluded(true)
             framePacer?.setPresentSuppressed(true)
@@ -78,11 +43,7 @@ extension VideoDecoder {
             armDecodeGateTimer()
         } else {
             // Keep the freshest frame for the first visible tick, then reuse flush/rebuild/IDR recovery.
-            log.notice("Present un-suppressed (window refocused) - newest frame retained, flush + single IDR resync")
             OSSignposter.render.emitEvent("PresentSuppressed", "state=off")
-            Diag.notice(
-                "present un-suppressed (window refocused) - retained newest frame presents, single IDR resync",
-                "Stream")
             TelemetryCounters.shared.setPresentSuppressed(false)
             statsCollector.setGapJudgingExcluded(false)
             framePacer?.setPresentSuppressed(false)

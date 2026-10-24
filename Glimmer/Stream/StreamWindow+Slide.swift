@@ -101,7 +101,7 @@ extension StreamWindow {
         let completion: @MainActor () -> Void = { [weak self] in
             guard let self else { return }
             self.applyPresentationOptions(coversNotch: self.coversNotch)
-            self.refreshPresentationVisibility()
+            self.refreshPresentationVisibility(reason: .coverReturnCompleted)
         }
         if coverTransition(.back, reduceMotion: reduceMotion) == .fade {
             fadeCover(entering: true, completion: completion)

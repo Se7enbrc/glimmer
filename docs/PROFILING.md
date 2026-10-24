@@ -280,6 +280,37 @@ cause.
 `present_stall`. VT uses its real-time hint; Sunshine streams have no B-frame
 temporal-processing requirement.
 
+### Presentation suppression
+
+Use `presentation_suppression` edges to explain hidden intervals before scoring
+pacing loss. The session log writes `Presentation suppression: {JSON}`; metrics
+NDJSON carries the same event fields plus its usual `ts` and `session` header.
+
+- `suppressed`, `reason` and uptime `t_ms` identify each enter or exit.
+  Duplicate visibility notifications emit no edge. Reasons are fixed codes such
+  as `occlusion_changed`, `miniaturized`, `first_frame_reveal_completed` and
+  `scene_availability`.
+- `session_generation` is the session's random UUID, or a decoder-lifetime UUID
+  for callers without a session. `presentation_generation` is the decoder's
+  suppression/admission generation.
+- Mac fields are `window_visible`, `minimized`, `occlusion_visible`, the numeric
+  `occlusion_state`, `revealing`, `alpha_zero`, `mini_player`, `app_active`,
+  `full_screen` and `full_screen_transition` (`idle`, `entering` or `exiting`).
+- iOS fields are `app_active`, `background`, `protected_data_available` and
+  `returned_in_time`. Unavailable platform inputs are omitted. These records
+  contain no window titles, PC names or picture contents.
+
+Evidence bundles split session and bookmark `pacer_discard` counts into
+`trace_pacer_discard_<reason>`. `trim`, `overflow` and `backoff` describe pacing
+work; `suppressed` counts intentional hidden-frame replacements. `recovery`,
+`stopped`, `rebind` and `cleared` remain separate. Missing or unknown reasons
+use `unknown`; they are never inferred to be trims.
+
+`decode_gated_work` comes from `drops_decode_gated_total`, separately from pacer
+trace rows. Bookmark work uses counter deltas at sample time, so boundaries are
+approximate. These are counts, not a visible-playback loss percentage. Preserve
+suppression transitions when investigating a picture that appeared visible.
+
 ### Frame watchdog
 
 Check decode gating and control activity before treating silence as a dead

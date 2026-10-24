@@ -9,6 +9,7 @@
 //  warp's jump never reaches the PC.
 //
 
+@testable import GlimmerEngine
 import AppKit
 import Testing
 @testable import Glimmer
@@ -142,7 +143,7 @@ struct StreamWindowFirstFrameTests {
         var backgrounded: [Bool] = []
         var suppressed: [Bool] = []
         stream.onBackgroundedChanged = { backgrounded.append($0) }
-        stream.onPresentationSuppressedChanged = { suppressed.append($0) }
+        stream.onPresentationSuppressedChanged = { value, _ in suppressed.append(value) }
 
         stream.backgroundStreamWindow()
 
@@ -158,7 +159,7 @@ struct StreamWindowFirstFrameTests {
         var backgrounded: [Bool] = []
         var suppressed: [Bool] = []
         stream.onBackgroundedChanged = { backgrounded.append($0) }
-        stream.onPresentationSuppressedChanged = { suppressed.append($0) }
+        stream.onPresentationSuppressedChanged = { value, _ in suppressed.append(value) }
         stream.installPresentationVisibilityObserver(nc: center)
         defer { for token in stream.keyObservers { center.removeObserver(token) } }
 
@@ -172,6 +173,34 @@ struct StreamWindowFirstFrameTests {
         center.post(name: NSWindow.didChangeOcclusionStateNotification, object: stream.window)
         #expect(!stream.presentationSuppressed)
         #expect(suppressed == [true])
+    }
+
+    @Test func windowSuppressionDiagnosticUsesNotificationAndCurrentPredicate() throws {
+        let stream = StreamWindow()
+        let center = NotificationCenter()
+        stream.window.title = "Identifying PC and game title"
+        stream.window.alphaValue = 0
+        stream.presentationRevealInProgress = true
+        stream.streamDelegate.closeState.transition = .entering
+        var inputs: VideoDecoder.PresentationVisibility?
+        stream.onPresentationSuppressedChanged = { _, visibility in inputs = visibility }
+        stream.installPresentationVisibilityObserver(nc: center)
+        defer { for token in stream.keyObservers { center.removeObserver(token) } }
+        center.post(name: NSWindow.didChangeOcclusionStateNotification, object: stream.window)
+        let visibility = try #require(inputs)
+        #expect(visibility.reason == .occlusionChanged)
+        #expect(visibility.windowVisible == stream.window.isVisible)
+        #expect(visibility.minimized == stream.window.isMiniaturized)
+        #expect(visibility.occlusionState == UInt64(stream.window.occlusionState.rawValue))
+        #expect(visibility.occlusionVisible == stream.window.occlusionState.contains(.visible))
+        #expect(visibility.appActive == NSApp.isActive)
+        #expect(visibility.revealing == true)
+        #expect(visibility.alphaZero == true)
+        #expect(visibility.miniPlayer == stream.isMiniPlayer)
+        #expect(visibility.fullScreenTransition == .entering)
+        let fields = VideoDecoder.suppressionFields(true, visibility: visibility, sessionGeneration: UUID(),
+            presentationGeneration: 1, uptimeNanos: 0).joined(separator: ",")
+        #expect(!fields.contains(stream.window.title))
     }
 
     /// A failing connect leaves the pointer free for the launcher's Cancel: the

@@ -51,7 +51,7 @@ extension StreamWindow {
             retireFullScreenCover()
             applyMiniPlayerChrome()
             installWindowedLifecycleObservers()
-            setBackgrounded(false)
+            setBackgrounded(false, reason: .miniPlayerChanged)
             onDidBecomeReadyForInput?()
             onMiniPlayerChanged?(true)
         }

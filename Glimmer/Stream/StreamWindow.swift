@@ -5,6 +5,7 @@
 // Pixel-buffer attachments and format metadata preserve that pipeline without manual color conversion.
 // StreamSession owns this cursor-capturing window; coversNotch selects a borderless cover or a full-screen Space.
 
+import GlimmerEngine
 import AppKit
 import AVFoundation
 import CoreGraphics
@@ -160,7 +161,7 @@ public final class StreamWindow {
     public var onBackgroundedChanged: (@MainActor (Bool) -> Void)?
 
     /// Only hidden presentation suppresses the decoder; a visible unfocused Space keeps playing.
-    public var onPresentationSuppressedChanged: (@MainActor (Bool) -> Void)?
+    public var onPresentationSuppressedChanged: (@MainActor (Bool, VideoDecoder.PresentationVisibility) -> Void)?
     var presentationSuppressed = false
 
     /// Called when the stream window moves to a different display (or its
