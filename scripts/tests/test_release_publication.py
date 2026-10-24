@@ -7,6 +7,8 @@ import copy
 import json
 import os
 import plistlib
+import shutil
+import xml.etree.ElementTree as ET
 import subprocess
 from pathlib import Path
 import sys
@@ -38,7 +40,8 @@ class RetryablePublicationTests(unittest.TestCase):
         self.addCleanup(self.env.stop)
         for suffix in ('dmg', 'zip', 'intoto.jsonl'):
             (self.assets / f'Glimmer-{SHORT}.{suffix}').write_bytes(b'original signed fixture')
-        receipt = {'short': SHORT, 'build': '400', 'length': '23', 'signature': 'fixture', 'public_key': 'fixture'}
+        receipt = {'short': SHORT, 'build': '400', 'length': '23', 'signature': 'fixture', 'public_key': 'fixture',
+                   'min_system': '15.7'}
         (self.assets / 'release.json').write_text(json.dumps(receipt))
         (self.assets / 'notes.md').write_text('Fixture notes')
         (self.assets / 'CHANGELOG.md').write_text('Fixture changelog')
@@ -53,6 +56,13 @@ class RetryablePublicationTests(unittest.TestCase):
         self.fail_feed = False
         self.fail_upload = None
         self.feed = '<rss><channel/></rss>'
+        self.tooling = self.root / 'tooling'
+        (self.tooling / 'scripts').mkdir(parents=True)
+        (self.tooling / 'Glimmer').mkdir()
+        for name in ('update-appcast.py', 'release_validation.py', 'changelog.py'):
+            shutil.copy2(Path(publication.__file__).parent / name, self.tooling / 'scripts' / name)
+        (self.tooling / 'Glimmer/Info.plist').write_bytes(
+            plistlib.dumps({'LSMinimumSystemVersion': '26.0'}))
         commands = patch.object(publication, 'command', side_effect=self.command)
         commands.start()
         self.addCleanup(commands.stop)
@@ -83,8 +93,10 @@ class RetryablePublicationTests(unittest.TestCase):
         if args[:2] == ['git', 'show']:
             return self.feed
         if args[1] == 'scripts/update-appcast.py':
-            Path(args[2]).write_text('updated fixture feed')
-            return ''
+            result = subprocess.run(args, cwd=self.tooling, capture_output=True, text=True)
+            if result.returncode:
+                raise ValueError(message)
+            return result.stdout
         if args[1] == 'scripts/github_signed_commit.py':
             if self.fail_feed:
                 raise ValueError(message)
@@ -109,6 +121,67 @@ class RetryablePublicationTests(unittest.TestCase):
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.assets.iterdir()})
         self.assertFalse(any(call[0] in ('make', 'codesign', 'xcodebuild') for call in self.calls))
         self.assertFalse(any('--clobber' in call for call in self.calls))
+
+    def test_candidate_floor_survives_real_feed_publication_and_retry(self):
+        app = self.root / 'Glimmer.app'
+        (app / 'Contents').mkdir(parents=True)
+        (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({
+            'CFBundleShortVersionString': SHORT, 'CFBundleVersion': '400',
+            'SUPublicEDKey': 'fixture', 'LSMinimumSystemVersion': '15.7'}))
+        source_info = plistlib.dumps({'SUPublicEDKey': 'fixture', 'LSMinimumSystemVersion': '26.0'}).decode()
+        with patch.object(publication, 'source_file', side_effect=[source_info, 'Fixture changelog']), \
+                patch.object(publication, 'command', side_effect=[
+                    '/fixture-tools', 'sparkle:edSignature="YWJj" length="23"', 'Fixture notes']), \
+                patch.dict(os.environ, SPARKLE_ED_PRIVATE_KEY='fixture-key'):
+            publication.prepare(self.assets, app)
+        (self.assets / 'manifest.json').unlink()
+        artifact.seal(self.assets, 'signed')
+        os.environ['SIGNED_MANIFEST'] = artifact.digest(self.assets / 'manifest.json')
+        self.assertEqual(publication.load(self.assets)[0]['min_system'], '15.7')
+        publication.publish(self.assets)
+        item = ET.fromstring(self.feed).find('channel/item')
+        self.assertEqual(item.findtext('{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+                                       'minimumSystemVersion'), '15.7')
+        original = self.feed
+        publication.publish(self.assets)
+        self.assertEqual(self.feed, original)
+        receipt, _ = publication.load(self.assets)
+        with self.assertRaisesRegex(ValueError, 'feed update rejected'):
+            publication.publish_feed(self.assets, {**receipt, 'min_system': '26.0'}, TAG)
+        self.assertEqual(self.feed, original)
+
+    def test_receipt_floor_must_be_present_and_valid(self):
+        path = self.assets / 'release.json'
+        receipt = json.loads(path.read_text())
+        for value in (None, '', 15.7, '15', '15.7beta', '15.7\n', '0.0'):
+            with self.subTest(value=value):
+                changed = {**receipt, 'min_system': value}
+                if value is None:
+                    changed.pop('min_system')
+                path.write_text(json.dumps(changed))
+                (self.assets / 'manifest.json').unlink()
+                artifact.seal(self.assets, 'signed')
+                os.environ['SIGNED_MANIFEST'] = artifact.digest(self.assets / 'manifest.json')
+                with self.assertRaisesRegex(ValueError, 'minimum system version'):
+                    publication.load(self.assets)
+
+    def test_distribution_validation_compares_receipt_floor_with_extracted_app(self):
+        def extract(args, message, **kwargs):
+            if args[0] == 'ditto':
+                path = Path(args[-1]) / 'Glimmer.app/Contents/Info.plist'
+                path.parent.mkdir(parents=True)
+                path.write_bytes(plistlib.dumps({'CFBundleShortVersionString': SHORT,
+                                                'CFBundleVersion': '400', 'LSMinimumSystemVersion': floor}))
+            return ''
+        with patch.object(publication, 'command', side_effect=extract), \
+                patch.object(publication, 'validate_distribution') as distribution:
+            floor = '26.0'
+            with self.assertRaisesRegex(ValueError, 'minimum system version'):
+                publication.validate(self.assets)
+            distribution.assert_not_called()
+            floor = '15.7'
+            publication.validate(self.assets)
+            distribution.assert_called_once()
 
     def test_diagnostic_publication_is_manual_only_and_retries_the_same_symbol_assets(self):
         os.environ['RC_TAG'] = TAG + '-diag'
@@ -236,7 +309,8 @@ class PublicationPreparationTests(unittest.TestCase):
         self.dist.mkdir()
         for suffix in ('zip', 'dmg'):
             (self.dist / f'Glimmer-{SHORT}.{suffix}').write_bytes(b'accepted')
-        self.info = {'CFBundleShortVersionString': SHORT, 'CFBundleVersion': '400', 'SUPublicEDKey': 'public'}
+        self.info = {'CFBundleShortVersionString': SHORT, 'CFBundleVersion': '400', 'SUPublicEDKey': 'public',
+                     'LSMinimumSystemVersion': '15.7'}
         (self.app / 'Contents/Info.plist').write_bytes(plistlib.dumps(self.info))
         env = patch.dict(os.environ, GITHUB_REPOSITORY='Se7enbrc/glimmer', GITHUB_RUN_ID='12',
                          GITHUB_RUN_ATTEMPT='1', EXPECTED_SHA=SHA, RC_TAG=TAG, RUNNER_TEMP=str(self.root),
@@ -274,6 +348,7 @@ class PublicationPreparationTests(unittest.TestCase):
 
     def test_prepare_and_persist_include_provenance_hashes_and_public_metadata_only(self):
         publication.prepare(self.dist, self.app)
+        self.assertEqual(json.loads((self.dist / 'release.json').read_text())['min_system'], '15.7')
         signer = next(call for call in self.calls if call[0][0] == '/pinned-tools/sign_update')
         self.assertEqual(signer[1]['input'], 'fixture-private-key\n')
         self.assertNotIn('fixture-private-key', str(signer[0]))
@@ -287,6 +362,17 @@ class PublicationPreparationTests(unittest.TestCase):
         self.assertIn('prerequisites.json', proof['hashes'])
         for path in self.dist.iterdir():
             self.assertNotIn(b'fixture-private-key', path.read_bytes())
+
+    def test_candidate_floor_is_validated_before_signing(self):
+        for value in (None, '', 15.7, '15.7beta'):
+            with self.subTest(value=value):
+                info = {**self.info, 'LSMinimumSystemVersion': value}
+                if value is None:
+                    info.pop('LSMinimumSystemVersion')
+                (self.app / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+                with self.assertRaisesRegex(ValueError, 'minimum system version'):
+                    publication.prepare(self.dist, self.app)
+        self.assertFalse(any(call[0][0] == '/pinned-tools/sign_update' for call in self.calls))
 
     def test_signer_failure_and_bad_length_cannot_prepare_publication(self):
         self.fail_signer = True
