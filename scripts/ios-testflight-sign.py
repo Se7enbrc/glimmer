@@ -258,25 +258,43 @@ def apple_message(error):
     return ' | '.join(parts)[:500]
 
 
+def json_objects(text):
+    # altool --wait can print progress around its JSON, so read every top-level object.
+    decoder, objects, index = json.JSONDecoder(), [], text.find('{')
+    while index != -1:
+        try:
+            value, end = decoder.raw_decode(text, index)
+        except ValueError:
+            index = text.find('{', index + 1)
+            continue
+        if isinstance(value, dict):
+            objects.append(value)
+        index = text.find('{', end)
+    return objects
+
+
 def delivery_outcome(returncode, output):
     result = {'returncode': returncode, 'status': 'delivery_unconfirmed', 'retry_safe': False}
     if len(output) > 8 * 1024**2:
         return result
     try:
-        data = json.loads(output)
-    except (ValueError, UnicodeError):
+        objects = json_objects(output.decode())
+    except UnicodeError:
         return result
-    if not isinstance(data, dict):
+    if not objects:
         return result
-    errors = data.get('errors') or data.get('product-errors') or data.get('error')
-    if returncode == 0 and not errors:
+    found = [data.get('errors') or data.get('product-errors') or data.get('error') for data in objects]
+    errors = [error for value in found if isinstance(value, list) for error in value]
+    if returncode == 0 and not any(found):
         result['status'] = 'upload_and_processing_command_succeeded'
-    if isinstance(errors, list):
+    if errors:
         result['error_codes'] = [str(error['code'])[:32] for error in errors
                                  if isinstance(error, dict) and isinstance(error.get('code'), (str, int))]
         # Apple's validation text names the rejected item; keep only these two fields, capped.
         result['error_messages'] = [apple_message(error) for error in errors if isinstance(error, dict)]
-    delivery = data.get('delivery-id')
-    if isinstance(delivery, str) and re.fullmatch(r'[A-Fa-f0-9-]{36}', delivery):
+    deliveries = [data.get('delivery-id') for data in objects]
+    delivery = next((value for value in deliveries if isinstance(value, str)
+                     and re.fullmatch(r'[A-Fa-f0-9-]{36}', value)), None)
+    if delivery:
         result['delivery_id'] = delivery
     return result

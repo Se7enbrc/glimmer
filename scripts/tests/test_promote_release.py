@@ -156,6 +156,25 @@ class CandidatePromotionTests(unittest.TestCase):
         self.assertIn(f"/releases/download/{TAG}/", self.feed)
         self.assertFalse(any(args[0] in {"make", "codesign", "ditto", "zip", "xcodebuild"} for args in self.calls))
 
+    def test_promotion_and_retry_preserve_candidate_floor_with_explicit_argument(self):
+        self.feed = self.feed.replace('>26.0<', '>15.7<')
+        PROMOTE.prepare(TAG, SHA)
+        PROMOTE.publish(TAG, SHA)
+        self.assertIn('>15.7<', self.feed)
+        original = self.feed
+        PROMOTE.publish(TAG, SHA)
+        self.assertEqual(self.feed, original)
+        updates = [args for args in self.calls if args[1] == 'scripts/update-appcast.py']
+        for args in updates:
+            self.assertEqual(args[args.index('--min-system') + 1], '15.7')
+
+    def test_changed_floor_after_verification_is_rejected(self):
+        PROMOTE.prepare(TAG, SHA)
+        self.feed = self.feed.replace('>26.0<', '>15.7<')
+        with self.assertRaisesRegex(ValueError, 'changed after provenance'):
+            PROMOTE.publish(TAG, SHA)
+        self.assertTrue(self.data['prerelease'])
+
     def test_final_tag_is_annotated_at_candidate_sha_before_release_becomes_stable(self):
         PROMOTE.prepare(TAG, SHA)
         PROMOTE.final_tag(TAG, SHA)
@@ -398,7 +417,15 @@ class ShippedSourceTests(unittest.TestCase):
             git("config", "user.email", "fixture@example.test")
             git("config", "user.name", "fixture")
             git("config", "commit.gpgsign", "false")
-            for path in ("Glimmer/App.swift", "scripts/promote-release.py", "docs/RELEASE.md"):
+            shipped = ("Glimmer/App.swift", "GlimmerEngine/Native/Decoder.swift",
+                       "Glimmer-Bridging-Header.h", "Glimmer/StreamLib.xcconfig",
+                       "Glimmer/Assets.xcassets/icon.json", "helper/main.swift", "LoginHelper/Info.plist",
+                       "Glimmer.xcodeproj/project.pbxproj",
+                       "Glimmer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
+                       "LICENSE", "CREDITS.md", "scripts/dmg/background.png", "scripts/provisioning.py",
+                       "scripts/release_candidate_kind.py", "scripts/hitch-recording-options.json")
+            unshipped = ("scripts/promote-release.py", "docs/RELEASE.md", "iOS/Glimmer/App.swift")
+            for path in (*shipped, *unshipped):
                 (Path(directory) / path).parent.mkdir(parents=True, exist_ok=True)
                 (Path(directory) / path).write_text("one\n")
             git("add", "-A")
@@ -410,7 +437,11 @@ class ShippedSourceTests(unittest.TestCase):
                 git("commit", "-qam", path)
                 diff = subprocess.run(["git", "-C", directory, "diff", "--quiet", candidate, "HEAD", "--",
                                        *PROMOTE.SHIPPED]).returncode
+                git("reset", "--hard", candidate)
                 return diff != 0
-            self.assertFalse(changed("scripts/promote-release.py"))
-            self.assertFalse(changed("docs/RELEASE.md"))
-            self.assertTrue(changed("Glimmer/App.swift"))
+            for path in unshipped:
+                with self.subTest(path=path):
+                    self.assertFalse(changed(path))
+            for path in shipped:
+                with self.subTest(path=path):
+                    self.assertTrue(changed(path))

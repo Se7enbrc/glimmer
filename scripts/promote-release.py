@@ -13,13 +13,15 @@ import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
-from release_validation import validate_feed
+from release_validation import validate_feed, validate_minimum_system
 
 REPO = "Se7enbrc/glimmer"
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 WORKFLOW = f"{REPO}/.github/workflows/release.yml"
 # Everything that goes into the shipped bytes; release tooling, docs and tests may move on.
-SHIPPED = ("Glimmer", "helper", "LoginHelper", "Glimmer.xcodeproj", "Makefile",
+SHIPPED = ("Glimmer", "GlimmerEngine", "helper", "LoginHelper", "Glimmer.xcodeproj", "Makefile",
+           "Glimmer-Bridging-Header.h", "LICENSE", "CREDITS.md", "scripts/dmg",
+           "scripts/provisioning.py", "scripts/release_candidate_kind.py", "scripts/hitch-recording-options.json",
            "scripts/generate-build-info.sh", "scripts/generate-dmg-background.swift",
            "scripts/make-dmg.sh", "scripts/sign-bundle.sh", "scripts/sparkle-tools.sh", "scripts/release-bundle.mk")
 FEED_BRANCH = "appcast"
@@ -105,13 +107,14 @@ def feed_item(short, build, tag):
     url = f"https://github.com/{REPO}/releases/download/{tag}/Glimmer-{short}.zip"
     if enclosure is None or enclosure.get("url") != url:
         raise ValueError("candidate update points at different assets")
-    return text, enclosure.attrib, head
+    min_system = validate_minimum_system(item.findtext(f"{{{SPARKLE}}}minimumSystemVersion"))
+    return text, enclosure.attrib, head, min_system
 
 
 def prepare(tag, sha):
     short, build = source(tag, sha)
     data = release(tag, short)
-    _, enclosure, _ = feed_item(short, build, tag)
+    _, enclosure, _, min_system = feed_item(short, build, tag)
     root = directory()
     root.mkdir(mode=0o700)
     command(["gh", "release", "download", tag, "-R", REPO, "-p", f"Glimmer-{short}.dmg",
@@ -129,18 +132,18 @@ def prepare(tag, sha):
     if enclosure.get("length") != str(zip_path.stat().st_size):
         raise ValueError("candidate ZIP differs from its signed update length")
     proof = {"tag": tag, "sha": sha, "short": short, "build": build,
-             "release_id": data["id"], "hashes": hashes, "enclosure": enclosure}
+             "release_id": data["id"], "hashes": hashes, "enclosure": enclosure, "min_system": min_system}
     (root / "verified.json").write_text(json.dumps(proof))
 
 
 def validate(tag, sha):
     short, build = source(tag, sha)
     data = release(tag, short)
-    _, enclosure, _ = feed_item(short, build, tag)
+    _, enclosure, _, min_system = feed_item(short, build, tag)
     root = directory()
     proof = json.loads((root / "verified.json").read_text())
     expected = {"tag": tag, "sha": sha, "short": short, "build": build,
-                "release_id": data["id"], "enclosure": enclosure}
+                "release_id": data["id"], "enclosure": enclosure, "min_system": min_system}
     if any(proof.get(key) != value for key, value in expected.items()):
         raise ValueError("candidate changed after provenance verification")
     names = {f"Glimmer-{short}.{suffix}" for suffix in ("dmg", "zip")}
@@ -157,13 +160,13 @@ def validate(tag, sha):
 
 def publish(tag, sha):
     proof = validate(tag, sha)
-    text, enclosure, head = feed_item(proof["short"], proof["build"], tag)
+    text, enclosure, head, min_system = feed_item(proof["short"], proof["build"], tag)
     appcast = directory() / "appcast.xml"
     appcast.write_text(text)
     command([sys.executable, "scripts/update-appcast.py", str(appcast), "--promote",
              "--short-version", proof["short"], "--version", proof["build"],
              "--url", enclosure["url"], "--ed-signature", enclosure[f"{{{SPARKLE}}}edSignature"],
-             "--length", enclosure["length"]], "candidate appcast promotion rejected")
+             "--length", enclosure["length"], "--min-system", min_system], "candidate appcast promotion rejected")
     command(["gh", "release", "edit", tag, "-R", REPO, "--prerelease=false", "--latest",
              "--title", f"Glimmer {proof['short']}"], "GitHub candidate promotion failed")
     if appcast.read_text() != text:

@@ -225,5 +225,118 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertIn("passed Verify", out.getvalue())
 
 
+class GitHubReadRetryTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        executable = self.root / 'gh'
+        executable.write_text(f'#!{sys.executable}\n' + '''import json
+from pathlib import Path
+import sys
+root = Path(__file__).parent
+log = root / 'calls.json'
+calls = json.loads(log.read_text()) if log.exists() else []
+calls.append(sys.argv[1:])
+log.write_text(json.dumps(calls))
+responses = json.loads((root / 'responses.json').read_text())
+response = responses[min(len(calls) - 1, len(responses) - 1)]
+sys.stdout.write(response['stdout'])
+sys.stderr.write(response['stderr'])
+sys.exit(response['returncode'])
+''')
+        executable.chmod(0o755)
+        env = patch.dict(CHECKS.os.environ, PATH=str(self.root) + ':' + CHECKS.os.environ['PATH'])
+        env.start()
+        self.addCleanup(env.stop)
+        sleep = patch('time.sleep')
+        self.sleep = sleep.start()
+        self.addCleanup(sleep.stop)
+
+    def responses(self, *responses):
+        (self.root / 'responses.json').write_text(json.dumps(responses))
+        (self.root / 'calls.json').unlink(missing_ok=True)
+        self.sleep.reset_mock()
+
+    def calls(self):
+        return json.loads((self.root / 'calls.json').read_text())
+
+    def test_fake_gh_recovers_transient_failure_on_the_same_endpoint(self):
+        success = {'returncode': 0, 'stdout': '[{"id": 1}]', 'stderr': ''}
+        for error in ('gh: Service Unavailable (HTTP 503)', 'read tcp: connection reset by peer',
+                      'error connecting to api.github.com', 'Get https://api.github.com: EOF'):
+            with self.subTest(error=error):
+                self.responses({'returncode': 1, 'stdout': '[{"partial": true}]', 'stderr': error}, success)
+                self.assertEqual(CHECKS.object_api('actions/workflows/1'), {'id': 1})
+                calls = self.calls()
+                self.assertEqual(len(calls), 2)
+                self.assertEqual(calls[0], calls[1])
+                self.sleep.assert_called_once_with(0.25)
+
+    def test_fake_gh_exhaustion_never_writes_authorization(self):
+        self.responses({'returncode': 1, 'stdout': '', 'stderr': 'gh: Bad Gateway (HTTP 502)'})
+        proof = self.root / 'proof.json'
+        with patch.dict(CHECKS.os.environ, RELEASE_CHECKS_FILE=str(proof)), \
+                patch.object(sys, 'argv', ['release-checks.py', SHA]), \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            CHECKS.main()
+        self.assertEqual(len(self.calls()), 3)
+        self.assertEqual([call.args[0] for call in self.sleep.call_args_list], [0.25, 0.5])
+        self.assertFalse(proof.exists())
+
+    def test_permanent_http_and_invalid_data_are_not_retried(self):
+        for response in (
+                {'returncode': 1, 'stdout': '', 'stderr': 'gh: Unauthorized (HTTP 401)'},
+                {'returncode': 1, 'stdout': '', 'stderr': 'gh: Forbidden (HTTP 403)'},
+                {'returncode': 1, 'stdout': '', 'stderr': 'gh: Not Found (HTTP 404)'},
+                {'returncode': 4, 'stdout': '', 'stderr': 'authentication required'},
+                {'returncode': 1, 'stdout': '', 'stderr': 'unknown flag'},
+                {'returncode': 0, 'stdout': 'not json', 'stderr': ''},
+                {'returncode': 0, 'stdout': '[]', 'stderr': ''}):
+            with self.subTest(response=response):
+                self.responses(response)
+                with self.assertRaises(ValueError) as error:
+                    CHECKS.api('actions/workflows/1')
+                if response['stderr']:
+                    self.assertNotIn(response['stderr'], str(error.exception))
+                self.assertEqual(len(self.calls()), 1)
+                self.sleep.assert_not_called()
+
+    def test_missing_or_red_checks_are_authoritative_without_retry(self):
+        workflow = '.github/workflows/verify.yml'
+        metadata = {'path': workflow, 'state': 'active', 'id': 3}
+        for runs in ([], [run(path=workflow, workflow_id=3, conclusion='failure')]):
+            with self.subTest(runs=runs):
+                self.responses({'returncode': 0, 'stdout': json.dumps([metadata]), 'stderr': ''},
+                               {'returncode': 0, 'stdout': json.dumps([{'workflow_runs': runs}]), 'stderr': ''})
+                with self.assertRaisesRegex(ValueError, 'missing checks|not green'):
+                    CHECKS.check(SHA)
+                self.assertEqual(len(self.calls()), 2)
+                self.sleep.assert_not_called()
+
+    def test_timeout_can_recover_but_repeated_timeouts_fail_closed(self):
+        timeout = subprocess.TimeoutExpired('gh', 20)
+        success = subprocess.CompletedProcess([], 0, '[{"id": 1}]', '')
+        with patch.object(CHECKS.subprocess, 'run', side_effect=[timeout, success]) as execute:
+            self.assertEqual(CHECKS.object_api('actions/workflows/1'), {'id': 1})
+        self.assertEqual(execute.call_count, 2)
+        self.assertTrue(all(call.kwargs['timeout'] <= 20 for call in execute.call_args_list))
+        self.sleep.reset_mock()
+        with patch.object(CHECKS.subprocess, 'run', side_effect=timeout) as execute:
+            with self.assertRaisesRegex(ValueError, 'lookup failed.*nothing authorized'):
+                CHECKS.api('actions/workflows/1')
+        self.assertEqual(execute.call_count, 3)
+
+    def test_total_read_budget_stops_retries_and_bounds_subprocess_timeout(self):
+        failure = subprocess.CompletedProcess([], 1, '', 'gh: Bad Gateway (HTTP 502)')
+        with patch('time.monotonic', side_effect=[0, 0, 60]), \
+                patch.object(CHECKS.subprocess, 'run', return_value=failure) as execute:
+            with self.assertRaisesRegex(ValueError, 'lookup failed.*nothing authorized'):
+                CHECKS.api('actions/workflows/1')
+        self.assertEqual(execute.call_count, 1)
+        self.assertLessEqual(execute.call_args.kwargs['timeout'], 60)
+        self.sleep.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
