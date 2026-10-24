@@ -8,6 +8,47 @@ import Testing
 @testable import Glimmer
 
 struct ControllerDiagramTests {
+    @Test func lineArtworkHidesShellBehindControlsWithoutChangingHitRegions() {
+        let sources: [ControllerLayoutSource] = [.button(.a), .button(.b), .button(.x), .button(.y),
+            .button(.touchpad), .button(.leftShoulder), .button(.rightShoulder), .trigger(.left), .trigger(.right),
+            .button(.paddle1), .button(.paddle2), .button(.paddle3), .button(.paddle4)]
+        let controls = sources.map { ControllerLayoutControl(id: $0, name: "Control", symbol: "") }
+        for family in ControllerDiagramFamily.allCases {
+            for rear in [false, true] {
+                for scale: CGFloat in [0.6, 1, 2] {
+                    let rect = CGRect(x: 7, y: 11, width: 480 * scale, height: 330 * scale)
+                    let surface = ControllerArtworkVisibleSurface(family: family, rear: rear, controls: controls)
+                        .path(in: rect)
+                    let outside = CGPoint(x: rect.minX + scale, y: rect.minY + scale)
+                    #expect(surface.cgPath.contains(outside, using: .evenOdd))
+                    for control in controls {
+                        guard let placement = ControllerDiagramGeometry.visiblePlacement(
+                            control, family: family, rear: rear) else { continue }
+                        let bounds = placement.bounds.applying(.init(scaleX: scale, y: scale))
+                            .offsetBy(dx: rect.minX, dy: rect.minY)
+                        let cap = ControllerButtonShape(family: family, placement: placement, source: control.id)
+                            .path(in: bounds)
+                        for row in 0..<8 {
+                            for column in 0..<8 {
+                                let point = CGPoint(x: bounds.minX + bounds.width * (CGFloat(column) + 0.5) / 8,
+                                                    y: bounds.minY + bounds.height * (CGFloat(row) + 0.5) / 8)
+                                if cap.cgPath.contains(point) {
+                                    #expect(surface.cgPath.contains(point, using: .evenOdd) == false,
+                                            "\(family) \(control.id) at \(scale)")
+                                }
+                            }
+                        }
+                    }
+                    let stick = CGPoint(x: rect.minX + family.leftStick.x * scale,
+                                        y: rect.minY + family.leftStick.y * scale)
+                    if !rear {
+                        #expect(surface.cgPath.contains(stick, using: .evenOdd) == false, "\(family) at \(scale), stick \(stick)")
+                    }
+                }
+            }
+        }
+    }
+
     @Test func familySelectionDoesNotConfuseBackbonePlayStationEditionWithDualSense() {
         #expect(ControllerDiagramFamily.identify(category: "MFi",
             name: "Backbone One PlayStation Edition", controls: []).rawValue == "backbonePlayStation")
@@ -119,7 +160,6 @@ struct ControllerDiagramTests {
     @Test func backboneEditionUsesObservedShellAndFaceLegend() {
         let family = ControllerDiagramFamily.identify(category: "MFi", name: "Backbone One PlayStation Edition", controls: [])
         let cross = ControllerLayoutControl(id: .button(.a), name: "Cross", symbol: ControllerMappedButton.a.layoutSymbol)
-        #expect(family.darkShell == false)
         #expect(family.symbol(for: cross) == "xmark")
         for edition in [family, .backbone] {
             let capture = ControllerLayoutControl(id: .button(.share), name: "Capture", symbol: "square.and.arrow.up")

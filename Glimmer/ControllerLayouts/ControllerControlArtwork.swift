@@ -13,69 +13,31 @@ struct ControllerControlArtwork: View {
     private var isFace: Bool {
         [.button(.a), .button(.b), .button(.x), .button(.y)].contains(control.id)
     }
-    private var dark: Bool {
-        !isFace || family.darkShell || family == .dualSenseEdge
-    }
 
     var body: some View {
-        if control.id == .button(.touchpad) {
-            touchpad
-        } else {
-            let shape = ControllerButtonShape(family: family, placement: placement, source: control.id)
-            shape.fill(LinearGradient(colors: tones, startPoint: .topLeading, endPoint: .bottomTrailing))
-                .overlay { if !shape.isPaddle { glyph } }
-                .frame(width: placement.width * scale, height: placement.height * scale)
-        }
-    }
-
-    private var tones: [Color] {
-        if ControllerButtonShape(family: family, placement: placement, source: control.id).isPaddle {
-            return [Color(white: 0.62), Color(white: 0.28), Color(white: 0.42)]
-        }
-        return dark ? [Color(white: 0.23), Color(white: 0.09)] : [Color(white: 0.96), Color(white: 0.73)]
-    }
-
-    private var legendColor: Color {
-        if family == .xbox {
-            let colors: [ControllerLayoutSource: Color] = [
-                .button(.a): .green, .button(.b): .red, .button(.x): .cyan, .button(.y): .yellow
-            ]
-            if let color = colors[control.id] { return color }
-        }
-        if family == .dualShock {
-            let colors: [ControllerLayoutSource: Color] = [
-                .button(.a): .cyan, .button(.b): .pink, .button(.x): .pink, .button(.y): .mint
-            ]
-            if let color = colors[control.id] { return color }
-        }
-        return dark ? Color(white: 0.83) : Color(white: 0.29)
-    }
-
-    private var glyph: some View {
-        Image(systemName: family.symbol(for: control))
-            .resizable().scaledToFit()
-            .foregroundStyle(legendColor)
-            .frame(width: min(placement.width - 6, isFace ? 20 : 25) * scale,
-                   height: min(placement.height - 6, isFace ? 20 : 15) * scale)
-    }
-
-    private var touchpad: some View {
-        let shape = ControllerTouchpadShape(family: family)
-        let darkPad = family == .dualSenseEdge || (family == .dualShock || family == .dualSenseEdge)
-        return shape.fill(.regularMaterial)
-            .overlay {
-                shape.fill(LinearGradient(colors: darkPad ? [Color(white: 0.23), Color(white: 0.12)]
-                    : [Color(white: 0.91), Color(white: 0.79)], startPoint: .top, endPoint: .bottom))
+        let shape = ControllerButtonShape(family: family, placement: placement, source: control.id)
+        ZStack {
+            if !shape.isPaddle && placement.width == placement.height {
+                Circle().stroke(.primary, lineWidth: 1.2 * scale)
+            } else {
+                shape.stroke(.primary, style: StrokeStyle(lineWidth: 1.2 * scale, lineCap: .round, lineJoin: .round))
             }
-            .overlay { shape.stroke(Color.black.opacity(0.45), lineWidth: scale) }
-            .overlay { shape.stroke(Color.white.opacity(0.25), lineWidth: scale).padding(scale) }
-            .overlay {
-                if family == .dualShock {
-                    Capsule().fill(Color.blue.opacity(0.65)).frame(width: 112 * scale, height: 2 * scale)
-                        .offset(y: -24 * scale)
-                }
+        }
+        .overlay {
+            if !shape.isPaddle && control.id != .button(.touchpad) {
+                Image(systemName: family.symbol(for: control))
+                    .resizable().scaledToFit()
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(.primary)
+                    .frame(width: min(placement.width - 6, isFace ? 20 : 25) * scale,
+                           height: min(placement.height - 6, isFace ? 20 : 15) * scale)
             }
-            .frame(width: placement.width * scale, height: placement.height * scale)
+            if control.id == .button(.touchpad) && family == .dualShock {
+                Capsule().stroke(.secondary, lineWidth: scale)
+                    .frame(width: 112 * scale, height: 2 * scale).offset(y: -24 * scale)
+            }
+        }
+        .frame(width: placement.width * scale, height: placement.height * scale)
     }
 }
 
@@ -84,22 +46,9 @@ struct ControllerStickArtwork: View {
     let scale: CGFloat
 
     var body: some View {
-        Circle().fill(Color(white: 0.07))
-            .overlay { Circle().stroke(Color.black.opacity(0.5), lineWidth: 2 * scale) }
-            .overlay {
-                Circle().fill(LinearGradient(colors: [Color(white: 0.36), Color(white: 0.12)],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing)).padding(4 * scale)
-            }
-            .overlay {
-                Circle().stroke(Color(white: 0.42), style: StrokeStyle(lineWidth: scale, dash: [scale, 2 * scale]))
-                    .padding(7 * scale)
-            }
-            .overlay {
-                Circle().fill(LinearGradient(colors: [Color(white: 0.12), Color(white: 0.26)],
-                                             startPoint: .top, endPoint: .bottom))
-                    .overlay { Circle().stroke(.black.opacity(0.7), lineWidth: scale) }.padding(10 * scale)
-            }
-            .shadow(color: .black.opacity(0.4), radius: 2 * scale, y: 2 * scale)
+        Circle().stroke(.primary, lineWidth: 1.2 * scale)
+            .overlay { Circle().stroke(.secondary, lineWidth: scale).padding(4 * scale) }
+            .overlay { Circle().stroke(.primary, lineWidth: 1.2 * scale).padding(10 * scale) }
             .frame(width: family.stickDiameter * scale, height: family.stickDiameter * scale)
     }
 }
@@ -111,32 +60,20 @@ struct ControllerDpadArtwork: View {
     var body: some View {
         ZStack {
             if family.isXbox {
-                Circle().fill(Color(white: 0.065)).padding(-4 * scale)
+                Circle().stroke(.secondary, lineWidth: scale).padding(-4 * scale)
                 ControllerDpadShape(dish: true, roundDish: family == .xboxElite)
-                    .fill(LinearGradient(colors: [Color(white: 0.48), Color(white: 0.16)],
-                                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
-                ControllerDpadShape(dish: true, roundDish: family == .xboxElite).stroke(Color(white: 0.55), lineWidth: scale)
-                ControllerDpadFacets().fill(.white.opacity(family == .xboxElite ? 0.20 : 0.07))
-                    .clipShape(ControllerDpadShape(dish: true, roundDish: family == .xboxElite))
-                ControllerDpadCross().fill(Color.black.opacity(0.22)).padding(7 * scale)
+                    .stroke(.primary, lineWidth: 1.2 * scale)
+                ControllerDpadCross().stroke(.secondary, lineWidth: scale).padding(7 * scale)
             } else if family.isPlayStation {
                 ForEach(0..<4) { index in
                     ControllerDpadShape(dish: false)
-                        .fill(LinearGradient(colors: (family == .dualShock || family == .dualSenseEdge)
-                            ? [Color(white: 0.3), Color(white: 0.12)] : [Color(white: 0.88), Color(white: 0.62)],
-                                             startPoint: .top, endPoint: .bottom))
-                        .overlay { ControllerDpadShape(dish: false).stroke(Color.black.opacity(0.6), lineWidth: scale) }
+                        .stroke(.primary, lineWidth: 1.2 * scale)
                         .rotationEffect(.degrees(Double(index) * 90))
                 }
             } else {
-                ControllerDpadCross()
-                    .fill(LinearGradient(colors: family == .backbonePlayStation
-                        ? [Color(white: 0.96), Color(white: 0.71)] : [Color(white: 0.38), Color(white: 0.13)],
-                                         startPoint: .top, endPoint: .bottom))
-                    .overlay { ControllerDpadCross().stroke(.black.opacity(0.6), lineWidth: scale) }
+                ControllerDpadCross().stroke(.primary, lineWidth: 1.2 * scale)
             }
         }
-        .shadow(color: .black.opacity(0.3), radius: scale, y: scale)
         .frame(width: family.dpadDiameter * scale, height: family.dpadDiameter * scale)
     }
 }

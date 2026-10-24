@@ -37,7 +37,7 @@ struct ControllerLayoutDiagram: View {
             GeometryReader { geometry in
                 let scale = geometry.size.width / 480
                 ZStack(alignment: .topLeading) {
-                    ControllerArtwork(family: family, rear: rear)
+                    ControllerArtwork(family: family, rear: rear, controls: controls)
                     if !rear {
                         directionPad(scale: scale)
                         stick(left: true, scale: scale)

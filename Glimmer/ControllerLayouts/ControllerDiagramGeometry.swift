@@ -48,7 +48,6 @@ enum ControllerDiagramFamily: String, CaseIterable {
     var isDualSense: Bool { self == .dualSense || self == .dualSenseEdge }
     var isPlayStation: Bool { isDualSense || self == .dualShock }
     var isXbox: Bool { self == .xbox || self == .xboxElite }
-    var darkShell: Bool { isXbox || self == .dualShock || self == .backbone }
     var stickDiameter: CGFloat { isBackbone ? 40 : 68 }
     var dpadDiameter: CGFloat { isBackbone ? 42 : 66 }
 

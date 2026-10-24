@@ -31,21 +31,6 @@ struct ControllerDpadCross: Shape {
     }
 }
 
-struct ControllerDpadFacets: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.addRect(CGRect(x: rect.minX + rect.width / 3, y: rect.minY,
-                                width: rect.width / 3, height: rect.height / 3))
-            path.addRect(CGRect(x: rect.minX, y: rect.minY + rect.height / 3,
-                                width: rect.width / 3, height: rect.height / 3))
-            path.addRect(CGRect(x: rect.minX + rect.width * 2 / 3, y: rect.minY + rect.height / 3,
-                                width: rect.width / 3, height: rect.height / 3))
-            path.addRect(CGRect(x: rect.minX + rect.width / 3, y: rect.minY + rect.height * 2 / 3,
-                                width: rect.width / 3, height: rect.height / 3))
-        }
-    }
-}
-
 private extension CGFloat {
     var sign: CGFloat { self == 0 ? 0 : self > 0 ? 1 : -1 }
 }

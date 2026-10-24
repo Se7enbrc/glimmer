@@ -5,7 +5,7 @@ import GlimmerEngine
 import SwiftUI
 
 struct ControllerSurfaceShape: Shape {
-    enum Detail { case trim, seams, lightBar, speaker, rearPanel, rearSeams, functionButtons, grips, gripTexture }
+    enum Detail { case trim, seams, lightBar, speaker, rearPanel, rearSeams, functionButtons, grips }
     let family: ControllerDiagramFamily
     let detail: Detail
 
@@ -20,7 +20,6 @@ struct ControllerSurfaceShape: Shape {
         case .rearSeams: path = rearSeams
         case .functionButtons: path = functionButtons
         case .grips: path = grips
-        case .gripTexture: path = gripTexture
         }
         return path.applying(.init(scaleX: rect.width / 480, y: rect.height / 330))
             .applying(.init(translationX: rect.minX, y: rect.minY))
@@ -134,18 +133,6 @@ struct ControllerSurfaceShape: Shape {
         return path
     }
 
-    private var gripTexture: Path {
-        var path = Path()
-        let region = grips
-        for row in 0..<48 {
-            for column in 0..<88 {
-                let point = CGPoint(x: 22 + CGFloat(column) * 5 + CGFloat(row % 2) * 2.5, y: 90 + CGFloat(row) * 5)
-                if region.contains(point) { path.addEllipse(in: CGRect(x: point.x, y: point.y, width: 0.8, height: 0.8)) }
-            }
-        }
-        return path
-    }
-
     private var rearSeams: Path {
         let left = Path { path in
             path.move(to: CGPoint(x: 111, y: 62))
@@ -210,7 +197,7 @@ struct ControllerButtonShape: Shape {
         case .button(.leftShoulder), .button(.rightShoulder): contour = shoulder(trigger: false)
         default:
             guard isPaddle else {
-                return Path(roundedRect: rect, cornerRadius: min(rect.width, rect.height) / 2)
+                return rect.width == rect.height ? Path(ellipseIn: rect) : Capsule().path(in: rect)
             }
             if family == .xboxElite {
                 contour = placement.height > 40 ? lowerPaddle : horizontalPaddle
@@ -279,5 +266,36 @@ struct ControllerButtonShape: Shape {
                           control2: CGPoint(x: 0.25, y: 0.23))
             path.closeSubpath()
         }
+    }
+}
+
+// Even-odd clipping hides shell strokes without opaque paint or Boolean curve reconstruction.
+struct ControllerArtworkVisibleSurface: Shape {
+    let family: ControllerDiagramFamily
+    let rear: Bool
+    let controls: [ControllerLayoutControl]
+
+    func path(in rect: CGRect) -> Path {
+        let scale = rect.width / 480
+        var surface = Path(rect)
+        for control in controls {
+            guard let placement = ControllerDiagramGeometry.visiblePlacement(control, family: family, rear: rear) else {
+                continue
+            }
+            let bounds = placement.bounds.applying(.init(scaleX: scale, y: scale))
+                .offsetBy(dx: rect.minX, dy: rect.minY)
+            let shape = ControllerButtonShape(family: family, placement: placement, source: control.id)
+            surface.addPath(shape.path(in: bounds))
+        }
+        if !rear {
+            for point in [family.leftStick, family.rightStick, family.dpad] {
+                let diameter = point == family.dpad ? family.dpadDiameter + 8 : family.stickDiameter
+                let bounds = CGRect(x: point.x - diameter / 2, y: point.y - diameter / 2,
+                                    width: diameter, height: diameter)
+                    .applying(.init(scaleX: scale, y: scale)).offsetBy(dx: rect.minX, dy: rect.minY)
+                surface.addEllipse(in: bounds)
+            }
+        }
+        return surface
     }
 }
