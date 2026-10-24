@@ -18,8 +18,8 @@ let admission = await session.request(rate: 30_000, reason: .congestion)
 - `deferred` means recovery, launch, wake verification or native availability
   prevents a transition, or this session has not owned and presented the game.
   Nothing is queued. Reconsider fresh evidence later.
-- `rejected` means an invalid rate, the current applied rate, or a stopped
-  session. No transport or PC request occurs.
+- `rejected` means an invalid rate, the current applied rate, a stopped session,
+  or no established bitrate yet. No transport or PC request occurs.
 
 An accepted request clears `lastBitrateChange`; read it for completion.
 `appliedBitrateKbps` changes only after the replacement submits its first frame
