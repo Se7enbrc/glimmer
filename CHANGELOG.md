@@ -84,6 +84,8 @@
   launcher icon stays visible at every text size.
 - At larger accessibility text sizes on iPhone, paired PC names and stream
   quality choices stay readable in Settings.
+- On iPhone, disconnected messages can scroll at larger text sizes, and
+  VoiceOver describes Done as returning to your apps.
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.
 - iPhone audio diagnostics now distinguish missing packets, rejected audio and

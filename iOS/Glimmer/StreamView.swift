@@ -155,7 +155,17 @@ struct StreamControls: View {
 
     var body: some View {
         ZStack {
-            status
+            if model.phase == .streaming {
+                status
+            } else {
+                GeometryReader { geometry in
+                    ScrollView {
+                        status.fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(.dark)
@@ -165,7 +175,9 @@ struct StreamControls: View {
                     controls
                     if let format = model.requestedFormat {
                         Text("Requested: \(format.summary)")
-                            .font(.caption).foregroundStyle(.secondary).padding(.horizontal).padding(.bottom)
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal).padding(.bottom)
                     }
                 }
             }
@@ -210,7 +222,8 @@ struct StreamControls: View {
         }
         .buttonStyle(.glass)
         .disabled(model.phase == .stopping)
-        .accessibilityHint("Disconnects without quitting the game on the PC.")
+        .accessibilityHint(model.phase.isEnded ? "Returns to your apps."
+                           : "Disconnects without quitting the game on the PC.")
     }
 
     @ViewBuilder private var status: some View {

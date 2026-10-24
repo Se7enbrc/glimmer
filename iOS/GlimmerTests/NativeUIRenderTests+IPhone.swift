@@ -154,6 +154,23 @@ extension NativeUIRenderTests {
         })
     }
 
+    @Test func endedStatusRemainsScrollableAtMaximumTextSize() async throws {
+        let id = UUID()
+        let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+                           format: StreamFormat(width: 2622, height: 1206, fps: 120))
+        })
+        model.start(surface: StreamSurface())
+        model.stop()
+        await model.waitUntilStopped()
+        try await record(StreamControls(model: model, close: {}), name: "ended-status-layout", size: nil,
+                         dark: true, textSize: .accessibility5, inspect: { view in
+            let scrolls = inventoryScrollViews(in: view)
+            #expect(!scrolls.isEmpty, "The complete ended message must remain reachable at maximum text size.")
+            #expect(scrolls.allSatisfy { $0.bounds.height > 0 })
+        })
+    }
+
     private func inventoryScrollViews(in view: UIView) -> [UIScrollView] {
         let own = (view as? UIScrollView).map { [$0] } ?? []
         return own + view.subviews.flatMap { inventoryScrollViews(in: $0) }
