@@ -164,8 +164,7 @@ extension InputForwarder {
         // Sunshine-only territory) stays unset and keeps the system default.
         gamepad.playerIndex = GCControllerPlayerIndex(rawValue: Int(slot)) ?? .indexUnset
 
-        // Determine controller type from GameController metadata. macOS doesn't
-        // expose a clean type enum, so we infer from product category strings.
+        // Keep the PC's emulated layout independent of the optional controls this pad exposes.
         let kind = controllerType(for: gamepad)
         var caps = UInt16(StreamProtocol.LI_CCAP_ANALOG_TRIGGERS)
         // ControllerHaptics plays rumble through `haptics` alone, so a pad without it
@@ -413,23 +412,14 @@ extension InputForwarder {
     // MARK: - GCController -> moonlight type/flag derivation
 
     func controllerType(for gamepad: GCController) -> UInt8 {
-        let category = gamepad.productCategory
-        switch category {
-        case GCProductCategoryXboxOne, GCProductCategoryMFi:
-            return UInt8(StreamProtocol.LI_CTYPE_XBOX)
-        case GCProductCategoryDualShock4, GCProductCategoryDualSense:
-            return UInt8(StreamProtocol.LI_CTYPE_PS)
-        case GCProductCategoryHID:
-            return UInt8(StreamProtocol.LI_CTYPE_UNKNOWN)
-        default:
-            // GCProductCategorySwitchPro / JoyCon / etc. fall here on
-            // older SDKs that don't expose a constant for them.
-            if category.localizedCaseInsensitiveContains("switch") ||
-               category.localizedCaseInsensitiveContains("joycon") {
-                return UInt8(StreamProtocol.LI_CTYPE_NINTENDO)
-            }
-            return UInt8(StreamProtocol.LI_CTYPE_UNKNOWN)
+        guard let pad = gamepad.extendedGamepad else {
+            return ControllerDescriptor.Kind.identify(productCategory: gamepad.productCategory).rawValue
         }
+        let profile: ControllerDescriptor.Kind = pad is GCXboxGamepad ? .xbox
+            : pad is GCDualSenseGamepad || pad is GCDualShockGamepad ? .playStation : .unknown
+        let symbols = [pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY].map(\.unmappedSfSymbolsName)
+        return ControllerDescriptor.Kind.identify(productCategory: gamepad.productCategory,
+                                                   profile: profile, faceSymbols: symbols).rawValue
     }
 
     /// `forwardsMute`: a DualSense whose raw-HID reader is live, so its Mute reaches the PC.

@@ -133,3 +133,24 @@ public struct ControllerDescriptor: Sendable, Equatable {
 }
 
 public enum PointerButton: Int32, Sendable { case left = 1, middle = 2, right = 3, back = 4, forward = 5 }
+
+extension ControllerDescriptor.Kind {
+    // A PlayStation layout can use a generic profile; category and original glyphs still identify it.
+    public static func identify(productCategory: String, profile: Self = .unknown,
+                                faceSymbols: [String?] = []) -> Self {
+        if profile != .unknown { return profile }
+        switch productCategory {
+        case "DualSense", "DualShock 4": return .playStation
+        case "Xbox One": return .xbox
+        default: break
+        }
+        let category = productCategory.lowercased().filter(\.isLetter)
+        if category.contains("switch") || category.contains("joycon") { return .nintendo }
+        let symbols = faceSymbols.map { symbol -> String? in
+            guard let symbol else { return nil }
+            return symbol.hasSuffix(".fill") ? String(symbol.dropLast(5)) : symbol
+        }
+        let playStation: [String?] = ["xmark.circle", "circle.circle", "square.circle", "triangle.circle"]
+        return symbols == playStation ? .playStation : .unknown
+    }
+}
