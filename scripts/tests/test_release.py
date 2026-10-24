@@ -17,6 +17,8 @@ import unittest
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
+from fixture_process import run_fixture
+
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 from release_validation import SPARKLE, validate_bundle, validate_distribution, validate_feed
@@ -55,10 +57,10 @@ class ReleaseValidationTests(unittest.TestCase):
                 (tools / name).write_text("#!/bin/bash\nexit 1\n")
             for tool in tools.iterdir():
                 tool.chmod(0o755)
-            result = subprocess.run(["/usr/bin/make", "sparkle-zip", "CONFIG=Release",
-                                     f"GLIMMER_APP_SRC={app}", f"DIST_DIR={output}"], cwd=root,
-                                    env={"PATH": f"{tools}:/usr/bin:/bin", "HOME": str(root),
-                                         "FIXTURE_LOG": str(log)}, capture_output=True, text=True, timeout=10)
+            result = run_fixture(["/usr/bin/make", "sparkle-zip", "CONFIG=Release",
+                                  f"GLIMMER_APP_SRC={app}", f"DIST_DIR={output}"], cwd=root,
+                                 env={"PATH": f"{tools}:/usr/bin:/bin", "HOME": str(root),
+                                      "FIXTURE_LOG": str(log)})
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads(log.read_text()),
                              ["-c", "-k", "--sequesterRsrc", "--keepParent", str(app),
@@ -331,10 +333,9 @@ exit 1
                         FIXTURE_SIGNED_ZIP=str(self.root / "signed-update"))
 
     def publish(self):
-        return subprocess.run(["bash", str(self.root / "scripts/publish-release.sh"),
-                               "2026.10.6", "400", str(self.root / "Glimmer.app"),
-                               str(self.root / "dist"), "fixture/glimmer"],
-                              env=self.env, capture_output=True, text=True, timeout=10)
+        return run_fixture(["bash", str(self.root / "scripts/publish-release.sh"),
+                            "2026.10.6", "400", str(self.root / "Glimmer.app"),
+                            str(self.root / "dist"), "fixture/glimmer"], env=self.env)
 
     def test_signer_failure_withholds_both_streams_and_stops_publication(self):
         result = self.publish()

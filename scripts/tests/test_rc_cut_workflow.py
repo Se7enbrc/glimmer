@@ -5,11 +5,12 @@
 
 from pathlib import Path
 import os
-import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
+
+from fixture_process import run_fixture
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/release-candidate.yml"
 
@@ -24,8 +25,7 @@ class RCCutWorkflowTests(unittest.TestCase):
                "GITHUB_EVENT_NAME": "workflow_run",
                "GITHUB_WORKFLOW_REF": "Se7enbrc/glimmer/.github/workflows/release-candidate.yml@refs/heads/main"}
         env.update(overrides)
-        return subprocess.run(["/bin/bash", "-euo", "pipefail", "-c", shell], env=env,
-                              capture_output=True, text=True, timeout=10).returncode
+        return run_fixture(["/bin/bash", "-euo", "pipefail", "-c", shell], env=env).returncode
 
     def test_both_main_tooling_triggers_pass(self):
         for event in ("pull_request_target", "workflow_run"):
@@ -68,7 +68,7 @@ class RCCutWorkflowTests(unittest.TestCase):
                     env = {**os.environ, "PATH": f"{root}:/usr/bin:/bin", "PR_NUMBER": "1", "HEAD_SHA": "a" * 40,
                            "GITHUB_REPOSITORY": "Se7enbrc/glimmer", "GITHUB_OUTPUT": str(output),
                            "FIXTURE_PR": f"{'a' * 40} OPEN true {base}"}
-                    result = subprocess.run(["/bin/bash", "-euo", "pipefail", "-c", shell], env=env,
-                                            cwd=root, capture_output=True, text=True, timeout=10)
+                    result = run_fixture(["/bin/bash", "-euo", "pipefail", "-c", shell], env=env,
+                                         cwd=root)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertIn(f"ready={expected}\n", output.read_text())

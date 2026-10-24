@@ -13,6 +13,8 @@ import sys
 import tempfile
 import unittest
 
+from fixture_process import run_fixture
+
 SCRIPTS = Path(__file__).resolve().parents[1]
 VERSION = "2026.10.6"
 BUILD = "20261010"
@@ -58,6 +60,7 @@ else:
 class ReleaseCandidateCutTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="glimmer candidate fixture ")
+        self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.work, self.origin, self.state, tools = (self.root / name for name in ("work", "origin.git", "state", "bin"))
         for directory in (self.work / "scripts", self.state, tools):
@@ -125,9 +128,6 @@ class ReleaseCandidateCutTests(unittest.TestCase):
             data["source"] = [*data["source"], os.path.realpath(self.work / "scripts")]
             self.env["COVERAGE_PROCESS_CONFIG"] = base64.b64encode(json.dumps(data).encode()).decode()
 
-    def tearDown(self):
-        self.temp.cleanup()
-
     def git(self, *args, cwd=None):
         return subprocess.run(["git", *args], cwd=cwd or self.work, env=self.env, check=True,
                               capture_output=True, text=True).stdout.strip()
@@ -152,8 +152,8 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         return self.git("ls-remote", "origin")
 
     def cut(self, *args, **env):
-        return subprocess.run([sys.executable, str(self.work / "scripts/release-candidate.py"), *args],
-                              cwd=self.work, env={**self.env, **env}, capture_output=True, text=True, timeout=60)
+        return run_fixture([sys.executable, str(self.work / "scripts/release-candidate.py"), *args],
+                           cwd=self.work, env={**self.env, **env})
 
     def gh_calls(self):
         log = self.state / "gh.log"

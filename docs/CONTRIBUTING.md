@@ -72,6 +72,12 @@ coverage-guided libFuzzer harnesses in `fuzz/` inside a pinned Swift Linux
 container, so it needs Docker; `FUZZ_SECONDS` sets the time per target and a
 crashing input is left under `build/fuzz/`.
 
+Release-tool integration fixtures use `scripts/tests/fixture_process.py` to stop
+the entire process group before removing temporary files. Its five-minute hang
+guard can be raised with `GLIMMER_TEST_TIMEOUT` (seconds) on loaded runners.
+Tests of production deadlines use fake responses and clocks instead of elapsed
+wall time; production timeout values stay independent of this guard.
+
 The shared scheme runs tests one at a time. Socket deadline tests measure real
 elapsed time; launching every test together can starve their callbacks on hosted
 runners. Each concurrency test still creates its own overlapping tasks or
