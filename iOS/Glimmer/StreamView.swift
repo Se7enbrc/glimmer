@@ -173,22 +173,26 @@ struct StreamControls: View {
 
     var body: some View {
         ZStack {
-            if model.phase == .streaming {
-                status
-            } else {
-                GeometryReader { geometry in
-                    ScrollView {
-                        status.fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+            if !model.editingTouchControls && (model.touchGeometryUsable || model.controllerConnected
+                || model.phase != .streaming) {
+                if model.phase == .streaming {
+                    status
+                } else {
+                    GeometryReader { geometry in
+                        ScrollView {
+                            status.fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+                        }
+                        .scrollBounceBehavior(.basedOnSize)
                     }
-                    .scrollBounceBehavior(.basedOnSize)
                 }
             }
+            TouchOverlay(model: model)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preferredColorScheme(.dark)
-        .safeAreaInset(edge: .top, alignment: .trailing) {
-            if model.controlsVisible || model.phase != .streaming {
+        .overlay(alignment: .topTrailing) {
+            if !model.editingTouchControls && (model.controlsVisible || model.phase != .streaming) {
                 VStack(alignment: .trailing, spacing: 0) {
                     controls
                     if model.pictureNeedsReview {
@@ -207,7 +211,7 @@ struct StreamControls: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) {
+        .overlay(alignment: .bottom) {
             VStack(spacing: 8) {
                 if let message = model.controllerModeMessage, model.inputFocused {
                     Text(message).font(.callout).padding(8).glassEffect().allowsHitTesting(false)
@@ -253,8 +257,13 @@ struct StreamControls: View {
 
     @ViewBuilder private var controlActions: some View {
         if model.phase == .streaming {
+            Button("Edit controls…", systemImage: "hand.draw") {
+                model.showControls()
+                model.editingTouchControls = true
+            }.buttonStyle(.glass)
             Button("Resume", systemImage: "play.fill", action: model.resumeInput)
                 .buttonStyle(.glass)
+                .disabled(!model.controllerConnected && !model.touchGeometryUsable)
                 .accessibilityHint("Returns controller and touch input to the PC.")
         }
         Button {

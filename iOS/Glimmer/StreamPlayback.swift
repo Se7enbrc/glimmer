@@ -58,6 +58,7 @@ struct StreamPlayback {
     var format: StreamFormat?
     var setVisible: (@MainActor (Bool, VideoDecoder.PresentationVisibility) -> Void)?
     var observeControllers: (@MainActor (@escaping @MainActor (Bool) -> Void) -> Void)?
+    var touchGamepad: TouchGamepadCapture?
 
     static func make(launch: StreamLaunch, surface: StreamSurface,
                      quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {
@@ -93,8 +94,7 @@ struct StreamPlayback {
             diagnosticsDirectory: DiagnosticsDefaults.directory)
         input.setStopChord(.menuOptionsShoulders)
         input.setControllerMouseMapping(launch.mouseStick.mapping)
-        nativeInput.controllers = IOSControllerCapture(input: input)
-        nativeInput.controllers?.start()
+        nativeInput.start(input: input)
         return StreamPlayback(id: session.id, events: session.events, start: {
             if launch.continuing {
                 await session.requireContinuation(previous: launch.useScreenSize ? launch.previousFormat : nil)
@@ -108,17 +108,6 @@ struct StreamPlayback {
            }, input: input, focusInput: nativeInput.focus, format: format,
            setVisible: { visible, inputs in
                video.setPresentSuppressed(!visible, visibility: inputs, sessionGeneration: session.id)
-           }, observeControllers: nativeInput.observeControllers)
+           }, observeControllers: nativeInput.observeControllers, touchGamepad: nativeInput.touch)
     }
-}
-
-/// The session retains native capture across recovery and releases it after shared media teardown.
-@MainActor
-private final class NativeInputLifetime {
-    var controllers: IOSControllerCapture?
-    func focus(_ focused: Bool) { controllers?.setFocused(focused) }
-    func observeControllers(_ changed: @escaping @MainActor (Bool) -> Void) {
-        controllers?.observeConnections(changed)
-    }
-    func stop() { controllers?.stop(); controllers = nil }
 }

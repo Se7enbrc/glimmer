@@ -44,7 +44,7 @@ struct StreamSessionTests {
         model.receive(fixture.update(.firstFrame))
         #expect(model.controllerConnected && model.inputFocused && !model.controlsVisible)
         fixture.connectionChanged?(false)
-        #expect(!model.inputFocused && model.controlsVisible)
+        #expect(model.inputFocused && !model.controlsVisible)
         fixture.connectionChanged?(true)
         #expect(model.inputFocused && !model.controlsVisible)
         model.showControls()
@@ -129,9 +129,7 @@ struct StreamSessionTests {
         model.inputCaptureChanged = { focus.append($0) }
         model.start(surface: StreamSurface())
         model.receive(fixture.update(.firstFrame))
-        #expect(model.controlsVisible)
-        #expect(!model.inputFocused)
-        model.resumeInput()
+        #expect(!model.controlsVisible)
         #expect(model.inputFocused)
         model.showControls()
         #expect(!model.inputFocused)
@@ -144,7 +142,7 @@ struct StreamSessionTests {
         #expect(model.inputFocused)
         model.stop()
         await model.waitUntilStopped()
-        #expect(focus == [false, true, false, true, false, true, false, false])
+        #expect(focus == [true, false, true, false, true, false, false])
     }
 
     @Test func sceneSuppressionForwardsAvailabilityInputs() async throws {

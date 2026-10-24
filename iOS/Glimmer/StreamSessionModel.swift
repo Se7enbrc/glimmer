@@ -37,8 +37,19 @@ final class StreamSessionModel {
     private(set) var externalDisplayActive = false
     var inputCaptureChanged: ((Bool) -> Void)?
     var presentationEnded: (() -> Void)?
-    var inputFocused: Bool { canStart && phase == .streaming && !controlsVisible && !captureSuspended }
+    var inputFocused: Bool {
+        canStart && phase == .streaming && !controlsVisible && !captureSuspended
+            && (controllerConnected || touchGeometryUsable)
+    }
     var streamInput: StreamInput? { playback?.input }
+    var touchGamepad: TouchGamepadCapture? { playback?.touchGamepad }
+    var editingTouchControls = false
+    private(set) var touchGeometryUsable = true
+    var touchControlsVisible: Bool { inputFocused && !controllerConnected }
+    var touchMouseActive: Bool {
+        guard let registration = touchGamepad?.registration else { return false }
+        return mouseControllers.contains(registration)
+    }
     nonisolated let launch: StreamLaunch
     private let makePlayback: @MainActor (StreamLaunch, StreamSurface,
         @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback
@@ -150,6 +161,7 @@ final class StreamSessionModel {
 
     private func complete() {
         backgroundGrace.finish()
+        editingTouchControls = false
         if phase.isEnded {
             if let endingMessage { phase = .ended(endingMessage) }
             return
@@ -196,8 +208,15 @@ final class StreamSessionModel {
         synchronizeInputFocus()
     }
 
+    func touchGeometryChanged(usable: Bool) {
+        guard touchGeometryUsable != usable else { return }
+        touchGeometryUsable = usable
+        if phase == .streaming, !controllerConnected, !controlsRequested { controlsVisible = !usable }
+        synchronizeInputFocus()
+    }
+
     func resumeInput() {
-        guard canStart, phase == .streaming else { return }
+        guard canStart, phase == .streaming, controllerConnected || touchGeometryUsable else { return }
         controlsRequested = false
         controlsVisible = false
         synchronizeInputFocus()
@@ -206,8 +225,8 @@ final class StreamSessionModel {
     private func controllerConnectionChanged(_ connected: Bool) {
         guard !phase.isEnded, controllerConnected != connected else { return }
         controllerConnected = connected
-        if connected, phase == .streaming, !controlsRequested { controlsVisible = false }
-        if !connected { controlsVisible = true }
+        if phase == .streaming, !controlsRequested { controlsVisible = false }
+        if !connected, !touchGeometryUsable { controlsVisible = true }
         synchronizeInputFocus()
     }
 
@@ -239,7 +258,7 @@ final class StreamSessionModel {
         case .controllersActive: break
         case .mouseMode(let controller, let enabled):
             if enabled { mouseControllers.insert(controller) } else { mouseControllers.remove(controller) }
-            if inputFocused, controllerConnected { showControllerMode(enabled) }
+            if inputFocused { showControllerMode(enabled) }
         }
     }
 
@@ -288,7 +307,7 @@ final class StreamSessionModel {
             terminalFailure = false
             captureSuspended = false
             phase = .streaming
-            if controllerConnected, !controlsRequested { controlsVisible = false }
+            if !controlsRequested { controlsVisible = !controllerConnected && !touchGeometryUsable }
             synchronizeInputFocus()
         case .reconnecting: prepareForRecovery()
         case .connectionTerminated(let code, let error):
