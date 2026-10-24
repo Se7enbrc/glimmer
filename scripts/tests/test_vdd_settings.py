@@ -54,6 +54,9 @@ MOBILE_MODES = (
     (2034, 1398, (60, 120)),    # iPhone Duo cover, iOS 27.
 )
 
+# Active UIKit measurement on the iOS 27.1 Duo Simulator; hardware sizes stay above.
+DUO_SIMULATOR_MODES = {(2852, 2006, 60)}
+
 STANDARD_MODES = (
     (1920, 1080, (60, 75, 100, 120, 144, 165, 240)),
     (1280, 720, (60, 75, 100, 120, 144, 165, 240)),
@@ -168,7 +171,7 @@ class VirtualDisplaySettingsTests(unittest.TestCase):
             "mac-builtin.xml": panel_modes(builtin, include_half=True),
             "mac-apple-displays.xml": panel_modes(displays, include_half=True),
             "iphone-ipad.xml": panel_modes(MOBILE_MODES, include_half=True)
-                               | {(1920, 1080, 60), (1920, 1080, 120)},
+                               | {(1920, 1080, 60), (1920, 1080, 120)} | DUO_SIMULATOR_MODES,
             "standard-external.xml": panel_modes(STANDARD_MODES),
         }
         self.assertEqual({path.name for path in SAMPLES.glob("*.xml")}, set(expected))

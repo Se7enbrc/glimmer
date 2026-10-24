@@ -140,6 +140,20 @@ that changing screens during a stream has been verified.
 | [iPhone 18 Pro Max](https://support.apple.com/en-us/148591)         | 2868 × 1320               | 120        |
 | [iPhone Duo](https://www.apple.com/iphone-duo/specs/), open / cover | 2670 × 1878 / 2034 × 1398 | 120        |
 
+### Duo Simulator measurement
+
+On Xcode 27.1 with iOS 27.1 (24A94232), the active Duo inner screen reports
+`nativeBounds` of 2007 × 2853 pixels and `maximumFramesPerSecond` of 60.
+`StreamProfile.resolve` therefore requests **2852 × 2006 @ 60** for Native. The
+iPhone/iPad sample includes this measured mode alongside the published 2670 ×
+1878 hardware size above; Simulator geometry does not replace hardware
+specifications. Both 1080p profiles request 1920 × 1080 @ 60 in this runtime.
+
+The mixed-client sample is already at its 90-mode budget and omits this
+Simulator-only inner mode. Use the iPhone/iPad sample for Duo Simulator Native
+requests, or replace an unused mixed-client mode using the
+[combining instructions](HOST_SETUP.md#combine-two-files).
+
 ## iPad
 
 Every model on Apple's
@@ -202,8 +216,9 @@ header gives its exact count and the **90-mode budget**. The
 [setup guide's file table](HOST_SETUP.md#pick-your-file) lists their counts.
 `mac-builtin.xml` covers every built-in Mac panel above at native and even half
 size (26 modes); `mac-apple-displays.xml` covers the Apple external table (10
-modes). `iphone-ipad.xml` covers every mobile row and both 1080p rates (74
-modes). None of these three files drops a listed native or half-size mode.
+modes). `iphone-ipad.xml` covers every mobile row and both 1080p rates, plus the
+measured Duo Simulator inner mode (75 modes). None of these three files drops a
+listed native or half-size mode.
 
 ### Default for mixed clients
 
@@ -214,10 +229,10 @@ combinations**, in **51 resolution entries**. One entry holds several
 `<g_refresh_rate>` adds that rate to every resolution and does not deduplicate a
 rate already present locally.
 
-The mode budget prioritizes every named Apple native and Mac Balanced request,
-including 60/120 Hz where the same size is shared or the screen caps the rate.
-It also keeps 48/50 Hz for MacBook Pro and Pro Display XDR fixed-refresh use.
-The remaining standard modes are:
+The mode budget prioritizes every named Apple hardware native and Mac Balanced
+request, including 60/120 Hz where the same size is shared or the screen caps
+the rate. It also keeps 48/50 Hz for MacBook Pro and Pro Display XDR
+fixed-refresh use. The remaining standard modes are:
 
 | Sizes                                                     | Refresh rates in the sample |
 | --------------------------------------------------------- | --------------------------- |
@@ -291,6 +306,8 @@ still needs a Windows installation check.
 
 ### What the default file leaves out
 
+- The iOS 27.1 Duo Simulator inner mode, 2852 × 2006 @ 60. The mobile sample
+  includes it; the published Duo hardware sizes remain in both files.
 - iPhone/iPad half-size modes and MacBook Neo's half size. No current Glimmer
   preset requests them. All actual Mac Balanced sizes remain.
 - Additional Custom rates: 24, 72, 90, 100, 144, 165 and 200 Hz throughout the

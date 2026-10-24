@@ -71,6 +71,8 @@
   the launcher wait for the PC to become idle.
 - On iPad, streams start in tall or square windows and keep the whole picture
   visible when the window is resized.
+- The iPhone/iPad virtual display sample now includes the Native resolution
+  requested by the open iPhone Duo in the iOS 27.1 Simulator.
 
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.

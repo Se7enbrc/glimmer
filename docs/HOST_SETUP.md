@@ -39,7 +39,7 @@ for the same driver settings file, with automatic GPU selection.
 | MacBook or iMac built-in display                      | [mac-builtin.xml](vdd/mac-builtin.xml)                 | 26    |
 | Studio Display, Studio Display XDR or Pro Display XDR | [mac-apple-displays.xml](vdd/mac-apple-displays.xml)   | 10    |
 | Standard external display                             | [standard-external.xml](vdd/standard-external.xml)     | 90    |
-| iPhone or iPad, including iPhone Duo                  | [iphone-ipad.xml](vdd/iphone-ipad.xml)                 | 74    |
+| iPhone or iPad, including iPhone Duo                  | [iphone-ipad.xml](vdd/iphone-ipad.xml)                 | 75    |
 
 ### Copy the ready-made modes
 
