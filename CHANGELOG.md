@@ -92,6 +92,7 @@
 - Open iPhone and iPad Settings with Command-comma and close them with
   Command-period.
 - Steam's icon stays visible at large text sizes.
+- Diagnostics describes saved files correctly on both iPhone and iPad.
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.
 - iPhone audio diagnostics now distinguish missing packets, rejected audio and
