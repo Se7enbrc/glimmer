@@ -225,7 +225,7 @@ struct StreamViewCaptureTests {
 
     // MARK: Diagnostic sampler
 
-    @Test func diagnosticEventNamesFallBackToTheRawType() {
+    @Test func diagnosticEventNamesFallBackToTheRawType() throws {
         let forwarder = InputForwarder()
         #expect(forwarder.diagnosticEventTypeName(.scrollWheel) == "scrollWheel")
         #expect(forwarder.diagnosticEventTypeName(.otherMouseDown) == "otherMouseDown")
@@ -233,6 +233,8 @@ struct StreamViewCaptureTests {
             #expect(forwarder.diagnosticEventTypeName(.mouseCancelled)
                 == "type(\(NSEvent.EventType.mouseCancelled.rawValue))")
         }
+        let unmapped = try #require(NSEvent.EventType(rawValue: 999))
+        #expect(forwarder.diagnosticEventTypeName(unmapped) == "type(999)")
     }
 
     /// Past 100 events in a second the log samples one in N.

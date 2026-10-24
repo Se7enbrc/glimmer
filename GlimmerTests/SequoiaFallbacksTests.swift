@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  SequoiaFallbacksTests.swift
-//
-//  The macOS 26 shims behave the same on either path; Verify's sequoia part runs the 15 one.
-//
+// The macOS 26 shims behave the same on either path; Verify's sequoia part runs the 15 one.
 
 import AppKit
 import Observation
@@ -28,17 +24,108 @@ private final class Counter {
 @MainActor
 struct SequoiaFallbacksTests {
 
-    @Test func trackedValuesDeliverTheCurrentValueThenEachChange() async {
+    @Test func trackedValuesDeliverTheCurrentValueThenEachChange() async throws {
         let counter = Counter()
-        let (values, sink) = AsyncStream<Int>.makeStream()
-        let watching = Task { await forEachTrackedValue({ counter.value }, perform: { sink.yield($0) }) }
-        defer { watching.cancel() }
-        var iterator = values.makeAsyncIterator()
-        #expect(await iterator.next() == 0)
-        counter.value = 1
-        #expect(await iterator.next() == 1)
+        let delivered = DispatchSemaphore(value: 0)
+        let completed = DispatchSemaphore(value: 0)
+        var values: [Int] = []
+        let watching = Task {
+            await forEachTrackedValue({ counter.value }, perform: {
+                values.append($0)
+                delivered.signal()
+            })
+            completed.signal()
+        }
+        defer {
+            watching.cancel()
+            counter.value += 1
+        }
+        try #require(await received(delivered))
+        #expect(values == [0])
+        for value in 1...4 {
+            counter.value = value
+            try #require(await received(delivered))
+            #expect(values == Array(0...value))
+        }
+        watching.cancel()
+        try #require(await received(completed))
+        await watching.value
+        counter.value = 5
+        #expect(values == [0, 1, 2, 3, 4])
+    }
+
+    @Test func trackedValuesNoticeAChangeDuringDelivery() async throws {
+        let counter = Counter()
+        let delivered = DispatchSemaphore(value: 0)
+        let completed = DispatchSemaphore(value: 0)
+        var values: [Int] = []
+        let watching = Task {
+            await forEachTrackedValue({ counter.value }, perform: { value in
+                values.append(value)
+                if value == 0 { counter.value = 1 }
+                delivered.signal()
+            })
+            completed.signal()
+        }
+        defer {
+            watching.cancel()
+            counter.value += 1
+        }
+        try #require(await received(delivered))
+        try #require(await received(delivered))
+        #expect(values == [0, 1])
         counter.value = 2
-        #expect(await iterator.next() == 2)
+        try #require(await received(delivered))
+        #expect(values == [0, 1, 2])
+        watching.cancel()
+        try #require(await received(completed))
+        await watching.value
+    }
+
+    @Test func trackedValuesCancelWithoutAChangeAndReleaseCapturedState() async throws {
+        var counter: Counter? = Counter()
+        weak let capturedCounter = counter
+        let delivered = DispatchSemaphore(value: 0)
+        let completed = DispatchSemaphore(value: 0)
+        let watching = Task { [counter] in
+            if let counter {
+                await forEachTrackedValue({ counter.value }, perform: { _ in delivered.signal() })
+            }
+            completed.signal()
+        }
+        counter = nil
+        defer {
+            watching.cancel()
+            capturedCounter?.value += 1
+        }
+        try #require(await received(delivered))
+        #expect(capturedCounter != nil)
+        watching.cancel()
+        try #require(await received(completed))
+        await watching.value
+        #expect(capturedCounter == nil)
+    }
+
+    @Test func trackedValuesCancelledBeforeStartingDoNotReadOrDeliver() async throws {
+        let completed = DispatchSemaphore(value: 0)
+        var reads = 0
+        var values: [Int] = []
+        let watching = Task {
+            await forEachTrackedValue({
+                reads += 1
+                return 0
+            }, perform: { values.append($0) })
+            completed.signal()
+        }
+        watching.cancel()
+        try #require(await received(completed))
+        await watching.value
+        #expect(reads == 0)
+        #expect(values.isEmpty)
+    }
+
+    private func received(_ signal: DispatchSemaphore) async throws -> Bool {
+        try await onTestThread { signal.wait(timeout: .now() + .seconds(5)) == .success }
     }
 
     @Test func displayIDMatchesTheScreenNumber() {
