@@ -49,8 +49,7 @@ extension InputCore {
 
     package func retireController(slot: UInt8) {
         withLock {
-            layouts?.states[Int(slot)] = nil
-            if layouts?.states.allSatisfy({ $0 == nil }) == true { layouts = nil }
+            removeLayout(slot: slot)
             pendingArrivals[slot] = nil
             releases.controllerRemovals.insert(slot)
             releases.hold(.controller(slot))

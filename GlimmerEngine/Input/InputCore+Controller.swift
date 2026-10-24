@@ -32,6 +32,7 @@ extension InputCore {
     package func removeController(id: ObjectIdentifier) {
         withLock {
             guard let sample = controllers.removeValue(forKey: id) else { return }
+            removeLayout(slot: sample.slot)
             current[sample.slot] = nil
             updateChord(slot: sample.slot, held: false, invalidate: true)
         }

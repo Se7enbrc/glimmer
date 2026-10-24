@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import GlimmerEngine
+import Foundation
 import Testing
 @testable import Glimmer
 
@@ -50,5 +51,21 @@ struct ControllerLayoutBoundaryTests {
         core.configureLayout(second, slot: 0, held: .init(), at: 1)
         #expect(core.announcedControllers[0]?.supportedButtons == ControllerMappedButton.a.rawValue | ControllerMappedButton.b.rawValue)
         #expect(core.announcedControllers[0]?.caps == 1)
+    }
+
+    @Test func detachBeforeReadinessCannotLeaveALayoutOnAReusedSlot() throws {
+        let (core, backend) = rig()
+        let controller = NSObject()
+        let id = ObjectIdentifier(controller)
+        core.registerController(id: id, slot: 0, buttons: 0, analog: InputCore.neutral)
+        let layout = try ControllerLayoutConfiguration(layout: .init(bindings: [.init(.button(.a), .button(.b))]),
+            shortcuts: nil, available: [.button(.a)])
+        core.configureLayout(layout, slot: 0, held: .init(), at: 0)
+        core.snapshot.ready = false
+        core.removeController(id: id)
+        core.snapshot.ready = true
+        core.receive(slot: 0, buttons: StreamProtocol.A_FLAG, analog: InputCore.neutral, capturedAt: 1)
+        #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG)
+        #expect(core.layouts == nil)
     }
 }

@@ -64,6 +64,7 @@ extension InputForwarder {
         guard let attached = attachedHIDControllers.removeValue(forKey: pad.id) else { return }
         inputCore.withLock {
             inputCore.hidRegistrations[attached.slot] = nil
+            inputCore.removeLayout(slot: attached.slot)
             inputCore.current[attached.slot] = nil
             inputCore.updateChord(slot: attached.slot, held: false, invalidate: true)
         }

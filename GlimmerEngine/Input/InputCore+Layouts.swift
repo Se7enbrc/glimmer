@@ -43,6 +43,14 @@ package final class ControllerLayoutRouting {
 }
 
 extension InputCore {
+    package func removeLayout(slot: UInt8) {
+        withLock {
+            guard slot < 16 else { return }
+            layouts?.states[Int(slot)] = nil
+            if layouts?.states.allSatisfy({ $0 == nil }) == true { layouts = nil }
+        }
+    }
+
     package func configureLayout(_ configuration: ControllerLayoutConfiguration?, slot: UInt8,
                                  held: ControllerMappingSample, at now: TimeInterval,
                                  systemHeld: ControllerMappingSample? = nil) {
@@ -109,8 +117,7 @@ extension InputCore {
         let sample = state.rearm.filter(sample)
         let gameSample = state.plan == nil ? state.gameRearm.filter(systemSample) : systemSample
         if state.removing, state.rearm.isNeutral, state.gameRearm.isNeutral {
-            layouts?.states[Int(slot)] = nil
-            if layouts?.states.allSatisfy({ $0 == nil }) == true { layouts = nil }
+            removeLayout(slot: slot)
         }
         let buttons = Int32(bitPattern: sample.buttons)
         let analog = sample.gamepadAnalog
