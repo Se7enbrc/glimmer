@@ -87,6 +87,10 @@ extension DiagnosticEvidence {
     static func event(_ row: [String: Any], frame: Bool) -> String {
         if let event = row["event"] as? String,
            event.count <= 80, event.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") }) {
+            if event == "pacer_discard" {
+                let reason = (row["reason"] as? String).flatMap(FrameTimingTracker.PacerDiscardReason.init(rawValue:))
+                return event + "_" + (reason?.rawValue ?? "unknown")
+            }
             return event
         }
         return frame && row["t_present_ms"] != nil ? "frame_present" : "sample"
@@ -121,6 +125,9 @@ extension DiagnosticEvidence {
             context.issue("Some frame observations lack a valid attempt identity.")
         }
         if label == "bookmark" { observeBookmark(row, context: context) }
+        if !frame, let total = row["drops_decode_gated_total"] as? UInt64 {
+            context.counts["decode_gated_work"] = max(context.counts["decode_gated_work"] ?? 0, Int(clamping: total))
+        }
     }
 
     static func observeBookmark(_ row: [String: Any], context: Context) {
@@ -144,12 +151,23 @@ extension DiagnosticEvidence {
     static func observeWindows(_ row: [String: Any], frame: Bool, context: Context) {
         guard let stamp = time(row, context: context) else { return }
         let label = (frame ? "trace_" : "metrics_") + boundedEvent(row, frame: frame, context: context)
+        let gatedTotal = frame ? nil : row["drops_decode_gated_total"] as? UInt64
+        let gatedWork = gatedTotal.map { total in
+            total >= context.lastWindowDecodeGatedTotal ? total - context.lastWindowDecodeGatedTotal : total
+        }
+        if let gatedTotal { context.lastWindowDecodeGatedTotal = gatedTotal }
         let fields = ["recv_to_assemble_ms", "assemble_to_submit_ms", "submit_to_output_ms",
                       "output_to_present_ms", "end_to_end_ms", "duration_ms"]
         for index in context.bookmarks.indices where stamp >= context.bookmarks[index].windowStartMs
             && stamp <= context.bookmarks[index].windowEndMs {
             context.bookmarks[index].observations += 1
             context.bookmarks[index].counts[label, default: 0] += 1
+            if let gatedWork {
+                let sum = context.bookmarks[index].counts["decode_gated_work", default: 0]
+                    .addingReportingOverflow(Int(clamping: gatedWork))
+                context.bookmarks[index].counts["decode_gated_work"] = sum.overflow ? Int.max : sum.partialValue
+                if sum.overflow { context.issue("Decode-gated work count overflow.") }
+            }
             for field in fields {
                 guard let value = row[field] as? Double, value.isFinite, value >= 0 else { continue }
                 let key = field == "duration_ms" ? label + "_duration_ms" : field
