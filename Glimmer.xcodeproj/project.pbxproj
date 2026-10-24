@@ -699,6 +699,14 @@
 		4D5AC7FC4A2F46669BFF0C54 /* AudioSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55111050FF214DB786CA5252 /* AudioSoakTests.swift */; };
 		A71335CBDEB940D8AB876478 /* SoakInputBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53DF99DA163148F4AC90E30A /* SoakInputBackend.swift */; };
 		D051B9E3369D40E4B90980A0 /* InputSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 113D7A54BDA8463D9446D939 /* InputSoakTests.swift */; };
+		753CC8167F7ACB6C6EA91505 /* ControllerLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 669CE07C7771AD963FDD9079 /* ControllerLayout.swift */; };
+		189785C9DBC0C32FE4B72628 /* ControllerMappingPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9753D8D63E229EA546F9690 /* ControllerMappingPlan.swift */; };
+		6CD65AE981620E655423894D /* ControllerLayoutIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19F40AFAB664AE0BE671EA39 /* ControllerLayoutIdentity.swift */; };
+		A0A04FB587A261D0553D1671 /* ControllerLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F68039AC4B6260A8DE2EEE8 /* ControllerLayoutStore.swift */; };
+		0465F14C454E14E6A517D5BD /* ControllerLayoutShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EC98CDA4A78A8C1ED713580 /* ControllerLayoutShortcuts.swift */; };
+		77DB31637950C41A7C275C4D /* ControllerMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22786CD127B725B21D9AF285 /* ControllerMappingTests.swift */; };
+		FB9C61E6827CF796431E0A86 /* ControllerLayoutPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0025D74D58DC051547B66EC /* ControllerLayoutPersistenceTests.swift */; };
+		019739D198D497E6988A315D /* ControllerLayoutEscapeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 524586702307A7A6D49FE698 /* ControllerLayoutEscapeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1452,6 +1460,14 @@
 		55111050FF214DB786CA5252 /* AudioSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/AudioSoakTests.swift"; sourceTree = SOURCE_ROOT; };
 		53DF99DA163148F4AC90E30A /* SoakInputBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/SoakInputBackend.swift"; sourceTree = SOURCE_ROOT; };
 		113D7A54BDA8463D9446D939 /* InputSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/InputSoakTests.swift"; sourceTree = SOURCE_ROOT; };
+		669CE07C7771AD963FDD9079 /* ControllerLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerLayout.swift"; sourceTree = SOURCE_ROOT; };
+		B9753D8D63E229EA546F9690 /* ControllerMappingPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerMappingPlan.swift"; sourceTree = SOURCE_ROOT; };
+		19F40AFAB664AE0BE671EA39 /* ControllerLayoutIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerLayoutIdentity.swift"; sourceTree = SOURCE_ROOT; };
+		8F68039AC4B6260A8DE2EEE8 /* ControllerLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerLayoutStore.swift"; sourceTree = SOURCE_ROOT; };
+		8EC98CDA4A78A8C1ED713580 /* ControllerLayoutShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerLayoutShortcuts.swift"; sourceTree = SOURCE_ROOT; };
+		22786CD127B725B21D9AF285 /* ControllerMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ControllerMappingTests.swift"; sourceTree = SOURCE_ROOT; };
+		A0025D74D58DC051547B66EC /* ControllerLayoutPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ControllerLayoutPersistenceTests.swift"; sourceTree = SOURCE_ROOT; };
+		524586702307A7A6D49FE698 /* ControllerLayoutEscapeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ControllerLayoutEscapeTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1743,6 +1759,9 @@
 		D2000016 /* GlimmerTests */ = {
 			isa = PBXGroup;
 			children = (
+				524586702307A7A6D49FE698 /* ControllerLayoutEscapeTests.swift */,
+				A0025D74D58DC051547B66EC /* ControllerLayoutPersistenceTests.swift */,
+				22786CD127B725B21D9AF285 /* ControllerMappingTests.swift */,
 				7C7F0E3662674785B95956E5 /* StreamInputMouseModeTests.swift */,
 				D587AB431CFF437B859B1C2D /* RouteBitratePolicyTests.swift */,
 				169353BBFAE64367BE1642EB /* FailureAPITests.swift */,
@@ -1985,6 +2004,11 @@
 		E26101210000000000000009 /* GlimmerEngine */ = {
 			isa = PBXGroup;
 			children = (
+				8EC98CDA4A78A8C1ED713580 /* ControllerLayoutShortcuts.swift */,
+				8F68039AC4B6260A8DE2EEE8 /* ControllerLayoutStore.swift */,
+				19F40AFAB664AE0BE671EA39 /* ControllerLayoutIdentity.swift */,
+				B9753D8D63E229EA546F9690 /* ControllerMappingPlan.swift */,
+				669CE07C7771AD963FDD9079 /* ControllerLayout.swift */,
 				AC2026101100000000000001B /* LauncherArtCache.swift */,
 				F8C3CBBB7FBF488C9D4A7BB7 /* StreamInput+ControllerMouse.swift */,
 				1DF214F57A624AA18B39158B /* ControllerMouseMapping.swift */,
@@ -2608,6 +2632,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				019739D198D497E6988A315D /* ControllerLayoutEscapeTests.swift in Sources */,
+				FB9C61E6827CF796431E0A86 /* ControllerLayoutPersistenceTests.swift in Sources */,
+				77DB31637950C41A7C275C4D /* ControllerMappingTests.swift in Sources */,
 				BC8110662971491390555EBE /* StreamInputMouseModeTests.swift in Sources */,
 				AE7C6C04693646DFA4647961 /* RouteBitratePolicyTests.swift in Sources */,
 				C8155497DB6E409B93D78556 /* FailureAPITests.swift in Sources */,
@@ -2849,6 +2876,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0465F14C454E14E6A517D5BD /* ControllerLayoutShortcuts.swift in Sources */,
+				A0A04FB587A261D0553D1671 /* ControllerLayoutStore.swift in Sources */,
+				6CD65AE981620E655423894D /* ControllerLayoutIdentity.swift in Sources */,
+				189785C9DBC0C32FE4B72628 /* ControllerMappingPlan.swift in Sources */,
+				753CC8167F7ACB6C6EA91505 /* ControllerLayout.swift in Sources */,
 				AC2026101100000000000001A /* LauncherArtCache.swift in Sources */,
 				967AC9F4B747400BA49F0B70 /* StreamInput+ControllerMouse.swift in Sources */,
 				2A48F2F26CA64FB481D74255 /* ControllerMouseMapping.swift in Sources */,
