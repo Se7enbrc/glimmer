@@ -76,6 +76,7 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         shutil.copy2(SCRIPTS / "release-candidate.py", self.work / "scripts")
         shutil.copy2(SCRIPTS / "release_validation.py", self.work / "scripts")
         shutil.copy2(SCRIPTS / "release_candidate_kind.py", self.work / "scripts")
+        shutil.copy2(SCRIPTS / "candidate_reservation.py", self.work / "scripts")
         (self.work / "scripts/release-checks.py").write_text(
             f"import os, runpy, sys\nREAL = runpy.run_path({str(SCRIPTS / 'release-checks.py')!r})\n"
             'REPO, REQUIRED = REAL["REPO"], REAL["REQUIRED"]\n'
