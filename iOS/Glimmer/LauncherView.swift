@@ -120,6 +120,7 @@ struct LauncherView: View {
                 Menu {
                     ForEach(model.savedPCs) { pc in
                         Button(pc.name, systemImage: Self.pcSymbol) { model.select(pc) }
+                            .accessibilityIdentifier("pc-picker-\(pc.id)")
                     }
                     Button("PC settings", systemImage: "gearshape") { showingSettings = true }
                 } label: {

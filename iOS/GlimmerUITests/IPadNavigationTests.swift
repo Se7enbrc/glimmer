@@ -75,12 +75,13 @@ final class IPadNavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
         recordScreen(app, name: "native-window-full-\(suffix)")
         app.buttons.matching(identifier: "Living room gaming PC 1").firstMatch.tap()
-        let lastPC = app.buttons["Living room gaming PC 12"]
+        let lastPC = app.buttons["pc-picker-fixture-11"]
         for _ in 0..<12 {
             if lastPC.isHittable { break }
             app.collectionViews.firstMatch.swipeUp()
         }
         XCTAssertTrue(lastPC.waitForExistence(timeout: 5))
+        XCTAssertEqual(lastPC.label, "Living room gaming PC 12")
         XCTAssertTrue(lastPC.isHittable)
         recordScreen(app, name: "native-pc-picker-\(suffix)")
         app.typeKey(".", modifierFlags: .command)
