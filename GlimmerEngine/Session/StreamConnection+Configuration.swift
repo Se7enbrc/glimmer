@@ -11,9 +11,11 @@ extension StreamConnection {
         /// Advertise only formats the supplied video sink can decode. Route observations are supplied by the shell.
         public init(width: Int, height: Int, fps: Int, bitrateKbps: Int,
                     videoFormats: VideoFormats, audio: AudioConfig = .stereo,
-                    remote: Bool = false, routeMTU: Int? = nil) {
+                    remote: Bool = false, routeMTU: Int? = nil, changeResolution: Bool = true, resumeResolutionChange: Bool = false) {
             var request = StreamRequest(width: width, height: height, fps: fps,
                                         bitrateKbps: bitrateKbps, videoFormats: videoFormats)
+            request.changeResolution = changeResolution
+            request.resumeResolutionChange = resumeResolutionChange
             request.audio = audio
             request.remoteness = remote ? .remote : .local
             self.request = request

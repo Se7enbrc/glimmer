@@ -62,7 +62,7 @@ extension StreamSession {
         return (session, input)
     }
 
-    /// Reuses the paired client's cached PC record; initial launch/resume makes no extra server-info request.
+    /// Refreshes authenticated occupancy before choosing launch, resume or an approved replacement.
     public func start(appID: Int, configuration: StreamConnection.Configuration) async throws {
         guard !publicTerminal else { throw CancellationError() }
         guard let media = publicMedia, let ownedInput = publicInput, let network = preparedNetwork, !publicStarted else {

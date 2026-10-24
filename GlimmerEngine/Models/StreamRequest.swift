@@ -4,6 +4,8 @@
 import Foundation
 
 package struct StreamRequest: Sendable {
+    package var resumeResolutionChange = false
+    package var changeResolution = true
     package var width: Int
     package var height: Int
     package var fps: Int

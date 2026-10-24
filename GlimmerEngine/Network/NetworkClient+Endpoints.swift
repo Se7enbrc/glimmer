@@ -308,7 +308,7 @@ extension NetworkClient {
         var query: [String: String] = [
             "mode": "\(config.width)x\(config.height)x\(config.fps)",
             "additionalStates": "1",
-            "sops": "1",
+            "sops": config.changeResolution ? "1" : "0",
             "rikey": riKeyHex,
             "rikeyid": "\(riKeyID)",
             // 1 = the PC keeps playing its own sound (Moonlight's "play audio on host").

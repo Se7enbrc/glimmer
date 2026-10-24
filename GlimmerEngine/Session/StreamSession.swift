@@ -323,6 +323,9 @@ public actor StreamSession {
     package var stopCause: DisconnectReason?
     package var teardown = SharedTeardown()
     package var takeoverAuthorized = false
+    package var approvedOccupant: Int?
+    package var continuationOnly = false
+    package var continuationRecovery: ContinuationFormat?
     package var ownsHostSession = false
     package var hostSessionClientID: String?
     package var hostSessionAppID: Int?
@@ -336,7 +339,7 @@ public actor StreamSession {
     /// answer as the PC; production uses the real client and the native engine.
     package let makeNetwork: @Sendable (ServerInfo) -> NetworkClient
     package let makeBackend: @Sendable () -> StreamingBackend
-    package let hostDisposition: StreamHostDisposition
+    package var hostDisposition: StreamHostDisposition
     /// Every watchdog, metric and backoff reads time here, so tests can script it.
     package nonisolated let clock: SessionClock
 

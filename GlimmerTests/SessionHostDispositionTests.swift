@@ -8,7 +8,7 @@ import Testing
 
 @Suite(.serialized)
 struct SessionHostDispositionTests {
-    @Test(arguments: [0, 7, 9])
+    @Test(arguments: [0, 7])
     func disconnectOnlyUsesOneCachedLaunchOrResume(runningApp: Int) async throws {
         let sunshine = FakeSunshine.scripted(["launch": [SessionFlow.launched], "resume": [SessionFlow.launched]])
         var server = SessionFlow.pairedPC()
@@ -34,7 +34,7 @@ struct SessionHostDispositionTests {
             _ = try await session.launchWithDeadline(network: sunshine.client(server), appID: 7,
                 config: SessionFlow.config.request, info: server)
         }
-        #expect(sunshine.paths == ["launch"])
+        if case .hostRefused = error { #expect(sunshine.paths == ["launch", "serverinfo"]) } else { #expect(sunshine.paths == ["launch"]) }
         await session.settlePendingLaunch { Issue.record("Failed local connection must not cancel") }
     }
 

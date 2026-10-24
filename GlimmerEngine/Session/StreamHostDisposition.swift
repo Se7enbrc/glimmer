@@ -4,9 +4,13 @@
 import Foundation
 
 /// Required for the entire session, including recovery and late launch completion.
-public enum StreamHostDisposition: Sendable {
+public enum StreamHostDisposition: Sendable, Equatable {
     case disconnectOnly
     case cancelOwnedHostSession
+
+    public init(leaveGamesRunning: Bool) {
+        self = leaveGamesRunning ? .disconnectOnly : .cancelOwnedHostSession
+    }
 
     package var cancellation: HostCancellation? {
         switch self {

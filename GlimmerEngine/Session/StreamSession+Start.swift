@@ -32,7 +32,7 @@ extension StreamSession {
         // in place (see StreamSession+Reconnect.swift): the original server (for
         // a fresh NetworkClient + handshake), the requested mode, and the app id.
         self.reconnectServer = server
-        self.reconnectConfig = config
+        self.reconnectConfig = continuationRecovery?.applying(to: config) ?? config
         self.reconnectAppID = appID
 
         // Keep the Mac (and its display) awake AND opt OUT of App Nap for the
@@ -60,16 +60,7 @@ extension StreamSession {
         let rttSampler = makeSampler?()
         // A throw below must still stop its loop, or it keeps probing the PC.
         defer { _ = rttSampler?.harvest() }
-        let serverInfo: ServerInfo
-        if cachedNetwork != nil {
-            serverInfo = await network.server
-            if serverInfo.isRealGFE { throw StreamError.gameStreamHost }
-            guard serverInfo.pairStatus == .paired, serverInfo.serverCertPEM != nil else {
-                throw NetworkClient.notPaired(server.serverName)
-            }
-        } else {
-            serverInfo = try await fetchAndVerifyServerInfo(network: network, pcName: server.serverName)
-        }
+        let serverInfo = try await fetchAndVerifyServerInfo(network: network, pcName: server.serverName)
         try checkAttempt()
         await rttSampler?.awaitPreLaunchWindow()
         try checkAttempt()
@@ -78,6 +69,7 @@ extension StreamSession {
         let launch = try await launchWithDeadline(network: network, appID: appID, config: config, info: serverInfo)
         try checkAttempt()
         takeoverAuthorized = false
+        approvedOccupant = nil
         await network.setRequestDeadline(nil)
         try checkAttempt()
 
