@@ -4,6 +4,9 @@
 
 ### Features
 
+- Open Support and the Privacy Policy from Settings on iPhone and iPad, or
+  Settings → About on Mac.
+
 - Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
   Sequoia, windows and controls use the system's standard materials in place of
   Liquid Glass.

@@ -111,3 +111,6 @@ scripts/telem-client.sh
 
 # Python bytecode
 __pycache__/
+
+# Generated from docs/PRIVACY.md by scripts/build-policy-page.py.
+/privacy/index.html
