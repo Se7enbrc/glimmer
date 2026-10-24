@@ -44,6 +44,8 @@ final class IOSControllerCapture {
     private var focusRevision: UInt64 = 0
     private var stopped = false
     private var connectionChanged: (@MainActor (Bool) -> Void)?
+    var beforeAttach: (() -> Void)?
+    var refreshed: ((Bool) -> Void)?
 
     convenience init(input: StreamInput) {
         self.init(calls: Calls(register: input.registerController, unregister: input.unregisterController,
@@ -86,6 +88,7 @@ final class IOSControllerCapture {
         let live = Set(controllers.map(ObjectIdentifier.init))
         for id in attached.keys where !live.contains(id) { detach(id) }
         for controller in controllers where attached[ObjectIdentifier(controller)] == nil { attach(controller) }
+        refreshed?(!attached.isEmpty)
         if wasConnected != !attached.isEmpty { connectionChanged?(!attached.isEmpty) }
     }
 
@@ -136,6 +139,7 @@ final class IOSControllerCapture {
 
     private func attach(_ controller: GCController) {
         guard let pad = controller.extendedGamepad else { return }
+        beforeAttach?()
         let nativeFeedback = IOSControllerFeedback(controller)
         let feedback = nativeFeedback.output()
         let nativeMotion = IOSControllerMotion(controller.motion)

@@ -97,6 +97,18 @@
 		1B853B11365C442C9C7D8A83 /* AudioSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD2F6A8EE12B4523B0843294 /* AudioSoakTests.swift */; };
 		6749DCF4412642DE8E4A260C /* SoakInputBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C163E6C978F43E4932CF0C1 /* SoakInputBackend.swift */; };
 		363006B84E794619B32525DF /* InputSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD9157DDD93149D59A3866D6 /* InputSoakTests.swift */; };
+		B31A7ED272F743128976E242 /* TouchElement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39635D55176B424A921A367A /* TouchElement.swift */; };
+		F61CCAED0B834DEE848A5BD2 /* TouchGamepadState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73CC95F8EC63419BB7F0CE6A /* TouchGamepadState.swift */; };
+		91EC65E9AF4A45B4A3D97340 /* TouchGamepadCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C8FAAD8CDA94E67B8FAD847 /* TouchGamepadCapture.swift */; };
+		A9257CD04E7F4AAFBFA2ADCF /* TouchLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 500F059263644A8CAF629793 /* TouchLayout.swift */; };
+		97C5F0D29A9E4ECCABD56BA5 /* TouchLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4004CBE93A5B4A9FABF532D1 /* TouchLayoutStore.swift */; };
+		77C208DEDEDB48589B61A4EB /* TouchTracking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7153A0C27CBC4954AF18A400 /* TouchTracking.swift */; };
+		98A92B4FCF7E4FB0B8B4C586 /* TouchButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 423981332AF543C8AB4547E4 /* TouchButton.swift */; };
+		E0B3A6C8F9E446E9B18A2310 /* TouchAxisControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C1C85D1E8B4854BBCDCDDC /* TouchAxisControl.swift */; };
+		B34082E7EED443D0B81A5849 /* TouchTrigger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5468949A506C4E83B372EAD8 /* TouchTrigger.swift */; };
+		5BA3CECBD4674E619C97A9C4 /* TouchGamepadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F12A56D518A41D786E1DEB9 /* TouchGamepadView.swift */; };
+		548C531EFF2940A894E74BE3 /* TouchGamepadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */; };
+		1AFD56F03E7B48E790FB679C /* TouchLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF8C717822E54668881721CD /* TouchLayoutTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -216,6 +228,18 @@
 		BD2F6A8EE12B4523B0843294 /* AudioSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/AudioSoakTests.swift"; sourceTree = SOURCE_ROOT; };
 		1C163E6C978F43E4932CF0C1 /* SoakInputBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/SoakInputBackend.swift"; sourceTree = SOURCE_ROOT; };
 		DD9157DDD93149D59A3866D6 /* InputSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/InputSoakTests.swift"; sourceTree = SOURCE_ROOT; };
+		39635D55176B424A921A367A /* TouchElement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchElement.swift"; sourceTree = "<group>"; };
+		73CC95F8EC63419BB7F0CE6A /* TouchGamepadState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchGamepadState.swift"; sourceTree = "<group>"; };
+		4C8FAAD8CDA94E67B8FAD847 /* TouchGamepadCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchGamepadCapture.swift"; sourceTree = "<group>"; };
+		500F059263644A8CAF629793 /* TouchLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchLayout.swift"; sourceTree = "<group>"; };
+		4004CBE93A5B4A9FABF532D1 /* TouchLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchLayoutStore.swift"; sourceTree = "<group>"; };
+		7153A0C27CBC4954AF18A400 /* TouchTracking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchTracking.swift"; sourceTree = "<group>"; };
+		423981332AF543C8AB4547E4 /* TouchButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchButton.swift"; sourceTree = "<group>"; };
+		45C1C85D1E8B4854BBCDCDDC /* TouchAxisControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchAxisControl.swift"; sourceTree = "<group>"; };
+		5468949A506C4E83B372EAD8 /* TouchTrigger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchTrigger.swift"; sourceTree = "<group>"; };
+		9F12A56D518A41D786E1DEB9 /* TouchGamepadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchGamepadView.swift"; sourceTree = "<group>"; };
+		F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchGamepadTests.swift"; sourceTree = "<group>"; };
+		FF8C717822E54668881721CD /* TouchLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchLayoutTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -297,6 +321,8 @@
 			isa = PBXGroup;
 			children = (
 				78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */,
+				FF8C717822E54668881721CD /* TouchLayoutTests.swift */,
+				F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */,
 				2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */,
 				9D536F6F337545DEB9369D51 /* NativeUIRenderTests+iPad.swift */,
 				69AB6019C55BC9409A7FA80F /* LauncherTests.swift */,
@@ -347,6 +373,16 @@
 		BEC83DE52194C0A67A8F75F5 /* Glimmer */ = {
 			isa = PBXGroup;
 			children = (
+				9F12A56D518A41D786E1DEB9 /* TouchGamepadView.swift */,
+				5468949A506C4E83B372EAD8 /* TouchTrigger.swift */,
+				45C1C85D1E8B4854BBCDCDDC /* TouchAxisControl.swift */,
+				423981332AF543C8AB4547E4 /* TouchButton.swift */,
+				7153A0C27CBC4954AF18A400 /* TouchTracking.swift */,
+				4004CBE93A5B4A9FABF532D1 /* TouchLayoutStore.swift */,
+				500F059263644A8CAF629793 /* TouchLayout.swift */,
+				4C8FAAD8CDA94E67B8FAD847 /* TouchGamepadCapture.swift */,
+				73CC95F8EC63419BB7F0CE6A /* TouchGamepadState.swift */,
+				39635D55176B424A921A367A /* TouchElement.swift */,
 				E3225303E73FF1C74315DDB3 /* PairingView.swift */,
 				E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */,
 				1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */,
@@ -529,6 +565,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				4474E8B9FD1A47A480A396C4 /* NativeUIRenderTests+IPhone.swift in Sources */,
+				1AFD56F03E7B48E790FB679C /* TouchLayoutTests.swift in Sources */,
+				548C531EFF2940A894E74BE3 /* TouchGamepadTests.swift in Sources */,
 				E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */,
 				BFC410B98DE44455B3A9D872 /* NativeUIRenderTests+iPad.swift in Sources */,
 				7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */,
@@ -570,6 +608,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5BA3CECBD4674E619C97A9C4 /* TouchGamepadView.swift in Sources */,
+				B34082E7EED443D0B81A5849 /* TouchTrigger.swift in Sources */,
+				E0B3A6C8F9E446E9B18A2310 /* TouchAxisControl.swift in Sources */,
+				98A92B4FCF7E4FB0B8B4C586 /* TouchButton.swift in Sources */,
+				77C208DEDEDB48589B61A4EB /* TouchTracking.swift in Sources */,
+				97C5F0D29A9E4ECCABD56BA5 /* TouchLayoutStore.swift in Sources */,
+				A9257CD04E7F4AAFBFA2ADCF /* TouchLayout.swift in Sources */,
+				91EC65E9AF4A45B4A3D97340 /* TouchGamepadCapture.swift in Sources */,
+				F61CCAED0B834DEE848A5BD2 /* TouchGamepadState.swift in Sources */,
+				B31A7ED272F743128976E242 /* TouchElement.swift in Sources */,
 				CF6514282E3FDE69E7FE6EA8 /* PairingView.swift in Sources */,
 				38C80A9D0A874449A43CE593 /* AddPCView.swift in Sources */,
 				AF9547F4F7817E3F82B8F721 /* LauncherModel.swift in Sources */,
