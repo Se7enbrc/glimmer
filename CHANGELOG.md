@@ -31,6 +31,7 @@
 - Controller layouts use detailed diagrams for PlayStation, Xbox, Backbone and
   MFi controllers, with back views for supported paddles and extra buttons.
 - Controller layouts show the shapes and controls of DualSense, DualSense Edge,
+- Controller layouts show clean line drawings of DualSense, DualSense Edge,
   DualShock 4, Xbox Series, Xbox Elite Series 2 and both Backbone One editions,
   with back views for supported paddles and a diagram for other MFi controllers.
 
