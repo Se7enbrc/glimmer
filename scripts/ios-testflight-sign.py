@@ -56,8 +56,24 @@ def export_options(team, fingerprint, profile_id):
     return {'method': 'app-store-connect', 'destination': 'export', 'signingStyle': 'manual',
             'teamID': team, 'signingCertificate': fingerprint,
             'provisioningProfiles': {artifact.BUNDLE: profile_id},
-            'testFlightInternalTestingOnly': True, 'manageAppVersionAndBuildNumber': False,
+            'testFlightInternalTestingOnly': False, 'manageAppVersionAndBuildNumber': False,
             'stripSwiftSymbols': True, 'uploadSymbols': True}
+
+
+def validate_export_options(options, team):
+    if not isinstance(options, dict) or not isinstance(team, str) or not re.fullmatch(r'[A-Z0-9]{10}', team):
+        raise ValueError('missing export options or signing team')
+    fingerprint = options.get('signingCertificate')
+    profiles = options.get('provisioningProfiles')
+    profile_id = profiles.get(artifact.BUNDLE) if isinstance(profiles, dict) else None
+    if (not isinstance(fingerprint, str) or not re.fullmatch(r'[A-Fa-f0-9]{40}', fingerprint)
+            or not isinstance(profile_id, str) or not re.fullmatch(r'[A-Fa-f0-9-]{36}', profile_id)):
+        raise ValueError('export must select an explicit signing certificate and profile')
+    reviewed = export_options(team, fingerprint, profile_id)
+    if (options.keys() != reviewed.keys()
+            or any(type(options[key]) is not type(value) or options[key] != value
+                   for key, value in reviewed.items())):
+        raise ValueError('export options differ from the reviewed TestFlight policy')
 
 
 def signing_identity(identities, certificate_pems, profile):
@@ -189,6 +205,7 @@ def export(archive, output, expected):
         raise ValueError('export output already exists')
     try:
         options = credentials(team)
+        validate_export_options(options, team)
         options_path = private_root() / 'ExportOptions.plist'
         options_path.write_bytes(plistlib.dumps(options))
         run(['xcodebuild', '-exportArchive', '-archivePath', str(archive),
@@ -201,7 +218,7 @@ def export(archive, output, expected):
         if {p.name for p in (inspected / 'Payload').iterdir()} != {'Glimmer.app'}:
             raise ValueError('export contains an unexpected application')
         verify_signed_app(inspected / 'Payload/Glimmer.app', expected, team)
-        receipt = {'schema': 1, 'identity': expected, 'internal_only': True, 'team': team,
+        receipt = {'schema': 2, 'identity': expected, 'external_testing_eligible': True, 'team': team,
                    'trusted_tooling_sha': os.environ['TRUSTED_TOOLING_SHA'],
                    'signing_run_id': os.environ['GITHUB_RUN_ID'],
                    'signing_run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
@@ -219,9 +236,11 @@ def upload(output, expected):
     artifact.require_dispatch()
     receipt = json.loads((output / 'receipt.json').read_text())
     ipa = output / 'Glimmer.ipa'
-    if (receipt.get('identity') != expected or receipt.get('internal_only') is not True
+    if (receipt.get('schema') != 2 or 'internal_only' in receipt
+            or receipt.get('identity') != expected or receipt.get('external_testing_eligible') is not True
             or receipt.get('ipa_sha256') != artifact.digest(ipa)):
         raise ValueError('signed artifact identity mismatch')
+    validate_export_options(receipt.get('export_options'), receipt.get('team'))
     key = os.environ.get('ASC_KEY_ID', '')
     issuer = os.environ.get('ASC_ISSUER_ID', '')
     if not re.fullmatch(r'[A-Z0-9]{10}', key) or not re.fullmatch(r'[a-fA-F0-9-]{36}', issuer):

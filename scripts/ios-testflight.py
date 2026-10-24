@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-"""Manual, exact-commit TestFlight build, verified handoff and internal-only upload."""
+"""Manual, exact-commit TestFlight build, verified handoff and upload for internal and external testing."""
 
 import argparse
 import hashlib

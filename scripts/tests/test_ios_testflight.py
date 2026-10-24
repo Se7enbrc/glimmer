@@ -381,12 +381,12 @@ class TestFlightTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 signing.validate_profile(profile, 'ABCDEFGHIJ')
 
-    def test_export_is_internal_only_and_preserves_build_number(self):
+    def test_export_allows_external_testing_and_preserves_build_number(self):
         options = signing.export_options('ABCDEFGHIJ', 'c' * 40, self.profile()['UUID'])
         self.assertEqual(options['method'], 'app-store-connect')
         self.assertEqual(options['destination'], 'export')
         self.assertEqual(options['signingStyle'], 'manual')
-        self.assertTrue(options['testFlightInternalTestingOnly'])
+        self.assertIs(options['testFlightInternalTestingOnly'], False)
         self.assertFalse(options['manageAppVersionAndBuildNumber'])
         self.assertEqual(set(options['provisioningProfiles']), {artifact.BUNDLE})
 
