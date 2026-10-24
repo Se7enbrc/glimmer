@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  CommandKeyUpTests.swift
-//
-//  The forwarder's keyboard path: the ⌘-held key-up de-dup (#86), which keys
-//  and modifiers the PC is told are held across ⌘, reconnects and JIS keys,
-//  Esc before the stream is live, and client chords on non-Latin layouts.
-//
+// Keyboard ownership and local shortcuts must survive layout and connection changes.
 
 import GlimmerEngine
 import AppKit
@@ -419,5 +413,95 @@ struct HotkeyChordLayoutTests {
         // AZERTY: the key in the US A position types Q, and the US Q position types A.
         #expect(try matches(kVK_ANSI_A, typing: "q"))
         #expect(try matches(kVK_ANSI_Q, typing: "a") == false)
+    }
+
+    @Test func matchKindPreservesCharacterAndPositionRules() throws {
+        let mods: NSEvent.ModifierFlags = [.control]
+        let cases: [(Int, String, HotkeyChord.MatchKind?)] = [
+            (kVK_ANSI_A, "q", .character), (kVK_ANSI_Q, "q", .character),
+            (kVK_ANSI_Q, "й", .keyPositionFallback), (kVK_ANSI_W, "ц", nil),
+            (kVK_ANSI_Q, "a", nil), (kVK_ANSI_Q, "", nil)
+        ]
+        for (code, text, expected) in cases {
+            let event = try key(.keyDown, code, mods: mods, chars: text)
+            #expect(quit.matchKind(event: event, modifiers: mods) == expected)
+            #expect(quit.matches(event: event, modifiers: mods) == (expected != nil))
+            #expect(quit.matchKind(event: event, modifiers: [.control, .shift]) == nil)
+        }
+    }
+}
+
+@MainActor
+struct QuitHotkeyDiagnosticTests {
+    private func entries(after previousID: UInt64?) -> [LogEntry] {
+        LogStore.shared.snapshot().filter { entry in
+            (previousID.map { entry.id > $0 } ?? true)
+                && entry.category == "Stream.Input" && entry.message.hasPrefix("Quit hotkey matched:")
+        }
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func matchedQuitLogsContextWithoutKeystrokePayload(keyEquivalent: Bool, fallback: Bool) throws {
+        let forwarder = InputForwarder()
+        let view = StreamInputView()
+        view.delegate = forwarder
+        let chord = HotkeyChord(ctrl: true, alt: true, shift: true, cmd: true, keyChar: "q")
+        var providerCalls = 0
+        forwarder.quitHotkeyProvider = {
+            providerCalls += 1
+            return providerCalls == 1 ? chord : .defaultStats
+        }
+        forwarder.inputGeneration = 37
+        forwarder.isWindowMode = !fallback
+        forwarder.isMiniPlayer = fallback
+        var quits = 0
+        forwarder.onQuitHotkey = { quits += 1 }
+        let event = try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [.control, .option, .shift, .command],
+            timestamp: 1, windowNumber: 0, context: nil, characters: "private-event-payload",
+            charactersIgnoringModifiers: fallback ? "й" : "q", isARepeat: false,
+            keyCode: UInt16(kVK_ANSI_Q)))
+        let before = LogStore.shared.snapshot().last?.id
+        if keyEquivalent {
+            #expect(view.performKeyEquivalent(with: event))
+        } else {
+            view.keyDown(with: event)
+        }
+        #expect(providerCalls == 1)
+        #expect(quits == 1)
+        let logged = entries(after: before)
+        try #require(logged.count == 1)
+        let entry = try #require(logged.first)
+        let expectedEntry = keyEquivalent ? "performKeyEquivalent" : "keyDown"
+        let expectedMatch = fallback ? "key-position-fallback" : "character"
+        let expected = "Quit hotkey matched: entry=\(expectedEntry) match=\(expectedMatch) chord=⌃⌥⇧⌘Q "
+            + "windowMode=\(!fallback) generation=37 miniPlayer=\(fallback)"
+        #expect(entry.level == .info)
+        #expect(entry.message == expected)
+        #expect(entry.redactedMessage == nil)
+        #expect(entry.shareable.hasSuffix(expected))
+        for rendered in [entry.message, entry.redactedMessage ?? entry.message] {
+            for payload in ["keyCode", "characters", "modifiers", "private-event-payload", "й",
+                            String(event.keyCode), String(event.modifierFlags.rawValue)] {
+                #expect(rendered.contains(payload) == false)
+            }
+        }
+    }
+
+    @Test func unmatchedAndRepeatedQuitEventsDoNotLog() throws {
+        let forwarder = InputForwarder()
+        var quits = 0
+        forwarder.onQuitHotkey = { quits += 1 }
+        let before = LogStore.shared.snapshot().last?.id
+        let unmatched = try key(.keyDown, kVK_ANSI_Z, mods: [.control], chars: "z")
+        let repeatQuit = try key(.keyDown, kVK_ANSI_Q, mods: [.control], chars: "q", isRepeat: true)
+        let keyUp = try key(.keyUp, kVK_ANSI_Q, mods: [.control], chars: "q")
+        for entry in ["keyDown", "performKeyEquivalent"] {
+            #expect(forwarder.consumeStopShortcut(unmatched, entry: entry) == false)
+            #expect(forwarder.consumeStopShortcut(repeatQuit, entry: entry))
+            #expect(forwarder.consumeStopShortcut(keyUp, entry: entry) == false)
+        }
+        #expect(quits == 0)
+        #expect(entries(after: before).isEmpty)
     }
 }
