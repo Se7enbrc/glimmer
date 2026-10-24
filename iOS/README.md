@@ -35,14 +35,17 @@ Native is the default, followed by 1080p 60 and 1080p 120 in Settings. Install
 PC. Both devices request only modes from that file. Native chooses the closest
 listed size to the window's pixels; 1080p always requests 1920 × 1080. The
 choice is saved. Requests use the listed refresh rate up to the profile and
-display maximum, so window modes generally run at 60 fps. All three choices use
-H.264, SDR, stereo and 20 Mbps for the initial device tests. Video fills behind
-cutouts. A different aspect crops edges; a lower resolution loses detail. The PC
-and game must use the requested aspect to avoid black bars inside the video. If
-discovery cannot find the PC, choose Settings → PCs → Add PC by address… and
-enter its IP address or hostname. Pairing and certificate verification use the
-same connection flow. Development builds keep the display awake throughout the
-active app. Release builds do so only during a stream. Leaving the app restores
+display maximum, so window modes generally run at 60 fps. All three choices
+request stereo and 20 Mbps. VideoToolbox capabilities enable AV1 or HEVC with
+H.264 fallback; HDR-capable displays can request 10-bit HDR. Sustained hardware
+and colour acceptance remains pending; see
+[video fidelity checks](docs/VIDEO_FIDELITY.md). Video fills behind cutouts. A
+different aspect crops edges; a lower resolution loses detail. The PC and game
+must use the requested aspect to avoid black bars inside the video. If discovery
+cannot find the PC, choose Settings → PCs → Add PC by address… and enter its IP
+address or hostname. Pairing and certificate verification use the same
+connection flow. Development builds keep the display awake throughout the active
+app. Release builds do so only during a stream. Leaving the app restores
 ordinary auto-lock; manually locking still stops a stream. Disconnecting stops
 the local stream immediately. Brief app switches preserve it for up to 15
 seconds, with input released; staying away longer disconnects. iOS may end this

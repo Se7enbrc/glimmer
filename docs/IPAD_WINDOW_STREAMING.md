@@ -29,9 +29,9 @@ Exact listed sizes therefore win. A 750 × 1000 target selects 750 × 972, with
 2.8% horizontal cropping after scaling to fill, rather than a full panel.
 Full-panel ProMotion modes retain 120 fps; most window modes have only 60 Hz. A
 90 Hz display report selects a listed 60 Hz mode, never an invented 90 Hz mode.
-Requests retain the same 20 Mbps, H.264, SDR and stereo startup configuration.
-This changes no decoder, bitrate, pacing or HDR defaults. The catalog is local,
-not a PC discovery response.
+Requests retain the same 20 Mbps, stereo, codec and HDR negotiation as every
+other stream. This changes no decoder, bitrate, pacing or HDR defaults. The
+catalog is local, not a PC discovery response.
 
 ## Filling and resizing
 
