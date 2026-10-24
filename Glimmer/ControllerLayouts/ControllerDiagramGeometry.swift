@@ -5,11 +5,13 @@ import GlimmerEngine
 import SwiftUI
 
 enum ControllerDiagramFamily: String, CaseIterable {
-    case xbox, dualSense, dualShock, backbone, generic
+    case xbox, xboxElite, dualSense, dualSenseEdge, dualShock, backbone, generic
 
     static func identify(category: String, name: String, controls: [ControllerLayoutControl]) -> Self {
         let description = (category + " " + name).lowercased()
         if description.contains("backbone") { return .backbone }
+        if description.contains("dualsense") && description.contains("edge") { return .dualSenseEdge }
+        if description.contains("xbox") && description.contains("elite") { return .xboxElite }
         if category == "PS5 Controller" { return .dualSense }
         if category == "PS4 Controller" { return .dualShock }
         if description.contains("dualsense") { return .dualSense }
@@ -19,32 +21,69 @@ enum ControllerDiagramFamily: String, CaseIterable {
         return .generic
     }
 
+    func symbol(for control: ControllerLayoutControl) -> String {
+        guard control.symbol == control.id.layoutSymbol else { return control.symbol }
+        let playStation: [ControllerLayoutSource: String] = [
+            .button(.a): "xmark", .button(.b): "circle", .button(.x): "square", .button(.y): "triangle",
+            .button(.home): "playstation.logo"]
+        let xbox: [ControllerLayoutSource: String] = [
+            .button(.home): "xbox.logo", .trigger(.left): "lt.button.roundedtop.horizontal",
+            .trigger(.right): "rt.button.roundedtop.horizontal", .button(.leftShoulder): "lb.button.roundedbottom.horizontal",
+            .button(.rightShoulder): "rb.button.roundedbottom.horizontal"]
+        if isPlayStation { return playStation[control.id] ?? control.symbol }
+        if isXbox { return xbox[control.id] ?? control.symbol }
+        return control.symbol
+    }
+
+    var isDualSense: Bool { self == .dualSense || self == .dualSenseEdge }
+    var isPlayStation: Bool { isDualSense || self == .dualShock }
+    var isXbox: Bool { self == .xbox || self == .xboxElite }
+    var darkShell: Bool { isXbox || self == .dualShock || self == .backbone }
+    var stickDiameter: CGFloat { self == .backbone ? 40 : 68 }
+    var dpadDiameter: CGFloat { self == .backbone ? 42 : 66 }
+
     var leftStick: CGPoint {
         switch self {
-        case .xbox: CGPoint(x: 122, y: 123)
-        case .backbone: CGPoint(x: 62, y: 120)
-        default: CGPoint(x: 174, y: 204)
+        case .xbox, .xboxElite: CGPoint(x: 104, y: 119)
+        case .backbone: CGPoint(x: 55, y: 112)
+        case .dualShock: CGPoint(x: 173, y: 208)
+        default: CGPoint(x: 175, y: 202)
         }
     }
 
-    var rightStick: CGPoint { self == .backbone ? CGPoint(x: 418, y: 208) : CGPoint(x: 306, y: 204) }
-    var dpad: CGPoint {
+    var rightStick: CGPoint {
         switch self {
-        case .xbox: CGPoint(x: 174, y: 204)
-        case .backbone: CGPoint(x: 62, y: 208)
-        default: CGPoint(x: 112, y: 130)
+        case .backbone: CGPoint(x: 425, y: 175)
+        case .dualShock: CGPoint(x: 307, y: 208)
+        case .xbox, .xboxElite: CGPoint(x: 302, y: 203)
+        default: CGPoint(x: 305, y: 202)
         }
     }
-    var faces: CGPoint { self == .backbone ? CGPoint(x: 418, y: 120) : CGPoint(x: 368, y: 130) }
-    var faceSpacing: CGFloat { self == .backbone ? 25 : 34 }
-    var isPlayStation: Bool { self == .dualSense || self == .dualShock }
+
+    var dpad: CGPoint {
+        switch self {
+        case .xbox, .xboxElite: CGPoint(x: 176, y: 203)
+        case .backbone: CGPoint(x: 55, y: 175)
+        default: CGPoint(x: 100, y: 118)
+        }
+    }
+    var faces: CGPoint { self == .backbone ? CGPoint(x: 425, y: 112) : CGPoint(x: 380, y: 118) }
+    var faceSpacing: CGFloat { self == .backbone ? 21 : 29 }
+    var shoulderX: CGFloat { self == .backbone ? 55 : isXbox ? 113 : 102 }
+    var touchpad: CGRect {
+        CGRect(x: 164, y: isDualSense ? 53 : 73, width: 152, height: isDualSense ? 82 : 64)
+    }
 }
 
 struct ControllerDiagramPlacement {
     let point: CGPoint
-    var width: CGFloat = 32
-    var height: CGFloat = 32
+    var width: CGFloat = 30
+    var height: CGFloat = 30
     var rear = false
+
+    var bounds: CGRect {
+        CGRect(x: point.x - width / 2, y: point.y - height / 2, width: width, height: height)
+    }
 }
 
 enum ControllerDiagramGeometry {
@@ -53,40 +92,51 @@ enum ControllerDiagramGeometry {
         switch control.id {
         case .button(let button): return buttonPlacement(button, family: family)
         case .trigger(let trigger):
-            return .init(point: CGPoint(x: trigger == .left ? shoulderX(family) : 480 - shoulderX(family), y: 26),
-                         width: 58, height: 34)
+            return .init(point: CGPoint(x: trigger == .left ? family.shoulderX : 480 - family.shoulderX,
+                                       y: family == .backbone ? 49 : 24),
+                         width: family == .backbone ? 44 : 64, height: 25)
         default: return nil
         }
     }
 
-    private static func shoulderX(_ family: ControllerDiagramFamily) -> CGFloat { family == .backbone ? 62 : 126 }
+    static func visiblePlacement(_ control: ControllerLayoutControl, family: ControllerDiagramFamily,
+                                 rear: Bool) -> ControllerDiagramPlacement? {
+        guard let placement = placement(control, family: family) else { return nil }
+        let onBothSides: Bool
+        switch control.id {
+        case .trigger, .button(.leftShoulder), .button(.rightShoulder): onBothSides = true
+        default: onBothSides = false
+        }
+        if rear && onBothSides {
+            return .init(point: CGPoint(x: 480 - placement.point.x, y: placement.point.y),
+                         width: placement.width, height: placement.height, rear: true)
+        }
+        return placement.rear == rear ? placement : nil
+    }
 
     private static func buttonPlacement(_ button: ControllerMappedButton,
                                         family: ControllerDiagramFamily) -> ControllerDiagramPlacement? {
         let faces = family.faces
         let offset = family.faceSpacing
-        let size: CGFloat = family == .backbone ? 26 : 32
+        let size: CGFloat = family == .backbone ? 20 : 29
         switch button {
         case .a: return .init(point: CGPoint(x: faces.x, y: faces.y + offset), width: size, height: size)
         case .b: return .init(point: CGPoint(x: faces.x + offset, y: faces.y), width: size, height: size)
         case .x: return .init(point: CGPoint(x: faces.x - offset, y: faces.y), width: size, height: size)
         case .y: return .init(point: CGPoint(x: faces.x, y: faces.y - offset), width: size, height: size)
         case .leftShoulder, .rightShoulder:
-            return .init(point: CGPoint(x: button == .leftShoulder ? shoulderX(family) : 480 - shoulderX(family), y: 64),
-                         width: 70, height: 26)
+            return .init(point: CGPoint(x: button == .leftShoulder ? family.shoulderX : 480 - family.shoulderX,
+                                       y: family == .backbone ? 70 : 49),
+                         width: family == .backbone ? 54 : 78, height: 20)
         case .menu, .options:
-            let x: CGFloat = family == .backbone ? 62 : family.isPlayStation ? 186 : 203
+            let x: CGFloat = family == .backbone ? 76 : family.isPlayStation ? 147 : 206
             return .init(point: CGPoint(x: button == .options ? x : 480 - x,
-                                       y: family == .backbone ? 266 : family.isPlayStation ? 104 : 128),
-                         width: 24, height: 24)
-        case .home:
-            return .init(point: CGPoint(x: family == .backbone ? 445 : 240,
-                                       y: family == .backbone ? 254 : family.isPlayStation ? 206 : 93), width: 26, height: 26)
-        case .share:
-            return .init(point: CGPoint(x: family == .backbone ? 35 : 240,
-                                       y: family == .backbone ? 254 : family.isPlayStation ? 238 : 166), width: 24, height: 24)
+                                       y: family == .backbone ? 223 : family.isPlayStation ? 91 : 128),
+                         width: family.isPlayStation ? 12 : 20, height: family.isPlayStation ? 24 : 20)
+        case .home, .share: return centerButton(button, family: family)
         case .touchpad:
-            return .init(point: CGPoint(x: 240, y: 116), width: 78, height: 50)
+            return .init(point: CGPoint(x: family.touchpad.midX, y: family.touchpad.midY),
+                         width: family.touchpad.width, height: family.touchpad.height)
         case .paddle1: return extra(.backRightPrimary, family: family)
         case .paddle2: return extra(.backLeftPrimary, family: family)
         case .paddle3: return extra(.backRightSecondary, family: family)
@@ -95,78 +145,30 @@ enum ControllerDiagramGeometry {
         }
     }
 
+    private static func centerButton(_ button: ControllerMappedButton,
+                                     family: ControllerDiagramFamily) -> ControllerDiagramPlacement {
+        if family == .backbone {
+            return .init(point: CGPoint(x: button == .home ? 438 : 42, y: 212), width: 19, height: 19)
+        }
+        if button == .home {
+            return .init(point: CGPoint(x: 240, y: family.isPlayStation ? 198 : 86), width: 25, height: 25)
+        }
+        return .init(point: CGPoint(x: 240, y: family.isPlayStation ? 226 : 161),
+                     width: family.isPlayStation ? 24 : 19, height: family.isPlayStation ? 9 : 19)
+    }
+
     private static func extra(_ position: ControllerLayoutControl.Position,
                               family: ControllerDiagramFamily) -> ControllerDiagramPlacement {
-        let outer: CGFloat = family == .backbone ? 62 : 160
-        let width: CGFloat = family.isPlayStation ? 50 : 36
-        let height: CGFloat = family.isPlayStation ? 28 : 64
+        let outer: CGFloat = family == .backbone ? 55 : family.isDualSense ? 170 : 161
+        let width: CGFloat = family.isDualSense ? 29 : 60
+        let height: CGFloat = family.isDualSense ? 67 : 27
         switch position {
-        case .backLeftPrimary: return .init(point: CGPoint(x: 480 - outer, y: 155), width: width, height: height, rear: true)
-        case .backRightPrimary: return .init(point: CGPoint(x: outer, y: 155), width: width, height: height, rear: true)
-        case .backLeftSecondary: return .init(point: CGPoint(x: 480 - outer + 18, y: 229), width: 42, height: 54, rear: true)
-        case .backRightSecondary: return .init(point: CGPoint(x: outer - 18, y: 229), width: 42, height: 54, rear: true)
-        case .topLeftInner: return .init(point: CGPoint(x: 190, y: 65), width: 26, height: 26)
-        case .topRightInner: return .init(point: CGPoint(x: 290, y: 65), width: 26, height: 26)
-        }
-    }
-}
-
-struct ControllerBodyShape: Shape {
-    let family: ControllerDiagramFamily
-
-    func path(in rect: CGRect) -> Path {
-        let path: Path
-        if family == .backbone {
-            var body = Path(roundedRect: CGRect(x: 18, y: 74, width: 88, height: 222), cornerRadius: 36)
-            body.addRoundedRect(in: CGRect(x: 374, y: 74, width: 88, height: 222), cornerSize: CGSize(width: 36, height: 36))
-            body.addRoundedRect(in: CGRect(x: 90, y: 124, width: 300, height: 108), cornerSize: CGSize(width: 8, height: 8))
-            path = body
-        } else {
-            path = handheld
-        }
-        return path.applying(CGAffineTransform(scaleX: rect.width / 480, y: rect.height / 330))
-            .applying(CGAffineTransform(translationX: rect.minX, y: rect.minY))
-    }
-
-    private var handheld: Path {
-        let playStation = family.isPlayStation
-        let inner: CGFloat = 255
-        let outer: CGFloat = family == .dualShock || family == .generic ? 440 : 460
-        let grip: CGFloat = playStation ? 309 : family == .xbox ? 292 : 290
-        let top: CGFloat = family == .xbox ? 54 : family == .generic ? 78 : 61
-        return Path { path in
-            path.move(to: CGPoint(x: 116, y: 73))
-            path.addCurve(to: CGPoint(x: 364, y: 73),
-                          control1: CGPoint(x: 184, y: top),
-                          control2: CGPoint(x: 296, y: top))
-            path.addCurve(to: CGPoint(x: 428, y: 125),
-                          control1: CGPoint(x: 407, y: 68),
-                          control2: CGPoint(x: 425, y: 92))
-            path.addCurve(to: CGPoint(x: outer, y: grip - 27),
-                          control1: CGPoint(x: 445, y: 171),
-                          control2: CGPoint(x: 455, y: 237))
-            path.addCurve(to: CGPoint(x: 405, y: grip),
-                          control1: CGPoint(x: outer + 5, y: grip + 5),
-                          control2: CGPoint(x: 430, y: grip + 17))
-            path.addCurve(to: CGPoint(x: 332, y: inner),
-                          control1: CGPoint(x: 380, y: grip - 19),
-                          control2: CGPoint(x: 359, y: inner))
-            path.addCurve(to: CGPoint(x: 148, y: inner),
-                          control1: CGPoint(x: 285, y: inner + 9),
-                          control2: CGPoint(x: 195, y: inner + 9))
-            path.addCurve(to: CGPoint(x: 75, y: grip),
-                          control1: CGPoint(x: 121, y: inner),
-                          control2: CGPoint(x: 100, y: grip - 19))
-            path.addCurve(to: CGPoint(x: 480 - outer, y: grip - 27),
-                          control1: CGPoint(x: 50, y: grip + 17),
-                          control2: CGPoint(x: 475 - outer, y: grip + 5))
-            path.addCurve(to: CGPoint(x: 52, y: 125),
-                          control1: CGPoint(x: 25, y: 237),
-                          control2: CGPoint(x: 35, y: 171))
-            path.addCurve(to: CGPoint(x: 116, y: 73),
-                          control1: CGPoint(x: 55, y: 92),
-                          control2: CGPoint(x: 73, y: 68))
-            path.closeSubpath()
+        case .backLeftPrimary: return .init(point: CGPoint(x: 480 - outer, y: 170), width: width, height: height, rear: true)
+        case .backRightPrimary: return .init(point: CGPoint(x: outer, y: 170), width: width, height: height, rear: true)
+        case .backLeftSecondary: return .init(point: CGPoint(x: 480 - outer + 10, y: 227), width: 29, height: 48, rear: true)
+        case .backRightSecondary: return .init(point: CGPoint(x: outer - 10, y: 227), width: 29, height: 48, rear: true)
+        case .topLeftInner: return .init(point: CGPoint(x: 188, y: 49), width: 26, height: 20)
+        case .topRightInner: return .init(point: CGPoint(x: 292, y: 49), width: 26, height: 20)
         }
     }
 }

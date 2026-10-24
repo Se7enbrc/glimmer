@@ -732,6 +732,10 @@
 		A3DF1B0473E02EBD01FC2C40 /* ControllerDiagramGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AB91A16DB2CB59EA97B9943 /* ControllerDiagramGeometry.swift */; };
 		51DAB01AF73E7404229D81AF /* ControllerLayoutDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92A400B198D99C4E81A5016 /* ControllerLayoutDiagram.swift */; };
 		0B8218BB2E049E000586D99A /* ControllerDiagramTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B939F73D22FF70CA6931E9B /* ControllerDiagramTests.swift */; };
+		7E4AFBDE5A4F4F8C9A27299D /* ControllerBodyShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = E739566E42134718B281E78F /* ControllerBodyShape.swift */; };
+		D0F3D158B8404F6780B9AE6A /* ControllerSurfaceShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = 356D8AE2FC704A91ADF9EBE9 /* ControllerSurfaceShape.swift */; };
+		329F02FEBDD44DAFA28300BC /* ControllerArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = D31A6D9DC42043D096EDE55D /* ControllerArtwork.swift */; };
+		059E9C4832CB459FB0FB8300 /* ControllerControlArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1518,6 +1522,10 @@
 		0AB91A16DB2CB59EA97B9943 /* ControllerDiagramGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerDiagramGeometry.swift"; sourceTree = SOURCE_ROOT; };
 		E92A400B198D99C4E81A5016 /* ControllerLayoutDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerLayoutDiagram.swift"; sourceTree = SOURCE_ROOT; };
 		5B939F73D22FF70CA6931E9B /* ControllerDiagramTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerDiagramTests.swift"; sourceTree = SOURCE_ROOT; };
+		E739566E42134718B281E78F /* ControllerBodyShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerBodyShape.swift"; sourceTree = SOURCE_ROOT; };
+		356D8AE2FC704A91ADF9EBE9 /* ControllerSurfaceShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerSurfaceShape.swift"; sourceTree = SOURCE_ROOT; };
+		D31A6D9DC42043D096EDE55D /* ControllerArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerArtwork.swift"; sourceTree = SOURCE_ROOT; };
+		7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerControlArtwork.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1613,6 +1621,10 @@
 			isa = PBXGroup;
 			children = (
 				E92A400B198D99C4E81A5016 /* ControllerLayoutDiagram.swift */,
+				7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */,
+				D31A6D9DC42043D096EDE55D /* ControllerArtwork.swift */,
+				356D8AE2FC704A91ADF9EBE9 /* ControllerSurfaceShape.swift */,
+				E739566E42134718B281E78F /* ControllerBodyShape.swift */,
 				0AB91A16DB2CB59EA97B9943 /* ControllerDiagramGeometry.swift */,
 				25E28540FB349E5444344446 /* ControllerLayoutShortcutSummary.swift */,
 				A5ED7BA9A4911DB133DB8082 /* ControllerLayoutEditing.swift */,
@@ -2525,6 +2537,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				51DAB01AF73E7404229D81AF /* ControllerLayoutDiagram.swift in Sources */,
+				059E9C4832CB459FB0FB8300 /* ControllerControlArtwork.swift in Sources */,
+				329F02FEBDD44DAFA28300BC /* ControllerArtwork.swift in Sources */,
+				D0F3D158B8404F6780B9AE6A /* ControllerSurfaceShape.swift in Sources */,
+				7E4AFBDE5A4F4F8C9A27299D /* ControllerBodyShape.swift in Sources */,
 				A3DF1B0473E02EBD01FC2C40 /* ControllerDiagramGeometry.swift in Sources */,
 				857BF7C4E7FD8FDEEA84F1A6 /* ControllerLayoutShortcutSummary.swift in Sources */,
 				388D6B7BE9B0C6DB43F9DD54 /* ControllerLayoutEditing.swift in Sources */,

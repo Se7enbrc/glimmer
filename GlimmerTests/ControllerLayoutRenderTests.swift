@@ -22,7 +22,7 @@ struct ControllerLayoutRenderTests {
         await model.load()
         let game = ControllerLayoutGame(pcID: "fixture-pc", appID: 42, pcName: "Living room PC", name: "Adventure")
         model.games = [game]
-        let device = fixture(.dualSense)
+        let device = fixture(.dualSenseEdge)
         let controls = device.controls
         let sources = ControllerLayout.standard(buttons: ControllerMappedButton.allCases.filter { button in
             controls.contains { $0.id == .button(button) }
@@ -61,7 +61,7 @@ struct ControllerLayoutRenderTests {
         let style = dark ? "dark" : "light"
         for family in ControllerDiagramFamily.allCases {
             let device = fixture(family)
-            for rear in [false, true] where !rear || family == .xbox || family == .dualSense {
+            for rear in [false, true] where !rear || family == .xboxElite || family == .dualSenseEdge {
                 try await record(NavigationStack {
                     Form {
                         Section { ControllerLayoutDiagram(family: family, controls: device.controls, rear: rear) { _ in } }
@@ -78,13 +78,14 @@ struct ControllerLayoutRenderTests {
     }
 
     private func fixture(_ family: ControllerDiagramFamily) -> ControllerLayoutDevice {
-        let names: [ControllerDiagramFamily: String] = [.xbox: "Xbox Elite Wireless Controller",
-            .dualSense: "DualSense Edge", .dualShock: "DualShock 4", .backbone: "Backbone One", .generic: "MFi controller"]
+        let names: [ControllerDiagramFamily: String] = [.xbox: "Xbox Series", .xboxElite: "Xbox Elite Series 2",
+            .dualSense: "DualSense", .dualSenseEdge: "DualSense Edge", .dualShock: "DualShock 4",
+            .backbone: "Backbone One", .generic: "MFi controller"]
         let excluded: Set<ControllerMappedButton> = [.paddle1, .paddle2, .paddle3, .paddle4, .touchpad, .share]
         var buttons = ControllerMappedButton.allCases.filter { !excluded.contains($0) }
-        if family == .xbox { buttons += [.paddle1, .paddle2, .paddle3, .paddle4] }
+        if family == .xboxElite { buttons += [.paddle1, .paddle2, .paddle3, .paddle4] }
         if family.isPlayStation { buttons.append(.touchpad) }
-        if family == .dualSense { buttons.append(.share) }
+        if family.isDualSense || family == .xbox { buttons.append(.share) }
         if family == .backbone { buttons.append(.share) }
         let layout = ControllerLayout.standard(buttons: buttons)
         var labels: [ControllerMappedButton: (String, String)] = [:]
@@ -92,18 +93,23 @@ struct ControllerLayoutRenderTests {
             labels = [.a: ("Cross", "xmark"), .b: ("Circle", "circle"), .x: ("Square", "square"), .y: ("Triangle", "triangle"),
                 .home: ("PS button", "playstation.logo"), .share: ("Mute", "mic.slash"),
                 .menu: ("Options", "line.3.horizontal"), .options: ("Create", "line.3.horizontal.decrease")]
-        } else if family == .xbox {
+        } else if family.isXbox {
             labels = [.home: ("Xbox button", "xbox.logo"),
                 .leftShoulder: ("LB", "lb.button.roundedbottom.horizontal"),
                 .rightShoulder: ("RB", "rb.button.roundedbottom.horizontal")]
         }
         var controls = layout.bindings.map { binding in
             let face: (String, String)?
-            if case .button(let button) = binding.source { face = labels[button] } else { face = nil }
+            switch binding.source {
+            case .button(let button): face = labels[button]
+            case .trigger(let trigger) where family.isXbox:
+                face = trigger == .left ? ("LT", "lt.button.roundedtop.horizontal") : ("RT", "rt.button.roundedtop.horizontal")
+            default: face = nil
+            }
             return ControllerLayoutControl(id: binding.source, name: face?.0 ?? binding.source.layoutName,
                 symbol: face?.1 ?? binding.source.layoutSymbol)
         }
-        if family == .dualSense {
+        if family == .dualSenseEdge {
             controls += [.init(id: .extra("back-left"), name: "Left back button", symbol: "button.horizontal",
                                position: .backLeftPrimary),
                          .init(id: .extra("back-right"), name: "Right back button", symbol: "button.horizontal",

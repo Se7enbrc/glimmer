@@ -28,6 +28,8 @@
   Translucent controls follow Light and Dark appearance and become clearer while
   held. Adjust the whole overlay's opacity under All controls in Edit controls
   and save it with the layout.
+- Controller layouts use detailed diagrams for PlayStation, Xbox, Backbone and
+  MFi controllers, with back views for supported paddles and extra buttons.
 
 - Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
   Sequoia, windows and controls use the system's standard materials in place of

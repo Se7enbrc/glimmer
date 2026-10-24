@@ -16,6 +16,12 @@ struct ControllerLayoutDiagram: View {
         }
     }
 
+    private var visibleControls: [(ControllerLayoutControl, ControllerDiagramPlacement)] {
+        controls.compactMap { control in
+            ControllerDiagramGeometry.visiblePlacement(control, family: family, rear: rear).map { (control, $0) }
+        }
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             if positioned.contains(where: { $0.1.rear }) {
@@ -31,13 +37,13 @@ struct ControllerLayoutDiagram: View {
             GeometryReader { geometry in
                 let scale = geometry.size.width / 480
                 ZStack(alignment: .topLeading) {
-                    shell
+                    ControllerArtwork(family: family, rear: rear)
                     if !rear {
                         directionPad(scale: scale)
                         stick(left: true, scale: scale)
                         stick(left: false, scale: scale)
                     }
-                    ForEach(positioned.filter { $0.1.rear == rear }, id: \.0.id) { control, placement in
+                    ForEach(visibleControls, id: \.0.id) { control, placement in
                         controlButton(control, placement: placement, scale: scale)
                     }
                 }
@@ -56,50 +62,12 @@ struct ControllerLayoutDiagram: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var shell: some View {
-        GeometryReader { geometry in
-            let scale = geometry.size.width / 480
-            let body = ControllerBodyShape(family: family)
-            body.fill(.regularMaterial)
-                .overlay { body.stroke(.secondary.opacity(0.5), lineWidth: 1.5) }
-            if family == .backbone {
-                RoundedRectangle(cornerRadius: 12 * scale)
-                    .fill(.background)
-                    .overlay { RoundedRectangle(cornerRadius: 12 * scale).stroke(.tertiary, lineWidth: 1) }
-                    .frame(width: 274 * scale, height: 170 * scale)
-                    .position(x: 240 * scale, y: 177 * scale)
-            }
-            if rear {
-                RoundedRectangle(cornerRadius: 8 * scale)
-                    .stroke(.tertiary, lineWidth: 1)
-                    .frame(width: (family.isPlayStation ? 54 : 92) * scale,
-                           height: (family.isPlayStation ? 16 : 86) * scale)
-                    .position(x: 240 * scale, y: (family.isPlayStation ? 216 : 144) * scale)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-
     private func controlButton(_ control: ControllerLayoutControl, placement: ControllerDiagramPlacement,
                                scale: CGFloat) -> some View {
-        let touchpad = control.id == .button(.touchpad)
-        let radius = touchpad ? 8 * scale : min(placement.width, placement.height) * scale / 2
-        let shape = RoundedRectangle(cornerRadius: radius)
-        return Button { select(control) } label: {
-            Image(systemName: control.symbol)
-                .resizable().scaledToFit()
-                .frame(width: min(placement.width - 6, touchpad ? 24 : 44) * scale,
-                       height: min(placement.height - 6, 26) * scale)
-                .frame(width: placement.width * scale, height: placement.height * scale)
-                .foregroundStyle(.primary)
-                .background(Color.primary.opacity(0.035), in: shape)
-                .overlay {
-                    if placement.rear || touchpad || family.isPlayStation {
-                        shape.stroke(.secondary.opacity(0.35), lineWidth: 0.75)
-                    }
-                }
-                .frame(minWidth: 28, minHeight: 28)
-                .contentShape(.capsule)
+        Button { select(control) } label: {
+            ControllerControlArtwork(control: control, placement: placement, family: family, scale: scale)
+                .contentShape(ControllerButtonShape(family: family, placement: placement,
+                                                    source: control.id))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(control.name)
@@ -113,9 +81,8 @@ struct ControllerLayoutDiagram: View {
         return Menu {
             ForEach(available) { control in Button(control.name) { select(control) } }
         } label: {
-            Image(systemName: "dpad.fill")
-                .resizable().scaledToFit().foregroundStyle(.secondary)
-                .frame(width: 66 * scale, height: 66 * scale)
+            ControllerDpadArtwork(family: family, scale: scale)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain).menuIndicator(.hidden)
         .disabled(available.isEmpty)
@@ -135,14 +102,8 @@ struct ControllerLayoutDiagram: View {
         return Menu {
             ForEach(available) { control in Button(control.name) { select(control) } }
         } label: {
-            Circle().fill(.secondary.opacity(0.16))
-                .overlay { Circle().stroke(.secondary.opacity(0.6), lineWidth: 1.5) }
-                .overlay {
-                    Circle().fill(.background).padding(7 * scale)
-                        .overlay { Image(systemName: left ? "l.joystick.press.down" : "r.joystick.press.down")
-                            .font(.system(size: 24 * scale)).foregroundStyle(.secondary) }
-                }
-                .frame(width: 66 * scale, height: 66 * scale)
+            ControllerStickArtwork(family: family, left: left, scale: scale)
+                .contentShape(.circle)
         }
         .buttonStyle(.plain).menuIndicator(.hidden)
         .disabled(available.isEmpty)
