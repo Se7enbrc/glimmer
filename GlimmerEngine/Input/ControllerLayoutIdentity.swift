@@ -14,7 +14,8 @@ public struct ControllerLayoutIdentity: Codable, Hashable, Sendable {
         let serial = verifiedSerial?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let placeholders = ["unknown", "none", "null", "0", "00000000", "000000000000"]
         if let vendor, let product, vendor != 0, product != 0, !salt.isEmpty,
-           !serial.isEmpty, serial.utf8.count <= 256, !placeholders.contains(serial.lowercased()) {
+           !serial.isEmpty, serial.utf8.count <= 256, !placeholders.contains(serial.lowercased()),
+           serial.contains(where: { $0 != "0" && $0 != ":" && $0 != "-" }) {
             hardware = Self.digest([salt.base64EncodedString(), String(vendor), String(product), serial])
         } else {
             hardware = nil
@@ -70,11 +71,13 @@ public struct ControllerLayoutRecord: Codable, Equatable, Sendable {
     public let key: ControllerLayoutKey
     public var name: String
     public var layout: ControllerLayout
+    public var controls: [ControllerLayoutControl]
 
-    public init(key: ControllerLayoutKey, name: String, layout: ControllerLayout) {
+    public init(key: ControllerLayoutKey, name: String, layout: ControllerLayout, controls: [ControllerLayoutControl] = []) {
         self.key = key
         self.name = name
         self.layout = layout
+        self.controls = controls
     }
 }
 
@@ -82,6 +85,7 @@ public struct ControllerLayoutLibrary: Codable, Equatable, Sendable {
     public var version = 1
     public private(set) var records: [ControllerLayoutRecord]
     public private(set) var shortcuts: [ControllerShortcutRecord]
+    public var games: [ControllerLayoutGameRecord] = []
 
     public init(records: [ControllerLayoutRecord] = [], shortcuts: [ControllerShortcutRecord] = []) {
         self.records = records
@@ -110,6 +114,8 @@ public struct ControllerLayoutLibrary: Codable, Equatable, Sendable {
 
     public mutating func remove(_ key: ControllerLayoutKey) { records.removeAll { $0.key == key } }
 
+    public mutating func removeShortcuts(for owner: ControllerLayoutOwner) { shortcuts.removeAll { $0.owner == owner } }
+
     public func shortcuts(for identity: ControllerLayoutIdentity) -> ControllerLayoutShortcuts? {
         if let hardware = identity.hardware,
            let record = shortcuts.first(where: { $0.owner == .hardware(hardware) }) { return record.shortcuts }
@@ -133,6 +139,10 @@ public struct ControllerLayoutLibrary: Codable, Equatable, Sendable {
             try record.key.validate()
             guard record.name.utf8.count <= 256 else { throw ControllerLayoutError.invalidDocument }
             try record.layout.validate()
+            try ControllerLayout(bindings: record.controls.map { .init($0.id, .disabled) }).validate()
+            guard record.controls.allSatisfy({ $0.name.utf8.count <= 256 && $0.symbol.utf8.count <= 128 }) else {
+                throw ControllerLayoutError.invalidDocument
+            }
         }
         guard shortcuts.count <= 512, Set(shortcuts.map(\.owner)).count == shortcuts.count else {
             throw ControllerLayoutError.invalidDocument
@@ -141,6 +151,15 @@ public struct ControllerLayoutLibrary: Codable, Equatable, Sendable {
             try ControllerLayoutKey(owner: record.owner, scope: .allGames).validate()
             guard record.available.count <= 256 else { throw ControllerLayoutError.invalidBindings }
             try record.shortcuts.validate(available: record.available)
+        }
+        guard games.count <= 1024, Set(games.map(\.id)).count == games.count else {
+            throw ControllerLayoutError.invalidDocument
+        }
+        for game in games {
+            try game.id.validate()
+            guard game.name.utf8.count <= 256, game.pcName.utf8.count <= 256 else {
+                throw ControllerLayoutError.invalidDocument
+            }
         }
     }
 }

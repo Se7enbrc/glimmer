@@ -41,6 +41,18 @@ public struct ControllerLayoutBinding: Equatable, Codable, Sendable {
     }
 }
 
+public struct ControllerLayoutControl: Identifiable, Hashable, Codable, Sendable {
+    public let id: ControllerLayoutSource
+    public let name: String
+    public let symbol: String
+
+    public init(id: ControllerLayoutSource, name: String, symbol: String) {
+        self.id = id
+        self.name = name
+        self.symbol = symbol
+    }
+}
+
 public struct ControllerLayout: Equatable, Codable, Sendable {
     public var bindings: [ControllerLayoutBinding]
 

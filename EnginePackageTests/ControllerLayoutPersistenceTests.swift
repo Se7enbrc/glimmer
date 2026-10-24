@@ -21,6 +21,7 @@ struct ControllerLayoutPersistenceTests {
         #expect(identity().type == identity(controls: ["b", "a", "b"]).type)
         #expect(identity(serial: "unknown").hardware == nil)
         #expect(identity(serial: "000000000000").hardware == nil)
+        #expect(identity(serial: "00:00:00:00:00:00").hardware == nil)
         #expect(identity(serial: "one").hardware != identity(serial: "two").hardware)
         #expect(identity(serial: "one").type == identity(serial: "two").type)
     }
@@ -82,5 +83,15 @@ struct ControllerLayoutPersistenceTests {
         #expect(throws: ControllerLayoutError.invalidDocument) {
             try ControllerLayoutLibrary(records: Array(repeating: value, count: 513)).validate()
         }
+    }
+
+    @Test func disconnectedControlNamesAndGlyphsSurvivePersistence() throws {
+        var record = record(.type(identity().type), .allGames)
+        record.controls = [.init(id: .button(.a), name: "Cross", symbol: "xmark.circle"),
+                           .init(id: .extra("rear"), name: "Left rear button", symbol: "1.circle")]
+        let library = ControllerLayoutLibrary(records: [record])
+        try library.validate()
+        let data = try JSONEncoder().encode(library)
+        #expect(try JSONDecoder().decode(ControllerLayoutLibrary.self, from: data) == library)
     }
 }

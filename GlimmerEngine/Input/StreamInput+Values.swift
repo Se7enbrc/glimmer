@@ -64,10 +64,13 @@ public struct ControllerInputSample: Sendable {
     public var rightStickX: Float
     public var rightStickY: Float
     public var touchpad: ControllerTouchpadSample?
+    public var extraButtons: SIMD2<UInt64>
+    public var physicalSample: ControllerMappingSample?
 
     public init(buttons: ControllerButtons = [], leftTrigger: Float = 0, rightTrigger: Float = 0,
                 leftStickX: Float = 0, leftStickY: Float = 0, rightStickX: Float = 0, rightStickY: Float = 0,
-                touchpad: ControllerTouchpadSample? = nil) {
+                touchpad: ControllerTouchpadSample? = nil, extraButtons: SIMD2<UInt64> = .zero,
+                physicalSample: ControllerMappingSample? = nil) {
         self.buttons = buttons
         self.leftTrigger = leftTrigger
         self.rightTrigger = rightTrigger
@@ -76,6 +79,8 @@ public struct ControllerInputSample: Sendable {
         self.rightStickX = rightStickX
         self.rightStickY = rightStickY
         self.touchpad = touchpad
+        self.extraButtons = extraButtons
+        self.physicalSample = physicalSample
     }
 
     package static let triggerPressThreshold: UInt8 = 128

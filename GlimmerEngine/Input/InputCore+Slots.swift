@@ -24,6 +24,7 @@ extension InputCore {
     @discardableResult
     package func announceController(slot: UInt8, arrival: ControllerArrival) -> Int32 {
         withLock {
+            let arrival = layoutArrival(arrival, slot: slot)
             pendingArrivals[slot] = arrival
             guard snapshot.ready, flushReleases() else { return -2 }
             let result = backend?.sendControllerArrival(num: slot, mask: snapshot.mask, type: arrival.type,
@@ -48,6 +49,8 @@ extension InputCore {
 
     package func retireController(slot: UInt8) {
         withLock {
+            layouts?.states[Int(slot)] = nil
+            if layouts?.states.allSatisfy({ $0 == nil }) == true { layouts = nil }
             pendingArrivals[slot] = nil
             releases.controllerRemovals.insert(slot)
             releases.hold(.controller(slot))

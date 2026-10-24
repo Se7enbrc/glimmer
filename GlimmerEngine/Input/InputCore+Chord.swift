@@ -16,6 +16,7 @@ extension InputCore {
 
     package func clearChords() {
         withLock {
+            layouts?.reset()
             for slot in chordSlots { updateChord(slot: slot, held: false, invalidate: true) }
         }
     }

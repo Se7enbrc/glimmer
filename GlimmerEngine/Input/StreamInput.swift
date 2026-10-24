@@ -120,9 +120,14 @@ public final class StreamInput: @unchecked Sendable {
             let accepted = state.rearm.filter(buttons: sample.buttons.rawValue, analog: sample.analog,
                                               touch: sample.touchpad?.sanitized)
             registrations[registration.slot] = state
+            if core.layouts != nil {
+                core.rememberUnfocusedLayout(slot: registration.slot, physical: sample.physicalSample,
+                    system: .init(buttons: sample.buttons.rawValue, analog: sample.analog, extras: sample.extraButtons))
+            }
             guard accepts(capturedAt), ensureAnnounced(registration) else { return }
             core.receive(slot: registration.slot, buttons: accepted.buttons,
-                         analog: accepted.analog, capturedAt: capturedAt)
+                         analog: accepted.analog, capturedAt: capturedAt, extras: sample.extraButtons,
+                         physicalSample: sample.physicalSample)
             if let touch = accepted.touch {
                 core.forwardTouchpad(slot: registration.slot, primary: (touch.primaryX, touch.primaryY),
                     secondary: (touch.secondaryX, touch.secondaryY), clicked: touch.clicked, now: capturedAt)
