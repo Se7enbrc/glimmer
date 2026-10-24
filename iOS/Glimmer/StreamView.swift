@@ -86,7 +86,9 @@ final class StreamViewController: GCEventViewController {
     }
 
     func startWhenReady() {
-        guard isViewLoaded, view.window != nil, view.bounds.width > view.bounds.height else { return }
+        guard isViewLoaded, view.window != nil, view.bounds.width > 0, view.bounds.height > 0 else { return }
+        // iPad windows can remain tall even when the scene requests landscape.
+        guard traitCollection.userInterfaceIdiom == .pad || view.bounds.width > view.bounds.height else { return }
         model.start(surface: surface)
     }
 
