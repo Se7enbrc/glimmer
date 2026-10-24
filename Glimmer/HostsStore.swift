@@ -438,6 +438,7 @@ extension AppModel {
     /// moves only on a real address change, since monitor() drops the PHY samples.
     func selectionChanged(from old: Host?) {
         if old?.id != selectedHost?.id {
+            hostUnreachableStreak = 0
             hostLiveStatus = nil
             wakeFailedHostID = nil
             wakeFailureReason = nil

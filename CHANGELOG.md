@@ -63,6 +63,10 @@
 
 ### Bug fixes
 
+- Returning to Glimmer keeps the launcher ready when the PC answered recently,
+  while checking its status in the background. A running game no longer makes
+  the launcher wait for the PC to become idle.
+
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.
 - iPhone audio diagnostics now distinguish missing packets, rejected audio and
