@@ -20,11 +20,6 @@ struct TouchOverlay: View {
             } else if model.inputFocused {
                 TouchControlsButton(area: area, showControls: model.showControls)
             }
-            if model.phase == .streaming, !model.controllerConnected, !model.touchGeometryUsable,
-               !model.editingTouchControls {
-                Text("Make this window larger to use touch controls.")
-                    .multilineTextAlignment(.center).padding().frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
             Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 .onChange(of: area, initial: true) { _, area in
                     guard geometry.size.width > 0, geometry.size.height > 0 else { return }

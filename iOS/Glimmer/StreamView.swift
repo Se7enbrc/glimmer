@@ -173,9 +173,38 @@ struct StreamControls: View {
 
     var body: some View {
         ZStack {
-            if !model.editingTouchControls && (model.touchGeometryUsable || model.controllerConnected
-                || model.phase != .streaming) {
-                if model.phase == .streaming {
+            statusPane
+            TouchOverlay(model: model)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .preferredColorScheme(.dark)
+        .overlay(alignment: model.touchControlsVisible ? .center : .bottom) {
+            if model.inputFocused { notices.offset(y: model.touchControlsVisible ? -24 : 0) }
+        }
+        .opacity(model.dismissWhenStopped ? 0 : 1)
+        .allowsHitTesting(!model.dismissWhenStopped)
+        .accessibilityHidden(model.dismissWhenStopped)
+        .onChange(of: model.phase.isEnded && model.dismissWhenStopped, initial: true) { _, finished in
+            if finished { close() }
+        }
+        .confirmationDialog("Quit \(model.launch.appName) on \(model.launch.pcName)?",
+                            isPresented: $confirmingQuit, titleVisibility: .visible) {
+            Button("Quit \(model.launch.appName)", role: .destructive, action: model.quitGame)
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Unsaved progress may be lost. Other streams from \(model.launch.pcName) will stop.")
+        }
+    }
+
+    private var statusPane: some View {
+        ZStack {
+            if !model.editingTouchControls {
+                if model.phase == .streaming, !model.controllerConnected, !model.touchGeometryUsable {
+                    ScrollView {
+                        Text("Make this window larger to use touch controls.")
+                            .multilineTextAlignment(.center).padding()
+                    }
+                } else if model.phase == .streaming {
                     status
                 } else {
                     GeometryReader { geometry in
@@ -187,11 +216,9 @@ struct StreamControls: View {
                     }
                 }
             }
-            TouchOverlay(model: model)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .preferredColorScheme(.dark)
-        .overlay(alignment: .topTrailing) {
+        .safeAreaInset(edge: .top, alignment: .trailing) {
             if !model.editingTouchControls && (model.controlsVisible || model.phase != .streaming) {
                 VStack(alignment: .trailing, spacing: 0) {
                     controls
@@ -211,33 +238,20 @@ struct StreamControls: View {
                 }
             }
         }
-        .overlay(alignment: .bottom) {
-            VStack(spacing: 8) {
-                if let message = model.controllerModeMessage, model.inputFocused {
-                    Text(message).font(.callout).padding(8).glassEffect().allowsHitTesting(false)
-                        .transition(.opacity)
-                }
-                if model.waitingForVideo, model.phase == .streaming {
-                    Label("Waiting for video…", systemImage: "clock")
-                        .font(.callout).padding().glassEffect()
-                }
+        .safeAreaInset(edge: .bottom) { if !model.inputFocused { notices } }
+    }
+
+    private var notices: some View {
+        VStack(spacing: 8) {
+            if let message = model.controllerModeMessage, model.inputFocused {
+                Text(message).font(.callout).padding(8).glassEffect().transition(.opacity)
             }
-            .padding(.bottom, 8)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.controllerModeMessage)
+            if model.waitingForVideo, model.phase == .streaming {
+                Label("Waiting for video…", systemImage: "clock").font(.callout).padding().glassEffect()
+            }
         }
-        .confirmationDialog("Quit \(model.launch.appName) on \(model.launch.pcName)?",
-                            isPresented: $confirmingQuit, titleVisibility: .visible) {
-            Button("Quit \(model.launch.appName)", role: .destructive, action: model.quitGame)
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Unsaved progress may be lost. Other streams from \(model.launch.pcName) will stop.")
-        }
-        .opacity(model.dismissWhenStopped ? 0 : 1)
-        .allowsHitTesting(!model.dismissWhenStopped)
-        .accessibilityHidden(model.dismissWhenStopped)
-        .onChange(of: model.phase.isEnded && model.dismissWhenStopped, initial: true) { _, finished in
-            if finished { close() }
-        }
+        .padding(.bottom, 8).allowsHitTesting(false)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.controllerModeMessage)
     }
 
     @ViewBuilder private var controls: some View {
@@ -251,6 +265,7 @@ struct StreamControls: View {
     private var controlLayout: some View {
         ViewThatFits(in: .horizontal) {
             HStack { controlActions }
+            HStack { controlActions }.labelStyle(.iconOnly)
             VStack(alignment: .trailing) { controlActions }
         }.padding()
     }
