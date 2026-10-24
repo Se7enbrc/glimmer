@@ -15,6 +15,13 @@ BOUNDARY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BOUNDARY)
 
 
+SHARED_SOAK_SOURCES = {
+    f"../EnginePackageTests/{name}.swift" for name in (
+        "AudioSoakTests", "InputSoakTests", "SessionSoakTests", "SoakInputBackend", "SoakTransport"
+    )
+}
+
+
 def validate_project(project, expected):
     objects = project["objects"]
     references = {key: item for key, item in objects.items()
@@ -56,6 +63,9 @@ def check(root):
     expected["GlimmerTests"].add("../GlimmerTests/VideoColorPatternTests.swift")
     if any(not sources for sources in expected.values()):
         raise ValueError("Missing iOS app or test sources")
+    expected["GlimmerTests"].update(SHARED_SOAK_SOURCES)
+    if any(not (ios / source).is_file() for source in SHARED_SOAK_SOURCES):
+        raise ValueError("Missing shared soak test sources")
     validate_project(BOUNDARY.load_project(ios / "Glimmer.xcodeproj/project.pbxproj"), expected)
     lock = ios / "Glimmer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
     if lock.exists():

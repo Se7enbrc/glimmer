@@ -689,6 +689,11 @@
 		D1A6202610180000000014B /* GlimmerDiagnosticCapture+XML.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610180000000014F /* GlimmerDiagnosticCapture+XML.swift */; };
 		D1A6202610180000000015B /* GlimmerDiagnosticCapture+Process.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610180000000015F /* GlimmerDiagnosticCapture+Process.swift */; };
 		D1A6202610180000000030B /* GlimmerDiagnosticCapture+Clock.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A6202610180000000030F /* GlimmerDiagnosticCapture+Clock.swift */; };
+		280BB8804E64469A989A9175 /* SoakTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A52572A30CF493B90B5C74C /* SoakTransport.swift */; };
+		A6A0DFEBAF5947798B529E9B /* SessionSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6B8D1CA299F4C5D85F9C824 /* SessionSoakTests.swift */; };
+		4D5AC7FC4A2F46669BFF0C54 /* AudioSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55111050FF214DB786CA5252 /* AudioSoakTests.swift */; };
+		A71335CBDEB940D8AB876478 /* SoakInputBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53DF99DA163148F4AC90E30A /* SoakInputBackend.swift */; };
+		D051B9E3369D40E4B90980A0 /* InputSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 113D7A54BDA8463D9446D939 /* InputSoakTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1432,6 +1437,11 @@
 		D1A6202610180000000014F /* GlimmerDiagnosticCapture+XML.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/CLI/GlimmerDiagnosticCapture+XML.swift"; sourceTree = SOURCE_ROOT; };
 		D1A6202610180000000015F /* GlimmerDiagnosticCapture+Process.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/CLI/GlimmerDiagnosticCapture+Process.swift"; sourceTree = SOURCE_ROOT; };
 		D1A6202610180000000030F /* GlimmerDiagnosticCapture+Clock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/CLI/GlimmerDiagnosticCapture+Clock.swift"; sourceTree = SOURCE_ROOT; };
+		9A52572A30CF493B90B5C74C /* SoakTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/SoakTransport.swift"; sourceTree = SOURCE_ROOT; };
+		B6B8D1CA299F4C5D85F9C824 /* SessionSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/SessionSoakTests.swift"; sourceTree = SOURCE_ROOT; };
+		55111050FF214DB786CA5252 /* AudioSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/AudioSoakTests.swift"; sourceTree = SOURCE_ROOT; };
+		53DF99DA163148F4AC90E30A /* SoakInputBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/SoakInputBackend.swift"; sourceTree = SOURCE_ROOT; };
+		113D7A54BDA8463D9446D939 /* InputSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/InputSoakTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1731,6 +1741,11 @@
 				7FDDED911B1446E189BA9F48 /* ControllerBatteryAttemptTests.swift */,
 				2C384E0B75D84A1C9D600624 /* EnvObservationLifetimeTests.swift */,
 				833CEB3A00B446F4AE896999 /* VideoAPITests.swift */,
+				9A52572A30CF493B90B5C74C /* SoakTransport.swift */,
+				B6B8D1CA299F4C5D85F9C824 /* SessionSoakTests.swift */,
+				55111050FF214DB786CA5252 /* AudioSoakTests.swift */,
+				53DF99DA163148F4AC90E30A /* SoakInputBackend.swift */,
+				113D7A54BDA8463D9446D939 /* InputSoakTests.swift */,
 				04D0B87CC9234840AB170535 /* InputAPITests.swift */,
 				3A512D68504B40DAB2ABB377 /* VideoBoundaryTests.swift */,
 				0993F1C446DD4B81ADA982E8 /* AudioBoundaryTests.swift */,
@@ -2586,6 +2601,11 @@
 				5D1F9D567D9C420BAD3C5E16 /* ControllerBatteryAttemptTests.swift in Sources */,
 				FD5533CB293E4E42A1843CA6 /* EnvObservationLifetimeTests.swift in Sources */,
 				DCD36887F3DD421C92D438D9 /* VideoAPITests.swift in Sources */,
+				280BB8804E64469A989A9175 /* SoakTransport.swift in Sources */,
+				A6A0DFEBAF5947798B529E9B /* SessionSoakTests.swift in Sources */,
+				4D5AC7FC4A2F46669BFF0C54 /* AudioSoakTests.swift in Sources */,
+				A71335CBDEB940D8AB876478 /* SoakInputBackend.swift in Sources */,
+				D051B9E3369D40E4B90980A0 /* InputSoakTests.swift in Sources */,
 				59F41A463AE44BE281229BA9 /* InputAPITests.swift in Sources */,
 				79FDF04D6D49401AAD6D3BA8 /* VideoBoundaryTests.swift in Sources */,
 				F8AA1A0DA38B488F9BFD757E /* AudioBoundaryTests.swift in Sources */,

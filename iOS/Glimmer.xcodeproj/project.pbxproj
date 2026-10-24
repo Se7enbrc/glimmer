@@ -89,6 +89,11 @@
 		B4D8A1F4662A448B88A9ABCC /* StreamDisplayMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E6D3B59D0034724BF096CCA /* StreamDisplayMode.swift */; };
 		C98A81575E2E43DB9264E7A7 /* ExternalStreamSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 561F95F4E6DA4B03A68B34D7 /* ExternalStreamSceneDelegate.swift */; };
 		B5BF87137D7941F0B279F257 /* ExternalStreamOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21AF75350764B66B907C5FE /* ExternalStreamOutputTests.swift */; };
+		E0CA41170F6D4AC3AE93FADB /* SoakTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF3C696C71946A8B934C0D7 /* SoakTransport.swift */; };
+		6B93908BCA6F4EE7900227AB /* SessionSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B568AB4020F4D058FB81D6A /* SessionSoakTests.swift */; };
+		1B853B11365C442C9C7D8A83 /* AudioSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD2F6A8EE12B4523B0843294 /* AudioSoakTests.swift */; };
+		6749DCF4412642DE8E4A260C /* SoakInputBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C163E6C978F43E4932CF0C1 /* SoakInputBackend.swift */; };
+		363006B84E794619B32525DF /* InputSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD9157DDD93149D59A3866D6 /* InputSoakTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -200,6 +205,11 @@
 		5E6D3B59D0034724BF096CCA /* StreamDisplayMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamDisplayMode.swift"; sourceTree = "<group>"; };
 		561F95F4E6DA4B03A68B34D7 /* ExternalStreamSceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExternalStreamSceneDelegate.swift"; sourceTree = "<group>"; };
 		C21AF75350764B66B907C5FE /* ExternalStreamOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExternalStreamOutputTests.swift"; sourceTree = "<group>"; };
+		0CF3C696C71946A8B934C0D7 /* SoakTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/SoakTransport.swift"; sourceTree = SOURCE_ROOT; };
+		2B568AB4020F4D058FB81D6A /* SessionSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/SessionSoakTests.swift"; sourceTree = SOURCE_ROOT; };
+		BD2F6A8EE12B4523B0843294 /* AudioSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/AudioSoakTests.swift"; sourceTree = SOURCE_ROOT; };
+		1C163E6C978F43E4932CF0C1 /* SoakInputBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/SoakInputBackend.swift"; sourceTree = SOURCE_ROOT; };
+		DD9157DDD93149D59A3866D6 /* InputSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/InputSoakTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -306,6 +316,11 @@
 				CAEE98C2A04C4861AF0185B2 /* IOSAudioPipelineTests.swift */,
 				8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */,
 				22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */,
+				0CF3C696C71946A8B934C0D7 /* SoakTransport.swift */,
+				2B568AB4020F4D058FB81D6A /* SessionSoakTests.swift */,
+				BD2F6A8EE12B4523B0843294 /* AudioSoakTests.swift */,
+				1C163E6C978F43E4932CF0C1 /* SoakInputBackend.swift */,
+				DD9157DDD93149D59A3866D6 /* InputSoakTests.swift */,
 				C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */,
 				3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */,
 				39B8F39A9BC8494A8BBC0149 /* DiagnosticsDefaultsTests.swift */,
@@ -530,6 +545,11 @@
 				E53BAE83AE664B16A3908721 /* IOSAudioPipelineTests.swift in Sources */,
 				5357DD73479F12579699A792 /* IOSAudioSessionTests.swift in Sources */,
 				1A26CF1176BA5F2D37E40F0A /* IOSAudioFixtures.swift in Sources */,
+				E0CA41170F6D4AC3AE93FADB /* SoakTransport.swift in Sources */,
+				6B93908BCA6F4EE7900227AB /* SessionSoakTests.swift in Sources */,
+				1B853B11365C442C9C7D8A83 /* AudioSoakTests.swift in Sources */,
+				6749DCF4412642DE8E4A260C /* SoakInputBackend.swift in Sources */,
+				363006B84E794619B32525DF /* InputSoakTests.swift in Sources */,
 				2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */,
 				448039B562D4A381F641CF03 /* AppDeclarationTests.swift in Sources */,
 				80AAC985744D4D0CA0D130C1 /* DiagnosticsDefaultsTests.swift in Sources */,

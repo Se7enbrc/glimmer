@@ -24,6 +24,8 @@ class IOSBoundaryTests(unittest.TestCase):
 
         cls.expected["GlimmerTests"].add("../GlimmerTests/VideoColorPatternTests.swift")
 
+        cls.expected["GlimmerTests"].update(BOUNDARY.SHARED_SOAK_SOURCES)
+
     def setUp(self):
         self.value = copy.deepcopy(self.project)
         self.objects = self.value["objects"]
@@ -59,6 +61,19 @@ class IOSBoundaryTests(unittest.TestCase):
         self.object("PBXSourcesBuildPhase")["files"].pop()
         with self.assertRaisesRegex(ValueError, "source membership mismatch"):
             BOUNDARY.validate_project(self.value, self.expected)
+
+    def test_each_shared_soak_source_is_required(self):
+        paths = BOUNDARY.BOUNDARY.file_paths(self.value)
+        for source in BOUNDARY.SHARED_SOAK_SOURCES:
+            with self.subTest(source=source):
+                value = copy.deepcopy(self.value)
+                objects = value["objects"]
+                for phase in objects.values():
+                    if phase["isa"] == "PBXSourcesBuildPhase":
+                        phase["files"] = [entry for entry in phase["files"]
+                                          if paths[objects[entry]["fileRef"]] != source]
+                with self.assertRaisesRegex(ValueError, "source membership mismatch"):
+                    BOUNDARY.validate_project(value, self.expected)
 
     def test_compiling_engine_source_in_shell_is_rejected(self):
         reference = next(item for item in self.objects.values()
