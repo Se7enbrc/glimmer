@@ -295,10 +295,12 @@ Sparkle update signature, run on another fresh runner without the release
 environment. That validate stage also checks the DMG with
 `codesign --verify --strict`,
 `spctl -a -t open --context context:primary-signature`, and
-`xcrun stapler validate`. Any failure blocks publication. No build or release
-job restores a cache. The approved workflow, main's tooling, reviewed source and
-dependencies remain trusted: a digest binds the handoff, it does not make a
-malicious build trustworthy. This is not a SLSA-level claim.
+`xcrun stapler validate`. Any failure blocks publication. Credential-free
+verification jobs may restore unsigned compiler state. Signing, validation and
+publication jobs never restore build caches. The approved workflow, main's
+tooling, reviewed source and dependencies remain trusted: a digest binds the
+handoff, it does not make a malicious build trustworthy. This is not a
+SLSA-level claim.
 
 | Check                                          | Expected result                                                                      |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------ |
