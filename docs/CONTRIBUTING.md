@@ -18,7 +18,7 @@ Required:
 Brew prerequisites:
 
 ```bash
-brew install python swiftlint actionlint trufflehog pre-commit
+brew install python swiftlint actionlint trufflehog pre-commit shellcheck
 ```
 
 The streaming engine links no third-party library: crypto, TLS and audio decode
