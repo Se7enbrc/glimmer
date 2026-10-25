@@ -29,7 +29,15 @@ struct TouchDeviceRenderTests {
         let window = UIWindow(windowScene: scene)
         let host = StreamViewController(model: model, close: {})
         host.overrideUserInterfaceStyle = dark ? .dark : .light
-        window.rootViewController = host
+        let orientation = TouchOrientationController()
+        let phone = scene.traitCollection.userInterfaceIdiom != .pad
+        orientation.mask = phone ? (reverse ? .landscapeRight : .landscapeLeft) : .all
+        orientation.addChild(host)
+        orientation.view.addSubview(host.view)
+        host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        host.view.frame = orientation.view.bounds
+        host.didMove(toParent: orientation)
+        window.rootViewController = orientation
         window.makeKeyAndVisible()
         defer { capture.detach(); model.stop(); window.isHidden = true; previous?.makeKeyAndVisible() }
         let sample = UIHostingController(rootView: TouchSampleFrame().ignoresSafeArea())
@@ -38,22 +46,10 @@ struct TouchDeviceRenderTests {
         sample.didMove(toParent: host)
         sample.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         sample.view.frame = host.view.bounds
-        try await Task.sleep(for: .milliseconds(300))
-        // Resizable iPad scenes ignore orientation requests; they record the window as it is.
-        let phone = scene.traitCollection.userInterfaceIdiom != .pad
-        if phone {
-            host.setNeedsUpdateOfSupportedInterfaceOrientations()
-            let target: UIInterfaceOrientation = reverse ? .landscapeRight : .landscapeLeft
-            let mask: UIInterfaceOrientationMask = reverse ? .landscapeRight : .landscapeLeft
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
-                Attachment.record(Array(error.localizedDescription.utf8), named: "rotation-error.txt")
-            }
-            let deadline = ContinuousClock.now + .seconds(5)
-            while scene.effectiveGeometry.interfaceOrientation != target, ContinuousClock.now < deadline {
-                try await Task.sleep(for: .milliseconds(20))
-            }
-            try #require(scene.effectiveGeometry.interfaceOrientation == target)
-        }
+        // Resizable iPad scenes keep their current window geometry.
+        let target: UIInterfaceOrientation? = phone ? (reverse ? .landscapeRight : .landscapeLeft) : nil
+        try await orientation.settle(in: scene, target: target)
+        if let target { try #require(scene.effectiveGeometry.interfaceOrientation == target) }
         model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
         var playingFrames: [TouchElement: CGRect]?
         for state in ["before", "after", "editor", "physical", "show-menu", "override",
@@ -186,5 +182,63 @@ struct TouchDeviceRenderTests {
     private func touchView(in view: UIView) -> TouchGamepadView? {
         if let touch = view as? TouchGamepadView { return touch }
         return view.subviews.lazy.compactMap { touchView(in: $0) }.first
+    }
+}
+
+@MainActor
+private final class TouchOrientationController: UIViewController {
+    var mask: UIInterfaceOrientationMask = .all
+    private let updates = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    private var appeared = false
+    private var transitioning = false
+    private var geometryError: (any Error)?
+
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { mask }
+    override var childForStatusBarHidden: UIViewController? { children.first }
+    override var childForHomeIndicatorAutoHidden: UIViewController? { children.first }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        appeared = true
+        updates.continuation.yield(())
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updates.continuation.yield(())
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: any UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        transitioning = true
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            guard let self else { return }
+            transitioning = false
+            updates.continuation.yield(())
+        }
+    }
+
+    func settle(in scene: UIWindowScene, target: UIInterfaceOrientation?) async throws {
+        let deadline = Timer(timeInterval: 5, repeats: false) { [updates] _ in
+            updates.continuation.finish()
+        }
+        RunLoop.main.add(deadline, forMode: .common)
+        defer { deadline.invalidate() }
+        var iterator = updates.stream.makeAsyncIterator()
+        while !appeared || transitioning {
+            try #require(await iterator.next() != nil, "UIKit did not settle the scene within five seconds")
+        }
+        guard let target else { return }
+        setNeedsUpdateOfSupportedInterfaceOrientations()
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { [weak self] error in
+            self?.geometryError = error
+            self?.updates.continuation.yield(())
+        }
+        while transitioning || scene.effectiveGeometry.interfaceOrientation != target {
+            if let geometryError { throw geometryError }
+            try #require(await iterator.next() != nil, "UIKit did not settle the scene within five seconds")
+        }
+        try Task.checkCancellation()
+        if let geometryError { throw geometryError }
     }
 }
