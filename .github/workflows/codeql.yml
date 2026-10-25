@@ -73,6 +73,7 @@ jobs:
       contents: read
       pull-requests: read
       security-events: write
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -224,7 +225,8 @@ jobs:
         if:
           steps.changes.outputs.scan == 'true' && matrix.language == 'swift' &&
           steps.restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # Same-ref action receives only unsigned cache paths.
+        uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
         with:
           path: ${{ runner.temp }}/swift-framework-traps
           key: ${{ steps.frameworks.outputs.key }}
@@ -253,7 +255,7 @@ jobs:
           name: swift-extraction-diagnostics
           path: ${{ runner.temp }}/codeql-results/swift.sarif
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 1
       # The jobs API binds this upload receipt to its successful run and attempt.
       - name: CodeQL upload ${{ steps.analyze.outputs.sarif-id }}
         if: steps.changes.outputs.scan == 'true'

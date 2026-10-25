@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 # A PR update or closure replaces its run; all other events keep independent runs.
 concurrency:
@@ -186,7 +187,7 @@ jobs:
             build/Logs/Test/
             build/coverage/swift/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 1
 
       - name: Coverage summary
         if: matrix.coverage != ''
@@ -206,7 +207,7 @@ jobs:
           name: coverage-${{ matrix.coverage }}-macos
           path: build/coverage/${{ matrix.coverage }}/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
           include-hidden-files: true
 
       - name: Build and test the source package
@@ -255,11 +256,12 @@ jobs:
             build/logs/
             iOS/build/logs/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 1
 
       - name: Save compiler and dependency caches
         if: success() && steps.build-cache.outputs.hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # Same-ref action receives only unsigned cache paths.
+        uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
         with:
           path: ${{ steps.build-cache.outputs.paths }}
           key: ${{ steps.build-cache.outputs.key }}
@@ -317,7 +319,7 @@ jobs:
           make -C iOS test-build TEST_DESTINATION="$destination" TEST_FLAGS='-enableCodeCoverage YES' \
             2>&1 | tee iOS/build/logs/test-build.log
           if grep -E '(^|[[:space:]])warning:' iOS/build/logs/test-build.log; then exit 1; fi
-          tar -C iOS/build/DerivedData/Build -czf "$RUNNER_TEMP/ios-tests.tgz" Products
+          tar -C iOS/build/production/DerivedData/Build -czf "$RUNNER_TEMP/ios-tests.tgz" Products
 
       - name: Share the Simulator test products
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -329,7 +331,8 @@ jobs:
 
       - name: Save compiler and dependency caches
         if: success() && steps.build-cache.outputs.hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # Same-ref action receives only unsigned cache paths.
+        uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
         with:
           path: ${{ steps.build-cache.outputs.paths }}
           key: ${{ steps.build-cache.outputs.key }}
@@ -341,7 +344,7 @@ jobs:
           name: ios-build-results
           path: iOS/build/logs/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 1
 
   ios:
     name: iOS (Simulator ${{ matrix.shard }})
@@ -350,7 +353,7 @@ jobs:
       needs.changes.outputs.build == 'true' && needs.changes.outputs.apple ==
       'true'
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -370,14 +373,14 @@ jobs:
           path: ${{ runner.temp }}
 
       - name: Test iPhone app against this checkout
-        timeout-minutes: 20
+        timeout-minutes: 40
         shell: bash
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           set -o pipefail
-          mkdir -p iOS/build/logs iOS/build/DerivedData/Build
-          tar -C iOS/build/DerivedData/Build -xzf "$RUNNER_TEMP/ios-tests.tgz"
+          mkdir -p iOS/build/logs iOS/build/production/DerivedData/Build
+          tar -C iOS/build/production/DerivedData/Build -xzf "$RUNNER_TEMP/ios-tests.tgz"
           destination=$(scripts/ci-ios-simulator.sh)
           case "$SHARD" in
             render) filter="-only-testing:GlimmerTests/NativeUIRenderTests" ;;
@@ -405,7 +408,7 @@ jobs:
             iOS/build/logs/
             iOS/build/CI-tests.xcresult
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 1
 
   # Run the same instrumented products on the oldest supported macOS.
   sequoia:
@@ -450,7 +453,7 @@ jobs:
             build/logs/
             build/sequoia.xcresult
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 1
 
   fuzz:
     name: libFuzzer
@@ -482,7 +485,7 @@ jobs:
             build/logs/
             build/fuzz/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 1
   checks:
     name: Portable checks
     needs: changes
@@ -558,4 +561,4 @@ jobs:
           path: build/coverage/python/
           include-hidden-files: true
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1

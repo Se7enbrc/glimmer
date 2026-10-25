@@ -6,6 +6,7 @@ on:
   workflow_call:
 permissions:
   contents: read
+  actions: read
 jobs:
   checks:
     name: Linux checks
@@ -45,6 +46,7 @@ jobs:
           echo "$RUNNER_TEMP/glimmer-tools/python/bin" >> "$GITHUB_PATH"
       - name: Run every portable hook and script fixture
         env:
+          SKIP: swiftlint
           GLIMMER_SECRET_SCAN_ALL_FILES: "1"
           SCAN_FROM:
             ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -59,7 +61,8 @@ jobs:
         if:
           github.event_name == 'push' && github.ref == 'refs/heads/main' &&
           steps.tools.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # Same-ref action receives only unsigned cache paths.
+        uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
         with:
           path: |
             ${{ runner.temp }}/glimmer-tools
@@ -72,4 +75,4 @@ jobs:
           path: build/coverage/python/
           include-hidden-files: true
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1

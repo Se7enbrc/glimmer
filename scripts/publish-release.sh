@@ -38,8 +38,10 @@ git -C "$HERE" fetch --quiet origin main "+refs/heads/$APPCAST_BRANCH:refs/remot
 HEAD_SHA="$(git -C "$HERE" rev-parse HEAD)"
 MAIN_SHA="$(git -C "$HERE" rev-parse origin/main)"
 if [ "$CHANNEL" = rc ]; then
-	[ "$HEAD_SHA" = "${GITHUB_SHA:-}" ] && [ "$HEAD_SHA" = "${EXPECTED_SHA:-}" ] || {
-		echo "ERR: candidate source does not match the reviewed workflow SHA" >&2; exit 1; }
+	if [ "$HEAD_SHA" != "${GITHUB_SHA:-}" ] || [ "$HEAD_SHA" != "${EXPECTED_SHA:-}" ]; then
+		echo "ERR: candidate source does not match the reviewed workflow SHA" >&2
+		exit 1
+	fi
 	TAG_SHA="$(gh api "repos/$REPO/commits/$TAG" --jq .sha)"
 	[ "$TAG_SHA" = "$HEAD_SHA" ] || { echo "ERR: candidate tag must already identify the reviewed source" >&2; exit 1; }
 elif [ "$HEAD_SHA" != "$MAIN_SHA" ]; then
@@ -90,7 +92,10 @@ if ! SIG_LINE="$("$CREDS" get SPARKLE_ED_PRIVATE_KEY | "$TOOLS/sign_update" --ed
 fi
 ED_SIG="$(printf '%s' "$SIG_LINE" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
 LENGTH="$(printf '%s' "$SIG_LINE" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"
-[ -n "$ED_SIG" ] && [ -n "$LENGTH" ] || { echo "ERR: sign_update produced no signature" >&2; exit 1; }
+if [ -z "$ED_SIG" ] || [ -z "$LENGTH" ]; then
+    echo "ERR: sign_update produced no signature" >&2
+    exit 1
+fi
 APP_ED_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)"
 "$HERE/scripts/verify-update-signature.swift" "$APP_ED_KEY" "$ED_SIG" "$ZIP" || {
 	echo "ERR: the update signature doesn't match the app's SUPublicEDKey; installed copies would reject it." >&2

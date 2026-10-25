@@ -39,7 +39,7 @@ jobs:
         with:
           name: scorecard-report
           path: results.sarif
-          retention-days: 5
+          retention-days: 1
 
       - name: Upload security findings
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2

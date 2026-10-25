@@ -112,18 +112,20 @@ hosted acceptance. Concurrent PRs compete for the same five slots.
 | Overlap the two traced CodeQL builds                            | Estimated 4–8 minutes saved, subject to memory/CPU contention.                                                                                                             |
 | Untrace only framework-cache keying/copying                     | Removes most of the observed 3.7–4.2 maintenance minutes. Production compilation remains traced and uncached.                                                              |
 | Version-only PR selection                                       | Numeric-only version metadata runs checks; direct candidate and main dispatches still run everything.                                                                      |
-| Xcode CAS, SDK modules, SwiftPM and unsigned DerivedData        | First new key has 0% hits. At an assumed 30–70% reusable compiler work, expect 2–4 fewer build minutes, less upload/download cost. This hit rate needs hosted measurement. |
+| Xcode CAS and SwiftPM checkouts/builds                          | First new key has 0% hits. At an assumed 30–70% reusable compiler work, expect 2–4 fewer build minutes, less upload/download cost. This hit rate needs hosted measurement. |
 | Release verification cache reuse and Linux checks               | Avoids another Mac checks allocation and reuses candidate compiler state; test, ASan and Release configurations remain distinct.                                           |
 | Credential-free TestFlight compilation cache                    | Reuses unchanged compilation inputs across candidate archives; signing and delivery restore no cache.                                                                      |
 
 Cache keys separate runner OS/architecture/image, Xcode build, configuration
-consumer and dependency/build-setting hashes. Fallbacks never cross those
-boundaries. GitHub isolates PR cache writes from main and candidate branches.
-TestFlight also separates compiled flavours and retains its exact-source gate.
-No cache includes keychains, credentials, profiles or signed distribution
-assets. Third-party inputs are hashed; their SwiftPM checkouts and built
-artifacts live inside the cached package/build directories. Compiler caches
-never authorize a job to skip its build or test command.
+consumer and dependency/build-setting hashes, without commit or branch suffixes.
+Fallbacks never cross those boundaries. GitHub isolates PR cache writes from
+main and candidate branches. TestFlight also separates compiled flavours and
+retains its exact-source gate. No cache includes keychains, credentials,
+profiles or signed distribution assets. Whole DerivedData products,
+intermediates and SDK module trees are not cached; test products travel through
+one-day artifacts. Third-party inputs are hashed; their SwiftPM checkouts and
+built artifacts live inside the cached package/build directories. Compiler
+caches never authorize a job to skip its build or test command.
 
 Mac coverage and ASan instrumentation cannot share object files, nor can device,
 Simulator, Debug, Release and CodeQL instrumentation. Each compatible test build
@@ -186,17 +188,47 @@ path equality now also covers the new helper/action files.
 
 ## Local validation
 
-Both branches passed make check, actionlint and the complete hook suite. Main
-passed 445 Python fixtures, 2,015 Swift tests and 17 ASan tests; the integration
-branch passed 493 Python fixtures, 2,699 Swift tests and 17 ASan tests. Compiler
-logs contain no compiler warnings. The subsequent missing-boundary-tool
-regression failed before the fix and passed with all six policy tests on both
-branches. A synthetic two-part coverage merge reported all four statements and
-both branches, without modifying the coverage reporter.
+Both branches passed make check, actionlint, zizmor and the complete hook suite.
+The full Python fixture suite runs without skips. Before feature-batch
+reconciliation, main passed 2,015 Swift tests and 17 ASan tests; integration
+passed 2,699 Swift tests and 17 ASan tests, with no compiler warnings. Native
+execution of the newly merged product batch remains hosted acceptance.
+Missing-boundary-tool and helper-floor regressions fail on the old behavior and
+pass on the corrections. A synthetic two-part coverage merge reports all four
+statements and both branches without modifying the coverage reporter.
 
 Install the auditor once with scripts/install-ci-auditor.sh and an existing bin
 directory on PATH, then run pre-commit install-hooks before committing. The
 installer verifies the official binary checksum; commits never download it.
+
+## Free storage budget
+
+At the start of this revision, GitHub reported 2.63 GB across 24 cache entries.
+The old full compiler entries were 326–359 MB compressed; existing framework
+entries were roughly 95–99 MB. The reduced CAS/SwiftPM entries are expected to
+use 100–300 MB each, framework entries about 100 MB, and portable tools roughly
+100–200 MB. Budget 2–4 GB for the active toolchain/configuration set; hosted
+sizes are still needed for the merged feature batch.
+
+Only main and release-candidate may save caches. PRs restore shared caches but
+never allocate their own copies. Keys omit commit SHA, branch and runner-image
+revision; Xcode build, SDK consumer and dependency/build settings still separate
+incompatible state. Immutable entries refresh when those inputs change. The
+upload guard rejects entries above 512 MiB and stops new admission at 5 GiB
+repository usage. Five Mac uploads plus one Linux tools upload can then bring
+usage to at most 8 GiB, leaving headroom below the free 10 GB limit. Usage
+lookup failure disables only the optional upload. No cache limit or paid-storage
+setting is changed. Old entries expire or are evicted; that can reduce hit rates
+but never removes a build, test or gate.
+
+Every uploaded CI artifact has one-day retention, including test products and
+release handoffs. Consume handoffs within that day; expired evidence fails
+closed and requires a fresh authorized run.
+
+Strict SwiftLint runs in required Mac checks, including release verification.
+Linux runs the other hooks and portable fixtures; its SwiftLint hook alone is
+explicitly delegated to Mac. Python tests are not skipped. SC2015 gate chains
+use explicit conditions with their original fail-closed behavior.
 
 ## Remaining hosted acceptance
 
@@ -207,10 +239,10 @@ toolchain libraries, fails closed when SourceKit is missing, and pins ShellCheck
 0.11.0 by its official checksum. Regression fixtures prove the SourceKit
 environment is required. A replacement hosted run is necessary.
 
-Confirm Linux SwiftLint and all portable fixtures, Xcode 26.6 CAS hit rates,
-artifact transfer sizes, complete Simulator shard counts, macOS 15 execution,
-CodeQL extraction and queue-adjusted wall time. Docker's daemon was stopped
-locally, so Linux execution was not claimed as validated.
+Confirm all portable Linux fixtures, Xcode 26.6 CAS hit rates, artifact transfer
+sizes, complete Simulator shard counts, macOS 15 execution, CodeQL extraction
+and queue-adjusted wall time. Docker's daemon was stopped locally, so Linux
+execution was not claimed as validated.
 
 A prebuilt GHCR tools image could remove roughly 20–90 seconds on a cold Linux
 job; a warm tool cache already avoids installation. It does not reduce the Mac

@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: Save within free cache budget
+description: Admit bounded unsigned caches only on shared trusted branches
+inputs:
+  path:
+    description: Newline-separated compiler or tool cache directories
+    required: true
+  key:
+    description: Toolchain and dependency identity without a commit or branch
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Check free storage headroom
+      id: budget
+      shell: bash
+      env:
+        CACHE_PATHS: ${{ inputs.path }}
+        GH_TOKEN: ${{ github.token }}
+        DYLD_INSERT_LIBRARIES: ""
+      run: python3 scripts/cache-budget.py >> "$GITHUB_OUTPUT"
+    - name: Save admitted cache
+      if: steps.budget.outputs.save == 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ inputs.path }}
+        key: ${{ inputs.key }}
