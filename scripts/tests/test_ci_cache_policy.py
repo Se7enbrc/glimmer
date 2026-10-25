@@ -9,10 +9,12 @@ import subprocess
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class CICachePolicyTests(unittest.TestCase):
+class CICachePolicyTests(FixtureTestCase):
     def test_key_separates_toolchains_locks_and_instrumentation(self):
         action = (ROOT / ".github/actions/build-cache/action.yml").read_text()
         for field in ("RUNNER_OS", "RUNNER_ARCH", "xcode", "VARIANT", "LOCKS"):

@@ -8,13 +8,15 @@ import importlib.util
 from pathlib import Path
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("ios_boundary", ROOT / "scripts/check-ios-boundary.py")
 BOUNDARY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BOUNDARY)
 
 
-class IOSBoundaryTests(unittest.TestCase):
+class IOSBoundaryTests(FixtureTestCase):
     @classmethod
     def setUpClass(cls):
         cls.project = BOUNDARY.BOUNDARY.load_project(ROOT / "iOS/Glimmer.xcodeproj/project.pbxproj")

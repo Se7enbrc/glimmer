@@ -7,13 +7,15 @@ import os
 from pathlib import Path
 import sys
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 from release_summary import duration, report
 
 
-class ReleaseSummaryTests(unittest.TestCase):
+class ReleaseSummaryTests(FixtureTestCase):
     def test_summary_reports_identity_durations_hashes_and_recovery_without_diagnostics(self):
         jobs = [{'name': 'publication / publish', 'conclusion': 'failure',
                  'started_at': '2026-10-12T12:00:00Z', 'completed_at': '2026-10-12T12:00:12Z',

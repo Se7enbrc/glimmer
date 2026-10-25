@@ -10,10 +10,12 @@ import tempfile
 import textwrap
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class SequoiaWarningTests(unittest.TestCase):
+class SequoiaWarningTests(FixtureTestCase):
     def test_build_for_testing_receives_warning_policy_and_preserves_failure(self):
         source = (ROOT / ".github/workflows/verify.yml").read_text()
         job = source.split("  verify:\n", 1)[1].split("  ios:\n", 1)[0]

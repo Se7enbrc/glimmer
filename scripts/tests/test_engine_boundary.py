@@ -8,6 +8,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 SPEC = importlib.util.spec_from_file_location("engine_boundary", Path(__file__).parents[1] / "check-engine-boundary.py")
 BOUNDARY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BOUNDARY)
@@ -43,7 +45,7 @@ def project_fixture():
     return {"rootObject": "ROOT", "objects": objects}, expected
 
 
-class EngineBoundaryTests(unittest.TestCase):
+class EngineBoundaryTests(FixtureTestCase):
     def setUp(self):
         self.project, self.expected = project_fixture()
         self.objects = self.project["objects"]

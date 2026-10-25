@@ -9,13 +9,15 @@ import subprocess
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location('imports', ROOT / 'scripts/check-python-imports.py')
 IMPORTS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(IMPORTS)
 
 
-class DeveloperToolsTests(unittest.TestCase):
+class DeveloperToolsTests(FixtureTestCase):
     def test_default_is_help_without_signing_or_building(self):
         result = subprocess.run(['make', '-n'], cwd=ROOT, capture_output=True, text=True, check=True)
         self.assertIn('Develop', result.stdout)

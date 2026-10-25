@@ -7,13 +7,15 @@ import subprocess
 import sys
 import unittest
 
+from fixture_git import FixtureTestCase
+
 SCRIPT = Path(__file__).resolve().parents[1] / "verify-changed.py"
 SPEC = importlib.util.spec_from_file_location("verify_changed", SCRIPT)
 CHANGED = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHANGED)
 
 
-class VerifyScopeTests(unittest.TestCase):
+class VerifyScopeTests(FixtureTestCase):
     def test_documentation_and_the_site_skip_the_build(self):
         self.assertFalse(CHANGED.must_build([
             "README.md", "CHANGELOG.md", "docs/INSTALL.md", "docs/gitbook-docs.yaml",

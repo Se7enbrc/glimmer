@@ -7,10 +7,12 @@ from pathlib import Path
 import subprocess
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class CITestProductsTests(unittest.TestCase):
+class CITestProductsTests(FixtureTestCase):
     def command(self, target):
         return subprocess.run(["make", "-n", target, "COVERAGE=1"], cwd=ROOT,
                               capture_output=True, text=True, check=True).stdout

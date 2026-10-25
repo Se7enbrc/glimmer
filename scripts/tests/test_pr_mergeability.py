@@ -10,12 +10,14 @@ import tempfile
 import textwrap
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/pr-mergeability.yml"
 SHA = "a" * 40
 
 
-class PRMergeabilityTests(unittest.TestCase):
+class PRMergeabilityTests(FixtureTestCase):
     def diagnose(self, metadata, api_status=0):
         shell = textwrap.dedent(WORKFLOW.read_text().split("        run: |\n", 1)[1])
         with tempfile.TemporaryDirectory() as temporary:

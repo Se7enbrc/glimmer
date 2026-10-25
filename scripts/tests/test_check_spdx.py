@@ -8,10 +8,12 @@ import subprocess
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 SCRIPT = Path(__file__).resolve().parents[1] / "check-spdx.sh"
 
 
-class LicenseNoticeTests(unittest.TestCase):
+class LicenseNoticeTests(FixtureTestCase):
     def run_check(self, source):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

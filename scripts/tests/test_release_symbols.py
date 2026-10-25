@@ -8,6 +8,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 import zipfile
 
@@ -15,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 import release_symbols as symbols
 
 
-class ReleaseSymbolsTests(unittest.TestCase):
+class ReleaseSymbolsTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

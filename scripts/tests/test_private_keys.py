@@ -8,13 +8,15 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "check-private-keys.sh"
 SECRET_SCRIPT = SCRIPT.with_name("check-secrets.sh")
 
 
-class PrivateKeyGateTests(unittest.TestCase):
+class PrivateKeyGateTests(FixtureTestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

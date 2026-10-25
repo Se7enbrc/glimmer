@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 from fixture_process import run_fixture
@@ -105,7 +107,7 @@ else:
 '''
 
 
-class ReleaseRunDisplayTests(unittest.TestCase):
+class ReleaseRunDisplayTests(FixtureTestCase):
     def test_only_macos_opens_the_release_page(self):
         with patch.object(sys, "path", [str(SCRIPTS), *sys.path]):
             show = runpy.run_path(str(SCRIPTS / "release-candidate.py"))["show"]
@@ -121,7 +123,7 @@ class ReleaseRunDisplayTests(unittest.TestCase):
                     run.assert_not_called()
 
 
-class ReleaseCandidateCutTests(unittest.TestCase):
+class ReleaseCandidateCutTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="glimmer candidate fixture ")
         self.addCleanup(self.temp.cleanup)
@@ -130,9 +132,8 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         for directory in (self.work / "scripts", self.state, tools):
             directory.mkdir(parents=True)
         self.env = {key: value for key, value in os.environ.items()
-                    if key not in {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "SSH_AUTH_SOCK"}}
-        self.env.update(PATH=f"{tools}:/usr/bin:/bin", HOME=str(self.root), GIT_CONFIG_NOSYSTEM="1",
-                        GIT_CONFIG_GLOBAL=os.devnull, FIXTURE_STATE=str(self.state))
+                    if key != "SSH_AUTH_SOCK"}
+        self.env.update(PATH=f"{tools}:/usr/bin:/bin", FIXTURE_STATE=str(self.state))
         self.measure_copy()
         (tools / "gh").write_text(GH)
         (tools / "open").write_text(f'#!/bin/bash\necho "$@" >> "{self.state}/open.log"\n')
