@@ -360,6 +360,19 @@ exit 1
         self.assertEqual(self.zip.read_bytes(), b"prepared update bytes")
         self.assertFalse(Path(self.env["FIXTURE_DITTO_MARKER"]).exists())
 
+    def test_publication_reads_binary_bundle_values_without_native_plist_tools(self):
+        info = {"CFBundleShortVersionString": "2026.10.6", "CFBundleVersion": "400",
+                "SUPublicEDKey": "fixture-public-key"}
+        (self.root / "Glimmer.app/Contents/Info.plist").write_bytes(plistlib.dumps(info, fmt=plistlib.FMT_BINARY))
+        (self.root / "tools/sign_update").write_text(
+            '#!/bin/bash\ncat >/dev/null\nprintf \'sparkle:edSignature="fixture" length="21"\\n\'\n')
+        verifier = self.root / "scripts/verify-update-signature.swift"
+        verifier.write_text('#!/bin/sh\n[ "$1" = fixture-public-key ] && [ "$2" = fixture ]\n')
+        result = self.publish()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(Path(self.env["FIXTURE_PUBLISH_MARKER"]).exists(), result.stderr)
+        self.assertNotIn("doesn't match the app's SUPublicEDKey", result.stderr)
+
     def test_signature_the_app_would_reject_stops_publication(self):
         (self.root / "tools/sign_update").write_text(
             '#!/bin/bash\ncat >/dev/null\nprintf \'sparkle:edSignature="fixture" length="21"\\n\'\n')

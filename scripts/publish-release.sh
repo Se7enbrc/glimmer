@@ -61,14 +61,19 @@ python3 "$HERE/scripts/release_validation.py" \
 	--config "$HERE/Glimmer/Version.xcconfig" --appcast "$FEED" --channel "$CHANNEL" \
 	--short-version "$SHORT" --build "$BUILD" --app "$APP" --validate-distribution
 
+read_bundle_value() {
+	python3 -c 'import plistlib, sys
+with open(sys.argv[1], "rb") as source:
+    print(plistlib.load(source).get(sys.argv[2], ""))' "$APP/Contents/Info.plist" "$1"
+}
+
 # Version assertion: the committed version at the tag, the built bundle, and the
 # advertised version ($SHORT) must all agree. A dirty .48 shipped with a bundle
 # version that the committed source didn't carry; assert all three match so the
 # tag's GPLv3 source always reproduces the binary. Fail loud on any mismatch.
 COMMITTED_VERSION="$(git -C "$HERE" show "HEAD:Glimmer/Version.xcconfig" \
 	| sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' | tr -d ' ')"
-BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-	"$APP/Contents/Info.plist" 2>/dev/null || true)"
+BUNDLE_VERSION="$(read_bundle_value CFBundleShortVersionString 2>/dev/null || true)"
 [ "$COMMITTED_VERSION" = "$SHORT" ] || {
 	echo "ERR: committed MARKETING_VERSION ($COMMITTED_VERSION) at HEAD != advertised version ($SHORT)." >&2
 	echo "  Bump + commit Version.xcconfig so the tag's source matches what you're publishing." >&2
@@ -96,7 +101,7 @@ if [ -z "$ED_SIG" ] || [ -z "$LENGTH" ]; then
     echo "ERR: sign_update produced no signature" >&2
     exit 1
 fi
-APP_ED_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)"
+APP_ED_KEY="$(read_bundle_value SUPublicEDKey 2>/dev/null || true)"
 "$HERE/scripts/verify-update-signature.swift" "$APP_ED_KEY" "$ED_SIG" "$ZIP" || {
 	echo "ERR: the update signature doesn't match the app's SUPublicEDKey; installed copies would reject it." >&2
 	exit 1
