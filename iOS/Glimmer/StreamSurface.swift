@@ -47,7 +47,10 @@ final class StreamSurface: UIView {
         let pixels = CGSize(width: landscape ? max(native.width, native.height) : min(native.width, native.height),
                             height: landscape ? min(native.width, native.height) : max(native.width, native.height))
         if scene.session.role == .windowExternalDisplayNonInteractive { return pixels }
-        return StreamDisplayGeometry.pixels(viewSize: bounds.size, scale: screen.nativeScale, screenPixels: pixels)
+        // Clamp against the panel in the window's own orientation; rotation must not shrink the request.
+        let panel = (bounds.width > bounds.height) == (pixels.width > pixels.height)
+            ? pixels : CGSize(width: pixels.height, height: pixels.width)
+        return StreamDisplayGeometry.pixels(viewSize: bounds.size, scale: screen.nativeScale, screenPixels: panel)
     }
 
     func replaceDisplayLayer(attach: (AVSampleBufferDisplayLayer) -> Void) -> AVSampleBufferDisplayLayer {

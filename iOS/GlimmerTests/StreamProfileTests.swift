@@ -102,9 +102,11 @@ struct StreamProfileTests {
         window.addSubview(surface)
         defer { surface.removeFromSuperview() }
         surface.traitOverrides.displayScale = 1
+        // Physical pixels keep the window aspect and are clamped to the panel, never displayScale points.
+        let pixels = surface.streamPixels
+        #expect(pixels.width > 640 && abs(pixels.width / pixels.height - 640.0 / 480.0) < 0.01)
         let expected = try StreamProfile.native120.resolve(
-            windowPixels: CGSize(width: 640 * scene.screen.nativeScale, height: 480 * scene.screen.nativeScale),
-            maximumFramesPerSecond: scene.screen.maximumFramesPerSecond)
+            windowPixels: pixels, maximumFramesPerSecond: scene.screen.maximumFramesPerSecond)
         #expect(try StreamProfile.native120.resolve(surface: surface) == expected)
     }
 

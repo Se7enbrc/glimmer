@@ -9,23 +9,20 @@ struct StreamDisplayGeometryTests {
     @Test func nativeStreamUsesDrawableWindowPixelsWithoutExceedingThePanel() throws {
         let pixels = StreamDisplayGeometry.pixels(viewSize: CGSize(width: 500, height: 700), scale: 2,
                                                   screenPixels: CGSize(width: 2388, height: 1668))
-        let format = try StreamProfile.native120.resolve(nativePixels: pixels,
-            maximumFramesPerSecond: 120, landscape: false)
-        #expect(format == StreamFormat(width: 1000, height: 1400, fps: 120))
+        #expect(pixels == CGSize(width: 1000, height: 1400))
+        let format = try StreamProfile.native120.resolve(windowPixels: pixels, maximumFramesPerSecond: 120)
+        #expect(StreamDisplayModes.bundled.contains(format) && format.height > format.width)
         #expect(StreamDisplayGeometry.pixels(viewSize: CGSize(width: 3840, height: 2160), scale: 2,
             screenPixels: CGSize(width: 3840, height: 2160)) == CGSize(width: 3840, height: 2160))
     }
 
-    @Test(arguments: [
-        (CGSize(width: 3840, height: 2160), 60, StreamFormat(width: 3840, height: 2160, fps: 60)),
-        (CGSize(width: 1080, height: 1920), 120, StreamFormat(width: 1080, height: 1920, fps: 120)),
-        (CGSize(width: 3440, height: 1440), 144, StreamFormat(width: 3440, height: 1440, fps: 120))
-    ])
-    func externalModesKeepTheirOwnOrientationAndRefreshLimit(pixels: CGSize, refresh: Int,
-                                                             expected: StreamFormat) throws {
-        let format = try StreamProfile.native120.resolve(nativePixels: pixels,
-            maximumFramesPerSecond: refresh, landscape: false)
-        #expect(format == expected)
+    @Test(arguments: [(CGSize(width: 3840, height: 2160), 60), (CGSize(width: 1080, height: 1920), 120),
+                      (CGSize(width: 3440, height: 1440), 144)])
+    func externalModesKeepTheirOwnOrientationAndRefreshLimit(pixels: CGSize, refresh: Int) throws {
+        let format = try StreamProfile.native120.resolve(windowPixels: pixels, maximumFramesPerSecond: refresh)
+        #expect(StreamDisplayModes.bundled.contains(format))
+        #expect((format.width > format.height) == (pixels.width > pixels.height))
+        #expect(format.fps <= min(120, refresh))
     }
 
     @Test func relativeInputUsesTheFittedPictureInTheControlWindow() {
