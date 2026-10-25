@@ -12,6 +12,23 @@ struct StreamStatsShortcutTests {
         try #require(UserDefaults(suiteName: "stats-shortcuts-\(UUID().uuidString)"))
     }
 
+    @Test func freshDefaultsStayAbsentAndExplicitChoicesSurviveReset() throws {
+        let defaults = try defaults()
+        let shortcuts = StreamShortcuts(defaults: defaults)
+        #expect(shortcuts.stats == .defaultStats)
+        #expect(defaults.data(forKey: "statsHotkey") == nil)
+        #expect(defaults.object(forKey: "statsControlZDefaultApplied") == nil)
+        let controlI = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        shortcuts.stats = controlI
+        #expect(StreamShortcuts(defaults: defaults).stats == controlI)
+        SettingsReset.reset(defaults: defaults)
+        let reset = StreamShortcuts(defaults: defaults)
+        #expect(reset.stats == .defaultStats)
+        #expect(defaults.data(forKey: "statsHotkey") == nil)
+        reset.stats = controlI
+        #expect(StreamShortcuts(defaults: defaults).stats == controlI)
+    }
+
     @Test func defaultsMigrationPreservesLaterExplicitChoices() throws {
         let defaults = try defaults()
         let old = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")

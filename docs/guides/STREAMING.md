@@ -123,9 +123,14 @@ displays; it does not include 4K at 120 Hz.
 
 {% hint style="info" %}
 
-On Mac, Control-Z shows the format. H.264, HEVC, supported AV1 and HDR10 require
-compatible hardware. Mac Custom: 640–7680 × 480–4320, 30–240 fps. PC menu: codec
-preference. [Shortcuts](../SHORTCUTS.md): Game Mode.
+⌃Z (Control-Z) shows stream stats on Mac and with a hardware keyboard on iPhone
+and iPad. On iPhone and iPad, you can also choose Show Stream Stats from the
+stream menu. Settings › Quality chooses the initial visibility and overlay
+detail. Change the shortcut in Settings › Input.
+
+H.264, HEVC, supported AV1 and HDR10 require compatible hardware. Mac Custom:
+640–7680 × 480–4320, 30–240 fps. PC menu: codec preference.
+[Shortcuts](../SHORTCUTS.md): Game Mode.
 
 {% endhint %}
 

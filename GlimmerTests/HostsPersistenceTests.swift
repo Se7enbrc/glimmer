@@ -67,8 +67,8 @@ struct HostsPersistenceTests {
         }
         let model = AppModel(defaults: defaults)
         #expect(model.statsHotkey.serialized == (savedKey == "k" ? "ctrl+k" : "ctrl+z"))
-        let restored = try #require(AppModel.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults))
-        #expect(restored == model.statsHotkey)
+        let restored = AppModel.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults)
+        #expect(restored == (savedKey == nil ? nil : model.statsHotkey))
         #expect(AppModel(defaults: defaults).statsHotkey == model.statsHotkey)
     }
 
@@ -80,6 +80,21 @@ struct HostsPersistenceTests {
         #expect(model.statsHotkey == custom)
         let controlI = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
         model.statsHotkey = controlI
+        #expect(AppModel(defaults: defaults).statsHotkey == controlI)
+    }
+
+    @Test func resettingStatsUsesTheCurrentDefaultAndPreservesTheNextExplicitChoice() {
+        let defaults = settings.defaults
+        let model = AppModel(defaults: defaults)
+        let controlI = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        model.statsHotkey = controlI
+        #expect(AppModel(defaults: defaults).statsHotkey == controlI)
+        SettingsReset.reset(defaults: defaults)
+        let reset = AppModel(defaults: defaults)
+        #expect(reset.statsHotkey == .defaultStats)
+        #expect(defaults.data(forKey: "statsHotkey") == nil)
+        #expect(defaults.bool(forKey: "statsControlZDefaultApplied"))
+        reset.statsHotkey = controlI
         #expect(AppModel(defaults: defaults).statsHotkey == controlI)
     }
 

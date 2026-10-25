@@ -1,8 +1,9 @@
 # Install Glimmer on Mac, iPhone or iPad
 
 Choose the install path for your [device](REQUIREMENTS.md), then pair with the
-same Sunshine PC. Mac installs use Homebrew or a DMG. iPhone and iPad use
-TestFlight now, with App Store installation available when released.
+same Sunshine PC. The Mac app is generally available through Homebrew or a DMG.
+iPhone and iPad are in TestFlight beta, with App Store installation available
+when released.
 
 ## Homebrew
 

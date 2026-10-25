@@ -5,8 +5,10 @@ icon: keyboard
 
 # Control your stream with shortcuts
 
-The keyboard shortcuts below apply to the Mac app. For iPhone and iPad, use the
-[stream menu and touch gestures](guides/CONTROLLERS.md#play-with-touch-controls-on-iphone-and-ipad).
+Stop and Stats work on Mac and with a hardware keyboard on iPhone and iPad. Mini
+Player, pointer capture, paste and Mac system shortcuts below apply to Mac. On
+iPhone and iPad, the stream menu also offers “Show Stream Stats” or “Hide Stream
+Stats”.
 
 | Reference                      | Location                                        |
 | ------------------------------ | ----------------------------------------------- |
@@ -28,9 +30,13 @@ The keyboard shortcuts below apply to the Mac app. For iPhone and iPad, use the
 | Paste                | Control-V | Types Mac text into PC.                       |
 | Bookmark             | Control-B | With telemetry enabled; otherwise sent to PC. |
 
-To use ⌃Z (Control-Z) for stats, open Settings › Input and record it beside
-“Show or Hide Stream Stats”. This replaces ⌃I. Glimmer uses your saved binding;
-⌃Q remains the default for “Stop Streaming”.
+⌃Z (Control-Z) is the default for “Show or Hide Stream Stats”; ⌃Q is the default
+for “Stop Streaming”. Change either in Settings › Input. Saved custom bindings
+stay yours. The old stats default moves to ⌃Z once; choosing ⌃I afterward keeps
+it.
+
+Stats changes apply to this stream. Settings › Quality chooses the initial
+visibility and overlay detail for future streams, including on iPhone and iPad.
 
 {% hint style="warning" %}
 
@@ -69,14 +75,21 @@ the setting is on.
 | Command-Escape                       | Game Overlay in native fullscreen; Settings holds Game Mode.                               |
 | Command forwarding, Settings › Input | Sends Windows key fullscreen or captured in window/Mini Player; stop shortcut still works. |
 
-## Controller stop shortcut
+## Controller shortcuts
 
-Hold **L1 + R1 + Start + Select** together for half a second. This stop chord is
-fixed on Mac, iPhone and iPad. Controller layouts cannot change it.
+Hold the complete shortcut for about half a second, then release every button.
+The defaults on Mac, iPhone and iPad are:
+
+- **Stop:** L1 + R1 + Create/Select + Options/Start.
+- **Stats:** L1 + R1 + L3 + R3, using both stick buttons.
+
+Change either in Settings › Input › Controller layouts. Choose Stop streaming or
+Stats, record at least three buttons, then release. Shortcuts use physical
+buttons independently of the game's mapping. Existing saved choices stay yours.
 
 | Controller        | Button names                |
 | ----------------- | --------------------------- |
-| PlayStation       | L1 + R1 + Options + Create. |
+| PlayStation       | L1 + R1 + Create + Options. |
 | Xbox              | LB + RB + Menu + View.      |
 | Other controllers | L1 + R1 + Start + Select.   |
 

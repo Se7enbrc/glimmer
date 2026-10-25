@@ -268,12 +268,7 @@ final class AppModel {
         }
     }
     var statsHotkey: HotkeyChord = .defaultStats {
-        didSet {
-            // Persist the chord, while toggling the overlay stays scoped to this stream.
-            if let data = try? JSONEncoder().encode(statsHotkey) {
-                settingsDefaults.set(data, forKey: "statsHotkey")
-            }
-        }
+        didSet { statsHotkey.persistStats(defaults: settingsDefaults) }
     }
 
     var captureSysKeys: Bool = false {

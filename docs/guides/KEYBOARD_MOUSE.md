@@ -25,8 +25,9 @@ Window or Mini Player: hold plain Escape about a second to free the pointer. See
 ## Keep Mac shortcuts available
 
 Command-Tab and Command-Space stay with the Mac by default. ⌃Q (Control-Q) stops
-the stream. Saved in-stream bindings live in Settings › Input; you can assign ⌃Z
-(Control-Z) to “Show or Hide Stream Stats” there.
+the stream. ⌃Z (Control-Z) shows or hides stream stats by default. Change saved
+bindings in Settings › Input. These two shortcuts also work with a hardware
+keyboard on iPhone and iPad.
 
 ## Paste text into the PC
 

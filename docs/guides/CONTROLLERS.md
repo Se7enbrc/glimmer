@@ -51,14 +51,30 @@ open the stream menu and choose “Controller layouts”.
 
 ## Keep Glimmer's controls available
 
-With a custom layout, hold Menu + Options for one second, then release to show
-controller layouts. Controllers without that pair use Menu + left stick button,
-or both stick buttons. The editor shows the available pair. This shortcut always
-uses physical controls and cannot be remapped.
+Stop streaming and Stats use remappable physical-button shortcuts on Mac, iPhone
+and iPad. Hold the complete shortcut for about half a second, then release.
 
-Hold **L1 + R1 + Start + Select** together for half a second to stop streaming.
-This chord is fixed on every device and cannot be remapped. Game layouts never
-change mouse mode or turn a PC button into a Glimmer shortcut.
+| Action             | Default                                  |
+| ------------------ | ---------------------------------------- |
+| Stop streaming     | L1 + R1 + Create/Select + Options/Start. |
+| Show or hide Stats | L1 + R1 + L3 + R3.                       |
+
+1. Open Settings › Input › Controller layouts.
+2. Choose Stop streaming or Stats.
+3. Hold at least three buttons, then release to record the shortcut.
+
+Saved shortcuts remain independent of game button mappings. Ordinary presses
+reach the PC immediately. Use the stream menu to open controller layouts;
+keyboard Stop and the touch menu remain available.
+
+## Reset settings
+
+1. End the current stream.
+2. Open Settings › General and choose “Reset to defaults…”.
+3. Choose whether to include per-game controller layouts, then confirm.
+
+Reset restores settings and controller shortcuts. Paired PCs, your app library
+and diagnostic captures stay on the device.
 
 ## Navigate the launcher
 
@@ -125,12 +141,11 @@ for touch controls, enlarge it or connect a controller.
 
 {% hint style="warning" %}
 
-Save first. Hold L1 + R1 + Start + Select together for half a second to stop
-streaming. Disconnecting quits the PC app by default. To keep it running, enable
-“Leave games running when you disconnect” in Settings › General before
-streaming.
+Save first. Hold your Stop shortcut, then release, to stop streaming.
+Disconnecting quits the PC app by default. To keep it running, enable “Leave
+games running when you disconnect” in Settings › General before streaming.
 
 {% endhint %}
 
 Next:
-[controller button names and DualSense requirements](../SHORTCUTS.md#controller-stop-shortcut).
+[controller button names and DualSense requirements](../SHORTCUTS.md#controller-shortcuts).

@@ -16,7 +16,7 @@ final class StreamShortcuts {
 
     private let defaults: UserDefaults
     var quit: HotkeyChord { didSet { save(quit, key: Action.quit.key) } }
-    var stats: HotkeyChord { didSet { save(stats, key: Action.stats.key) } }
+    var stats: HotkeyChord { didSet { stats.persistStats(defaults: defaults) } }
     private var held: Set<String> = []
 
     init(defaults: UserDefaults = .standard) {

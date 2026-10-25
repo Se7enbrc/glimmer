@@ -2,23 +2,17 @@
 
 ## 2026.10.8 - Unreleased
 
-- Show or hide stream stats with Control-Z by default. Custom shortcuts stay
-  saved.
-- Keep your chosen stats thresholds, launcher style, codec and touch opacity
-  when defaults change.
-
-- iPhone and iPad connections now check the route to the PC before choosing
-  packet sizes, including when playing through a tunnel.
-
 ### Features
 
+- Show or hide stream stats with ⌃Z (Control-Z) by default. Saved custom
+  shortcuts stay yours.
 - iPhone and iPad now share the Mac's stream stats and hardware-keyboard
   shortcuts. Show stats from the stream menu or Control-Z, stop with Control-Q,
   and change the shortcuts in Settings → Input.
 - Record controller shortcuts for Stop streaming and Stats on Mac, iPhone and
-  iPad. Hold at least three buttons, then release. Stats defaults to Select +
-  L3 + R3; Stop keeps L1 + R1 + Start + Select. Ordinary game input stays
-  immediate.
+  iPad. Hold the shortcut, then release. Stats defaults to L1 + R1 + L3 + R3;
+  Stop defaults to L1 + R1 + Create/Select + Options/Start. Ordinary game input
+  stays immediate.
 
 - Reset settings to defaults from General on Mac, iPhone and iPad. Choose
   whether to include per-game controller layouts; paired PCs, your app library
@@ -48,9 +42,6 @@
   Translucent controls follow Light and Dark appearance and become clearer while
   held. Adjust the whole overlay's opacity under All controls in Edit controls
   and save it with the layout.
-- Controller layouts use detailed diagrams for PlayStation, Xbox, Backbone and
-  MFi controllers, with back views for supported paddles and extra buttons.
-- Controller layouts show the shapes and controls of DualSense, DualSense Edge,
 - Controller layouts show clean line drawings of DualSense, DualSense Edge,
   DualShock 4, Xbox Series, Xbox Elite Series 2 and both Backbone One editions,
   with back views for supported paddles and a diagram for other MFi controllers.
@@ -127,11 +118,15 @@
 
 ### Bug fixes
 
+- Keep your chosen stats thresholds, launcher style, codec and touch opacity
+  when defaults change.
+- iPhone and iPad connections check the route to the PC before choosing packet
+  sizes, including when playing through a tunnel.
 - Returning to Glimmer keeps the launcher ready when the PC answered recently,
   while checking its status in the background. A running game no longer makes
   the launcher wait for the PC to become idle.
-- The iPhone/iPad virtual display sample now includes the Native resolution
-  requested by the open iPhone Duo in the iOS 27.1 Simulator.
+- On iPhone Duo, the supplied PC display modes include the Native size for
+  the open display.
 - PlayStation controllers, including the PlayStation Backbone, are identified
   consistently on Mac, iPhone and iPad so compatible PC games can show matching
   button prompts.
@@ -141,8 +136,6 @@
   quality choices stay readable in Settings.
 - On iPhone, disconnected messages can scroll at larger text sizes, and
   VoiceOver describes Done as returning to your apps.
-- iPad streams can start in portrait, Split View and narrow windows, using the
-  window's shape and resolution within the selected quality limit.
 - iPad streams can start in portrait, Split View and narrow windows. iPhone and
   iPad share the same quality choices and use the supplied PC display modes.
   Native chooses the closest size for the window. Resizing keeps the game
@@ -150,10 +143,8 @@
 - iPad app buttons keep their grid size with a small library. Large text has
   more room in PC names, saved-PC actions and stream controls. Connection
   messages can scroll when space is tight.
-- Quality choices stay readable at accessibility text sizes on iPhone and iPad.
 - Open iPhone and iPad Settings with Command-comma and close them with
   Command-period.
-- Steam's icon renders reliably in the launcher.
 - Large-text app buttons and Settings rows give their names more room in narrow
   iPad windows.
 - Diagnostics describes saved files correctly on both iPhone and iPad.

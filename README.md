@@ -1,8 +1,10 @@
 # Play your PC games on Mac, iPhone and iPad with Glimmer
 
-Glimmer is a native Swift [Sunshine](https://github.com/LizardByte/Sunshine)
-client for Apple devices. Pair with your PC, choose a game and play on Mac,
-iPhone or iPad. Free, now and always. No account or analytics.
+Glimmer is a native Swift Sunshine client for Mac, iPhone and iPad. Pair with
+your PC, choose a game and play on Mac, iPhone or iPad. Free, now and always. No
+account or analytics.
+
+The Mac app is generally available; iPhone and iPad are in TestFlight beta.
 
 Use an Apple Silicon Mac with macOS 15.7 or later, an iPhone with iOS 26 or
 later, or an iPad with iPadOS 26 or later.
@@ -30,8 +32,8 @@ On Mac:
 2. [Pair your PC](docs/GETTING_STARTED.md).
 
 Mac installs update in the app through Sparkle. On iPhone or iPad, install
-through [TestFlight](docs/INSTALL.md#iphone-and-ipad) now, or through the App
-Store when released.
+through the [TestFlight beta](docs/INSTALL.md#iphone-and-ipad) now, or through
+the App Store when released.
 
 ## Choose how you play
 
