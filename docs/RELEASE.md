@@ -358,16 +358,12 @@ release stable/latest, removes the appcast's `rc` channel and updates Homebrew.
 The candidate tag, asset URLs, ZIP signature and size remain. It never rebuilds,
 re-signs or repackages. A conflicting final tag stops promotion.
 
-### Local publication
+### Local source checks
 
-Use local distribution targets only when the maintainer requests that exact
-operation.
-
-`make release` and `make dist` build locally; `make release-publish` directly
-publishes and is not candidate promotion. Packaging/publication need a fully
-clean tree and valid signatures, notarization, Gatekeeper and launch
-authorization. Do not use this path to bypass acceptance or replace published
-bytes.
+Use `make rc DRY_RUN=1` to inspect candidate source checks. `make rc` dispatches
+the hosted workflow when explicitly requested. Signing, notarization, update
+keys, credentials, publication and Homebrew updates run only in CI. Local
+installation and distribution targets have been removed.
 
 ## Website and update feed
 
@@ -383,7 +379,7 @@ deployment change.
 
 An appcast push alone cannot trigger Pages because that branch has no workflow.
 After a manual feed edit, dispatch
-`gh workflow run pages.yml -R Se7enbrc/glimmer`. Local publication dispatches
+`gh workflow run pages.yml -R Se7enbrc/glimmer`. The release workflow dispatches
 it. Preview the site locally with `python3 -m http.server 8765`.
 
 Keep the site without a custom domain until an app release using the new feed
@@ -501,63 +497,19 @@ VM as the final boundary. See
 
 ## 3. Signing credentials
 
-Use explicit Developer ID profiles with the existing certificate for installed
-builds.
+Supply approved signing credentials and app/helper provisioning profiles through
+the protected GitHub release environment. The workflow uses temporary runner
+files and keychains, then removes them. It never reads a developer's local
+keychain or `~/.config/developer-id`.
 
-| Profile                             | Bundle ID                  | Capabilities                                         |
-| ----------------------------------- | -------------------------- | ---------------------------------------------------- |
-| Glimmer Developer ID                | `io.ugfugl.Glimmer`        | Head Pose, Spatial Audio Profile, Enhanced Security. |
-| Glimmer Network Helper Developer ID | `io.ugfugl.glimmer.helper` | Network Topology Observation.                        |
+The CI-only Make entry point is `scripts/ci-signing.mk`. It requires hosted CI
+and temporary credential paths. Developers cannot invoke signing or publication
+through the root Makefile. Certificate exports, key generation and cloud secret
+changes require the maintainer's explicit authorization and are outside local
+build tooling.
 
-Store mode-0600 files in mode-0700 `~/.config/glimmer/profiles/`:
-`Glimmer_Developer_ID.provisionprofile` and
-`Glimmer_Network_Helper_Developer_ID.provisionprofile`. Override paths when
-needed:
-
-```bash
-make release \
-  PROVISIONING_PROFILE="$HOME/Downloads/Glimmer_Developer_ID.provisionprofile" \
-  HELPER_PROVISIONING_PROFILE="$HOME/Downloads/Glimmer_Network_Helper_Developer_ID.provisionprofile"
-```
-
-Validation checks identifier, team, expiry, scope and grants, then embeds each
-profile in its own bundle. Missing/expired profiles stop installation; replace
-the profile, not the keys. Unsigned checks/tests need no profiles. No ad hoc
-installation fallback exists.
-
-### Set up a signing machine
-
-Run setup targets only when the maintainer explicitly requests them.
-
-`make creds-init` creates the credentials file; fill it or set `OP_SOURCE`, then
-use `make codesign-setup setup-notary sparkle-keys` for a new setup. Existing
-releases must keep their Sparkle key. Secrets stay in the mode-0600 file and its
-1Password item, never the repository.
-
-`~/.config/developer-id/` and `~/Library/Keychains/developer-id.keychain-db` are
-shared signing state, not repository files. Keep exactly one reachable matching
-Developer ID identity. The App Store Connect team API key uses the `notary`
-profile; Developer access is sufficient, and it does not depend on the Apple ID
-password.
-
-### Renew credentials and tooling
-
-Renew the expiring item without replacing unrelated signing state.
-
-`make dist` reports certificate expiry and warns 60 days ahead. Use the actual
-certificate date. Create Developer ID certificates on Apple's G2 Sub-CA; the
-older sub-CA stops signing on 2027-02-01. Timestamped builds survive expiry, but
-revoking a release-signing certificate can block those builds. Never revoke one.
-
-For an authorized certificate renewal, create the CSR/key outside the
-repository, obtain the G2 certificate, export a password-protected P12, update
-`P12_PATH` and `P12_PASSWORD` through `scripts/signing-creds.sh`, then rerun
-`make codesign-teardown codesign-setup setup-notary`. Store the P12/passphrase
-in 1Password. Team/name continuity preserves helper and update identity.
-
-Sparkle tools downloads must match `scripts/sparkle-tools.sh`'s pinned digest. A
-`SPARKLE_VERSION` override needs a trusted `SPARKLE_SHA256`. Keep the framework
-pin, tool version and bundled full license in `ThirdPartyNotices.txt` aligned.
+Sparkle tools downloads must match `scripts/sparkle-tools.sh`'s pinned digest.
+Keep its version, the framework pin and `ThirdPartyNotices.txt` aligned.
 
 ## 4. Reproducible payload
 

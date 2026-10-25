@@ -18,20 +18,17 @@ and [iOS contributing](../iOS/CONTRIBUTING.md) for Simulator and device setup.
 
 Use the same Mac toolchain as hosted verification.
 
-| Requirement | Version                                                               |
-| ----------- | --------------------------------------------------------------------- |
-| macOS       | 26 or later, Apple Silicon.                                           |
-| Xcode       | 26.6 or later; hosted Swift checks and releases use 26.6 on macOS 26. |
-| Python      | 3.10 or later.                                                        |
-| TruffleHog  | 3.97.8 or later for the required scan flags.                          |
-| Homebrew    | Installs the tools below.                                             |
+Use macOS 26 or later on Apple Silicon, with Xcode 26.6 or later. CI uses Xcode
+26.6. The committed mise lockfile pins every other development tool.
 
-```bash
-brew install python swiftlint actionlint trufflehog pre-commit shellcheck
-git clone https://github.com/Se7enbrc/glimmer.git
-cd glimmer
-pre-commit install
-```
+1. Install mise: `brew install mise`.
+2. From this checkout, install the pinned tools: `mise install`.
+3. Activate mise in your shell, then install hooks: `mise exec -- hk install`.
+4. List the everyday commands: `make help`.
+
+With mise activated, step 3 is simply `hk install`. Hooks launch through mise
+and do not download tools during a commit. Existing contributors should run
+`pre-commit uninstall` once before `mise exec -- hk install`.
 
 Sparkle is the app's only third-party framework. The engine uses system
 frameworks; there are no submodules or vendored C streaming libraries. Read the
@@ -42,16 +39,16 @@ relevant [architecture](ARCHITECTURE.md) section before changing it.
 Use unsigned checks for correctness; install only when someone will use the
 build.
 
-| Command                                   | Result                                                             |
-| ----------------------------------------- | ------------------------------------------------------------------ |
-| `make app`                                | Unsigned Debug compile check.                                      |
-| `make check`                              | Actionlint, SPDX notices, strict SwiftLint and release-tool tests. |
-| `make test`                               | Hostless Swift unit tests.                                         |
-| `make test TEST_SUITE=DatagramBatchTests` | One suite; append `/testName` for one test.                        |
-| `make test-asan`                          | Protocol fuzz tests under AddressSanitizer.                        |
-| `make verify`                             | All checks above; ignores `TEST_SUITE` so the full gate runs.      |
-| `make test COVERAGE=1`                    | Swift coverage in `build/coverage`.                                |
-| `make test-scripts COVERAGE=1`            | Release-tool coverage in `build/coverage`.                         |
+| Command                                   | Result                                                        |
+| ----------------------------------------- | ------------------------------------------------------------- |
+| `make app`                                | Unsigned Debug compile check.                                 |
+| `make check`                              | hk checks, SPDX notices, boundary audits and tooling tests.   |
+| `make test`                               | Hostless Swift unit tests.                                    |
+| `make test TEST_SUITE=DatagramBatchTests` | One suite; append `/testName` for one test.                   |
+| `make test-asan`                          | Protocol fuzz tests under AddressSanitizer.                   |
+| `make verify`                             | All checks above; ignores `TEST_SUITE` so the full gate runs. |
+| `make test COVERAGE=1`                    | Swift coverage in `build/coverage`.                           |
+| `make test-scripts COVERAGE=1`            | Release-tool coverage in `build/coverage`.                    |
 
 `scripts/fuzz.sh` runs coverage-guided harnesses in a pinned Swift Linux
 container. It needs Docker; `FUZZ_SECONDS` controls each target and crashing
@@ -68,14 +65,26 @@ elapsed time; launching every test together can starve their callbacks on hosted
 runners. Each concurrency test still creates its own overlapping tasks or
 threads. Keep those assertions and time limits intact.
 
+### Before pushing
+
+Run `make preflight`. The hk pre-push hook runs this same command: all hooks,
+script fixtures, Mac tests, AddressSanitizer and `make ci-parity`. On a release
+branch it also runs `make rc DRY_RUN=1 SOURCE_ONLY=1`. This validates source
+before it is pushed; hosted-check and reservation checks still run when cutting
+a candidate. The hook has no project-specific skip switch. Never bypass it as an
+agent.
+
+`make ci-parity` uses `/Applications/Xcode-26.6.0.app/Contents/Developer` when
+installed, without changing the selected Xcode. It compiles the unsigned Mac app
+and tests, iOS Simulator app and tests, and iOS device app into separate
+directories under `build/ci-parity`. If Xcode 26.6 is absent, it prints a clear
+skip message.
+
 ### Run the app
 
-Use the signed installation path only when you need to inspect the app.
-
-`make`, `make open` and `make dev` install a signed, notarized Release build;
-`make dev` tests first and relaunches it. They require your Developer ID and
-explicit [provisioning profiles](RELEASE.md#3-signing-credentials). Compile
-checks and tests need neither.
+Install a published CI candidate when you need to inspect the app. Signing,
+notarization, credentials, update keys and publication stay in the hosted
+Release workflow. Local Make targets only compile and test unsigned products.
 
 For Xcode, run `scripts/generate-build-info.sh` first and base Debug on
 `Glimmer/StreamLib.xcconfig` locally. Keep that project setting out of commits.
@@ -163,11 +172,11 @@ Treat every compiler or strict SwiftLint warning as a failure.
 | Width       | Keep changed lines within 120 columns, even where lint allows more.                        |
 | Fixes       | No suppressions, raised thresholds, force unwraps, force casts or `try!`.                  |
 | Hooks       | Never use `--no-verify`; review and restage any `swiftlint --fix` changes.                 |
-| Other files | Prettier, markdownlint and yamllint run through pre-commit.                                |
+| Other files | Prettier, markdownlint and yamllint run through hk.                                        |
 | Secrets     | Verified-credential scanning plus offline private-key scanning; findings stay out of logs. |
 
 `swift-format` is not enforced because it rewrites the established argument
-alignment. Hosted checks run all pre-commit hooks; formatting failures require a
+alignment. Hosted checks run all hk checks; formatting failures require a
 reviewed fix.
 
 ## Style

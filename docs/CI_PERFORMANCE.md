@@ -197,9 +197,10 @@ Missing-boundary-tool and helper-floor regressions fail on the old behavior and
 pass on the corrections. A synthetic two-part coverage merge reports all four
 statements and both branches without modifying the coverage reporter.
 
-Install the auditor once with scripts/install-ci-auditor.sh and an existing bin
-directory on PATH, then run pre-commit install-hooks before committing. The
-installer verifies the official binary checksum; commits never download it.
+Install the shared toolchain with `mise install`, then
+`mise exec -- hk install`. Tool versions and dependency checksums live in
+`mise.toml`, `mise.lock` and `.mise/locks`. See
+[developer tooling](DX_TOOLING.md) for the migration inventory.
 
 ## Free storage budget
 
