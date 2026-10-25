@@ -9,6 +9,12 @@ struct TouchOverlay: View {
     var body: some View {
         GeometryReader { geometry in
             let area = Self.area(geometry)
+            // Stay below the controls: accessibility hit tests still land on a hidden full-size view.
+            Color.clear.allowsHitTesting(false).accessibilityHidden(true)
+                .onChange(of: area, initial: true) { _, area in
+                    guard geometry.size.width > 0, geometry.size.height > 0 else { return }
+                    model.touchGeometryChanged(usable: !TouchLayout().frames(in: area).isEmpty)
+                }
             if model.editingTouchControls {
                 TouchLayoutEditor(launch: model.launch, area: area) { model.editingTouchControls = false }
             } else if model.touchControlsVisible {
@@ -22,11 +28,6 @@ struct TouchOverlay: View {
                     pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
                 TouchControlsButton(area: area, opacity: layout.opacity, showControls: model.showControls)
             }
-            Color.clear.allowsHitTesting(false).accessibilityHidden(true)
-                .onChange(of: area, initial: true) { _, area in
-                    guard geometry.size.width > 0, geometry.size.height > 0 else { return }
-                    model.touchGeometryChanged(usable: !TouchLayout().frames(in: area).isEmpty)
-                }
         }
     }
 

@@ -6,9 +6,6 @@ import XCTest
 @MainActor
 final class IPadNavigationTests: XCTestCase {
     func testStreamStartsInPortraitAndResizedWindows() throws {
-        // XCUITest reports the touch overlay's UIKit menu button as not hittable and its taps never land;
-        // TouchDeviceRenderTests proves the button receives hit tests and opens the menu.
-        try XCTSkipIf(true, "Touch-play stream menu needs an on-device tap check")
         let app = XCUIApplication()
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "stream"
         if let mode = ProcessInfo.processInfo.environment["GLIMMER_NATIVE_WINDOW_MODE"] {
@@ -24,6 +21,7 @@ final class IPadNavigationTests: XCTestCase {
             // Without a controller the stream starts in touch play; its menu button opens the controls.
             let menu = app.buttons["Show controls"].firstMatch
             XCTAssertTrue(menu.waitForExistence(timeout: 10))
+            XCTAssertTrue(menu.isHittable)
             menu.tap()
             XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 10))
             XCTAssertTrue(app.buttons["Disconnect"].isHittable)
@@ -38,7 +36,10 @@ final class IPadNavigationTests: XCTestCase {
                     withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)))
         }
         app.buttons["Desktop"].tap()
-        XCTAssertTrue(app.buttons["Show controls"].firstMatch.waitForExistence(timeout: 10))
+        // A window too small for touch controls opens on the stream menu instead of its menu button.
+        let way = app.buttons.matching(NSPredicate(format: "label IN %@", ["Show controls", "Disconnect"])).firstMatch
+        XCTAssertTrue(way.waitForExistence(timeout: 10))
+        XCTAssertTrue(way.isHittable)
         recordScreen(app, name: "whole-window-native-resize-request")
     }
 
