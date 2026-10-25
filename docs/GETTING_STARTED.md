@@ -5,29 +5,40 @@ icon: play
 
 # Start your first stream
 
-1. [Install Glimmer](INSTALL.md) on a [compatible Mac](REQUIREMENTS.md).
+1. Install Glimmer on a [compatible device](REQUIREMENTS.md): use the
+   [Mac installer](INSTALL.md), or open your TestFlight invitation on iPhone or
+   iPad and install Glimmer. The App Store release is coming soon.
 
 2. [Set up Sunshine](HOST_SETUP.md).
 
 ## 3. Pair the PC
 
-1. Choose “Pair a PC…”.
+1. On Mac, choose “Pair a PC…”. On iPhone or iPad, open Settings › PCs.
 2. Select the PC or enter its address.
 3. Enter Glimmer's code on Sunshine's PIN page.
 
 {% hint style="info" %}
 
-Allow Local Network access; [Wi-Fi helper](guides/WIFI.md) optional.
+Allow Local Network access on each device. On iPhone or iPad, use “Add PC by
+address…” if the PC isn't listed. The optional [Wi-Fi helper](guides/WIFI.md) is
+for Mac.
 
 {% endhint %}
 
 ## 4. Start a stream
 
-1. Click Desktop or a game.
+1. Select Desktop or a game in the launcher.
+
+On iPhone or iPad, use the on-screen controls or connect a controller. Tap with
+three fingers to show the stream menu, then choose “Resume” to return to play.
+See [touch controls and layouts](guides/CONTROLLERS.md).
 
 {% hint style="warning" %}
 
-Save before stopping: it quits the PC app.
+Save before stopping: disconnecting quits the PC app by default. To continue on
+another device, turn on “Leave games running when you disconnect” in Settings ›
+General before starting the stream. The next paired device offers “Resume” or
+“Continue here” for a running game.
 
 {% endhint %}
 

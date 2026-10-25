@@ -5,6 +5,9 @@ icon: keyboard
 
 # Control your stream with shortcuts
 
+The keyboard shortcuts below apply to the Mac app. For iPhone and iPad, use the
+[stream menu and touch gestures](guides/CONTROLLERS.md#play-with-touch-controls-on-iphone-and-ipad).
+
 | Reference                      | Location                                        |
 | ------------------------------ | ----------------------------------------------- |
 | Saved bindings                 | Settings › Input; defaults below.               |
@@ -13,22 +16,28 @@ icon: keyboard
 
 ## While streaming
 
-| Action in the focused stream | Default   | Result                                                    |
-| ---------------------------- | --------- | --------------------------------------------------------- |
-| Stop                         | Control-Q | Ends stream and quits PC app. Save first.                 |
-| Mini Player                  | Control-M | Toggles presentation.                                     |
-| Stats                        | Control-Z | Toggles for this stream; next uses Settings › Quality.    |
-| Pointer                      | Control-P | Toggles captured/free; keeps choice across focus changes. |
+| Action in the focused stream | Default        | Result                                                                                    |
+| ---------------------------- | -------------- | ----------------------------------------------------------------------------------------- |
+| Stop                         | ⌃Q (Control-Q) | Ends the stream; quits the PC app unless “Leave games running when you disconnect” is on. |
+| Mini Player                  | Control-M      | Toggles presentation.                                                                     |
+| Stats                        | Control-Z      | Toggles for this stream; next uses Settings › Quality.                                    |
+| Pointer                      | Control-P      | Toggles captured/free; keeps choice across focus changes.                                 |
 
 | Text and diagnostics | Default   | Result                                        |
 | -------------------- | --------- | --------------------------------------------- |
 | Paste                | Control-V | Types Mac text into PC.                       |
 | Bookmark             | Control-B | With telemetry enabled; otherwise sent to PC. |
 
+To use ⌃Z (Control-Z) for stats, open Settings › Input and record it beside
+“Show or Hide Stream Stats”. This replaces ⌃I. Glimmer uses your saved binding;
+⌃Q remains the default for “Stop Streaming”.
+
 {% hint style="warning" %}
 
-Closing the stream window or quitting Glimmer also quits the PC app. Command-Q
-quits Glimmer. Save first.
+Closing the stream window or quitting Glimmer follows “Leave games running when
+you disconnect” in Settings › General. It is off by default, so save first.
+Command-Q quits Glimmer. An explicit “Quit” action quits the PC app even when
+the setting is on.
 
 {% endhint %}
 

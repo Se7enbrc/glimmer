@@ -5,6 +5,8 @@ icon: computer-mouse
 
 # Free the pointer or use game controls
 
+On Mac:
+
 1. Focus the stream.
 2. Press Control-P to switch modes.
 
@@ -22,7 +24,9 @@ Window or Mini Player: hold plain Escape about a second to free the pointer. See
 
 ## Keep Mac shortcuts available
 
-Command-Tab and Command-Space stay with the Mac by default.
+Command-Tab and Command-Space stay with the Mac by default. ⌃Q (Control-Q) stops
+the stream. Saved in-stream bindings live in Settings › Input; you can assign ⌃Z
+(Control-Z) to “Show or Hide Stream Stats” there.
 
 ## Paste text into the PC
 
@@ -36,5 +40,22 @@ Up to 4,096 UTF-8 bytes; no files/images.
 [Copy on the PC stays there](https://github.com/LizardByte/Sunshine/issues/1539).
 
 {% endhint %}
+
+## Use touch as a mouse on iPhone and iPad
+
+Use the picture outside the on-screen buttons as a trackpad:
+
+| Gesture           | Action                |
+| ----------------- | --------------------- |
+| Drag one finger   | Move the pointer.     |
+| Tap one finger    | Left-click.           |
+| Drag two fingers  | Scroll.               |
+| Tap two fingers   | Right-click.          |
+| Tap three fingers | Show the stream menu. |
+
+“Touch mouse” in Settings › Input is on by default, including with a controller
+connected. Turn it off to prevent accidental mouse input during the next stream.
+The three-finger tap still opens the menu. Choose “Resume” to return input to
+the PC.
 
 Next: [shortcuts and Command forwarding](../SHORTCUTS.md).

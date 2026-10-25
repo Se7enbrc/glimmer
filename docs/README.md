@@ -10,7 +10,12 @@ layout:
     visible: false
 ---
 
-# Play your PC games on your Mac
+# Play your PC games on Mac, iPhone and iPad
+
+Pair with Sunshine on your PC, choose a game and play. Glimmer brings the same
+launcher, controller layouts and running-game controls to Mac, iPhone and iPad.
+The iPhone and iPad app is available through TestFlight now; the App Store
+release is coming soon.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/launcher-art-dark.png">
