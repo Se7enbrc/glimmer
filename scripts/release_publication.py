@@ -45,11 +45,24 @@ def version():
     return short, build
 
 
+def validate_helper_floors(app, minimum):
+    helpers = ('LoginItems/Glimmer Login Helper.app', 'LaunchServices/Glimmer Network Helper.app')
+    for helper in helpers:
+        path = app / 'Contents/Library' / helper / 'Contents/Info.plist'
+        try:
+            info = plistlib.loads(path.read_bytes())
+        except (OSError, plistlib.InvalidFileException, ValueError) as error:
+            raise ValueError('helper minimum system version missing or invalid') from error
+        if not isinstance(info, dict) or validate_minimum_system(info.get('LSMinimumSystemVersion')) != minimum:
+            raise ValueError('helper minimum system version differs from app')
+
+
 def prepare(root, app):
     short, build = version()
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     validate_bundle(info, short, build)
     min_system = validate_minimum_system(info.get('LSMinimumSystemVersion'))
+    validate_helper_floors(app, min_system)
     validate_marker(info, os.environ['RC_TAG'])
     source_info = plistlib.loads(source_file('Glimmer/Info.plist').encode())
     if info['SUPublicEDKey'] != source_info['SUPublicEDKey']:
@@ -133,6 +146,7 @@ def validate(root):
         validate_bundle(info, receipt['short'], receipt['build'])
         if validate_minimum_system(info.get('LSMinimumSystemVersion')) != receipt['min_system']:
             raise ValueError('signed artifact minimum system version mismatch')
+        validate_helper_floors(app, receipt['min_system'])
         validate_marker(info, os.environ['RC_TAG'])
         validate_distribution(str(app))
 

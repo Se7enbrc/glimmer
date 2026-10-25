@@ -22,7 +22,7 @@ class VerificationTimeoutTests(unittest.TestCase):
     def test_test_steps_leave_time_for_failure_uploads(self):
         for job, step in (("verify", "Verify"), ("sequoia", "Run the unit tests on macOS 15"),
                           ("ios", "Test iPhone app against this checkout"),
-                          ("engine-ios", "Build and test the source package"),
+                          ("verify", "Build and test the source package"),
                           ("fuzz", "Fuzz protocol parsers")):
             with self.subTest(job=job):
                 source = self.job(job)

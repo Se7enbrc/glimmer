@@ -6,9 +6,11 @@ name: Release candidate
 # A same-repository pull request labelled `rc` gets a candidate once Verify and
 # CodeQL pass on its head. Both triggers run main's copy of this workflow.
 on:
-  pull_request_target:
+  # Main inspects same-repository PR metadata; it never checks out the PR.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [labeled]
-  workflow_run:
+  # Only trusted main code runs; triggering runs supply identifiers, never executable artifacts.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [Verify, CodeQL]
     types: [completed]
 
@@ -128,6 +130,7 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
+          persist-credentials: false
 
       - name: Cut the candidate
         env:
@@ -136,6 +139,7 @@ jobs:
           PR_NUMBER: ${{ needs.ready.outputs.pr }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
         run: |
+          gh auth setup-git
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
           git fetch --quiet origin "$HEAD_SHA"

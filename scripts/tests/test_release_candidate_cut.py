@@ -6,12 +6,14 @@
 import base64
 import json
 import os
+import runpy
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from fixture_process import run_fixture
 
@@ -25,7 +27,12 @@ RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-pub
                  "scripts/candidate_delivery.py", ".github/workflows/candidate-delivery.yml",
                  ".github/workflows/verify.yml", ".github/workflows/codeql.yml",
                  ".github/workflows/ios-testflight-build.yml", "scripts/ios-testflight.py",
-                 "scripts/ios-testflight-artifact.py", "scripts/ios-testflight-sign.py")
+                 "scripts/ios-testflight-artifact.py", "scripts/ios-testflight-sign.py",
+                 ".github/actions/build-cache/action.yml", ".github/workflows/portable-checks.yml",
+                 "scripts/install-ci-linux-tools.sh", "scripts/install-ci-auditor.sh",
+                 "scripts/ci-python-requirements.txt", "scripts/coverage-requirements.txt",
+                 "scripts/ci-checks.mk", "scripts/mac-test-products.mk", "scripts/test-scripts.py",
+                 ".github/actions/cache-save/action.yml", "scripts/cache-budget.py")
 REQUIRED = ["macOS", "Analyze (swift)", "Analyze (python)", "Analyze (actions)"]
 
 
@@ -69,6 +76,22 @@ elif sys.argv[1:3] == ["pr", "view"]:
 else:
     sys.exit(1)
 '''
+
+
+class ReleaseRunDisplayTests(unittest.TestCase):
+    def test_only_macos_opens_the_release_page(self):
+        with patch.object(sys, "path", [str(SCRIPTS), *sys.path]):
+            show = runpy.run_path(str(SCRIPTS / "release-candidate.py"))["show"]
+        url = "https://github.com/Se7enbrc/glimmer/actions/runs/100"
+        for platform in ("darwin", "linux"):
+            with self.subTest(platform=platform), patch.object(sys, "platform", platform), \
+                    patch("subprocess.run") as run, patch("builtins.print") as output:
+                show(url, False)
+                output.assert_any_call(f"Release run: {url}")
+                if platform == "darwin":
+                    run.assert_called_once_with(["open", url], timeout=30)
+                else:
+                    run.assert_not_called()
 
 
 class ReleaseCandidateCutTests(unittest.TestCase):
@@ -256,7 +279,10 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         url = "https://github.com/Se7enbrc/glimmer/actions/runs/100"
         self.assertIn(f"Release run: {url}", result.stdout)
         self.assertIn("approve the protected `release` deployment", result.stdout)
-        self.assertEqual((self.state / "open.log").read_text().strip(), url)
+        if sys.platform == "darwin":
+            self.assertEqual((self.state / "open.log").read_text().strip(), url)
+        else:
+            self.assertFalse((self.state / "open.log").exists())
         again = self.cut()
         self.assertEqual(again.returncode, 0, again.stderr)
         self.assertIn(f"{tag} already identifies {self.sha}", again.stdout)

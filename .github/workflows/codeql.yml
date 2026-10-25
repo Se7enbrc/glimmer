@@ -18,37 +18,21 @@ permissions:
 # A PR update or closure replaces its run; all other events keep independent runs.
 concurrency:
   group:
-    ${{ github.workflow }}-${{ github.ref }}-${{
-    github.event.pull_request.number || github.ref }}-${{ github.event_name ==
-    'pull_request' && 'pr' || github.run_id }}
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref
+    }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  analyze:
+  changes:
     if: github.event.action != 'closed'
-    name: Analyze (${{ matrix.language }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    name: Decide what to scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
-      security-events: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - language: swift
-            runner: macos-26
-            build-mode: manual
-          - language: python
-            runner: ubuntu-latest
-            build-mode: none
-          - language: actions
-            runner: ubuntu-latest
-            build-mode: none
-    defaults:
-      run:
-        shell: bash
+    outputs:
+      scan: ${{ steps.changes.outputs.scan }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,7 +46,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          LANGUAGE: ${{ matrix.language }}
+          LANGUAGE: swift
         run: |
           scan=true
           if [ "$LANGUAGE" = swift ] && [ -n "$PR_NUMBER" ]; then
@@ -76,6 +60,51 @@ jobs:
             fi
           fi
           printf 'scan=%s\n' "$scan" >> "$GITHUB_OUTPUT"
+
+  analyze:
+    needs: changes
+    if: always() && github.event.action != 'closed'
+    name: Analyze (${{ matrix.language }})
+    runs-on:
+      ${{ matrix.language == 'swift' && needs.changes.outputs.scan == 'true' &&
+      'macos-26' || 'ubuntu-latest' }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      pull-requests: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: swift
+            build-mode: manual
+          - language: python
+            build-mode: none
+          - language: actions
+            build-mode: none
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Require a successful scope decision
+        env:
+          DECIDED: ${{ needs.changes.result }}
+        run: test "$DECIDED" = success
+
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select analysis scope
+        id: changes
+        env:
+          SCAN:
+            ${{ matrix.language != 'swift' || needs.changes.outputs.scan ==
+            'true' }}
+        run: printf 'scan=%s\n' "$SCAN" >> "$GITHUB_OUTPUT"
 
       - name: Prepare Swift analysis
         if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
@@ -129,6 +158,7 @@ jobs:
         if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
         env:
           CODEQL_VERSION: ${{ steps.init.outputs.codeql-version }}
+          DYLD_INSERT_LIBRARIES: ""
         run: |
           # Read versions from files; launching the CodeQL CLI or xcodebuild here costs minutes.
           xcode="$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$DEVELOPER_DIR/../version.plist")"
@@ -151,6 +181,8 @@ jobs:
         if:
           steps.changes.outputs.scan == 'true' && matrix.language == 'swift' &&
           steps.restore.outputs.cache-hit == 'true'
+        env:
+          DYLD_INSERT_LIBRARIES: ""
         run: |
           trap="$RUNNER_TEMP/codeql-databases/swift/trap/swift"
           mkdir -p "$trap"
@@ -161,11 +193,17 @@ jobs:
         if: steps.changes.outputs.scan == 'true' && matrix.language == 'swift'
         env:
           # Keep package resolution outside the compiler tracer.
-          # The compiler wrapper restores tracing for every production target.
+          # Both builds have separate products; the wrapper traces every production compiler.
           DYLD_INSERT_LIBRARIES: ""
         run: |
-          make app helper-build CONFIG=Debug SWIFTC="$PWD/scripts/codeql-swiftc.sh"
-          make ios-app CONFIG=Debug
+          make app helper-build CONFIG=Debug SWIFTC="$PWD/scripts/codeql-swiftc.sh" &
+          mac=$!
+          if [ -f iOS/Makefile ]; then make ios-app CONFIG=Debug; fi &
+          ios=$!
+          status=0
+          wait "$mac" || status=$?
+          wait "$ios" || status=$?
+          exit "$status"
 
       # Only imported modules and their lazily extracted declarations are kept;
       # anything built from this checkout is extracted fresh every run.
@@ -173,6 +211,8 @@ jobs:
         if:
           steps.changes.outputs.scan == 'true' && matrix.language == 'swift' &&
           steps.restore.outputs.cache-hit != 'true'
+        env:
+          DYLD_INSERT_LIBRARIES: ""
         run: |
           trap="$RUNNER_TEMP/codeql-databases/swift/trap/swift"
           out="$RUNNER_TEMP/swift-framework-traps"
@@ -185,7 +225,8 @@ jobs:
         if:
           steps.changes.outputs.scan == 'true' && matrix.language == 'swift' &&
           steps.restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # Same-ref action receives only unsigned cache paths.
+        uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
         with:
           path: ${{ runner.temp }}/swift-framework-traps
           key: ${{ steps.frameworks.outputs.key }}
@@ -207,13 +248,6 @@ jobs:
           python3 scripts/codeql-coverage.py \
             --database "$RUNNER_TEMP/codeql-databases/swift"
 
-      # The jobs API binds this upload receipt to its successful run and attempt.
-      - name: CodeQL upload ${{ steps.analyze.outputs.sarif-id }}
-        if: steps.changes.outputs.scan == 'true'
-        env:
-          SARIF_ID: ${{ steps.analyze.outputs.sarif-id }}
-        run: test -n "$SARIF_ID"
-
       - name: Retain failed Swift extraction diagnostics
         if: failure() && steps.coverage.outcome == 'failure'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -221,4 +255,10 @@ jobs:
           name: swift-extraction-diagnostics
           path: ${{ runner.temp }}/codeql-results/swift.sarif
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 1
+      # The jobs API binds this upload receipt to its successful run and attempt.
+      - name: CodeQL upload ${{ steps.analyze.outputs.sarif-id }}
+        if: steps.changes.outputs.scan == 'true'
+        env:
+          SARIF_ID: ${{ steps.analyze.outputs.sarif-id }}
+        run: test -n "$SARIF_ID"

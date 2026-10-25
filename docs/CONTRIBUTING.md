@@ -27,7 +27,7 @@ Use the same Mac toolchain as hosted verification.
 | Homebrew    | Installs the tools below.                                             |
 
 ```bash
-brew install python swiftlint actionlint trufflehog pre-commit
+brew install python swiftlint actionlint trufflehog pre-commit shellcheck
 git clone https://github.com/Se7enbrc/glimmer.git
 cd glimmer
 pre-commit install

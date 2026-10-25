@@ -91,7 +91,7 @@ jobs:
       github.repository == 'Se7enbrc/glimmer' && github.ref == 'refs/heads/main'
     environment: ios-testflight
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 50
     permissions:
       contents: read
       actions: read
@@ -161,7 +161,7 @@ jobs:
             ${{ runner.temp }}/ios-export/Glimmer.ipa
             ${{ runner.temp }}/ios-export/receipt.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
       - name: Recheck candidate before accessing upload credentials
         env:
           GH_TOKEN: ${{ github.token }}
@@ -181,7 +181,7 @@ jobs:
           name: ios-delivery-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/ios-export/upload.json
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 1
       - name: Remove temporary signing and upload credentials
         if: always()
         run: python3 scripts/ios-testflight.py cleanup

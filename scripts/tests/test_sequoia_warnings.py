@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-"""The independent Sequoia build must receive the CI compiler warning policy."""
+"""Both macOS runs must share a build with the CI compiler warning policy."""
 
 import os
 from pathlib import Path
@@ -16,9 +16,13 @@ ROOT = Path(__file__).resolve().parents[2]
 class SequoiaWarningTests(unittest.TestCase):
     def test_build_for_testing_receives_warning_policy_and_preserves_failure(self):
         source = (ROOT / ".github/workflows/verify.yml").read_text()
-        job = source.split("  sequoia-build:\n", 1)[1].split("  sequoia:\n", 1)[0]
-        step = job.split("      - name: Build the unit tests for macOS 15.7\n", 1)[1]
-        shell = textwrap.dedent(step.split("        run: |\n", 1)[1].split("      - name:", 1)[0])
+        job = source.split("  verify:\n", 1)[1].split("  ios:\n", 1)[0]
+        prepare = job.split("      - name: Prepare verification\n", 1)[1]
+        prepare = prepare.split("        run: |\n", 1)[1].split("      - name:", 1)[0]
+        config = prepare[prepare.index('          XCODE_XCCONFIG_FILE='):]
+        step = job.split("      - name: Build the shared Mac test products\n", 1)[1]
+        build = step.split("        run: |\n", 1)[1].split("      - name:", 1)[0]
+        shell = textwrap.dedent(config) + 'export XCODE_XCCONFIG_FILE\n' + textwrap.dedent(build)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             make = root / "make"
@@ -29,7 +33,7 @@ exit 65
 ''')
             make.chmod(0o755)
             env = {key: value for key, value in os.environ.items() if key != "XCODE_XCCONFIG_FILE"}
-            env.update(PATH=f"{root}:/usr/bin:/bin", RUNNER_TEMP=str(root))
+            env.update(PATH=f"{root}:/usr/bin:/bin", RUNNER_TEMP=str(root), GITHUB_ENV=str(root / "env"))
             result = subprocess.run(["/bin/bash", "-euo", "pipefail", "-c", shell],
                                     cwd=root, env=env, text=True, capture_output=True, timeout=10)
             self.assertEqual(result.returncode, 65, result.stderr)

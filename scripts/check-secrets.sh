@@ -44,10 +44,10 @@ if [ -n "$FROM$TO" ]; then
     [[ "$FROM" =~ ^[0-9a-f]{40}$ && "$TO" =~ ^[0-9a-f]{40}$ ]] || {
         echo "ERROR: secret scan range requires two full commit SHAs." >&2; exit 1;
     }
-    git rev-parse --verify "$FROM^{commit}" >/dev/null 2>&1 &&
-        git rev-parse --verify "$TO^{commit}" >/dev/null 2>&1 || {
-        echo "ERROR: secret scan range isn't available. Fetch both commits before scanning." >&2; exit 1;
-    }
+    if ! git rev-parse --verify "$FROM^{commit}" >/dev/null 2>&1 ||
+        ! git rev-parse --verify "$TO^{commit}" >/dev/null 2>&1; then
+        echo "ERROR: secret scan range isn't available. Fetch both commits before scanning." >&2; exit 1
+    fi
 elif [ "${GLIMMER_SECRET_SCAN_ALL_FILES:-0}" = 1 ]; then
     exit 0
 else
