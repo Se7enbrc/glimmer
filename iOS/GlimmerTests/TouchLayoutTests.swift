@@ -90,7 +90,7 @@ struct TouchLayoutTests {
         }
     }
 
-    @Test func opacityOnlyEditsPersistIndependentlyAndResetRemovesTheRecord() throws {
+    @Test func opacityOnlyEditsPersistIndependentlyIncludingTheDefault() throws {
         let suite = "touch-opacity-test.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -112,7 +112,7 @@ struct TouchLayoutTests {
         #expect(edited.opacity == 0.6 && edited.frames(in: area)[.a] == nil)
         store.save(TouchLayout(), pcID: "first", appID: 1, family: .compact)
         #expect(store.load(pcID: "first", appID: 1, family: .compact) == TouchLayout())
-        #expect(defaults.dictionaryRepresentation().keys.allSatisfy { !$0.hasPrefix("ios.touchLayout.") })
+        #expect(defaults.dictionaryRepresentation().keys.contains { $0.hasPrefix("ios.touchLayout.") })
     }
 
     @Test func persistenceIsScopedAndForgetRemovesOnlyThatPC() throws {

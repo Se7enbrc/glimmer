@@ -274,7 +274,7 @@ struct HostsPersistenceTests {
 
     // MARK: - Codec preference
 
-    @Test func aCodecChoiceRoundTripsAndAutoClearsTheKey() throws {
+    @Test func aCodecChoiceRoundTripsIncludingAutomatic() throws {
         let store = try IsolatedStore("codec")
         defer { store.remove() }
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .auto)
@@ -282,7 +282,7 @@ struct HostsPersistenceTests {
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .h264)
         #expect(HostCodecPreference.load(for: "BBB", defaults: store.defaults) == .auto)
         HostCodecPreference.save(.auto, for: "AAA", defaults: store.defaults)
-        #expect(store.defaults.string(forKey: "glimmer.codecPreference.AAA") == nil)
+        #expect(store.defaults.string(forKey: "glimmer.codecPreference.AAA") == "auto")
         HostCodecPreference.save(.hevc, for: "AAA", defaults: store.defaults)
         HostCodecPreference.forget(hostID: "AAA", defaults: store.defaults)
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .auto)
@@ -331,5 +331,19 @@ struct HostsPersistenceTests {
         #expect(AppModel.persistedCustomRows(defaults: store.defaults) == [.latency, .jitter])
         store.defaults.set(["bogus"], forKey: "statsOverlayCustomRows")
         #expect(AppModel.persistedCustomRows(defaults: store.defaults) == nil)
+    }
+    @Test func choosingDefaultLauncherStyleKeepsAnExplicitValue() throws {
+        let store = try IsolatedStore("launcher-default")
+        defer { store.remove() }
+        LauncherStyle.save(.buttons, for: "AAA", defaults: store.defaults)
+        store.defaults.register(defaults: ["glimmer.launcherStyle.AAA": "covers"])
+        #expect(LauncherStyle.load(for: "AAA", defaults: store.defaults) == .buttons)
+    }
+
+    @Test func choosingNoCustomStatsRowsKeepsTheEmptySelection() throws {
+        let store = try IsolatedStore("empty-rows")
+        defer { store.remove() }
+        store.defaults.set([String](), forKey: "statsOverlayCustomRows")
+        #expect(AppModel.persistedCustomRows(defaults: store.defaults)?.isEmpty == true)
     }
 }

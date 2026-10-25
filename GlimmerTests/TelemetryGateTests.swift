@@ -9,6 +9,21 @@ import Testing
 
 @MainActor
 struct TelemetryGateTests {
+    @Test func updateDefaultsAreRegisteredAndExplicitChoicesWin() throws {
+        let name = "UpdateDefaults." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        GlimmerApp.registerDefaults(defaults: defaults)
+        #expect(defaults.bool(forKey: "SUEnableAutomaticChecks"))
+        #expect(defaults.double(forKey: "SUScheduledCheckInterval") == 86_400)
+        #expect(defaults.persistentDomain(forName: name)?.isEmpty != false)
+        defaults.set(false, forKey: "SUEnableAutomaticChecks")
+        defaults.set(172_800, forKey: "SUScheduledCheckInterval")
+        GlimmerApp.registerDefaults(defaults: defaults)
+        #expect(defaults.bool(forKey: "SUEnableAutomaticChecks") == false)
+        #expect(defaults.double(forKey: "SUScheduledCheckInterval") == 172_800)
+    }
+
     @Test func diagnosticDefaultsDoNotPersistOrOverrideAnExplicitOptOut() throws {
         let name = "DiagnosticDefaults." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: name))

@@ -4,6 +4,8 @@
 
 - Show or hide stream stats with Control-Z by default. Custom shortcuts stay
   saved.
+- Keep your chosen stats thresholds, launcher style, codec and touch opacity
+  when defaults change.
 
 - iPhone and iPad connections now check the route to the PC before choosing
   packet sizes, including when playing through a tunnel.

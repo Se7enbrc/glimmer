@@ -23,11 +23,6 @@ final class UpdaterController {
         controller = SPUStandardUpdaterController(
             startingUpdater: true, updaterDelegate: streamAwareAlerts, userDriverDelegate: streamAwareAlerts)
         streamAwareAlerts.observeAvailability(of: controller.updater)
-        // Default to daily checks, preserving any opt-out made in Sparkle's update alert.
-        if UserDefaults.standard.object(forKey: "SUEnableAutomaticChecks") == nil {
-            controller.updater.automaticallyChecksForUpdates = true
-        }
-        controller.updater.updateCheckInterval = 86_400
     }
 
     var updater: SPUUpdater { controller.updater }

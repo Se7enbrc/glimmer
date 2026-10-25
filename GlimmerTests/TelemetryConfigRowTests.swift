@@ -325,15 +325,15 @@ struct TelemetryConfigRowTests {
         #expect(render.value == "120.0 FPS")
         #expect(render.health == .neutral)
     }
-    @Test @MainActor func fpsThresholdMigrationPreservesCustomValuesAndRunsOnce() throws {
+    @Test @MainActor func fpsThresholdDefaultsNeverReplaceASavedChoice() throws {
         let name = "fps-threshold-tests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
         var thresholds = StatsThresholds(fpsWarningBelow: 60, fpsCriticalBelow: 30, latencyWarningAbove: 75)
         defaults.set(try JSONEncoder().encode(thresholds), forKey: "statsThresholds")
         let migrated = AppModel.persistedStatsThresholds(defaults: defaults)
-        #expect(migrated.fpsWarningBelow == 0)
-        #expect(migrated.fpsCriticalBelow == 0)
+        #expect(migrated.fpsWarningBelow == 60)
+        #expect(migrated.fpsCriticalBelow == 30)
         #expect(migrated.latencyWarningAbove == 75)
         defaults.set(try JSONEncoder().encode(thresholds), forKey: "statsThresholds")
         #expect(AppModel.persistedStatsThresholds(defaults: defaults) == thresholds)

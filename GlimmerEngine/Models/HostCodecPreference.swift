@@ -1,22 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  HostCodecPreference.swift
-//
-//  Per-host codec override. The DEFAULT is smart: the client advertises
-//  everything this Mac can hardware-decode (VideoFormats.probedSupported) and
-//  the RTSP negotiation picks the best the host can encode - AV1 if both
-//  sides speak it, else HEVC, else H.264, with the 10-bit flavor riding the
-//  HDR toggle. So "Automatic" already does the right thing on a host that
-//  can't encode AV1 (e.g. an RTX 3080): it lands on HEVC with zero
-//  configuration.
-//
-//  The override exists for the host that negotiates a codec it then handles
-//  badly (broken AV1 driver, ancient encoder): it CAPS what we advertise for
-//  that one host. Persisted like the cert pins - one UserDefaults key per
-//  host id - so it never touches the migrated host blob.
-//
+// Per-PC codec choices cap advertised capabilities without altering the paired-PC record.
 
 import Foundation
 
@@ -63,11 +48,7 @@ package enum HostCodecPreference: String, CaseIterable, Identifiable {
     }
 
     package static func save(_ pref: HostCodecPreference, for hostID: String, defaults: UserDefaults = .standard) {
-        if pref == .auto {
-            defaults.removeObject(forKey: key(for: hostID))
-        } else {
-            defaults.set(pref.rawValue, forKey: key(for: hostID))
-        }
+        defaults.set(pref.rawValue, forKey: key(for: hostID))
     }
 
     package static func forget(hostID: String, defaults: UserDefaults = .standard) {

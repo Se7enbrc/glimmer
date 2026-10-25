@@ -1,19 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-// Typed reads and migrations keep persisted choices consistent during model initialization.
+// Read saved choices without turning current defaults into persistent values.
 
 import GlimmerEngine
 import Foundation
 
 extension AppModel {
-
-    // MARK: - Persisted-setting decode helpers
-    //
-    // Small typed wrappers around UserDefaults so `init()` reads as a flat list
-    // of assignments instead of a branch per key. Each returns nil when the key
-    // is absent / out of range / undecodable, so the caller keeps the property's
-    // declared default - identical to the prior inline `if let` / `if x > 0`.
 
     /// A positive `Int`, or nil when the key is absent (`integer(forKey:)`
     /// returns 0) or non-positive.
@@ -28,16 +21,7 @@ extension AppModel {
         return defaults.bool(forKey: key)
     }
 
-    /// The persisted quality preset, with the presets dropped in the rework
-    /// remapped to their surviving equivalents
-    /// (`QualityPreset.migrated(fromPersistedRawValue:)` owns the mapping).
-    /// nil when the key is absent, so the property's declared default holds and
-    /// nothing is written for a user who never picked a preset.
-    ///
-    /// One-shot: the migrated value is written back only when it actually
-    /// differs from what was on disk, so a legacy string is rewritten exactly
-    /// once and every later launch takes the plain decode path. Idempotent -
-    /// re-running over an already-migrated key writes nothing.
+    /// Only retired enum cases migrate; never infer intent from a value matching a default.
     static func persistedQualityPreset(defaults: UserDefaults = .standard) -> QualityPreset? {
         guard let raw = defaults.string(forKey: "qualityPreset") else { return nil }
         let preset = QualityPreset.migrated(fromPersistedRawValue: raw)
@@ -67,29 +51,18 @@ extension AppModel {
         HotkeyChord.persistedStats(defaults: defaults)
     }
 
-    /// Retire the old default FPS alarms once while preserving custom thresholds.
+    /// Stored values carry intent even when they equal a previous default.
     static func persistedStatsThresholds(defaults: UserDefaults = .standard) -> StatsThresholds {
-        var thresholds = defaults.data(forKey: "statsThresholds")
-            .flatMap { try? JSONDecoder().decode(StatsThresholds.self, from: $0) } ?? .default
-        guard !defaults.bool(forKey: "informationalFpsDefaultsApplied") else { return thresholds }
-        if thresholds.fpsWarningBelow == 60 && thresholds.fpsCriticalBelow == 30 {
-            thresholds.fpsWarningBelow = 0
-            thresholds.fpsCriticalBelow = 0
-            if let data = try? JSONEncoder().encode(thresholds) {
-                defaults.set(data, forKey: "statsThresholds")
-            }
-        }
-        defaults.set(true, forKey: "informationalFpsDefaultsApplied")
-        return thresholds
+        persistedDecoded("statsThresholds", StatsThresholds.self, defaults: defaults) ?? .default
     }
 
     /// Decode the persisted stats-overlay custom-row set, or nil when the key is
-    /// absent or decodes to an empty set (so the default initial set holds).
+    /// absent or contains only unknown names. An explicit empty set stays empty.
     static func persistedCustomRows(defaults: UserDefaults = .standard) -> Set<StatsRow.Kind>? {
         guard let raw = defaults.array(forKey: "statsOverlayCustomRows") as? [String] else {
             return nil
         }
         let decoded = raw.compactMap(StatsRow.Kind.init(rawValue:))
-        return decoded.isEmpty ? nil : Set(decoded)
+        return !raw.isEmpty && decoded.isEmpty ? nil : Set(decoded)
     }
 }

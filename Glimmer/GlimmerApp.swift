@@ -52,21 +52,13 @@ struct GlimmerApp: App {
         registerDefaults()
     }
 
-    /// Defaults for prefs whose readers use bare `UserDefaults.bool(forKey:)`.
-    /// REGISTERED, never written - a registration sits under the persistent
-    /// domain, so a user's own choice still wins and toggling back to the
-    /// default doesn't leave a stray key behind.
-    ///
-    /// Every value here must equal what the code effectively falls back to
-    /// today (`bool(forKey:)` on an absent key is false), so adding a key
-    /// changes nothing now. The point is that the default becomes a stated,
-    /// changeable fact in ONE place: flipping one of these to `true` later
-    /// reaches EXISTING users, where a hard-coded `false` fallback only ever
-    /// reached fresh installs.
+    /// Registration supplies defaults without overwriting or materializing saved choices.
     @MainActor
     static func registerDefaults(defaults: UserDefaults = .standard,
                                  diagnosticBuild: Bool = DiagnosticBuild.isEnabled) {
         defaults.register(defaults: [
+            "SUEnableAutomaticChecks": true,
+            "SUScheduledCheckInterval": 86_400,
             // Default-ON prefs. disableMouseAccelWhileStreaming linearizes the
             // system pointer acceleration while the stream window is focused so
             // forwarded mouse deltas are raw 1:1; the non-UI gate reads it via

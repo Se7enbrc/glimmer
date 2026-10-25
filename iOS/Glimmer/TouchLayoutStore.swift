@@ -20,10 +20,6 @@ struct TouchLayoutStore {
 
     func save(_ layout: TouchLayout, pcID: String, appID: Int, family: TouchLayout.Family) {
         let key = key(pcID, appID, family)
-        guard !layout.changes.isEmpty || layout.opacity != TouchLayout.defaultOpacity else {
-            defaults.removeObject(forKey: key)
-            return
-        }
         guard layout.changes.values.allSatisfy(\.valid),
               let data = try? JSONEncoder().encode(Record(layout: layout)) else {
             return

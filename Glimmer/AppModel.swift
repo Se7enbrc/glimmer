@@ -1,22 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AppModel.swift
-//
-//  ObservableObject that owns the UI's view of paired hosts, quality
-//  settings, pairing state, and stream lifecycle. This file is the class
-//  core (published properties + orchestration). The split is:
-//
-//    * Models/Host.swift      - Host, LibraryApp, QualityPreset,
-//                               HotkeyChord, HostLiveStatus
-//    * AppModel+Defaults.swift - the typed UserDefaults read helpers `init()`
-//                               loads settings through
-//    * HostsStore.swift       - UserDefaults read/write of the host list,
-//                               moonlight-qt migration, unpair/retrust
-//    * QualityCalculator.swift - bitrate/resolution/fps recommendation logic
-//    * HostStatusPoller.swift - periodic readiness-chip polling Task
-//
+// Observable app state; feature extensions own persistence, input and session orchestration.
 
 import GlimmerEngine
 import Foundation
@@ -502,38 +487,39 @@ final class AppModel {
         // Observation setters can run during initialization. Restore quality's
         // backing storage so entering Custom cannot overwrite saved dimensions
         // before they are read, or persist defaults the user never chose.
-        leaveGamesRunning = defaults.bool(forKey: "leaveGamesRunning")
-        muteMacWhileStreaming = settingsDefaults.bool(forKey: "muteMacWhileStreaming")
-        defaultLaunchApp = settingsDefaults.string(forKey: "defaultLaunchApp") ?? defaultLaunchApp
+        _leaveGamesRunning = defaults.bool(forKey: "leaveGamesRunning")
+        _muteMacWhileStreaming = settingsDefaults.bool(forKey: "muteMacWhileStreaming")
+        _defaultLaunchApp = settingsDefaults.string(forKey: "defaultLaunchApp") ?? defaultLaunchApp
         _qualityPreset = Self.persistedQualityPreset(defaults: defaults) ?? _qualityPreset
         // Clamp legacy custom values to the bounds used by QualityPane.
         _customWidth = min(max(Self.persistedPositiveInt("customWidth", defaults: defaults) ?? _customWidth, 640), 7680)
         _customHeight = min(max(Self.persistedPositiveInt("customHeight", defaults: defaults) ?? _customHeight, 480), 4320)
         _customFPS = min(max(Self.persistedPositiveInt("customFPS", defaults: defaults) ?? _customFPS, 30), 240)
-        streamHDR = Self.persistedBool("streamHDR", defaults: defaults) ?? streamHDR
-        captureSysKeys = Self.persistedBool("captureSysKeys", defaults: defaults) ?? captureSysKeys
-        streamCoversNotch = Self.persistedBool("streamCoversNotch", defaults: defaults) ?? streamCoversNotch
-        streamUsesFullScreenSpace = Self.persistedBool("streamUsesFullScreenSpace",
+        _streamHDR = Self.persistedBool("streamHDR", defaults: defaults) ?? streamHDR
+        _captureSysKeys = Self.persistedBool("captureSysKeys", defaults: defaults) ?? captureSysKeys
+        _streamCoversNotch = Self.persistedBool("streamCoversNotch", defaults: defaults) ?? streamCoversNotch
+        _streamUsesFullScreenSpace = Self.persistedBool("streamUsesFullScreenSpace",
             defaults: defaults) ?? streamUsesFullScreenSpace
         // Registered default (GlimmerApp) answers the absent-key case; an
         // unrecognised raw value lands on the default rather than guessing.
-        streamDisplayMode = StreamDisplayMode.persisted(
+        _streamDisplayMode = StreamDisplayMode.persisted(
             rawValue: settingsDefaults.string(forKey: StreamDisplayMode.defaultsKey))
-        bitrateMode = BitrateMode.persisted(rawValue: settingsDefaults.string(forKey: BitrateMode.defaultsKey))
-        releasePointerHotkey = Self.persistedDecoded("releasePointerHotkey", HotkeyChord.self,
+        _bitrateMode = BitrateMode.persisted(rawValue: settingsDefaults.string(forKey: BitrateMode.defaultsKey))
+        _releasePointerHotkey = Self.persistedDecoded("releasePointerHotkey", HotkeyChord.self,
             defaults: defaults) ?? releasePointerHotkey
-        miniPlayerHotkey = Self.persistedDecoded("miniPlayerHotkey", HotkeyChord.self,
+        _miniPlayerHotkey = Self.persistedDecoded("miniPlayerHotkey", HotkeyChord.self,
             defaults: defaults) ?? miniPlayerHotkey
-        showStreamStats = Self.persistedBool("showStreamStats", defaults: defaults) ?? showStreamStats
-        streamStatsCorner = .persisted(defaults: defaults)
+        _showStreamStats = Self.persistedBool("showStreamStats", defaults: defaults) ?? showStreamStats
+        _streamStatsCorner = .persisted(defaults: defaults)
         // Missing or unknown overlay preferences keep their declared defaults.
-        statsOverlayPreset = Self.persistedRawValue("statsOverlayPreset", StatsOverlayPreset.self,
+        _statsOverlayPreset = Self.persistedRawValue("statsOverlayPreset", StatsOverlayPreset.self,
             defaults: defaults) ?? statsOverlayPreset
-        statsOverlayCustomRows = Self.persistedCustomRows(defaults: defaults) ?? statsOverlayCustomRows
-        statsThresholds = Self.persistedStatsThresholds(defaults: defaults)
-        quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self, defaults: defaults) ?? quitHotkey
-        statsHotkey = Self.persistedStatsHotkey(defaults: defaults)
+        _statsOverlayCustomRows = Self.persistedCustomRows(defaults: defaults) ?? statsOverlayCustomRows
+        _statsThresholds = Self.persistedStatsThresholds(defaults: defaults)
+        _quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self, defaults: defaults) ?? quitHotkey
+        _statsHotkey = Self.persistedStatsHotkey(defaults: defaults)
         hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
+        persistQualitySettings()
     }
 
     /// How the model reaches a PC and where it keeps paired PCs and their pins.
