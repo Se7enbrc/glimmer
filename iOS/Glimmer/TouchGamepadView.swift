@@ -10,6 +10,7 @@ class TouchGamepadView: UIView {
     private(set) var opacity = TouchLayout.defaultOpacity
     private var capture: TouchGamepadCapture?
     private var lastFrames: [TouchElement: CGRect] = [:]
+    private var preview = false
     private var transparencyObserver: NSObjectProtocol?
 
     override init(frame: CGRect) {
@@ -65,14 +66,20 @@ class TouchGamepadView: UIView {
             capture?.cancel()
             lastFrames = frames
             for (element, control) in controls {
-                control.isHidden = frames[element] == nil
                 if let frame = frames[element] { control.frame = frame }
             }
         }
         let menuFrame = TouchLayout.menuFrame(in: area)
         if menuButton.frame != menuFrame { menuButton.frame = menuFrame }
         applyOpacity(layout.opacity)
-        isHidden = !preview && capture?.enabled != true
+        self.preview = preview
+        updateVisibility()
+    }
+
+    // Only the pad follows the capture; the menu button stays the visible, tappable way back to the controls.
+    private func updateVisibility() {
+        let active = preview || capture?.enabled == true
+        for (element, control) in controls { control.isHidden = !active || lastFrames[element] == nil }
     }
 
     private var appearanceControls: [UIControl] { Array(controls.values) + [menuButton] }
@@ -95,7 +102,7 @@ class TouchGamepadView: UIView {
             inputTracking(control)?.invalidate()
             control.cancelTracking(with: nil)
         }
-        isHidden = capture?.enabled != true
+        updateVisibility()
     }
 
     func mouseMode(_ enabled: Bool, leftStick: Bool) {

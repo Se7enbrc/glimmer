@@ -221,6 +221,15 @@ struct TouchGamepadTests {
         #expect(shown == 1)
     }
 
+    @Test func menuStaysReachableWhenThePadCannotTakeInput() {
+        let view = TouchGamepadView(frame: CGRect(x: 0, y: 0, width: 956, height: 440))
+        view.configure(capture: nil, layout: TouchLayout(), area: view.bounds.insetBy(dx: 24, dy: 12))
+        view.layoutIfNeeded()
+        #expect(view.hitTest(view.menuButton.center, with: nil) === view.menuButton)
+        let shown = view.controls.values.filter { !$0.isHidden }
+        #expect(shown.isEmpty)
+    }
+
     private func composite(_ color: UIColor, over background: SIMD3<Double>) throws -> SIMD3<Double> {
         var red: CGFloat = 0
         var green: CGFloat = 0
