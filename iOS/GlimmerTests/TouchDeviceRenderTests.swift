@@ -39,16 +39,21 @@ struct TouchDeviceRenderTests {
         sample.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         sample.view.frame = host.view.bounds
         try await Task.sleep(for: .milliseconds(300))
-        host.setNeedsUpdateOfSupportedInterfaceOrientations()
-        let target: UIInterfaceOrientation = reverse ? .landscapeRight : .landscapeLeft
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: reverse ? .landscapeRight : .landscapeLeft)) { error in
-            Attachment.record(Array(error.localizedDescription.utf8), named: "rotation-error.txt")
+        // Resizable iPad scenes ignore orientation requests; they record the window as it is.
+        let phone = scene.traitCollection.userInterfaceIdiom != .pad
+        if phone {
+            host.setNeedsUpdateOfSupportedInterfaceOrientations()
+            let target: UIInterfaceOrientation = reverse ? .landscapeRight : .landscapeLeft
+            let mask: UIInterfaceOrientationMask = reverse ? .landscapeRight : .landscapeLeft
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
+                Attachment.record(Array(error.localizedDescription.utf8), named: "rotation-error.txt")
+            }
+            let deadline = ContinuousClock.now + .seconds(5)
+            while scene.effectiveGeometry.interfaceOrientation != target, ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            try #require(scene.effectiveGeometry.interfaceOrientation == target)
         }
-        let deadline = ContinuousClock.now + .seconds(5)
-        while scene.effectiveGeometry.interfaceOrientation != target, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        try #require(scene.effectiveGeometry.interfaceOrientation == target)
         model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
         var playingFrames: [TouchElement: CGRect]?
         for state in ["before", "after", "editor", "physical", "show-menu", "override",
@@ -66,7 +71,7 @@ struct TouchDeviceRenderTests {
             pressFixture(in: host, active: state.hasSuffix("active"))
             window.layoutIfNeeded()
             try await Task.sleep(for: .milliseconds(250))
-            #expect(window.bounds.width > window.bounds.height)
+            if phone { #expect(window.bounds.width > window.bounds.height) }
             if state == "physical" || state == "hidden" { verifyMouseOnly(host) }
             if state == "after" { playingFrames = try verifyAppearance(host, dark: dark) }
             if state == "mouse" {
@@ -76,6 +81,44 @@ struct TouchDeviceRenderTests {
             let style = "\(dark ? "dark" : "light")-\(reverse ? "right" : "left")"
             try record(window, name: "actual-\(UIDevice.current.model.lowercased())-\(style)-\(state)")
         }
+        model.stop()
+        await model.waitUntilStopped()
+        await connection.stop()
+    }
+
+    @Test func touchMenuButtonReceivesItsTapAndOpensTheStreamMenu() async throws {
+        let scene = try await testWindowScene()
+        let previous = scene.keyWindow
+        let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
+        let capture = TouchGamepadCapture(input: connection.input)
+        #expect(capture.attach())
+        let id = UUID()
+        let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
+                           input: connection.input, focusInput: { capture.setEnabled($0) },
+                           observeControllers: { $0(false) }, touchGamepad: capture)
+        })
+        let window = UIWindow(windowScene: scene)
+        let host = StreamViewController(model: model, close: {})
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { capture.detach(); window.isHidden = true; previous?.makeKeyAndVisible() }
+        model.start(surface: host.surface)
+        await model.waitUntilStartFinishes()
+        model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+        var menu: TouchMenuButton?
+        for _ in 0..<100 where menu?.window == nil {
+            window.layoutIfNeeded()
+            menu = touchView(in: host.view)?.menuButton
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let button = try #require(menu)
+        #expect(model.touchControlsVisible && !model.controlsVisible)
+        // A real tap starts at the button's centre and must reach the button, not the video below it.
+        let centre = button.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), to: window)
+        #expect(window.hitTest(centre, with: nil) === button)
+        button.sendActions(for: .primaryActionTriggered)
+        #expect(model.controlsVisible && !model.inputFocused)
         model.stop()
         await model.waitUntilStopped()
         await connection.stop()
