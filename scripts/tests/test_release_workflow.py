@@ -136,7 +136,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         sign = makefile.split("\nsign-bundle:", 1)[1].split("\n\n", 1)[0]
         notarize = makefile.split("\nnotarize-bundle:", 1)[1].split("\n\n", 1)[0]
         dmg = makefile.split("\nnotarize-dmg:", 1)[1].split("\n\n", 1)[0]
-        self.assertTrue(sign.startswith(" ensure-signing\n"))
+        self.assertTrue(sign.startswith(" signing-preflight ensure-signing\n"))
         self.assertTrue(notarize.startswith(" sign-bundle appcast-feed\n"))
         for forbidden in ("xcodebuild", "swiftc", "embed-helper", "--validate-distribution"):
             self.assertNotIn(forbidden, sign + notarize + dmg)

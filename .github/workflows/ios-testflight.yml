@@ -70,6 +70,12 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Wait for trusted delivery admission
         env:
           GH_TOKEN: ${{ github.token }}
@@ -113,6 +119,12 @@ jobs:
           ref: main
           fetch-depth: 0
           persist-credentials: false
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Pin tooling to this main workflow commit
         run: |
           [[ "$TRUSTED_TOOLING_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1

@@ -56,6 +56,12 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Require candidate context and exact-commit Verify and CodeQL
         env:
           GH_TOKEN: ${{ github.token }}
