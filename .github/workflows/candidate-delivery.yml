@@ -4,7 +4,8 @@
 name: Candidate delivery admission
 
 on:
-  workflow_run:
+  # Only trusted main code runs; triggering runs supply identifiers, never executable artifacts.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [Release, iOS TestFlight]
     types: [requested, in_progress, completed]
   workflow_dispatch:

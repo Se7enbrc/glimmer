@@ -61,7 +61,7 @@ build_twice() {
     rev="$(git -C "$REPO_ROOT" rev-parse HEAD)"
     git -C "$REPO_ROOT" diff --quiet HEAD || echo "note: uncommitted changes stay out of both clones" >&2
     for n in a b; do
-        rm -rf "$work/$n"
+        rm -rf "${work:?}/${n:?}"
         git clone -q --no-checkout "$REPO_ROOT" "$work/$n"
         git -C "$work/$n" checkout -q "$rev"
         make -C "$work/$n" CONFIG=Release app embed-helper
