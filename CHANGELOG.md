@@ -99,7 +99,7 @@
 - iPad streams can start in portrait, Split View and narrow windows. iPhone and
   iPad share the same quality choices and use the supplied PC display modes.
   Native chooses the closest size for the window. Resizing keeps the game
-  running and fills the window, cropping edges when needed.
+  running and fits the whole picture in the window.
 - iPad app buttons keep their grid size with a small library. Large text has
   more room in PC names, saved-PC actions and stream controls. Connection
   messages can scroll when space is tight.
@@ -110,8 +110,8 @@
 - Large-text app buttons and Settings rows give their names more room in narrow
   iPad windows.
 - Diagnostics describes saved files correctly on both iPhone and iPad.
-- Streams on an external display show the whole picture without cropping when
-  the display has a different shape.
+- iPhone and iPad streams show the whole picture without cropping when the
+  display or window has a different shape.
 - Avoid unnecessary video processing while you briefly switch away from a
   stream.
 

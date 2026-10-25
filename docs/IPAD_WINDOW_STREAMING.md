@@ -22,31 +22,30 @@ selector filters out rates above the profile/display maximum, then ranks:
    logarithms of width/target-width and height/target-height. This treats
    doubling and halving equally and avoids an oversized decode request for a
    tiny aspect improvement.
-2. Least area cropped by proportional aspect fill.
+2. Least area lost to aspect mismatch.
 3. Highest listed FPS within the cap. XML order breaks any remaining tie.
 
-Exact listed sizes therefore win. A 750 × 1000 target selects 750 × 972, with
-2.8% horizontal cropping after scaling to fill, rather than a full panel.
-Full-panel ProMotion modes retain 120 fps; most window modes have only 60 Hz. A
-90 Hz display report selects a listed 60 Hz mode, never an invented 90 Hz mode.
+Exact listed sizes therefore win. A 750 × 1000 target selects 750 × 972, with a
+2.8% aspect mismatch shown as thin bars, rather than a full panel. Full-panel
+ProMotion modes retain 120 fps; most window modes have only 60 Hz. A 90 Hz
+display report selects a listed 60 Hz mode, never an invented 90 Hz mode.
 Requests retain the same 20 Mbps, stereo, codec and HDR negotiation as every
 other stream. This changes no decoder, bitrate, pacing or HDR defaults. The
 catalog is local, not a PC discovery response.
 
-## Filling and resizing
+## Fitting and resizing
 
-`StreamSurface` uses `AVSampleBufferDisplayLayer.resizeAspectFill` across the
-whole window. A same-aspect lower mode loses detail through upscaling; a higher
-mode downsamples. A different aspect crops equal amounts from opposite edges,
-without stretching or adding Glimmer letterboxing. This can hide game HUD
-elements. The requested-format label reports the selected mode, not the window
-target.
+`StreamSurface` uses `AVSampleBufferDisplayLayer.resizeAspect` in every window
+and on external displays. A same-aspect lower mode loses detail through
+upscaling; a higher mode downsamples. A different aspect shows black bars on
+opposite edges, never cropping or stretching, so game HUD elements stay visible.
+The requested-format label reports the selected mode, not the window target.
 
 Mid-stream rotation and resizing preserve the initial requested format, matching
 iPhone's existing rotation behavior. The surface follows every layout change;
 there is no delayed reconnect, decoder rebuild or request to quit the game.
-Starting a new stream selects for the new window. This fulfills the whole-window
-requirement through aspect fill, at the cost of cropping after an aspect change.
+Starting a new stream selects for the new window. After an aspect change the
+picture keeps every edge, at the cost of black bars until the next stream.
 
 The earlier 750 ms resize coordinator and unused format-actuator closure have
 been removed under the maintainer's shared-iPhone-rule decision. There is no

@@ -5,7 +5,8 @@ no overlay. Without one, the player starts with native Resume and Disconnect
 controls. Resume gives the PC controller and touch input and hides the overlay.
 Showing controls releases PC input before UIKit handles their buttons. Removing
 the last controller reveals the controls; reconnecting resumes unless the player
-explicitly opened the controls. Disconnect leaves the game running on the PC.
+explicitly opened the controls. Disconnect quits the game on the PC unless Leave
+games running when you disconnect is on.
 
 ## Controller mouse mode
 

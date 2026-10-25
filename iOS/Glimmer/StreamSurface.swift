@@ -62,10 +62,8 @@ final class StreamSurface: UIView {
         return displayLayer
     }
 
-    // Device windows fill like iPhone, cropping after an aspect change; an external display keeps every edge.
-    private var presentationGravity: AVLayerVideoGravity {
-        window?.windowScene?.session.role == .windowExternalDisplayNonInteractive ? .resizeAspect : .resizeAspectFill
-    }
+    // One rule for every window and display: never crop the PC picture.
+    private let presentationGravity = AVLayerVideoGravity.resizeAspect
 
     private func configureDisplayLayer() {
         displayLayer.videoGravity = presentationGravity

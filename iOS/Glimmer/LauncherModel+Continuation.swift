@@ -117,10 +117,8 @@ extension LauncherModel {
     var screenSizeNeedsRestart: Bool {
         guard let selected, let runningApp else { return true }
         guard history.previous(pc: selected.server.uniqueId, app: runningApp.id) != nil else { return true }
-        let screen = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }?.screen
-        let target = screen.flatMap { try? streamProfile.screenSize(nativePixels: $0.nativeBounds.size,
-            maximumFramesPerSecond: $0.maximumFramesPerSecond) }
+        let target = Self.streamWindow.flatMap { try? streamProfile.screenSize(windowPixels: $0.pixels,
+            maximumFramesPerSecond: $0.fps) }
         return target.map { history.rejected($0.continuationFormat, pc: selected.server.uniqueId, app: runningApp.id) }
             ?? true
     }
@@ -179,13 +177,24 @@ extension LauncherModel {
         } else { offerStart(trial.app, format: trial.previous) }
     }
 
+    /// The active window's physical pixels as a stream will see them; iPhone streams turn landscape.
+    private static var streamWindow: (pixels: CGSize, fps: Int)? {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }),
+            let window = scene.keyWindow ?? scene.windows.first else { return nil }
+        let scale = scene.screen.nativeScale
+        var pixels = CGSize(width: window.bounds.width * scale, height: window.bounds.height * scale)
+        if scene.traitCollection.userInterfaceIdiom != .pad, pixels.height > pixels.width {
+            pixels = CGSize(width: pixels.height, height: pixels.width)
+        }
+        return (pixels, scene.screen.maximumFramesPerSecond)
+    }
+
     private func preferredStart(for app: HostApp) -> ContinuationFormat? {
-        guard let selected, let screen = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive })?.screen,
-            let source = try? streamProfile.resolve(nativePixels: screen.nativeBounds.size,
-                                                    maximumFramesPerSecond: screen.maximumFramesPerSecond),
-            let native = try? streamProfile.screenSize(nativePixels: screen.nativeBounds.size,
-                                                       maximumFramesPerSecond: screen.maximumFramesPerSecond) else {
+        guard let selected, let window = Self.streamWindow,
+            let source = try? streamProfile.resolve(windowPixels: window.pixels, maximumFramesPerSecond: window.fps),
+            let native = try? streamProfile.screenSize(windowPixels: window.pixels,
+                                                       maximumFramesPerSecond: window.fps) else {
             return nil
         }
         return history.preferredStart(pc: selected.server.uniqueId, app: app.id,

@@ -40,7 +40,7 @@ struct StreamWindowResizeTests {
             #expect(model.requestedFormat == original && model.phase == .streaming)
             #expect(controller.surface.bounds.size == size)
             #expect(controller.surface.displayLayer.frame == controller.surface.bounds)
-            #expect(controller.surface.displayLayer.videoGravity == .resizeAspectFill)
+            #expect(controller.surface.displayLayer.videoGravity == .resizeAspect)
         }
         #expect(preparations == 1 && starts == 1 && stops == 0)
         model.stop()

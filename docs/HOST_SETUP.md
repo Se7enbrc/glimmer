@@ -194,9 +194,10 @@ automatically. You do not need MTT VDD or the XML sample for Apollo.
 {% hint style="info" %}
 
 Sunshine's `dd_` controls are Windows-only. On Mac, stopping the stream also
-quits the PC app, allowing app-exit Undo commands to run. On iPhone and iPad,
-disconnecting leaves the game running; do not rely on an app-exit Undo command
-for display restoration.
+quits the PC app, allowing app-exit Undo commands to run. iPhone and iPad also
+quit it by default; with Leave games running when you disconnect on, the game
+keeps running, so do not rely on an app-exit Undo command for display
+restoration.
 
 {% endhint %}
 
