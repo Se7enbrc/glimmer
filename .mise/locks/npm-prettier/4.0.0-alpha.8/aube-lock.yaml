@@ -1,0 +1,395 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      prettier:
+        specifier: 4.0.0-alpha.8
+        version: 4.0.0-alpha.8
+
+packages:
+
+  '@iarna/toml@2.2.5':
+    resolution: {integrity: sha512-trnsAYxU3xnS1gPHPyU961coFyLkh4gAD/0zQ5mymY4yOZ+CYvsPqUbOFSw0aDM4y0tV7tiFxL/1XfXPNC6IPg==}
+
+  '@prettier/cli@0.3.0':
+    resolution: {integrity: sha512-8qq527QT5n8paE9eoHeulmGw7a3MroVk5+8ITf+xoWJn1gcVaZiOP6vb9OlwZv49hhdRZ1WX+0MyisSSXL/4fA==}
+    hasBin: true
+    peerDependencies:
+      prettier: ^3.1.0 || ^4.0.0
+
+  ansi-purge@1.1.0:
+    resolution: {integrity: sha512-sa1KWMANfZurQkYemaVNNJh8gRF0iUJvcVNxvjPlYM9pPPTB0v+VKH/mFRz4s6gXA8plimQXorJSqJgutxUs8g==}
+
+  ansi-truncate@1.4.0:
+    resolution: {integrity: sha512-p6d2MrNs/mbpdXFT08fGabIg4pbgnUbbhrsoFfxWV5L3zFKw7tUkYUxGY3xCGJUPohENM80Q4sWkl/VDEN3pZg==}
+
+  argparse@2.0.1:
+    resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
+
+  atomically@2.1.1:
+    resolution: {integrity: sha512-P4w9o2dqARji6P7MHprklbfiArZAWvo07yW7qs3pdljb3BWr12FIB7W+p0zJiuiVsUpRO0iZn1kFFcpPegg0tQ==}
+
+  binary-extensions@2.3.0:
+    resolution: {integrity: sha512-Ceh+7ox5qe7LJuLHoY0feh3pHuUDHAcRUeyL2VYghZwfpkNIy/+8Ocg0a3UuSoYzavmylwuLWQOf3hl0jjMMIw==}
+    engines: {node: '>=8'}
+
+  dettle@1.0.5:
+    resolution: {integrity: sha512-ZVyjhAJ7sCe1PNXEGveObOH9AC8QvMga3HJIghHawtG7mE4K5pW9nz/vDGAr/U7a3LWgdOzEE7ac9MURnyfaTA==}
+
+  fast-ignore@1.1.3:
+    resolution: {integrity: sha512-xTo4UbrOKfEQgOFlPaqFScodTV/Wf3KATEqCZZSMh6OP4bcez0lTsqww3n3/Fve1q9u0jmfDP0q0nOhH4POZEg==}
+
+  fast-string-truncated-width@3.0.3:
+    resolution: {integrity: sha512-0jjjIEL6+0jag3l2XWWizO64/aZVtpiGE3t0Zgqxv0DPuxiMjvB3M24fCyhZUO4KomJQPj3LTSUnDP3GpdwC0g==}
+
+  fast-string-width@3.0.2:
+    resolution: {integrity: sha512-gX8LrtNEI5hq8DVUfRQMbr5lpaS4nMIWV+7XEbXk2b8kiQIizgnlr12B4dA3ZEx3308ze0O4Q1R+cHts8kyUJg==}
+
+  find-up-json@2.0.5:
+    resolution: {integrity: sha512-1zZZUfD1GOOEEd1AqwbRmCkCCv1O9t0vOpCYgmzfJqKty8WKaKlDyxWej8Aew+vI5lvDiTviaQuaVuu6GzlHzQ==}
+
+  find-up-path@1.0.1:
+    resolution: {integrity: sha512-cl4Sfxufq9WK848L887b4r+NVZoBjMeB4QydPZ+pXbp6Jt2nUVspTo2svNOm48stIIeSxtuCsULa9+e+LMTzwA==}
+
+  function-once@3.0.1:
+    resolution: {integrity: sha512-bE3E8REk4jANDot3l0sLFkXgywBwzFKsmbwdnVHLJUnt/3kV6dNG0oJJqoRBuS1Z9Lr4ZoQgwV0ZNLDgWDbv7Q==}
+
+  get-current-package@1.0.1:
+    resolution: {integrity: sha512-c/Rw5ByDQ+zg+Lh/emBWv0bDpugEFdmXPR6/srIemVtIvol0XbT0JAr8Db0cX+Jj/xY9wj1wdjeq2qNB35Tayg==}
+
+  grammex@3.1.13:
+    resolution: {integrity: sha512-LnPnhOBLEJEVKS8WFDVaA397L9Kq55Q9oSITJiVLHVdhAclfUkWzQv74KhvZHKL2Q09Pb1XdsrOsZ4LfTFFTEg==}
+
+  graphmatch@1.1.1:
+    resolution: {integrity: sha512-5ykVn/EXM1hF0XCaWh05VbYvEiOL2lY1kBxZtaYsyvjp7cmWOU1XsAdfQBwClraEofXDT197lFbXOEVMHpvQOg==}
+
+  import-meta-resolve@4.2.0:
+    resolution: {integrity: sha512-Iqv2fzaTQN28s/FwZAoFq0ZSs/7hMAHJVX+w8PZl3cY19Pxk6jFFalxQoIfW2826i/fDLXv8IiEZRIT0lDuWcg==}
+
+  ini-simple-parser@1.0.1:
+    resolution: {integrity: sha512-myU5nhF2miBQP3tO/giUi+8BI9QhfM/XRZd0RD7G0p+40K6KPAwxMDtH3UEtJ2XJZbd+ZiQOoGh432DTYfzNVQ==}
+
+  ionstore@1.0.1:
+    resolution: {integrity: sha512-g+99vyka3EiNFJCnbq3NxegjV211RzGtkDUMbZGB01Con8ZqUmMx/FpWMeqgDXOqgM7QoVeDhe+CfYCWznaDVA==}
+
+  is-binary-path@2.1.0:
+    resolution: {integrity: sha512-ZMERYes6pDydyuGidse7OsHxtbI7WVeUEozgR/g7rd0xUimYNlvZRE/K2MgZTjWy725IfelLeVcEM97mmtRGXw==}
+    engines: {node: '>=8'}
+
+  js-yaml@4.3.2:
+    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
+    hasBin: true
+
+  json-sorted-stringify@1.0.2:
+    resolution: {integrity: sha512-6UiiM9hRn9P+nfznAif3TsmulMJTvlmfNDN8mAmDUvDW/JbSyczdgT0w7NVJvWQwMS83iLnYkH2IXNRZUB4iFg==}
+
+  json5@2.2.3:
+    resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
+    engines: {node: '>=6'}
+    hasBin: true
+
+  kasi@1.1.2:
+    resolution: {integrity: sha512-Q2N8EHdkJFKdzq8fxzDNSXb4RE8xzcPHwZuT7N1/wJY3XaMkoGXkzGZcEnNODzQXJNOd9inReEW2V1V4svAf/Q==}
+
+  pioppo@1.2.1:
+    resolution: {integrity: sha512-1oErGVWD6wFDPmrJWEY1Cj2p829UGT6Fw9OItYFxLkWtBjCvQSMC8wA5IcAR5ms/6gqiY8pnJvIV/+/Imyobew==}
+
+  prettier@4.0.0-alpha.8:
+    resolution: {integrity: sha512-7FFBkQb0Eg0wJRYzA7ucc31nqTjWgoSpmS0ey9OATHU6WiV0z53Uzo5hA3tZs/pbhhIG7YvOIBNmkRQ7Dr/k5A==}
+    engines: {node: '>=14'}
+    hasBin: true
+
+  promise-make-counter@1.0.2:
+    resolution: {integrity: sha512-FJAxTBWQuQoAs4ZOYuKX1FHXxEgKLEzBxUvwr4RoOglkTpOjWuM+RXsK3M9q5lMa8kjqctUrhwYeZFT4ygsnag==}
+
+  promise-make-naked@2.1.2:
+    resolution: {integrity: sha512-y7s8ZuHIG56JYspB24be9GFkXA1zXL85Ur9u1DKrW/tvyUoPxWgBjnalK6Nc6l7wHBcAW0c3PO07+XOsWTRuhg==}
+
+  promise-make-naked@3.0.2:
+    resolution: {integrity: sha512-B+b+kQ1YrYS7zO7P7bQcoqqMUizP06BOyNSBEnB5VJKDSWo8fsVuDkfSmwdjF0JsRtaNh83so5MMFJ95soH5jg==}
+
+  specialist@1.4.5:
+    resolution: {integrity: sha512-4mPQEREzBUW2hzlXX/dWFbQdUWzpkqvMFVpUAdRlo1lUlhKMObDHiAo09oZ94x4cS3uWMJebPOTn+GaQYLfv3Q==}
+
+  stdin-blocker@2.0.1:
+    resolution: {integrity: sha512-NEcAEpag+gE/Iivx1prq1AFPwnmgmcyHNvGZLUqGBoOE/7DZtmhtP9iYqJt8ymueFL+kknhfEebAMWbrWp3FJw==}
+
+  string-escape-regex@1.0.1:
+    resolution: {integrity: sha512-cdSXOHSJ32K/T2dbj9t7rJwonujaOkaINpa1zsXT+PNFIv1zuPjtr0tXanCvUhN2bIu2IB0z/C7ksl+Qsy44nA==}
+
+  stubborn-fs@2.0.0:
+    resolution: {integrity: sha512-Y0AvSwDw8y+nlSNFXMm2g6L51rBGdAQT20J3YSOqxC53Lo3bjWRtr2BKcfYoAf352WYpsZSTURrA0tqhfgudPA==}
+
+  stubborn-utils@1.0.2:
+    resolution: {integrity: sha512-zOh9jPYI+xrNOyisSelgym4tolKTJCQd5GBhK0+0xJvcYDcwlOoxF/rnFKQ2KRZknXSG9jWAp66fwP6AxN9STg==}
+
+  tiny-bin@1.11.3:
+    resolution: {integrity: sha512-CrBbiKsvJN4bHSDA0cPau4t5KWdGUUAcTXQ8bB14XNqNY+68UZF4Zo7WRVdHLq0j0GYZjIRbNDg+zJbJXDEXeg==}
+
+  tiny-colors@2.2.2:
+    resolution: {integrity: sha512-Elmv7JL+dX0c78caKEelH1nHHBskHzJkaqBRgVvQuxsvVA/Z9Fa2R3ZZtfmkkajcd18e96RLMwJvtFqC8jsZWA==}
+
+  tiny-cursor@2.0.1:
+    resolution: {integrity: sha512-28ytGEfb7m/8Gdflv+wSo5qRM01fROo2CjJVYon6yYbzPsc3ap3Ps5CZXuS19pIROwswSvZMGbEQ7kWnokdUGA==}
+
+  tiny-editorconfig@1.0.2:
+    resolution: {integrity: sha512-QVxndBgsEs5NMdOiUcZhj191moZW3yk0X6b7ItAqIkUGkSLl1IlfkXbraImOEyGqhRynWJjdFkn0a//smQV3GQ==}
+
+  tiny-jsonc@1.0.2:
+    resolution: {integrity: sha512-f5QDAfLq6zIVSyCZQZhhyl0QS6MvAyTxgz4X4x3+EoCktNWEYJ6PeoEA97fyb98njpBNNi88ybpD7m+BDFXaCw==}
+
+  tiny-levenshtein@1.1.0:
+    resolution: {integrity: sha512-sU4wduNrjb2e51rgPOTy6nx3ag8pQPFA9XQCQQsFmECWEDS23LEoYsZv3fhVuJNIcxzBNMvCDDb7e/PPOP+vxw==}
+
+  tiny-parse-argv@2.8.2:
+    resolution: {integrity: sha512-RnIDHQ+r9zMuslQWVoRxfKVOumteeheQqbwNYJyQxzM2vzx/vdN5xAeL64F3rQOpfbVdxFkhM4zPDyfq7SxsBQ==}
+
+  tiny-readdir-glob@1.23.2:
+    resolution: {integrity: sha512-+47FIdgzEtZj03mOyq9iAljlZZNleqSEwe3i6Uzkzec5axbMg32Vp78U2fLo4TiCMv9gzjnno7yJn34z5pXECw==}
+
+  tiny-readdir@2.7.4:
+    resolution: {integrity: sha512-721U+zsYwDirjr8IM6jqpesD/McpZooeFi3Zc6mcjy1pse2C+v19eHPFRqz4chGXZFw7C3KITDjAtHETc2wj7Q==}
+
+  tiny-spinner@2.0.5:
+    resolution: {integrity: sha512-OIGogtfEbA2IQdCBgF0zI3EjpFyiUEd6Uj5j0q5jhIPPq8pgNR83D0t9WIckbD2FzPann8lH/uLf1vX0YIu04w==}
+
+  tiny-truncate@1.0.5:
+    resolution: {integrity: sha512-v69A1bjP624gxzBEvvshTMcwU2tkMcuAOIXAjJj0AG7aR+/YFmBYSw3rEKo0Ma2SCX7coeq9MNnUHQo1wZmMHw==}
+
+  tiny-updater@3.7.0:
+    resolution: {integrity: sha512-d1qNP+YObARMlu2FS3XiJmLTj7JGIWrpKB7Vj1WmPmdAUHDI6yXRE1AmI671bTZKsnC3lCrMSnAu5zG1A5gGag==}
+
+  webworker-shim@1.1.4:
+    resolution: {integrity: sha512-W/40L5W6ZQyGhYr3hJ7N/2SjdK5OdFtnYm94j6xlRyjckegXnIGwz0EdxdkQx6VGTglJjK8mqBhMz3fd3AY4bg==}
+
+  when-exit@2.1.5:
+    resolution: {integrity: sha512-VGkKJ564kzt6Ms1dbgPP/yuIoQCrsFAnRbptpC5wOEsDaNsbCB2bnfnaA8i/vRs5tjUSEOtIuvl9/MyVsvQZCg==}
+
+  worktank@2.7.3:
+    resolution: {integrity: sha512-M0fesnpttBPdvNYBdzRvLDsacN0na9RYWFxwmM/x1+/6mufjduv9/9vBObK8EXDqxRMX/SOYJabpo0UCYYBUdQ==}
+
+  zeptomatch-explode@1.0.1:
+    resolution: {integrity: sha512-7cUQASLLRGZ20+zEQcEgQ9z/gH1+jSfrNg4KfRJSxF1QU2fpymAwWvnAxl69GD5pr3IV0V9vo3ke2np//Nh4tQ==}
+
+  zeptomatch-is-static@1.0.1:
+    resolution: {integrity: sha512-bN9q7H/UdXhkub01WE7b7Grg07jLldNnIWG2T1IpBq5NtvcQ4DwFbNiGGapnbKHUdWiCNjg/bIvixV88nj9gog==}
+
+  zeptomatch-unescape@1.0.1:
+    resolution: {integrity: sha512-xhSFkKV0aQ03e/eiN4VhOTwJhcqfH7SMiGHrWKw9gXi+0EVJAxJ8Gt4ehozYsYLhUXL1JFbP1g3EE6ZmkStB0g==}
+
+  zeptomatch@1.2.2:
+    resolution: {integrity: sha512-0ETdzEO0hdYmT8aXHHf5aMjpX+FHFE61sG4qKFAoJD2Umt3TWdCmH7ADxn2oUiWTlqBGC+SGr8sYMfr+37J8pQ==}
+
+  zeptomatch@2.1.0:
+    resolution: {integrity: sha512-KiGErG2J0G82LSpniV0CtIzjlJ10E04j02VOudJsPyPwNZgGnRKQy7I1R7GMyg/QswnE4l7ohSGrQbQbjXPPDA==}
+
+snapshots:
+
+  '@iarna/toml@2.2.5': {}
+
+  '@prettier/cli@0.3.0(prettier@4.0.0-alpha.8)':
+    dependencies:
+      '@iarna/toml': 2.2.5
+      atomically: 2.1.1
+      fast-ignore: 1.1.3
+      find-up-json: 2.0.5
+      import-meta-resolve: 4.2.0
+      is-binary-path: 2.1.0
+      js-yaml: 4.3.2
+      json-sorted-stringify: 1.0.2
+      json5: 2.2.3
+      kasi: 1.1.2
+      pioppo: 1.2.1
+      prettier: 4.0.0-alpha.8
+      specialist: 1.4.5
+      tiny-editorconfig: 1.0.2
+      tiny-jsonc: 1.0.2
+      tiny-readdir-glob: 1.23.2
+      tiny-spinner: 2.0.5
+      worktank: 2.7.3
+      zeptomatch: 1.2.2
+
+  ansi-purge@1.1.0: {}
+
+  ansi-truncate@1.4.0:
+    dependencies:
+      fast-string-truncated-width: 3.0.3
+
+  argparse@2.0.1: {}
+
+  atomically@2.1.1:
+    dependencies:
+      stubborn-fs: 2.0.0
+      when-exit: 2.1.5
+
+  binary-extensions@2.3.0: {}
+
+  dettle@1.0.5: {}
+
+  fast-ignore@1.1.3:
+    dependencies:
+      grammex: 3.1.13
+      string-escape-regex: 1.0.1
+
+  fast-string-truncated-width@3.0.3: {}
+
+  fast-string-width@3.0.2:
+    dependencies:
+      fast-string-truncated-width: 3.0.3
+
+  find-up-json@2.0.5:
+    dependencies:
+      find-up-path: 1.0.1
+
+  find-up-path@1.0.1: {}
+
+  function-once@3.0.1: {}
+
+  get-current-package@1.0.1:
+    dependencies:
+      find-up-json: 2.0.5
+
+  grammex@3.1.13: {}
+
+  graphmatch@1.1.1: {}
+
+  import-meta-resolve@4.2.0: {}
+
+  ini-simple-parser@1.0.1: {}
+
+  ionstore@1.0.1: {}
+
+  is-binary-path@2.1.0:
+    dependencies:
+      binary-extensions: 2.3.0
+
+  js-yaml@4.3.2:
+    dependencies:
+      argparse: 2.0.1
+
+  json-sorted-stringify@1.0.2: {}
+
+  json5@2.2.3: {}
+
+  kasi@1.1.2: {}
+
+  pioppo@1.2.1:
+    dependencies:
+      dettle: 1.0.5
+      when-exit: 2.1.5
+
+  prettier@4.0.0-alpha.8:
+    dependencies:
+      '@prettier/cli': 0.3.0(prettier@4.0.0-alpha.8)
+
+  promise-make-counter@1.0.2:
+    dependencies:
+      promise-make-naked: 3.0.2
+
+  promise-make-naked@2.1.2: {}
+
+  promise-make-naked@3.0.2: {}
+
+  specialist@1.4.5:
+    dependencies:
+      tiny-bin: 1.11.3
+      tiny-colors: 2.2.2
+      tiny-parse-argv: 2.8.2
+      tiny-updater: 3.7.0
+
+  stdin-blocker@2.0.1: {}
+
+  string-escape-regex@1.0.1: {}
+
+  stubborn-fs@2.0.0:
+    dependencies:
+      stubborn-utils: 1.0.2
+
+  stubborn-utils@1.0.2: {}
+
+  tiny-bin@1.11.3:
+    dependencies:
+      ansi-purge: 1.1.0
+      fast-string-width: 3.0.2
+      get-current-package: 1.0.1
+      tiny-colors: 2.2.2
+      tiny-levenshtein: 1.1.0
+      tiny-parse-argv: 2.8.2
+      tiny-updater: 3.7.0
+
+  tiny-colors@2.2.2: {}
+
+  tiny-cursor@2.0.1:
+    dependencies:
+      when-exit: 2.1.5
+
+  tiny-editorconfig@1.0.2:
+    dependencies:
+      ini-simple-parser: 1.0.1
+      zeptomatch: 2.1.0
+
+  tiny-jsonc@1.0.2: {}
+
+  tiny-levenshtein@1.1.0: {}
+
+  tiny-parse-argv@2.8.2: {}
+
+  tiny-readdir-glob@1.23.2:
+    dependencies:
+      tiny-readdir: 2.7.4
+      zeptomatch: 2.1.0
+      zeptomatch-explode: 1.0.1
+      zeptomatch-is-static: 1.0.1
+      zeptomatch-unescape: 1.0.1
+
+  tiny-readdir@2.7.4:
+    dependencies:
+      promise-make-counter: 1.0.2
+
+  tiny-spinner@2.0.5:
+    dependencies:
+      stdin-blocker: 2.0.1
+      tiny-colors: 2.2.2
+      tiny-cursor: 2.0.1
+      tiny-truncate: 1.0.5
+
+  tiny-truncate@1.0.5:
+    dependencies:
+      ansi-truncate: 1.4.0
+
+  tiny-updater@3.7.0:
+    dependencies:
+      function-once: 3.0.1
+      ionstore: 1.0.1
+      tiny-colors: 2.2.2
+      when-exit: 2.1.5
+
+  webworker-shim@1.1.4: {}
+
+  when-exit@2.1.5: {}
+
+  worktank@2.7.3:
+    dependencies:
+      promise-make-naked: 2.1.2
+      webworker-shim: 1.1.4
+
+  zeptomatch-explode@1.0.1: {}
+
+  zeptomatch-is-static@1.0.1: {}
+
+  zeptomatch-unescape@1.0.1: {}
+
+  zeptomatch@1.2.2:
+    dependencies:
+      grammex: 3.1.13
+
+  zeptomatch@2.1.0:
+    dependencies:
+      grammex: 3.1.13
+      graphmatch: 1.1.1
