@@ -53,7 +53,7 @@ local wall-clock observations, not hosted timing claims.
 | Command                   |   Before |    After | Result                                      |
 | ------------------------- | -------: | -------: | ------------------------------------------- |
 | All-file fixing hooks     |  12.07 s |   6.22 s | Passed                                      |
-| `make check`              | 171.03 s | 158.30 s | Passed                                      |
+| `make check`              | 171.03 s | 153.64 s | Passed                                      |
 | `make verify`             | 373.80 s | 337.57 s | Both stopped at the same Accessibility test |
 | `make ci-parity`          |      n/a | 181.58 s | All requested unsigned targets compiled     |
 | Separate `make test-asan` |      n/a | 121.46 s | Passed                                      |
@@ -63,5 +63,9 @@ Both full verification runs executed 2,869 Swift tests. The only failed test was
 three assertions and Accessibility error `-25212`. The after run used Xcode
 26.6; no compiler warnings were found. No tests were skipped or disabled. Hosted
 Linux execution, notarization and publication remain unverified locally.
+
+The companion branch from merged PR #196 passed `make check` in 152.24 s (459
+fixtures) and `make ci-parity` in 54.83 s. That branch has no iOS app yet; the
+compile check reports that explicitly.
 
 Continue with [the release process](RELEASE.md) for hosted candidate acceptance.
