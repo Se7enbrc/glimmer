@@ -188,7 +188,7 @@ struct ControllerLayoutRenderTests {
     }
     #endif
 
-    private func fixture(_ family: ControllerDiagramFamily) -> ControllerLayoutDevice {
+    func fixture(_ family: ControllerDiagramFamily) -> ControllerLayoutDevice {
         let names: [ControllerDiagramFamily: String] = [.xbox: "Xbox Series", .xboxElite: "Xbox Elite Series 2",
             .dualSense: "DualSense", .dualSenseEdge: "DualSense Edge", .dualShock: "DualShock 4",
             .backbone: "Backbone One", .backbonePlayStation: "Backbone One PlayStation Edition", .generic: "MFi controller"]
@@ -237,7 +237,7 @@ struct ControllerLayoutRenderTests {
             owner: .type(identity.type), reader: nil, controller: nil, controls: controls, nintendoLabels: false)
     }
 
-    private func record<Content: View>(_ content: Content, name: String, dark: Bool) async throws {
+    func record<Content: View>(_ content: Content, name: String, dark: Bool) async throws {
         #if os(macOS)
         let host = NSHostingController(rootView: content.environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentViewController: host)

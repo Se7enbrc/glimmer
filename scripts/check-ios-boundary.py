@@ -69,7 +69,8 @@ def expected_sources(root):
                                for path in (root / "Glimmer/ControllerLayouts").glob("*.swift"))
     expected["GlimmerTests"].update("../GlimmerTests/" + name for name in
                                   ["ControllerLayoutRenderTests.swift", "ControllerLayoutCaptureTests.swift",
-                                   "ControllerDiagramTests.swift", "SettingsResetTests.swift"])
+                                   "ControllerDiagramTests.swift", "SettingsResetTests.swift",
+                                   "ControllerShortcutRenderTests.swift"])
     expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in
                                   ["ControllerMappingTests.swift", "ControllerLayoutPersistenceTests.swift",
                                    "ControllerLayoutEscapeTests.swift", "ControllerShortcutTests.swift"])

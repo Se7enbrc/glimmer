@@ -766,6 +766,7 @@
 		E31B347927A1170384BBEB95 /* ControllerShortcutSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD515C08AFF793031FF8AC1D /* ControllerShortcutSection.swift */; };
 		D7F330D765E7A73DE210A28E /* ControllerShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 056C6102A2BD668896A01FCE /* ControllerShortcutTests.swift */; };
 		B6D5ED5AF9A2619C75EAE789 /* ControllerShortcutRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */; };
+		114D0A9130EE107F0ED56FF8 /* ControllerShortcutRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1586,6 +1587,7 @@
 		DD515C08AFF793031FF8AC1D /* ControllerShortcutSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerShortcutSection.swift"; sourceTree = SOURCE_ROOT; };
 		056C6102A2BD668896A01FCE /* ControllerShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ControllerShortcutTests.swift"; sourceTree = SOURCE_ROOT; };
 		A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerShortcutRoutingTests.swift"; sourceTree = SOURCE_ROOT; };
+		0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerShortcutRenderTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1906,6 +1908,7 @@
 				81E3DDA1106D496F9D8D71D3 /* ControllerLayoutRenderTests.swift */,
 				EB8E8DC2D7CDC60EF66275B3 /* ControllerLayoutBoundaryTests.swift */,
 				5C42C1D0E1A5A595F2D9D459 /* ControllerLayoutCaptureTests.swift */,
+				0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */,
 				837D4DB90C33C0B07D279747 /* SettingsResetTests.swift */,
 				C7C0E1B0EA955CEF50500AC9 /* ControllerLayoutRoutingTests.swift */,
 				A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */,
@@ -2838,6 +2841,7 @@
 				ED42D881756D5526B8FBA435 /* ControllerLayoutRenderTests.swift in Sources */,
 				67208A0EDA4DDDDD610A8176 /* ControllerLayoutBoundaryTests.swift in Sources */,
 				0E71DD174FA02F0B707E9761 /* ControllerLayoutCaptureTests.swift in Sources */,
+				114D0A9130EE107F0ED56FF8 /* ControllerShortcutRenderTests.swift in Sources */,
 				56A574311FFA79E0A008A3EF /* SettingsResetTests.swift in Sources */,
 				C7FF37545FB1A12CC429370A /* ControllerLayoutRoutingTests.swift in Sources */,
 				B6D5ED5AF9A2619C75EAE789 /* ControllerShortcutRoutingTests.swift in Sources */,
