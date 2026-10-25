@@ -9,8 +9,8 @@ struct TouchOverlay: View {
     var body: some View {
         GeometryReader { geometry in
             let area = Self.area(geometry)
-            // Stay below the controls: accessibility hit tests still land on a hidden full-size view.
-            Color.clear.allowsHitTesting(false).accessibilityHidden(true)
+            // Zero-sized: accessibility hit tests land even on a hidden full-size view, covering the stream menu.
+            Color.clear.frame(width: 0, height: 0).allowsHitTesting(false).accessibilityHidden(true)
                 .onChange(of: area, initial: true) { _, area in
                     guard geometry.size.width > 0, geometry.size.height > 0 else { return }
                     model.touchGeometryChanged(usable: !TouchLayout().frames(in: area).isEmpty)
