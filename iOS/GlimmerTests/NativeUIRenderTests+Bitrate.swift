@@ -16,7 +16,7 @@ extension NativeUIRenderTests {
         var pause: (@MainActor @Sendable () -> Void)?
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, quiesce in
             pause = quiesce
-            return StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {})
+            return StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {})
         })
         let controller = StreamViewController(model: model, close: {})
         controller.loadViewIfNeeded()

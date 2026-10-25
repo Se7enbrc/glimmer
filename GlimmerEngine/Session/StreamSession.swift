@@ -24,6 +24,9 @@ public actor StreamSession {
     package var bandwidthSampler = BandwidthHealthSampler()
     package var bandwidthTransition: BandwidthRequest?
     package var adaptiveBandwidth = false
+    /// The rate the policy chose for this stream's first ANNOUNCE; nil when adaptive quality is off.
+    public internal(set) var adaptiveStartKbps: Int?
+    package var bandwidthSizeAttemptAt = -Double.infinity
     package var waitingForVideo = false
     package var attemptID = UUID()
     package var telemetryGeneration: UInt64 = 0

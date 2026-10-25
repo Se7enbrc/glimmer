@@ -47,8 +47,16 @@ decisions are still recorded when telemetry is on.
   Data Mode at most 9 Mbps. iPhone and iPad use them as the ANNOUNCE rate when
   the switch is on. The Mac keeps its launch ask and adapts from it.
 - A protective cut follows three bad seconds (or two severe episodes in ten).
-- Low Data Mode caps the rate at 9 Mbps on every interface; play continues.
-- Wi-Fi to cellular keeps playing; the new path reseeds from its own prior.
+- Low Data Mode caps the rate at 9 Mbps on every interface; play continues. It
+  also uses a reduced listed mode, at most 1080p and 60 fps, from the same
+  resolver as the iPhone and iPad profiles: at launch (`StreamFormats`, after
+  waiting at most 250 ms for the first path) and, when it turns on or off
+  mid-stream, through the resume-only size seam with any pending rate in the
+  same transition. Frame rate cannot change mid-stream, so a stream keeps the
+  frame rate it started with. The Mac supplies no data-mode sizes and keeps only
+  the rate cap.
+- Wi-Fi to cellular keeps playing; the new path reseeds from its own prior in
+  either direction, so leaving Low Data Mode returns to the start rate at once.
 - iOS seeds from current conditions, never from remembered sessions.
 - Low Power Mode is recorded and changes nothing.
 - Every reduction stays recoverable: backoff is finite and decays.
@@ -147,9 +155,14 @@ Integration must supply those actual values; an unknown engine revision is not
 the app revision.
 
 Live windows come from `BandwidthHealthSampler` (see the integration boundary).
-Local queue delay, rising-queue trend, jitter percentiles and packet trains are
-not produced yet; absent values never block health, so the 2× Wi-Fi headroom
-(which needs jitter p95) stays unearned until a producer exists.
+`ReceiveTimingTelemetry.video` also keeps a policy-only window, drained once a
+second and never by the telemetry exporter: the median kernel-to-read queue
+delay of every video datagram (`localQueueMs`) and the p95 frame-delivery
+jitter, one RFC 3550 |D| sample per new frame (`jitterP95Ms`). Both are fixed
+64-bucket histograms inside the receive path's existing lock. A minute of
+windows with jitter p95 ≤1 ms and the RTT bounds earns the 2× Wi-Fi/wired
+headroom; a missing value never blocks recovery to the start rate. Rising-queue
+trend and packet trains are not produced.
 
 ## Deterministic verification
 

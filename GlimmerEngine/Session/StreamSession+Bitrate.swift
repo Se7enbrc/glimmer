@@ -78,7 +78,7 @@ extension StreamSession {
         return beginTransition(rate: rate, reason: .resize, size: (width, height))
     }
 
-    private func beginTransition(rate: Int, reason: BitrateReason, size: (width: Int, height: Int)?) -> BitrateAdmission {
+    func beginTransition(rate: Int, reason: BitrateReason, size: (width: Int, height: Int)?) -> BitrateAdmission {
         guard rate > 0, Int32(exactly: rate) != nil, isStreaming, !stopInProgress,
               let current = appliedBitrateKbps else { return .rejected }
         guard reachedLiveState, ownsHostSession, !isReconnecting, bitrateTask == nil, bitrateAvailable,

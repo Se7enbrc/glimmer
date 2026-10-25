@@ -156,4 +156,21 @@ struct StreamProfileTests {
     @Test func nativeIsTheFirstStreamFormat() {
         #expect(StreamProfile.allCases.first == .native120)
     }
+
+    @Test(arguments: StreamProfile.allCases)
+    func lowDataModeUsesAReducedListedModeOfAtMost1080p60(profile: StreamProfile) throws {
+        let pixels = CGSize(width: 2622, height: 1206)
+        let full = try profile.resolve(windowPixels: pixels, maximumFramesPerSecond: 120)
+        let formats = try StreamFormats(full: full, windowPixels: pixels, maximumFramesPerSecond: 120)
+        #expect(formats.start(lowData: false) == full)
+        let reduced = formats.start(lowData: true)
+        #expect(reduced.width <= 1920 && reduced.height <= 1080 && reduced.fps <= 60)
+        #expect(formats.sizes == DataModeSizes(fullWidth: full.width, fullHeight: full.height,
+                                               lowDataWidth: reduced.width, lowDataHeight: reduced.height))
+    }
+
+    @Test func launcherNamesNoFixedRateWhenAdaptive() {
+        #expect(StreamProfile.fullHD60.summary(adaptive: false) == "1080p · 60 fps · 20 Mbps requested")
+        #expect(StreamProfile.fullHD60.summary(adaptive: true) == "1080p · 60 fps · adaptive bitrate")
+    }
 }

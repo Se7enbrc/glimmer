@@ -220,10 +220,11 @@ struct AppIconsRow: View {
 
 struct SpecChipsRow: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptive = false
 
     var body: some View {
         // Facts, not controls: one secondary line, so nothing here looks pressable.
-        Text(model.streamSpecChips.joined(separator: " · "))
+        Text(model.streamSpecChips(adaptive: adaptive).joined(separator: " · "))
             .contentTransition(.opacity)
             .animation(Motion.fade, value: model.selectedHost?.id)
             .font(.body)

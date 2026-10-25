@@ -230,7 +230,8 @@ struct StreamControls: View {
                         }.buttonStyle(.glass).padding()
                     }
                     if let format = model.requestedFormat {
-                        Text("Requested: \(format.summary)")
+                        Text("Requested: \(format.summary)"
+                             + (model.requestedStartKbps.map { " · starts at \($0 / 1000) Mbps" } ?? ""))
                             .font(.caption).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal).padding(.bottom)

@@ -254,7 +254,7 @@ struct LauncherTests {
         let gate = StreamTestGate()
         fixture.makeSession = { launch in
             StreamSessionModel(launch: launch, makePlayback: { _, _, _ in
-                StreamPlayback(id: UUID(), events: AsyncStream { _ in }, start: {},
+                StreamPlayback(id: UUID(), events: AsyncStream { _ in }, start: { nil },
                                stop: { await gate.wait() }, screenChanged: {})
             })
         }

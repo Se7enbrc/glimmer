@@ -252,7 +252,7 @@ struct NativeUIRenderTests {
         let id = UUID()
         fixture.makeSession = { launch in
             StreamSessionModel(launch: launch, makePlayback: { _, _, _ in
-                StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+                StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                                format: StreamFormat(width: 2622, height: 1206, fps: 120),
                                observeControllers: { $0(true) })
             })
@@ -318,7 +318,7 @@ struct NativeUIRenderTests {
     func streamControls(state: String) async throws {
         let id = UUID()
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                            format: StreamFormat(width: 2622, height: 1206, fps: 120),
                            observeControllers: { $0(true) })
         })
@@ -369,7 +369,7 @@ struct NativeUIRenderTests {
     private func recoveryController() -> (StreamSessionModel, StreamViewController) {
         let id = UUID()
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                            format: StreamFormat(width: 2622, height: 1206, fps: 120))
         })
         let controller = StreamViewController(model: model, close: {})

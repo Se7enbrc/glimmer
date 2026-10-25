@@ -10,7 +10,7 @@ import Network
 /// Session-scoped path, cost and device facts for every client. Hints never identify a carrier,
 /// network name or subscriber in shared diagnostics.
 @MainActor public final class BandwidthSignals: NSObject {
-    public let inputs: BandwidthInputs
+    public nonisolated let inputs: BandwidthInputs
     #if os(iOS)
     private let radio = CTTelephonyNetworkInfo()
     #endif
@@ -43,6 +43,14 @@ import Network
         }
         monitor.start(queue: DispatchQueue(label: "io.ugfugl.Glimmer.bandwidthPath", qos: .utility))
         publish()
+    }
+
+    /// Launch-time decisions wait briefly for the monitor's first answer; it normally arrives within milliseconds.
+    public func waitForPath(upTo limit: Duration = .milliseconds(250)) async {
+        let deadline = ContinuousClock.now + limit
+        while lastPath == nil, monitor != nil, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
     }
 
     public func stop() {

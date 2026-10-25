@@ -21,6 +21,7 @@ struct LauncherView: View {
     @State private var pendingPC: HostDiscovery.Discovered?
     @AppStorage("leaveGamesRunning") private var leaveGamesRunning = false
     @AppStorage("streamProfile") private var profile: StreamProfile = .native120
+    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
     @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
     @AppStorage("controllerMouseStick") private var mouseStick: ControllerMouseStick = .right
 
@@ -139,7 +140,7 @@ struct LauncherView: View {
                 }
                 .disabled(model.busy)
                 if model.selectedName != nil {
-                    Text(profile.summary).font(.subheadline).foregroundStyle(.secondary)
+                    Text(profile.summary(adaptive: adaptiveBandwidth)).font(.subheadline).foregroundStyle(.secondary)
                 } else {
                     Text("Pair with a PC running Sunshine in Settings.").foregroundStyle(.secondary)
                 }

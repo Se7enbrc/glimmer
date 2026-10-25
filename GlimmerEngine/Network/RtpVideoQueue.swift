@@ -395,6 +395,7 @@ final class RtpVideoQueue {
             let transitDelta = abs(receiveDelta - timestampDelta)
             // jitter += (|D| - jitter) / 16  (RFC 3550 6.4.1).
             jitterUs += (transitDelta - jitterUs) / 16.0
+            if timestampDelta != 0 { ReceiveTimingTelemetry.video.observeFrameJitter(transitDelta / 1_000) }
         }
         lastTimestamp = timestamp
         lastReceiveUs = receiveTimeUs

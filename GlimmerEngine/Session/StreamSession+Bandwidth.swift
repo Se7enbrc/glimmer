@@ -42,7 +42,8 @@ package struct BandwidthHealthSampler {
     package init() {}
 
     package mutating func window(start: Double, end: Double, generation: UInt64, counters: Counters,
-                                 rttSamplesMs: [Double]) -> BandwidthHealth {
+                                 rttSamplesMs: [Double],
+                                 receive: ReceiveTimingTelemetry.PolicyWindow = .init()) -> BandwidthHealth {
         var health = BandwidthHealth(start: start, end: end, generation: generation)
         defer { last = counters }
         guard let previous = last else { return Self.unavailable(health) }
@@ -67,6 +68,8 @@ package struct BandwidthHealthSampler {
         health.gapMs = delta(\.gaps100) > 0 ? 101 : (delta(\.gaps50) > 0 ? 51 : 0)
         health.decoderBacklog = delta(\.overflows) > 0
         health.rttSamplesMs = Array(rttSamplesMs.suffix(256))
+        health.localQueueMs = receive.queueDelayP50Ms
+        health.jitterP95Ms = receive.jitterP95Ms
         if end > start { health.encodedKbps = Double(delta(\.bytes)) * 8 / 1_000 / (end - start) }
         return health
     }
@@ -89,6 +92,7 @@ extension StreamSession {
         var ask = appliedKbps
         if adaptiveBandwidth, publicMedia != nil {
             ask = BandwidthPolicy.startRate(demand: demand, path: snapshot.path)
+            adaptiveStartKbps = ask
             reconnectConfig?.bitrateKbps = ask
             reconnectConfig?.bitrateBoost = 1
         }
@@ -116,6 +120,7 @@ extension StreamSession {
         guard !isReconnecting, let decoder = videoDecoder else {
             bandwidthLastObservation = nil
             bandwidthSampler = BandwidthHealthSampler()
+            _ = ReceiveTimingTelemetry.video.takePolicyWindow()
             return
         }
         policy.replacePath(snapshot.path)
@@ -124,22 +129,42 @@ extension StreamSession {
         let health = bandwidthSampler.window(start: bandwidthLastObservation ?? time, end: time,
             generation: snapshot.path.generation,
             counters: .live(receivedBytes: decoder.statsCollector.receivedBytesSnapshot()),
-            rttSamplesMs: backend.drainRttSamples())
+            rttSamplesMs: backend.drainRttSamples(), receive: ReceiveTimingTelemetry.video.takePolicyWindow())
         bandwidthLastObservation = time
         var decision = policy.evaluate(health)
-        if adaptiveBandwidth, bandwidthTransition == nil, let request = policy.submission(at: time) {
-            let admission = self.request(rate: request.rateKbps, reason: Self.bitrateReason(request.reason))
-            let outcome: BandwidthActuatorOutcome = switch admission {
-            case .accepted: .accepted
-            case .deferred: .deferred
-            case .rejected: .rejected
-            }
-            policy.recordOutcome(outcome, for: request)
-            if outcome == .accepted { bandwidthTransition = request }
+        if adaptiveBandwidth, bandwidthTransition == nil, bitrateTask == nil {
+            actuateBandwidth(&policy, at: time, lowData: snapshot.path.constrained)
             decision = policy.decision(decision.reason, health: health)
         }
         bandwidthPolicy = policy
         TelemetryExporter.recordLiveEvent(bandwidthFields(decision))
+    }
+
+    /// A Low Data Mode edge also moves the encoder size, carrying any pending rate in the same transition.
+    private func actuateBandwidth(_ policy: inout BandwidthPolicy, at time: Double, lowData: Bool?) {
+        let request = policy.submission(at: time)
+        let admission: BitrateAdmission
+        if let lowData, let size = dataModeTarget(lowData: lowData), let applied = appliedBitrateKbps,
+           time - bandwidthSizeAttemptAt >= BandwidthFlapGuard.minDwellSeconds {
+            bandwidthSizeAttemptAt = time
+            admission = beginTransition(rate: request?.rateKbps ?? applied, reason: .resize, size: size)
+        } else if let request {
+            admission = self.request(rate: request.rateKbps, reason: Self.bitrateReason(request.reason))
+        } else { return }
+        guard let request else { return }
+        let outcome: BandwidthActuatorOutcome = switch admission {
+        case .accepted: .accepted
+        case .deferred: .deferred
+        case .rejected: .rejected
+        }
+        policy.recordOutcome(outcome, for: request)
+        if outcome == .accepted { bandwidthTransition = request }
+    }
+
+    func dataModeTarget(lowData: Bool) -> (width: Int, height: Int)? {
+        guard let config = reconnectConfig, let sizes = config.dataModeSizes else { return nil }
+        let target = sizes.size(lowData: lowData)
+        return target == (config.width, config.height) ? nil : target
     }
 
     /// Completion of any transition. Only the policy's own request confirms; failures stay retryable.

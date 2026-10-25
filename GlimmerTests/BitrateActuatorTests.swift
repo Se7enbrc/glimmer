@@ -121,6 +121,24 @@ struct BitrateActuatorTests {
         await fixture.stopLocally()
     }
 
+    @Test func lowDataModeEdgeMovesSizeAndRateInOneResumeOnlyTransition() async throws {
+        let replay = BandwidthReplay(constrained: true)
+        let inputs = BandwidthInputs(.init(path: replay.policy.path, environment: replay.policy.environment))
+        let fixture = await BitrateFixture(bandwidthInputs: inputs)
+        await fixture.session.armBandwidthForTest(replay.policy, enabled: true, sizes: DataModeSizes(
+            fullWidth: 1920, fullHeight: 1080, lowDataWidth: 1280, lowDataHeight: 720))
+        await fixture.session.observeBandwidth(at: 100, attempt: fixture.session.attemptID)
+        await fixture.session.waitForBitrateTask()
+        #expect(fixture.pc.paths == ["serverinfo", "resume"])
+        let config = try #require(fixture.fresh.startedConfigs.first)
+        #expect(config.width == 1280 && config.height == 720 && config.bitrate == 9_000)
+        #expect(await fixture.session.bandwidthPolicy?.appliedKbps == 9_000)
+        #expect(await fixture.session.lastBitrateChange?.reason == .resize)
+        #expect(await fixture.session.dataModeTarget(lowData: true) == nil)
+        #expect(await fixture.session.dataModeTarget(lowData: false).map { [$0.width, $0.height] } == [1920, 1080])
+        await fixture.stopLocally()
+    }
+
     @Test func resizeSeamRenegotiatesSizeAtTheSameRate() async throws {
         let fixture = await BitrateFixture()
         #expect(await fixture.session.request(width: 1920, height: 1080) == .rejected)
@@ -416,9 +434,10 @@ private extension StreamSession {
     }
 
     func markRecoveryBusy(_ value: Bool) { isReconnecting = value }
-    func armBandwidthForTest(_ policy: BandwidthPolicy, enabled: Bool) {
+    func armBandwidthForTest(_ policy: BandwidthPolicy, enabled: Bool, sizes: DataModeSizes? = nil) {
         bandwidthPolicy = policy
         adaptiveBandwidth = enabled
+        reconnectConfig?.dataModeSizes = sizes
     }
     func setOwnershipForTest(_ owned: Bool) { ownsHostSession = owned }
     func waitForBitrateTask() async { await bitrateTask?.value }

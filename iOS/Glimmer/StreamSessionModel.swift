@@ -32,6 +32,8 @@ final class StreamSessionModel {
     }
     var announce: @MainActor (String) -> Void = { UIAccessibility.post(notification: .announcement, argument: $0) }
     private(set) var requestedFormat: StreamFormat?
+    /// The adaptive policy's first rate for this stream; nil when adaptive quality is off.
+    private(set) var requestedStartKbps: Int?
     private(set) var mouseControllers: Set<ControllerRegistration> = []
     var controllerMouseActive: Bool { !mouseControllers.isEmpty }
     private(set) var controllerConnected = false
@@ -105,7 +107,10 @@ final class StreamSessionModel {
         }
         startTask = Task { [weak self] in
             do {
-                try await playback.start()
+                if let started = try await playback.start(), let self, !self.stopRequested {
+                    self.requestedFormat = started.format
+                    self.requestedStartKbps = started.startKbps
+                }
             } catch RunningAppFailure.ended {
                 guard let self, !self.stopRequested else { return }
                 self.endingMessage = StreamFailureCopy.gameEnded(self.launch.appName, pc: self.launch.pcName)

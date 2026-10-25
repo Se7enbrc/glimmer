@@ -45,11 +45,17 @@ struct StreamLaunch: Identifiable, Sendable {
     }
 }
 
+/// What a started stream actually asked the PC for: the listed mode and, when adaptive, its first rate.
+struct StreamStart: Equatable, Sendable {
+    let format: StreamFormat
+    let startKbps: Int?
+}
+
 @MainActor
 struct StreamPlayback {
     let id: UUID
     let events: AsyncStream<StreamSession.Update>
-    let start: @Sendable () async throws -> Void
+    let start: @Sendable () async throws -> StreamStart?
     let stop: @Sendable () async -> Void
     let screenChanged: @MainActor () -> Void
     var quit: (@Sendable () async throws -> Void)?
@@ -70,7 +76,10 @@ struct StreamPlayback {
             : launch.profile.resolve(windowPixels: pixels, maximumFramesPerSecond: screen.maximumFramesPerSecond)
         let format = StreamFormat.continuing(launch, native: native,
                                              maximumFPS: screen.maximumFramesPerSecond)
-        let configuration = format.configuration(potentialEDRHeadroom: Double(screen.potentialEDRHeadroom))
+        let formats = try StreamFormats(full: format, windowPixels: pixels,
+                                        maximumFramesPerSecond: screen.maximumFramesPerSecond)
+        let headroom = Double(screen.potentialEDRHeadroom)
+        let configuration = format.configuration(potentialEDRHeadroom: headroom)
         let video = VideoDecoder(configuration: configuration, displayInfo: { [weak surface] in
             guard let screen = surface?.window?.windowScene?.screen else { return nil }
             return VideoDisplayInfo(currentHeadroom: Double(screen.currentEDRHeadroom),
@@ -86,7 +95,6 @@ struct StreamPlayback {
             return surface?.replaceDisplayLayer { video.attach(to: $0) }
         }
         video.attach(to: surface.displayLayer)
-        video.startPacing(display: surface.pacerDisplay, configuredFps: format.pacingFPS)
         let nativeInput = NativeInputLifetime()
         let bandwidth = BandwidthSignals()
         let media = StreamSession.PreparedMedia(video: video, audio: audio,
@@ -105,8 +113,18 @@ struct StreamPlayback {
             let address = await launch.network.destinationAddress()
             try Task.checkCancellation()
             await bandwidth.start(host: address)
+            // Low Data Mode starts at the reduced listed mode; the session moves sizes on later edges.
+            let adaptive = AdaptiveBandwidth.isEnabled()
+            if adaptive { await bandwidth.waitForPath() }
+            // A continued game keeps its known size, so it never trades sizes for Low Data Mode.
+            let sized = adaptive && !launch.continuing
+            let started = formats.start(lowData: sized && bandwidth.inputs.snapshot().path.constrained == true)
+            await MainActor.run { video.startPacing(display: surface.pacerDisplay, configuredFps: started.pacingFPS) }
             do {
-                try await session.start(appID: launch.appID, configuration: configuration)
+                try await session.start(appID: launch.appID,
+                                        configuration: started.configuration(potentialEDRHeadroom: headroom,
+                                                                            sizes: sized ? formats.sizes : nil))
+                return StreamStart(format: started, startKbps: await session.adaptiveStartKbps)
             } catch {
                 await bandwidth.stop()
                 throw error

@@ -270,6 +270,19 @@ struct StreamSessionTests {
         await model.waitUntilStopped()
     }
 
+    @Test func requestedCaptionAdoptsTheStartedModeAndAdaptiveStartRate() async {
+        let fixture = PlaybackFixture()
+        fixture.started = StreamStart(format: StreamFormat(width: 1920, height: 1080, fps: 60), startKbps: 9_000)
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        #expect(model.requestedStartKbps == nil)
+        for _ in 0..<1_000 where model.requestedStartKbps == nil { await Task.yield() }
+        #expect(model.requestedFormat == StreamFormat(width: 1920, height: 1080, fps: 60))
+        #expect(model.requestedStartKbps == 9_000)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
     @Test func qualityAdjustmentHoldsLikeRecoveryAndAnnouncesOnce() async {
         let fixture = PlaybackFixture()
         let model = fixture.model()
@@ -451,6 +464,7 @@ final class PlaybackFixture {
     var connectionChanged: (@MainActor (Bool) -> Void)?
     var backgroundCalls = StreamBackgroundGrace.Calls(begin: { _ in .invalid }, end: { _ in })
     var start: @Sendable () async throws -> Void = {}
+    var started: StreamStart?
     var stop: @Sendable () async -> Void = {}
     let events = AsyncStream<StreamSession.Update>.makeStream()
 
@@ -463,7 +477,9 @@ final class PlaybackFixture {
                            makePlayback: { [self] _, _, quiesce in
             makes += 1
             self.quiesce = quiesce
-            return StreamPlayback(id: id, events: events.stream, start: start, stop: { [self] in
+            let start = start, started = started
+            return StreamPlayback(id: id, events: events.stream, start: { try await start(); return started },
+                                  stop: { [self] in
                 await stop()
                 await MainActor.run { completedStops += 1 }
             }, screenChanged: {}, focusInput: { [self] in focusHistory.append($0) }, format: format,

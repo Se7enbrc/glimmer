@@ -140,7 +140,9 @@ public struct BandwidthPolicy: Sendable {
     mutating func constrainedRequest(_ health: BandwidthHealth) -> BandwidthDecision? {
         let limit = Self.ceiling(demand: demand, path: path)
         let desired = pathNeedsReseed ? min(baseKbps, limit) : limit
-        if desired < appliedKbps {
+        // A new path starts from its own prior in either direction, like a fresh launch.
+        let reseedUp = pathNeedsReseed && desired > appliedKbps && environment.allowsPromotion
+        if desired < appliedKbps || reseedUp {
             if pending?.rateKbps == desired { return nil }
             let reason: BandwidthReason = path.constrained == true ? .lowData : .pathChanged
             return propose(desired, reason: reason, health: health)

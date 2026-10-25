@@ -10,7 +10,13 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
     static let bitrateKbps = 20_000
 
     var id: Self { self }
-    var summary: String { "\(label) · \(Self.bitrateKbps / 1000) Mbps requested" }
+    /// Adaptive quality chooses the rate from the connection, so no fixed number is promised.
+    func summary(adaptive: Bool) -> String {
+        adaptive ? "\(label) · adaptive bitrate" : "\(label) · \(Self.bitrateKbps / 1000) Mbps requested"
+    }
+
+    /// Low Data Mode's reduced profile: at most 1080p and 60 fps.
+    static let lowData = StreamProfile.fullHD60
     var label: String {
         switch self {
         case .fullHD60: "1080p · 60 fps"
@@ -51,6 +57,29 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// The listed modes a stream uses: its profile's, and the reduced one for Low Data Mode.
+struct StreamFormats: Equatable, Sendable {
+    let full: StreamFormat
+    let lowData: StreamFormat
+
+    init(full: StreamFormat, windowPixels: CGSize, maximumFramesPerSecond: Int) throws {
+        self.full = full
+        let reduced = try StreamProfile.lowData.resolve(windowPixels: windowPixels,
+                                                        maximumFramesPerSecond: maximumFramesPerSecond)
+        let smaller = reduced.width * reduced.height < full.width * full.height ? reduced : full
+        lowData = StreamFormat(width: smaller.width, height: smaller.height, fps: min(full.fps, reduced.fps),
+                               changeResolution: full.changeResolution)
+    }
+
+    /// Start under Low Data Mode at the reduced mode; either way both sizes ride along for later edges.
+    func start(lowData constrained: Bool) -> StreamFormat { constrained ? lowData : full }
+
+    var sizes: DataModeSizes {
+        DataModeSizes(fullWidth: full.width, fullHeight: full.height,
+                      lowDataWidth: lowData.width, lowDataHeight: lowData.height)
+    }
+}
+
 /// One immutable format supplies decoder configuration, session negotiation and display pacing.
 struct StreamFormat: Hashable, Sendable {
     let width: Int
@@ -77,11 +106,11 @@ struct StreamFormat: Hashable, Sendable {
 
     var summary: String { "\(width) × \(height) · \(fps) fps" }
     var pacingFPS: Int32 { Int32(fps) }
-    func configuration(potentialEDRHeadroom: Double,
-                       hardwareFormats: VideoFormats = .hardwareSupported) -> StreamConnection.Configuration {
+    func configuration(potentialEDRHeadroom: Double, hardwareFormats: VideoFormats = .hardwareSupported,
+                       sizes: DataModeSizes? = nil) -> StreamConnection.Configuration {
         let formats = hardwareFormats.forDisplay(potentialEDRHeadroom: potentialEDRHeadroom)
         return StreamConnection.Configuration(width: width, height: height, fps: fps,
             bitrateKbps: StreamProfile.bitrateKbps, videoFormats: formats, audio: .stereo,
-            changeResolution: changeResolution, resumeResolutionChange: true)
+            changeResolution: changeResolution, resumeResolutionChange: true, dataModeSizes: sizes)
     }
 }

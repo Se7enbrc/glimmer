@@ -107,6 +107,45 @@ struct BandwidthFlapGuardTests {
     }
 }
 
+struct BandwidthHeadroomTests {
+    @Test func lowDataModeEndingReseedsUpToTheNewPathsStart() throws {
+        var replay = BandwidthReplay(constrained: true)
+        replay.run(5)
+        var path = replay.policy.path
+        path.generation += 1
+        path.constrained = false
+        replay.policy.replacePath(path)
+        _ = replay.tick()
+        #expect(replay.policy.pending?.rateKbps == 40_000 && replay.policy.pending?.reason == .pathChanged)
+    }
+
+    @Test func jitterAboveOneMillisecondNeverEarnsHeadroomButStillRecovers() throws {
+        var jittery = BandwidthReplay()
+        for _ in 0..<8 {
+            jittery.run(120) { $0.jitterP95Ms = 2 }
+            if jittery.policy.pending != nil { try jittery.apply() }
+        }
+        #expect(jittery.policy.appliedKbps == 40_000)
+        var missing = BandwidthReplay()
+        missing.run(240) { $0.jitterP95Ms = nil }
+        #expect(missing.policy.appliedKbps == 40_000)
+        missing.distress()
+        try missing.apply()
+        missing.run(300) { $0.jitterP95Ms = nil }
+        #expect(missing.policy.pending?.reason == .recovery)
+    }
+
+    @Test func receivePathFeedsQueueDelayAndJitterWithoutTheExporterDrainingThem() {
+        let telemetry = ReceiveTimingTelemetry()
+        for delay in [0.2, 0.4, 0.4, 3.0] { telemetry.observe(delayMs: delay, gapMs: nil) }
+        for jitter in Array(repeating: 0.3, count: 19) + [6] { telemetry.observeFrameJitter(jitter) }
+        _ = telemetry.takeSnapshot()
+        let window = telemetry.takePolicyWindow()
+        #expect(window.queueDelayP50Ms == 0.5 && window.jitterP95Ms == 0.5)
+        #expect(telemetry.takePolicyWindow() == ReceiveTimingTelemetry.PolicyWindow())
+    }
+}
+
 struct BandwidthHealthSamplerTests {
     typealias Counters = BandwidthHealthSampler.Counters
 
@@ -123,7 +162,8 @@ struct BandwidthHealthSamplerTests {
         #expect(first.missingReason == .producerUnavailable)
         let folded = sampler.window(start: 1, end: 2, generation: 1,
             counters: Self.counters(packets: 990, lost: 10, frames: 120, bytes: 5_000_000, gaps50: 1),
-            rttSamplesMs: [2, 3])
+            rttSamplesMs: [2, 3], receive: .init(queueDelayP50Ms: 0.25, jitterP95Ms: 0.75))
+        #expect(folded.localQueueMs == 0.25 && folded.jitterP95Ms == 0.75)
         #expect(folded.expectedPackets == 1_000 && folded.lostPackets == 10 && folded.totalFrames == 120)
         #expect(folded.gapMs == 51 && folded.decoderBacklog == false && folded.encodedKbps == 40_000)
         #expect(folded.rttSamplesMs == [2, 3] && folded.valid)
