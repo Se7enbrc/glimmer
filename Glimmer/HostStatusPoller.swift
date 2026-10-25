@@ -290,20 +290,22 @@ extension AppModel {
     }
 
     /// A separate bounded task survives the ordinary chip poller's activation and launch restarts.
-    func beginHostReadiness(for host: Host, afterStream: Bool = false, now: Date = Date()) {
+    func beginHostReadiness(for host: Host, afterStream: Bool = false, waitUntilIdle: Bool = false,
+                            now: Date = Date()) {
         guard hostPolling.readinessTasks[host.id] == nil, !hostPollingPausedForSleep else { return }
         // The 60 s evidence window covers two missed hidden polls; activation revalidates immediately.
-        // Teardown still needs an idle answer even when the last stream proved the PC reachable.
-        if !afterStream, Self.hasRecentReachableStatus(hostLiveStatus, hostID: host.id, now: now) { return }
+        // Teardown and stream starts still need an idle answer even when recent evidence proved the PC reachable.
+        let waitUntilIdle = afterStream || waitUntilIdle
+        if !waitUntilIdle, Self.hasRecentReachableStatus(hostLiveStatus, hostID: host.id, now: now) { return }
         let reason = afterStream ? "Finishing the last stream…" : "Checking the PC…"
         hostPolling.readinessReasons[host.id] = reason
         let server = nativeServerInfo(for: host)
         let makeClient = makeNetwork
         hostPolling.readinessTasks[host.id] = Task { [weak self] in
             let client = makeClient(server)
-            let deadline = Date().addingTimeInterval(afterStream ? 5 : 1)
+            let deadline = Date().addingTimeInterval(waitUntilIdle ? 5 : 1)
             await client.setRequestDeadline(deadline)
-            let answer = await Self.pollReadiness(until: deadline, waitUntilIdle: afterStream, fetch: {
+            let answer = await Self.pollReadiness(until: deadline, waitUntilIdle: waitUntilIdle, fetch: {
                 try await client.fetchServerInfo(timeout: 1, diagnosePinnedFailure: false)
             })
             await client.shutdown()

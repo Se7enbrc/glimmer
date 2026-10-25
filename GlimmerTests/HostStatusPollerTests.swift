@@ -277,6 +277,17 @@ struct HostStatusPollerTests {
         #expect(model.hostPolling.readinessTasks[hostID] != nil)
     }
 
+    @Test func streamStartReadinessWaitsDespiteRecentBusyEvidence() throws {
+        let model = model()
+        let host = try #require(model.selectedHost)
+        model.hostLiveStatus = HostLiveStatus(hostID: hostID, state: .streamingApp(name: "Hades II"),
+                                              capturedAt: Date())
+        model.beginHostReadiness(for: host, waitUntilIdle: true)
+        defer { model.cancelHostReadiness() }
+        #expect(model.selectedReadinessReason == "Checking the PC…")
+        #expect(model.hostPolling.readinessTasks[hostID] != nil)
+    }
+
     @Test(arguments: [false, true])
     func onlyTeardownWaitsFiveSecondsForABusyPC(waitUntilIdle: Bool) async {
         let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.running(7)]])
