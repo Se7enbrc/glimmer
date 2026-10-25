@@ -32,22 +32,14 @@ runs:
       run: |
         test "$(xcodebuild -version | head -1)" = 'Xcode 26.6'
         xcode=$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$DEVELOPER_DIR/../version.plist")
-        prefix="compiler-v1-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS}-${ImageVersion}-${xcode}-${VARIANT}-${LOCKS}"
-        printf 'prefix=%s-\nkey=%s-%s\n' "$prefix" "$prefix" "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+        prefix="compiler-v2-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS}-${xcode}-${VARIANT}-${LOCKS}"
+        printf 'prefix=%s\nkey=%s\n' "$prefix" "$prefix" >> "$GITHUB_OUTPUT"
         {
           echo 'paths<<CACHE_PATHS'
           echo 'build/SourcePackages'
-          echo 'build/ModuleCache.noindex'
           echo 'build/CompilationCache.noindex'
-          echo 'build/SDKExplicitPrecompiledModules'
-          echo 'build/Build/Intermediates.noindex'
-          echo 'build/Build/Products'
-          echo 'build/engine-ios'
-          echo 'iOS/build/DerivedData/SourcePackages'
-          echo 'iOS/build/DerivedData/ModuleCache.noindex'
-          echo 'iOS/build/DerivedData/CompilationCache.noindex'
-          echo 'iOS/build/DerivedData/SDKExplicitPrecompiledModules'
-          echo 'iOS/build/DerivedData/Build'
+          echo 'iOS/build/production/DerivedData/SourcePackages'
+          echo 'iOS/build/production/DerivedData/CompilationCache.noindex'
           echo '.build'
           echo 'CACHE_PATHS'
         } >> "$GITHUB_OUTPUT"

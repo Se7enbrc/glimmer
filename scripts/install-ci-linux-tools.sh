@@ -11,11 +11,6 @@ scripts/install-ci-scanner.sh
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 curl -fsSL --proto '=https' --proto-redir '=https' \
-    https://github.com/realm/SwiftLint/releases/download/0.65.1/swiftlint_linux_amd64.zip -o "$work/swiftlint.zip"
-printf '%s  %s\n' caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d "$work/swiftlint.zip" | shasum -a 256 --check --status
-unzip -q "$work/swiftlint.zip" swiftlint -d "$work"
-install -m 755 "$work/swiftlint" "$bin/swiftlint"
-curl -fsSL --proto '=https' --proto-redir '=https' \
     https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$work/actionlint.tgz"
 printf '%s  %s\n' 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 "$work/actionlint.tgz" | shasum -a 256 --check --status
 tar -xzf "$work/actionlint.tgz" -C "$work" actionlint

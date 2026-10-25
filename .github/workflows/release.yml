@@ -72,6 +72,7 @@ jobs:
     outputs:
       record: ${{ steps.verify.outputs.record }}
     env:
+      SKIP: swiftlint
       EXPECTED_SHA: ${{ inputs.expected_sha }}
       RELEASE_OPERATION: ${{ inputs.operation }}
       RC_TAG: ${{ inputs.rc_tag }}
@@ -144,6 +145,7 @@ jobs:
 
       - name: Prepare verification
         run: |
+          if ! command -v swiftlint >/dev/null 2>&1; then brew install swiftlint; fi
           test "$(uname -m)" = arm64
           xcodebuild -version
           xcrun --sdk macosx --show-sdk-version
@@ -168,7 +170,8 @@ jobs:
 
       - name: Save unsigned compiler state
         if: success() && steps.build-cache.outputs.hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # Same-ref action receives only unsigned cache paths.
+        uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
         with:
           path: ${{ steps.build-cache.outputs.paths }}
           key: ${{ steps.build-cache.outputs.key }}
@@ -234,7 +237,8 @@ jobs:
 
       - name: Save unsigned compiler state
         if: success() && steps.build-cache.outputs.hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # Same-ref action receives only unsigned cache paths.
+        uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
         with:
           path: ${{ steps.build-cache.outputs.paths }}
           key: ${{ steps.build-cache.outputs.key }}
@@ -305,7 +309,7 @@ jobs:
             inputs.expected_sha }}
           path: ${{ runner.temp }}/unsigned/*
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
 
   sign:
     needs: [build, tooling]
@@ -409,7 +413,7 @@ jobs:
             inputs.expected_sha }}
           path: build/dist/*
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
       - name: Remove temporary credentials
         if: always()
         run: scripts/ci-release.sh cleanup

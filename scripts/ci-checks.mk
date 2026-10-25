@@ -16,6 +16,7 @@ check-portable:
 	@$(MAKE) test-scripts TEST_PLATFORM=portable
 
 check-macos:
+	@scripts/lint-swift.sh lint --strict --quiet
 	@if [ -f Package.swift ] || [ -d GlimmerEngine ]; then python3 scripts/check-engine-boundary.py; fi
 	@if [ -f Package.swift ] || [ -d GlimmerEngine ]; then python3 scripts/check-ios-boundary.py; fi
 	@$(MAKE) test-scripts TEST_PLATFORM=macos

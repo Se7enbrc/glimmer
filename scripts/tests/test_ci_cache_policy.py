@@ -15,8 +15,10 @@ ROOT = Path(__file__).resolve().parents[2]
 class CICachePolicyTests(unittest.TestCase):
     def test_key_separates_toolchains_locks_and_instrumentation(self):
         action = (ROOT / ".github/actions/build-cache/action.yml").read_text()
-        for field in ("RUNNER_OS", "RUNNER_ARCH", "ImageVersion", "xcode", "VARIANT", "LOCKS", "GITHUB_SHA"):
+        for field in ("RUNNER_OS", "RUNNER_ARCH", "xcode", "VARIANT", "LOCKS"):
             self.assertIn(field, action)
+        self.assertNotIn("$GITHUB_SHA", action)
+        self.assertNotIn("build/Build/", action)
         self.assertIn("Package.resolved", action)
         self.assertIn("third_party/**", action)
         self.assertIn("test \"$(xcodebuild -version | head -1)\" = 'Xcode 26.6'", action)
