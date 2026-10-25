@@ -108,7 +108,7 @@ struct VideoDecoderSuppressionTests {
             #expect(row["app_active"] as? Bool == false)
             #expect(row["full_screen"] as? Bool == true)
             #expect(row["full_screen_transition"] as? String == "exiting")
-            #expect(row.count == 17)
+            #expect(row.count == 16)
             #expect(entry.redactedMessage == nil)
         }
     }
