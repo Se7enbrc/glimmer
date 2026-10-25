@@ -42,13 +42,17 @@ struct ControllerDiagramTests {
                                 #expect(core.intersects(bounds) == false, "Shoulder target covers \(family) \(button)")
                             }
                         }
-                        let target = ControllerShoulderTarget(family: family, controls: controls, rear: rear, left: left,
+                        // The union target ships only in the iOS 26 menu; macOS 15's path union drops coincident edges.
+                        var target: CGPath?
+                        if #available(macOS 26, *) {
+                            target = ControllerShoulderTarget(family: family, controls: controls, rear: rear, left: left,
                                                               scale: scale).path(in: frame).cgPath
+                        }
                         for row in 0..<8 {
                             for column in 0..<8 {
                                 let point = CGPoint(x: core.minX + (CGFloat(column) + 0.5) * core.width / 8,
                                                     y: core.minY + (CGFloat(row) + 0.5) * core.height / 8)
-                                #expect(target.contains(point))
+                                if let target { #expect(target.contains(point)) }
                             }
                         }
                         for control in controls {
@@ -59,7 +63,7 @@ struct ControllerDiagramTests {
                             let part = ControllerButtonShape(family: family, placement: placement, source: control.id)
                                 .path(in: placement.bounds.applying(.init(scaleX: scale, y: scale))).cgPath
                             #expect(part.contains(point), "Label outside \(family) \(control.id), rear \(rear)")
-                            #expect(target.contains(point))
+                            if let target { #expect(target.contains(point)) }
                         }
                     }
                 }
