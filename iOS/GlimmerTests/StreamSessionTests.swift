@@ -44,7 +44,7 @@ struct StreamSessionTests {
         model.receive(fixture.update(.firstFrame))
         #expect(model.controllerConnected && model.inputFocused && !model.controlsVisible)
         fixture.connectionChanged?(false)
-        #expect(!model.inputFocused && model.controlsVisible)
+        #expect(model.inputFocused && !model.controlsVisible)
         fixture.connectionChanged?(true)
         #expect(model.inputFocused && !model.controlsVisible)
         model.showControls()
@@ -87,16 +87,14 @@ struct StreamSessionTests {
 
     @Test func realPreparedPlaybackCanStopBeforeStartWithoutContactingPC() async throws {
         var quiesces = 0
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let scene = try await testWindowScene()
         let window = UIWindow(windowScene: scene)
-        let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 852, height: 393))
+        let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 320, height: 180))
         window.addSubview(surface)
         defer { surface.removeFromSuperview() }
         let playback = try StreamPlayback.make(launch: testLaunch(), surface: surface) { quiesces += 1 }
-        let pixels = scene.screen.nativeBounds.size
-        #expect(playback.format == StreamFormat(width: Int(max(pixels.width, pixels.height)),
-                                                height: Int(min(pixels.width, pixels.height)),
-                                                fps: min(120, scene.screen.maximumFramesPerSecond)))
+        let expected = try testLaunch().profile.resolve(surface: surface)
+        #expect(playback.format == expected)
         await playback.stop()
         await playback.stop()
         #expect(quiesces == 1)
@@ -131,9 +129,7 @@ struct StreamSessionTests {
         model.inputCaptureChanged = { focus.append($0) }
         model.start(surface: StreamSurface())
         model.receive(fixture.update(.firstFrame))
-        #expect(model.controlsVisible)
-        #expect(!model.inputFocused)
-        model.resumeInput()
+        #expect(!model.controlsVisible)
         #expect(model.inputFocused)
         model.showControls()
         #expect(!model.inputFocused)
@@ -146,13 +142,14 @@ struct StreamSessionTests {
         #expect(model.inputFocused)
         model.stop()
         await model.waitUntilStopped()
-        #expect(focus == [false, true, false, true, false, true, false, false])
+        #expect(focus == [true, false, true, false, true, false, false])
     }
 
     @Test func sceneSuppressionForwardsAvailabilityInputs() async throws {
         let fixture = PlaybackFixture()
         // Without granted background time, leaving disconnects and the return is never forwarded.
-        fixture.backgroundCalls = .init(begin: { _ in .init(rawValue: 42) }, end: { _ in }, now: { 0 })
+        fixture.backgroundCalls = .init(begin: { _ in .init(rawValue: 42) }, end: { _ in },
+                                         now: { 0 }, sleep: { throw CancellationError() })
         let model = fixture.model()
         model.start(surface: StreamSurface())
         model.availabilityChanged(active: false, background: true, protectedDataAvailable: true)
@@ -269,6 +266,38 @@ struct StreamSessionTests {
         #expect(model.phase == .reconnecting)
         model.receive(fixture.update(.reconnected))
         #expect(model.phase == .streaming && model.inputFocused)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
+    @Test func requestedCaptionAdoptsTheStartedModeAndAdaptiveStartRate() async {
+        let fixture = PlaybackFixture()
+        fixture.started = StreamStart(format: StreamFormat(width: 1920, height: 1080, fps: 60), startKbps: 9_000)
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        #expect(model.requestedStartKbps == nil)
+        for _ in 0..<1_000 where model.requestedStartKbps == nil { await Task.yield() }
+        #expect(model.requestedFormat == StreamFormat(width: 1920, height: 1080, fps: 60))
+        #expect(model.requestedStartKbps == 9_000)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
+    @Test func qualityAdjustmentHoldsLikeRecoveryAndAnnouncesOnce() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        var spoken: [String] = []
+        model.announce = { spoken.append($0) }
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.firstFrame))
+        model.resumeInput()
+        for _ in 0..<2 { model.receive(fixture.update(.adjustingQuality)) }
+        #expect(model.phase == .reconnecting && model.adjustingQuality && !model.inputFocused)
+        #expect(spoken == [StreamSession.adjustingQualityText])
+        model.receive(fixture.update(.reconnected))
+        #expect(model.phase == .streaming && !model.adjustingQuality && model.inputFocused)
+        model.receive(fixture.update(.reconnecting))
+        #expect(model.phase == .reconnecting && !model.adjustingQuality && spoken.count == 1)
         model.stop()
         await model.waitUntilStopped()
     }
@@ -400,21 +429,20 @@ struct StreamSessionTests {
         #expect(surface.displayLayer === replacement)
         #expect(replacement.superlayer === surface.layer)
         #expect(failedLayer.superlayer == nil)
-        #expect(replacement.videoGravity ==
-            (surface.traitCollection.userInterfaceIdiom == .pad ? .resizeAspect : .resizeAspectFill))
+        #expect(replacement.videoGravity == .resizeAspectFill)
         #expect(replacement.frame == surface.bounds && surface.clipsToBounds)
     }
 
-    @Test func streamSurfaceFillsVideoAndSupportsBothLandscapeOrientations() {
+    @Test func streamSurfaceFillsVideoAndSupportsWindowOrientations() {
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 800, height: 400))
         surface.layoutIfNeeded()
         #expect(surface.displayLayer.frame == surface.bounds)
-        #expect(surface.displayLayer.videoGravity ==
-            (surface.traitCollection.userInterfaceIdiom == .pad ? .resizeAspect : .resizeAspectFill))
+        #expect(surface.displayLayer.videoGravity == .resizeAspectFill)
         #expect(surface.clipsToBounds)
         let model = PlaybackFixture().model()
         let controller = StreamViewController(model: model, close: {})
-        #expect(controller.supportedInterfaceOrientations == .landscape)
+        #expect(controller.supportedInterfaceOrientations
+            == AppDelegate.streamOrientations(for: controller.traitCollection.userInterfaceIdiom))
         #expect(controller.prefersStatusBarHidden)
         #expect(controller.prefersHomeIndicatorAutoHidden)
         controller.startWhenReady()
@@ -426,6 +454,7 @@ struct StreamSessionTests {
 final class PlaybackFixture {
     let id = UUID()
     var makes = 0
+    var format: StreamFormat?
     var visibility: [Bool] = []
     var visibilityInputs: [VideoDecoder.PresentationVisibility] = []
     var focusHistory: [Bool] = []
@@ -435,6 +464,7 @@ final class PlaybackFixture {
     var connectionChanged: (@MainActor (Bool) -> Void)?
     var backgroundCalls = StreamBackgroundGrace.Calls(begin: { _ in .invalid }, end: { _ in })
     var start: @Sendable () async throws -> Void = {}
+    var started: StreamStart?
     var stop: @Sendable () async -> Void = {}
     let events = AsyncStream<StreamSession.Update>.makeStream()
 
@@ -442,15 +472,17 @@ final class PlaybackFixture {
         .init(sessionID: id, attemptID: UUID(), event: event)
     }
 
-    func model() -> StreamSessionModel {
-        StreamSessionModel(launch: testLaunch(), backgroundGrace: StreamBackgroundGrace(calls: backgroundCalls),
+    func model(launch: StreamLaunch = testLaunch()) -> StreamSessionModel {
+        StreamSessionModel(launch: launch, backgroundGrace: StreamBackgroundGrace(calls: backgroundCalls),
                            makePlayback: { [self] _, _, quiesce in
             makes += 1
             self.quiesce = quiesce
-            return StreamPlayback(id: id, events: events.stream, start: start, stop: { [self] in
+            let start = start, started = started
+            return StreamPlayback(id: id, events: events.stream, start: { try await start(); return started },
+                                  stop: { [self] in
                 await stop()
                 await MainActor.run { completedStops += 1 }
-            }, screenChanged: {}, focusInput: { [self] in focusHistory.append($0) },
+            }, screenChanged: {}, focusInput: { [self] in focusHistory.append($0) }, format: format,
                setVisible: { [self] visible, inputs in
                    visibility.append(visible)
                    visibilityInputs.append(inputs)
@@ -487,10 +519,15 @@ actor StreamTestGate {
 }
 
 @MainActor
-func testLaunch() -> StreamLaunch {
-    let server = ServerInfo(address: "pc.invalid", uniqueId: "test-pc", serverName: "Test PC")
-    let identity = IdentityManager(defaultsSuite: "io.ugfugl.Glimmer.tests.unused",
-                                   supportBase: URL(fileURLWithPath: "/unused"), protectedDataAvailable: { false })
-    return StreamLaunch(network: NetworkClient(server: server, identity: identity, deviceName: "Test device"),
-                        pcID: server.uniqueId, pcName: server.serverName, appID: 1, appName: "Test game")
+func testWindowScene() async throws -> UIWindowScene {
+    let activations = NotificationCenter.default.notifications(named: UIScene.didActivateNotification).map { _ in () }
+    func application() -> UIWindowScene? {
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.session.role == .windowApplication }
+    }
+    if let scene = application() { return scene }
+    for await _ in activations {
+        if let scene = application() { return scene }
+    }
+    throw CancellationError()
 }

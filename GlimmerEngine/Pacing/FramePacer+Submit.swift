@@ -85,9 +85,11 @@ extension FramePacer {
             recordDiscardedFrame(droppedStale, reason: .overflow)
             // Overflow leaves the decode reference chain intact, so no keyframe is needed.
             stats.recordPresentationLateDrop()
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             OSSignposter.render.emitEvent(
                 "PacerOverflowDrop",
                 "depth=\(FramePacer.maxQueuedFrames, privacy: .public)")
+            #endif
         }
     }
 
@@ -139,7 +141,7 @@ extension FramePacer {
                                       binding: UInt64, presentation: UInt64) {
         lock.lock()
         guard running, bindingGeneration == binding else {
-            let reason: FrameTimingTracker.PacerDiscardReason = running ? .rebind : .stopped
+            let reason: FrameInstrumentation.PacerDiscardReason = running ? .rebind : .stopped
             lock.unlock()
             recordDiscardedFrame(entry.sampleBuffer, reason: reason)
             return
@@ -260,7 +262,7 @@ extension FramePacer {
         return true
     }
 
-    func recordPresentationDiscards(_ frames: [CMSampleBuffer], reason: FrameTimingTracker.PacerDiscardReason) {
+    func recordPresentationDiscards(_ frames: [CMSampleBuffer], reason: FrameInstrumentation.PacerDiscardReason) {
         assertLockNotHeld()
         for frame in frames {
             stats.recordPresentationLateDrop()
@@ -269,11 +271,13 @@ extension FramePacer {
     }
 
     /// Record the actual discard after unlocking; expiry is reserved for unresolved frames.
-    func recordDiscardedFrame(_ sampleBuffer: CMSampleBuffer, reason: FrameTimingTracker.PacerDiscardReason) {
+    func recordDiscardedFrame(_ sampleBuffer: CMSampleBuffer, reason: FrameInstrumentation.PacerDiscardReason) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         assertLockNotHeld()
-        guard let tracker = FrameTimingTracker.shared else { return }
+        guard let tracker = FrameInstrumentation.shared else { return }
         let rtp = VideoDecoder.rtpTimestamp(from: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         tracker.recordPacerDiscard(rtpTimestamp: rtp, reason: reason)
+        #endif
     }
 
     // MARK: - Suppression flag (suppression edges)

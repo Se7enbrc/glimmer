@@ -91,19 +91,24 @@ extension FramePacer {
         // the old one's - that timebase is discontinuous across rebuilds), and
         // is suspension-sized after a backgrounded window - the bounds below
         // exclude all three.
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         var emitRefreshChange = false
         var changedFromHz = 0.0
         var changedToHz = 0.0
+        #endif
         lock.lock()
         guard running, expectedGeneration == nil || expectedGeneration == bindingGeneration else {
             lock.unlock(); return
         }
         let generation = bindingGeneration
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let realizedInterval = target - Self.lastTickTargetTimestamp
         Self.lastTickTargetTimestamp = target
+        #endif
         let hostNow = CFAbsoluteTimeGetCurrent()
         liveness.lastTickHostTime = hostNow
         liveness.tickCount &+= 1
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if realizedInterval.isFinite, realizedInterval > 0,
            realizedInterval <= Self.maxRealizedTickDeltaSeconds {
             refreshTelemetry.refreshIntervalSumSeconds += realizedInterval
@@ -132,6 +137,7 @@ extension FramePacer {
             }
             refreshTelemetry.lastRefreshIntervalSeconds = vsyncInterval
         }
+        #endif
         // Tick-deficit service: roll the realized-rate window when due and
         // advance the deficit / floor-violation / warm-handover machines off
         // the MEASURED rates (FramePacer+TickDeficit.swift). Cheap - a couple
@@ -157,40 +163,20 @@ extension FramePacer {
         // own lock) crosses threads. Reuses hostNow/realizedInterval/vsyncInterval -
         // no extra clock read. `entryGap` shares the realized delta's plausibility
         // bounds (NaN/first-tick + suspension-sized gaps excluded).
-        let entryGap = hostNow - Self.lastTickEntryHostTime
-        Self.lastTickEntryHostTime = hostNow
-        if realizedInterval.isFinite, realizedInterval > 0,
-           realizedInterval <= Self.maxRealizedTickDeltaSeconds,
-           realizedInterval > 1.5 * vsyncInterval {
-            if entryGap.isFinite, entryGap > 0, entryGap <= Self.maxRealizedTickDeltaSeconds,
-               entryGap > 1.5 * vsyncInterval {
-                TelemetryCounters.shared.tickMissDescheduledTotal.increment()
-            } else {
-                TelemetryCounters.shared.tickMissCoalescedTotal.increment()
-            }
-            // FINER split via a DIRECT promptness measure (the entryGap test above
-            // conflates a starved thread with a skipped vsync DELIVERY - both
-            // stretch the gap). `link.timestamp` is the just-passed vsync this
-            // callback fired for, in the same CACurrentMediaTime base; the lag of
-            // `handleTick` behind it separates the two: ran a full frame-or-more
-            // late = thread starved (PREEMPTED, RT not working); ran promptly but
-            // the interval still stretched = the link skipped a vsync (LINKSKIP, RT
-            // working, residual is the display server). One clock read, off-lock.
-            let lag = CACurrentMediaTime() - timestamp
-            if lag.isFinite, lag > vsyncInterval {
-                TelemetryCounters.shared.tickMissPreemptedTotal.increment()
-            } else {
-                TelemetryCounters.shared.tickMissLinkskipTotal.increment()
-            }
-        }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        recordTickMiss(hostNow: hostNow, realizedInterval: realizedInterval,
+                       vsyncInterval: vsyncInterval, timestamp: timestamp)
+        #endif
 
         handleTickDeficitEvents(deficitEvents)
 
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if emitRefreshChange {
             OSSignposter.render.emitEvent(
                 "RefreshChanged",
                 "fromHz=\(changedFromHz, privacy: .public) toHz=\(changedToHz, privacy: .public)")
         }
+        #endif
 
         // Re-apply checks touch the link and NSView, so hop to main, at most
         // ~10 Hz. A preferred-rate change still requires a sustained two-second move.
@@ -243,6 +229,38 @@ extension FramePacer {
     /// Min seconds between main-actor re-apply hops; timestamp is tick-thread confined.
     static let reapplyHopMinInterval: CFTimeInterval = 0.1
     nonisolated(unsafe) static var lastReapplyHopHostTime: CFTimeInterval = .nan
+
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    private func recordTickMiss(hostNow: Double, realizedInterval: Double,
+                                vsyncInterval: Double, timestamp: Double) {
+        let entryGap = hostNow - Self.lastTickEntryHostTime
+        Self.lastTickEntryHostTime = hostNow
+        if realizedInterval.isFinite, realizedInterval > 0,
+           realizedInterval <= Self.maxRealizedTickDeltaSeconds,
+           realizedInterval > 1.5 * vsyncInterval {
+            if entryGap.isFinite, entryGap > 0, entryGap <= Self.maxRealizedTickDeltaSeconds,
+               entryGap > 1.5 * vsyncInterval {
+                TelemetryCounters.shared.tickMissDescheduledTotal.increment()
+            } else {
+                TelemetryCounters.shared.tickMissCoalescedTotal.increment()
+            }
+            // FINER split via a DIRECT promptness measure (the entryGap test above
+            // conflates a starved thread with a skipped vsync DELIVERY - both
+            // stretch the gap). `link.timestamp` is the just-passed vsync this
+            // callback fired for, in the same CACurrentMediaTime base; the lag of
+            // `handleTick` behind it separates the two: ran a full frame-or-more
+            // late = thread starved (PREEMPTED, RT not working); ran promptly but
+            // the interval still stretched = the link skipped a vsync (LINKSKIP, RT
+            // working, residual is the display server). One clock read, off-lock.
+            let lag = CACurrentMediaTime() - timestamp
+            if lag.isFinite, lag > vsyncInterval {
+                TelemetryCounters.shared.tickMissPreemptedTotal.increment()
+            } else {
+                TelemetryCounters.shared.tickMissLinkskipTotal.increment()
+            }
+        }
+    }
+    #endif
 
     // The floor re-apply (`reapplyPreferredRangeIfNeeded`) lives in
     // FramePacer+FrameRateRange.swift alongside the range builders it calls.

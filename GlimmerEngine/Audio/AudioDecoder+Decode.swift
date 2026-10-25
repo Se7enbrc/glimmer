@@ -16,22 +16,35 @@ extension AudioDecoder {
 
     /// Decode one packet, or conceal one lost frame when `packet` is nil, and schedule the result.
     func decodeCore(_ packet: UnsafeRawBufferPointer?) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let started = DispatchTime.now().uptimeNanoseconds
+        #endif
         stateLock.lock()
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let acquired = DispatchTime.now().uptimeNanoseconds
+        #endif
         defer {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             let finished = DispatchTime.now().uptimeNanoseconds
+            #endif
             stateLock.unlock()
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             AudioPipelineTelemetry.shared.stateLockWait.observe(Double(acquired &- started) / 1_000_000)
+            #endif
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             AudioPipelineTelemetry.shared.decodeSchedule.observe(
                 Double(finished &- started) / 1_000_000)
+            #endif
         }
         guard !graphChanging else {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             AudioPipelineTelemetry.shared.reconfigurationDrops.increment()
+            #endif
             return
         }
         guard !isShutdown, let decoder, let fmt = inputFormat else { return }
 
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         // `AudioFrame` interval - decode + schedule, one per 5 ms packet; cheap enough not to gate.
         let audioSignpostID = OSSignposter.audio.makeSignpostID()
         let audioIntervalState = OSSignposter.audio.beginInterval(
@@ -41,6 +54,7 @@ extension AudioDecoder {
         defer {
             OSSignposter.audio.endInterval("AudioFrame", audioIntervalState)
         }
+        #endif
         decodeOneFrame(decoder: decoder, fmt: fmt, packet: packet)
     }
 
@@ -49,7 +63,9 @@ extension AudioDecoder {
     @discardableResult
     private func decodeOneFrame(decoder: OpusDecoder, fmt: AVAudioFormat, packet: UnsafeRawBufferPointer?) -> Bool {
         guard let lease = pcmPool?.acquire() else {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             AudioPipelineTelemetry.shared.poolExhausted.increment()
+            #endif
             maintenanceSource.add(data: 1)
             return false
         }
@@ -75,7 +91,9 @@ extension AudioDecoder {
             // A loss, or a packet that won't decode, before any good packet: nothing to play.
             return false
         }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         AudioPipelineTelemetry.shared.decodedFrames.wrappingAdd(UInt64(decoded), ordering: .relaxed)
+        #endif
         pcm.frameLength = AVAudioFrameCount(decoded)
 
         // A drained player no longer ends at the skipped block's predecessor.

@@ -14,7 +14,9 @@ extension InputCore {
         guard let samples = InputTimingContext.take()?.samples() else { return }
         let remaining = max(0, 4096 - (mouseTimings[slot]?.count ?? 0))
         mouseTimings[slot, default: []].append(contentsOf: samples.prefix(remaining))
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if samples.count > remaining { FrameTimingTracker.shared?.inputTimingDropped.increment() }
+        #endif
     }
 
     @discardableResult
@@ -30,6 +32,7 @@ extension InputCore {
     package func removeController(id: ObjectIdentifier) {
         withLock {
             guard let sample = controllers.removeValue(forKey: id) else { return }
+            removeLayout(slot: sample.slot)
             current[sample.slot] = nil
             updateChord(slot: sample.slot, held: false, invalidate: true)
         }
@@ -50,8 +53,10 @@ extension InputCore {
             guard let sample = controllers[id], sample.token == token,
                   snapshot.ready, snapshot.focused, capturedAt >= snapshot.acceptEventsAfter,
                   capturedAt >= sample.registeredAt else { return }
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             InputDeliverStamp.shared.stamp(slot: Int(sample.slot), nanos: DispatchTime.now().uptimeNanoseconds)
             defer { _ = InputDeliverStamp.shared.take(slot: Int(sample.slot)) }
+            #endif
             controllers[id] = ControllerSample(slot: sample.slot, token: token,
                 registeredAt: sample.registeredAt, buttons: buttons, analog: analog)
             receive(slot: sample.slot, buttons: buttons, analog: analog,
@@ -75,8 +80,14 @@ extension InputCore {
                 | StreamProtocol.SPECIAL_FLAG | StreamProtocol.MISC_FLAG
             let merged = (sample.buttons & ~centerMask) | (buttons & centerMask)
             let chord = merged | (shoulders & (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG))
+            var physical = layouts?.states[Int(sample.slot)]?.last
+            if let physicalButtons = physical?.buttons {
+                physical?.buttons = (physicalButtons & ~UInt32(bitPattern: centerMask))
+                    | UInt32(bitPattern: buttons & centerMask)
+                    | UInt32(bitPattern: shoulders & (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG))
+            }
             receive(slot: sample.slot, buttons: merged, analog: sample.analog,
-                    chordButtons: chord, capturedAt: capturedAt)
+                    chordButtons: chord, capturedAt: capturedAt, extras: sample.extras, physicalSample: physical)
             retainMouseTiming(slot: sample.slot)
             if !chordSlots.contains(sample.slot), controllerMouseStates[sample.slot]?.isMouse != true,
                buttons & (StreamProtocol.PLAY_FLAG | StreamProtocol.BACK_FLAG) != 0 {
@@ -85,10 +96,11 @@ extension InputCore {
         }
     }
 
-    package func receiveHID(slot: UInt8, token: UUID, buttons: Int32, analog: GamepadAnalog, capturedAt: TimeInterval) {
+    package func receiveHID(slot: UInt8, token: UUID, buttons: Int32, analog: GamepadAnalog, capturedAt: TimeInterval,
+                            extras: SIMD2<UInt64> = .zero) {
         withLock {
             guard hidRegistrations[slot] == token, capturedAt >= snapshot.acceptEventsAfter else { return }
-            receive(slot: slot, buttons: buttons, analog: analog, capturedAt: capturedAt)
+            receive(slot: slot, buttons: buttons, analog: analog, capturedAt: capturedAt, extras: extras)
             retainMouseTiming(slot: slot)
         }
     }

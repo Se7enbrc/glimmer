@@ -34,9 +34,14 @@ may cache app artwork received from the PC. No Glimmer account is required. The
 app contains no advertising or analytics service and does not track you across
 other apps or websites.
 
-Optional diagnostic recording saves performance and troubleshooting files on
-your device. Nothing uploads automatically. Production builds default to
-recording off; development and diagnostic builds can enable it by default.
+The production iPhone and iPad app contains no diagnostic recording, diagnostic
+settings or diagnostic listener. Installing that build through TestFlight does
+not enable diagnostics. It ignores old recording preferences and leaves any
+files from an earlier beta untouched, without exposing them.
+
+Beta builds for iPhone and iPad include local diagnostic recording, on by
+default unless you turn it off. Mac offers optional recording. Nothing uploads
+automatically. These diagnostic builds can save the following on your device:
 
 - In-app logs may show PC names, addresses and errors. Copied, system and
   session logs hide private fields and do not include keys, PINs or
@@ -48,18 +53,18 @@ recording off; development and diagnostic builds can enable it by default.
 - Audio diagnostics contain state and timing, not device names or identifiers.
 
 Glimmer does not capture microphones or read, store or export head-pose or
-spatial-audio profile data. On iPhone and iPad, live diagnostic metrics are
-available only on the device. On Mac, a separate opt-in can expose metrics to
-your local network. See
+spatial-audio profile data. In diagnostic beta builds for iPhone and iPad, live
+metrics are available only on the device. On Mac, a separate opt-in can expose
+metrics to your local network. See
 [diagnostic details and limits](PROFILING.md#opt-in-telemetry).
 
 ## Your choices
 
-On iPhone and iPad, turn off Record diagnostics in Settings → Diagnostics to
-stop recording future streams. Existing files remain until local cleanup or
-removal. Cleanup removes session logs older than 14 days and limits some
-performance files when it runs. A controller capability record can remain until
-app data is removed.
+In iPhone and iPad beta builds, turn off Record diagnostics in Settings →
+Diagnostics to stop recording future streams. Existing files remain until local
+cleanup or removal. Cleanup removes session logs older than 14 days and limits
+some performance files when it runs. A controller capability record can remain
+until app data is removed.
 
 Use Settings → PCs → Forget… on iPhone and iPad, or Unpair on Mac, to remove a
 saved PC and its local trust record. This does not remove the paired-device

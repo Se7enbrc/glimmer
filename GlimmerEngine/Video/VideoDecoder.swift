@@ -49,12 +49,14 @@ public final class VideoDecoder {
     nonisolated let requestedColorRange: ColorRange
     nonisolated let resolvedColor = OSAllocatedUnfairLock<VideoColorDescription?>(initialState: nil)
     nonisolated let pixelFormatRanges = OSAllocatedUnfairLock(initialState: [OSType: String]())
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     var colorDisplayProbeTask: Task<Void, Never>?
     var colorProbeSleep: @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     var colorProbeLog: @MainActor (DiagMessage, Bool) -> Void = { message, warning in
         if warning { Diag.warn(message, "Stream") } else { Diag.notice(message, "Stream") }
     }
     nonisolated let colorProbeState = OSAllocatedUnfairLock<ColorProbeKey?>(initialState: nil)
+    #endif
 
     /// Safety-net teardown for the VTDecompressionSession. Normally
     /// `StreamSession.stop()` calls `teardown()` explicitly so the session
@@ -100,6 +102,7 @@ public final class VideoDecoder {
     /// without polling.
     public var onHDRActiveChanged: ((Bool) -> Void)?
 
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     /// Whether the in-stream stats overlay (ping / fps / decode time) should
     /// be drawn on top of the next rendered frame.
     ///
@@ -130,6 +133,7 @@ public final class VideoDecoder {
 
     /// HUD backdrop sampling state: set on the main actor, sampled on the present path.
     nonisolated let backdropBox = OSAllocatedUnfairLock(initialState: HUDBackdropState())
+    #endif
 
     // MARK: - Internal state
     //
@@ -354,6 +358,7 @@ public final class VideoDecoder {
         set { firstDecodedFrameClaimed.store(newValue, ordering: .releasing) }
     }
     // A live layer replacement must preserve the connection's pending first-frame notification.
+    nonisolated let retainImageForReconnect = Atomic<Bool>(false)
     nonisolated let firstFrameLifecycleGeneration = Atomic<UInt64>(0)
 
     // Each callback retains its matching colour/space pair after unlocking; teardown drains callbacks first.

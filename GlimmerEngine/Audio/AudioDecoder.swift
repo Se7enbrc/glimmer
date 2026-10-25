@@ -31,6 +31,7 @@ public final class AudioDecoder: @unchecked Sendable {
     var isShutdown = false
     /// True while the PC plays this stream's sound: the ring renders zeros
     /// and the engine keeps running. Guarded by `stateLock`; see `setOutputMuted`.
+    var reconnectFadeIn = false
     var outputMuted = false
 
     var decoder: OpusDecoder?

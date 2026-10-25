@@ -164,8 +164,7 @@ extension InputForwarder {
         // Sunshine-only territory) stays unset and keeps the system default.
         gamepad.playerIndex = GCControllerPlayerIndex(rawValue: Int(slot)) ?? .indexUnset
 
-        // Determine controller type from GameController metadata. macOS doesn't
-        // expose a clean type enum, so we infer from product category strings.
+        // Keep the PC's emulated layout independent of the optional controls this pad exposes.
         let kind = controllerType(for: gamepad)
         var caps = UInt16(StreamProtocol.LI_CCAP_ANALOG_TRIGGERS)
         // ControllerHaptics plays rumble through `haptics` alone, so a pad without it
@@ -271,6 +270,7 @@ extension InputForwarder {
     }
 
     func detach(gamepad: GCController) {
+        controllerLayouts?.release(gamepad)
         guard let state = attachedControllers.removeValue(forKey: ObjectIdentifier(gamepad)) else { return }
         inputCore.removeController(id: ObjectIdentifier(gamepad))
         gamepad.extendedGamepad?.valueChangedHandler = nil
@@ -336,6 +336,8 @@ extension InputForwarder {
     /// .stop() runs this after stopConnection(), so there is no live
     /// connection to tell.
     func releaseAttachedControllers() {
+        controllerLayouts?.stop()
+        controllerLayouts = nil
         // A pad connecting while stop waits on the PC must not retake the HID
         // retain and haptics, motion, or battery slots this walk releases.
         removeGamepadObservers()
@@ -413,23 +415,14 @@ extension InputForwarder {
     // MARK: - GCController -> moonlight type/flag derivation
 
     func controllerType(for gamepad: GCController) -> UInt8 {
-        let category = gamepad.productCategory
-        switch category {
-        case GCProductCategoryXboxOne, GCProductCategoryMFi:
-            return UInt8(StreamProtocol.LI_CTYPE_XBOX)
-        case GCProductCategoryDualShock4, GCProductCategoryDualSense:
-            return UInt8(StreamProtocol.LI_CTYPE_PS)
-        case GCProductCategoryHID:
-            return UInt8(StreamProtocol.LI_CTYPE_UNKNOWN)
-        default:
-            // GCProductCategorySwitchPro / JoyCon / etc. fall here on
-            // older SDKs that don't expose a constant for them.
-            if category.localizedCaseInsensitiveContains("switch") ||
-               category.localizedCaseInsensitiveContains("joycon") {
-                return UInt8(StreamProtocol.LI_CTYPE_NINTENDO)
-            }
-            return UInt8(StreamProtocol.LI_CTYPE_UNKNOWN)
+        guard let pad = gamepad.extendedGamepad else {
+            return ControllerDescriptor.Kind.identify(productCategory: gamepad.productCategory).rawValue
         }
+        let profile: ControllerDescriptor.Kind = pad is GCXboxGamepad ? .xbox
+            : pad is GCDualSenseGamepad || pad is GCDualShockGamepad ? .playStation : .unknown
+        let symbols = [pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY].map(\.unmappedSfSymbolsName)
+        return ControllerDescriptor.Kind.identify(productCategory: gamepad.productCategory,
+                                                   profile: profile, faceSymbols: symbols).rawValue
     }
 
     /// `forwardsMute`: a DualSense whose raw-HID reader is live, so its Mute reaches the PC.
@@ -483,7 +476,8 @@ extension InputForwarder {
     /// Reassert ownership of GameController state and raw-HID centre-button updates.
     /// The chord recorder polls independently and leaves these handlers alone.
     func installInputHandlers(for state: AttachedController) {
-        guard let gamepad = state.controller else { return }
+        guard !ControllerLayoutEditing.active, let gamepad = state.controller else { return }
+        controllerLayouts?.release(gamepad)
         let slot = state.slot
         let routesHID = state.retainedHID
         publishInputSnapshot()
@@ -526,6 +520,7 @@ extension InputForwarder {
                 inputCore.receiveCenterButtons(device: device, capturedAt: capturedAt)
             }
         }
+        controllerLayouts?.install(state)
     }
 
     // MARK: - Focus resync
@@ -536,6 +531,7 @@ extension InputForwarder {
     /// that used to live here moved to ControllerBattery.swift, with the
     /// host-facing battery uplink.)
     func resyncControllers() {
+        guard !ControllerLayoutEditing.active else { return }
         controllerOwnershipSuspended = false
         publishInputSnapshot()
         guard forwardsControllerEvents else { return }

@@ -231,7 +231,8 @@ struct AppModelSunshineTests {
     // MARK: - Quit and the app list
 
     @Test func quitSendsCancelOverThePinnedConnection() async throws {
-        let sunshine = FakeSunshine.scripted(["cancel": [.success(FakeSunshine.xml("<cancel>1</cancel>"))]])
+        let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.running(7), SessionFlow.running(7), SessionFlow.idle],
+            "cancel": [SessionFlow.cancelled]])
         let fixture = try FakePCModel("quit", sunshine: sunshine)
         defer { fixture.remove() }
         let host = try fixture.pairTower()
@@ -239,12 +240,13 @@ struct AppModelSunshineTests {
         try await fixture.model.quitRunningApp(on: host)
         fixture.settle()
 
-        #expect(sunshine.paths == ["cancel"])
+        #expect(sunshine.paths == ["serverinfo", "serverinfo", "cancel", "serverinfo"])
         #expect(sunshine.requests.first?.tls == true && sunshine.requests.first?.credential.pinnedCertPEM == FakePCModel.pin)
     }
 
     @Test func aRefusedQuitNamesThePCAndTheOtherStream() async throws {
-        let sunshine = FakeSunshine.scripted(["cancel": [.success(FakeSunshine.xml("", status: 503))]])
+        let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.running(7)],
+                                               "cancel": [.success(FakeSunshine.xml("", status: 503))]])
         let fixture = try FakePCModel("quit-refused", sunshine: sunshine)
         defer { fixture.remove() }
         let host = try fixture.pairTower()

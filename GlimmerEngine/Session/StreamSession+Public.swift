@@ -49,20 +49,23 @@ extension StreamSession {
     /// Exactly one synchronous input handle survives every attempt. Stop ends this public session permanently.
     /// Local recording also requires the telemetryEnabled preference or GLIMMER_TELEMETRY=1.
     @MainActor public static func make(media: PreparedMedia, network: NetworkClient, hostDisposition: StreamHostDisposition,
-                                       diagnosticsDirectory: URL? = nil)
+                                       diagnosticsDirectory: URL? = nil, bandwidthInputs: BandwidthInputs? = nil)
         -> (session: StreamSession, input: StreamInput) {
         let events = SessionEventSource()
         _ = events.stream
         let input = StreamInput { events.yield(.input($0)) }
+        var services = SessionServices.recording(directory: diagnosticsDirectory)
+        services.bandwidthInputs = bandwidthInputs
+        services.route = { server, rtt in StreamDestinationProbe.probe(host: server.address, rtt: rtt) }
         let session = StreamSession(hostDisposition: hostDisposition, audioDecoder: media.audio,
-            services: .recording(directory: diagnosticsDirectory), backend: NativeBackend(),
+            services: services, backend: NativeBackend(),
             makeNetwork: { network.freshClient(for: $0) },
             makeBackend: { NativeBackend() }, publicMedia: media, publicInput: input, preparedNetwork: network, events: events)
         events.onTermination { [weak session] in Task { await session?.stop(cause: .consumerDropped) } }
         return (session, input)
     }
 
-    /// Reuses the paired client's cached PC record; initial launch/resume makes no extra server-info request.
+    /// Refreshes authenticated occupancy before choosing launch, resume or an approved replacement.
     public func start(appID: Int, configuration: StreamConnection.Configuration) async throws {
         guard !publicTerminal else { throw CancellationError() }
         guard let media = publicMedia, let ownedInput = publicInput, let network = preparedNetwork, !publicStarted else {
@@ -75,7 +78,14 @@ extension StreamSession {
             suppliedRouteMTU = configuration.routeMTU
             let server = await network.server
             guard !publicTerminal else { throw CancellationError() }
-            _ = try await start(server: server, request: configuration.request, appID: appID, cachedNetwork: network,
+            var request = configuration.request
+            if services.bandwidthInputs != nil, request.remoteness == .local { request.remoteness = .auto }
+            bandwidthProbeGeneration = services.bandwidthInputs?.snapshot().path.generation
+            let makeSampler: (@Sendable () -> RttSampler)? = UInt16(exactly: server.httpsPort).map { port in
+                { @Sendable in StreamDestinationProbe.makeSampler(host: server.address, port: port) }
+            }
+            _ = try await start(server: server, request: request, appID: appID, cachedNetwork: network,
+                makeSampler: makeSampler,
                 prepare: { bitrate in
                     media.video.setNegotiatedBitrateKbps(bitrate)
                     let presentation = SessionPresentation()

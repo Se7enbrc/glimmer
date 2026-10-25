@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
+
 import AudioToolbox
 import Foundation
 import Synchronization
@@ -116,3 +118,5 @@ extension AudioOutput {
         queue.pointee.outputProbe.requested.store(true, ordering: .releasing)
     }
 }
+
+#endif

@@ -46,6 +46,21 @@ dmg:
 	@echo "$(DIST_DIR)/$(DMG_NAME)"
 	@shasum -a 256 "$(DIST_DIR)/$(DMG_NAME)"
 
+# Hosted signing finishes the outer container before credentials are removed.
+.PHONY: notarize-dmg
+notarize-dmg: ensure-signing
+	@test -n "$(strip $(DEVELOPER_ID))" && test "$(DEVELOPER_ID)" != "-" || { \
+		echo "ERR: DMG requires Developer ID signing" >&2; exit 1; }
+	@test -s "$(DIST_DIR)/$(DMG_NAME)" || { echo "ERR: DMG missing" >&2; exit 1; }
+	codesign --force --timestamp --sign "$(DEVELOPER_ID)" --keychain "$(SIGN_KEYCHAIN)" \
+		--identifier io.ugfugl.Glimmer.dmg "$(DIST_DIR)/$(DMG_NAME)"
+	xcrun notarytool submit "$(DIST_DIR)/$(DMG_NAME)" \
+		--keychain-profile "$(NOTARY_PROFILE)" --keychain "$(SIGN_KEYCHAIN)" --wait --output-format json \
+		> "$(DERIVED)/Glimmer-dmg-notary.json"
+	@python3 -c 'import json, sys; result = json.load(open(sys.argv[1])); sys.exit(0 if result.get("status") == "Accepted" else "ERR: DMG notarization not accepted")' \
+		"$(DERIVED)/Glimmer-dmg-notary.json"
+	xcrun stapler staple "$(DIST_DIR)/$(DMG_NAME)"
+
 # Package the final stapled app before attestation or publication.
 sparkle-zip:
 	@test -d "$(GLIMMER_APP_SRC)" || { echo "ERR: build first (make release)" >&2; exit 1; }

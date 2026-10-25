@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Foundation
 import os
 @testable import Glimmer
@@ -95,10 +95,15 @@ final class InputRecordingBackend: StreamingBackend {
     /// Thrown from every connect when set, as a PC that refuses the RTSP handshake would.
     private let connectFailure: StreamError?
 
+    private let beforeConnect: @Sendable () async throws -> Void
+    private let onConnect: @Sendable () -> Void
     private let onInput: @Sendable () -> Void
-    init(connectFailure: StreamError? = nil, onInput: @escaping @Sendable () -> Void = {}) {
+    init(connectFailure: StreamError? = nil, beforeConnect: @escaping @Sendable () async throws -> Void = {},
+         onConnect: @escaping @Sendable () -> Void = {}, onInput: @escaping @Sendable () -> Void = {}) {
         self.connectFailure = connectFailure
         self.onInput = onInput
+        self.onConnect = onConnect
+        self.beforeConnect = beforeConnect
     }
     private let idrCount = OSAllocatedUnfairLock(initialState: 0)
     private let hostHDR = OSAllocatedUnfairLock<HdrMetadata?>(initialState: nil)
@@ -119,10 +124,17 @@ final class InputRecordingBackend: StreamingBackend {
     }
     var pointer: [PointerSend] { pointerSends.withLock { $0 } }
 
+    func startConnectionAsync(server: BackendServerInfo, config: BackendStreamConfig) async throws {
+        try await beforeConnect()
+        try Task.checkCancellation()
+        try startConnection(server: server, config: config)
+    }
+
     func startConnection(server: BackendServerInfo, config: BackendStreamConfig) throws {
         connectStarts.withLock { $0.append(server) }
         connectConfigs.withLock { $0.append(config) }
         if let connectFailure { throw connectFailure }
+        onConnect()
     }
     func stopConnection() { stoppedControllerSends.withLock { $0 = calls } }
     func interruptConnection() {}

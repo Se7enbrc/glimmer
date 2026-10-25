@@ -118,6 +118,11 @@ def load(root):
 
 def validate(root):
     receipt, _ = load(root)
+    dmg_path = str(root / f'Glimmer-{receipt["short"]}.dmg')
+    command(['codesign', '--verify', '--strict', '--verbose=2', dmg_path], 'DMG signature rejected')
+    command(['spctl', '-a', '-t', 'open', '--context', 'context:primary-signature', '--verbose=2', dmg_path],
+            'DMG Gatekeeper assessment rejected')
+    command(['xcrun', 'stapler', 'validate', dmg_path], 'DMG notarization ticket rejected')
     zip_path = root / f'Glimmer-{receipt["short"]}.zip'
     command(['scripts/verify-update-signature.swift', receipt['public_key'], receipt['signature'], str(zip_path)],
             'update signature rejected')

@@ -216,7 +216,7 @@ struct SessionLaunchTests {
     }
 
     @Test(arguments: [StreamError.hostTimedOut, StreamError.hostUnreachable("Connection closed")])
-    func busyRecoveryKeepsOwnershipAfterTransportFailure(error: StreamError) async throws {
+    func uncertainLaunchCannotAuthorizeReplacement(error: StreamError) async throws {
         let session = StreamSession(hostDisposition: .cancelOwnedHostSession)
         await session.prepareLaunchTestSession()
         var info = ServerInfo(address: "", uniqueId: "", serverName: "")
@@ -229,9 +229,11 @@ struct SessionLaunchTests {
         } catch {
             #expect(StreamSession.retainsLaunchOwnership(after: error))
         }
-        try await session.authorizeOccupancy(info, network: network, deadline: .distantFuture)
-        #expect(await session.ownsHostSession)
-        #expect(await session.hostSessionClientID == "client")
+        // Ownership of an uncertain launch does not authorize replacing a running game.
+        await #expect(throws: TakeoverRequired.self) {
+            try await session.authorizeOccupancy(info, network: network, deadline: .distantFuture)
+        }
+        #expect(await !session.ownsHostSession)
     }
 
     @Test func differentAppAfterUncertainLaunchRequiresTakeover() async throws {

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import Foundation
-import GlimmerEngine
+@testable import GlimmerEngine
 import Synchronization
 import Testing
 @testable import Glimmer
@@ -110,5 +110,64 @@ final class ConnectionTestVideoSink: VideoSink {
     func submitDecodeUnit(_ unit: DecodeUnit) -> Int32 {
         Issue.record("Rejected connection attempts must not deliver video.")
         return -1
+    }
+}
+
+@MainActor
+struct VideoDecodeEnergyTests {
+    @Test(arguments: [true, false])
+    func gatedFramesDoNotAssemblePictureData(isIDR: Bool) {
+        let decoder = VideoDecoder()
+        defer { decoder.teardown() }
+        decoder.presentSuppressedLock.withLock { decoder._decodeGated = true }
+        var assemblies = 0
+        func picture() -> Data {
+            assemblies += 1
+            return Data([0, 0, 0, 1, 0x41])
+        }
+        let result = decoder.decodeAssembledFrame(pictureData: picture(), newSps: nil, newPps: nil,
+            newVps: nil, isIDR: isIDR, rtpTimestamp: 0, totalLength: 5)
+        #expect(result == StreamProtocol.DR_OK)
+        #expect(assemblies == 0)
+        #expect(decoder.inFlightDecodeBacklog() == 0)
+    }
+
+    @Test func admittedUnitPreservesPictureOrderAndParameterSets() throws {
+        let decoder = VideoDecoder()
+        decoder.isStreaming = true
+        decoder.decodeQueue.suspend()
+        defer {
+            decoder.decodeQueue.resume()
+            decoder.teardown()
+        }
+        let unit = DecodeUnit(frameNumber: 1, frameType: StreamProtocol.FRAME_TYPE_IDR, fullLength: 6,
+            frameHostProcessingLatency: 0, receiveTimeUs: 0, enqueueTimeUs: 0, presentationTimeUs: 0,
+            rtpTimestamp: 90, hdrActive: false, colorspace: 0, buffers: [
+                DecodeBuffer(kind: .sps, data: Data([7])), DecodeBuffer(kind: .picData, data: Data([1, 2])),
+                DecodeBuffer(kind: .pps, data: Data([8])), DecodeBuffer(kind: .picData, data: Data([3, 4]))
+            ])
+        #expect(decoder.submitDecodeUnit(unit) == StreamProtocol.DR_OK)
+        let pending = try #require(decoder.pendingDecodes.first)
+        #expect(pending.pictureData == Data([1, 2, 3, 4]))
+        #expect(pending.newSps == Data([7]))
+        #expect(pending.newPps == Data([8]))
+        #expect(pending.epoch == 1)
+        #expect(decoder.pendingDecodes.count == 1)
+    }
+
+    @Test func resyncDoesNotAssembleRejectedPictureData() {
+        let decoder = VideoDecoder()
+        defer { decoder.teardown() }
+        #expect(decoder.armResyncAfterDecodeError(epoch: 0))
+        var assemblies = 0
+        func picture() -> Data {
+            assemblies += 1
+            return Data([0, 0, 0, 1, 0x41])
+        }
+        let result = decoder.decodeAssembledFrame(pictureData: picture(), newSps: nil, newPps: nil,
+            newVps: nil, isIDR: false, rtpTimestamp: 0, totalLength: 5)
+        #expect(result == StreamProtocol.DR_NEED_IDR)
+        #expect(assemblies == 0)
+        #expect(decoder.inFlightDecodeBacklog() == 0)
     }
 }

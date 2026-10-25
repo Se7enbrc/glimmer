@@ -126,7 +126,9 @@ extension AudioDecoder {
                 if !nearMissLatched {
                     nearMissLatched = true
                     TelemetryCounters.shared.audioNearMissTotal.increment()
+                    #if os(macOS) || GLIMMER_DIAGNOSTICS
                     AudioPipelineTelemetry.shared.noteNearMiss()
+                    #endif
                 }
             } else if aheadMs > Self.nearMissRearmFillMs {
                 nearMissLatched = false
@@ -346,21 +348,27 @@ extension AudioDecoder {
         // Later route or resampler work must not add its latency to this snapshot's drift.
         let observedAtNanos = now
         let aheadFrames = framesScheduled &- framesPlayed
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let residentSilenceFrames = pendingSilenceFrames
+        #endif
         let rate = meterSampleRate
         let started = playoutStarted
         let anchorNanos = driftAnchorNanos
         let anchorFramesPlayed = driftAnchorFramesPlayed
         let playedFrames = framesPlayed
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let rePrimes = rePrimeCount
         let engineUp = engineRunning
+        #endif
         // The adaptive cushion target rides the same gauge: its VALUE only moves
         // on the cold grow/decay edges, but carrying it here (one load under the
         // lock already held) is what lets every exported row judge fill AGAINST
         // target - without it a fill hugging a flat ceiling is indistinguishable
         // from the old disguised-permanent-give-up re-pin.
         let targetMs = playoutTargetMs
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let cushionMaxMs = effectiveCushionMaxMs
+        #endif
         // Engage the drift resampler only in steady playout - the SAME gate the trim
         // uses (Meter trim path). During pre-roll / re-prime / drain the rebuild
         // machinery owns recovery and driveResampler slews the rate back to 1.0.
@@ -374,8 +382,10 @@ extension AudioDecoder {
         // Surface resident corrector-silence to the A/V-skew meter so it subtracts
         // it from buffer fill: the silence is buffered media the audio RTP clock
         // never advanced past, so counting it makes audio read falsely "late".
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         AudioVideoSkewStore.shared.setResidentSilenceMs(
             Double(residentSilenceFrames) / rate * 1000.0)
+        #endif
 
         let bufferFillMs = Double(aheadFrames) / rate * 1000.0
         // Drive the drift-tracking resampler (self-rate-limited to ~4Hz inside):
@@ -406,8 +416,11 @@ extension AudioDecoder {
             } ?? true
             resamplerSkewConverged = abs(resamplerIntegralPpm) <= Self.cushionReleaseSkewPpm && driftBounded
         }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let appliedPpm = resamplerEpsPpm
+        #endif
         audioMeterLock.unlock()
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         TelemetryCounters.shared.setAudioState(
             TelemetryCounters.AudioState(
                 bufferFillMs: bufferFillMs,
@@ -424,6 +437,7 @@ extension AudioDecoder {
                 // reconnect "packets flow but playout dead" latch in one query.
                 engineRunning: engineUp,
                 cushionMaxMs: cushionMaxMs))
+        #endif
     }
 
     // MARK: - Playout-stall watchdog (detection + recovery)

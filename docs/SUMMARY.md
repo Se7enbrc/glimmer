@@ -46,6 +46,7 @@
     - [iOS engine roadmap](IOS_ENGINE_ROADMAP.md)
   - [Profiling and telemetry](PROFILING.md)
     - [Performance validation](PERFORMANCE_VALIDATION.md)
+    - [Long-session and input soak](SOAK_TESTING.md)
   - [Release process](RELEASE.md)
     - [Hosted release pipeline](RELEASE_PIPELINE.md)
   - [Code of conduct](https://github.com/Se7enbrc/glimmer/blob/main/CODE_OF_CONDUCT.md)

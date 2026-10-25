@@ -80,6 +80,7 @@ final class LauncherServices {
         try PinnedCertStore.delete(forHostID: id, defaults: defaults, base: base,
                                    protectedDataAvailable: { protectedData.read() })
         defaults.set(encoded, forKey: Self.savedKey)
+        TouchLayoutStore(defaults: defaults).forget(pcID: id)
         if defaults.string(forKey: Self.lastConnectedKey) == id {
             defaults.removeObject(forKey: Self.lastConnectedKey)
         }

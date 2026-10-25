@@ -85,7 +85,9 @@ extension RtpAudioReceiver {
         // is still a socket arrival, and the counters measure the ARRIVAL process).
         if arrival == nil { noteAudioArrivalGap(now: DispatchTime.now().uptimeNanoseconds) }
         let packetArrival = arrival ?? DispatchTime.now().uptimeNanoseconds
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         AudioPipelineTelemetry.shared.processedDatagrams.wrappingAdd(1, ordering: .relaxed)
+        #endif
         noteProcessedArrival(packetArrival)
 
         guard count >= RtpAudioQueue.fixedRtpHeaderSize, count <= buf.count, buf[0] == 0x80,
@@ -164,7 +166,9 @@ extension RtpAudioReceiver {
         // P1 AUDIO receive-quality: fold the queue's cumulative stats into the
         // always-live telemetry totals once per ~1s window (off the per-packet
         // path). Done after addPacket so the window sees this packet's effect.
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         flushAudioMetricsIfDue()
+        #endif
         switch result {
         case .handleNow:
             // In-order fast path: decode this packet immediately - unless the
@@ -188,7 +192,9 @@ extension RtpAudioReceiver {
 
     private func drainQueuedPackets(dropForStartup: Bool) {
         while let lost = queue.getQueuedPacket(into: &recoveredPacket) {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             if lost { audioLostInWindow += 1 }
+            #endif
             if dropForStartup {
                 // Lost placeholders still count as loss; the startup gate discards their timeline too.
                 startupDroppedPackets += 1
@@ -203,10 +209,14 @@ extension RtpAudioReceiver {
     /// Receive timestamps distinguish a socket stall from a delayed decoder. No sink work runs here.
     /// This is recvQueue-confined; startup/reorder state is owned by the worker.
     private func noteAudioArrivalGap(now: UInt64) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         AudioPipelineTelemetry.shared.receivedDatagrams.wrappingAdd(1, ordering: .relaxed)
+        #endif
         let gap: UInt64? = lastDatagramArrivalNanos != 0 ? now &- lastDatagramArrivalNanos : nil
         if let gap {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             AudioPipelineTelemetry.shared.receiveGap.observe(Double(gap) / 1_000_000)
+            #endif
             if gap > 20_000_000 {
                 let counters = TelemetryCounters.shared
                 counters.audioGapOver20msTotal.increment()
@@ -215,7 +225,9 @@ extension RtpAudioReceiver {
             }
         }
         lastDatagramArrivalNanos = now
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         TelemetryCounters.shared.audioArrivalGaps.noteArrival(at: now, gapNanos: gap)
+        #endif
     }
 
     private func noteProcessedArrival(_ now: UInt64) {

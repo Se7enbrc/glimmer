@@ -15,14 +15,18 @@ public final class AudioRenderStorage {
         queue.initialize(to: AudioPCMQueue(capacity: capacity, channels: channels))
     }
 
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     package func resetProbe() { queue.pointee.outputProbe.reset() }
+    #endif
     package func disable() { queue.pointee.enabled.store(false, ordering: .releasing) }
 
     public var renderCallback: AURenderCallbackStruct {
         AURenderCallbackStruct(inputProc: renderAudioPCM, inputProcRefCon: queue)
     }
 
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     public var renderObserver: AURenderCallback { observeAudioOutput }
+    #endif
     public var context: UnsafeMutableRawPointer { UnsafeMutableRawPointer(queue) }
 
     /// Invoke during adapter teardown, off the render thread. A failed disposal intentionally
@@ -64,7 +68,9 @@ public final class AudioOutput {
     private let running: () -> Bool
     private let rate: (Float) -> OSStatus
     let lastRenderError: () -> OSStatus
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     var outputSilence = AudioOutputSilence()
+    #endif
 
     public init(storage: AudioRenderStorage, sampleRate: Double, channels: UInt32, latencyMs: Double,
                 spatial: Bool = false, start: @escaping () -> OSStatus, isRunning: @escaping () -> Bool,

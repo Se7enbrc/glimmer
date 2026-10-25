@@ -54,10 +54,12 @@ package final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendabl
         // edge is the rarest event). Stamp the connect-relative instant of the
         // stages that bound the breakdown legs. Name-matched against the engine's
         // own stage labels (performRtspStage / performControlStage).
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let now = TelemetryCounters.monotonicNowNanos()
         let p2 = TelemetryCounters.shared.p2
         if name == "name resolution" { p2.markRtspStart(now) }
         if name == "ENET_CONNECT" { p2.markEnetStart(now) }
+        #endif
         emit(.stageStarting(name: name))
     }
 
@@ -68,7 +70,9 @@ package final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendabl
         // of the pairing/auth leg (RTSP-done → ENet-connect start, where the
         // control crypto + control-V2 negotiation set up the per-session material).
         if name == "RTSP handshake" {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             TelemetryCounters.shared.p2.markRtspDone(TelemetryCounters.monotonicNowNanos())
+            #endif
         }
         emit(.stageComplete(name: name))
     }
@@ -85,7 +89,9 @@ package final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendabl
         // P2 established edge: bounds the ENet-connect leg, starts the first-frame
         // leg. Reconnect is NOT inferred here (silent-reconnect resets the timeline
         // per attempt) - it's counted at the recovery site (runReconnectEpisode).
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         TelemetryCounters.shared.p2.markEstablished()
+        #endif
         let bridge = self.bridge
         // If the continuation is gone at yield time, this established edge fires
         // into the void and the UI's connecting→streaming promotion falls back to
@@ -113,8 +119,10 @@ package final class NativeConnectionEvents: ConnectionEvents, @unchecked Sendabl
         // Latch the per-session reason ordinal only (code 0 → clean, else error).
         // The process-global tally is bumped at genuine teardown, NOT here - a
         // recoverable terminate may be silently reconnected (would over-count).
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         TelemetryCounters.shared.p2.setDisconnectReason(
             code == 0 ? .hostClosedClean : .hostError)
+        #endif
         let bridge = self.bridge
         // Don't yield `.connectionTerminated` directly: handleHostTerminate
         // classifies it (a recoverable live-session close drives a silent reconnect

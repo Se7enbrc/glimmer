@@ -167,8 +167,9 @@ prove that the PC rendered the desktop at that size instead of scaling it.
 
 Do not stretch a 16:9 image to disguise a missing phone-shaped mode. If the PC
 cannot provide the requested mode, explain the setup action and offer a
-supported aspect-fit mode. Cropping is not the default fallback. Game-generated
-letterboxing remains possible even when the desktop resolution matches.
+supported listed mode. The picture fills the window, cropping edges when the
+aspect differs. Game-generated letterboxing remains possible even when the
+desktop resolution matches.
 
 Support both landscape orientations without reconnecting when dimensions stay
 the same. Coalesce geometry changes; do not restart a stream for transient
@@ -219,9 +220,10 @@ Represent foreground, temporary inactivity, background, route loss, and
 protected-data unavailability explicitly. Temporary inactivity immediately
 releases input; returning must not replay held state. On background or screen
 lock, stop local streaming work and release resources. Returning offers a
-controlled resume/reconnect. Local disconnect and quitting the PC application
-are distinct actions; backgrounding must not silently quit the player's game.
-Document the existing Sunshine cancellation semantics before changing them.
+controlled resume/reconnect when the game remains running. Local teardown quits
+the PC game by default. The optional leave-running setting applies equally to
+manual disconnect, background grace and lock teardown; explicit Quit remains
+available regardless of that setting.
 
 Use structured cancellation and a session generation to reject old callbacks.
 Stop receive work before releasing its sinks and bridge. Remove display links,

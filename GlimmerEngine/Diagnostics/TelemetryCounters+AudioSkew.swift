@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
+
 //
 //  TelemetryCounters+AudioSkew.swift
 //
@@ -503,3 +505,5 @@ package final class AudioVideoSkewStore: @unchecked Sendable {
         os_unfair_lock_unlock(lock)
     }
 }
+
+#endif

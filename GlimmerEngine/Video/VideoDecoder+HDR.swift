@@ -43,7 +43,9 @@ extension VideoDecoder {
         if active != isHDRActive {
             isHDRActive = active
             onHDRActiveChanged?(active)
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             probeDisplayTransition(headroom: headroom)
+            #endif
         }
     }
 

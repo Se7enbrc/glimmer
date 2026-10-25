@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
+
 // Per-frame stage timestamps share one bounded identity map. Singleton access is locked
 // even when disabled; enabled producers update counters and append bounded typed records.
 // JSON formatting and file writes run on the trace writer's background queue.
@@ -12,6 +14,8 @@ import os
 
 /// The map is lock-guarded; histogram stages and the trace writer synchronize their own state.
 /// RTP timestamps correlate frames across decode and presentation; zero is untracked.
+package typealias FrameInstrumentation = FrameTimingTracker
+
 package final class FrameTimingTracker: @unchecked Sendable {
 
     /// The gate-checked singleton, installed by `start()` iff telemetry is on and
@@ -484,3 +488,31 @@ package final class FrameTimingTracker: @unchecked Sendable {
         return Double(end &- start) / 1_000_000.0
     }
 }
+
+#endif
+
+#if !os(macOS) && !GLIMMER_DIAGNOSTICS
+// An uninhabited seam keeps shared input signatures stable without a recorder or storage.
+package enum FrameInstrumentation: Sendable {
+    @inlinable package static var shared: FrameInstrumentation? { nil }
+    package enum RendererStatePhase: String, Sendable {
+        case backpressureBegan = "backpressure_began"
+        case backpressureEnded = "backpressure_ended"
+        case flushBegan = "flush_began"
+        case flushReturned = "flush_returned"
+    }
+
+    package enum RendererDecision: String, CaseIterable, Sendable {
+        case frameRejectedFailed = "frame_rejected_failed"
+        case frameRejectedNotReady = "frame_rejected_not_ready"
+        case repaintRejectedFailed = "repaint_rejected_failed"
+        case repaintRejectedNotReady = "repaint_rejected_not_ready"
+        case repaintCopyFailed = "repaint_copy_failed"
+        case repaintEnqueued = "repaint_enqueued"
+    }
+
+    package enum PacerDiscardReason: String, Sendable {
+        case overflow, suppressed, trim, backoff, stopped, rebind, cleared, recovery
+    }
+}
+#endif

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
+
 // Snapshots contain performance values without PC identity or secrets.
 // Sendable reader closures connect the live engine to the opt-in exporter.
 
@@ -579,3 +581,5 @@ package struct TelemetrySource: Sendable {
     package var stream: StreamTelemetryConfig?
     package var capture = TelemetryCapture()
 }
+
+#endif

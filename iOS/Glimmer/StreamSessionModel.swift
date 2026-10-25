@@ -14,9 +14,26 @@ final class StreamSessionModel {
 
     private(set) var phase: Phase = .idle
     private(set) var audioUnavailable = false
+    var firstVideo: ((StreamFormat) -> Void)?
+    var continuationEnded: (() -> Void)?
+    var startupFailed: ((StreamFormat?) -> Void)?
+    var pictureNeedsReview = false
+    var keepSize: (() -> Void)?
+    var restoreSize: (() -> Void)?
+    var replacementRequired: ((Int) -> Void)?
+    private var quittingGame = false
+    var quitFailure: String?
     private(set) var connectionPoor = false
     private(set) var waitingForVideo = false
+    /// The engine only reports a held quality change once its anti-flap gate allows it.
+    private(set) var adjustingQuality = false
+    var recoveryText: String {
+        adjustingQuality ? StreamSession.adjustingQualityText : "Reconnecting to \(launch.pcName)…"
+    }
+    var announce: @MainActor (String) -> Void = { UIAccessibility.post(notification: .announcement, argument: $0) }
     private(set) var requestedFormat: StreamFormat?
+    /// The adaptive policy's first rate for this stream; nil when adaptive quality is off.
+    private(set) var requestedStartKbps: Int?
     private(set) var mouseControllers: Set<ControllerRegistration> = []
     var controllerMouseActive: Bool { !mouseControllers.isEmpty }
     private(set) var controllerConnected = false
@@ -25,9 +42,23 @@ final class StreamSessionModel {
     private let backgroundGrace: StreamBackgroundGrace
     private(set) var canStart = true
     private(set) var controlsVisible = true
+    private(set) var externalDisplayActive = false
     var inputCaptureChanged: ((Bool) -> Void)?
-    var inputFocused: Bool { canStart && phase == .streaming && !controlsVisible && !captureSuspended }
+    var presentationEnded: (() -> Void)?
+    var inputFocused: Bool {
+        canStart && phase == .streaming && !controlsVisible && !captureSuspended
+            && (controllerConnected || touchGeometryUsable)
+    }
     var streamInput: StreamInput? { playback?.input }
+    var touchGamepad: TouchGamepadCapture? { playback?.touchGamepad }
+    var editingTouchControls = false
+    private(set) var touchGeometryUsable = true
+    private(set) var touchControlsRequested = false
+    var touchControlsVisible: Bool { inputFocused && (!controllerConnected || touchControlsRequested) }
+    var touchMouseActive: Bool {
+        guard let registration = touchGamepad?.registration else { return false }
+        return mouseControllers.contains(registration)
+    }
     nonisolated let launch: StreamLaunch
     private let makePlayback: @MainActor (StreamLaunch, StreamSurface,
         @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback
@@ -42,12 +73,16 @@ final class StreamSessionModel {
     private var captureSuspended = false
     private var controlsRequested = false
     private var modeNoticeTask: Task<Void, Never>?
+    private var windowResize: StreamWindowResize?
+    private let resizeSleep: @Sendable (Duration) async throws -> Void
 
     init(launch: StreamLaunch, backgroundGrace: StreamBackgroundGrace = StreamBackgroundGrace(),
+         resizeSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          makePlayback: @escaping @MainActor (StreamLaunch, StreamSurface,
             @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback = StreamPlayback.make) {
         self.launch = launch
         self.backgroundGrace = backgroundGrace
+        self.resizeSleep = resizeSleep
         self.makePlayback = makePlayback
     }
 
@@ -61,10 +96,16 @@ final class StreamSessionModel {
             }
         } catch {
             phase = .ended("Couldn't prepare this display. Close the stream and try again.")
+            presentationEnded?()
             return
         }
         self.playback = playback
         requestedFormat = playback.format
+        if let format = playback.format, let request = playback.requestFormatChange {
+            windowResize = StreamWindowResize(format: format, request: request, applied: { [weak self] in
+                self?.requestedFormat = $0
+            }, sleep: resizeSleep)
+        }
         phase = .connecting
         playback.observeControllers? { [weak self] connected in self?.controllerConnectionChanged(connected) }
         eventTask = Task { [weak self] in
@@ -75,9 +116,23 @@ final class StreamSessionModel {
         }
         startTask = Task { [weak self] in
             do {
-                try await playback.start()
+                if let started = try await playback.start(), let self, !self.stopRequested {
+                    self.requestedFormat = started.format
+                    self.requestedStartKbps = started.startKbps
+                    self.windowResize?.adopt(started.format)
+                }
+            } catch RunningAppFailure.ended {
+                guard let self, !self.stopRequested else { return }
+                self.endingMessage = StreamFailureCopy.gameEnded(self.launch.appName, pc: self.launch.pcName)
+                self.continuationEnded?()
+                self.complete()
+            } catch let takeover as TakeoverRequired {
+                guard let self, !self.stopRequested else { return }
+                self.replacementRequired?(takeover.appID)
+                self.disconnect()
             } catch {
                 guard let self, !self.stopRequested else { return }
+                self.startupFailed?(self.requestedFormat)
                 if !self.terminalFailure {
                     self.endingMessage = StreamSessionFailureCopy.connection(
                         StreamFailure.connection(error), pcName: self.launch.pcName)
@@ -101,6 +156,26 @@ final class StreamSessionModel {
         }
     }
 
+    func quitGame() {
+        guard stopTask == nil, !phase.isEnded, let quit = playback?.quit else { return }
+        quittingGame = true
+        stopRequested = true
+        phase = .stopping
+        synchronizeInputFocus()
+        stopTask = Task {
+            do {
+                try await quit()
+                dismissWhenStopped = true
+            } catch {
+                quitFailure = StreamSessionFailureCopy.quit(error, app: launch.appName, pc: launch.pcName)
+                endingMessage = quitFailure
+            }
+            quittingGame = false
+            complete()
+            stopTask = nil
+        }
+    }
+
     func disconnect() {
         dismissWhenStopped = true
         stop()
@@ -108,16 +183,22 @@ final class StreamSessionModel {
 
     private func complete() {
         backgroundGrace.finish()
+        editingTouchControls = false
+        touchControlsRequested = false
+        playback?.showTouchControls?(false)
         if phase.isEnded {
             if let endingMessage { phase = .ended(endingMessage) }
             return
         }
         phase = .ended(endingMessage ?? "Disconnected from \(launch.pcName).")
+        presentationEnded?()
         mouseControllers.removeAll()
         controllerConnected = false
         modeNoticeTask?.cancel()
         controllerModeMessage = nil
         synchronizeInputFocus()
+        windowResize?.stop()
+        windowResize = nil
         playback = nil
         startTask = nil
         eventTask?.cancel()
@@ -153,27 +234,62 @@ final class StreamSessionModel {
         synchronizeInputFocus()
     }
 
+    func touchGeometryChanged(usable: Bool) {
+        guard touchGeometryUsable != usable else { return }
+        touchGeometryUsable = usable
+        if phase == .streaming, !controllerConnected, !controlsRequested { controlsVisible = !usable }
+        synchronizeInputFocus()
+    }
+
     func resumeInput() {
-        guard canStart, phase == .streaming else { return }
+        guard canStart, phase == .streaming, controllerConnected || touchGeometryUsable else { return }
         controlsRequested = false
         controlsVisible = false
         synchronizeInputFocus()
     }
 
+    func toggleTouchControls() {
+        guard controllerConnected, phase == .streaming else { return }
+        touchControlsRequested.toggle()
+        playback?.showTouchControls?(touchControlsRequested)
+    }
+
     private func controllerConnectionChanged(_ connected: Bool) {
         guard !phase.isEnded, controllerConnected != connected else { return }
         controllerConnected = connected
-        if connected, phase == .streaming, !controlsRequested { controlsVisible = false }
-        if !connected { controlsVisible = true }
+        if phase == .streaming, !controlsRequested { controlsVisible = false }
+        if !connected, !touchGeometryUsable { controlsVisible = true }
         synchronizeInputFocus()
     }
 
     private func synchronizeInputFocus() {
         playback?.focusInput?(inputFocused)
         inputCaptureChanged?(inputFocused)
+        windowResize?.setAvailable(canStart && phase == .streaming)
     }
 
+    /// A resized window, or a continued game at an earlier size, moves to the window's listed mode.
+    func windowChanged(surface: StreamSurface) {
+        guard let current = requestedFormat, let target = try? launch.profile.resolve(surface: surface) else { return }
+        // The resume-only seam keeps the running frame rate.
+        windowResize?.submit(StreamFormat(width: target.width, height: target.height, fps: current.fps,
+                                          changeResolution: current.changeResolution))
+    }
+
+    func waitForWindowResize() async { await windowResize?.waitForPendingChange() }
+
     func screenChanged() { playback?.screenChanged() }
+
+    func prepareForDisplayChange() {
+        playback?.focusInput?(false)
+        inputCaptureChanged?(false)
+    }
+
+    func finishDisplayChange(external: Bool) {
+        externalDisplayActive = external
+        screenChanged()
+        synchronizeInputFocus()
+    }
 
     func waitUntilStartFinishes() async { await startTask?.value }
 
@@ -182,10 +298,11 @@ final class StreamSessionModel {
     private func receiveInput(_ event: StreamInput.Event) {
         switch event {
         case .stopRequested: disconnect()
+        // Engine activity includes the touch registration; only native discovery reports physical presence.
         case .controllersActive: break
         case .mouseMode(let controller, let enabled):
             if enabled { mouseControllers.insert(controller) } else { mouseControllers.remove(controller) }
-            if inputFocused, controllerConnected { showControllerMode(enabled) }
+            if inputFocused { showControllerMode(enabled) }
         }
     }
 
@@ -198,24 +315,53 @@ final class StreamSessionModel {
         }
     }
 
+    private func recordFirstVideo() {
+        guard !hasReceivedVideo, let format = requestedFormat else { return }
+        firstVideo?(format)
+        pictureNeedsReview = launch.continuing && launch.useScreenSize && launch.previousFormat != nil
+        if pictureNeedsReview { controlsRequested = true; controlsVisible = true }
+    }
+
+    private func rejectPictureTrial() {
+        guard pictureNeedsReview else { return }
+        startupFailed?(requestedFormat)
+        pictureNeedsReview = false
+    }
+
+    private func holdForRecovery(_ event: StreamEvent) {
+        var quality = false
+        if case .adjustingQuality = event { quality = true }
+        if quality, !adjustingQuality { announce(StreamSession.adjustingQualityText) }
+        adjustingQuality = quality
+        // A bitrate-only change keeps the picture size, so it never judges a size trial.
+        if !quality { rejectPictureTrial() }
+        if !quality, launch.useScreenSize, let old = launch.previousFormat, old.isValid {
+            requestedFormat = StreamFormat(width: old.width, height: old.height, fps: old.fps,
+                                           changeResolution: old.changeResolution)
+        }
+        captureSuspended = true
+        phase = .reconnecting
+        synchronizeInputFocus()
+    }
+
     func receive(_ update: StreamSession.Update) {
         guard playback?.id == update.sessionID, !phase.isEnded else { return }
-        if case .stopped = update.event { complete(); return }
+        if case .stopped = update.event { if !quittingGame { complete() }; return }
         guard phase != .stopping else { return }
         switch update.event {
         case .firstFrame, .reconnected:
+            recordFirstVideo()
             hasReceivedVideo = true
             endingMessage = nil
             terminalFailure = false
             captureSuspended = false
+            adjustingQuality = false
             phase = .streaming
-            if controllerConnected, !controlsRequested { controlsVisible = false }
+            if !controlsRequested { controlsVisible = !controllerConnected && !touchGeometryUsable }
             synchronizeInputFocus()
-        case .reconnecting:
-            captureSuspended = true
-            phase = .reconnecting
-            synchronizeInputFocus()
+        case .reconnecting, .adjustingQuality: holdForRecovery(update.event)
         case .connectionTerminated(let code, let error):
+            rejectPictureTrial()
             let reason = StreamFailure.termination(code: code, hasReceivedVideo: hasReceivedVideo)
             terminalFailure = error != nil || reason != .unexpected
             if let error {

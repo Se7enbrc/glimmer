@@ -29,7 +29,7 @@ cli = importlib.import_module('ios-testflight')
 ENV = {
     'GITHUB_REPOSITORY': 'Se7enbrc/glimmer', 'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2',
     'EXPECTED_SHA': 'a' * 40, 'TRUSTED_TOOLING_SHA': 'b' * 40, 'GITHUB_SHA': 'b' * 40,
-    'IOS_VERSION': '2026.10.8', 'IOS_BUILD_NUMBER': '3', 'GITHUB_REF': 'refs/heads/main',
+    'IOS_FLAVOUR': 'production', 'IOS_VERSION': '2026.10.8', 'IOS_BUILD_NUMBER': '3', 'GITHUB_REF': 'refs/heads/main',
     'GITHUB_EVENT_NAME': 'workflow_dispatch',
     'GITHUB_WORKFLOW_REF': 'Se7enbrc/glimmer/.github/workflows/ios-testflight.yml@refs/heads/main',
 }
@@ -42,6 +42,10 @@ class TestFlightTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.expected = artifact.identity(ENV)
+        inspector = importlib.import_module('check-ios-diagnostics')
+        inspection = patch.object(inspector, 'inspect_app')
+        inspection.start()
+        self.addCleanup(inspection.stop)
 
     def fixture(self):
         root = self.root / 'Glimmer.xcarchive'
@@ -49,7 +53,7 @@ class TestFlightTests(unittest.TestCase):
         app.mkdir(parents=True)
         info = {'CFBundleIdentifier': artifact.BUNDLE, 'CFBundleExecutable': 'Glimmer',
                 'CFBundleShortVersionString': '2026.10.8', 'CFBundleVersion': '3',
-                'CFBundleSupportedPlatforms': ['iPhoneOS']}
+                'CFBundleSupportedPlatforms': ['iPhoneOS'], 'GlimmerBuildFlavour': 'production'}
         (app / 'Info.plist').write_bytes(plistlib.dumps(info))
         (app / 'Glimmer').write_bytes(b'inert executable fixture')
         (app / 'Glimmer').chmod(0o755)
@@ -65,6 +69,20 @@ class TestFlightTests(unittest.TestCase):
         symbols.mkdir(parents=True)
         (symbols / 'Glimmer').write_bytes(b'inert symbols fixture')
         return root
+
+    def test_flavour_is_required_and_submission_fails_closed(self):
+        for flavour in ('', 'unknown', 'sandbox', None):
+            with self.subTest(flavour=flavour), self.assertRaises(ValueError):
+                artifact.identity({**ENV, 'IOS_FLAVOUR': flavour})
+        self.assertFalse(artifact.app_store_source_eligible('beta'))
+        self.assertTrue(artifact.app_store_source_eligible('production'))
+        with self.assertRaises(KeyError):
+            artifact.identity({key: value for key, value in ENV.items() if key != 'IOS_FLAVOUR'})
+
+    def test_archive_rejects_flavour_mismatch(self):
+        root = self.fixture()
+        with self.assertRaisesRegex(ValueError, 'flavour mismatch'):
+            artifact.validate_archive(root, {**self.expected, 'IOS_FLAVOUR': 'beta'}, check_symbols=False)
 
     def test_apple_version_and_build_inputs(self):
         for build in ('1', '9999', '3.99', '3.99.99'):
@@ -93,14 +111,29 @@ class TestFlightTests(unittest.TestCase):
         (source / 'Glimmer').mkdir(parents=True)
         (source / 'Glimmer/Version.xcconfig').write_text('MARKETING_VERSION = 2026.10.8\n')
         head = subprocess.CompletedProcess([], 0, stdout=ENV['EXPECTED_SHA'])
-        with patch.object(cli.subprocess, 'run', return_value=head) as run, \
-                patch.object(cli, 'toolchain', return_value='Xcode 26.6'), \
-                patch.object(artifact, 'validate_archive'):
-            cli.archive(source, self.root / 'archive', self.expected)
-        command = run.call_args.args[0]
-        self.assertIn('SWIFT_SUPPRESS_WARNINGS=NO', command)
-        self.assertIn('SWIFT_TREAT_WARNINGS_AS_ERRORS=YES', command)
-        self.assertIn('GCC_TREAT_WARNINGS_AS_ERRORS=YES', command)
+        for flavour in ('beta', 'production'):
+            with self.subTest(flavour=flavour), patch.object(cli.subprocess, 'run', return_value=head) as run, \
+                    patch.object(cli, 'toolchain', return_value='Xcode 26.6'), \
+                    patch.object(artifact, 'validate_archive'):
+                cli.archive(source, self.root / 'archive', {**self.expected, 'IOS_FLAVOUR': flavour})
+            command = run.call_args.args[0]
+            self.assertIn('SWIFT_SUPPRESS_WARNINGS=NO', command)
+            self.assertIn('SWIFT_TREAT_WARNINGS_AS_ERRORS=YES', command)
+            self.assertIn('GCC_TREAT_WARNINGS_AS_ERRORS=YES', command)
+            conditions = 'GLIMMER_DIAGNOSTICS' if flavour == 'beta' else ''
+            self.assertIn(f'SWIFT_ACTIVE_COMPILATION_CONDITIONS={conditions}', command)
+            self.assertIn(f'GLIMMER_BUILD_FLAVOUR={flavour}', command)
+
+    def test_delivery_rejects_beta_receipt_for_production_before_credentials(self):
+        (self.root / 'Glimmer.ipa').write_bytes(b'fixture')
+        receipt = {'schema': 2, 'identity': {**self.expected, 'IOS_FLAVOUR': 'beta'},
+                   'app_store_source_eligible': False, 'external_testing_eligible': True,
+                   'ipa_sha256': artifact.digest(self.root / 'Glimmer.ipa')}
+        (self.root / 'receipt.json').write_text(json.dumps(receipt))
+        with patch.object(artifact, 'require_dispatch'), patch.object(signing.subprocess, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'identity mismatch'):
+                signing.upload(self.root, self.expected)
+            run.assert_not_called()
 
     def test_only_main_manual_workflow_can_access_distribution(self):
         artifact.require_dispatch(ENV)
@@ -116,17 +149,17 @@ class TestFlightTests(unittest.TestCase):
         with patch.dict(os.environ, {**ENV, 'RUNNER_TEMP': str(self.root)}, clear=True):
             with patch.object(checks, 'check', return_value={'sha': ENV['EXPECTED_SHA'], 'runs': []}) as check:
                 cli.gate(self.expected)
-                check.assert_called_once_with(ENV['EXPECTED_SHA'])
+                check.assert_called_once_with(ENV['EXPECTED_SHA'], candidate=True, delivery=True)
             with patch.object(checks, 'check', side_effect=ValueError('checks not green')):
                 with self.assertRaisesRegex(ValueError, 'checks not green'):
                     cli.gate(self.expected)
 
     def test_builder_runs_only_its_exact_nondefault_branch_commit(self):
-        env = {**ENV, 'GITHUB_SHA': 'a' * 40, 'GITHUB_REF': 'refs/heads/candidate', 'DEFAULT_BRANCH': 'main',
-               'GITHUB_WORKFLOW_REF': 'Se7enbrc/glimmer/.github/workflows/ios-testflight-build.yml@refs/heads/candidate'}
+        env = {**ENV, 'GITHUB_SHA': 'a' * 40, 'GITHUB_REF': 'refs/heads/release-candidate', 'DEFAULT_BRANCH': 'main',
+               'GITHUB_WORKFLOW_REF': 'Se7enbrc/glimmer/.github/workflows/ios-testflight-build.yml@refs/heads/release-candidate'}
         artifact.require_builder(env)
-        for key, value in [('GITHUB_SHA', 'c' * 40), ('GITHUB_REF', 'refs/heads/main'),
-                           ('DEFAULT_BRANCH', 'candidate'), ('DEFAULT_BRANCH', ''),
+        for key, value in [('GITHUB_SHA', 'c' * 40), ('GITHUB_REF', 'refs/heads/main'), ('GITHUB_REF', 'refs/heads/feature'),
+                           ('DEFAULT_BRANCH', 'release-candidate'), ('DEFAULT_BRANCH', ''),
                            ('GITHUB_EVENT_NAME', 'pull_request_target')]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 artifact.require_builder({**env, key: value})
@@ -358,23 +391,23 @@ class TestFlightTests(unittest.TestCase):
     def test_build_run_requires_workflow_source_repository_success_and_branch(self):
         run = {'id': 123, 'head_sha': 'a' * 40, 'head_repository': {'full_name': 'Se7enbrc/glimmer'},
                'event': 'workflow_dispatch', 'path': cli.BUILD_WORKFLOW, 'workflow_id': 17,
-               'status': 'completed', 'conclusion': 'success', 'head_branch': 'candidate', 'run_attempt': 2}
+               'status': 'completed', 'conclusion': 'success', 'head_branch': 'release-candidate', 'run_attempt': 2}
         cli.check_build_run(run, self.expected, 17, 'main')
         for key, value in [('id', 124), ('head_sha', 'b' * 40), ('head_repository', {'full_name': 'fork/glimmer'}),
                            ('event', 'pull_request_target'), ('path', '.github/workflows/other.yml'),
                            ('workflow_id', 18), ('status', 'in_progress'), ('conclusion', 'failure'),
-                           ('head_branch', 'main'), ('run_attempt', 0)]:
+                           ('head_branch', 'main'), ('head_branch', 'feature'), ('run_attempt', 0)]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 cli.check_build_run({**run, key: value}, self.expected, 17, 'main')
         with self.assertRaises(ValueError):
-            cli.check_build_run(run, self.expected, 17, 'candidate')
+            cli.check_build_run(run, self.expected, 17, 'release-candidate')
 
     def test_resolve_selects_exact_producing_attempt_and_emits_digest(self):
         checks = importlib.import_module('release-checks')
         workflow = {'id': 17, 'path': cli.BUILD_WORKFLOW, 'state': 'active'}
         run = {'id': 123, 'head_sha': 'a' * 40, 'head_repository': {'full_name': 'Se7enbrc/glimmer'},
                'event': 'workflow_dispatch', 'path': cli.BUILD_WORKFLOW, 'workflow_id': 17,
-               'status': 'completed', 'conclusion': 'success', 'head_branch': 'candidate', 'run_attempt': 4}
+               'status': 'completed', 'conclusion': 'success', 'head_branch': 'release-candidate', 'run_attempt': 4}
         metadata = {'id': 44, 'name': 'ios-unsigned-123-4', 'expired': False, 'digest': 'sha256:' + 'd' * 64,
                     'workflow_run': {'id': 123, 'head_sha': 'a' * 40}}
         with patch.dict(os.environ, {**ENV, 'DEFAULT_BRANCH': 'main'}, clear=True):
@@ -407,12 +440,12 @@ class TestFlightTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 signing.validate_profile(profile, 'ABCDEFGHIJ')
 
-    def test_export_is_internal_only_and_preserves_build_number(self):
+    def test_export_allows_external_testing_and_preserves_build_number(self):
         options = signing.export_options('ABCDEFGHIJ', 'c' * 40, self.profile()['UUID'])
         self.assertEqual(options['method'], 'app-store-connect')
         self.assertEqual(options['destination'], 'export')
         self.assertEqual(options['signingStyle'], 'manual')
-        self.assertTrue(options['testFlightInternalTestingOnly'])
+        self.assertIs(options['testFlightInternalTestingOnly'], False)
         self.assertFalse(options['manageAppVersionAndBuildNumber'])
         self.assertEqual(set(options['provisioningProfiles']), {artifact.BUNDLE})
 
@@ -485,7 +518,7 @@ class TestFlightTests(unittest.TestCase):
         self.assertNotIn('actions/cache', build)
         self.assertIn('ref: ${{ github.sha }}', build)
         self.assertNotIn('ref: ${{ inputs.expected_sha }}', build)
-        self.assertIn("github.ref != 'refs/heads/main'", build)
+        self.assertIn("github.ref ==\n      'refs/heads/release-candidate'", build)
         self.assertIn('github.event.repository.default_branch', build)
         self.assertNotIn('ios-testflight.py archive', workflow)
         self.assertNotIn('ref: ${{ inputs.expected_sha }}', workflow)
@@ -498,6 +531,8 @@ class TestFlightTests(unittest.TestCase):
         self.assertLess(signing_job.index('ios-testflight.py gate'), signing_job.index('IOS_DISTRIBUTION_P12_BASE64'))
         self.assertLess(signing_job.index('ios-testflight.py import'), signing_job.index('IOS_DISTRIBUTION_P12_BASE64'))
         self.assertLess(signing_job.index('Preserve signed bytes before upload'), signing_job.index('ASC_KEY_BASE64'))
+        self.assertEqual(signing_job.count('ios-testflight.py gate'), 2)
+        self.assertLess(signing_job.rindex('ios-testflight.py gate'), signing_job.index('ASC_KEY_BASE64'))
         self.assertIn('if: always()\n        run: python3 scripts/ios-testflight.py cleanup', signing_job)
         self.assertNotIn('notarytool', workflow)
 

@@ -113,6 +113,7 @@ struct GeneralPane: View {
                 }
                 .accessibilityLabel("Play sound on the PC")
             }
+            DisconnectSettings()
             Section {
                 // Picker sourced from the selected host's announced app
                 // list (Sunshine's `applist`). "Desktop" is always
@@ -189,6 +190,7 @@ enum CommonResolution: CaseIterable {
 struct QualityPane: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
 
     /// The privileged AWDL network helper (parks awdl0 during streams). Shared
     /// singleton so this toggle and the stream lifecycle drive one instance.
@@ -382,7 +384,7 @@ struct QualityPane: View {
             }
 
             Section("Your next stream") {
-                Text(model.streamSpecSummary)
+                Text(model.streamSpecSummary(adaptive: adaptiveBandwidth))
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
             }

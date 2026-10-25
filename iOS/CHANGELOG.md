@@ -2,6 +2,9 @@
 
 ## 2026.10.8 (build 3, unreleased)
 
+- iPhone and iPad can send the streamed picture to a connected display while
+  keeping controls on the device. iPad streams also fill Stage Manager windows.
+
 - iPhone and iPad releases now use Glimmer's shared calendar version.
 
 - Forget a PC from Settings and pair again after resetting Sunshine. Other saved

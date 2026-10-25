@@ -8,10 +8,15 @@ import SwiftUI
 struct GlimmerApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @Environment(\.scenePhase) private var scenePhase
-    @State private var launcher = LauncherModel.make()
+    @State private var launcher: LauncherModel
     private let displayActivity = AppDisplayActivity()
 
     init() {
+        #if DEBUG
+        _launcher = State(initialValue: UITestLauncher.make() ?? .make())
+        #else
+        _launcher = State(initialValue: .make())
+        #endif
         DiagnosticsDefaults.register()
     }
 
@@ -59,9 +64,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         idiom == .pad ? .all : .allButUpsideDown
     }
 
+    static func streamOrientations(for idiom: UIUserInterfaceIdiom) -> UIInterfaceOrientationMask {
+        idiom == .pad ? .all : .landscape
+    }
+
     static func orientationMask(for window: UIWindow?) -> UIInterfaceOrientationMask {
-        if let window, let root = window.rootViewController, containsStream(root, in: window) { return .landscape }
-        return menuOrientations(for: window?.traitCollection.userInterfaceIdiom ?? UIDevice.current.userInterfaceIdiom)
+        let idiom = window?.traitCollection.userInterfaceIdiom ?? UIDevice.current.userInterfaceIdiom
+        if let window, let root = window.rootViewController, containsStream(root, in: window) {
+            return streamOrientations(for: idiom)
+        }
+        return menuOrientations(for: idiom)
     }
 
     private static func containsStream(_ controller: UIViewController, in window: UIWindow) -> Bool {

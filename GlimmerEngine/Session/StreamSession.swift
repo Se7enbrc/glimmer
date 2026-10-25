@@ -17,6 +17,16 @@ public actor StreamSession {
     package var publicTerminal = false
     package var publicStarted = false
     package var suppliedRouteMTU: Int?
+    package var bandwidthPolicy: BandwidthPolicy?
+    package var bandwidthLastObservation: Double?
+    package var bandwidthConnectRTT: RttStats?
+    package var bandwidthProbeGeneration: UInt64?
+    package var bandwidthSampler = BandwidthHealthSampler()
+    package var bandwidthTransition: BandwidthRequest?
+    package var adaptiveBandwidth = false
+    /// The rate the policy chose for this stream's first ANNOUNCE; nil when adaptive quality is off.
+    public internal(set) var adaptiveStartKbps: Int?
+    package var bandwidthSizeAttemptAt = -Double.infinity
     package var waitingForVideo = false
     package var attemptID = UUID()
     package var telemetryGeneration: UInt64 = 0
@@ -190,6 +200,14 @@ public actor StreamSession {
     package var reachedLiveState = false
     /// The episode owns retries while the frame/present watchdogs stay quiet.
     package var isReconnecting = false
+    package var bitrateChange: BitrateChange?
+    package var bitrateTask: Task<Void, Never>?
+    package var bitrateAvailable = true
+    package var qualityNotice = QualityNoticeGate()
+    package var preserveGameOnStop = false
+    package var bitrateAudioTail: (id: UUID, attempt: UUID, oldLast: Double)?
+    public internal(set) var appliedBitrateKbps: Int?
+    public internal(set) var lastBitrateChange: BitrateChangeReport?
     /// Attempt counter for the current reconnect episode.
     package var reconnectAttempts = 0
     /// The last attempt's classified failure; a give-up hands it to the launcher so the copy names the fix.
@@ -253,7 +271,9 @@ public actor StreamSession {
     package nonisolated(unsafe) var presentMetricTimer: Timer?
     /// Opt-in telemetry exporter (all-interfaces /metrics + NDJSON); nil unless
     /// enabled. See StreamSession+Telemetry.swift for gating + safety.
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     package var telemetryExporter: TelemetryExporter?
+    #endif
 
     // Present-path watchdog tuning constants live with the watchdog logic in
     // StreamSession+Watchdog.swift; the episode/recovery STATE they gate stays
@@ -298,8 +318,10 @@ public actor StreamSession {
     // `stop()` closes an aborted connection-flow interval when connection
     // setup fails before `nativeConnectionEstablished()`, keeping the
     // Instruments timeline from showing it as still open.
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     package var connectFlowState: OSSignpostIntervalState?
     package let connectFlowSignpostID = OSSignposter.network.makeSignpostID()
+    #endif
 
     // Controller input does not reset display idle time, so a visible stream
     // needs an assertion. Hidden streams still keep system sleep and App Nap
@@ -319,6 +341,9 @@ public actor StreamSession {
     package var stopCause: DisconnectReason?
     package var teardown = SharedTeardown()
     package var takeoverAuthorized = false
+    package var approvedOccupant: Int?
+    package var continuationOnly = false
+    package var continuationRecovery: ContinuationFormat?
     package var ownsHostSession = false
     package var hostSessionClientID: String?
     package var hostSessionAppID: Int?
@@ -332,7 +357,7 @@ public actor StreamSession {
     /// answer as the PC; production uses the real client and the native engine.
     package let makeNetwork: @Sendable (ServerInfo) -> NetworkClient
     package let makeBackend: @Sendable () -> StreamingBackend
-    package let hostDisposition: StreamHostDisposition
+    package var hostDisposition: StreamHostDisposition
     /// Every watchdog, metric and backoff reads time here, so tests can script it.
     package nonisolated let clock: SessionClock
 

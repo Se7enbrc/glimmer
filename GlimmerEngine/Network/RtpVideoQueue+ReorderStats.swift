@@ -30,6 +30,7 @@ extension RtpVideoQueue {
     /// Record one reordered packet's displacement. Called from
     /// `accumulateReceiveQuality` on the genuine-reorder branch only.
     func recordReorderDisplacement(seq: UInt16, receiveTimeUs: UInt64) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         // Displacement in packets: wrap-aware distance behind the highest seq
         // accepted (how many sequence slots overtook it, dups notwithstanding).
         let dispPackets = Int(Self.u16(Int(seqHighestSeen) - Int(seq)))
@@ -64,16 +65,19 @@ extension RtpVideoQueue {
             tracker.reorderDisplacementMs.observe(dispMs)
             tracker.reorderDisplacementPackets.observe(Double(dispPackets))
         }
+        #endif
     }
 
     /// Flush the displacement gauge alongside the per-window FEC health publish
     /// (maybeLogMetrics, ~2s cadence). Session-lifetime maxes + the hold,
     /// so the exporter can emit the margin without touching this thread.
     func publishReorderDisplacementGauge() {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         TelemetryCounters.shared.setReorderDisplacement(
             TelemetryCounters.ReorderDisplacementSnapshot(
                 maxMs: reorderDispSessionMaxMs,
                 maxPackets: reorderDispSessionMaxPackets,
                 holdMs: Double(Self.reorderWindowUs) / 1000.0))
+        #endif
     }
 }

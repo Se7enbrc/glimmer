@@ -26,6 +26,7 @@ final class MacSessionServices: @unchecked Sendable {
         result.stopLog = { SessionLogFileSink.stop() }
         result.captureEnd = { SessionReceiptStore.captureStreamEnd(rttMs: $0, collector: $1) }
         result.armWake = { self.armWake($0) }
+        result.armAvailability = { self.armAvailability($0) }
         result.stopWake = { self.stopWake() }
         result.latchHost = { StreamRouteProbe.latchHost($0) }
         result.route = { MacStreamPath.probe(host: $0.address, rttPort: UInt16($0.httpsPort), rtt: $1) }
@@ -96,6 +97,16 @@ final class MacSessionServices: @unchecked Sendable {
                                                 object: nil, queue: .main) { _ in wake() })
     }
 
+    private func armAvailability(_ changed: @escaping @Sendable (Bool) -> Void) {
+        let center = NSWorkspace.shared.notificationCenter
+        for (name, available) in [(NSWorkspace.willSleepNotification, false),
+                                  (NSWorkspace.didWakeNotification, true)] {
+            wakeObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { _ in
+                changed(available)
+            })
+        }
+    }
+
     private func stopWake() {
         let center = NSWorkspace.shared.notificationCenter
         for token in wakeObservers { center.removeObserver(token) }
@@ -104,11 +115,24 @@ final class MacSessionServices: @unchecked Sendable {
 }
 
 extension StreamSession {
+    /// The app's session: route path facts start before launch so the first ask sees the real path.
+    @MainActor static func mac(server: ServerInfo, disposition: StreamHostDisposition,
+                               makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient)
+        -> (StreamSession, BandwidthSignals) {
+        let bandwidth = BandwidthSignals()
+        bandwidth.start(host: server.address)
+        let session = StreamSession(hostDisposition: disposition, backend: MacTransport.makeBackend(),
+                                    makeNetwork: makeNetwork, bandwidthInputs: bandwidth.inputs)
+        return (session, bandwidth)
+    }
+
     init(hostDisposition: StreamHostDisposition, backend: any StreamingBackend = MacTransport.makeBackend(),
          makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) },
          makeBackend: @escaping @Sendable () -> any StreamingBackend = { MacTransport.makeBackend() },
-         clock: SessionClock = SessionClock()) {
-        self.init(hostDisposition: hostDisposition, audioDecoder: AudioDecoder(), services: MacSessionServices().services(),
+         clock: SessionClock = SessionClock(), bandwidthInputs: BandwidthInputs? = nil) {
+        var services = MacSessionServices().services()
+        services.bandwidthInputs = bandwidthInputs
+        self.init(hostDisposition: hostDisposition, audioDecoder: AudioDecoder(), services: services,
                   backend: backend, makeNetwork: makeNetwork, makeBackend: makeBackend, clock: clock)
     }
 }

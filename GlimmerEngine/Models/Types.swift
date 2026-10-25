@@ -212,6 +212,9 @@ public enum StreamEvent: Sendable {
     /// Shared recovery retains the last frame while a replacement transport connects.
     /// Ends with reconnected or, when recovery gives up, connectionTerminated.
     case reconnecting
+    /// A requested bitrate change has held the frame long enough to name. Ends like reconnecting.
+    /// Shown at most once a minute unless the hold passes the breakthrough threshold.
+    case adjustingQuality
     /// A silent reconnect succeeded - the stream resumed in place. The UI
     /// returns to the streaming state; the fresh `.connectionEstablished` /
     /// `.firstFrame` edges also promote the phase, so this is belt-and-braces.

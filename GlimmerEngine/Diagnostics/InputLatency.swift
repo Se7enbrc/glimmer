@@ -24,6 +24,7 @@ package struct InputEventTiming: Sendable {
     }
 }
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 /// Each TLS cell belongs to one OS thread. Scopes clear it before returning to the event loop.
 package final class InputTimingContext: @unchecked Sendable {
 
@@ -263,3 +264,29 @@ package final class InputLatency: @unchecked Sendable {
 
     package func snapshot() -> [Row] { lock.withLock { rows } }
 }
+
+#else
+package enum InputTimingContext {
+    package struct Capture: Sendable {
+        package func samples() -> [InputEventTiming] { [] }
+    }
+    package struct Pause {
+        package func restore() {}
+    }
+    @inlinable package static func begin(source: InputEventTiming.Source, timestamp: TimeInterval,
+                                         handler: UInt64 = 0) {}
+    @inlinable package static func begin(samples: [InputEventTiming]) {}
+    @inlinable package static func end() {}
+    @inlinable package static func allowRelease(_ release: InputReleaseLedger.Release) {}
+    @inlinable package static func allowModifierReleases() {}
+    @inlinable package static func suspend(except release: InputReleaseLedger.Release? = nil) -> Pause? { nil }
+    @inlinable package static func coalesced(timestamp: TimeInterval) {}
+    @inlinable package static func take() -> Capture? { nil }
+}
+
+package struct InputTimingBatch: Sendable {
+    @inlinable package init?(_ samples: [InputEventTiming], tracker: FrameInstrumentation?) { nil }
+    @inlinable package func submitted(at sent: UInt64) {}
+    @inlinable package func completed(sent: UInt64, at completed: UInt64) {}
+}
+#endif

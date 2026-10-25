@@ -1,47 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-//
-//  TelemetryCounters.swift
-//
-//  The process-global, always-live event counters + activity gauges the opt-in
-//  telemetry exporter snapshots. Split out of TelemetryExporter.swift to keep
-//  each unit focused; see that file for the exporter, gate, snapshot type, and
-//  the gate/safety contract.
-//
-//  These counters are always-live, not gated - see the `TelemetryCounters` type
-//  doc below for why.
-//
-//  Code map (this type is split across same-module extension files)
-//  ----------------------------------------------------------------
-//    * TelemetryCounters.swift             - the class decl + every stored
-//                                            counter / gauge field.
-//    * TelemetryCounters+Types.swift       - the nested value types + constants.
-//    * TelemetryCounters+Lifecycle.swift   - lock lifecycle + the session reset.
-//    * TelemetryCounters+Gauges.swift      - decode / packet-gap / jitter / RTT /
-//                                            present-suppression gauge accessors.
-//    * TelemetryCounters+AudioGauges.swift - audio playout gauges + cold-start.
-//    * TelemetryCounters+InputActivity.swift - input stamp + idle-edge reads.
-//    * TelemetrySessionEvents.swift        - the P2 lifecycle state + accessors.
-//
+// Field notes describe Mac and beta diagnostics. Production iOS retains control measurements;
+// diagnostic event totals have no storage, and diagnostic-only collectors are excluded.
 
 import Foundation
 import os
 
 // MARK: - Event counters
 
-/// Monotonic, process-global event counters fed from the rare event sites across
-/// the engine (IDR/RFI requests, backlog overflow, present stalls, frame loss,
-/// unrecoverable frames, pacer give-up) plus the receive-path packet/FEC totals.
-/// All `OSAllocatedUnfairLock`-free: each counter is its own atomic so an
-/// increment is a single locked add with no cross-counter contention. These are
-/// ALWAYS live (not gated) because the increments are unconditional integer adds
-/// at already-rare sites - gating them would buy nothing and risk a skew between
-/// the gate and the site. The exporter snapshots them; when the exporter is off,
-/// nothing reads them and they simply accumulate harmlessly.
-///
-/// `@unchecked Sendable`: every field is an `Atomic*`-style counter guarded by
-/// its own lock, so the type is safe to touch from any thread (receive thread,
-/// decode queue, pacing queue, main actor).
+/// Counters and gauges shared by stream control and optional recording.
+/// `@unchecked Sendable`: stored counters and gauge values synchronize their own mutations.
 package final class TelemetryCounters: @unchecked Sendable {
     package static let shared = TelemetryCounters()
 
@@ -59,7 +27,7 @@ package final class TelemetryCounters: @unchecked Sendable {
 
     // ---- Receive-path totals (the exporter derives pkts/s + fec rate from
     //      deltas of these monotonic totals; recv-jitter is a live gauge). ----
-    package let videoPacketsTotal = Counter()
+    package let videoPacketsTotal = Counter(operational: true)
     package let videoFramesTotal = Counter()
     package let fecRecoveredFramesTotal = Counter()
     package let inputEventsTotal = Counter()
@@ -87,7 +55,7 @@ package final class TelemetryCounters: @unchecked Sendable {
     package let videoPacketsLostPreFecTotal = Counter()
     /// Packets that arrived with a sequence number BEHIND the highest already seen
     /// (genuine reorder on the wire).
-    package let videoPacketsOutOfOrderTotal = Counter()
+    package let videoPacketsOutOfOrderTotal = Counter(operational: true)
     /// Packets whose sequence number was already observed (true duplicates).
     package let videoPacketsDuplicateTotal = Counter()
 
@@ -97,7 +65,7 @@ package final class TelemetryCounters: @unchecked Sendable {
     //      stall (paired with the already-surfaced oldest-unacked trend from
     //      enetHealth()). Always-live integer add at the already-rare retransmit
     //      site (sub-2Hz under a healthy link). ----
-    package let enetRetransmitTotal = Counter()
+    package let enetRetransmitTotal = Counter(operational: true)
 
     /// ACK-silence near-miss total (P1 NETWORK). Bumped once per EDGE the control
     /// loop's ACK silence crosses a deep RTT multiple short of the dead-peer cutoff
@@ -126,11 +94,11 @@ package final class TelemetryCounters: @unchecked Sendable {
     //      >20ms gaps per ~2s window; audio compares last-arrival; the ENet
     //      leg counts reliable-ACK DELAYS - idle-proof, sees idle doze). ----
     package let videoGapOver20msTotal = Counter()
-    package let videoGapOver50msTotal = Counter()
-    package let videoGapOver100msTotal = Counter()
+    package let videoGapOver50msTotal = Counter(operational: true)
+    package let videoGapOver100msTotal = Counter(operational: true)
     package let audioGapOver20msTotal = Counter()
-    package let audioGapOver50msTotal = Counter()
-    package let audioGapOver100msTotal = Counter()
+    package let audioGapOver50msTotal = Counter(operational: true)
+    package let audioGapOver100msTotal = Counter(operational: true)
     package let enetGapOver20msTotal = Counter()
     package let enetGapOver50msTotal = Counter()
     package let enetGapOver100msTotal = Counter()
@@ -382,7 +350,7 @@ package final class TelemetryCounters: @unchecked Sendable {
     /// scheduled buffers and had nothing to play (a gap / glitch the user hears).
     /// Bumped on the audio output path when a scheduled buffer completes and the
     /// scheduled-ahead duration has fallen to zero. Always-live integer add.
-    package let audioUnderrunTotal = Counter()
+    package let audioUnderrunTotal = Counter(operational: true)
     /// Audio output buffer OVER-RUNs this session: a decoded buffer was dropped
     /// because the scheduled-ahead backlog already exceeded the safety CEILING
     /// (the worst-case-link backstop). CEILING-BACKSTOP ONLY - the designed
@@ -443,6 +411,7 @@ package final class TelemetryCounters: @unchecked Sendable {
     /// rather than guessing). The lock is on the telemetry path only - when the
     /// gate is off the tracker that reads it doesn't exist, so the present hot
     /// path never touches it.
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     let rttLock = os_unfair_lock_t.allocate(capacity: 1)
     var rttMsValue: Double = 0
 
@@ -586,6 +555,7 @@ package final class TelemetryCounters: @unchecked Sendable {
     /// receiver exists. 0 = not anchored yet. Crosses the receiver-init →
     /// recv-thread boundary, so it lives here behind the measured value's lock.
     var audioStreamStartNanosValue: UInt64 = 0
+    #endif
 
     package init() { initializeGaugeLocks() }
     deinit { deallocateGaugeLocks() }

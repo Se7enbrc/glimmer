@@ -5,12 +5,18 @@ import GlimmerEngine
 import UIKit
 
 enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
-    case fullHD60, fullHD120, native120
+    case native120, fullHD60, fullHD120
 
     static let bitrateKbps = 20_000
 
     var id: Self { self }
-    var summary: String { "\(label) · \(Self.bitrateKbps / 1000) Mbps requested" }
+    /// Adaptive quality chooses the rate from the connection, so no fixed number is promised.
+    func summary(adaptive: Bool) -> String {
+        adaptive ? "\(label) · adaptive bitrate" : "\(label) · \(Self.bitrateKbps / 1000) Mbps requested"
+    }
+
+    /// Low Data Mode's reduced profile: at most 1080p and 60 fps.
+    static let lowData = StreamProfile.fullHD60
     var label: String {
         switch self {
         case .fullHD60: "1080p · 60 fps"
@@ -19,32 +25,92 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    enum Failure: Error { case displayUnavailable }
+    /// A native-size trial asks for the window's listed size at this profile's refresh cap.
+    func screenSize(windowPixels: CGSize, maximumFramesPerSecond: Int) throws -> StreamFormat {
+        try Self.native120.resolve(windowPixels: windowPixels,
+                                   maximumFramesPerSecond: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond))
+    }
 
-    func resolve(nativePixels: CGSize, maximumFramesPerSecond: Int) throws -> StreamFormat {
-        guard nativePixels.width.isFinite, nativePixels.height.isFinite,
-              nativePixels.width > 0, nativePixels.height > 0,
-              nativePixels.width < CGFloat(Int32.max), nativePixels.height < CGFloat(Int32.max),
-              maximumFramesPerSecond > 0 else { throw Failure.displayUnavailable }
-        let native = self == .native120
-        let size = StreamQuality.encodableSize(
-            width: native ? Int(max(nativePixels.width, nativePixels.height)) : 1920,
-            height: native ? Int(min(nativePixels.width, nativePixels.height)) : 1080)
-        return StreamFormat(width: size.width, height: size.height,
-                            fps: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond))
+    enum Failure: Error { case displayUnavailable, modesUnavailable }
+
+    func resolve(windowPixels: CGSize, maximumFramesPerSecond: Int) throws -> StreamFormat {
+        let width = windowPixels.width
+        let height = windowPixels.height
+        guard width.isFinite, height.isFinite, width >= 1, height >= 1,
+              width < CGFloat(Int32.max), height < CGFloat(Int32.max),
+              maximumFramesPerSecond >= 30 else { throw Failure.displayUnavailable }
+        let target = StreamQuality.encodableSize(width: Int(width), height: Int(height))
+        let size = self == .native120
+            ? CGSize(width: max(2, target.width), height: max(2, target.height))
+            : CGSize(width: 1920, height: 1080)
+        guard let mode = StreamDisplayModes.closest(to: size,
+            maximumFPS: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond)) else {
+            throw Failure.modesUnavailable
+        }
+        return mode
+    }
+
+    @MainActor
+    func resolve(surface: StreamSurface) throws -> StreamFormat {
+        guard let screen = surface.window?.windowScene?.screen else { throw Failure.displayUnavailable }
+        return try resolve(windowPixels: surface.streamPixels, maximumFramesPerSecond: screen.maximumFramesPerSecond)
+    }
+}
+
+/// The listed modes a stream uses: its profile's, and the reduced one for Low Data Mode.
+struct StreamFormats: Equatable, Sendable {
+    let full: StreamFormat
+    let lowData: StreamFormat
+
+    init(full: StreamFormat, windowPixels: CGSize, maximumFramesPerSecond: Int) throws {
+        self.full = full
+        let reduced = try StreamProfile.lowData.resolve(windowPixels: windowPixels,
+                                                        maximumFramesPerSecond: maximumFramesPerSecond)
+        let smaller = reduced.width * reduced.height < full.width * full.height ? reduced : full
+        lowData = StreamFormat(width: smaller.width, height: smaller.height, fps: min(full.fps, reduced.fps),
+                               changeResolution: full.changeResolution)
+    }
+
+    /// Start under Low Data Mode at the reduced mode; either way both sizes ride along for later edges.
+    func start(lowData constrained: Bool) -> StreamFormat { constrained ? lowData : full }
+
+    var sizes: DataModeSizes {
+        DataModeSizes(fullWidth: full.width, fullHeight: full.height,
+                      lowDataWidth: lowData.width, lowDataHeight: lowData.height)
     }
 }
 
 /// One immutable format supplies decoder configuration, session negotiation and display pacing.
-struct StreamFormat: Equatable, Sendable {
+struct StreamFormat: Hashable, Sendable {
     let width: Int
     let height: Int
     let fps: Int
+    var changeResolution = true
+
+    var continuationFormat: ContinuationFormat {
+        ContinuationFormat(width: width, height: height, fps: fps, hdr: false, changeResolution: changeResolution)
+    }
+
+    static func continuing(_ launch: StreamLaunch, native: StreamFormat, maximumFPS: Int) -> StreamFormat {
+        guard !launch.useScreenSize else { return native }
+        let previous = launch.continuing ? launch.previousFormat : launch.startFormat
+        if let old = previous?.supported(maximumWidth: 3840, maximumHeight: 2160,
+                                                       maximumFPS: maximumFPS, supportsHDR: false) {
+            return StreamFormat(width: old.width, height: old.height, fps: old.fps,
+                                changeResolution: old.changeResolution)
+        }
+        var result = native
+        result.changeResolution = !launch.continuing
+        return result
+    }
 
     var summary: String { "\(width) × \(height) · \(fps) fps" }
     var pacingFPS: Int32 { Int32(fps) }
-    var configuration: StreamConnection.Configuration {
-        StreamConnection.Configuration(width: width, height: height, fps: fps, bitrateKbps: StreamProfile.bitrateKbps,
-                                       videoFormats: .h264, audio: .stereo)
+    func configuration(potentialEDRHeadroom: Double, hardwareFormats: VideoFormats = .hardwareSupported,
+                       sizes: DataModeSizes? = nil) -> StreamConnection.Configuration {
+        let formats = hardwareFormats.forDisplay(potentialEDRHeadroom: potentialEDRHeadroom)
+        return StreamConnection.Configuration(width: width, height: height, fps: fps,
+            bitrateKbps: StreamProfile.bitrateKbps, videoFormats: formats, audio: .stereo,
+            changeResolution: changeResolution, resumeResolutionChange: true, dataModeSizes: sizes)
     }
 }

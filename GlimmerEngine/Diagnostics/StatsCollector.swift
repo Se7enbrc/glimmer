@@ -8,6 +8,7 @@
 import Foundation
 import QuartzCore
 import os
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 package final class StatsCollector: @unchecked Sendable {
 
     package init() {}
@@ -74,6 +75,7 @@ package final class StatsCollector: @unchecked Sendable {
     /// detect a screen freeze without depending on the pacer's liveness (which
     /// is nil in direct mode - the gap that let the direct path wedge with no
     /// recovery). 0 means we haven't presented our first frame yet.
+    var firstPresentTime: CFAbsoluteTime = 0
     var lastPresentTime: CFAbsoluteTime = 0
     var receivedFrames: UInt64 = 0
     var decodedFrames: UInt64 = 0
@@ -317,6 +319,7 @@ package final class StatsCollector: @unchecked Sendable {
         lastDecodeCallbackTime = 0
         decoderDroppedFrames = 0
         lastDecodedFrameTime = 0
+        firstPresentTime = 0
         lastPresentTime = 0
         windowStart = CACurrentMediaTime()
         hostFrameRate = HostFrameRate(now: windowStart)
@@ -504,3 +507,61 @@ package final class StatsCollector: @unchecked Sendable {
             lateByHostPercent: presents > 0 ? Double(hostTimedLatePresents) / Double(presents) * 100.0 : nil)
     }
 }
+#else
+/// Production keeps watchdog clocks and the byte count the bandwidth policy reads. The lock guards all state.
+package final class StatsCollector: @unchecked Sendable {
+    let lock = OSAllocatedUnfairLock()
+    private var lastDecodedFrameTime: Double = 0
+    var firstPresentTime: Double = 0
+    var lastPresentTime: Double = 0
+    private var receivedBytes: UInt64 = 0
+
+    package struct HostCadence: Sendable {
+        package var intervalP50Ms: Double
+        package var intervalP95Ms: Double
+        package var unevenPairs: UInt64
+        package var lateByHostPercent: Double?
+    }
+
+    package init() {}
+    package func receivedBytesSnapshot() -> UInt64 { lock.withLock { receivedBytes } }
+    package func recordReceivedFrame(bytes: Int, isIDR: Bool = false, ptsUs: UInt64 = 0,
+                                     frameNumber: Int32, hostProcessingLatency: UInt16 = 0) {
+        lock.withLock { receivedBytes &+= UInt64(max(0, bytes)) }
+    }
+    package func recordDecodedFrame() { lock.withLock { lastDecodedFrameTime = CACurrentMediaTime() } }
+    package func recordRendererEnqueue() {
+        lock.withLock {
+            let now = CACurrentMediaTime()
+            if firstPresentTime == 0 { firstPresentTime = now }
+            lastPresentTime = now
+        }
+    }
+    package var presentationTimes: (first: Double?, last: Double?) {
+        lock.withLock { (firstPresentTime > 0 ? firstPresentTime : nil, lastPresentTime > 0 ? lastPresentTime : nil) }
+    }
+    package func secondsSinceLastDecodedFrame() -> Double {
+        lock.withLock { lastDecodedFrameTime > 0 ? CACurrentMediaTime() - lastDecodedFrameTime : .infinity }
+    }
+    package func secondsSinceLastPresent() -> Double {
+        lock.withLock { lastPresentTime > 0 ? CACurrentMediaTime() - lastPresentTime : .infinity }
+    }
+    package func resetForConnection() {
+        lock.withLock { lastDecodedFrameTime = 0; firstPresentTime = 0; lastPresentTime = 0 }
+    }
+    package func dropPendingDecodeSubmits() {}
+    package func recordDecoderDiscard() {}
+    package func recordRendererBackpressureDrop() {}
+    package func recordPresentationLateDrop() {}
+    package func recordPresentationGap() {}
+    package func recordPacingDepth(_ depth: Int) {}
+    package func setGapJudgingExcluded(_ excluded: Bool) {}
+    package func recordPresent(cadenceErrorMs: Double, hostPTSSeconds: Double = .nan,
+                               streamIntervalMs: Double = 0, refreshMs: Double = 0) {}
+    package func snapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot { StreamStatsSnapshot() }
+    package func decoderDropCount() -> UInt64 { 0 }
+    package func backpressureDropCount() -> UInt64 { 0 }
+    package func presentationLateDropCount() -> UInt64 { 0 }
+    package func presentationGapCount() -> UInt64 { 0 }
+}
+#endif

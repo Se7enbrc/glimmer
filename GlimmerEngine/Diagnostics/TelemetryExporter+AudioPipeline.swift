@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 import Foundation
 
 extension TelemetryRenderer {
@@ -79,3 +80,5 @@ extension TelemetryRenderer {
          ("audio_rendered_frames_total", snapshot.renderedFrames)]
     }
 }
+
+#endif

@@ -2,12 +2,47 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import GlimmerEngine
+import SwiftUI
 import Testing
 import UIKit
 @testable import Glimmer
 
 @MainActor
 struct LauncherGalleryTests {
+    @Test(arguments: [DynamicTypeSize.large, .accessibility5], [Image.Scale.small, .medium, .large])
+    func steamGlyphRetainsLayoutAtEveryTextSize(textSize: DynamicTypeSize, scale: Image.Scale) {
+        let view = AppGlyph(name: "Steam Big Picture").dynamicTypeSize(textSize).imageScale(scale)
+        let host = UIHostingController(rootView: view)
+        let size = host.sizeThatFits(in: CGSize(width: 200, height: 200))
+        #expect(size.width > 0 && size.height > 0)
+    }
+
+    @Test(arguments: [LauncherStyle.buttons, .covers])
+    func accessibleAppHasRoomForItsFullTitle(style: LauncherStyle) async {
+        let title = "A game with a long title that should remain readable"
+        let fixture = LauncherFixture()
+        let app = HostApp(id: 1, name: title, hdrCapable: false, hidden: false)
+        let model = LauncherModel(calls: .init(savedPCs: { [fixture.saved] },
+            prepare: { _, _ in PreparedPC(network: testLaunch().network, server: fixture.server) },
+            pair: { pc, _ in pc }, apps: { _ in [app] }, remember: { _ in [fixture.saved] },
+            protectedDataChanged: { _ in }), discoveryEnabled: false)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        let width: CGFloat = 327
+        let gallery = UIHostingController(rootView:
+            LauncherGallery(model: model, style: style, size: CGSize(width: width, height: 667))
+                .dynamicTypeSize(.accessibility5))
+        let fullTitle = UIHostingController(rootView:
+            Text(title).font(style == .covers ? .headline : .body).fontWeight(.semibold)
+                .fixedSize(horizontal: false, vertical: true)
+                .dynamicTypeSize(.accessibility5))
+        let proposal = CGSize(width: width, height: 2_000)
+        let artworkHeight: CGFloat = style == .covers ? width / 0.75 + 8 : 0
+        let minimumHeight = artworkHeight + fullTitle.sizeThatFits(in: proposal).height
+        #expect(gallery.sizeThatFits(in: proposal).height >= minimumHeight)
+    }
+
     @Test func gridsFillAvailableColumnsAndAdaptToLargerText() {
         #expect(LauncherGrid.columns(width: 800, minimum: 220, count: 2) == 2)
         #expect(LauncherGrid.columns(width: 800, minimum: 220, count: 7) == 3)

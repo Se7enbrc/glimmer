@@ -53,10 +53,8 @@ extension VideoDecoder: VideoSink {
         VideoDecoder.rfiCapabilities
     }
 
-    /// Consume a Swift-native DecodeUnit. Walks the buffer chain (mirroring
-    /// handleSubmitDecodeUnit's PLENTRY walk) into parameter sets + concatenated
-    /// picture data, then hands them to the shared decode core. Returns
-    /// StreamProtocol.DR_OK / DR_NEED_IDR.
+    /// Select parameter sets now; concatenate picture buffers only after decode admission.
+    /// Hidden and resync-rejected frames retain receive accounting without copying their payload.
     public nonisolated func submitDecodeUnit(_ unit: DecodeUnit) -> Int32 {
         guard isStreaming else { return StreamProtocol.DR_OK }
 
@@ -67,7 +65,17 @@ extension VideoDecoder: VideoSink {
                                            ptsUs: unit.presentationTimeUs, frameNumber: unit.frameNumber,
                                            hostProcessingLatency: unit.frameHostProcessingLatency)
 
-        var pictureData = Data()
+        var pictureData: Data {
+            var data = Data()
+            for buffer in unit.buffers where buffer.kind == .picData {
+                if data.isEmpty {
+                    data = buffer.data
+                } else {
+                    data.append(buffer.data)
+                }
+            }
+            return data
+        }
         var newSps: Data?
         var newPps: Data?
         var newVps: Data?
@@ -77,12 +85,7 @@ extension VideoDecoder: VideoSink {
             case .sps: newSps = buffer.data
             case .pps: newPps = buffer.data
             case .vps: newVps = buffer.data
-            case .picData:
-                if pictureData.isEmpty {
-                    pictureData = buffer.data
-                } else {
-                    pictureData.append(buffer.data)
-                }
+            case .picData: break
             }
         }
 

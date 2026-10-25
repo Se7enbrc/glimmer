@@ -206,9 +206,11 @@ extension EnetControlChannel {
     /// Gate the stamp on the tracker so it pairs with the gated IDR resolver
     /// and costs only an optional load when telemetry is off.
     private func armIdrRoundTrip() {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard FrameTimingTracker.shared != nil else { return }
         TelemetryCounters.shared.p2.stampIdrRequest(TelemetryCounters.monotonicNowNanos())
         TelemetryCounters.shared.idrRoundTripRequestTotal.increment()
+        #endif
     }
 
     /// Seal before reserving a reliable sequence; failed encryption must never leave a hole.

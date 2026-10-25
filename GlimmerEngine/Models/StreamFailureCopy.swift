@@ -2,6 +2,22 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 public enum StreamFailureCopy {
+    public static func gameEnded(_ app: String, pc: String) -> String {
+        "\(app) ended on \(pc)."
+    }
+
+    public static func runningAppChanged(_ pc: String) -> String {
+        "The app running on \(pc) changed. Choose what to do next."
+    }
+
+    public static func quitUnconfirmed(_ app: String, pc: String) -> String {
+        "Couldn't confirm that \(app) quit on \(pc). Refresh the PC before trying again."
+    }
+
+    public static func quitRefused(_ pc: String) -> String {
+        "\(pc) wouldn't quit the app. If another device is streaming from it, stop that stream first."
+    }
+
     public static func needsSunshineMessage(_ pcName: String) -> String {
         "Glimmer needs Sunshine on \(pcName), which is running NVIDIA GameStream."
     }

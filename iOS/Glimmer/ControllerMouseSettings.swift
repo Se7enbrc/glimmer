@@ -23,12 +23,13 @@ struct GlimmerSettings: View {
     let model: LauncherModel
     var addPC: () -> Void = {}
     var pairPC: (HostDiscovery.Discovered) -> Void = { _ in }
-    @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
-    @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
-    @AppStorage("telemetryEnabled") private var diagnostics = false
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     enum Page: String, CaseIterable, Identifiable {
-        case general, quality, pcs, input, diagnostics
+        case general, quality, pcs, input
+        #if GLIMMER_DIAGNOSTICS
+        case diagnostics
+        #endif
         var id: Self { self }
         var title: String {
             switch self {
@@ -36,7 +37,9 @@ struct GlimmerSettings: View {
             case .quality: "Quality"
             case .pcs: "PCs"
             case .input: "Input"
+            #if GLIMMER_DIAGNOSTICS
             case .diagnostics: "Diagnostics"
+            #endif
             }
         }
         var symbol: String {
@@ -45,7 +48,9 @@ struct GlimmerSettings: View {
             case .quality: "gauge.with.dots.needle.67percent"
             case .pcs: "display"
             case .input: "gamecontroller"
+            #if GLIMMER_DIAGNOSTICS
             case .diagnostics: "stethoscope"
+            #endif
             }
         }
     }
@@ -56,7 +61,11 @@ struct GlimmerSettings: View {
                 Section {
                     ForEach(Page.allCases) { page in
                         NavigationLink { settingsPage(page) } label: {
-                            Label(page.title, systemImage: page.symbol)
+                            if dynamicTypeSize.isAccessibilitySize {
+                                Text(page.title)
+                            } else {
+                                Label(page.title, systemImage: page.symbol)
+                            }
                         }
                     }
                 }
@@ -72,12 +81,37 @@ struct GlimmerSettings: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+                }
             }
         }
     }
 
     func settingsPage(_ page: Page) -> some View {
+        GlimmerSettingsPage(profile: $profile, stick: $stick, model: model,
+                            addPC: addPC, pairPC: pairPC, page: page)
+    }
+}
+
+@MainActor
+private struct GlimmerSettingsPage: View {
+    @Binding var profile: StreamProfile
+    @Binding var stick: ControllerMouseStick
+    let model: LauncherModel
+    let addPC: () -> Void
+    let pairPC: (HostDiscovery.Discovered) -> Void
+    let page: GlimmerSettings.Page
+    @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
+    @AppStorage("leaveGamesRunning") private var leaveGamesRunning = false
+    @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
+    #if GLIMMER_DIAGNOSTICS
+    @AppStorage("telemetryEnabled") private var diagnostics = true
+    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
+    #endif
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
         Form {
             switch page {
             case .general:
@@ -86,10 +120,18 @@ struct GlimmerSettings: View {
                         ForEach(LauncherStyle.allCases) { Text($0.label).tag($0) }
                     }
                 }
-            case .quality: streamSettings
+                Section {
+                    Toggle("Leave games running when you disconnect", isOn: $leaveGamesRunning)
+                } footer: {
+                    Text("For games and PCs that handle a change in screen size. "
+                         + "Otherwise, disconnecting quits the game.")
+                }
+            case .quality: StreamQualitySettings(profile: $profile)
             case .pcs: computerSettings
             case .input: controllerSettings
+            #if GLIMMER_DIAGNOSTICS
             case .diagnostics: diagnosticSettings
+            #endif
             }
         }
         .navigationTitle(page.title)
@@ -108,15 +150,7 @@ struct GlimmerSettings: View {
     @ViewBuilder private var computerSettings: some View {
         if !model.savedPCs.isEmpty {
             Section("Paired PCs") {
-                ForEach(model.savedPCs) { pc in
-                    HStack {
-                        Label(pc.name, systemImage: "display")
-                        Spacer()
-                        Button("Forget…", role: .destructive) { model.requestForget(pc) }
-                            .accessibilityLabel("Forget \(pc.name)")
-                            .disabled(!model.canForgetPC)
-                    }
-                }
+                ForEach(model.savedPCs) { PairedPCRow(pc: $0, model: model) }
             }
         }
         if let failure = model.forgetFailure {
@@ -137,21 +171,13 @@ struct GlimmerSettings: View {
         }
     }
 
-    private var streamSettings: some View {
-        Section {
-            Picker("Stream format", selection: $profile) {
-                ForEach(StreamProfile.allCases) { option in Text(option.label).tag(option) }
-            }
-        } header: {
-            Text("Stream")
-        } footer: {
-            Text("Native matches this display's full resolution. The PC needs the same display mode. "
-                 + "Some games need 16:9. Choose 1080p if the picture looks wrong. "
-                 + "Changes apply to the next stream.")
-        }
-    }
-
     @ViewBuilder private var controllerSettings: some View {
+        Section("Controllers") {
+            NavigationLink("Controller layouts") {
+                ControllerLayoutsView()
+                    .onAppear { model.prepareControllerLayoutGames() }
+            }
+        }
         Section {
             Toggle(isOn: $touchMouseEnabled) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -176,12 +202,72 @@ struct GlimmerSettings: View {
         }
     }
 
+    #if GLIMMER_DIAGNOSTICS
     private var diagnosticSettings: some View {
         Section {
             Toggle("Record diagnostics", isOn: $diagnostics)
+            Toggle("Adaptive stream quality", isOn: $adaptiveBandwidth)
         } footer: {
-            Text("Saves performance and troubleshooting files on this iPhone for the next stream. "
-                 + "Nothing is uploaded. TestFlight builds turn this on by default.")
+            Text("Saves performance and troubleshooting files on this device for the next stream. "
+                 + "Nothing is uploaded. Adaptive stream quality lowers the bitrate when the connection "
+                 + "struggles and raises it again once it recovers. Beta builds turn both on by default.")
         }
+    }
+    #endif
+}
+
+@MainActor
+private struct PairedPCRow: View {
+    let pc: SavedPC
+    let model: LauncherModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let title = Label(pc.name, systemImage: "display")
+            .fixedSize(horizontal: false, vertical: true)
+        let forget = Button("Forget…", role: .destructive) { model.requestForget(pc) }
+            .accessibilityLabel("Forget \(pc.name)")
+            .disabled(!model.canForgetPC)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) { title; forget }
+            } else {
+                HStack { title; Spacer(); forget }
+            }
+        }
+    }
+}
+
+@MainActor
+private struct StreamQualitySettings: View {
+    @Binding var profile: StreamProfile
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        Section {
+            if dynamicTypeSize.isAccessibilitySize {
+                streamProfilePicker.pickerStyle(.inline)
+            } else {
+                streamProfilePicker
+            }
+        } header: {
+            Text("Stream")
+        } footer: {
+            Text(streamExplanation)
+        }
+    }
+
+    private var streamProfilePicker: some View {
+        Picker("Stream format", selection: $profile) {
+            ForEach(StreamProfile.allCases) { option in
+                Text(option.label).fixedSize(horizontal: false, vertical: true).tag(option)
+            }
+        }
+    }
+
+    private var streamExplanation: String {
+        "Native chooses the closest size from the iPhone and iPad display modes. "
+            + "Install those modes on the PC. The picture fills the window and may crop at the edges. "
+            + "Some games need 16:9. Choose 1080p if the picture looks wrong. Changes apply to the next stream."
     }
 }

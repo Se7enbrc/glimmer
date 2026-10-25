@@ -2,10 +2,54 @@
 
 ## 2026.10.8 - Unreleased
 
+- iPhone and iPad connections now check the route to the PC before choosing
+  packet sizes, including when playing through a tunnel.
+
 ### Features
+
+- The production iPhone and iPad app no longer includes diagnostic recording.
+  Beta builds keep local diagnostics on by default, with an option to turn them
+  off.
 
 - Open Support and the Privacy Policy from Settings on iPhone and iPad, or
   Settings → About on Mac.
+- iPhone and iPad can negotiate HEVC and AV1 when hardware decoding is
+  available, with 10-bit HDR on supported displays and H.264 fallback.
+- iPhone and iPad can send the streamed picture to a connected display while
+  keeping controls on the device. iPad streams also fit Stage Manager windows.
+- Disconnecting now quits the game on the PC on both Mac and iPhone/iPad,
+  including after the iOS background grace period. Turn on “Leave games running
+  when you disconnect” for games and PCs that handle a change in screen size.
+
+- Running games offer Resume or Continue here and Quit. Choosing another app
+  offers to quit the running game and start the new one. Continuation keeps a
+  known stream size and fits the picture; a different size is an explicit
+  choice.
+- Play with on-screen controls on iPhone and iPad. Move, resize or hide controls
+  for each PC app; connecting a controller clears them from the game. Show them
+  again from the stream menu for another player, just for that session.
+  Translucent controls follow Light and Dark appearance and become clearer while
+  held. Adjust the whole overlay's opacity under All controls in Edit controls
+  and save it with the layout.
+- Controller layouts use detailed diagrams for PlayStation, Xbox, Backbone and
+  MFi controllers, with back views for supported paddles and extra buttons.
+- Controller layouts show the shapes and controls of DualSense, DualSense Edge,
+- Controller layouts show clean line drawings of DualSense, DualSense Edge,
+  DualShock 4, Xbox Series, Xbox Elite Series 2 and both Backbone One editions,
+  with back views for supported paddles and a diagram for other MFi controllers.
+  Shoulder buttons curve along the grips, with triggers partly hidden behind
+  them.
+
+- Connection quality adjustments keep the game running on the PC and reconnect
+  in the same stream window. A slow one says “Adjusting stream quality…”, at
+  most once a minute unless it takes longer than 2 seconds; brief ones show
+  nothing.
+
+- Beta builds adapt stream quality to the connection on Mac, iPhone and iPad:
+  the bitrate drops within a few seconds when the network struggles and climbs
+  back once it recovers. iPhone and iPad start at 40 Mbps on Wi-Fi, 20 Mbps on
+  cellular and 9 Mbps in Low Data Mode, where they also stream at up to 1080p
+  and 60 fps. Turn it off in Diagnostics to compare.
 
 - Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
   Sequoia, windows and controls use the system's standard materials in place of
@@ -20,8 +64,8 @@
   a local evidence bundle that identifies missing or incomplete measurements.
   These builds are separate from automatic updates.
 
-- Stop the current stream and quit its game on the PC from a `glimmer://stop`
-  link, `glimmer stop` or the Stop Streaming shortcut.
+- Stop the current stream from a `glimmer://stop` link, `glimmer stop` or the
+  Stop Streaming shortcut. These actions follow your disconnect setting.
 
 - Smoother motion when the PC can't hold your display's refresh rate. On a
   variable-refresh display, refresh changes settle before taking effect and stay
@@ -69,10 +113,35 @@
 - Returning to Glimmer keeps the launcher ready when the PC answered recently,
   while checking its status in the background. A running game no longer makes
   the launcher wait for the PC to become idle.
-- On iPad, streams start in tall or square windows and keep the whole picture
-  visible when the window is resized.
 - The iPhone/iPad virtual display sample now includes the Native resolution
   requested by the open iPhone Duo in the iOS 27.1 Simulator.
+- PlayStation controllers, including the PlayStation Backbone, are identified
+  consistently on Mac, iPhone and iPad so compatible PC games can show matching
+  button prompts.
+- On iPhone, larger text has more room for PC names and full app titles. Steam's
+  launcher icon stays visible at every text size.
+- At larger accessibility text sizes on iPhone, paired PC names and stream
+  quality choices stay readable in Settings.
+- On iPhone, disconnected messages can scroll at larger text sizes, and
+  VoiceOver describes Done as returning to your apps.
+- iPad streams can start in portrait, Split View and narrow windows, using the
+  window's shape and resolution within the selected quality limit.
+- iPad streams can start in portrait, Split View and narrow windows. iPhone and
+  iPad share the same quality choices and use the supplied PC display modes.
+  Native chooses the closest size for the window. Resizing keeps the game
+  running, fills the window and moves to the new window's size once it settles.
+- iPad app buttons keep their grid size with a small library. Large text has
+  more room in PC names, saved-PC actions and stream controls. Connection
+  messages can scroll when space is tight.
+- Quality choices stay readable at accessibility text sizes on iPhone and iPad.
+- Open iPhone and iPad Settings with Command-comma and close them with
+  Command-period.
+- Steam's icon renders reliably in the launcher.
+- Large-text app buttons and Settings rows give their names more room in narrow
+  iPad windows.
+- Diagnostics describes saved files correctly on both iPhone and iPad.
+- Avoid unnecessary video processing while you briefly switch away from a
+  stream.
 
 - On Mac, a PC stays in the list if Glimmer cannot remove its saved pairing,
   with an error explaining how to try again.

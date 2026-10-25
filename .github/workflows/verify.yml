@@ -16,8 +16,9 @@ permissions:
 # A PR update or closure replaces its run; all other events keep independent runs.
 concurrency:
   group:
-    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref
-    }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
+    ${{ github.workflow }}-${{ github.ref }}-${{
+    github.event.pull_request.number || github.ref }}-${{ github.event_name ==
+    'pull_request' && 'pr' || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -271,7 +272,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.build == 'true'
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -285,7 +286,7 @@ jobs:
           persist-credentials: false
 
       - name: Test iPhone app against this checkout
-        timeout-minutes: 20
+        timeout-minutes: 40
         if: matrix.platform == 'Simulator'
         shell: bash
         run: |
