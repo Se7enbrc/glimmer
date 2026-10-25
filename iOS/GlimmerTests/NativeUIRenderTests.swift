@@ -406,27 +406,24 @@ struct NativeUIRenderTests {
                           inspect: ((UIView) throws -> Void)? = nil) async throws {
         let scene = try await testWindowScene()
         let previous = scene.windows.first(where: \.isKeyWindow)
-        let window = UIWindow(windowScene: scene)
-        window.overrideUserInterfaceStyle = dark ? .dark : .light
-        window.frame = scene.effectiveGeometry.coordinateSpace.bounds
-        window.traitOverrides.preferredContentSizeCategory = textSize == .accessibility5
-            ? .accessibilityExtraExtraExtraLarge : (textSize == .large ? .large : .extraExtraExtraLarge)
-        host.overrideUserInterfaceStyle = dark ? .dark : .light
-        let root: UIViewController
-        if let size {
-            root = FixtureViewportController(content: host, size: size)
-            if name.hasPrefix("ipad-") {
-                host.traitOverrides.horizontalSizeClass = size.width < 600 ? .compact : .regular
-            }
-        } else { root = host }
-        window.rootViewController = root
+        let phone = scene.traitCollection.userInterfaceIdiom != .pad
+        let rotates = portrait || (phone && size.map { $0.width > $0.height } ?? true)
+        let landscape: UIInterfaceOrientationMask = landscapeRight ? .landscapeRight : .landscapeLeft
+        let requested: UIInterfaceOrientationMask = portrait ? .portrait : landscape
+        let (window, root) = makeRenderWindow(host, scene: scene, name: name, size: size,
+                                              dark: dark, textSize: textSize,
+                                              orientations: phone && rotates ? requested : .all)
+        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
         window.makeKeyAndVisible()
-        // Resizable iPad scenes ignore orientation requests; they record the window as it is. A landscape
-        // phone fixture left in a portrait scene inherits the top inset, as no landscape-locked stream can.
-        if portrait || (scene.traitCollection.userInterfaceIdiom != .pad && size.map { $0.width > $0.height } ?? true) {
+        try await waitForUIState("The render fixture did not become the visible key window.") {
+            root.hasAppeared && window.isKeyWindow && scene.activationState == .foregroundActive
+        }
+        await finishTransition(root)
+        if rotates, phone {
             root.setNeedsUpdateOfSupportedInterfaceOrientations()
-            let landscape: UIInterfaceOrientationMask = landscapeRight ? .landscapeRight : .landscapeLeft
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: portrait ? .portrait : landscape))
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: requested)) { error in
+                Issue.record("The render fixture's orientation request failed: \(error)")
+            }
             try await waitForOrientation(scene, portrait: portrait, controller: root)
             if landscapeRight {
                 try await waitForUIState("The scene did not rotate to landscape right.") {
@@ -434,7 +431,6 @@ struct NativeUIRenderTests {
                 }
             }
         }
-        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
         root.view.setNeedsLayout()
         root.view.layoutIfNeeded()
         // Give SwiftUI one finite layout transaction on the hosted Simulator.
@@ -564,35 +560,5 @@ struct NativeUIRenderTests {
             #expect(joined)
             if !joined { finish() }
         }
-    }
-}
-
-@MainActor
-private final class FixtureViewportController: UIViewController {
-    private let content: UIViewController
-    private let size: CGSize
-
-    init(content: UIViewController, size: CGSize) {
-        self.content = content
-        self.size = size
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { content.supportedInterfaceOrientations }
-    override var prefersStatusBarHidden: Bool { content.prefersStatusBarHidden }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        addChild(content)
-        view.addSubview(content.view)
-        content.didMove(toParent: self)
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        content.view.frame = CGRect(origin: .zero, size: size)
     }
 }

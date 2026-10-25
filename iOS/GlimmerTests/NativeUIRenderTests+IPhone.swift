@@ -8,6 +8,17 @@ import UIKit
 @testable import Glimmer
 
 extension NativeUIRenderTests {
+    @Test(arguments: [false, true])
+    func fixtureKeepsRequestedOrientation(portrait: Bool) async throws {
+        try await record(Color.gray, name: "fixture-orientation-\(portrait)", size: nil,
+                         dark: false, portrait: portrait, inspect: { view in
+            let root = try #require(view.window?.rootViewController)
+            let requested: UIInterfaceOrientationMask = portrait ? .portrait : .landscapeLeft
+            let expected = view.traitCollection.userInterfaceIdiom == .pad ? .all : requested
+            #expect(root.supportedInterfaceOrientations == expected)
+        })
+    }
+
     @Test(arguments: [false, true], [DynamicTypeSize.large, .accessibility5])
     func iPhoneMenuInventory(portrait: Bool, textSize: DynamicTypeSize) async throws {
         for dark in [false, true] {
