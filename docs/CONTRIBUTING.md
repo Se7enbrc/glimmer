@@ -23,12 +23,41 @@ Use macOS 26 or later on Apple Silicon, with Xcode 26.6 or later. CI uses Xcode
 
 1. Install mise: `brew install mise`.
 2. From this checkout, install the pinned tools: `mise install`.
-3. Activate mise in your shell, then install hooks: `mise exec -- hk install`.
+3. Install the [guarded hooks](#migrate-shared-hooks) for all worktrees.
 4. List the everyday commands: `make help`.
 
-With mise activated, step 3 is simply `hk install`. Hooks launch through mise
-and do not download tools during a commit. Existing contributors should run
-`pre-commit uninstall` once before `mise exec -- hk install`.
+Hooks launch through mise and do not download tools during a commit.
+
+### Migrate shared hooks
+
+Git hooks are shared by all worktrees. With Git 2.54 or later, run these
+commands once from a migrated checkout. Keep the old framework installed while
+any active branch still uses `.pre-commit-config.yaml`.
+
+1. Let the old hooks accept migrated branches:
+
+   ```bash
+   pre-commit install --allow-missing-config --hook-type pre-commit --hook-type pre-push
+   ```
+
+2. Install hk and guard its launch before mise runs:
+
+   ```bash
+   mise exec -- hk install --mise
+   for event in pre-commit pre-push; do
+     git config --local "hook.hk-$event.command" \
+       "test -f hk.pkl || exit 0; test -f mise.toml || exit 0; test \"\${HK:-1}\" = 0 || mise x -- hk run $event --from-hook"
+   done
+   ```
+
+3. After every active branch has hk, remove the old hooks:
+
+   ```bash
+   pre-commit uninstall --hook-type pre-commit --hook-type pre-push
+   ```
+
+The config-based hk hooks remain installed. Repeat step 2 after reinstalling hk;
+the guards make older worktrees silent even when mise cannot find hk there.
 
 Sparkle is the app's only third-party framework. The engine uses system
 frameworks; there are no submodules or vendored C streaming libraries. Read the
@@ -68,17 +97,20 @@ threads. Keep those assertions and time limits intact.
 ### Before pushing
 
 Run `make preflight`. The hk pre-push hook runs this same command: all hooks,
-script fixtures, Mac tests, AddressSanitizer and `make ci-parity`. On a release
-branch it also runs `make rc DRY_RUN=1 SOURCE_ONLY=1`. This validates source
-before it is pushed; hosted-check and reservation checks still run when cutting
-a candidate. The hook has no project-specific skip switch. Never bypass it as an
-agent.
+boundary audits, fast script tests and CI-compiler builds for affected targets.
+Full script integration tests, Mac tests and AddressSanitizer remain in
+`make verify` and hosted verification. On a release branch it also runs
+`make rc DRY_RUN=1 SOURCE_ONLY=1`. This validates source before it is pushed;
+hosted-check and reservation checks still run when cutting a candidate. The hook
+has no project-specific skip switch. Never bypass it as an agent.
 
 `make ci-parity` uses `/Applications/Xcode-26.6.0.app/Contents/Developer` when
 installed, without changing the selected Xcode. It compiles the unsigned Mac app
 and tests, iOS Simulator app and tests, and iOS device app into separate
 directories under `build/ci-parity`. If Xcode 26.6 is absent, it prints a clear
-skip message.
+skip message. Preflight selects Mac or iOS from changes against the upstream
+branch, including staged, unstaged and untracked files; shared build inputs
+select both. Missing base information selects both conservatively.
 
 ### Run the app
 

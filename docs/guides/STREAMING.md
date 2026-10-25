@@ -29,7 +29,7 @@ choose “Use this screen's size…” and save your progress first. A game that
 failed that change offers a restart instead.
 
 Select another app to quit the running game and start the new one in a single
-confirmed action. “Quit <game>…” remains available when you only want to stop
+confirmed action. “Quit `<game>`…” remains available when you only want to stop
 it.
 
 ## Leave the picture running
