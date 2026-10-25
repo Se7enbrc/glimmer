@@ -4,8 +4,7 @@
 
 """Cut the next release candidate for the pushed, reviewed HEAD (`make rc`).
 
-A labelled pull request runs the same cut in CI with --ci-sha once its checks pass: the app
-tags as itself and the approval link goes to the pull request instead of a browser."""
+CI uses --ci-sha for a labelled pull request and tags as the release app."""
 
 import argparse
 import importlib.util
@@ -30,19 +29,46 @@ SPEC.loader.exec_module(CHECKS)
 FEED_BRANCH = "appcast"
 BRANCH = "release-candidate"
 # Candidate workflows execute before protected tooling takes over, so these must already be reviewed on main.
-RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-publication.yml",
-                 "scripts/ci-release.sh", "scripts/install-ci-scanner.sh", "scripts/release-checks.py",
-                 "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py",
-                 "scripts/release_candidate_kind.py", "scripts/release_symbols.py", "scripts/candidate_reservation.py",
-                 "scripts/candidate_delivery.py", ".github/workflows/candidate-delivery.yml",
-                 ".github/workflows/verify.yml", ".github/workflows/codeql.yml",
-                 ".github/workflows/ios-testflight-build.yml", "scripts/ios-testflight.py",
-                 "scripts/ios-testflight-artifact.py", "scripts/ios-testflight-sign.py",
-                 ".github/actions/build-cache/action.yml", ".github/workflows/portable-checks.yml",
-                 "scripts/install-ci-linux-tools.sh", "scripts/install-ci-auditor.sh",
-                 "scripts/ci-python-requirements.txt", "scripts/coverage-requirements.txt",
-                 "scripts/ci-checks.mk", "scripts/mac-test-products.mk", "scripts/test-scripts.py",
-                 ".github/actions/cache-save/action.yml", "scripts/cache-budget.py")
+RELEASE_PATHS = (
+    '.github/workflows/release.yml',
+    '.github/workflows/release-publication.yml',
+    'scripts/ci-release.sh',
+    'scripts/release-checks.py',
+    'scripts/release_publication.py',
+    'scripts/release_artifact.py',
+    'scripts/release_validation.py',
+    'scripts/release_candidate_kind.py',
+    'scripts/release_symbols.py',
+    'scripts/candidate_reservation.py',
+    'scripts/candidate_delivery.py',
+    '.github/workflows/candidate-delivery.yml',
+    '.github/workflows/verify.yml',
+    '.github/workflows/codeql.yml',
+    '.github/workflows/ios-testflight-build.yml',
+    'scripts/ios-testflight.py',
+    'scripts/ios-testflight-artifact.py',
+    'scripts/ios-testflight-sign.py',
+    '.github/actions/build-cache/action.yml',
+    '.github/workflows/portable-checks.yml',
+    'scripts/ci-checks.mk',
+    'scripts/mac-test-products.mk',
+    'scripts/test-scripts.py',
+    '.github/actions/cache-save/action.yml',
+    'scripts/cache-budget.py',
+    'mise.toml',
+    'mise.lock',
+    '.mise/locks',
+    'hk.pkl',
+    '.github/actions/mise/action.yml',
+    'scripts/mise-exec.sh',
+    'scripts/check-data.py',
+    'scripts/check-python-imports.py',
+    'scripts/ci-signing.mk',
+    'scripts/release-bundle.mk',
+    'scripts/signing-creds.sh',
+    'scripts/check-secrets.sh',
+    'scripts/check-private-keys.sh',
+)
 POLL_SECONDS = 60
 TIMEOUT_SECONDS = 90 * 60
 
@@ -187,14 +213,14 @@ def signed(tag):
     return re.search(r"^-----BEGIN [A-Z ]*SIGNATURE-----$", body, re.M) is not None
 
 
-def reviewed_head():
+def reviewed_head(require_pushed=True):
     if output(["git", "status", "--porcelain"], "couldn't read the working tree"):
         raise ValueError("working tree is not clean; commit, stash or remove changes first")
     branch = output(["git", "symbolic-ref", "--quiet", "--short", "HEAD"], "HEAD is detached; check out the PR branch")
     output(["git", "fetch", "--quiet", "origin"], "git fetch origin failed")
     sha = output(["git", "rev-parse", "HEAD"], "couldn't resolve HEAD")
     pushed = output(["git", "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}"])
-    if pushed != sha:
+    if require_pushed and pushed != sha:
         raise ValueError(f"HEAD {sha[:12]} is not pushed; origin/{branch} is {pushed[:12] or 'missing'}")
     return sha, branch
 
@@ -226,13 +252,13 @@ def candidate_tag(version, build, sha, tags, diagnostic):
     return f"{version}-rc.{number}{'-diag' if diagnostic else ''}", False
 
 
-def cut(dry_run, ci_sha=None, pr=None, diagnostic=False, prepare_only=False):
+def cut(dry_run, ci_sha=None, pr=None, diagnostic=False, prepare_only=False, source_only=False):
     if ci_sha:
         # CI never checks out the pull request; it reads the candidate commit from history.
         sha, branch = ci_sha, f"pull request #{pr}"
         output(["git", "cat-file", "-e", f"{sha}^{{commit}}"], f"commit {sha[:12]} is not in this clone")
     else:
-        sha, branch = reviewed_head()
+        sha, branch = reviewed_head(require_pushed=not source_only)
     output(["git", "fetch", "--quiet", "origin", "main"], "couldn't fetch main; nothing cut")
     output(["git", "diff", "--quiet", "origin/main", sha, "--", *RELEASE_PATHS],
            "candidate release workflow or script differs from main; "
@@ -245,6 +271,10 @@ def cut(dry_run, ci_sha=None, pr=None, diagnostic=False, prepare_only=False):
     config = output(["git", "show", f"{sha}:Glimmer/Version.xcconfig"], "couldn't read the candidate version")
     values = dict(re.findall(r"^(MARKETING_VERSION|CURRENT_PROJECT_VERSION)\s*=\s*(\S+)\s*$", config, re.M))
     version, build = values["MARKETING_VERSION"], values["CURRENT_PROJECT_VERSION"]
+    if source_only:
+        check_build(version, build)
+        print(f"Candidate source checks passed for {sha}; hosted checks run after pushing.")
+        return
     tags = {ref.removeprefix("refs/tags/"): target for ref, target in remote_refs("refs/tags/*").items()}
     if version in tags:
         raise ValueError(f"{version} already has a final tag; bump MARKETING_VERSION")
@@ -286,6 +316,7 @@ def cut(dry_run, ci_sha=None, pr=None, diagnostic=False, prepare_only=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="print every step without pushing, tagging or dispatching")
+    parser.add_argument("--source-only", action="store_true", help="pre-push source checks; requires --dry-run")
     parser.add_argument("--prepare-only", action="store_true", help="reserve and scan for iOS without tagging or releasing Mac")
     parser.add_argument("--diagnostic", action="store_true", help="manual-install diagnostic candidate; never promoted")
     parser.add_argument("--ci-sha", help="CI only: the labelled pull request head to cut")
@@ -295,9 +326,11 @@ def main():
         parser.error("--ci-sha needs a full commit SHA and --pr")
     if args.prepare_only and (args.ci_sha or args.diagnostic):
         parser.error("--prepare-only is a local preparation for both platforms, without --ci-sha or --diagnostic")
+    if args.source_only and (not args.dry_run or args.ci_sha or args.prepare_only):
+        parser.error("--source-only requires --dry-run and cannot cut or prepare a candidate")
     os.chdir(SCRIPTS.parent)
     try:
-        cut(args.dry_run, args.ci_sha, args.pr, args.diagnostic, args.prepare_only)
+        cut(args.dry_run, args.ci_sha, args.pr, args.diagnostic, args.prepare_only, args.source_only)
     except (ValueError, KeyError, OSError, ET.ParseError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
         parser.exit(1, f"ERR: {error}\n")
 

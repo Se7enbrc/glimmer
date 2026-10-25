@@ -64,7 +64,7 @@ def swift():
 
 
 def python():
-    tool = shlex.split(os.environ.get("COVERAGE_PY", "python3 -m coverage"))
+    tool = shlex.split(os.environ.get("COVERAGE_PY", "coverage"))
     rc = "--rcfile=scripts/tests/coveragerc"
     subprocess.run([*tool, "combine", rc], check=True, capture_output=True)
     report = subprocess.run([*tool, "report", rc], check=True, capture_output=True, text=True).stdout

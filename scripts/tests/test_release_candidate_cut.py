@@ -20,19 +20,46 @@ from fixture_process import run_fixture
 SCRIPTS = Path(__file__).resolve().parents[1]
 VERSION = "2026.10.6"
 BUILD = "20261010"
-RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-publication.yml",
-                 "scripts/ci-release.sh", "scripts/install-ci-scanner.sh", "scripts/release-checks.py",
-                 "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py",
-                 "scripts/release_candidate_kind.py", "scripts/release_symbols.py", "scripts/candidate_reservation.py",
-                 "scripts/candidate_delivery.py", ".github/workflows/candidate-delivery.yml",
-                 ".github/workflows/verify.yml", ".github/workflows/codeql.yml",
-                 ".github/workflows/ios-testflight-build.yml", "scripts/ios-testflight.py",
-                 "scripts/ios-testflight-artifact.py", "scripts/ios-testflight-sign.py",
-                 ".github/actions/build-cache/action.yml", ".github/workflows/portable-checks.yml",
-                 "scripts/install-ci-linux-tools.sh", "scripts/install-ci-auditor.sh",
-                 "scripts/ci-python-requirements.txt", "scripts/coverage-requirements.txt",
-                 "scripts/ci-checks.mk", "scripts/mac-test-products.mk", "scripts/test-scripts.py",
-                 ".github/actions/cache-save/action.yml", "scripts/cache-budget.py")
+RELEASE_PATHS = (
+    '.github/workflows/release.yml',
+    '.github/workflows/release-publication.yml',
+    'scripts/ci-release.sh',
+    'scripts/release-checks.py',
+    'scripts/release_publication.py',
+    'scripts/release_artifact.py',
+    'scripts/release_validation.py',
+    'scripts/release_candidate_kind.py',
+    'scripts/release_symbols.py',
+    'scripts/candidate_reservation.py',
+    'scripts/candidate_delivery.py',
+    '.github/workflows/candidate-delivery.yml',
+    '.github/workflows/verify.yml',
+    '.github/workflows/codeql.yml',
+    '.github/workflows/ios-testflight-build.yml',
+    'scripts/ios-testflight.py',
+    'scripts/ios-testflight-artifact.py',
+    'scripts/ios-testflight-sign.py',
+    '.github/actions/build-cache/action.yml',
+    '.github/workflows/portable-checks.yml',
+    'scripts/ci-checks.mk',
+    'scripts/mac-test-products.mk',
+    'scripts/test-scripts.py',
+    '.github/actions/cache-save/action.yml',
+    'scripts/cache-budget.py',
+    'mise.toml',
+    'mise.lock',
+    '.mise/locks',
+    'hk.pkl',
+    '.github/actions/mise/action.yml',
+    'scripts/mise-exec.sh',
+    'scripts/check-data.py',
+    'scripts/check-python-imports.py',
+    'scripts/ci-signing.mk',
+    'scripts/release-bundle.mk',
+    'scripts/signing-creds.sh',
+    'scripts/check-secrets.sh',
+    'scripts/check-private-keys.sh',
+)
 REQUIRED = ["macOS", "Analyze (swift)", "Analyze (python)", "Analyze (actions)"]
 
 
@@ -248,6 +275,21 @@ class ReleaseCandidateCutTests(unittest.TestCase):
     def test_unpushed_head_is_refused(self):
         self.commit("20261011")
         self.assert_refused(self.cut(), "is not pushed")
+
+    def test_prepush_source_checks_accept_unpushed_head_without_dispatch(self):
+        self.commit("20261011")
+        before = self.remote()
+        result = self.cut("--dry-run", "--source-only")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Candidate source checks passed", result.stdout)
+        self.assertEqual(self.remote(), before)
+        self.assertEqual(self.dispatches(), [])
+
+    def test_source_checks_cannot_enable_publication(self):
+        result = self.cut("--source-only")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires --dry-run", result.stderr)
+        self.assertEqual(self.dispatches(), [])
 
     def test_stale_build_number_is_refused(self):
         self.publish_feed("20261008", BUILD)

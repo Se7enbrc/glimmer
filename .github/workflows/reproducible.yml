@@ -28,6 +28,12 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Check toolchain
         run: |
           test "$(uname -m)" = arm64
