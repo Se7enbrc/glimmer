@@ -51,7 +51,7 @@ elif [ "$HEAD_SHA" != "$MAIN_SHA" ]; then
 	exit 1
 fi
 
-WORK="$(mktemp -d -t glimmer-publication)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/glimmer-publication.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 # The feed lives alone on its own branch so releases never move main.
 FEED="$WORK/$APPCAST"

@@ -472,7 +472,8 @@ dist: guard-clean-tree guard-release-version verify
 	$(MAKE) CONFIG=Release preflight clean app notarize dmg
 
 # Keep the shipping gate complete even when a local suite filter is supplied.
-verify: check
+verify:
+	@$(MAKE) check TEST_PLATFORM=all
 	@$(MAKE) TEST_SUITE= test
 	@$(MAKE) test-asan
 

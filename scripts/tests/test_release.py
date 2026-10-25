@@ -70,10 +70,11 @@ class ReleaseValidationTests(unittest.TestCase):
 
     def test_local_suite_filter_cannot_narrow_the_full_gate(self):
         # The default gate, not one inherited from an outer make such as a COVERAGE=1 run.
-        clean = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL", "COVERAGE")}
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL", "MAKEOVERRIDES", "COVERAGE", "TEST_PLATFORM")}
 
-        def plan(target):
-            return subprocess.run(["make", "--dry-run", target, "TEST_SUITE=DatagramBatchTests"], env=clean,
+        def plan(target, *settings):
+            return subprocess.run(["make", "--dry-run", target, "TEST_SUITE=DatagramBatchTests", *settings], env=clean,
                                   cwd=SCRIPTS.parent, capture_output=True, text=True, check=True).stdout
         self.assertIn("-only-testing:GlimmerTests/DatagramBatchTests", plan("test"))
         full = plan("verify")
@@ -86,6 +87,7 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertIn("-only-testing:GlimmerTests/StreamFuzzTests", commands[1])
         self.assertIn("scripts/lint-swift.sh lint --strict", full)
         self.assertIn("python3 scripts/test-scripts.py all", full)
+        self.assertIn("python3 scripts/test-scripts.py all", plan("verify", "TEST_PLATFORM=portable"))
 
     def test_build_gates_read_the_feed_from_the_appcast_branch(self):
         makefile = (SCRIPTS.parent / "Makefile").read_text()
