@@ -57,14 +57,17 @@ The iPhone and iPad app requires iOS or iPadOS 26 or later. It shares the Mac
 app's Swift engine and uses SwiftUI and UIKit for pairing, the launcher and
 streaming. Menus work in portrait or landscape. iPhone streams use landscape;
 iPad streams fill their window in any orientation, including narrow windows.
-Native requests the window's pixel size; 1080p fits that aspect within its
-quality limit. Both support physical controllers. Disconnecting leaves the game
-running on the PC.
+Both use the same ordered choices: Native, 1080p 60 and 1080p 120. Native uses
+the window's pixel size as its target and chooses the closest mode listed in
+`docs/vdd/iphone-ipad.xml`. 1080p requests 1920 × 1080. All requests respect the
+display's refresh limit and share the same codec, HDR and quality rules. Both
+support physical controllers. Disconnecting leaves the game running on the PC.
 
-An iPad resize must use the shared resume-only format transition after the
-window settles, preserving the running game and session settings. The
-[window streaming contract](docs/IPAD_WINDOW_STREAMING.md) records the pending
-shared-actuator integration and PC display-mode limits.
+Rotation and window resizing keep the current stream format, as iPhone does
+today. Video fills the new bounds, cropping edges when the aspect changes. A new
+stream chooses a mode for the new window. No resize quits or relaunches the
+game. The [window streaming contract](docs/IPAD_WINDOW_STREAMING.md) explains
+mode selection, the 90-mode budget and PC setup requirements.
 
 Distribution is internal TestFlight only so far, with no App Store release. tvOS
 and visionOS are possible future ports.

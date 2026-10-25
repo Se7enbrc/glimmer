@@ -76,8 +76,9 @@
 			isa = PBXBuildFile;
 			fileRef = 87663570874C427BB408C4D9;
 		};
-		6890117473FC46DDBF9A0388 /* StreamWindowResize.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2348C9B108F9477C9930E31B /* StreamWindowResize.swift */; };
 		CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */; };
+		CC4120261024000000000001 /* StreamDisplayModes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4120261024000000000002 /* StreamDisplayModes.swift */; };
+		CC4120261024000000000003 /* iphone-ipad.xml in Resources */ = {isa = PBXBuildFile; fileRef = CC4120261024000000000004 /* iphone-ipad.xml */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -176,8 +177,9 @@
 			path = GlimmerUITests.xctest;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-		2348C9B108F9477C9930E31B /* StreamWindowResize.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamWindowResize.swift; sourceTree = "<group>"; };
 		DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamWindowResizeTests.swift; sourceTree = "<group>"; };
+		CC4120261024000000000002 /* StreamDisplayModes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayModes.swift; sourceTree = "<group>"; };
+		CC4120261024000000000004 /* iphone-ipad.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "../../docs/vdd/iphone-ipad.xml"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -309,7 +311,8 @@
 				E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */,
 				57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */,
 				5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */,
-				2348C9B108F9477C9930E31B /* StreamWindowResize.swift */,
+				CC4120261024000000000002 /* StreamDisplayModes.swift */,
+				CC4120261024000000000004 /* iphone-ipad.xml */,
 				D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */,
 				6D57DEF880324835B4BA487E /* LauncherGallery.swift */,
 				A49D3096BFB64C23AE91AC56 /* ControllerMouseSettings.swift */,
@@ -449,6 +452,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CC4120261024000000000003 /* iphone-ipad.xml in Resources */,
 				D24F000A4BCC4C65C8508D0A /* Assets.xcassets in Resources */,
 				9D8E655FEF584B17AD847218 /* PrivacyInfo.xcprivacy in Resources */,
 				76D18FAA5093262D2C6C77E9 /* AppIcon.icon in Resources */,
@@ -512,7 +516,7 @@
 				D2CF67DA276842128B900E3A /* StreamSessionFailureCopy.swift in Sources */,
 				902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */,
 				FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */,
-				6890117473FC46DDBF9A0388 /* StreamWindowResize.swift in Sources */,
+				CC4120261024000000000001 /* StreamDisplayModes.swift in Sources */,
 				A3D372A8CF7E4C02AC0926B7 /* StreamBackgroundGrace.swift in Sources */,
 				E5079E847C204146BDF540F1 /* LauncherGallery.swift in Sources */,
 				46257D27DA574232935DD699 /* ControllerMouseSettings.swift in Sources */,

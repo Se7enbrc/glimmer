@@ -30,16 +30,18 @@ needs the manual installation path. Stock Sunshine works with this setup.
 
 ### Pick your file
 
-Use **all-glimmer-clients.xml** if unsure. Each file is a complete replacement
-for the same driver settings file, with automatic GPU selection.
+Use **iphone-ipad.xml** for iPhone or iPad, including windowed play. Use
+**all-glimmer-clients.xml** for the older mixed-client panel set; it omits the
+new iPad window modes. Each file replaces the same driver settings file and
+selects the GPU automatically.
 
 | Device type                                           | File                                                   | Modes |
 | ----------------------------------------------------- | ------------------------------------------------------ | ----- |
-| Mixed Mac, iPhone and iPad                            | [all-glimmer-clients.xml](vdd/all-glimmer-clients.xml) | 90    |
+| Mixed clients, panel modes only                       | [all-glimmer-clients.xml](vdd/all-glimmer-clients.xml) | 90    |
 | MacBook or iMac built-in display                      | [mac-builtin.xml](vdd/mac-builtin.xml)                 | 26    |
 | Studio Display, Studio Display XDR or Pro Display XDR | [mac-apple-displays.xml](vdd/mac-apple-displays.xml)   | 10    |
 | Standard external display                             | [standard-external.xml](vdd/standard-external.xml)     | 90    |
-| iPhone or iPad, including iPhone Duo                  | [iphone-ipad.xml](vdd/iphone-ipad.xml)                 | 75    |
+| iPhone or iPad, including iPhone Duo                  | [iphone-ipad.xml](vdd/iphone-ipad.xml)                 | 90    |
 
 ### Copy the ready-made modes
 
@@ -138,9 +140,10 @@ The files cover the
 [listed Apple displays and selected custom modes](VIRTUAL_DISPLAY_MODES.md).
 Each stays within 90 modes because larger lists can stop the display from
 starting. Arbitrary Custom values and other external displays may need
-replacement modes or Apollo. The iPhone/iPad sample includes half sizes, but
-Glimmer on iPhone and iPad has no half-resolution or Custom choice. A listed
-mode does not promise that the PC can encode it fast enough.
+replacement modes or Apollo. The iPhone/iPad sample uses its budget for native
+panels and window shapes. Glimmer selects only its listed modes on both mobile
+devices; it has no half-resolution or Custom choice. A listed mode does not
+promise that the PC can encode it fast enough.
 
 {% endhint %}
 

@@ -75,8 +75,6 @@
   the launcher wait for the PC to become idle.
 - On iPad, streams start in tall or square windows and keep the whole picture
   visible when the window is resized.
-- The iPhone/iPad virtual display sample now includes the Native resolution
-  requested by the open iPhone Duo in the iOS 27.1 Simulator.
 - PlayStation controllers, including the PlayStation Backbone, are identified
   consistently on Mac, iPhone and iPad so compatible PC games can show matching
   button prompts.
@@ -88,7 +86,10 @@
   VoiceOver describes Done as returning to your apps.
 - iPad streams can start in portrait, Split View and narrow windows, using the
   window's shape and resolution within the selected quality limit.
-
+- iPad streams can start in portrait, Split View and narrow windows. iPhone and
+  iPad share the same quality choices and use the supplied PC display modes.
+  Native chooses the closest size for the window. Resizing keeps the game
+  running and fills the window, cropping edges when needed.
 - iPad app buttons keep their grid size with a small library. Large text has
   more room in PC names, saved-PC actions and stream controls. Connection
   messages can scroll when space is tight.

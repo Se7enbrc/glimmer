@@ -118,30 +118,40 @@ extension NativeUIRenderTests {
             ("split", CGSize(width: 507, height: 645)), ("slide-over", CGSize(width: 375, height: 853))
         ]
         for (name, size) in layouts {
-            let id = UUID()
-            let model = StreamSessionModel(launch: testLaunch(), makePlayback: { launch, surface, _ in
-                StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
-                               format: try launch.profile.resolve(surface: surface))
-            })
-            let controller = StreamViewController(model: model, close: {})
-            controller.traitOverrides.userInterfaceIdiom = .pad
-            let label = "ipad-whole-window-\(name)-\(dark ? "dark" : "light")-"
-                + (textSize == .large ? "default" : "ax5")
-            try await recordController(controller, name: label, size: size, dark: dark, prepare: {
-                #expect(model.phase == .connecting)
-                #expect(controller.surface.bounds.size == size)
-                #expect(controller.surface.displayLayer.frame == controller.surface.bounds)
-                #expect(controller.surface.displayLayer.videoGravity == .resizeAspectFill)
-                let pattern = WindowPatternView(frame: controller.surface.bounds)
-                pattern.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-                controller.surface.addSubview(pattern)
-                model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
-                model.showControls()
-                Attachment.record(Array("Requested: \(model.requestedFormat?.summary ?? "none")".utf8),
-                                  named: "\(label)-request.txt")
-            }, textSize: textSize)
-            model.stop()
-            await model.waitUntilStopped()
+            for profile in StreamProfile.allCases {
+                let id = UUID()
+                let launch = testLaunch()
+                let selected = StreamLaunch(network: launch.network, pcID: launch.pcID, pcName: launch.pcName,
+                                            appID: launch.appID, appName: launch.appName, profile: profile)
+                let model = StreamSessionModel(launch: selected, makePlayback: { launch, surface, _ in
+                    StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+                                   format: try launch.profile.resolve(surface: surface))
+                })
+                let controller = StreamViewController(model: model, close: {})
+                controller.traitOverrides.userInterfaceIdiom = .pad
+                let label = "ipad-whole-window-\(profile.rawValue)-\(name)-\(dark ? "dark" : "light")-"
+                    + (textSize == .large ? "default" : "ax5")
+                try await recordController(controller, name: label, size: size, dark: dark, prepare: {
+                    #expect(model.phase == .connecting)
+                    #expect(controller.surface.bounds.size == size)
+                    #expect(controller.surface.displayLayer.frame == controller.surface.bounds)
+                    #expect(controller.surface.displayLayer.videoGravity == .resizeAspectFill)
+                    #expect(model.requestedFormat != nil)
+                    guard let format = model.requestedFormat else { return }
+                    #expect(StreamDisplayModes.bundled.contains(format))
+                    let scale = max(size.width / CGFloat(format.width), size.height / CGFloat(format.height))
+                    let pattern = WindowPatternView(frame: CGRect(x: 0, y: 0, width: CGFloat(format.width) * scale,
+                                                                   height: CGFloat(format.height) * scale))
+                    pattern.center = CGPoint(x: size.width / 2, y: size.height / 2)
+                    controller.surface.addSubview(pattern)
+                    model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+                    model.showControls()
+                    Attachment.record(Array("Requested: \(model.requestedFormat?.summary ?? "none")".utf8),
+                                      named: "\(label)-request.txt")
+                }, textSize: textSize)
+                model.stop()
+                await model.waitUntilStopped()
+            }
         }
     }
 
@@ -243,6 +253,6 @@ private final class WindowPatternView: UIView {
         let text = "Simulator layout fixture"
         let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 12),
                                                        .foregroundColor: UIColor.white]
-        (text as NSString).draw(at: CGPoint(x: 12, y: bounds.maxY - 24), withAttributes: attributes)
+        (text as NSString).draw(at: CGPoint(x: bounds.midX - 68, y: bounds.midY), withAttributes: attributes)
     }
 }

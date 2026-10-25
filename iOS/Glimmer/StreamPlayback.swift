@@ -42,8 +42,6 @@ struct StreamPlayback {
     var format: StreamFormat?
     var setVisible: (@MainActor (Bool, VideoDecoder.PresentationVisibility) -> Void)?
     var observeControllers: (@MainActor (@escaping @MainActor (Bool) -> Void) -> Void)?
-    // Integration with the shared resume-only actuator is specified in docs/IPAD_WINDOW_STREAMING.md.
-    var requestFormatChange: StreamWindowResize.Request?
 
     static func make(launch: StreamLaunch, surface: StreamSurface,
                      quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {

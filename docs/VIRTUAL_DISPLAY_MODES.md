@@ -11,32 +11,30 @@ below use landscape stream requests and hardware maximum refresh rates. Both
 clients round each requested dimension down to an even number of pixels. Runtime
 display reports remain authoritative.
 
-| Choice                  | Request rule                                                                                                                                                      | Source                                                                                                            |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Mac Sharpest            | Panel-native pixels from Core Graphics; both dimensions rounded down to even. FPS is `NSScreen.maximumFramesPerSecond`, or 60 if unavailable.                     | [QualityCalculator.swift](../Glimmer/QualityCalculator.swift), `mainDisplayMode`, `effectiveValuesForPreset`      |
-| Mac Balanced            | Integer half dimensions when both are at least 1280 × 720; otherwise native. Round the result down to even. Same FPS as Sharpest.                                 | [StreamQuality.swift](../GlimmerEngine/Session/StreamQuality.swift), `hidpiSize`, `encodableSize`                 |
-| Mac Custom              | Width 640–7680, height 480–4320, integer FPS 30–240. Round dimensions down to even. Full screen preserves FPS; windowed caps to the display, with a 30 fps floor. | [bounds](../GlimmerEngine/Models/StreamSizeBounds.swift), [window cap](../Glimmer/Models/StreamDisplayMode.swift) |
-| Mac common-size menu    | 1280 × 720, 1920 × 1080, 2560 × 1440, 3840 × 2160. These change Custom's size, not its FPS.                                                                       | [CommonResolution](../Glimmer/SettingsGeneralStreamingPanes.swift)                                                |
-| iPhone Native · 120 fps | `max(nativeBounds)` × `min(nativeBounds)`, both rounded down to even; FPS is `min(120, maximumFramesPerSecond)`.                                                  | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift), `resolve`                                              |
-| iPhone 1080p            | 1920 × 1080 at `min(60, maximumFramesPerSecond)` or `min(120, maximumFramesPerSecond)`. No other quality profiles or half-size choice.                            | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift)                                                         |
+| Choice                 | Request rule                                                                                                                                                      | Source                                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Mac Sharpest           | Panel-native pixels from Core Graphics; both dimensions rounded down to even. FPS is `NSScreen.maximumFramesPerSecond`, or 60 if unavailable.                     | [QualityCalculator.swift](../Glimmer/QualityCalculator.swift), `mainDisplayMode`, `effectiveValuesForPreset`      |
+| Mac Balanced           | Integer half dimensions when both are at least 1280 × 720; otherwise native. Round the result down to even. Same FPS as Sharpest.                                 | [StreamQuality.swift](../GlimmerEngine/Session/StreamQuality.swift), `hidpiSize`, `encodableSize`                 |
+| Mac Custom             | Width 640–7680, height 480–4320, integer FPS 30–240. Round dimensions down to even. Full screen preserves FPS; windowed caps to the display, with a 30 fps floor. | [bounds](../GlimmerEngine/Models/StreamSizeBounds.swift), [window cap](../Glimmer/Models/StreamDisplayMode.swift) |
+| Mac common-size menu   | 1280 × 720, 1920 × 1080, 2560 × 1440, 3840 × 2160. These change Custom's size, not its FPS.                                                                       | [CommonResolution](../Glimmer/SettingsGeneralStreamingPanes.swift)                                                |
+| iPhone and iPad Native | Target the window's physical pixels, preserving orientation and rounding down to even; choose the closest listed mobile mode under the display/120 fps cap.       | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift), [catalog](../iOS/Glimmer/StreamDisplayModes.swift)     |
+| iPhone and iPad 1080p  | 1920 × 1080 at the highest listed rate up to 60 or 120 fps and the display maximum.                                                                               | [StreamProfile.swift](../iOS/Glimmer/StreamProfile.swift)                                                         |
 
-For iPad, Native now requests the window's backing-pixel size in its current
-orientation, bounded by shared decoder limits. 1080p preserves that window's
-aspect within 1920 × 1080 (landscape) or 1080 × 1920 (portrait), without
-upscaling unless needed to reach the shared minimum. If the aspect cannot
-satisfy both limits, clamp to legal dimensions and use aspect fill; do not block
-startup. FPS retains the profile/display cap. The tables below describe
-landscape panels; the XML samples do not cover arbitrary windows. See
-[window modes and the 90-mode budget](IPAD_WINDOW_STREAMING.md#pc-display-modes).
+Both mobile devices bundle [iphone-ipad.xml](vdd/iphone-ipad.xml) and request
+only its listed combinations. Native minimizes the worst proportional
+width/height error, then aspect-fill cropping, then chooses the highest eligible
+refresh. The [window contract](IPAD_WINDOW_STREAMING.md) defines the ranking and
+fixed-format resize behavior. iPhone locks streams to landscape; iPad keeps the
+window's orientation. 1080p remains 16:9 on both, with cropping to fill.
 
 Both clients use
 [StreamQuality.encodableSize](../GlimmerEngine/Session/StreamQuality.swift)
 before creating the stream configuration. The shared
 [launch query](../GlimmerEngine/Network/NetworkClient+Endpoints.swift) sends
 these dimensions and FPS in `mode` and sets `sops=1`, which enables Sunshine's
-automatic resolution selection. It does not change the request to a nearby mode.
-macOS display probing can fall back to a Retina mode or framebuffer size when
-the panel-native flag is unavailable.
+automatic resolution selection. Mobile mode selection happens before this query;
+the query does not change it. macOS display probing can fall back to a Retina
+mode or framebuffer size when the panel-native flag is unavailable.
 
 A 2436 × 1125 iPhone panel requests **2436 × 1124**. A 2556 × 1179 panel
 requests **2556 × 1178**. The table and XML use these even requests, while the
@@ -152,16 +150,11 @@ that changing screens during a stream has been verified.
 ### Duo Simulator measurement
 
 On Xcode 27.1 with iOS 27.1 (24A94232), the active Duo inner screen reports
-`nativeBounds` of 2007 × 2853 pixels and `maximumFramesPerSecond` of 60.
-`StreamProfile.resolve` therefore requests **2852 × 2006 @ 60** for Native. The
-iPhone/iPad sample includes this measured mode alongside the published 2670 ×
-1878 hardware size above; Simulator geometry does not replace hardware
-specifications. Both 1080p profiles request 1920 × 1080 @ 60 in this runtime.
-
-The mixed-client sample is already at its 90-mode budget and omits this
-Simulator-only inner mode. Use the iPhone/iPad sample for Duo Simulator Native
-requests, or replace an unused mixed-client mode using the
-[combining instructions](HOST_SETUP.md#combine-two-files).
+`nativeBounds` of 2007 × 2853 pixels and `maximumFramesPerSecond` of 60. Glimmer
+requests the closest listed mode rather than this exact size. Both samples are
+at their 90-mode budget and omit this Simulator-only inner mode; the published
+2670 × 1878 hardware size above remains in both. Add it by replacing an unused
+mode using the [combining instructions](HOST_SETUP.md#combine-two-files).
 
 ## iPad
 
@@ -184,39 +177,52 @@ ProMotion; Air, mini and standard iPad models use 60 Hz.
 | [iPad Pro 12.9-inch (6th generation)](https://support.apple.com/en-us/111841), [iPad Pro 12.9-inch (5th generation)](https://support.apple.com/en-us/111896), [iPad Pro 12.9-inch (4th generation)](https://support.apple.com/en-us/111977), [iPad Pro 12.9-inch (3rd generation)](https://support.apple.com/en-us/111979)                                                                                                                                          | 2732 × 2048              | 120        |
 | [iPad Pro 13-inch (M5)](https://support.apple.com/en-us/125407), [iPad Pro 13-inch (M4)](https://support.apple.com/en-us/119891)                                                                                                                                                                                                                                                                                                                                    | 2752 × 2064              | 120        |
 
-### Optional mobile half sizes
+### iPad window targets
 
-[iphone-ipad.xml](vdd/iphone-ipad.xml) includes the native rows above, their
-halves below, and 1920 × 1080 at 60/120 Hz. Halve each dimension, then round
-down to even. These additional modes do not add a half-size choice to Glimmer on
-iOS. Each row's rates apply to both sizes; shared panel sizes use the union of
-rates.
+The mobile XML keeps all landscape panel modes above and adds the targets below.
+Each row maps to the device names in the preceding table; XML blocks repeat the
+device names. Sizes are physical pixels, with even dimensions. Portrait retains
+the panel's 60/120 Hz rates. Split and Stage Manager targets use **60 Hz**.
 
-| Native landscape size | Half size   | Rates (Hz) |
-| --------------------- | ----------- | ---------- |
-| 1334 × 750            | 666 × 374   | 60         |
-| 1792 × 828            | 896 × 414   | 60         |
-| 2340 × 1080           | 1170 × 540  | 60         |
-| 2436 × 1124           | 1218 × 562  | 60         |
-| 2532 × 1170           | 1266 × 584  | 60, 120    |
-| 2556 × 1178           | 1278 × 588  | 60, 120    |
-| 2622 × 1206           | 1310 × 602  | 60, 120    |
-| 2688 × 1242           | 1344 × 620  | 60         |
-| 2736 × 1260           | 1368 × 630  | 60, 120    |
-| 2778 × 1284           | 1388 × 642  | 60, 120    |
-| 2796 × 1290           | 1398 × 644  | 60, 120    |
-| 2868 × 1320           | 1434 × 660  | 60, 120    |
-| 2048 × 1536           | 1024 × 768  | 60         |
-| 2160 × 1620           | 1080 × 810  | 60         |
-| 2224 × 1668           | 1112 × 834  | 60         |
-| 2266 × 1488           | 1132 × 744  | 60         |
-| 2360 × 1640           | 1180 × 820  | 60         |
-| 2388 × 1668           | 1194 × 834  | 60, 120    |
-| 2420 × 1668           | 1210 × 834  | 60, 120    |
-| 2732 × 2048           | 1366 × 1024 | 60, 120    |
-| 2752 × 2064           | 1376 × 1032 | 60, 120    |
-| 2670 × 1878           | 1334 × 938  | 60, 120    |
-| 2034 × 1398           | 1016 × 698  | 60, 120    |
+| Landscape panel | Portrait    | Split 1/2   | Split 2/3   | Split 1/3  | Stage Manager 3/4 size |
+| --------------- | ----------- | ----------- | ----------- | ---------- | ---------------------- |
+| 2048 × 1536     | 1536 × 2048 | 1014 × 1536 | 1352 × 1536 | 676 × 1536 | 1536 × 1152            |
+| 2160 × 1620     | 1620 × 2160 | 1070 × 1620 | 1426 × 1620 | 712 × 1620 | 1620 × 1214            |
+| 2224 × 1668     | 1668 × 2224 | 1102 × 1668 | 1468 × 1668 | 734 × 1668 | 1668 × 1250            |
+| 2266 × 1488     | 1488 × 2266 | 1122 × 1488 | 1496 × 1488 | 748 × 1488 | 1698 × 1116            |
+| 2360 × 1640     | 1640 × 2360 | 1170 × 1640 | 1560 × 1640 | 780 × 1640 | 1770 × 1230            |
+| 2388 × 1668     | 1668 × 2388 | 1184 × 1668 | 1578 × 1668 | 788 × 1668 | 1790 × 1250            |
+| 2420 × 1668     | 1668 × 2420 | 1200 × 1668 | 1600 × 1668 | 800 × 1668 | 1814 × 1250            |
+| 2732 × 2048     | 2048 × 2732 | 1356 × 2048 | 1808 × 2048 | 904 × 2048 | 2048 × 1536            |
+| 2752 × 2064     | 2064 × 2752 | 1366 × 2064 | 1820 × 2064 | 910 × 2064 | 2064 × 1548            |
+
+Split targets divide the landscape width after a 20-pixel (10-point) gap, round
+down to even, and retain the panel height. The half tiles were measured at 1014
+× 1536 on mini 5/iPadOS 26 and 1366 × 2064 on Pro 13/iPadOS 27. The other
+fractions are representative targets, not claims of fixed system window sizes.
+Decorations, OS version and display zoom can change the actual bounds.
+Three-quarter Stage Manager targets scale both panel dimensions by 0.75 and
+round down to even. They cover a common medium-large aspect for every geometry;
+they are sample choices, not an Apple-defined preset.
+
+The catalog also includes 750 × 972 (small Stage Manager, measured on mini 5 and
+Pro 13), 1280 × 1200 (the audit's medium window fixture), 1014 × 1290 (mini 5
+Stage Manager tile) and 750 × 1706 (Pro 13 Slide Over). All use 60 Hz. Other
+widths, heights and portrait split arrangements select the closest listed mode.
+Aspect fill scales proportionally and crops edges when aspects differ; 1080p can
+crop substantially in a narrow portrait window. It never stretches.
+
+The **90-mode budget** retains 36 native landscape combinations and two 1080p
+combinations, then adds 52 window combinations. The three-quarter 2732 × 2048
+target shares mini 5's 2048 × 1536 mode, so it costs no extra entry. Trade-offs:
+
+- Remove all 36 optional half-size combinations; iOS never offered that preset.
+- Keep 120 Hz for full-panel ProMotion and 1080p; window-specific modes use 60
+  Hz.
+- Use representative sizes for continuous resizing, portrait splits and other
+  Stage Manager sizes. No finite list can cover every window pixel size.
+- Keep the older mixed-client sample unchanged. It lacks these window modes;
+  iPhone/iPad users need the mobile file, not the combined file.
 
 ## Sample coverage and limits
 
@@ -225,9 +231,9 @@ header gives its exact count and the **90-mode budget**. The
 [setup guide's file table](HOST_SETUP.md#pick-your-file) lists their counts.
 `mac-builtin.xml` covers every built-in Mac panel above at native and even half
 size (26 modes); `mac-apple-displays.xml` covers the Apple external table (10
-modes). `iphone-ipad.xml` covers every mobile row and both 1080p rates, plus the
-measured Duo Simulator inner mode (75 modes). None of these three files drops a
-listed native or half-size mode.
+modes). `iphone-ipad.xml` covers every mobile native row, both 1080p rates and
+the window targets above (90 modes). The Mac files retain their half-size modes;
+the mobile file spends those entries on usable window shapes.
 
 ### Default for mixed clients
 
@@ -315,8 +321,8 @@ still needs a Windows installation check.
 
 ### What the default file leaves out
 
-- The iOS 27.1 Duo Simulator inner mode, 2852 × 2006 @ 60. The mobile sample
-  includes it; the published Duo hardware sizes remain in both files.
+- The iOS 27.1 Duo Simulator inner mode, 2852 × 2006 @ 60. The published Duo
+  hardware sizes remain in both files.
 - iPhone/iPad half-size modes and MacBook Neo's half size. No current Glimmer
   preset requests them. All actual Mac Balanced sizes remain.
 - Additional Custom rates: 24, 72, 90, 100, 144, 165 and 200 Hz throughout the

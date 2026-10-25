@@ -42,16 +42,12 @@ final class StreamSessionModel {
     private var captureSuspended = false
     private var controlsRequested = false
     private var modeNoticeTask: Task<Void, Never>?
-    private var windowResize: StreamWindowResize?
-    private let resizeSleep: @Sendable (Duration) async throws -> Void
 
     init(launch: StreamLaunch, backgroundGrace: StreamBackgroundGrace = StreamBackgroundGrace(),
-         resizeSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          makePlayback: @escaping @MainActor (StreamLaunch, StreamSurface,
             @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback = StreamPlayback.make) {
         self.launch = launch
         self.backgroundGrace = backgroundGrace
-        self.resizeSleep = resizeSleep
         self.makePlayback = makePlayback
     }
 
@@ -69,11 +65,6 @@ final class StreamSessionModel {
         }
         self.playback = playback
         requestedFormat = playback.format
-        if let format = playback.format, let request = playback.requestFormatChange {
-            windowResize = StreamWindowResize(format: format, request: request, applied: { [weak self] in
-                self?.requestedFormat = $0
-            }, sleep: resizeSleep)
-        }
         phase = .connecting
         playback.observeControllers? { [weak self] connected in self?.controllerConnectionChanged(connected) }
         eventTask = Task { [weak self] in
@@ -96,10 +87,7 @@ final class StreamSessionModel {
         }
     }
 
-    func waitForWindowResize() async { await windowResize?.waitForPendingChange() }
-
     func stop(message: String? = nil) {
-        windowResize?.stop()
         stopRequested = true
         guard stopTask == nil, !phase.isEnded else { return }
         endingMessage = message ?? "Disconnected from \(launch.pcName)."
@@ -119,7 +107,6 @@ final class StreamSessionModel {
     }
 
     private func complete() {
-        windowResize?.stop()
         backgroundGrace.finish()
         if phase.isEnded {
             if let endingMessage { phase = .ended(endingMessage) }
@@ -182,18 +169,11 @@ final class StreamSessionModel {
     }
 
     private func synchronizeInputFocus() {
-        windowResize?.setAvailable(canStart && phase == .streaming)
         playback?.focusInput?(inputFocused)
         inputCaptureChanged?(inputFocused)
     }
 
     func screenChanged() { playback?.screenChanged() }
-
-    func windowChanged(surface: StreamSurface) {
-        guard surface.traitCollection.userInterfaceIdiom == .pad,
-              let format = try? launch.profile.resolve(surface: surface) else { return }
-        windowResize?.submit(format)
-    }
 
     func waitUntilStartFinishes() async { await startTask?.value }
 

@@ -92,7 +92,6 @@ final class StreamViewController: GCEventViewController {
         // iPad windows can remain tall even when the scene requests landscape.
         guard traitCollection.userInterfaceIdiom == .pad || view.bounds.width > view.bounds.height else { return }
         model.start(surface: surface)
-        model.windowChanged(surface: surface)
     }
 
     override func viewWillDisappear(_ animated: Bool) {

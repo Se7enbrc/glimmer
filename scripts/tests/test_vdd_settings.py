@@ -26,7 +26,7 @@ APPLE_DISPLAY_MODES = (
     (5120, 2880, 2560, 1440, (60, 120)),  # Studio Display / Studio Display XDR.
     (6016, 3384, 3008, 1692, (48, 50, 60)), # Pro Display XDR.
 )
-# StreamProfile.resolve rounds landscape nativeBounds down with StreamQuality.encodableSize.
+# StreamProfile selects only bundled mobile modes after even-dimension rounding.
 # 120 fps profiles cap to the screen maximum; 60 covers shared sizes and capped screens.
 MOBILE_MODES = (
     (1334, 750, (60,)),          # SE 2/3.
@@ -54,8 +54,19 @@ MOBILE_MODES = (
     (2034, 1398, (60, 120)),    # iPhone Duo cover, iOS 27.
 )
 
-# Active UIKit measurement on the iOS 27.1 Duo Simulator; hardware sizes stay above.
-DUO_SIMULATOR_MODES = {(2852, 2006, 60)}
+# Landscape panel geometry; shared by every iPad model with that pixel size.
+IPAD_PANELS = MOBILE_MODES[12:21]
+
+
+def ipad_window_modes():
+    modes = set()
+    for width, height, rates in IPAD_PANELS:
+        modes.update((height, width, fps) for fps in rates)
+        for numerator, denominator in ((1, 2), (2, 3), (1, 3)):
+            modes.add(((width - 20) * numerator // denominator & ~1, height, 60))
+        modes.add((width * 3 // 4 & ~1, height * 3 // 4 & ~1, 60))
+    return modes | {(750, 972, 60), (750, 1706, 60), (1014, 1290, 60), (1280, 1200, 60)}
+
 
 STANDARD_MODES = (
     (1920, 1080, (60, 75, 100, 120, 144, 165, 240)),
@@ -139,7 +150,7 @@ class VirtualDisplaySettingsTests(unittest.TestCase):
                 self.assertEqual(list(child), [])
                 self.assertRegex(child.text or "", r"^[1-9][0-9]*$")
             width, height = int(entry[0].text), int(entry[1].text)
-            self.assertTrue(0 < height <= width <= 7680 and height <= 4320)
+            self.assertTrue(0 < width <= 7680 and 0 < height <= 4320)
             self.assertEqual((width % 2, height % 2), (0, 0))
             self.assertNotIn((width, height), sizes, "duplicate resolution block")
             sizes.add((width, height))
@@ -170,8 +181,8 @@ class VirtualDisplaySettingsTests(unittest.TestCase):
             "all-glimmer-clients.xml": required,
             "mac-builtin.xml": panel_modes(builtin, include_half=True),
             "mac-apple-displays.xml": panel_modes(displays, include_half=True),
-            "iphone-ipad.xml": panel_modes(MOBILE_MODES, include_half=True)
-                               | {(1920, 1080, 60), (1920, 1080, 120)} | DUO_SIMULATOR_MODES,
+            "iphone-ipad.xml": panel_modes(MOBILE_MODES) | ipad_window_modes()
+                               | {(1920, 1080, 60), (1920, 1080, 120)},
             "standard-external.xml": panel_modes(STANDARD_MODES),
         }
         self.assertEqual({path.name for path in SAMPLES.glob("*.xml")}, set(expected))
