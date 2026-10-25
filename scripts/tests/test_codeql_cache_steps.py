@@ -11,10 +11,12 @@ import tempfile
 import textwrap
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class CodeQLCacheStepTests(unittest.TestCase):
+class CodeQLCacheStepTests(FixtureTestCase):
     def test_maintenance_does_not_inherit_compiler_tracing(self):
         workflow = (ROOT / ".github/workflows/codeql.yml").read_text()
         for name in ("Key cached framework extraction", "Seed framework extraction", "Collect framework extraction"):
@@ -35,14 +37,16 @@ class CodeQLCacheStepTests(unittest.TestCase):
         wrapper = (ROOT / "scripts/codeql-swiftc.sh").read_text()
         self.assertIn('export DYLD_INSERT_LIBRARIES="$SEMMLE_PRELOAD_libtrace"', wrapper)
         workflow = (ROOT / ".github/workflows/codeql.yml").read_text()
-        self.assertIn('make app helper-build CONFIG=Debug SWIFTC="$PWD/scripts/codeql-swiftc.sh"', workflow)
+        self.assertIn('make -j2 app helper-build CONFIG=Debug SWIFTC="$PWD/scripts/codeql-swiftc.sh"', workflow)
         self.assertIn("make ios-app CONFIG=Debug", workflow)
         self.assertIn("python3 scripts/codeql-coverage.py", workflow)
         self.assertIn("queries: security-extended", workflow)
         self.assertIn("SWIFT_ENABLE_COMPILE_CACHE = NO", workflow)
+        self.assertIn("ARCHS = arm64", workflow)
+        self.assertIn("ONLY_ACTIVE_ARCH = YES", workflow)
 
 
-class CodeQLBuildTests(unittest.TestCase):
+class CodeQLBuildTests(FixtureTestCase):
     def test_independent_builds_overlap_and_either_failure_blocks_analysis(self):
         workflow = (ROOT / ".github/workflows/codeql.yml").read_text()
         step = workflow.split("      - name: Build both apps, login item and privileged helper\n", 1)[1]
@@ -54,7 +58,7 @@ class CodeQLBuildTests(unittest.TestCase):
             make = root / "make"
             make.write_text('''#!/bin/bash
 set -eu
-if [ "$1" = app ]; then
+if [ "$1" = -j2 ] && [ "$2" = app ] && [ "$3" = helper-build ]; then
   printf 'ready\\n' > "$FIXTURE/ready"
   read -r reply < "$FIXTURE/reply"
   touch "$FIXTURE/mac-finished"
