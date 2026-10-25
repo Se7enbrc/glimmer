@@ -18,7 +18,14 @@ final class IPadNavigationTests: XCTestCase {
             XCUIDevice.shared.orientation = orientation
             XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 10))
             app.buttons["Desktop"].tap()
-            XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 10))
+            // Without a controller the stream starts in touch play; its menu button opens the controls.
+            // The first tap can land while the cover is still rotating into landscape.
+            let menu = app.buttons["Show controls"].firstMatch
+            XCTAssertTrue(menu.waitForExistence(timeout: 10))
+            for _ in 0..<5 where !app.buttons["Resume"].waitForExistence(timeout: 2) {
+                if menu.isHittable { menu.tap() }
+            }
+            XCTAssertTrue(app.buttons["Resume"].exists)
             XCTAssertTrue(app.buttons["Disconnect"].isHittable)
             recordScreen(app, name: "whole-window-native-stream-\(orientation.rawValue)")
             app.buttons["Disconnect"].tap()
@@ -31,7 +38,7 @@ final class IPadNavigationTests: XCTestCase {
                     withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)))
         }
         app.buttons["Desktop"].tap()
-        XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Show controls"].firstMatch.waitForExistence(timeout: 10))
         recordScreen(app, name: "whole-window-native-resize-request")
     }
 

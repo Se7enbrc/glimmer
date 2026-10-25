@@ -56,7 +56,7 @@ def validate_project(project, expected):
         raise ValueError("iOS app must link GlimmerEngine exactly once")
 
 
-def check(root):
+def expected_sources(root):
     ios = root / "iOS"
     expected = {name: {str(path.relative_to(ios)) for path in (ios / name).rglob("*.swift")}
                 for name in ("Glimmer", "GlimmerTests", "GlimmerUITests")}
@@ -64,7 +64,8 @@ def check(root):
     expected["Glimmer"].update("../" + str(path.relative_to(root))
                                for path in (root / "Glimmer/ControllerLayouts").glob("*.swift"))
     expected["GlimmerTests"].update("../GlimmerTests/" + name for name in
-                                  ["ControllerLayoutRenderTests.swift", "ControllerLayoutCaptureTests.swift", "ControllerDiagramTests.swift"])
+                                  ["ControllerLayoutRenderTests.swift", "ControllerLayoutCaptureTests.swift",
+                                   "ControllerDiagramTests.swift"])
     expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in
                                   ["ControllerMappingTests.swift", "ControllerLayoutPersistenceTests.swift",
                                    "ControllerLayoutEscapeTests.swift"])
@@ -73,6 +74,12 @@ def check(root):
     expected["GlimmerTests"].update(SHARED_SOAK_SOURCES)
     if any(not (ios / source).is_file() for source in SHARED_SOAK_SOURCES):
         raise ValueError("Missing shared soak test sources")
+    return expected
+
+
+def check(root):
+    ios = root / "iOS"
+    expected = expected_sources(root)
     validate_project(BOUNDARY.load_project(ios / "Glimmer.xcodeproj/project.pbxproj"), expected)
     lock = ios / "Glimmer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
     if lock.exists():
