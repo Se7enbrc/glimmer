@@ -155,8 +155,9 @@ verify:
 	@$(MAKE) TEST_SUITE= test
 	@$(MAKE) test-asan
 
-preflight: verify
-	@$(MAKE) ci-parity
+preflight: check-hooks check-boundaries
+	@$(MAKE) test-scripts TEST_PLATFORM=fast
+	@scripts/ci-parity.sh --changed
 	@case "$$(git branch --show-current)" in \
 		release-candidate|build/[0-9]*|feat/[0-9]*) $(MAKE) rc DRY_RUN=1 SOURCE_ONLY=1 ;; \
 		*) echo "Candidate source checks: not a release branch." ;; \

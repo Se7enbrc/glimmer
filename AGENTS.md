@@ -67,9 +67,11 @@ toolchains aligned; the Mac deployment target is 15.7.
 ```bash
 brew install mise
 mise install
-mise exec -- hk install
 make help
 ```
+
+Install the [guarded shared hooks](docs/CONTRIBUTING.md#migrate-shared-hooks)
+before committing. Older worktrees must remain usable during migration.
 
 - `make app`: Debug build, unsigned. A compile check.
 - `make test`: the Mac unit tests. Hostless, no PC needed.
