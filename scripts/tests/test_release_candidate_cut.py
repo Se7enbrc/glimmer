@@ -13,13 +13,19 @@ import sys
 import tempfile
 import unittest
 
+from fixture_process import run_fixture
+
 SCRIPTS = Path(__file__).resolve().parents[1]
 VERSION = "2026.10.6"
 BUILD = "20261010"
 RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-publication.yml",
                  "scripts/ci-release.sh", "scripts/install-ci-scanner.sh", "scripts/release-checks.py",
                  "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py",
-                 "scripts/release_candidate_kind.py", "scripts/release_symbols.py")
+                 "scripts/release_candidate_kind.py", "scripts/release_symbols.py", "scripts/candidate_reservation.py",
+                 "scripts/candidate_delivery.py", ".github/workflows/candidate-delivery.yml",
+                 ".github/workflows/verify.yml", ".github/workflows/codeql.yml",
+                 ".github/workflows/ios-testflight-build.yml", "scripts/ios-testflight.py",
+                 "scripts/ios-testflight-artifact.py", "scripts/ios-testflight-sign.py")
 REQUIRED = ["macOS", "Analyze (swift)", "Analyze (python)", "Analyze (actions)"]
 
 
@@ -32,20 +38,30 @@ def feed(*builds):
 
 
 GH = f'''#!{sys.executable}
-import json, os, pathlib, sys
+import json, os, pathlib, subprocess, sys
 state = pathlib.Path(os.environ["FIXTURE_STATE"])
 with (state / "gh.log").open("a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\\n")
 runs = json.loads((state / "runs.json").read_text())
 if sys.argv[1:3] == ["run", "list"]:
     print(json.dumps(runs))
+elif sys.argv[1:3] == ["workflow", "run"] and sys.argv[3] != "release.yml":
+    sha = subprocess.check_output(["git", "ls-remote", "origin", "refs/heads/release-candidate"], text=True).split()[0]
+    (state / (sys.argv[3] + ".json")).write_text(json.dumps([{{"workflow_runs": [{{
+        "id": 42, "head_sha": sha, "head_branch": "release-candidate", "event": "workflow_dispatch",
+        "status": "completed", "conclusion": "success"}}]}}]))
 elif sys.argv[1:3] == ["workflow", "run"]:
     sha = next(arg.split("=", 1)[1] for arg in sys.argv if arg.startswith("expected_sha="))
     run = {{"databaseId": 100 + len(runs), "headSha": sha,
            "url": f"https://github.com/Se7enbrc/glimmer/actions/runs/{{100 + len(runs)}}"}}
     (state / "runs.json").write_text(json.dumps([run] + runs))
 elif sys.argv[1] == "api":
-    print((state / "check-runs.json").read_text())
+    if "actions/workflows/" in sys.argv[-1]:
+        workflow = sys.argv[-1].split("actions/workflows/", 1)[1].split("/", 1)[0]
+        data = state / (workflow + ".json")
+        print(data.read_text() if data.exists() else '[{{"workflow_runs": []}}]')
+    else:
+        print((state / "check-runs.json").read_text())
 elif sys.argv[1:3] == ["pr", "comment"]:
     pass
 elif sys.argv[1:3] == ["pr", "view"]:
@@ -58,6 +74,7 @@ else:
 class ReleaseCandidateCutTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="glimmer candidate fixture ")
+        self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.work, self.origin, self.state, tools = (self.root / name for name in ("work", "origin.git", "state", "bin"))
         for directory in (self.work / "scripts", self.state, tools):
@@ -76,9 +93,15 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         shutil.copy2(SCRIPTS / "release-candidate.py", self.work / "scripts")
         shutil.copy2(SCRIPTS / "release_validation.py", self.work / "scripts")
         shutil.copy2(SCRIPTS / "release_candidate_kind.py", self.work / "scripts")
+        shutil.copy2(SCRIPTS / "candidate_reservation.py", self.work / "scripts")
         (self.work / "scripts/release-checks.py").write_text(
             f"import os, runpy, sys\nREAL = runpy.run_path({str(SCRIPTS / 'release-checks.py')!r})\n"
             'REPO, REQUIRED = REAL["REPO"], REAL["REQUIRED"]\n'
+            'api, ChecksPending = REAL["api"], REAL["ChecksPending"]\n'
+            'read_budget = REAL["read_budget"]\n'
+            'def check(sha, candidate=False):\n'
+            '    if os.environ.get("FIXTURE_CANDIDATE_CHECKS"): raise ValueError("candidate checks failed")\n'
+            '    return {"sha": sha}\n'
             'if __name__ == "__main__" and os.environ.get("FIXTURE_CHECKS"):\n'
             '    sys.exit("ERR: " + os.environ["FIXTURE_CHECKS"])\n')
         (self.work / "Glimmer").mkdir()
@@ -125,9 +148,6 @@ class ReleaseCandidateCutTests(unittest.TestCase):
             data["source"] = [*data["source"], os.path.realpath(self.work / "scripts")]
             self.env["COVERAGE_PROCESS_CONFIG"] = base64.b64encode(json.dumps(data).encode()).decode()
 
-    def tearDown(self):
-        self.temp.cleanup()
-
     def git(self, *args, cwd=None):
         return subprocess.run(["git", *args], cwd=cwd or self.work, env=self.env, check=True,
                               capture_output=True, text=True).stdout.strip()
@@ -152,15 +172,15 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         return self.git("ls-remote", "origin")
 
     def cut(self, *args, **env):
-        return subprocess.run([sys.executable, str(self.work / "scripts/release-candidate.py"), *args],
-                              cwd=self.work, env={**self.env, **env}, capture_output=True, text=True, timeout=60)
+        return run_fixture([sys.executable, str(self.work / "scripts/release-candidate.py"), *args],
+                           cwd=self.work, env={**self.env, **env})
 
     def gh_calls(self):
         log = self.state / "gh.log"
         return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
 
     def dispatches(self):
-        return [call for call in self.gh_calls() if call[:2] == ["workflow", "run"]]
+        return [call for call in self.gh_calls() if call[:3] == ["workflow", "run", "release.yml"]]
 
     def assert_refused(self, result, message):
         self.assertNotEqual(result.returncode, 0, result.stdout)
@@ -287,7 +307,7 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.assertEqual((self.remote(), self.git("for-each-ref")), before)
         self.assertEqual(self.dispatches(), [])
         self.assertFalse((self.state / "open.log").exists())
-        for line in (f"Would run: git push origin {self.sha}:refs/heads/release-candidate",
+        for line in (f"Would atomically reserve {self.sha} for Mac and iOS and move release-candidate",
                      f"Would run: git tag -s {VERSION}-rc.1 {self.sha} -m {VERSION}-rc.1",
                      f"Would run: git push origin refs/tags/{VERSION}-rc.1",
                      "Would run: gh workflow run release.yml --ref release-candidate -f operation=candidate"):
@@ -300,8 +320,7 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.git("checkout", "--quiet", "feat/rc")
         result = self.cut()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(f"git push --force-with-lease=release-candidate:{diverged} origin", result.stdout)
-        self.assertIn(f"Moved release-candidate from {diverged[:12]} to {self.sha[:12]}", result.stdout)
+        self.assertIn("refs/heads/candidate-reservation", self.remote())
         self.assertIn(f"{self.sha}\trefs/heads/release-candidate", self.remote())
 
     def test_failed_checks_stop_without_waiting(self):
@@ -324,6 +343,29 @@ class ReleaseCandidateCutTests(unittest.TestCase):
         self.assertIn(f'{self.sha}\trefs/tags/{VERSION}-rc.5-diag^{{}}', self.remote())
         self.assertEqual(self.cut('--diagnostic').returncode, 0)
         self.assertIn('different candidate kind', self.cut().stderr)
+
+    def test_direct_scans_precede_release_and_failed_candidate_evidence_retains_reservation(self):
+        result = self.cut(FIXTURE_CANDIDATE_CHECKS="failed")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("candidate checks failed", result.stderr)
+        self.assertEqual(self.dispatches(), [])
+        self.assertNotIn("refs/tags/", self.remote())
+        self.assertIn("refs/heads/candidate-reservation", self.remote())
+        scans = [call[2] for call in self.gh_calls() if call[:2] == ["workflow", "run"]]
+        self.assertEqual(scans, ["verify.yml", "codeql.yml"])
+        (self.state / "pr-head").write_text(self.old)
+        result = self.cut("--ci-sha", self.sha, "--pr", "114", FIXTURE_CHECKS="PR advanced to Y")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        scans = [call[2] for call in self.gh_calls() if call[:2] == ["workflow", "run"]]
+        self.assertEqual(scans, ["verify.yml", "codeql.yml", "release.yml"])
+
+    def test_ios_only_preparation_does_not_require_a_new_mac_version_or_create_a_tag(self):
+        self.tag_origin(VERSION)
+        result = self.cut('--prepare-only')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.dispatches(), [])
+        self.assertNotIn('-rc.', self.remote())
+        self.assertIn(f'{self.sha}\trefs/heads/release-candidate', self.remote())
 
     def test_off_feed_diagnostic_build_number_cannot_be_reused(self):
         self.tag_origin(f'{VERSION}-rc.1-diag', sha=self.sha)

@@ -6,6 +6,7 @@
 
 from collections import Counter
 import hashlib
+import importlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -35,9 +36,20 @@ def validate_inputs(sha, version, build):
         raise ValueError('build_number must use Apple numeric 4.2.2 component limits')
 
 
+def validate_flavour(flavour):
+    if flavour not in ('beta', 'production'):
+        raise ValueError('IOS_FLAVOUR must be beta or production')
+
+
+def app_store_source_eligible(flavour):
+    validate_flavour(flavour)
+    return flavour == 'production'
+
+
 def identity(env=None, attempt=None):
     env = os.environ if env is None else env
-    values = {key: env[key] for key in ('EXPECTED_SHA', 'IOS_VERSION', 'IOS_BUILD_NUMBER', 'GITHUB_REPOSITORY')}
+    values = {key: env[key] for key in ('EXPECTED_SHA', 'IOS_VERSION', 'IOS_BUILD_NUMBER', 'IOS_FLAVOUR', 'GITHUB_REPOSITORY')}
+    validate_flavour(values['IOS_FLAVOUR'])
     values['GITHUB_RUN_ID'] = env.get('ARCHIVE_RUN_ID') or env['GITHUB_RUN_ID']
     values['GITHUB_RUN_ATTEMPT'] = attempt or env.get('ARCHIVE_ATTEMPT') or env['GITHUB_RUN_ATTEMPT']
     validate_inputs(values['EXPECTED_SHA'], values['IOS_VERSION'], values['IOS_BUILD_NUMBER'])
@@ -55,7 +67,7 @@ def require_builder(env=None):
     default = env.get('DEFAULT_BRANCH', '')
     workflow = f'{REPOSITORY}/.github/workflows/ios-testflight-build.yml@{ref}'
     if (env.get('GITHUB_REPOSITORY') != REPOSITORY or env.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
-            or not default or not ref.startswith('refs/heads/') or ref in ('refs/heads/main', f'refs/heads/{default}')
+            or not default or ref != 'refs/heads/release-candidate' or ref in ('refs/heads/main', f'refs/heads/{default}')
             or env.get('GITHUB_WORKFLOW_REF') != workflow or env.get('GITHUB_SHA') != env.get('EXPECTED_SHA')):
         raise ValueError('archive must run on its exact candidate branch commit, never the default branch')
 
@@ -105,7 +117,10 @@ def regular_files(root):
 
 
 def validate_app(app, expected):
+    validate_flavour(expected['IOS_FLAVOUR'])
     info = read_plist(app / 'Info.plist')
+    if info.get('GlimmerBuildFlavour') != expected['IOS_FLAVOUR']:
+        raise ValueError('archive compiled flavour mismatch')
     if (info.get('CFBundleIdentifier') != BUNDLE or info.get('CFBundleExecutable') != 'Glimmer'
             or info.get('CFBundleShortVersionString') != expected['IOS_VERSION']
             or info.get('CFBundleVersion') != expected['IOS_BUILD_NUMBER']
@@ -155,6 +170,8 @@ def validate_archive(root, expected, check_symbols=True):
     symbols = root / 'dSYMs/Glimmer.app.dSYM/Contents/Resources/DWARF/Glimmer'
     if not symbols.is_file():
         raise ValueError('matching app dSYM is required')
+    if check_symbols:
+        importlib.import_module('check-ios-diagnostics').inspect_app(root / APP, expected['IOS_FLAVOUR'])
     if check_symbols and uuids(root / APP / 'Glimmer') != uuids(symbols):
         raise ValueError('app and dSYM UUID mismatch')
     return files

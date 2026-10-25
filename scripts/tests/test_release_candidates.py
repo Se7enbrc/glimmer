@@ -13,6 +13,8 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
+from fixture_process import run_fixture
+
 import test_release
 from test_release import SCRIPTS, channel
 from release_validation import SPARKLE, validate_feed
@@ -183,10 +185,9 @@ print("c" * 40)
         path.chmod(0o755)
 
     def publish_candidate(self, tag="2026.10.6-rc.1"):
-        return subprocess.run(["bash", str(self.root / "scripts/publish-release.sh"),
-                               "2026.10.6", "400", str(self.root / "Glimmer.app"),
-                               str(self.root / "dist"), "fixture/glimmer", tag],
-                              env=self.env, capture_output=True, text=True, timeout=10)
+        return run_fixture(["bash", str(self.root / "scripts/publish-release.sh"),
+                            "2026.10.6", "400", str(self.root / "Glimmer.app"),
+                            str(self.root / "dist"), "fixture/glimmer", tag], env=self.env)
 
     def test_candidate_uses_appcast_branch_feed_and_cas_without_changing_source_checkout(self):
         self.configure_candidate()
