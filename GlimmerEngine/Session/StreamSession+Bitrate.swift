@@ -30,6 +30,27 @@ extension StreamSession {
         public var legs: [String: Double] = [:]
     }
 
+    /// Copy for a quality change that holds the frame; both platforms show it in their reconnect slot.
+    public static let adjustingQualityText = "Adjusting stream quality…"
+
+    /// Anti-flap for the quality indicator. Times are session uptime seconds.
+    package struct QualityNoticeGate: Sendable {
+        /// Shorter holds read as a hitch, not a wait worth naming.
+        package static let showAfter: Duration = .milliseconds(750)
+        /// A policy stepping down and back up should not keep talking: one notice a minute.
+        package static let quietWindowSeconds: Double = 60
+        /// Inside the quiet window a hold this long looks like a stall, so it is still named.
+        package static let breakthroughAfter: Duration = .seconds(2)
+        package private(set) var lastShown: Double?
+
+        package func delay(startingAt start: Double) -> Duration {
+            guard let lastShown, start - lastShown < Self.quietWindowSeconds else { return Self.showAfter }
+            return Self.breakthroughAfter
+        }
+
+        package mutating func shown(at time: Double) { lastShown = time }
+    }
+
     package struct BitrateChange {
         let started: Double
         var report: BitrateChangeReport
@@ -67,8 +88,9 @@ extension StreamSession {
     private func performBitrateChange() async {
         guard bitrateChange != nil else { return }
         defer { bitrateTask = nil; bitrateChange = nil }
+        let delay = qualityNotice.delay(startingAt: uptimeSeconds)
         let notice = Task {
-            do { try await clock.sleep(.milliseconds(750)) } catch { return }
+            do { try await clock.sleep(delay) } catch { return }
             await showBitrateRecovery()
         }
         defer { notice.cancel() }
@@ -81,9 +103,10 @@ extension StreamSession {
     package func showBitrateRecovery() async {
         guard bitrateChange?.report.indicatorShown == false, isReconnecting, isStreaming, !stopInProgress else { return }
         bitrateChange?.report.indicatorShown = true
-        bridge?.emit(.reconnecting)
+        qualityNotice.shown(at: uptimeSeconds)
+        bridge?.emit(.adjustingQuality)
         let surface = presentation
-        await MainActor.run { surface?.showRecovery("Reconnecting…") }
+        await MainActor.run { surface?.showRecovery(Self.adjustingQualityText) }
     }
 
     package func completeBitrateChange(_ outcome: BitrateChangeReport.Outcome) {

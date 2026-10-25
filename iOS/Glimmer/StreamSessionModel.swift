@@ -25,6 +25,12 @@ final class StreamSessionModel {
     var quitFailure: String?
     private(set) var connectionPoor = false
     private(set) var waitingForVideo = false
+    /// The engine only reports a held quality change once its anti-flap gate allows it.
+    private(set) var adjustingQuality = false
+    var recoveryText: String {
+        adjustingQuality ? StreamSession.adjustingQualityText : "Reconnecting to \(launch.pcName)…"
+    }
+    var announce: @MainActor (String) -> Void = { UIAccessibility.post(notification: .announcement, argument: $0) }
     private(set) var requestedFormat: StreamFormat?
     private(set) var mouseControllers: Set<ControllerRegistration> = []
     var controllerMouseActive: Bool { !mouseControllers.isEmpty }
@@ -294,9 +300,14 @@ final class StreamSessionModel {
         pictureNeedsReview = false
     }
 
-    private func prepareForRecovery() {
-        rejectPictureTrial()
-        if launch.useScreenSize, let old = launch.previousFormat, old.isValid {
+    private func holdForRecovery(_ event: StreamEvent) {
+        var quality = false
+        if case .adjustingQuality = event { quality = true }
+        if quality, !adjustingQuality { announce(StreamSession.adjustingQualityText) }
+        adjustingQuality = quality
+        // A bitrate-only change keeps the picture size, so it never judges a size trial.
+        if !quality { rejectPictureTrial() }
+        if !quality, launch.useScreenSize, let old = launch.previousFormat, old.isValid {
             requestedFormat = StreamFormat(width: old.width, height: old.height, fps: old.fps,
                                            changeResolution: old.changeResolution)
         }
@@ -316,10 +327,11 @@ final class StreamSessionModel {
             endingMessage = nil
             terminalFailure = false
             captureSuspended = false
+            adjustingQuality = false
             phase = .streaming
             if !controlsRequested { controlsVisible = !controllerConnected && !touchGeometryUsable }
             synchronizeInputFocus()
-        case .reconnecting: prepareForRecovery()
+        case .reconnecting, .adjustingQuality: holdForRecovery(update.event)
         case .connectionTerminated(let code, let error):
             rejectPictureTrial()
             let reason = StreamFailure.termination(code: code, hasReceivedVideo: hasReceivedVideo)

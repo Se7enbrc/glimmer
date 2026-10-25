@@ -168,10 +168,58 @@ struct BitrateActuatorTests {
         bridge.beginAttempt(UUID())
         #expect(!bridge.acceptsInput(attempt: bridge.currentAttempt))
         var reconnecting = 0
+        var adjusting = 0
         for await event in fixture.events {
             if case .reconnecting = event { reconnecting += 1 }
+            if case .adjustingQuality = event { adjusting += 1 }
         }
-        #expect(reconnecting == 1)
+        #expect(reconnecting == 0 && adjusting == 1)
+        #expect(fixture.banners.withLock { $0 } == [StreamSession.adjustingQualityText, nil])
+    }
+
+    @Test func qualityNoticeIsQuietForAMinuteUnlessAHoldBreaksThrough() {
+        var gate = StreamSession.QualityNoticeGate()
+        #expect(gate.delay(startingAt: 100) == .milliseconds(750))
+        gate.shown(at: 100.75)
+        #expect(gate.delay(startingAt: 101) == .seconds(2))
+        #expect(gate.delay(startingAt: 160.74) == .seconds(2))
+        #expect(gate.delay(startingAt: 160.75) == .milliseconds(750))
+        gate.shown(at: 132)
+        #expect(gate.delay(startingAt: 191) == .seconds(2))
+    }
+
+    @Test func slowTransitionNamesQualityOnceThenStaysQuietButRealReconnectsDoNot() async throws {
+        let gate = BitrateTestGate()
+        let connects = OSAllocatedUnfairLock(initialState: 0)
+        let fixture = await BitrateFixture(beforeConnect: {
+            if connects.withLock({ $0 += 1; return $0 }) == 2 { await gate.pause() }
+        })
+        let session = fixture.session
+        #expect(await session.request(rate: 30_000, reason: .trial) == .accepted)
+        await session.waitForBitrateTask()
+        #expect(await session.lastBitrateChange?.indicatorShown == false)
+        #expect(await session.request(rate: 40_000, reason: .recovery) == .accepted)
+        await gate.waitUntilEntered()
+        await session.showBitrateRecovery()
+        await gate.release()
+        await session.waitForBitrateTask()
+        #expect(await session.lastBitrateChange?.indicatorShown == true)
+        #expect(await session.request(rate: 30_000, reason: .trial) == .accepted)
+        await session.waitForBitrateTask()
+        fixture.time.withLock { $0 += 61_000_000_000 }
+        #expect(await session.request(rate: 40_000, reason: .recovery) == .accepted)
+        await session.waitForBitrateTask()
+        #expect(fixture.noticeDelays.withLock { $0 } ==
+            [.milliseconds(750), .milliseconds(750), .seconds(2), .milliseconds(750)])
+        await session.runSelfInitiatedReconnect(cause: "test", rearmWatchdog: { _ in })
+        #expect(fixture.banners.withLock { $0.compactMap { $0 } } == [StreamSession.adjustingQualityText, "Reconnecting…"])
+        await fixture.stopLocally()
+        var events: [String] = []
+        for await event in fixture.events {
+            if case .reconnecting = event { events.append("reconnecting") }
+            if case .adjustingQuality = event { events.append("adjusting") }
+        }
+        #expect(events == ["adjusting", "reconnecting"])
     }
 
     @Test func stopDuringReservedTransitionLeavesGameRunning() async {
@@ -240,6 +288,9 @@ private struct BitrateFixture: Sendable {
     let fresh: InputRecordingBackend
     let events: AsyncStream<StreamEvent>
     let quiesces: OSAllocatedUnfairLock<Int>
+    let time = OSAllocatedUnfairLock(initialState: UInt64(10_000_000_000))
+    let noticeDelays = OSAllocatedUnfairLock<[Duration]>(initialState: [])
+    let banners = OSAllocatedUnfairLock<[String?]>(initialState: [])
 
     @MainActor
     init(disposition: StreamHostDisposition = .cancelOwnedHostSession, app: Int = 7,
@@ -262,9 +313,12 @@ private struct BitrateFixture: Sendable {
             if present { stats.lock.withLock { stats.firstPresentTime = 10.02; stats.lastPresentTime = 10.02 } }
         })
         self.fresh = fresh
-        let time = OSAllocatedUnfairLock(initialState: UInt64(10_000_000_000))
+        let time = time
+        let noticeDelays = noticeDelays
         let clock = SessionClock(uptimeNanos: { time.withLock { $0 } }, sleep: { duration in
-            if duration == .milliseconds(750) {
+            if duration == StreamSession.QualityNoticeGate.showAfter
+                || duration == StreamSession.QualityNoticeGate.breakthroughAfter {
+                noticeDelays.withLock { $0.append(duration) }
                 let (stream, continuation) = AsyncStream<Void>.makeStream()
                 defer { continuation.finish() }
                 for await _ in stream { }
@@ -281,8 +335,10 @@ private struct BitrateFixture: Sendable {
         let session = StreamSession(hostDisposition: disposition, audioDecoder: audio, services: SessionServices(),
             backend: InputRecordingBackend(), makeNetwork: { pc.client($0) }, makeBackend: { fresh }, clock: clock)
         self.session = session
+        let banners = banners
         events = await session.prepareBitrateTest(video: video, audio: audio, hooks: hooks,
-            server: FakeSunshine.server(pin: "host-pin"), request: configuration.request)
+            server: FakeSunshine.server(pin: "host-pin"), request: configuration.request,
+            showRecovery: { text in banners.withLock { $0.append(text) } })
     }
 
     func stopLocally() async {
@@ -301,7 +357,9 @@ private struct BitrateFixture: Sendable {
 
 private extension StreamSession {
     func prepareBitrateTest(video: VideoDecoder, audio: AudioDecoder, hooks: SessionInputHooks,
-                            server: ServerInfo, request: StreamRequest) async -> AsyncStream<StreamEvent> {
+                            server: ServerInfo, request: StreamRequest,
+                            showRecovery: @escaping @MainActor @Sendable (String?) -> Void)
+        async -> AsyncStream<StreamEvent> {
         isStreaming = true
         reachedLiveState = true
         ownsHostSession = true
@@ -311,7 +369,11 @@ private extension StreamSession {
         appliedBitrateKbps = 40_000
         input = hooks
         videoDecoder = video
-        presentation = await SessionPresentation()
+        presentation = await MainActor.run {
+            let presentation = SessionPresentation()
+            presentation.showRecovery = showRecovery
+            return presentation
+        }
         let bridge = StreamBridgeContext(session: self, videoDecoder: video, audioDecoder: audio)
         let pair = AsyncStream<StreamEvent>.makeStream()
         bridge.eventContinuation = pair.continuation

@@ -40,8 +40,16 @@ a successful transition.
 The first attempt has no recovery backoff. Input releases precede transport
 teardown. A 5 ms PCM ramp fades the old output, with a 20 ms scheduling
 allowance plus the output adapter's reported latency before disposal; the new
-output ramps in over 5 ms. The existing “Reconnecting…” indicator appears only
-if the transition is still pending after 750 ms.
+output ramps in over 5 ms.
+
+A transition still pending after 750 ms emits `adjustingQuality` and shows
+“Adjusting stream quality…” in the reconnect slot: the stream window banner on
+Mac, the stream view status on iPhone and iPad, announced once to VoiceOver.
+After it shows, later transitions stay silent for 60 seconds unless one is still
+pending after 2 seconds; a breakthrough restarts the window. Shorter holds read
+as a hitch; a 2-second freeze looks like a stall. The gate is
+`QualityNoticeGate` on the session clock and runs no timer while idle. Real
+reconnects and recovery keep “Reconnecting…” and are never suppressed.
 
 Each attempt fetches `/serverinfo`, requires the same running app, calls
 `/resume`, and creates a fresh RTSP connection. `RtspClient` performs OPTIONS,
@@ -72,7 +80,7 @@ its transport replies are instantaneous and it has no audio device. Those are
 synthetic boundary checks, not measured reconnect performance. PCM tests check
 the ramp and sustained silence; fake-PC tests check resume-only legs, admission,
 input release, cancellation and failure. Simulator screenshots exercise the
-retained surface and delayed indicator without a PC video feed.
+retained surface and delayed quality indicator without a PC video feed.
 
 Real interruption is the release/fade allowance plus local teardown, HTTPS
 status/resume, RTSP/control setup and first-frame delivery. For planning, allow

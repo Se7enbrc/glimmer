@@ -193,6 +193,7 @@ public actor StreamSession {
     package var bitrateChange: BitrateChange?
     package var bitrateTask: Task<Void, Never>?
     package var bitrateAvailable = true
+    package var qualityNotice = QualityNoticeGate()
     package var preserveGameOnStop = false
     package var bitrateAudioTail: (id: UUID, attempt: UUID, oldLast: Double)?
     public internal(set) var appliedBitrateKbps: Int?

@@ -270,6 +270,25 @@ struct StreamSessionTests {
         await model.waitUntilStopped()
     }
 
+    @Test func qualityAdjustmentHoldsLikeRecoveryAndAnnouncesOnce() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        var spoken: [String] = []
+        model.announce = { spoken.append($0) }
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.firstFrame))
+        model.resumeInput()
+        for _ in 0..<2 { model.receive(fixture.update(.adjustingQuality)) }
+        #expect(model.phase == .reconnecting && model.adjustingQuality && !model.inputFocused)
+        #expect(spoken == [StreamSession.adjustingQualityText])
+        model.receive(fixture.update(.reconnected))
+        #expect(model.phase == .streaming && !model.adjustingQuality && model.inputFocused)
+        model.receive(fixture.update(.reconnecting))
+        #expect(model.phase == .reconnecting && !model.adjustingQuality && spoken.count == 1)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
     @Test func canonicalVideoHoldIsInformationalAndDoesNotSuspendInput() async {
         let fixture = PlaybackFixture()
         let model = fixture.model()

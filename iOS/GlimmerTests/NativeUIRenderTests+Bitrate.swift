@@ -9,7 +9,8 @@ import UIKit
 @testable import Glimmer
 
 extension NativeUIRenderTests {
-    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440)], [false, true])
+    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440),
+                      CGSize(width: 1194, height: 834)], [false, true])
     func bitrateTransitionKeepsSurfaceAndOnlyShowsDelayedRecovery(size: CGSize, dark: Bool) async throws {
         let id = UUID()
         var pause: (@MainActor @Sendable () -> Void)?
@@ -40,7 +41,7 @@ extension NativeUIRenderTests {
                         decoder.flushRenderer(layer.sampleBufferRenderer)
                     }
                     if phase == "indicator" {
-                        model.receive(.init(sessionID: id, attemptID: UUID(), event: .reconnecting))
+                        model.receive(.init(sessionID: id, attemptID: UUID(), event: .adjustingQuality))
                     }
                     if phase == "after" { model.receive(.init(sessionID: id, attemptID: UUID(), event: .reconnected)) }
                     #expect(controller.surface.displayLayer === layer)

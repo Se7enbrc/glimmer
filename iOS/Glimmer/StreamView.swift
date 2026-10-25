@@ -328,7 +328,7 @@ struct StreamControls: View {
         case .stopping:
             ProgressView("Disconnecting…")
         case .reconnecting:
-            ProgressView("Reconnecting to \(model.launch.pcName)…")
+            ProgressView(model.recoveryText)
         case .ended(let message):
             Text(message).multilineTextAlignment(.center).padding(32)
         case .streaming:
