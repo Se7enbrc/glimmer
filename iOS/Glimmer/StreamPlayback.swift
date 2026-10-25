@@ -66,6 +66,8 @@ struct StreamPlayback {
     var observeControllers: (@MainActor (@escaping @MainActor (Bool) -> Void) -> Void)?
     var touchGamepad: TouchGamepadCapture?
     var showTouchControls: (@MainActor (Bool) -> Void)?
+    /// Moves a running stream to a new listed size through the resume-only seam; the game keeps running.
+    var requestFormatChange: StreamWindowResize.Request?
 
     static func make(launch: StreamLaunch, surface: StreamSurface,
                      quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {
@@ -139,6 +141,7 @@ struct StreamPlayback {
                bandwidth.setForeground(visible)
                Task { await session.setBitrateChangesAvailable(visible) }
            }, observeControllers: nativeInput.observeControllers, touchGamepad: nativeInput.touch,
-           showTouchControls: nativeInput.showTouchControls)
+           showTouchControls: nativeInput.showTouchControls,
+           requestFormatChange: { await StreamWindowResize.request($0, session: session) })
     }
 }

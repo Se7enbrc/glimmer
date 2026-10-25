@@ -8,12 +8,12 @@ import UIKit
 
 @MainActor
 struct StreamDisplayTests {
-    @Test func pictureIsNeverCroppedIncludingAfterRendererRecovery() {
+    @Test func deviceWindowFillsIncludingAfterRendererRecovery() {
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 1024, height: 768))
-        #expect(surface.displayLayer.videoGravity == .resizeAspect)
+        #expect(surface.displayLayer.videoGravity == .resizeAspectFill)
         let original = surface.displayLayer
         let replacement = surface.replaceDisplayLayer { _ in }
         #expect(replacement !== original)
-        #expect(replacement.videoGravity == .resizeAspect)
+        #expect(replacement.videoGravity == .resizeAspectFill)
     }
 }

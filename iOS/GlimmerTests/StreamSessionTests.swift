@@ -429,15 +429,15 @@ struct StreamSessionTests {
         #expect(surface.displayLayer === replacement)
         #expect(replacement.superlayer === surface.layer)
         #expect(failedLayer.superlayer == nil)
-        #expect(replacement.videoGravity == .resizeAspect)
+        #expect(replacement.videoGravity == .resizeAspectFill)
         #expect(replacement.frame == surface.bounds && surface.clipsToBounds)
     }
 
-    @Test func streamSurfaceFitsVideoAndSupportsWindowOrientations() {
+    @Test func streamSurfaceFillsVideoAndSupportsWindowOrientations() {
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 800, height: 400))
         surface.layoutIfNeeded()
         #expect(surface.displayLayer.frame == surface.bounds)
-        #expect(surface.displayLayer.videoGravity == .resizeAspect)
+        #expect(surface.displayLayer.videoGravity == .resizeAspectFill)
         #expect(surface.clipsToBounds)
         let model = PlaybackFixture().model()
         let controller = StreamViewController(model: model, close: {})

@@ -62,8 +62,8 @@ final class StreamSurface: UIView {
         return displayLayer
     }
 
-    // One rule for every window and display: never crop the PC picture.
-    private let presentationGravity = AVLayerVideoGravity.resizeAspect
+    // One rule on iPhone, iPad and external displays: fill the whole window, cropping edges if shapes differ.
+    private let presentationGravity = AVLayerVideoGravity.resizeAspectFill
 
     private func configureDisplayLayer() {
         displayLayer.videoGravity = presentationGravity

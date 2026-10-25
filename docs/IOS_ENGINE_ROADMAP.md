@@ -167,8 +167,9 @@ prove that the PC rendered the desktop at that size instead of scaling it.
 
 Do not stretch a 16:9 image to disguise a missing phone-shaped mode. If the PC
 cannot provide the requested mode, explain the setup action and offer a
-supported aspect-fit mode. Cropping is not the default fallback. Game-generated
-letterboxing remains possible even when the desktop resolution matches.
+supported listed mode. The picture fills the window, cropping edges when the
+aspect differs. Game-generated letterboxing remains possible even when the
+desktop resolution matches.
 
 Support both landscape orientations without reconnecting when dimensions stay
 the same. Coalesce geometry changes; do not restart a stream for transient

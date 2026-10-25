@@ -267,7 +267,7 @@ private struct StreamQualitySettings: View {
 
     private var streamExplanation: String {
         "Native chooses the closest size from the iPhone and iPad display modes. "
-            + "Install those modes on the PC. The whole picture fits the window. "
+            + "Install those modes on the PC. The picture fills the window and may crop at the edges. "
             + "Some games need 16:9. Choose 1080p if the picture looks wrong. Changes apply to the next stream."
     }
 }

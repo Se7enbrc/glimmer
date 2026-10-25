@@ -11,11 +11,10 @@ closest listed size to the window's pixels. Both 1080p choices request 1920 ×
 profile and display. Window modes generally use 60 fps. There is no
 half-resolution or Custom choice.
 
-The whole picture fits the window. A different aspect shows black bars, and a
-lower resolution loses detail. Resizing during play keeps the initial stream
-format, just like rotating iPhone; start a new stream to select for the new
-window. Disconnecting quits the game on the PC unless Leave games running when
-you disconnect is on.
+The picture fills the window. A different aspect crops edges, and a lower
+resolution loses detail. After a resize settles, the stream moves to the new
+window's listed mode without quitting the game. Disconnecting quits the game on
+the PC unless Leave games running when you disconnect is on.
 
 The PC display and game must use the requested aspect. Otherwise Sunshine or the
 game may put black bars inside the video. Installing modes makes them available;

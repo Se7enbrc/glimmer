@@ -16,8 +16,9 @@ returns video to the application window.
 An interactive Stage Manager window remains an application scene. iPad streaming
 follows its window orientation; only iPhone streaming requests landscape. Its
 drawable size determines native stream dimensions at connection time. Resizing
-fits the existing picture without cropping. To request new dimensions,
-disconnect and start again after resizing or moving the window.
+keeps the requested size and fills the new bounds, cropping edges when the
+aspect changes. To request new dimensions, disconnect and start again after
+resizing or moving the window.
 
 A dedicated external scene selects the display's preferred mode while streaming
 and restores its previous mode and overscan compensation afterward. A subsequent
@@ -52,9 +53,9 @@ and that controls stay in the application window.
 The iOS 26 iPad Simulator accepted a 1920 × 1080 TV-out geometry and power
 changes, but delivered only an application scene. Dedicated external-scene
 delivery still needs a connected device. Injected window tests cover routing,
-restoration and focus; rendered corner patterns verify letterboxing and
-pillarboxing without cropping. Simulator results cannot prove cable modes, HDR
-output, actual display-link cadence, hardware decoding or power.
+restoration and focus; rendered corner patterns record fit and fill for
+comparison. Simulator results cannot prove cable modes, HDR output, actual
+display-link cadence, hardware decoding or power.
 
 ## Hardware acceptance still required
 

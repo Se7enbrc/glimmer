@@ -226,7 +226,7 @@ struct NativeUIRenderTests {
         try await recordController(controller, name: name, size: size, dark: dark, prepare: {
             #expect(fixture.makes == (shouldStart ? 1 : 0))
             #expect(model.phase == (shouldStart ? .connecting : .idle))
-            #expect(controller.surface.displayLayer.videoGravity == .resizeAspect)
+            #expect(controller.surface.displayLayer.videoGravity == .resizeAspectFill)
             if fixture.makes == 1 {
                 model.receive(fixture.update(.firstFrame))
                 model.showControls()
@@ -237,7 +237,7 @@ struct NativeUIRenderTests {
             controller.startWhenReady()
             if shouldStart { #expect(fixture.makes == 1) }
             let replacement = controller.surface.replaceDisplayLayer { _ in }
-            #expect(replacement.videoGravity == .resizeAspect)
+            #expect(replacement.videoGravity == .resizeAspectFill)
         })
         model.stop()
         await model.waitUntilStopped()

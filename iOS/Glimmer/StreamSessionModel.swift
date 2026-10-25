@@ -73,12 +73,16 @@ final class StreamSessionModel {
     private var captureSuspended = false
     private var controlsRequested = false
     private var modeNoticeTask: Task<Void, Never>?
+    private var windowResize: StreamWindowResize?
+    private let resizeSleep: @Sendable (Duration) async throws -> Void
 
     init(launch: StreamLaunch, backgroundGrace: StreamBackgroundGrace = StreamBackgroundGrace(),
+         resizeSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          makePlayback: @escaping @MainActor (StreamLaunch, StreamSurface,
             @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback = StreamPlayback.make) {
         self.launch = launch
         self.backgroundGrace = backgroundGrace
+        self.resizeSleep = resizeSleep
         self.makePlayback = makePlayback
     }
 
@@ -97,6 +101,11 @@ final class StreamSessionModel {
         }
         self.playback = playback
         requestedFormat = playback.format
+        if let format = playback.format, let request = playback.requestFormatChange {
+            windowResize = StreamWindowResize(format: format, request: request, applied: { [weak self] in
+                self?.requestedFormat = $0
+            }, sleep: resizeSleep)
+        }
         phase = .connecting
         playback.observeControllers? { [weak self] connected in self?.controllerConnectionChanged(connected) }
         eventTask = Task { [weak self] in
@@ -110,6 +119,7 @@ final class StreamSessionModel {
                 if let started = try await playback.start(), let self, !self.stopRequested {
                     self.requestedFormat = started.format
                     self.requestedStartKbps = started.startKbps
+                    self.windowResize?.adopt(started.format)
                 }
             } catch RunningAppFailure.ended {
                 guard let self, !self.stopRequested else { return }
@@ -187,6 +197,8 @@ final class StreamSessionModel {
         modeNoticeTask?.cancel()
         controllerModeMessage = nil
         synchronizeInputFocus()
+        windowResize?.stop()
+        windowResize = nil
         playback = nil
         startTask = nil
         eventTask?.cancel()
@@ -253,7 +265,18 @@ final class StreamSessionModel {
     private func synchronizeInputFocus() {
         playback?.focusInput?(inputFocused)
         inputCaptureChanged?(inputFocused)
+        windowResize?.setAvailable(canStart && phase == .streaming)
     }
+
+    /// A resized window, or a continued game at an earlier size, moves to the window's listed mode.
+    func windowChanged(surface: StreamSurface) {
+        guard let current = requestedFormat, let target = try? launch.profile.resolve(surface: surface) else { return }
+        // The resume-only seam keeps the running frame rate.
+        windowResize?.submit(StreamFormat(width: target.width, height: target.height, fps: current.fps,
+                                          changeResolution: current.changeResolution))
+    }
+
+    func waitForWindowResize() async { await windowResize?.waitForPendingChange() }
 
     func screenChanged() { playback?.screenChanged() }
 

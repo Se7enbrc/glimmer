@@ -10,10 +10,10 @@ See the fixed [input mapping](docs/INPUT.md).
 Use the iPhone launcher, Settings and pairing screens in portrait or landscape.
 iPhone streams stay in landscape; menus can rotate again after disconnecting.
 iPad streams start in either orientation and use the whole window, including
-Split View and Stage Manager. This build keeps the initial stream size after a
-window resize, matching iPhone rotation. The whole picture fits the new window,
-never cropped. A connected external display can show the whole picture while the
-device keeps the controls. See
+Split View and Stage Manager. After a window resize settles, the stream moves to
+the new window's listed mode without quitting the game. The picture fills the
+window and can crop at the edges. A connected external display can show the
+picture while the device keeps the controls. See
 [external display validation](docs/EXTERNAL_DISPLAYS.md) for hardware checks.
 The app opts into iOS Game Mode; the system controls its activation.
 
@@ -41,13 +41,13 @@ display maximum, so window modes generally run at 60 fps. All three choices
 request stereo and 20 Mbps. VideoToolbox capabilities enable AV1 or HEVC with
 H.264 fallback; HDR-capable displays can request 10-bit HDR. Sustained hardware
 and colour acceptance remains pending; see
-[video fidelity checks](docs/VIDEO_FIDELITY.md). Video fits the whole picture. A
-different aspect shows black bars; a lower resolution loses detail. The PC and
-game must use the requested aspect to avoid black bars inside the video. If
-discovery cannot find the PC, choose Settings → PCs → Add PC by address… and
-enter its IP address or hostname. Pairing and certificate verification use the
-same connection flow. Development builds keep the display awake throughout the
-active app. Release builds do so only during a stream. Leaving the app restores
+[video fidelity checks](docs/VIDEO_FIDELITY.md). Video fills behind cutouts. A
+different aspect crops edges; a lower resolution loses detail. The PC and game
+must use the requested aspect to avoid black bars inside the video. If discovery
+cannot find the PC, choose Settings → PCs → Add PC by address… and enter its IP
+address or hostname. Pairing and certificate verification use the same
+connection flow. Development builds keep the display awake throughout the active
+app. Release builds do so only during a stream. Leaving the app restores
 ordinary auto-lock; manually locking still stops a stream. Disconnecting stops
 the local stream immediately. Brief app switches preserve it for up to 15
 seconds, with input released; staying away longer disconnects. iOS may end this

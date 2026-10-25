@@ -71,6 +71,12 @@ extension StreamSession {
 
     /// Resume-only encoded-size change for a resized window, at the current rate and frame rate.
     /// Same admission and completion contract as `request(rate:reason:)`; see docs/BITRATE_ACTUATOR.md.
+    /// Waits for the transition an accepted request started; its report is the only proof of the outcome.
+    public func settledBitrateChange() async -> BitrateChangeReport? {
+        await bitrateTask?.value
+        return lastBitrateChange
+    }
+
     public func request(width: Int, height: Int) -> BitrateAdmission {
         guard StreamSizeBounds.width.contains(width), StreamSizeBounds.height.contains(height),
               width.isMultiple(of: 2), height.isMultiple(of: 2), let config = reconnectConfig,

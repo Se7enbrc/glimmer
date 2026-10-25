@@ -135,11 +135,11 @@ extension NativeUIRenderTests {
                     #expect(model.phase == .connecting)
                     #expect(controller.surface.bounds.size == size)
                     #expect(controller.surface.displayLayer.frame == controller.surface.bounds)
-                    #expect(controller.surface.displayLayer.videoGravity == .resizeAspect)
+                    #expect(controller.surface.displayLayer.videoGravity == .resizeAspectFill)
                     #expect(model.requestedFormat != nil)
                     guard let format = model.requestedFormat else { return }
                     #expect(StreamDisplayModes.bundled.contains(format))
-                    let scale = min(size.width / CGFloat(format.width), size.height / CGFloat(format.height))
+                    let scale = max(size.width / CGFloat(format.width), size.height / CGFloat(format.height))
                     let pattern = WindowPatternView(frame: CGRect(x: 0, y: 0, width: CGFloat(format.width) * scale,
                                                                    height: CGFloat(format.height) * scale))
                     pattern.center = CGPoint(x: size.width / 2, y: size.height / 2)

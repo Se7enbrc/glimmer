@@ -61,15 +61,15 @@ use the same ordered choices: Native, 1080p 60 and 1080p 120. Native uses the
 window's pixel size as its target and chooses the closest mode listed in
 `docs/vdd/iphone-ipad.xml`. 1080p requests 1920 × 1080. All requests respect the
 display's refresh limit and share the same codec, HDR and quality rules. A
-connected external display can show the whole picture while the device keeps the
+connected external display can show the picture while the device keeps the
 controls. Both support physical controllers. Disconnecting quits the game on the
 PC by default. “Leave games running when you disconnect” enables continuation
 for games and PCs that handle a screen-size change. Running games offer Resume
 or Continue here and an explicit Quit action on both platforms.
 
-Rotation and window resizing keep the current stream format, as iPhone does
-today. Video fits the new bounds, never cropping when the aspect changes. A new
-stream chooses a mode for the new window. No resize quits or relaunches the
+Video fills the window, cropping edges when the aspect changes. Once a window
+resize settles, the stream moves to the new window's listed mode through a
+resume-only change; rotation keeps the format. No resize quits or relaunches the
 game. The [window streaming contract](docs/IPAD_WINDOW_STREAMING.md) explains
 mode selection, the 90-mode budget and PC setup requirements.
 

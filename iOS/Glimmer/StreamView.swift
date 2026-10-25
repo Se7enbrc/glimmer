@@ -96,6 +96,7 @@ final class StreamViewController: GCEventViewController {
               traitCollection.userInterfaceIdiom == .pad || model.externalDisplayActive
                 || view.bounds.width > view.bounds.height else { return }
         model.start(surface: surface)
+        model.windowChanged(surface: surface)
     }
 
     override func viewWillDisappear(_ animated: Bool) {

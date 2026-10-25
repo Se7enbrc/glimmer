@@ -3,10 +3,7 @@
 ## 2026.10.8 (build 3, unreleased)
 
 - iPhone and iPad can send the streamed picture to a connected display while
-  keeping controls on the device. iPad streams also fit Stage Manager windows.
-
-- Streams show the whole picture without cropping when the display or window has
-  a different shape.
+  keeping controls on the device. iPad streams also fill Stage Manager windows.
 
 - iPhone and iPad releases now use Glimmer's shared calendar version.
 
