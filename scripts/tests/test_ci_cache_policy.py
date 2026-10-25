@@ -5,6 +5,8 @@
 
 import importlib.util
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -58,3 +60,13 @@ class CICachePolicyTests(unittest.TestCase):
         self.assertIn("cp build/coverage/parts/coverage-python-macos/.coverage build/coverage/python/.coverage.macos", workflow)
         self.assertIn('test "$CHECKS" = success', workflow)
         self.assertIn('test "$RESULT" = success', workflow)
+
+    def test_missing_boundary_checker_cannot_turn_engine_verification_off(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Package.swift").touch()
+            (root / "scripts").mkdir()
+            (root / "scripts/test-scripts.py").write_text("raise SystemExit(0)\n")
+            (root / "Makefile").write_text(f"include {ROOT}/scripts/ci-checks.mk\n")
+            result = subprocess.run(["make", "check-macos"], cwd=root, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
