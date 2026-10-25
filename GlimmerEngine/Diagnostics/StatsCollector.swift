@@ -8,8 +8,25 @@
 import Foundation
 import QuartzCore
 import os
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+
+// The lock owns all counters, measurement windows and collection state.
 package final class StatsCollector: @unchecked Sendable {
+
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    var collecting = true
+    #else
+    var collecting = false
+    #endif
+
+    package func setOverlayCollection(_ enabled: Bool) {
+        #if !os(macOS) && !GLIMMER_DIAGNOSTICS
+        lock.withLock {
+            collecting = enabled
+            submitFifo.removeAll(keepingCapacity: true)
+            resetMeasurementWindowLocked()
+        }
+        #endif
+    }
 
     package init() {}
 
@@ -43,7 +60,7 @@ package final class StatsCollector: @unchecked Sendable {
         }
     }
 
-    var submitFifo: [(timestamp: CFAbsoluteTime, state: OSSignpostIntervalState, identity: DecodeIdentity?)] = []
+    var submitFifo: [(timestamp: CFAbsoluteTime, state: OSSignpostIntervalState?, identity: DecodeIdentity?)] = []
     package static let submitFifoCapacity = 64
 
     /// EMA of decoder wall-clock time, in seconds. `nil` until the first
@@ -301,26 +318,35 @@ package final class StatsCollector: @unchecked Sendable {
         var leftover: [OSSignpostIntervalState] = []
         lock.lock()
         leftover.reserveCapacity(submitFifo.count)
-        for entry in submitFifo { leftover.append(entry.state) }
+        for entry in submitFifo { if let state = entry.state { leftover.append(state) } }
         submitFifo.removeAll(keepingCapacity: true)
         lock.unlock()
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         for state in leftover {
             OSSignposter.decode.endInterval(
                 "DecodeFrame", state, "outcome=dropped")
         }
+        #endif
     }
 
     package func resetForConnection() {
         dropPendingDecodeSubmits()
         lock.lock()
+        lastDecodedFrameTime = 0
+        firstPresentTime = 0
+        lastPresentTime = 0
+        gapJudgingExcluded = false
+        resetMeasurementWindowLocked()
+        lock.unlock()
+    }
+
+    /// Overlay visibility resets measurements without resetting recovery's clocks or byte counter.
+    private func resetMeasurementWindowLocked() {
         decodeTimeEmaSeconds = nil
         decodeServiceEmaSeconds = nil
         decodeWaitEmaSeconds = nil
         lastDecodeCallbackTime = 0
         decoderDroppedFrames = 0
-        lastDecodedFrameTime = 0
-        firstPresentTime = 0
-        lastPresentTime = 0
         windowStart = CACurrentMediaTime()
         hostFrameRate = HostFrameRate(now: windowStart)
         windowStartReceivedFrames = receivedFrames
@@ -330,7 +356,6 @@ package final class StatsCollector: @unchecked Sendable {
         windowCache = nil
         gapBaselineTime = 0
         gapBaselineReceived = 0
-        gapJudgingExcluded = false
         onTimePresents = 0
         latePresents = 0
         presentCadenceErrorMsSum = 0
@@ -348,7 +373,6 @@ package final class StatsCollector: @unchecked Sendable {
         lastPresentedPtsSeconds = .nan; hostTimedLatePresents = 0; clientSkipSinceLastPresent = false
         pendingNetworkGapPtsSeconds.removeAll(keepingCapacity: true)
         pendingNetworkGapHead = 0; pendingNetworkGapCount = 0
-        lock.unlock()
     }
 
     /// Snapshot the collector for the overlay / telemetry.
@@ -507,61 +531,3 @@ package final class StatsCollector: @unchecked Sendable {
             lateByHostPercent: presents > 0 ? Double(hostTimedLatePresents) / Double(presents) * 100.0 : nil)
     }
 }
-#else
-/// Production keeps watchdog clocks and the byte count the bandwidth policy reads. The lock guards all state.
-package final class StatsCollector: @unchecked Sendable {
-    let lock = OSAllocatedUnfairLock()
-    private var lastDecodedFrameTime: Double = 0
-    var firstPresentTime: Double = 0
-    var lastPresentTime: Double = 0
-    private var receivedBytes: UInt64 = 0
-
-    package struct HostCadence: Sendable {
-        package var intervalP50Ms: Double
-        package var intervalP95Ms: Double
-        package var unevenPairs: UInt64
-        package var lateByHostPercent: Double?
-    }
-
-    package init() {}
-    package func receivedBytesSnapshot() -> UInt64 { lock.withLock { receivedBytes } }
-    package func recordReceivedFrame(bytes: Int, isIDR: Bool = false, ptsUs: UInt64 = 0,
-                                     frameNumber: Int32, hostProcessingLatency: UInt16 = 0) {
-        lock.withLock { receivedBytes &+= UInt64(max(0, bytes)) }
-    }
-    package func recordDecodedFrame() { lock.withLock { lastDecodedFrameTime = CACurrentMediaTime() } }
-    package func recordRendererEnqueue() {
-        lock.withLock {
-            let now = CACurrentMediaTime()
-            if firstPresentTime == 0 { firstPresentTime = now }
-            lastPresentTime = now
-        }
-    }
-    package var presentationTimes: (first: Double?, last: Double?) {
-        lock.withLock { (firstPresentTime > 0 ? firstPresentTime : nil, lastPresentTime > 0 ? lastPresentTime : nil) }
-    }
-    package func secondsSinceLastDecodedFrame() -> Double {
-        lock.withLock { lastDecodedFrameTime > 0 ? CACurrentMediaTime() - lastDecodedFrameTime : .infinity }
-    }
-    package func secondsSinceLastPresent() -> Double {
-        lock.withLock { lastPresentTime > 0 ? CACurrentMediaTime() - lastPresentTime : .infinity }
-    }
-    package func resetForConnection() {
-        lock.withLock { lastDecodedFrameTime = 0; firstPresentTime = 0; lastPresentTime = 0 }
-    }
-    package func dropPendingDecodeSubmits() {}
-    package func recordDecoderDiscard() {}
-    package func recordRendererBackpressureDrop() {}
-    package func recordPresentationLateDrop() {}
-    package func recordPresentationGap() {}
-    package func recordPacingDepth(_ depth: Int) {}
-    package func setGapJudgingExcluded(_ excluded: Bool) {}
-    package func recordPresent(cadenceErrorMs: Double, hostPTSSeconds: Double = .nan,
-                               streamIntervalMs: Double = 0, refreshMs: Double = 0) {}
-    package func snapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot { StreamStatsSnapshot() }
-    package func decoderDropCount() -> UInt64 { 0 }
-    package func backpressureDropCount() -> UInt64 { 0 }
-    package func presentationLateDropCount() -> UInt64 { 0 }
-    package func presentationGapCount() -> UInt64 { 0 }
-}
-#endif

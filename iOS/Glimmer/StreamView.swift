@@ -79,6 +79,7 @@ final class StreamViewController: GCEventViewController {
         super.viewDidAppear(animated)
         updateOrientation()
         startWhenReady()
+        becomeFirstResponder()
     }
 
     override func viewDidLayoutSubviews() {
@@ -288,6 +289,9 @@ struct StreamControls: View {
 
     @ViewBuilder private var controlActions: some View {
         if model.phase == .streaming {
+            Button(model.statsShown ? "Hide Stream Stats" : "Show Stream Stats",
+                   systemImage: "chart.xyaxis.line", action: model.toggleStats)
+                .buttonStyle(.glass)
             IOSControllerLayoutStreamButton(model: model)
             Button("Edit controls…", systemImage: "hand.draw") {
                 model.showControls()

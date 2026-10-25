@@ -200,8 +200,6 @@
 		D1000050 /* RtspClient+Handshake.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100004F /* RtspClient+Handshake.swift */; };
 		D1000052 /* Pairing+Crypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000051 /* Pairing+Crypto.swift */; };
 		D1000054 /* Types+Cert.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000053 /* Types+Cert.swift */; };
-		D1000056 /* Types+Stats.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000055 /* Types+Stats.swift */; };
-		D1000058 /* Types+StatsSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000057 /* Types+StatsSnapshot.swift */; };
 		D100005A /* Identity+Loading.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000059 /* Identity+Loading.swift */; };
 		D100005C /* Identity+Crypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005B /* Identity+Crypto.swift */; };
 		D100005E /* AppModel+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005D /* AppModel+Lifecycle.swift */; };
@@ -753,6 +751,12 @@
 		D533A4260AA14705836FE716 /* StreamSession+Bandwidth.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF02F645DDC741DE839C0B73 /* StreamSession+Bandwidth.swift */; };
 		36F2C4D5722740A9ABAFEAD5 /* BandwidthActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 233DB1B4C6884DFE94410F95 /* BandwidthActuatorTests.swift */; };
 		9A913317D15D48E1B54D8F33 /* BandwidthTrainEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */; };
+		0FECE547C2E44F4AA3A9F583 /* StatsOverlayValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6A7700C5CF4F4C9243B556 /* StatsOverlayValues.swift */; };
+		4BB7125F711C488A987492B4 /* StreamStatsSnapshot+Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 792FE09DB5904C8499772234 /* StreamStatsSnapshot+Rows.swift */; };
+		AC0296E69DA245A6B89DDD62 /* StatsOverlayLayer+Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB3E6E14588045D7BC957D35 /* StatsOverlayLayer+Platform.swift */; };
+		19D6F6FE50EC4C22A2E3F0B9 /* HotkeyChord+Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E41E9A75D4B4975944CD474 /* HotkeyChord+Preferences.swift */; };
+		BFEB080D8DA444E99209EFF1 /* VideoDecoder+Overlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3241A15BD5564EFA9E355E5C /* VideoDecoder+Overlay.swift */; };
+		D678220340FD4652A784D2A5 /* StatsOverlayFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1129CE3CCD134F3E8B900134 /* StatsOverlayFormatting.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1010,8 +1014,6 @@
 		D100004F /* RtspClient+Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtspClient+Handshake.swift"; sourceTree = "<group>"; };
 		D1000051 /* Pairing+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Pairing+Crypto.swift"; sourceTree = SOURCE_ROOT; };
 		D1000053 /* Types+Cert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Types+Cert.swift"; sourceTree = SOURCE_ROOT; };
-		D1000055 /* Types+Stats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+Stats.swift"; sourceTree = "<group>"; };
-		D1000057 /* Types+StatsSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+StatsSnapshot.swift"; sourceTree = "<group>"; };
 		D1000059 /* Identity+Loading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Identity+Loading.swift"; sourceTree = SOURCE_ROOT; };
 		D100005B /* Identity+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Identity+Crypto.swift"; sourceTree = SOURCE_ROOT; };
 		D100005D /* AppModel+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Lifecycle.swift"; sourceTree = "<group>"; };
@@ -1560,6 +1562,12 @@
 		EF02F645DDC741DE839C0B73 /* StreamSession+Bandwidth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamSession+Bandwidth.swift"; sourceTree = SOURCE_ROOT; };
 		233DB1B4C6884DFE94410F95 /* BandwidthActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/BandwidthActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
 		7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthTrainEvidence.swift"; sourceTree = SOURCE_ROOT; };
+		FA6A7700C5CF4F4C9243B556 /* StatsOverlayValues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/StatsOverlayValues.swift"; sourceTree = "<group>"; };
+		792FE09DB5904C8499772234 /* StreamStatsSnapshot+Rows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/StreamStatsSnapshot+Rows.swift"; sourceTree = "<group>"; };
+		DB3E6E14588045D7BC957D35 /* StatsOverlayLayer+Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayLayer+Platform.swift"; sourceTree = "<group>"; };
+		2E41E9A75D4B4975944CD474 /* HotkeyChord+Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/HotkeyChord+Preferences.swift"; sourceTree = "<group>"; };
+		3241A15BD5564EFA9E355E5C /* VideoDecoder+Overlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Video/VideoDecoder+Overlay.swift"; sourceTree = "<group>"; };
+		1129CE3CCD134F3E8B900134 /* StatsOverlayFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/StatsOverlayFormatting.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1654,6 +1662,7 @@
 		A10000031 /* Glimmer */ = {
 			isa = PBXGroup;
 			children = (
+				DB3E6E14588045D7BC957D35 /* StatsOverlayLayer+Platform.swift */,
 				E92A400B198D99C4E81A5016 /* ControllerLayoutDiagram.swift */,
 				7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */,
 				B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */,
@@ -1786,8 +1795,6 @@
 				D1A00003 /* AppModel+SessionReceipt.swift */,
 				D100005D /* AppModel+Lifecycle.swift */,
 				D2000096 /* AppModel+Defaults.swift */,
-				D1000057 /* Types+StatsSnapshot.swift */,
-				D1000055 /* Types+Stats.swift */,
 				D1000B72 /* StreamSession+Start.swift */,
 				D1000B74 /* StreamSession+StartSetup.swift */,
 				D10000C2 /* WiFiTelemetry.swift */,
@@ -2127,6 +2134,11 @@
 		E26101210000000000000009 /* GlimmerEngine */ = {
 			isa = PBXGroup;
 			children = (
+				1129CE3CCD134F3E8B900134 /* StatsOverlayFormatting.swift */,
+				3241A15BD5564EFA9E355E5C /* VideoDecoder+Overlay.swift */,
+				2E41E9A75D4B4975944CD474 /* HotkeyChord+Preferences.swift */,
+				792FE09DB5904C8499772234 /* StreamStatsSnapshot+Rows.swift */,
+				FA6A7700C5CF4F4C9243B556 /* StatsOverlayValues.swift */,
 				7CD73F38A2F31EA6C135B7C6 /* ControllerLayoutGame.swift */,
 				72D815E46F71CDAFE8C355CC /* StreamInput+Layouts.swift */,
 				450021319D188F639B72AA9B /* InputCore+Layouts.swift */,
@@ -2587,6 +2599,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AC0296E69DA245A6B89DDD62 /* StatsOverlayLayer+Platform.swift in Sources */,
 				51DAB01AF73E7404229D81AF /* ControllerLayoutDiagram.swift in Sources */,
 				059E9C4832CB459FB0FB8300 /* ControllerControlArtwork.swift in Sources */,
 				966232EF57614C298EE9BFD6 /* ControllerDpadSurface.swift in Sources */,
@@ -2717,8 +2730,6 @@
 				D1A00004 /* AppModel+SessionReceipt.swift in Sources */,
 				D100005E /* AppModel+Lifecycle.swift in Sources */,
 				D2000097 /* AppModel+Defaults.swift in Sources */,
-				D1000058 /* Types+StatsSnapshot.swift in Sources */,
-				D1000056 /* Types+Stats.swift in Sources */,
 				D1000B71 /* StreamSession+Start.swift in Sources */,
 				D1000B73 /* StreamSession+StartSetup.swift in Sources */,
 				D10000C3 /* WiFiTelemetry.swift in Sources */,
@@ -3045,6 +3056,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D678220340FD4652A784D2A5 /* StatsOverlayFormatting.swift in Sources */,
+				BFEB080D8DA444E99209EFF1 /* VideoDecoder+Overlay.swift in Sources */,
+				19D6F6FE50EC4C22A2E3F0B9 /* HotkeyChord+Preferences.swift in Sources */,
+				4BB7125F711C488A987492B4 /* StreamStatsSnapshot+Rows.swift in Sources */,
+				0FECE547C2E44F4AA3A9F583 /* StatsOverlayValues.swift in Sources */,
 				434EF25A3A966CCB0AC006D1 /* ControllerLayoutGame.swift in Sources */,
 				FA80C81BCDA1DFF52B27294C /* StreamInput+Layouts.swift in Sources */,
 				0C088E96F1ADE2E4E70945F2 /* InputCore+Layouts.swift in Sources */,

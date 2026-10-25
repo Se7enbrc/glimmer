@@ -172,6 +172,7 @@ private struct GlimmerSettingsPage: View {
     }
 
     @ViewBuilder private var controllerSettings: some View {
+        StreamShortcutSettings()
         Section("Controllers") {
             NavigationLink("Controller layouts") {
                 ControllerLayoutsView()
@@ -241,6 +242,8 @@ private struct PairedPCRow: View {
 @MainActor
 private struct StreamQualitySettings: View {
     @Binding var profile: StreamProfile
+    @AppStorage("showStreamStats") private var showStats = false
+    @AppStorage("statsOverlayPreset") private var preset: StatsOverlayPreset = .minimal
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -254,6 +257,14 @@ private struct StreamQualitySettings: View {
             Text("Stream")
         } footer: {
             Text(streamExplanation)
+        }
+        Section {
+            Toggle("Stream stats", isOn: $showStats)
+            Picker("Overlay detail", selection: $preset) {
+                ForEach(StatsOverlayPreset.allCases.filter { $0 != .custom || preset == .custom }, id: \.self) {
+                    Text($0.displayName).tag($0)
+                }
+            }
         }
     }
 

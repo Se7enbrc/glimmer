@@ -1,16 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  Types+StatsSnapshot.swift
-//
-//  StreamStatsSnapshot - the immutable per-window value type the stats overlay
-//  renders (decode/network/latency/HDR fields and their formatting). Split out
-//  of Types.swift to keep each unit focused; the row kinds + overlay config live
-//  in Types+Stats.swift.
-//
-
-import GlimmerEngine
 import Foundation
 
 /// The HUD uses estimated PC capture FPS while telemetry retains pipeline rates.
@@ -38,13 +28,7 @@ extension StreamStatsSnapshot {
         return out
     }
 
-    /// Compose one row for the given kind. Centralises the
-    /// label / symbol / formatting / health rule lookup so the row
-    /// catalogue lives in one place and adding a new row is a one-case
-    /// edit in the matching per-section builder plus an enum case in
-    /// `StatsRow.Kind`. The dispatch is split by overlay section so each
-    /// builder stays small and focused - the section a kind belongs to is
-    /// fixed (it's encoded in the `section:` of every row it can produce).
+    /// Compose one row for the given kind.
     private func buildRow(kind: StatsRow.Kind, targetFps: Double, thresholds: StatsThresholds) -> StatsRow {
         switch kind {
         case .hostFps, .networkFps, .decodeFps, .renderFps:
@@ -136,14 +120,7 @@ extension StreamStatsSnapshot {
     private func pipelineRow(kind: StatsRow.Kind, targetFps: Double, thresholds: StatsThresholds) -> StatsRow {
         switch kind {
         case .decoderDrops:
-            // Real THREE-WAY drops-by-cause split. The headline is the decoder
-            // drop %, but when ANY client-side drops have happened we append the
-            // coherent decoder / backpressure / presentation-late counts (D/B/L)
-            // so each cause shows a real number - previously two of the three
-            // causes were hidden (backpressure folded into a "(+N RB)" suffix,
-            // presentation-late buried in the Smoothness row), which made the
-            // numbers look like they "never worked". Health stays keyed on the
-            // decoder %, the most user-actionable signal.
+            // Real THREE-WAY drops-by-cause split.
             return StatsRow(
                 kind: .decoderDrops, label: "Drops",
                 value: formatDropsByCause(),
@@ -167,11 +144,8 @@ extension StreamStatsSnapshot {
                 symbolName: "cpu.fill",
                 health: .neutral, section: .pipeline)
         case .smoothness:
-            // Headline: present-cadence error + on-time fraction, with the
-            // live pacing depth as a parenthetical and presentation-late
-            // drops as a suffix when any have happened. Health keys off the
-            // cadence error against the frame budget - judder is "presents
-            // drifting a meaningful fraction of a frame off the grid".
+            // Headline: present-cadence error + on-time fraction, with the live pacing depth as a
+            // parenthetical and presentation-late drops as a suffix when any have happened.
             return StatsRow(
                 kind: .smoothness, label: "Smoothness",
                 value: formatSmoothness(),
@@ -219,23 +193,16 @@ extension StreamStatsSnapshot {
         }
     }
 
-    /// "85% · Charging" / "30% · On battery" / "-" for nil. Mirrors the
-    /// macOS battery-indicator's two-line voice but tightened to a single
-    /// row of right-aligned mono text. Symbol selection at the row level
-    /// separately picks battery.0/25/50/75/100 + charge bolt.
+    /// "85% · Charging" / "30% · On battery" / "-" for nil.
     private func formatBattery(percent: Int?, charging: Bool?) -> String {
         guard let percent else { return "\u{2014}" }
         guard let charging else { return "\(percent) %" }
         return "\(percent) % · \(charging ? "Charging" : "On battery")"
     }
 
-    /// Pick an SF Symbol from the `battery.*` family, or nil when there is
-    /// no reading - an absent battery must render NO glyph, because every
-    /// level glyph lies and the least-wrong one ("battery.0") reads as
-    /// battery-empty: a standing false alarm on desktop Macs. Bolt overlay
-    /// glyphs are surfaced separately for the charging-state communication;
-    /// the regular fill levels (0/25/50/75/100) convey the percentage at a
-    /// glance even before reading the value.
+    /// Pick an SF Symbol from the `battery.*` family, or nil when there is no reading - an absent battery
+    /// must render NO glyph, because every level glyph lies and the least-wrong one ("battery.0") reads as
+    /// battery-empty: a standing false alarm on desktop Macs.
     private func batterySymbol(percent: Int?, charging: Bool?) -> String? {
         guard let percent else { return nil }
         if charging == true { return "battery.100.bolt" }
@@ -248,11 +215,7 @@ extension StreamStatsSnapshot {
         }
     }
 
-    // MARK: Health rules
-    //
-    // Rules consume `StatsThresholds` so the user can tune them in
-    // Settings. Defaults are calibrated to "when does this actually start
-    // to feel bad" - see `StatsThresholds.default`.
+    // MARK: Health rules  Rules consume `StatsThresholds` so the user can tune them in Settings.
 
     private func fpsHealth(_ fps: Double?, thresholds: StatsThresholds) -> StatsRow.Health {
         guard let fps, thresholds.fpsWarningBelow > 0 || thresholds.fpsCriticalBelow > 0 else { return .neutral }
@@ -280,26 +243,19 @@ extension StreamStatsSnapshot {
     }
     /// Decode is pipelined, so time inside the frame budget is latency, not a fault.
     /// Only a decode longer than the whole frame budget falls behind the stream.
-    static func decodeTimeHealth(_ decodeMs: Double?, targetFps: Double) -> StatsRow.Health {
+    public static func decodeTimeHealth(_ decodeMs: Double?, targetFps: Double) -> StatsRow.Health {
         guard let decodeMs, targetFps > 0 else { return .neutral }
         return decodeMs > 1000.0 / targetFps ? .critical : .healthy
     }
 
-    // MARK: Formatting helpers
-    //
-    // Reused per-tick at 1 Hz. They allocate Strings, but at this cadence the
-    // allocation churn is negligible (dozens of strings every 1 s - orders of
-    // magnitude under any reasonable jitter budget). We deliberately don't
-    // cache: the values change every tick, so caching would buy nothing.
+    // MARK: Formatting helpers  Reused per-tick at 1 Hz.
 
     private func formatFps(_ fps: Double?) -> String {
         guard let fps else { return "\u{2014}" }
         return String(format: "%.1f FPS", fps)
     }
-    /// "0.4 ms · 99% (d2)" - average present-cadence error, on-time fraction,
-    /// and live pacing depth, with a "+N late" suffix when the pacer has had
-    /// to drop frames it couldn't present in time. Em-dash until the pacer has
-    /// presented at least one frame this window.
+    /// "0.4 ms · 99% (d2)" - average present-cadence error, on-time fraction, and live pacing depth, with a
+    /// "+N late" suffix when the pacer has had to drop frames it couldn't present in time.
     private func formatSmoothness() -> String {
         guard let err = avgPresentCadenceErrorMs,
               let onTime = onTimePresentPercent else {
@@ -314,10 +270,9 @@ extension StreamStatsSnapshot {
         }
         return text
     }
-    /// Smoothness health from the present-cadence error against the frame
-    /// budget: warn when average error crosses a quarter-frame, critical at
-    /// half a frame - at 60Hz that's >4.2ms warn / >8.3ms crit, tightening
-    /// automatically at higher refresh. Neutral until the pacer reports.
+    /// Smoothness health from the present-cadence error against the frame budget: warn when average error
+    /// crosses a quarter-frame, critical at half a frame - at 60Hz that's >4.2ms warn / >8.3ms crit,
+    /// tightening automatically at higher refresh.
     private func smoothnessHealth(targetFps: Double) -> StatsRow.Health {
         guard let err = avgPresentCadenceErrorMs, targetFps > 0 else { return .neutral }
         let frameBudget = 1000.0 / targetFps
@@ -348,10 +303,6 @@ extension StreamStatsSnapshot {
         return String(format: "%.2f ms", ms)
     }
     /// "5.90 ms ±0.09" - RTT plus jitter as a single value cell, in DECIMAL ms.
-    /// At ~6ms e2e a whole-ms RTT (the old integer formatter) read with ±halfms
-    /// blur that hid the signal; two decimals make a 0.1ms change visible. The ±
-    /// character is the standard math glyph (U+00B1), which SF Mono renders at a
-    /// fixed advance so the numeric column stays aligned across ticks.
     private func formatLatency(rtt: Double?, jitter: Double?) -> String {
         guard let rtt else { return "\u{2014}" }
         if let jitter {
@@ -359,14 +310,6 @@ extension StreamStatsSnapshot {
         }
         return String(format: "%.2f ms", rtt)
     }
-    /// Three-way drops-by-cause: the decoder drop % headline plus a D/B/L count
-    /// breakdown when any client-side drops exist -
-    ///   D = decoder (VT rejected + pre-VT discards),
-    ///   B = renderer backpressure (OS queue full),
-    ///   L = presentation-late (pacer could not present in time).
-    /// "0.00 %" alone when nothing has dropped (the clean-stream common case),
-    /// "0.40 % · 12D/3B/0L" when drops have happened. Each cause is a real
-    /// number - no cause is hidden in another row's suffix.
     private func formatDropsByCause() -> String {
         let pct = formatPercent(decoderDroppedPercent)
         let decoder = decoderDropCount ?? 0
@@ -388,11 +331,7 @@ extension StreamStatsSnapshot {
         }
         return String(format: "%.1f / %.1f / %.1f ms", lo, hi, avg)
     }
-    /// "45.2 / 50.0 Mbps" - measured-over-negotiated. We render both as
-    /// monospaced numerics with a slash so the user can see the
-    /// instantaneous bitrate against the ceiling they configured. When
-    /// only one half is available we still render a slash with an em-dash
-    /// in the missing slot to preserve column width.
+    /// "45.2 / 50.0 Mbps" - measured-over-negotiated.
     private func formatBitrate(measured: Double?, negotiated: Double?) -> String {
         switch (measured, negotiated) {
         case let (measured?, negotiated?):

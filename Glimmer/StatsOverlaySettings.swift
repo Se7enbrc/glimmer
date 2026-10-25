@@ -11,6 +11,7 @@
 //  health rules) lives here, not in the main Settings monolith.
 //
 
+import GlimmerEngine
 import SwiftUI
 
 /// One warn-or-critical threshold row: its label, the value binding, and the

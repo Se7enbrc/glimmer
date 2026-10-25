@@ -88,14 +88,14 @@ package enum QualityPreset: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// A remappable in-stream chord. Its JSON shape preserves saved keyboard shortcuts.
-package struct HotkeyChord: Codable, Equatable, Sendable {
-    package var ctrl: Bool
-    package var alt: Bool
-    package var shift: Bool
-    package var cmd: Bool
-    package var keyChar: String  // single character, e.g. "q"
+public struct HotkeyChord: Codable, Equatable, Sendable {
+    public var ctrl: Bool
+    public var alt: Bool
+    public var shift: Bool
+    public var cmd: Bool
+    public var keyChar: String  // single character, e.g. "q"
 
-    package init(ctrl: Bool, alt: Bool, shift: Bool, cmd: Bool, keyChar: String) {
+    public init(ctrl: Bool, alt: Bool, shift: Bool, cmd: Bool, keyChar: String) {
         self.ctrl = ctrl; self.alt = alt; self.shift = shift; self.cmd = cmd
         self.keyChar = keyChar
     }
@@ -104,23 +104,23 @@ package struct HotkeyChord: Codable, Equatable, Sendable {
     // whether or not ⌘ is forwarded to the PC. Players can remap game conflicts.
 
     /// ⌃Q. ⌃⌘Q is macOS's Lock Screen and never reaches an app.
-    package static let defaultQuit = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "q")
+    public static let defaultQuit = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "q")
 
     /// ⌃Z, remappable. Glimmer consumes the chord; a game binding ⌃Z does not receive it.
-    package static let defaultStats = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "z")
+    public static let defaultStats = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "z")
 
     /// ⌃B, client-only and telemetry-gated: it only means anything in a diagnostic session.
-    package static let defaultBookmark = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "b")
+    public static let defaultBookmark = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "b")
 
     /// ⌃P for the pointer toggle, not ⌃R: ⌃R is crouch plus reload. Window mode only;
     /// in full screen capture follows key status, so the chord reaches the PC.
-    package static let defaultReleasePointer = HotkeyChord(
+    public static let defaultReleasePointer = HotkeyChord(
         ctrl: true, alt: false, shift: false, cmd: false, keyChar: "p")
 
     /// ⌃M toggles the mini player and the full presentation.
-    package static let defaultMiniPlayer = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "m")
+    public static let defaultMiniPlayer = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "m")
 
-    package var displayString: String {
+    public var displayString: String {
         var parts: [String] = []
         if ctrl { parts.append("⌃") }
         if alt { parts.append("⌥") }
@@ -130,7 +130,7 @@ package struct HotkeyChord: Codable, Equatable, Sendable {
         return parts.joined()
     }
 
-    package var serialized: String {
+    public var serialized: String {
         var parts: [String] = []
         if ctrl { parts.append("ctrl") }
         if alt { parts.append("alt") }

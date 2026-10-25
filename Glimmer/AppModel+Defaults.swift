@@ -64,11 +64,7 @@ extension AppModel {
 
     /// Move only the old stats default once, preserving later choices of ⌃I.
     static func persistedStatsHotkey(defaults: UserDefaults = .standard) -> HotkeyChord {
-        let saved = persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults) ?? .defaultStats
-        guard !defaults.bool(forKey: "statsControlZDefaultApplied") else { return saved }
-        defaults.set(true, forKey: "statsControlZDefaultApplied")
-        let oldDefault = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
-        return saved == oldDefault ? .defaultStats : saved
+        HotkeyChord.persistedStats(defaults: defaults)
     }
 
     /// Retire the old default FPS alarms once while preserving custom thresholds.

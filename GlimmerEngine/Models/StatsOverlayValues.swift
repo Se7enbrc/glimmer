@@ -1,30 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  Types+Stats.swift
-//
-//  The stream stats overlay model: per-row kinds plus the overlay preset /
-//  defaults / color thresholds / corner. The large per-frame snapshot value
-//  type lives in Types+StatsSnapshot.swift. Split out of Types.swift to keep
-//  each unit focused.
-//
-
 import Foundation
 
 // MARK: - Stream stats overlay
 
-/// One row of the in-stream stats overlay's compact HUD: an SF Symbol icon,
-/// a short left-aligned label, and a right-aligned color-coded value. The
-/// overlay layer renders an ordered array of these per tick, grouping
-/// adjacent rows of the same `Section` together with hairline dividers
-/// between sections.
-///
-/// Health is computed against the negotiated stream FPS / latency
-/// thresholds - see `StreamStatsSnapshot.rows(enabled:targetFps:)`. A row
-/// whose underlying data is missing (`nil` in the snapshot) still emits a
-/// neutral row with an em-dash value so the user sees that the metric
-/// exists but isn't measurable right now (e.g. RTT pre-ENet-connect).
+/// One row of the in-stream stats overlay's compact HUD: an SF Symbol icon, a short left-aligned label, and a
+/// right-aligned color-coded value.
 public struct StatsRow: Sendable, Equatable {
     /// Stable identifier per row type. Used as the persistence key for the
     /// Custom preset's per-row toggles AND as the de-duplication key when
@@ -39,10 +21,7 @@ public struct StatsRow: Sendable, Equatable {
         case controllerBattery
     }
 
-    /// Color state of the value text. `neutral` is "no threshold -
-    /// informational" (host FPS, bitrate, audio config) and renders
-    /// identically to `healthy` today, but stays its own case so a future
-    /// dim-treatment for purely-informational rows is a one-line change.
+    /// Color state of the value text.
     public enum Health: Sendable { case healthy, warning, critical, neutral }
 
     /// Section the row belongs to. Rows in the same section render
@@ -62,10 +41,6 @@ public struct StatsRow: Sendable, Equatable {
     /// the trailing digit doesn't jitter when the value changes.
     public let value: String
     /// SF Symbol name (e.g. "display", "network", "bolt.horizontal").
-    /// Rendered as a 12pt monochrome white CGImage and parked as the row's
-    /// icon-slot layer contents. `nil` leaves the icon slot empty - for
-    /// rows whose only honest glyph would mislead (no battery reading must
-    /// not draw `battery.0`, which reads as battery-empty).
     public let symbolName: String?
     public let health: Health
     public let section: Section
@@ -84,15 +59,7 @@ public struct StatsRow: Sendable, Equatable {
 }
 // MARK: - Stats overlay preset
 
-/// Which curated row set the stats overlay shows. `.minimal` is the
-/// at-a-glance default for fresh installs: frame rate, latency, bitrate and codec.
-/// `.micro` adds the full frame-rate and network breakdown;
-/// `.extended` shows the pipeline-plus-network row set minus audio;
-/// `.custom` honours `statsOverlayCustomRows`.
-///
-/// Persisted to UserDefaults as the rawValue string so the choice survives
-/// launches. New installs default to `.minimal`. Case order is the
-/// Settings picker order - smallest set first.
+/// Which curated row set the stats overlay shows.
 public enum StatsOverlayPreset: String, CaseIterable, Codable, Sendable {
     case minimal, micro, extended, custom
 
@@ -132,10 +99,7 @@ public enum StatsOverlayDefaults {
         Set(StatsRow.Kind.allCases).subtracting([
             .audio, .macBattery, .macCpu, .macRam
         ])
-    /// Initial Custom row set on first toggle into Custom. Same as the
-    /// Micro set so the user sees a familiar starting point, rather
-    /// than an empty overlay that requires them to figure out which
-    /// rows exist.
+    /// Initial Custom row set on first toggle into Custom.
     public static let initialCustomRows: Set<StatsRow.Kind> = microRows
 }
 
@@ -154,10 +118,7 @@ public struct StatsThresholds: Sendable, Equatable, Codable {
     public var latencyWarningAbove: UInt32
     public var latencyCriticalAbove: UInt32
 
-    /// Jitter (RTT variance) in milliseconds. Warn / critical thresholds
-    /// for noticeable stutter. Slightly more permissive than the previous
-    /// 5/15 since real LAN streams routinely show ~5ms variance under
-    /// load without visible problems.
+    /// Jitter (RTT variance) in milliseconds.
     public var jitterWarningAbove: UInt32
     public var jitterCriticalAbove: UInt32
 
@@ -198,7 +159,7 @@ public enum StatsOverlayCorner: String, CaseIterable, Sendable {
     // rawValues are the case names, so adding cases mid-list is persistence-safe.
     case topLeft, topCenter, topRight, bottomLeft, bottomCenter, bottomRight
 
-    static func persisted(defaults: UserDefaults = .standard) -> Self {
+    public static func persisted(defaults: UserDefaults = .standard) -> Self {
         defaults.string(forKey: "streamStatsCorner").flatMap(Self.init(rawValue:)) ?? .topLeft
     }
 

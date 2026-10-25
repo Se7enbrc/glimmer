@@ -13,6 +13,12 @@ enum UITestLauncher {
             return nil
         }
         let streaming = environment["GLIMMER_UI_TESTING"] == "stream"
+        if streaming {
+            for (key, chord) in [("quitHotkey", HotkeyChord.defaultQuit), ("statsHotkey", .defaultStats)] {
+                UserDefaults.standard.set(try? JSONEncoder().encode(chord), forKey: key)
+            }
+            UserDefaults.standard.set(false, forKey: "showStreamStats")
+        }
         let count = environment["GLIMMER_UI_TESTING"] == "one" || streaming ? 1
             : environment["GLIMMER_UI_TESTING"] == "many" ? 12 : 0
         let pcs = (0..<count).map { index in
@@ -36,13 +42,24 @@ enum UITestLauncher {
            lastConnectedPCID: { pcs.first?.id }, artwork: { _, _ in Data() }, makeSession: { launch in
             StreamSessionModel(launch: launch, makePlayback: { launch, surface, _ in
                 guard streaming else { throw CancellationError() }
+                let stats = StreamStats(surface: surface, snapshot: {
+                    var snapshot = StreamStatsSnapshot()
+                    snapshot.hostFps = 59.9
+                    snapshot.rttMs = 5.9
+                    snapshot.measuredBitrateMbps = 45.2
+                    snapshot.videoCodec = "HEVC"
+                    return snapshot
+                }, collection: { _ in }, videoSize: { surface.bounds.size }, backdrop: { _ in nil })
                 let id = UUID()
                 let events = AsyncStream<StreamSession.Update>.makeStream()
                 return StreamPlayback(id: id, events: events.stream, start: {
                     events.continuation.yield(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
                     return nil
-                }, stop: { events.continuation.finish() }, screenChanged: {},
-                   format: try launch.profile.resolve(surface: surface))
+                }, stop: {
+                    await MainActor.run { stats.setVisible(false) }
+                    events.continuation.finish()
+                }, screenChanged: {},
+                   format: try launch.profile.resolve(surface: surface), showStats: stats.setVisible)
             })
         })
         return LauncherModel(calls: calls, discoveryEnabled: false)

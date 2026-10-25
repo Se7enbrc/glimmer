@@ -60,6 +60,9 @@ def expected_sources(root):
     ios = root / "iOS"
     expected = {name: {str(path.relative_to(ios)) for path in (ios / name).rglob("*.swift")}
                 for name in ("Glimmer", "GlimmerTests", "GlimmerUITests")}
+    expected["Glimmer"].update(f"../Glimmer/Stream/{name}.swift" for name in (
+        "StatsOverlayLayer", "StatsOverlayLayer+Rows", "StatsOverlayLayer+Traces", "StatsOverlayLayer+Platform"
+    ))
     expected["GlimmerTests"].add("../GlimmerTests/VideoColorPatternTests.swift")
     expected["Glimmer"].update("../" + str(path.relative_to(root))
                                for path in (root / "Glimmer/ControllerLayouts").glob("*.swift"))

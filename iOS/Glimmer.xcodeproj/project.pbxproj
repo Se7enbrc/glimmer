@@ -154,6 +154,17 @@
 		DEA3E708B2B3486488721058 /* ControllerShoulderControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F37D021E6E54166A96FFD0A /* ControllerShoulderControls.swift */; };
 		CFB1AD00C82D4222AF70ABDE /* BandwidthPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */; };
 		6A7D680A0F1A46C181605D73 /* BandwidthActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C228A78E7CE4F408100275C /* BandwidthActuatorTests.swift */; };
+		E4EF44B54F05479482CBBD41 /* StatsOverlayLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F68B7F041FA4431BB3ECB37 /* StatsOverlayLayer.swift */; };
+		674681F832554A358662117A /* StatsOverlayLayer+Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CDFE1A69C794885A4BAAC67 /* StatsOverlayLayer+Rows.swift */; };
+		7979FBC09186448AA100332C /* StatsOverlayLayer+Traces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000BAA5D78D74191AB0681B2 /* StatsOverlayLayer+Traces.swift */; };
+		459018743BA44EDB878EEAF1 /* StatsOverlayLayer+Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA39DACED77A4B91AB1B7334 /* StatsOverlayLayer+Platform.swift */; };
+		E7F74CAC18C64EFEB6BC8BB5 /* StreamShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25ABE7FC5ED54B53B47B2112 /* StreamShortcuts.swift */; };
+		347D1D5D850C4851A1889C9E /* StreamViewController+Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295CED6EC23A4E8A9A89DB8C /* StreamViewController+Shortcuts.swift */; };
+		146C0670DABD40BA9FC2B5B4 /* StreamShortcutSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F2067D5C5D04097AD0B8BAD /* StreamShortcutSettings.swift */; };
+		94F27AAF765F4882923DB215 /* StreamStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFFFFF2A1DCA4232B5D2F2FA /* StreamStats.swift */; };
+		87C061C7DD2F49A490D2FD64 /* StreamStatsShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 166A546B1C874204A64047B4 /* StreamStatsShortcutTests.swift */; };
+		8BCC2D7346BA4AE5859226AF /* StreamStatsRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CD585C1BA434406A551C188 /* StreamStatsRenderTests.swift */; };
+		68ABC059685942C0934C319D /* StreamShortcutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 861EE67A9ECB492D8E16666F /* StreamShortcutUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -330,6 +341,17 @@
 		7F37D021E6E54166A96FFD0A /* ControllerShoulderControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerShoulderControls.swift"; sourceTree = SOURCE_ROOT; };
 		0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/BandwidthPolicyTests.swift"; sourceTree = SOURCE_ROOT; };
 		9C228A78E7CE4F408100275C /* BandwidthActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/BandwidthActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
+		3F68B7F041FA4431BB3ECB37 /* StatsOverlayLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../../Glimmer/Stream/StatsOverlayLayer.swift"; sourceTree = "<group>"; };
+		9CDFE1A69C794885A4BAAC67 /* StatsOverlayLayer+Rows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../../Glimmer/Stream/StatsOverlayLayer+Rows.swift"; sourceTree = "<group>"; };
+		000BAA5D78D74191AB0681B2 /* StatsOverlayLayer+Traces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../../Glimmer/Stream/StatsOverlayLayer+Traces.swift"; sourceTree = "<group>"; };
+		FA39DACED77A4B91AB1B7334 /* StatsOverlayLayer+Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../../Glimmer/Stream/StatsOverlayLayer+Platform.swift"; sourceTree = "<group>"; };
+		25ABE7FC5ED54B53B47B2112 /* StreamShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamShortcuts.swift"; sourceTree = "<group>"; };
+		295CED6EC23A4E8A9A89DB8C /* StreamViewController+Shortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamViewController+Shortcuts.swift"; sourceTree = "<group>"; };
+		8F2067D5C5D04097AD0B8BAD /* StreamShortcutSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamShortcutSettings.swift"; sourceTree = "<group>"; };
+		EFFFFF2A1DCA4232B5D2F2FA /* StreamStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamStats.swift"; sourceTree = "<group>"; };
+		166A546B1C874204A64047B4 /* StreamStatsShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamStatsShortcutTests.swift"; sourceTree = "<group>"; };
+		7CD585C1BA434406A551C188 /* StreamStatsRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamStatsRenderTests.swift"; sourceTree = "<group>"; };
+		861EE67A9ECB492D8E16666F /* StreamShortcutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamShortcutUITests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -410,6 +432,8 @@
 		94A1479D3C65CC3651C769B5 /* GlimmerTests */ = {
 			isa = PBXGroup;
 			children = (
+				7CD585C1BA434406A551C188 /* StreamStatsRenderTests.swift */,
+				166A546B1C874204A64047B4 /* StreamStatsShortcutTests.swift */,
 				78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */,
 				6A53E4B24FC641FA9C4B7BE8 /* TouchEvidenceVideo.swift */,
 				265BEE350AD240AE9718A4D2 /* TouchDeviceRenderTests.swift */,
@@ -483,6 +507,14 @@
 		BEC83DE52194C0A67A8F75F5 /* Glimmer */ = {
 			isa = PBXGroup;
 			children = (
+				EFFFFF2A1DCA4232B5D2F2FA /* StreamStats.swift */,
+				8F2067D5C5D04097AD0B8BAD /* StreamShortcutSettings.swift */,
+				295CED6EC23A4E8A9A89DB8C /* StreamViewController+Shortcuts.swift */,
+				25ABE7FC5ED54B53B47B2112 /* StreamShortcuts.swift */,
+				FA39DACED77A4B91AB1B7334 /* StatsOverlayLayer+Platform.swift */,
+				000BAA5D78D74191AB0681B2 /* StatsOverlayLayer+Traces.swift */,
+				9CDFE1A69C794885A4BAAC67 /* StatsOverlayLayer+Rows.swift */,
+				3F68B7F041FA4431BB3ECB37 /* StatsOverlayLayer.swift */,
 				ED971F0EC0A74A1390A03CC6 /* NativeInputLifetime.swift */,
 				BEF0AE5437814E84A7B51A43 /* TouchLayoutEditor.swift */,
 				27F0B1C5D299420CADB725DB /* TouchOverlay.swift */,
@@ -568,6 +600,7 @@
 		7A473BD2CBB94CF688A22DA7 = {
 			isa = PBXGroup;
 			children = (
+				861EE67A9ECB492D8E16666F /* StreamShortcutUITests.swift */,
 				87663570874C427BB408C4D9,
 			);
 			path = GlimmerUITests;
@@ -699,6 +732,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8BCC2D7346BA4AE5859226AF /* StreamStatsRenderTests.swift in Sources */,
+				87C061C7DD2F49A490D2FD64 /* StreamStatsShortcutTests.swift in Sources */,
 				4474E8B9FD1A47A480A396C4 /* NativeUIRenderTests+IPhone.swift in Sources */,
 				54B75E820761434DAFC10CD7 /* TouchEvidenceVideo.swift in Sources */,
 				20A5B2E0106945C889D94DD5 /* TouchDeviceRenderTests.swift in Sources */,
@@ -763,6 +798,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				94F27AAF765F4882923DB215 /* StreamStats.swift in Sources */,
+				146C0670DABD40BA9FC2B5B4 /* StreamShortcutSettings.swift in Sources */,
+				347D1D5D850C4851A1889C9E /* StreamViewController+Shortcuts.swift in Sources */,
+				E7F74CAC18C64EFEB6BC8BB5 /* StreamShortcuts.swift in Sources */,
+				459018743BA44EDB878EEAF1 /* StatsOverlayLayer+Platform.swift in Sources */,
+				7979FBC09186448AA100332C /* StatsOverlayLayer+Traces.swift in Sources */,
+				674681F832554A358662117A /* StatsOverlayLayer+Rows.swift in Sources */,
+				E4EF44B54F05479482CBBD41 /* StatsOverlayLayer.swift in Sources */,
 				9E12EE79B752454994A3EDBF /* NativeInputLifetime.swift in Sources */,
 				99D81EE643F14D3FB1FDB250 /* TouchLayoutEditor.swift in Sources */,
 				638FEE2A9267486B9D24C181 /* TouchOverlay.swift in Sources */,
@@ -842,6 +885,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				68ABC059685942C0934C319D /* StreamShortcutUITests.swift in Sources */,
 				9A840CDBA4454BB792C44D65,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -68,6 +68,7 @@ struct StreamPlayback {
     var showTouchControls: (@MainActor (Bool) -> Void)?
     /// Moves a running stream to a new listed size through the resume-only seam; the game keeps running.
     var requestFormatChange: StreamWindowResize.Request?
+    var showStats: (@MainActor (Bool) -> Void)?
 
     static func make(launch: StreamLaunch, surface: StreamSurface,
                      quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {
@@ -97,10 +98,14 @@ struct StreamPlayback {
             return surface?.replaceDisplayLayer { video.attach(to: $0) }
         }
         video.attach(to: surface.displayLayer)
+        let stats = StreamStats(surface: surface, snapshot: { video.overlaySnapshot() },
+            collection: { video.statsOverlayEnabled = $0 }, videoSize: { video.overlayVideoSize },
+            backdrop: { video.hudBackdropRect = $0; return video.hudBackdropLuminance })
         let nativeInput = NativeInputLifetime()
         let bandwidth = BandwidthSignals()
         let media = StreamSession.PreparedMedia(video: video, audio: audio,
-            quiesce: { nativeInput.focus(false); quiesce() }, finalDispose: { nativeInput.stop(); bandwidth.stop() })
+            quiesce: { nativeInput.focus(false); quiesce() },
+            finalDispose: { stats.setVisible(false); nativeInput.stop(); bandwidth.stop() })
         let (session, input) = StreamSession.make(media: media, network: launch.network,
                                                   hostDisposition: launch.hostDisposition,
             diagnosticsDirectory: DiagnosticsDefaults.directory, bandwidthInputs: bandwidth.inputs)
@@ -142,6 +147,6 @@ struct StreamPlayback {
                Task { await session.setBitrateChangesAvailable(visible) }
            }, observeControllers: nativeInput.observeControllers, touchGamepad: nativeInput.touch,
            showTouchControls: nativeInput.showTouchControls,
-           requestFormatChange: { await StreamWindowResize.request($0, session: session) })
+           requestFormatChange: { await StreamWindowResize.request($0, session: session) }, showStats: stats.setVisible)
     }
 }
