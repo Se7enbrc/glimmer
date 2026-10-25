@@ -108,15 +108,15 @@ the review names them using the controller's labels. Cancel leaves the saved
 shortcut untouched. Shortcuts apply to every game, independently of the PC
 button layout.
 
-Stop defaults to L1 + R1 + Create/Select + Options/Start. Stats defaults to L1 + R1 + L3 + R3.
-Reject a shortcut that contains the other shortcut or fits inside it. Warn about
-the commonly used L3 + R3, L1 + R1 and Start + Select pairs. Also warn when a
-shortcut needs multiple buttons from one thumb: left stick, d-pad and Select on
-the left; right stick, face buttons and Start on the right. Shoulders and
-triggers use fingers. Saved Stats choices, including Select + L3 + R3, stay
-intact until explicitly reset. Missing Stats choices use the current default. An
-older saved Stop choice stays intact; if it overlaps the new Stats default,
-Stats remains inactive until a nonconflicting shortcut is recorded.
+Stop defaults to L1 + R1 + Create/Select + Options/Start. Stats defaults to L1 +
+R1 + L3 + R3. Reject a shortcut that contains the other shortcut or fits inside
+it. Warn about the commonly used L3 + R3, L1 + R1 and Start + Select pairs. Also
+warn when a shortcut needs multiple buttons from one thumb: left stick, d-pad
+and Select on the left; right stick, face buttons and Start on the right.
+Shoulders and triggers use fingers. Saved Stats choices, including Select + L3 +
+R3, stay intact until explicitly reset. Missing Stats choices use the current
+default. An older saved Stop choice stays intact; if it overlaps the new Stats
+default, Stats remains inactive until a nonconflicting shortcut is recorded.
 
 Input is forwarded immediately, including the start of a shortcut. After the
 hold, Glimmer releases its buttons to the PC and suppresses them until every
