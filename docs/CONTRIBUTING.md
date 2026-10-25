@@ -3,74 +3,56 @@ description: Build, test, and prepare a change for review.
 icon: code
 ---
 
-# Contribute to Glimmer
+# Developer guide
+
+Start with an agreed issue, make one focused change, and verify it before
+requesting review.
+[AGENTS.md](https://github.com/Se7enbrc/glimmer/blob/main/AGENTS.md) is binding;
+where it differs from this guide, follow the stricter rule.
+
+Both the Mac and iOS apps live here and build the same engine checkout. Use
+[repository ownership](APPLE_REPOSITORY.md) for paths and cross-platform checks,
+and [iOS contributing](../iOS/CONTRIBUTING.md) for Simulator and device setup.
 
 ## Setup
 
-Required:
+Use the same Mac toolchain as hosted verification.
 
-- macOS 26 or newer
-- Xcode 26.6 or later (Swift 6, `swiftc`, `xcodebuild`, `xcrun`)
-- Homebrew
-- Python 3.10 or newer, for release tooling and its regression tests
-- TruffleHog 3.97.8 or newer, for the required secret-scan flags
+Use macOS 26 or later on Apple Silicon, with Xcode 26.6 or later. CI uses Xcode
+26.6. The committed mise lockfile pins every other development tool.
 
-Brew prerequisites:
+1. Install mise: `brew install mise`.
+2. From this checkout, install the pinned tools: `mise install`.
+3. Activate mise in your shell, then install hooks: `mise exec -- hk install`.
+4. List the everyday commands: `make help`.
 
-```bash
-brew install python swiftlint actionlint trufflehog pre-commit shellcheck
-```
+With mise activated, step 3 is simply `hk install`. Hooks launch through mise
+and do not download tools during a commit. Existing contributors should run
+`pre-commit uninstall` once before `mise exec -- hk install`.
 
-The streaming engine links no third-party library: crypto, TLS and audio decode
-use Apple's frameworks (CryptoKit, CommonCrypto, Security, Network,
-AudioToolbox), not OpenSSL or libopus. Sparkle is the app's only third-party
-framework, for updates. There are no submodules and no vendored C library.
-`swiftlint` and `trufflehog` back pre-commit hooks, and the commit fails without
-them.
-
-`actionlint` checks GitHub workflow syntax and expressions as part of
-`make verify`, before compilation.
-
-The secret hooks check verified credentials and separately reject parseable
-private keys offline. The private-key scan withholds scanner output so a
-rejected key never appears in the commit log.
-
-Clone:
-
-```bash
-git clone https://github.com/Se7enbrc/glimmer.git
-cd glimmer
-```
-
-Install pre-commit hooks:
-
-```bash
-pre-commit install # lint + secret scan, per commit
-```
+Sparkle is the app's only third-party framework. The engine uses system
+frameworks; there are no submodules or vendored C streaming libraries. Read the
+relevant [architecture](ARCHITECTURE.md) section before changing it.
 
 ## Build
 
-```bash
-make app        # compile-only check (Debug), no signing
-make check      # workflow lint, SPDX notices, SwiftLint, release-tool tests
-make test       # unit tests
-make test-asan  # protocol fuzz tests with AddressSanitizer, unsigned
-make verify     # lint, release tools, all Swift tests and sanitizer checks
-make            # notarized Release build, installed to /Applications
-make open       # same, then open it
-```
+Use unsigned checks for correctness; install only when someone will use the
+build.
 
-Use `make check` for quick feedback between edits. Run a focused Swift suite
-with `make test TEST_SUITE=DatagramBatchTests`, or append `/testName` to select
-one test. `make verify` always runs every suite, even if `TEST_SUITE` is set. It
-also runs the parser and stream fuzz suites under AddressSanitizer. A memory
-error fails the gate before a merge or release.
+| Command                                   | Result                                                        |
+| ----------------------------------------- | ------------------------------------------------------------- |
+| `make app`                                | Unsigned Debug compile check.                                 |
+| `make check`                              | hk checks, SPDX notices, boundary audits and tooling tests.   |
+| `make test`                               | Hostless Swift unit tests.                                    |
+| `make test TEST_SUITE=DatagramBatchTests` | One suite; append `/testName` for one test.                   |
+| `make test-asan`                          | Protocol fuzz tests under AddressSanitizer.                   |
+| `make verify`                             | All checks above; ignores `TEST_SUITE` so the full gate runs. |
+| `make test COVERAGE=1`                    | Swift coverage in `build/coverage`.                           |
+| `make test-scripts COVERAGE=1`            | Release-tool coverage in `build/coverage`.                    |
 
-`make test COVERAGE=1` and `make test-scripts COVERAGE=1` also write coverage
-reports to `build/coverage`, with no threshold. `scripts/fuzz.sh` runs the
-coverage-guided libFuzzer harnesses in `fuzz/` inside a pinned Swift Linux
-container, so it needs Docker; `FUZZ_SECONDS` sets the time per target and a
-crashing input is left under `build/fuzz/`.
+`scripts/fuzz.sh` runs coverage-guided harnesses in a pinned Swift Linux
+container. It needs Docker; `FUZZ_SECONDS` controls each target and crashing
+inputs stay in `build/fuzz/`.
 
 Release-tool integration fixtures use `scripts/tests/fixture_process.py` to stop
 the entire process group before removing temporary files. Its five-minute hang
@@ -83,122 +65,78 @@ elapsed time; launching every test together can starve their callbacks on hosted
 runners. Each concurrency test still creates its own overlapping tasks or
 threads. Keep those assertions and time limits intact.
 
-`make` and `make open` run the full shipping pipeline: Developer ID signing,
-notarization, strict library validation. That is deliberate: there is no ad hoc
-or Debug divergence in daemon registration, TCC or library validation to chase,
-because you always run what ships. Installed builds require a Developer ID
-certificate and the two explicit provisioning profiles described in
-[RELEASE.md](RELEASE.md). Unsigned compile checks and tests need neither.
+### Before pushing
 
-The canonical xcodebuild invocation (what `make app` runs) is:
+Run `make preflight`. The hk pre-push hook runs this same command: all hooks,
+script fixtures, Mac tests, AddressSanitizer and `make ci-parity`. On a release
+branch it also runs `make rc DRY_RUN=1 SOURCE_ONLY=1`. This validates source
+before it is pushed; hosted-check and reservation checks still run when cutting
+a candidate. The hook has no project-specific skip switch. Never bypass it as an
+agent.
+
+`make ci-parity` uses `/Applications/Xcode-26.6.0.app/Contents/Developer` when
+installed, without changing the selected Xcode. It compiles the unsigned Mac app
+and tests, iOS Simulator app and tests, and iOS device app into separate
+directories under `build/ci-parity`. If Xcode 26.6 is absent, it prints a clear
+skip message.
+
+### Run the app
+
+Install a published CI candidate when you need to inspect the app. Signing,
+notarization, credentials, update keys and publication stay in the hosted
+Release workflow. Local Make targets only compile and test unsigned products.
+
+For Xcode, run `scripts/generate-build-info.sh` first and base Debug on
+`Glimmer/StreamLib.xcconfig` locally. Keep that project setting out of commits.
+The script creates the untracked `Glimmer/BuildInfo.generated.swift`; `make app`
+and `make test` run it for you.
+
+The equivalent compile command is:
 
 ```bash
 scripts/generate-build-info.sh
-xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
-    -xcconfig Glimmer/StreamLib.xcconfig \
-    CODE_SIGNING_ALLOWED=NO \
-    -derivedDataPath ./build -destination 'platform=macOS' build
+SWIFT_DETERMINISTIC_HASHING=1 xcodebuild -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+  -xcconfig Glimmer/StreamLib.xcconfig CODE_SIGNING_ALLOWED=NO \
+  -derivedDataPath ./build -destination 'platform=macOS' build
 ```
-
-The script writes `Glimmer/BuildInfo.generated.swift`, the commit and build date
-that telemetry stamps on every session. The project compiles that file but it is
-not checked in, so a fresh clone fails with a missing input file until the
-script has run once. `CODE_SIGNING_ALLOWED=NO` leaves signing to the Makefile's
-`sign` target; without it, Xcode's Automatic signing asks for the keychain once
-per nested bundle.
-
-To run what you're working on, either use `make dev` (unit tests, then the
-notarized Release build, installed and relaunched on the same signing path as
-`make install`), or work in Xcode against `Glimmer.xcodeproj`:
-
-1. Run `scripts/generate-build-info.sh` once so
-   `Glimmer/BuildInfo.generated.swift` exists (`make app` and `make test` run it
-   for you).
-2. Base the Debug configuration on `Glimmer/StreamLib.xcconfig` (project editor
-   → Info → Configurations), and keep that change out of commits. It supplies
-   the bridging header and the version from `Glimmer/Version.xcconfig`.
-3. Build and run.
-
-Useful log tails:
-
-```bash
-log stream --predicate 'subsystem == "io.ugfugl.Glimmer"' --level info
-```
-
-See [PROFILING.md](PROFILING.md) for per-category predicates.
 
 ### Build hygiene: don't mint app copies
 
-**Build once per thing you actually want to look at.** Not once per edit.
+Build once per thing you need to inspect; use `make verify` between inspections.
 
-macOS gives every distinct copy of the bundle its own privacy identity. Anything
-that registers a `Glimmer.app` with LaunchServices (and `make app` re-registers
-its Debug bundle on _every_ run) earns a separate row under **System Settings →
-Privacy & Security → Local Network**. Those rows are TCC records: they survive
-deleting the app, and they survive a reboot.
+Registered copies of `Glimmer.app` gain separate macOS privacy records. Deleting
+a copy or rebooting does not remove those records. Stale copies can make Local
+Network failures look like PC connectivity problems.
 
-One session of rebuild-on-every-edit produced **nine** registered copies (two
-checkouts' `build/`, two DerivedData trees, `/Applications`, Trash, Downloads)
-and eight Local Network entries. The app then could not reach a PC on the LAN,
-and the failure surfaced as `Couldn't reach <ip>`, which reads as a network
-problem and is not one.
-
-Keep the inner loop cheap and batch the install:
-
-```bash
-make app     # compile-only check: fast, no install
-make test    # unit tests
-make dev     # ONLY when you want to actually use the build
-```
-
-Clean up copies you created:
+To inspect and unregister a known stale copy:
 
 ```bash
 LSREG=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/\
 LaunchServices.framework/Versions/A/Support/lsregister
-"$LSREG" -dump | grep -oE '/[^ ]*Glimmer\.app' | sort -u   # what macOS knows about
-"$LSREG" -u /path/to/stale/Glimmer.app                      # unregister one
-rm -rf build ~/Library/Developer/Xcode/DerivedData/Glimmer-*
+"$LSREG" -dump | grep -oE '/[^ ]*Glimmer\.app' | sort -u
+"$LSREG" -u /path/to/stale/Glimmer.app
 ```
 
-Unregistering does **not** retract the privacy grants. Only this does, and only
-the user can run it:
-
-```bash
-sudo tccutil reset All io.ugfugl.Glimmer
-```
-
-`tccutil reset LocalNetwork <bundle-id>` is rejected: `LocalNetwork` is not a
-service name `tccutil` accepts. `All` is the working form, and it also clears
-Input Monitoring (the DualSense raw-HID grant), so expect to re-approve that.
+Unregistering does not revoke privacy grants. Only the user should reset them
+with `sudo tccutil reset All io.ugfugl.Glimmer`; this also clears Input
+Monitoring. `LocalNetwork` is not a supported `tccutil` service name. Do not
+make resets a routine step.
 
 ## UI changes
 
-The launcher window is **sized to its content and not resizable**
-(`.windowResizability(.contentSize)` in `GlimmerApp`). That only holds while
-every view in the column states a _definite_ size, which makes ordinary SwiftUI
-idioms load-bearing in a way that is easy to miss:
+Read [DESIGN.md](https://github.com/Se7enbrc/glimmer/blob/main/DESIGN.md) and
+[PRODUCT.md](https://github.com/Se7enbrc/glimmer/blob/main/PRODUCT.md), then
+inspect the running result.
 
-- `minHeight:` / `minWidth:` are **floors, not sizes**. A view with a floor
-  accepts any larger size it is offered, so one of them anywhere in the column
-  hands the window something to grow into: the window becomes resizable again
-  and the offending view stretches to fill whatever the user drags out.
-- `.frame(maxWidth: .infinity)` has no size of its own to measure.
-- A trailing `Spacer()` exists to push content against a container taller than
-  itself. In a content-sized window there is no such space, so it can only
-  invent some.
-- `ConnectSurface` and `EmptyPairingState` therefore end in
-  `.fixedSize(horizontal: false, vertical: true)`: they take their ideal height
-  rather than the offered one. Keep it that way.
+| Rule                                                                       | Reason                                                    |
+| -------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Keep the launcher column's `.fixedSize(horizontal: false, vertical: true)` | The launcher is sized to content.                         |
+| No flexible outer frame, height floor or trailing `Spacer`                 | These let the window stretch.                             |
+| Match the window's minimum width to the real content width                 | A smaller floor squeezes margins and permits resizing.    |
+| Use system controls; custom appearance belongs in a control style          | Keeps focus, keyboard and VoiceOver behavior.             |
+| Animate once on a state change                                             | Avoid continuous main-thread work; respect Reduce Motion. |
 
-The window's `minWidth` in `GlimmerApp` must equal the connect surface's real
-width (card width plus twice its horizontal padding). A floor _below_ the true
-content width leaves the window that much range to be dragged through, and it
-opens at the bottom of that range with the margins squeezed flat.
-
-**Verify geometry against the running app, not the source.** Every one of the
-above was shipped at least once on a source reading that looked right. Build,
-install, launch, then ask the window what it actually did:
+For a geometry change, run this against the app:
 
 ```bash
 osascript <<'EOS'
@@ -218,321 +156,254 @@ end tell
 EOS
 ```
 
-If `after_grow` differs from the opening size, something in the column is still
-flexible. This takes about a minute and is not optional for a geometry change: a
-resize regression once survived two releases because it was only ever read,
-never run.
-
-A UI pull request should say which of these it touches, and include a
-before/after screenshot at the smallest and largest window the change allows.
-“Builds clean” is not evidence about layout.
+For the content-sized launcher, `after_grow` must match the opening size.
+Include before/after screenshots at the smallest and largest allowed sizes.
+Check empty, one PC, many apps, mid-stream, disconnected, light and dark,
+VoiceOver labels and keyboard navigation.
 
 ## Lint
 
-`swiftlint` runs as a pre-commit hook over `Glimmer/`, `GlimmerTests/`,
-`helper/` and `LoginHelper/`; `scripts/` is build-time tooling and is not held
-to the product lint bar. Both the commit hook and `make verify` lint with
-`--strict`, where any warning fails. `make verify` also runs release-tool
-regression tests and the Swift suite. `make dist` runs this gate before
-building. Treat a warning as a failure. Thresholds worth knowing from
-`.swiftlint.yml`:
+Treat every compiler or strict SwiftLint warning as a failure.
 
-- `force_unwrapping`, `force_cast`, `force_try`: warnings, so strict fails them.
-- File length and type body warn at 600, function body at 80, and strict holds
-  every file to that.
-- `line_length` warns at 140, errors at 280, ignoring URLs and comments.
+| Check       | Requirement                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| Scope       | SwiftLint covers `Glimmer/`, `GlimmerTests/`, `helper/` and `LoginHelper/`.                |
+| Size        | Files and type bodies at most 600 lines; functions at most 80.                             |
+| Width       | Keep changed lines within 120 columns, even where lint allows more.                        |
+| Fixes       | No suppressions, raised thresholds, force unwraps, force casts or `try!`.                  |
+| Hooks       | Never use `--no-verify`; review and restage any `swiftlint --fix` changes.                 |
+| Other files | Prettier, markdownlint and yamllint run through hk.                                        |
+| Secrets     | Verified-credential scanning plus offline private-key scanning; findings stay out of logs. |
 
-The pre-commit wrapper runs `swiftlint --fix` first; if it rewrites any Swift
-file, the commit is **refused** and you are told to re-stage the diff. The hook
-never stages for you, so you see what changed.
-
-`swift-format` is intentionally NOT enforced: Apple's formatter reflows the
-codebase's trailing-aligned function arguments into a noisier style.
-
-A `trufflehog` secret scan runs per commit against verified detectors, and
-`prettier`, `markdownlint`, and `yamllint` cover the non-Swift files.
-Credentials never belong in the tree; see [SECURITY.md](SECURITY.md).
-
-Hosted Verify's checks job runs every pre-commit hook with
-`pre-commit run --all-files` on the same Apple Silicon runner as the rest of the
-gate. Credential checks cover all tracked files and the PR's commits, including
-credentials removed before the final commit. Scanner findings are withheld from
-public logs. Formatting hooks may fail and modify files for review; CI never
-commits those changes.
+`swift-format` is not enforced because it rewrites the established argument
+alignment. Hosted checks run all hk checks; formatting failures require a
+reviewed fix.
 
 ## Style
 
-- 4-space indent, opening brace on the same line, trailing newline. Match
-  neighbouring files.
-- File / type names match the load-bearing type they contain
-  (`VideoDecoder.swift` → `class VideoDecoder`). Extensions split out by feature
-  (`VideoDecoder+HDR.swift`, `VideoDecoder+Bitstream.swift`).
-- Protocol constants mirror their upstream C names verbatim
-  (`COLORSPACE_REC_2020`, `DR_NEED_IDR`) so a reader can grep the spec.
-  `identifier_name.allowed_symbols: ["_"]` exists for exactly that.
-- Comments in new and changed code earn their keep and stay at three lines or
-  fewer, doc comments and file headers included: what the code is for and the
-  one-line why. If a future maintainer would have to dig through an upstream PR
-  thread to understand a line, the why goes in the source; the full story goes
-  in the commit message.
-- No emoji in source files.
-- A new source file starts with the `SPDX-License-Identifier: GPL-3.0-only` and
-  `SPDX-FileCopyrightText` lines its neighbours carry; `scripts/check-spdx.sh`
-  in `make check` fails a tracked Swift, header, shell, Python, JavaScript,
-  workflow or Makefile file whose first three lines lack the license line.
+Match the neighboring code and reuse shared helpers before adding another.
+
+Use four spaces, same-line opening braces and a trailing newline. Split by
+feature into `Type+Feature.swift`. Keep protocol constants' upstream C names.
+New and changed comments, including headers, are at most three lines and explain
+why. Keep longer rationale in the commit body.
+
+New source files need the neighboring SPDX license/copyright header and four
+unique `project.pbxproj` entries: file reference, build file, group and Sources.
+Use Swift Testing for new tests. Cover pure logic and every behavior change; a
+regression test must fail without its fix. Use defaulted closures or parameters
+for seams, not a new protocol with one conformer.
+
+Use sentence case, “the PC”, curly quotation marks, straight apostrophes and
+`…`. No emoji, em dashes or exclamation marks in copy. Reuse shared failure
+text.
 
 ## Concurrency
 
-Swift 6 strict concurrency mode is on. The codebase is `@MainActor`-heavy on UI
-code and `actor`-heavy in the streaming engine.
+Keep Swift 6 complete strict concurrency and document ownership at each
+boundary.
 
-Rules:
-
-- **`@MainActor`** for anything that touches `NSWindow`, `NSEvent`,
-  `AVSampleBufferDisplayLayer` configuration, or SwiftUI bindings.
-  `VideoDecoder`, `InputForwarder`, `StreamWindow`, and `AppModel` are all
-  `@MainActor`-isolated at the class level.
-- **`actor`** for engine subsystems with non-trivial cross-thread state:
-  `StreamSession`, `NetworkClient`, `PairingClient`, `IdentityManager`.
-- **`@unchecked Sendable` with a documented lock** when a system framework
-  forces callbacks onto its own threads:
-  - `AudioDecoder` (AVAudioEngine callbacks on Core Audio threads, internal
-    state lock-guarded).
-  - `StatsCollector` (touched from the engine's receive thread, the VT decode
-    queue, AND the main actor; guarded by an internal `OSAllocatedUnfairLock`).
-  - `StreamBridgeContext` (the receive-thread callback target).
+| State                                  | Isolation                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------ |
+| UI, AppKit and SwiftUI bindings        | `@MainActor`.                                                                              |
+| Session, network, pairing and identity | Actors.                                                                                    |
+| Framework callbacks outside actors     | `@unchecked Sendable` only with a documented lock or equivalent invariant.                 |
+| Audio render callback                  | Preallocated storage and lock-free atomics; no locks, allocation or runtime metadata work. |
 
 ### `nonisolated(unsafe)`
 
-`nonisolated(unsafe)` IS acceptable in this codebase, and there are about 70 of
-them. Every use must document the invariant in a comment on the property: what
-the synchronisation discipline is, and why a regular actor or lock isn't viable.
+Document why an actor or lock cannot express a safe existing ownership rule.
 
-Acceptable patterns:
-
-- **Receive-thread callback bridging.** The native engine hands us frames and
-  control events on its own receive threads, on hot paths that can't afford an
-  actor hop per frame. The weak refs on `StreamBridgeContext` are
-  `nonisolated(unsafe)` because Swift weak storage is atomic per spec and the
-  engine serialises its callbacks per stream. Swift 6 strict concurrency can't
-  see through to that guarantee, but the load is sound.
-- **VT decode-queue state.** `decompressionSession`, `formatDescription`, SPS /
-  PPS / VPS, stream parameters in `VideoDecoder.swift` are touched from the
-  engine's receive thread (submit) and the VT output callback (decode). They
-  live on `decodeQueue` (a serial `DispatchQueue`) and are serialised by it.
-- **Single-writer-from-MainActor reads-from-anywhere.**
-  `VideoDecoder.hdrEnabled` is written on the main actor, read by the VT output
-  callback. A Bool load/store is naturally atomic on every supported arch; the
-  eventually-consistent read is correct here (HDR-flip → next-frame fallback
-  colorspace).
-- **MainActor-only `Foundation.Timer` slots on an actor.**
-  `StreamSession.statsOverlayTimer` is allocated and invalidated on the main
-  actor (the only thread that may touch a `Timer`), but the _actor_ needs to
-  schedule those mutations via `await MainActor.run`. The actual mutation only
-  ever runs on the main thread.
-
-NOT acceptable:
-
-- “It compiled” without an invariant comment.
-- Multi-writer races. If two threads can write the same slot,
-  `nonisolated(unsafe)` is wrong: use a lock or hop to an actor.
-- Anything with a Sendable-incomplete type behind it (`CALayer`,
-  `AVSampleBufferDisplayLayer`). Wrap with an `NSLock` around the load/store
-  (`VideoDecoder._displayLayer` is the reference pattern).
+Valid cases include serial decode-queue ownership, atomic weak callback
+references with serialized delivery, and main-actor-only timer slots. A single
+writer does not make arbitrary multi-field state safe. Never use it for
+multi-writer races or an unprotected layer pointer; the decoder's display layer
+uses a lock and its shared format description uses `inputFormatBox`.
 
 ### Event-yield discipline
 
-The canonical place to surface a stream event to the consumer is
-`StreamBridgeContext.eventContinuation?.yield(_:)`. `AsyncStream.Continuation`
-is `Sendable` and FIFO-ordered, so yielding from the engine's receive thread
-preserves the order the native engine delivered them in. The previous
-`Task { await deliver(...) }` pattern lost ordering because consecutive Tasks
-land on the global concurrent executor without inter-Task happens-before; see
-the comment at `StreamBridgeContext.eventContinuation` (in
-`StreamBridgeContext.swift`) for the motivating regression.
+Yield engine events directly through `StreamBridgeContext.eventContinuation`.
+
+Its Sendable continuation preserves callback order. Separate unstructured tasks
+can reorder consecutive stage events. Drain receive threads before subsystem
+teardown; weak references alone do not establish safe teardown ordering.
 
 ## Logging
 
-`Logger` from `os`, never `print`, never `os_log`.
+Use `Logger` on `io.ugfugl.Glimmer`, with a per-file category; CLI output is the
+only `print` exception.
 
-- Subsystem: **`io.ugfugl.Glimmer`** (capital G). Every `Logger` in the app uses
-  this string; no `.Stream` suffix on the subsystem. The privileged AWDL helper
-  is a separate process and uses `io.ugfugl.glimmer.helper`.
-- Category: per-file, dotted form `Stream.<Area>` for streaming-engine files.
-  The current list is in [PROFILING.md](PROFILING.md#unified-log); add to it
-  when you add a file, don't reuse a neighbour's category. Signposts sit on the
-  same subsystem with their own categories (`Stream.Decode`, `Stream.Render`,
-  `Stream.Network`, `Stream.Pairing`, `Stream.Audio`) in
-  `Glimmer/Stream/Signposts.swift`.
-- Privacy:
-  - `privacy: .public` for non-sensitive diagnostic data (stage names, decode
-    timings, codec format ints, error codes).
-  - `privacy: .private` (the default) for anything PII-adjacent: PC addresses,
-    PC names, error message strings, Sunshine versions.
-  - `Diag.*` takes the same `privacy:` argument as `Logger`, but defaults to
-    `.public`, so mark those values `.private` there too:
-    `Diag.info("Connecting to \(address, privacy: .private)", "Stream")`.
-    Private values reach only the in-app log viewer. Copied logs, the system log
-    and session files, which people attach to public issues, show `<private>` in
-    their place. Telemetry names the PC and the Mac by per-install pseudonyms,
-    never their names.
-  - Never log:
-    - Key characters from `keyDown` events (a later change fixed the regression
-      where `chars=...` leaked at `.public`).
-    - URLs carrying `rikey`, `rikeyid`, `gcmkey`, `gcmkeyid`, `uuid`, or
-      `uniqueid`. `NetworkClient.sensitiveQueryKeys` is the set; the redaction
-      that consumes it lives in `NetworkClient+Endpoints.swift`.
-    - Cert PEMs or fingerprints at `.public` (a hostile log scraper could read
-      the pinned cert; see [SECURITY.md](SECURITY.md)).
-    - PIN values, AES keys, signed pairing-secret bytes.
+| Data                                                            | Rule                                                                 |
+| --------------------------------------------------------------- | -------------------------------------------------------------------- |
+| PC names, addresses, errors and identifying values              | `.private` in both Logger and Diag; Diag defaults to public.         |
+| Timing, stages and non-sensitive format codes                   | May be public.                                                       |
+| Keys, PINs, certificates, keystrokes and sensitive query values | Never log. Use `NetworkClient.sensitiveQueryKeys` for URL redaction. |
+| Repeated frame or mouse activity                                | Nothing per-frame at `.info`.                                        |
+| Root helper                                                     | Separate subsystem `io.ugfugl.glimmer.helper`.                       |
+| Telemetry identity                                              | Per-install pseudonyms.                                              |
 
-The current Swift 6 strict-concurrency posture means
-`Logger.info("\(value, privacy: .public)")` is the standard form. Logging on
-long-running paths (per-frame, per-mouseMoved) is gated behind explicit
-conditions: never log per-frame at `.info`.
+Private Diag values reach only the in-app viewer; copied, system and session
+logs redact them. Logs retain timings, codec configuration, sanitized network
+errors, pairing transitions and pin mismatches without fingerprints. See
+[log categories](PROFILING.md#unified-log).
 
 ## Commits
 
-CalVer for releases (`YYYY.M.MICRO`). See [RELEASE.md](RELEASE.md).
+Use an imperative, lowercase conventional prefix and explain why in the body.
 
-Conventional-commit-style prefixes are used in the repo's history; match what's
-there. Common prefixes:
+Prefixes include `fix(area):`, `feat(area):`, `perf(area):`, `refactor(area):`,
+`test:`, `build:`, `chore:` and `docs:`. No trailing period. Wrap bodies near 72
+columns. Commits entering `main` need a signature GitHub verifies; keep private
+keys local.
 
-- `fix(area)`: bug fix scoped to a subsystem
-- `feat(area)`: new behaviour
-- `perf(area)`: performance fix
-- `refactor(area)`: non-behavioural rework
-- `test`: tests only
-- `build`: Xcode, Makefile, scripts
-- `chore`: repo hygiene
-- `docs` or `docs(area)`: these files
-
-Subject line: imperative mood, lowercase after the prefix, no trailing period.
-Body wrapped at about 72 columns when one's needed.
-
-Commits entering `main` must have a signature GitHub verifies. Register your
-signing key with GitHub and enable signing before committing. GitHub's web
-editor signs commits automatically. See
-[signing commits](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
-Keep private signing keys on your own machine; CI uses GitHub's signing service
-for release metadata updates.
-
-**No attribution to tools or agents.** No `Co-Authored-By` trailer, no session
-trailers or links, no “Generated with” line, no model or tool names: not in
-commits, pull request titles or bodies, the changelog, or code comments. Hard
-rule of repo policy. No emoji in commit messages either.
+Do not add tool or agent attribution, co-author trailers, session links or
+“Generated with” text to commits, PRs, code comments or the changelog. Never
+commit secrets or signing material.
 
 ## The bar
 
-**“It builds clean” is table stakes, not evidence.** Neither is “the tests
-pass”. Both are necessary; neither says anything about whether the thing is any
-good.
+Prove the behavior you claim, including what the user sees and feels.
 
-The bar for anything a user can see or feel is: **would someone with taste,
-looking at this for two seconds, be appalled?** If you would not put it in a
-demo, it is not done, however green the checks are.
-
-This is not hypothetical. Glimmer shipped a launcher whose PC card floated in
-several hundred points of empty window. It compiled without a warning, the tests
-passed, SwiftLint was clean, and it was obviously wrong to anyone who opened it.
-Walking it back took the rest of a release train: 2026.8.3 pinned the window to
-its content and left the card nearly touching the frame, and 2026.8.4 put the
-margins back. Each attempt had been validated by reading the diff instead of
-looking at the app.
-
-Practically, before you call something done:
-
-- **Run it.** Not the test suite: the app, the way a user meets it.
-- **Look at it**, in the states a user will hit: empty, one PC, many apps,
-  mid-stream, disconnected, light and dark, the smallest and largest window you
-  allow.
-- **Prove the claim you are making.** If the claim is “no longer resizable”,
-  drive the window and read the size back (see [UI changes](#ui-changes)). If it
-  is “reconnects cleanly”, pull the cable. A claim you have not exercised is a
-  guess with a commit message.
-- **Say what you did NOT verify.** An honest “the dropdown has never rendered
-  with more than two apps” is worth more than silence, and it is what lets the
-  next person aim their attention.
+Run the app for UI changes, pull the cable for recovery claims, and collect
+before/after [telemetry](PROFILING.md) for pacing, bitrate, buffering or decode
+changes. Green checks do not replace a real stream or visual review. State what
+you did not verify.
 
 ## Pull requests
 
-- Start with an issue. Describe the problem or the change, and wait for the
-  maintainer to agree on the approach before you write code. A pull request that
-  doesn't link an agreed issue is closed.
-- `main` is the active development branch; releases are tags on it.
-- Fork, push your branch to the fork, and open the PR from there against `main`.
-  Only the maintainer can merge into `main`. Renovate, run by the maintainer,
-  keeps one grouped update branch; other contributors use forks.
-- Rulesets protect `main`: changes arrive only by pull request and squash merge,
-  after the required `macOS`, `Analyze (swift)`, `Analyze (python)` and
-  `Analyze (actions)` checks pass. Its history must carry verified signatures,
-  and it cannot be force-pushed or deleted. Only the maintainer (and the release
-  app) can create or push other branches. The repository admin role can bypass
-  the pull request and checks rule.
-- Keep a PR scoped to one area, so it can land independently.
-- Leave `CHANGELOG.md` and `Glimmer/Version.xcconfig` alone: the maintainer
-  picks the version and writes the release notes when a change ships. Each
-  release there is a `## <version> - <date>` heading with `### Features` and
-  `### Bug fixes` lists, one bullet per change a player will notice, written for
-  them. See [RELEASE.md](RELEASE.md).
-- Before you ask for a merge, run the thing and look at it. [The bar](#the-bar)
-  is the checklist.
-- Before merging any PR, including Renovate updates, check out its exact head
-  commit in a clean worktree and run `make verify`. Record that commit SHA and
-  the checks in the review. Hosted Verify runs the same gate as three parallel
-  jobs (`make check` with every pre-commit hook, `make test`, `make test-asan`)
-  on Apple Silicon macOS 26 runners with Xcode 26.6 and compiler warnings
-  treated as errors; the required `macOS` check passes only when all three do.
-  The checks and tests jobs measure coverage and upload the reports. A separate
-  `libFuzzer` job runs `scripts/fuzz.sh` for 30 seconds per target; it is not
-  part of the required check. Every `main` commit gets its own Verify and CodeQL
-  run, and a newer push to a pull request replaces its older run. PR jobs
-  receive no signing credentials and cannot publish releases.
+Agree on an issue before coding, then submit one area from your fork against
+current `main`.
 
-Hosted verification, CodeQL and releases use the same Xcode 26.6 toolchain on
-macOS 26. These checks exercise the minimum supported OS family, but do not
-replace real streaming checks of audio devices, mouse capture and controllers.
-The macOS 27 Hot Corner option uses its documented public enum value so builds
-made with Xcode 26 preserve that behavior on newer systems. Release signing uses
-a separate protected workflow; see [RELEASE.md](RELEASE.md).
+1. Link the agreed issue. Only the maintainer pushes branches here or merges.
+2. Follow
+   [fork identity and update-feed rules](https://github.com/Se7enbrc/glimmer/blob/main/AGENTS.md#working-in-a-fork)
+   before distributing your build. Keep `LICENSE` and `CREDITS.md`.
+3. Leave changelog/version selection to the maintainer. Maintainer releases need
+   a user-facing changelog bullet and both version fields bumped together.
+4. Run `make verify`, inspect warnings, and include your visual or real-PC
+   checks and gaps.
+5. Before merging, review the exact head in a clean worktree, rerun
+   `make verify`, and record the SHA and results.
 
-CodeQL scans Swift, Python and GitHub Actions with the `security-extended` query
-suite on pull requests, including approved fork PRs, and on every `main` commit.
-A pull request that changes nothing the traced Swift build reads (see
-`scripts/codeql-swift-changed.py`) skips only the Swift build and analysis; its
-merge to `main` is scanned in full, and a release candidate needs a Swift
-analysis of its exact commit. The Swift scan compiles the unsigned app, login
-item and privileged helper with Xcode 26.6; it receives no release credentials.
-Compiler-only tracing leaves SwiftPM's package sandbox intact. A post-analysis
-query requires successful extraction of every tracked production Swift file, so
-partial extraction cannot pass. An unsupported compiler or failed coverage query
-blocks the scan. Scheduled scans also check for newly added queries. GitHub's AI
-Scan is advisory and does not scan fork or bot PRs. Neither scanner replaces
-tests or security review.
+### Hosted checks
 
-Hosted verification and releases download TruffleHog 3.97.8 and verify its
-pinned SHA-256 before installation. Scanner output stays suppressed, including
-failure diagnostics, so findings cannot expose credentials in public logs.
+Wait for the required checks on the exact commit under review.
 
-Workflow runs from all outside contributors, including returning contributors,
-require a maintainer's approval. GitHub allows anyone with repository write
-access to approve runs; that access is reserved for trusted maintainers.
-Approving a PR workflow never grants it release credentials.
+| Check                         | Scope                                                                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `macOS`                       | Parallel checks, Swift tests and ASan tests; docs-only PRs run checks alone. Every `main` commit runs the full gate. |
+| CodeQL                        | Required Swift, Python and Actions analysis; Swift uses Xcode 26.6, the other jobs Linux.                            |
+| Swift extraction              | Requires every tracked production Swift file; unsupported compilers or incomplete extraction fail.                   |
+| Documentation-only Swift skip | PRs with no traced build inputs can skip Swift analysis; release candidates still need exact-commit analysis.        |
+| Coverage                      | Per-component reports, no threshold.                                                                                 |
+| libFuzzer                     | 30 seconds per target in a separate job, outside the required `macOS` check.                                         |
+
+Outside-contributor workflows need maintainer approval. PRs receive no release
+credentials. Releases use a separate protected workflow. Main requires squash
+PRs, green checks and verified signatures; no force-push or deletion. Repository
+admins can bypass the PR/check rule, not the protected release approval.
+
+CodeQL uses security-extended queries and scheduled scans. AI Scan is advisory
+and omits fork/bot PRs. Neither replaces testing or security review. TruffleHog
+is pinned and verified before use; scan output stays suppressed.
+
+## Write documentation
+
+{% hint style="info" %}
+
+**Writing docs:** Lead with what readers do or get; no intros or hedging. Number
+procedures, one action per step, with copy-paste commands where useful. Keep
+sections within one screen and lists near five items; split recovery steps. Put
+detail in hints; move tests, telemetry fields, internals and code paths to
+developer pages. End each user page with a next-step link; first and last lines
+must explain purpose and destination.
+
+{% endhint %}
+
+Keep user tasks in the first four GitBook groups and developer work under
+Project › Contributing.
+
+Preserve filenames and front matter. Use short action-led sections, tables for
+reference and numbered procedures. `docs/SUMMARY.md` defines navigation and
+`docs/README.md` is the landing page.
+
+Use
+[GitBook's documented hint syntax](https://gitbook.com/docs/create-content/blocks/hint)
+for a brief note:
+
+```text
+{% hint style="info" %}
+
+Your note goes here.
+
+{% endhint %}
+```
+
+Use `warning` for consequences such as quitting a PC app. Run `make check` and
+the Markdown formatting hooks, then inspect a GitBook preview for layout and
+links.
+
+## Release artifact checks
+
+The [user verification guide](VERIFY_DOWNLOAD.md) covers provenance, Apple
+signatures and notarization. Hosted attestations identify source and workflow;
+they neither establish a SLSA level nor replace Apple and Sparkle checks.
+
+For `gh attestation verify`, add `--format json` to inspect the source commit,
+`--source-digest CANDIDATE_FULL_SHA` to require a full SHA, or
+`--bundle FILE.intoto.jsonl` to use a saved bundle. A release may include one;
+otherwise download it with:
+
+```bash
+gh attestation download FILE --repo Se7enbrc/glimmer
+```
+
+Let Sparkle verify updates automatically, or use OpenSSL 3 for an independent
+check.
+
+Get the ZIP's exact `sparkle:edSignature` from the
+[appcast](https://se7enbrc.github.io/glimmer/appcast.xml) and replace
+`SIGNATURE_FROM_APPCAST` below. Use your downloaded ZIP's filename.
+
+```bash
+KEY=bUc9IWEtH/FuDUIsGqyDIVy/1gvlPtBkFXNcVO/TrPU=
+{ printf 302a300506032b6570032100; echo "$KEY" | base64 -d | xxd -p -c 64; } \
+  | xxd -r -p > glimmer-ed25519.der
+echo 'SIGNATURE_FROM_APPCAST' | base64 -d > Glimmer.zip.sig
+openssl pkeyutl -verify -pubin -keyform DER -inkey glimmer-ed25519.der \
+  -rawin -in Glimmer-2026.10.8.zip -sigfile Glimmer.zip.sig
+```
+
+Expect “Signature Verified Successfully”. macOS's LibreSSL lacks Ed25519; this
+command requires OpenSSL 3. The key above is public and matches `SUPublicEDKey`
+in the released app.
+
+Sparkle signs each ZIP, not the feed itself; the feed relies on HTTPS. The
+documented checks were exercised on 2026-10-10 against 2026.10.5 and
+2026.10.6-rc.1. Repeat them for the particular artifact you download.
+
+Stable promotion reuses the candidate's exact DMG and ZIP. Versions follow
+`year.month.release`; the final number is not a day. See the
+[changelog](https://github.com/Se7enbrc/glimmer/blob/main/CHANGELOG.md) and
+[release process](RELEASE.md).
+
+[![Verification status](https://github.com/Se7enbrc/glimmer/actions/workflows/verify.yml/badge.svg?branch=main)](https://github.com/Se7enbrc/glimmer/actions/workflows/verify.yml)
+[![OpenSSF Best Practices status](https://www.bestpractices.dev/projects/15346/badge)](https://www.bestpractices.dev/en/projects/15346)
+
+[![GPL license](https://img.shields.io/github/license/Se7enbrc/glimmer)](../LICENSE)
 
 ## Roles and continuity
 
-Glimmer has one maintainer, who triages issues, reviews and merges every change,
-picks versions, and approves each release in the protected `release`
-environment. Contributors propose changes through issues and fork pull requests.
-Security reports follow [SECURITY.md](SECURITY.md). Everyone taking part follows
-the
-[code of conduct](https://github.com/Se7enbrc/glimmer/blob/main/CODE_OF_CONDUCT.md);
-report problems to <glimmer-conduct@ugfugl.io>.
+Bring proposals to the maintainer, who owns triage, review, merges, versions and
+release approval.
 
-The maintainer's GitHub account uses a passkey for two-factor authentication,
-and only the maintainer has write access. Release secrets live in Doppler, which
-is reached through that GitHub account. A designated successor has emergency
-access to the maintainer's password manager, which holds the credentials for
-GitHub, Doppler and the project's domain, and holds the account recovery codes,
-so the repository, releases and update feed can continue if the maintainer
-becomes unavailable or loses a device.
+Everyone follows the
+[code of conduct](https://github.com/Se7enbrc/glimmer/blob/main/CODE_OF_CONDUCT.md);
+report conduct concerns to <glimmer-conduct@ugfugl.io> and security issues
+through [private reporting](SECURITY.md#reporting).
+
+Only the maintainer has write access and uses a passkey for GitHub two-factor
+authentication. Release secrets live in Doppler, accessed through that account.
+A designated successor has emergency password-manager access to GitHub, Doppler,
+the domain credentials and recovery codes so releases and the update feed can
+continue.

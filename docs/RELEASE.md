@@ -298,12 +298,9 @@ changes players will notice. The publisher includes these notes in GitHub and
 Sparkle. Candidate and stable items share one appcast; normal Sparkle clients
 ignore items in the `rc` channel, while enrolled clients can receive both.
 
-Local `make release` and `make dist` remain available for explicitly requested
-local builds. Local `make release-publish` is a separate direct publication
-path, not the candidate promotion procedure. Do not use it to bypass acceptance
-or to rebuild an already published candidate. Packaging and publication require
-a clean worktree, including untracked files, and validate signatures,
-notarization, Gatekeeper acceptance and app/helper launch authorization.
+Signing, notarization and publication run only in the hosted Release workflow.
+Use `make rc DRY_RUN=1 SOURCE_ONLY=1` for pre-push source checks and `make rc`
+only when a reviewed candidate is ready to dispatch.
 
 ### Website and update feed
 
@@ -318,8 +315,8 @@ machine-written feed: releases and promotions commit there, so they never move
 The workflow deploys on every push to `main`, after every **Release** run and on
 demand. A push to `appcast` cannot start it, because push events run the
 workflows on the pushed branch and that branch has none. After a manual change
-to the feed, run `gh workflow run pages.yml -R Se7enbrc/glimmer`; local
-`make release-publish` does this itself.
+to the feed, run `gh workflow run pages.yml -R Se7enbrc/glimmer`; the release
+workflow dispatches it.
 
 One-time setup, in this order. Promote any pending candidate first with the
 tooling already on `main`, then:
@@ -373,7 +370,7 @@ allowed branch expands access to release secrets and requires maintainer
 approval.
 
 Before any candidate compilation, three independent jobs check out the exact
-candidate SHA: all pre-commit hooks plus `make check`, `make test`, and
+candidate SHA: all hk checks plus `make check`, `make test`, and
 `make test-asan`. Each checks the existing hosted Verify and CodeQL
 prerequisites, uses its own build directory, and has no release environment or
 secrets. Their records must match the SHA, run ID and check name before the
@@ -503,27 +500,12 @@ upload state. A retry never replaces them. The appcast update uses the persisted
 signature and ZIP length, and a GitHub-signed compare-and-swap commit. A service
 or authentication error is not treated as an absent release.
 
-Promotion still verifies the exact candidate's attestations, public asset
-hashes, source and unchanged shipped inputs before marking the same release
-stable. It never compiles, signs, repackages or uploads replacement bytes.
-Homebrew is a separate dependent job. It independently downloads and verifies
-that candidate again, requires a stable release, and checks its downloaded DMG
-against the verified digest before changing the cask. Release reads use the
-read-only run token; only tap writes use the tap token. Both metadata paths
-require GitHub's verified signature and signing key through
-`createCommitOnBranch`; there is no unsigned fallback.
+### Local source checks
 
-Recovery is by rerunning the failed job in the **original Release run**:
-
-| Failed phase                               | Safe action                                                                                                          |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| Verification or unsigned build             | Before a candidate exists, rerun failed jobs; successful verification records remain valid for the same run and SHA. |
-| Signing or persistence, before publication | Resolve the failure and rerun the signing job; never use this to repair a public candidate.                          |
-| Distribution validation                    | Rerun validation against the already persisted signed artifact.                                                      |
-| Candidate upload or RC feed                | Rerun the publication job only. It can complete a partial draft or repair the feed after the candidate is public.    |
-| Stable promotion or feed                   | Rerun the publication job only; it revalidates and reuses the same published assets.                                 |
-| Homebrew                                   | Rerun only the tap job; an already current cask creates no second commit.                                            |
-| Pages                                      | Rerun Pages and confirm the public appcast, even if a later Release phase failed.                                    |
+Use `make rc DRY_RUN=1` to inspect candidate source checks. `make rc` dispatches
+the hosted workflow when explicitly requested. Signing, notarization, update
+keys, credentials, publication and Homebrew updates run only in CI. Local
+installation and distribution targets have been removed.
 
 Successful producer outputs survive a failed-job retry. Consumers use the
 explicit **producing** attempt, not the newer retry attempt; another run or SHA
@@ -677,93 +659,19 @@ VM as the final boundary. See
 
 ## 3. Signing credentials
 
-Installed builds require two explicit macOS **Developer ID** provisioning
-profiles, made with the existing Developer ID Application certificate:
+Supply approved signing credentials and app/helper provisioning profiles through
+the protected GitHub release environment. The workflow uses temporary runner
+files and keychains, then removes them. It never reads a developer's local
+keychain or `~/.config/developer-id`.
 
-| Profile                             | Explicit App ID            | Capabilities                                        |
-| ----------------------------------- | -------------------------- | --------------------------------------------------- |
-| Glimmer Developer ID                | `io.ugfugl.Glimmer`        | Head Pose, Spatial Audio Profile, Enhanced Security |
-| Glimmer Network Helper Developer ID | `io.ugfugl.glimmer.helper` | Network Topology Observation                        |
+The CI-only Make entry point is `scripts/ci-signing.mk`. It requires hosted CI
+and temporary credential paths. Developers cannot invoke signing or publication
+through the root Makefile. Certificate exports, key generation and cloud secret
+changes require the maintainer's explicit authorization and are outside local
+build tooling.
 
-Store these files with mode 0600 in the mode-0700 directory
-`~/.config/glimmer/profiles/`, outside the repository:
-
-- `Glimmer_Developer_ID.provisionprofile`
-- `Glimmer_Network_Helper_Developer_ID.provisionprofile`
-
-These are the Makefile's default paths, so normal `make release`, `make dev` and
-`make reinstall` commands need no extra arguments. The signing private key
-remains in the existing Developer ID keychain. To use profiles elsewhere,
-override their paths:
-
-```bash
-make release \
-  PROVISIONING_PROFILE="$HOME/Downloads/Glimmer_Developer_ID.provisionprofile" \
-  HELPER_PROVISIONING_PROFILE="$HOME/Downloads/Glimmer_Network_Helper_Developer_ID.provisionprofile"
-```
-
-Use the actual filenames. The same variables apply to `make dev`,
-`make reinstall` and distribution targets; they can also be exported in the
-shell. Profile names are labels; the build validates the bundle identifier,
-team, expiration, distribution scope and requested entitlement grants. It
-derives the signing identifiers from the profiles and embeds each one in its own
-bundle before signing inside out. It uses only the two configured paths; it
-never scans other signing directories. Both `.provisionprofile` and
-`.mobileprovision` files are gitignored as a second safeguard.
-
-Missing or incompatible profiles stop signing. There is no ad hoc installation
-fallback for these restricted capabilities. `make app`, `make test` and
-`make verify` remain unsigned and need no profiles or signing credentials.
-
-Fresh machine, one-time: `make creds-init`, fill in the file it prints (or set
-its `OP_SOURCE`), then `make codesign-setup setup-notary sparkle-keys`. Secrets
-live in that 0600 file and its 1Password item, never in the repo.
-
-Sparkle's command-line tools are downloaded only after their archive matches the
-SHA-256 pinned in `scripts/sparkle-tools.sh`. When overriding `SPARKLE_VERSION`,
-supply `SPARKLE_SHA256` from that release's trusted digest. Keep the framework
-package pin and the tools version in step, and refresh Sparkle's full license
-text in `Glimmer/ThirdPartyNotices.txt`. The app bundles that file, `CREDITS.md`
-and `LICENSE` as resources.
-
-These belong to your Developer ID, not to Glimmer: `~/.config/developer-id/` and
-`~/Library/Keychains/developer-id.keychain-db` hold one identity and one
-`notary` profile, and any other project can sign and notarize with them. Exactly
-one Developer ID Application identity should be reachable, or signing by name
-fails as ambiguous.
-
-- The **Developer ID Application certificate** (`P12_PATH`, `P12_PASSWORD`)
-  signs the app. Create it on the G2 Sub-CA; the previous sub-CA ends
-  2027-02-01, and nothing it issued signs after that. Apple says G2 certificates
-  expire yearly, though the first one issued here runs to 2031-09-17, so go by
-  the date `make dist` prints. Shipped builds keep working after their
-  certificate expires, because every signature is timestamped. Never revoke a
-  certificate that signed a release: Gatekeeper would then block those builds.
-- The **App Store Connect team API key** (`NOTARY_KEY_PATH`, `NOTARY_KEY_ID`,
-  `NOTARY_ISSUER_ID`) notarizes through the `notary` notarytool profile that
-  `make setup-notary` stores in the signing keychain. Developer access is
-  enough. It doesn't expire and doesn't depend on the Apple ID password.
-
-`make dist` prints the certificate's expiry and warns 60 days ahead. To renew:
-
-```bash
-D=~/.config/developer-id; umask 077
-/usr/bin/openssl req -new -newkey rsa:2048 -nodes -keyout $D/developer-id.key \
-    -out ~/Downloads/Glimmer-Developer-ID.certSigningRequest -subj "/CN=Glimmer Developer ID/C=US"
-# developer.apple.com → Certificates → + → Developer ID Application → G2 Sub-CA → upload it
-/usr/bin/openssl x509 -inform der -in ~/Downloads/developerID_application.cer -out $D/developer-id.pem
-P="$(/usr/bin/openssl rand -base64 24)"
-/usr/bin/openssl pkcs12 -export -inkey $D/developer-id.key -in $D/developer-id.pem \
-    -out $D/developer-id.p12 -passout "pass:$P"
-scripts/signing-creds.sh set P12_PATH $D/developer-id.p12
-scripts/signing-creds.sh set P12_PASSWORD "$P"
-rm $D/developer-id.key $D/developer-id.pem
-make codesign-teardown codesign-setup setup-notary
-```
-
-Then put the new `.p12` and its passphrase in the 1Password item. The signing
-identity is matched by name and the app's designated requirement by team, so
-updates, privacy permissions and the helpers carry over to the new certificate.
+Sparkle tools downloads must match `scripts/sparkle-tools.sh`'s pinned digest.
+Keep its version, the framework pin and `ThirdPartyNotices.txt` aligned.
 
 ## 4. Reproducible payload
 
