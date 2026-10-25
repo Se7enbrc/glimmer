@@ -48,7 +48,11 @@ struct TouchIdleEvidenceTests {
         let axis = try #require(overlay.controls[.leftStick] as? TouchAxisControl)
         let signposter = OSSignposter(subsystem: "io.ugfugl.Glimmer", category: "Touch evidence")
         var lines = ["state,seconds,root_layouts,root_draws,submissions,user_cpu_s,system_cpu_s,video_frames"]
-        for state in ["hidden", "visible", "held", "moving"] {
+        for state in ["hidden", "minimum", "maximum", "held", "moving"] {
+            var layout = TouchLayout()
+            layout.opacity = state == "minimum" ? 0.1 : 0.6
+            overlay.configure(capture: capture, layout: layout,
+                              area: owner.view.bounds.inset(by: owner.view.safeAreaInsets))
             overlay.isHidden = state == "hidden"
             let contact = state == "held" || state == "moving" ? capture.begin(.leftStick) : nil
             if let contact {

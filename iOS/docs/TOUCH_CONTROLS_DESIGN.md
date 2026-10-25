@@ -182,9 +182,10 @@ the player's existing Touch mouse preference. Add no second mode setting.
 1. Open stream controls and choose “Edit controls…”. Release all PC input first.
    The game keeps running; do not claim to pause it or send a guessed Menu key.
 2. Select a control, then drag it. A violet selection ring identifies it. A
-   native inspector offers Size and Hide; show its current name and a brief
-   usage hint. Collapse the inspector while dragging so it cannot block a
-   destination. Keep the selected control visible when the inspector reappears.
+   native inspector offers Size, overlay-wide Opacity and Hide; show its current
+   name and a brief usage hint. Collapse the inspector while dragging so it
+   cannot block a destination. Keep the selected control visible when the
+   inspector reappears.
 3. Resize through the slider or accessible increment/decrement. Clamp the whole
    hit frame inside safe bounds and keep distinct targets separated by 8pt.
    Moving to an invalid position previews the last valid location.
@@ -193,34 +194,46 @@ the player's existing Touch mouse preference. Add no second mode setting.
    atomically and returns to the stream menu; Cancel discards all preview edits.
 5. Resume when ready. The editor's touches cannot become gameplay presses.
 
-No jiggle loop, save-on-every-drag, arbitrary transparency slider, layout
-gallery, presets picker, cloud sync or numerical coordinate form. Controls are
-neutral by default; violet belongs to selection and editor actions.
+Opacity previews all controls over the game, including their resting fills,
+outlines and glyphs. It ranges from 10% to 60% in 5-point steps; 20% preserves
+the approved translucent appearance. Glyphs retain an independent contrast floor
+so the minimum remains findable. Done saves opacity with explicit layout edits,
+including opacity-only changes; Cancel discards it. Reset layout restores 20%.
+Older saved layouts decode with that default. The percentage is the base surface
+opacity; light/dark fills retain their small appearance adjustment.
+
+No jiggle loop, save-on-every-drag, layout gallery, presets picker, cloud sync
+or numerical coordinate form. Controls are neutral by default; violet belongs to
+selection and editor actions.
 
 Per-PC-app memory earns its keep: a platformer and a driving game need different
 visible controls. Save only deviations after Done, keyed by the persisted PC
 UUID, Sunshine app ID and compact/expanded geometry family, locally on this
 installation. Do not key by PC address or display name. Store edge-relative
-positions within each reachable region, element size and visibility plus a
-schema version. Rotation reuses and clamps the layout; opening Duo uses the
-other family without destroying the saved one. Revalidate on every geometry
+positions within each reachable region, element size, visibility and opacity
+plus a schema version. Rotation reuses and clamps the layout; opening Duo uses
+the other family without destroying the saved one. Revalidate on every geometry
 change; temporary clamping must not overwrite the original layout. Missing,
 corrupt or incompatible data returns to defaults. Forgetting the PC deletes its
 layouts. Do not auto-create records for every game launch.
 
 ## Appearance, accessibility and haptics
 
-During play, use static low-alpha system neutral fills. Resting light controls
-use 22% fill and dark controls 18%, with 20% outlines and softer glyphs at 70%
-and 76%. Active controls rise to 38% light or 34% dark fill and 94% glyphs only
-while held, then return immediately. There is no idle fade or animation.
+During play, use static low-alpha system neutral fills. At the default opacity,
+light controls use 22% fill and dark controls 18%, with 20% outlines and softer
+glyphs at 70% and 76%. Active controls rise to 38% light or 34% dark fill and
+94% glyphs only while held, then return immediately. There is no idle fade or
+animation.
 
 A fine opposite-tone edge keeps glyphs legible over bright and dark frames.
 Native labels draw cached glyph images into their existing text layers; SF
 Symbols use small cached rasters with the edge baked in. This adds no layer
 shadow, live blur or frame sampling. Stick thumbs use a quiet 10% fill at rest.
 Increase Contrast strengthens the palette; Reduce Transparency makes control
-fills opaque. These are design tokens, not settings.
+fills opaque. Those accessibility overrides take precedence over the slider.
+Opacity changes only static palette values and invalidate controls once; it adds
+no timer, recurring layout or live compositing effect. Values are snapped to
+eleven steps before rendering, keeping the glyph raster cache finite.
 
 The stream follows system appearance. Light controls look light over bright and
 dark game frames; dark controls use the corresponding translucent dark fill. The

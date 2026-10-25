@@ -74,6 +74,47 @@ struct TouchLayoutTests {
         #expect(saved == original)
     }
 
+    @Test func opacityIsBoundedAndOldLayoutsKeepTheApprovedDefault() throws {
+        var layout = TouchLayout()
+        #expect(layout.opacity == 0.2)
+        for (input, expected) in [(-1.0, 0.1), (0.0, 0.1), (0.12, 0.1), (0.23, 0.25),
+                                  (0.6, 0.6), (2.0, 0.6), (.infinity, 0.2), (.nan, 0.2)] {
+            layout.opacity = input
+            #expect(layout.opacity == expected)
+        }
+        let old = Data(#"{"changes":[]}"#.utf8)
+        #expect(try JSONDecoder().decode(TouchLayout.self, from: old) == TouchLayout())
+        for (stored, expected) in [("-1", 0.1), ("9", 0.6), ("0.4", 0.4)] {
+            let data = Data("{\"changes\":[],\"opacity\":\(stored)}".utf8)
+            #expect(try JSONDecoder().decode(TouchLayout.self, from: data).opacity == expected)
+        }
+    }
+
+    @Test func opacityOnlyEditsPersistIndependentlyAndResetRemovesTheRecord() throws {
+        let suite = "touch-opacity-test.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = TouchLayoutStore(defaults: defaults)
+        var layout = TouchLayout()
+        layout.opacity = 0.6
+        store.save(layout, pcID: "first", appID: 1, family: .compact)
+        #expect(store.load(pcID: "first", appID: 1, family: .compact) == layout)
+        #expect(store.load(pcID: "first", appID: 2, family: .compact) == TouchLayout())
+        #expect(store.load(pcID: "second", appID: 1, family: .compact) == TouchLayout())
+        #expect(store.load(pcID: "first", appID: 1, family: .expanded) == TouchLayout())
+        var cancelled = store.load(pcID: "first", appID: 1, family: .compact)
+        cancelled.opacity = 0.1
+        #expect(store.load(pcID: "first", appID: 1, family: .compact).opacity == 0.6)
+        let area = CGRect(x: 0, y: 0, width: 844, height: 369)
+        var placement = layout.placement(.a, in: area)
+        placement.hidden = true
+        let edited = try #require(layout.editing(.a, to: placement, in: area))
+        #expect(edited.opacity == 0.6 && edited.frames(in: area)[.a] == nil)
+        store.save(TouchLayout(), pcID: "first", appID: 1, family: .compact)
+        #expect(store.load(pcID: "first", appID: 1, family: .compact) == TouchLayout())
+        #expect(defaults.dictionaryRepresentation().keys.allSatisfy { !$0.hasPrefix("ios.touchLayout.") })
+    }
+
     @Test func persistenceIsScopedAndForgetRemovesOnlyThatPC() throws {
         let suite = "touch-layout-test.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))

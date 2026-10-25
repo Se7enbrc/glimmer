@@ -74,28 +74,35 @@ enum TouchAppearance {
     }
     private struct GlyphKey: Hashable {
         let glyph: Glyph
-        let colors: Colors
+        let foreground: UIColor
+        let edge: UIColor
     }
     // Callers use the fixed gamepad glyphs and mouse-mode labels, never video or arbitrary user text.
     private static var glyphs: [GlyphKey: UIImage] = [:]
 
-    static func colors(style: UIUserInterfaceStyle, contrast: Bool, opaque: Bool, pressed: Bool) -> Colors {
+    static func colors(style: UIUserInterfaceStyle, contrast: Bool, opaque: Bool, pressed: Bool,
+                       opacity: Double = TouchLayout.defaultOpacity) -> Colors {
         let dark = style == .dark
         let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
         let background = UIColor.systemBackground.resolvedColor(with: traits)
         let foreground = UIColor.label.resolvedColor(with: traits)
-        let fill = contrast ? 0.5 : pressed ? (dark ? 0.34 : 0.38) : (dark ? 0.18 : 0.22)
+        let strength = TouchLayout.boundedOpacity(opacity)
+        let change = strength - TouchLayout.defaultOpacity
+        let resting = strength * (dark ? 0.9 : 1.1)
+        let fill = max(contrast ? 0.5 : 0, resting + (pressed ? 0.16 : 0))
+        let glyph = (dark ? 0.76 : 0.70) + change * 0.5
         return Colors(fill: background.withAlphaComponent(opaque ? 1 : fill),
-                      glyph: foreground.withAlphaComponent(contrast ? 1 : pressed ? 0.94 : dark ? 0.76 : 0.70),
+                      glyph: foreground.withAlphaComponent(contrast ? 1 : max(pressed ? 0.94 : 0, glyph)),
                       edge: background.withAlphaComponent(contrast ? 1 : pressed ? 0.90 : 0.78),
-                      border: foreground.withAlphaComponent(contrast ? 0.65 : pressed ? 0.35 : 0.20),
-                      thumb: background.withAlphaComponent(contrast ? 0.35 : pressed ? 0.18 : 0.10))
+                      border: foreground.withAlphaComponent(contrast ? 0.65 : (pressed ? 0.35 : 0.20) + change * 0.3),
+                      thumb: background.withAlphaComponent(contrast ? 0.35 : strength * 0.5 + (pressed ? 0.08 : 0)))
     }
 
     @discardableResult static func apply(to control: UIControl, pressed: Bool = false) -> Colors {
         let contrast = control.traitCollection.accessibilityContrast == .high
         let colors = colors(style: control.traitCollection.userInterfaceStyle, contrast: contrast,
-                            opaque: UIAccessibility.isReduceTransparencyEnabled, pressed: pressed)
+                            opaque: UIAccessibility.isReduceTransparencyEnabled, pressed: pressed,
+                            opacity: (control.superview as? TouchGamepadView)?.opacity ?? TouchLayout.defaultOpacity)
         control.backgroundColor = colors.fill
         control.layer.borderColor = colors.border.cgColor
         control.layer.borderWidth = contrast ? 2 : 0.75
@@ -114,7 +121,7 @@ enum TouchAppearance {
     }
 
     private static func image(for glyph: Glyph, colors: Colors) -> UIImage? {
-        let key = GlyphKey(glyph: glyph, colors: colors)
+        let key = GlyphKey(glyph: glyph, foreground: colors.glyph, edge: colors.edge)
         if let image = glyphs[key] { return image }
         guard let source = source(for: glyph) else { return nil }
         let bounds = CGRect(origin: .zero, size: CGSize(width: source.size.width + 2, height: source.size.height + 2))

@@ -8,7 +8,7 @@ listed separately.
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Element names                       | Left stick; Right stick; Directional pad; A; B; X; Y; Left shoulder; Right shoulder; Left trigger; Right trigger; Left stick click; Right stick click; Options; Menu |
 | Compact glyphs                      | L1; R1; L2; R2; L3; R3                                                                                                                                               |
-| Stream/editor commands              | Edit controls…; Show controls; Edit controls; Cancel; Done; Size; Hide; Add control…; Reset layout…; Reset layout; OK                                                |
+| Stream/editor commands              | Edit controls…; Show controls; Edit controls; Cancel; Done; Size; Opacity; Hide; Add control…; Reset layout…; Reset layout; OK                                       |
 | Editor confirmation                 | Reset this app's layout?                                                                                                                                             |
 | Editor collision explanation        | Move a control to make room.                                                                                                                                         |
 | Insufficient space                  | Make this window larger to use touch controls.                                                                                                                       |
@@ -36,3 +36,10 @@ counterpart.
 
 Next:
 [review implementation evidence and remaining acceptance gaps](TOUCH_CONTROLS_VALIDATION.md).
+
+## Opacity follow-up
+
+The only new user-facing string is “Opacity”, used for the visible editor label
+and the native slider's VoiceOver label. Its visible and accessible value uses
+locale-formatted percentages (10% through 60%, default 20%). No new hint, alert,
+menu item or Settings string is introduced.

@@ -6,6 +6,61 @@ but the complete Phase 2 acceptance evidence is not available: actual iPad
 rotation, Duo inner/partial-fold postures, assistive interaction and device
 energy still have gaps.
 
+## Opacity editor follow-up
+
+Edit controls now includes a native Opacity slider beside Size, with a vertical
+fallback for narrow or large-text inspectors. The range is 10% to 60% in five
+percentage-point steps; 20% retains the approved translucent look. The same
+bounded value styles every gamepad element and the stream-menu button without
+changing hit frames. Glyph edges retain a readability floor and held controls
+keep their contrast boost. Accessibility palette overrides still take
+precedence.
+
+Done saves opacity with explicit per-PC/app/family edits, including opacity-only
+changes. Cancel leaves the stored record alone. Reset layout restores 20%;
+saving a fully default layout removes its record. Existing layouts without the
+field load at 20%. The only new string is “Opacity”; its visible and accessible
+values use locale-formatted percentages.
+
+The warning-as-error Simulator build and 167 correctness tests pass. Coverage
+includes bounds/non-finite values, legacy decoding, persistence/scope, discarded
+drafts, reset, every native control type, held-input/geometry preservation,
+contrast over neutral luminance levels, and glyph raster reuse independent of
+background fill. Native editor captures also assert matching slider and preview
+values at 10%, 20% and 60%.
+
+Boards, raw xcresults, CSVs and reproduction scripts are under
+`shots-48/phase2/opacity/` in the task evidence directory. The board index
+includes before/after editors, both appearances over bright/dark frames, eight
+viewport geometries, and actual small-iPhone/Max/Duo-primary scenes in both
+landscape orientations. iPad/fold fixtures do not resolve the physical posture
+gaps above.
+
+Opacity invalidates appearance only on a value change; gameplay adds no timer,
+continuous animation, blur or polling. Values are quantized before rendering,
+and glyph cache keys contain only foreground/edge colors. The updated idle
+fixture measures 10% and 60% over static and moving video; existing input timing
+uses the unchanged capture-to-network submission path. See the evidence folder's
+`measurements.md` for results and limits, including unmeasured child-layer GPU
+composition, device watts and physical input latency.
+
+Idle measurements at both bounds record zero recurring root layouts, draws or
+input submissions in light/dark, static/video and stationary-held intervals.
+Static visible CPU is 0.14% to 0.22% of one Simulator host core; moving-video
+visible CPU is 6.55% to 6.94%. These are process counters, not device power.
+Existing capture-to-network p95 timing has median paired touch-minus-direct
+differences of -0.003 ms idle, -0.024 ms under input load and -0.008 ms with
+main thread work. All timing stage counts match and dropped records are zero.
+
+The native slider regression and maximum-value captures caught fractional steps
+truncating the final endpoint to 55%. Using whole percentage points fixes it;
+the regression sends native value-change events at both endpoints and verifies
+live preview without saving. VoiceOver label/value are supplied by the Slider.
+In-process enumeration did not expose SwiftUI's accessibility nodes; physical
+VoiceOver gestures remain an acceptance gap. No stream-session,
+disconnect-default or quality-indicator policy files changed; no Mac tests,
+physical-device run, version bump or push is included.
+
 ## Implemented behavior
 
 - Touch gameplay starts with the first usable frame without a physical
@@ -32,8 +87,8 @@ energy still have gaps.
 
 The full inventory of new user-facing text is in
 [touch control strings](TOUCH_CONTROLS_STRINGS.md). Floating sticks, macros,
-remapping, genre detection, cloud layouts, opacity settings and a second
-renderer remain excluded.
+remapping, genre detection, cloud layouts, Settings-page opacity controls and a
+second renderer remain excluded.
 
 ## Correctness and build
 

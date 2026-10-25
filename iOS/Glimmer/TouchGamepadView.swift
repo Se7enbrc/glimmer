@@ -6,6 +6,7 @@ import UIKit
 @MainActor
 class TouchGamepadView: UIView {
     private(set) var controls: [TouchElement: UIControl] = [:]
+    private(set) var opacity = TouchLayout.defaultOpacity
     private var capture: TouchGamepadCapture?
     private var lastFrames: [TouchElement: CGRect] = [:]
     private var transparencyObserver: NSObjectProtocol?
@@ -56,6 +57,10 @@ class TouchGamepadView: UIView {
             self.capture = capture
             for control in controls.values { inputTracking(control)?.capture = capture }
             capture?.invalidated = { [weak self] in self?.invalidate() }
+        }
+        if opacity != layout.opacity {
+            opacity = layout.opacity
+            for control in controls.values { control.setNeedsLayout() }
         }
         let frames = layout.frames(in: area)
         if frames != lastFrames {

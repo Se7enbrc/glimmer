@@ -76,9 +76,10 @@ struct TouchLayoutEditor: View {
                     Spacer()
                     Button("Done", action: save).fontWeight(.semibold)
                 }
-                Text(selected.name).font(.subheadline)
-                Slider(value: Binding(get: { size }, set: resize), in: 0.75...1.5, step: 0.05) { Text("Size") }
-                    .accessibilityValue(size.formatted(.percent.precision(.fractionLength(0))))
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 16) { sizeControl; opacityControl }
+                    VStack(spacing: 10) { sizeControl; opacityControl }
+                }
                 ViewThatFits(in: .horizontal) {
                     HStack { editingActions }
                     VStack { editingActions }
@@ -89,6 +90,30 @@ struct TouchLayoutEditor: View {
             }.padding()
         }
         .background(.regularMaterial, in: .rect(cornerRadius: 24))
+    }
+
+    private var sizeControl: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(selected.name).font(.subheadline)
+            Slider(value: Binding(get: { size }, set: resize), in: 0.75...1.5, step: 0.05) { Text("Size") }
+                .accessibilityValue(size.formatted(.percent.precision(.fractionLength(0))))
+        }.frame(minWidth: 140)
+    }
+
+    private var opacityControl: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text("Opacity")
+                Spacer()
+                Text(draft.opacity, format: .percent.precision(.fractionLength(0)))
+                    .monospacedDigit().foregroundStyle(.secondary)
+            }.font(.subheadline).accessibilityHidden(true)
+            // Whole percentage points keep SwiftUI's stepped range from truncating the final fractional step.
+            Slider(value: Binding(get: { draft.opacity * 100 }, set: { draft.opacity = $0 / 100 }),
+                   in: (TouchLayout.opacityRange.lowerBound * 100)...(TouchLayout.opacityRange.upperBound * 100),
+                   step: 5) { Text("Opacity") }
+                .accessibilityValue(draft.opacity.formatted(.percent.precision(.fractionLength(0))))
+        }.frame(minWidth: 140)
     }
 
     private var inspectorFrame: CGRect {

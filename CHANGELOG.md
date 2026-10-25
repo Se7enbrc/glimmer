@@ -26,7 +26,8 @@
   for each PC app; connecting a controller clears them from the game. Show them
   again from the stream menu for another player, just for that session.
   Translucent controls follow Light and Dark appearance and become clearer while
-  held.
+  held. Adjust their opacity together in Edit controls and save it with the
+  layout.
 
 - Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
   Sequoia, windows and controls use the system's standard materials in place of

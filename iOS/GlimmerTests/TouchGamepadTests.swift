@@ -21,6 +21,22 @@ struct TouchGamepadTests {
         #expect(active.glyph.cgColor.alpha > rest.glyph.cgColor.alpha)
     }
 
+    @Test(arguments: [UIUserInterfaceStyle.light, .dark], [0.1, 0.2, 0.6])
+    func opacityRetainsFindabilityAndHeldBoost(style: UIUserInterfaceStyle, opacity: Double) {
+        let rest = TouchAppearance.colors(style: style, contrast: false, opaque: false,
+                                         pressed: false, opacity: opacity)
+        let held = TouchAppearance.colors(style: style, contrast: false, opaque: false,
+                                         pressed: true, opacity: opacity)
+        #expect(rest.fill.cgColor.alpha >= 0.09 && rest.fill.cgColor.alpha < 0.7)
+        #expect(rest.glyph.cgColor.alpha >= 0.65 - 0.00001 && rest.edge.cgColor.alpha >= 0.78)
+        #expect(held.fill.cgColor.alpha > rest.fill.cgColor.alpha)
+        #expect(held.glyph.cgColor.alpha >= rest.glyph.cgColor.alpha)
+        #expect(held.border.cgColor.alpha > rest.border.cgColor.alpha)
+        let opaque = TouchAppearance.colors(style: style, contrast: false, opaque: true,
+                                           pressed: false, opacity: opacity)
+        #expect(opaque.fill.cgColor.alpha == 1)
+    }
+
     @Test func lightButtonsUseLightSurfacesAndDarkTitles() throws {
         let button = TouchButton(.a)
         button.overrideUserInterfaceStyle = .light
@@ -35,11 +51,12 @@ struct TouchGamepadTests {
         #expect(red < 0.2)
     }
 
-    @Test(arguments: [UIUserInterfaceStyle.light, .dark], [false, true])
-    func glyphEdgesStayLegibleAcrossVideoLuminance(style: UIUserInterfaceStyle, pressed: Bool) throws {
-        for contrast in [false, true] {
-            for opaque in [false, true] {
-                let colors = TouchAppearance.colors(style: style, contrast: contrast, opaque: opaque, pressed: pressed)
+    @Test(arguments: [UIUserInterfaceStyle.light, .dark], [0.1, 0.2, 0.6])
+    func glyphEdgesStayLegibleAcrossVideoLuminance(style: UIUserInterfaceStyle, opacity: Double) throws {
+        for pressed in [false, true] {
+            for (contrast, opaque) in [(false, false), (true, false), (false, true), (true, true)] {
+                let colors = TouchAppearance.colors(style: style, contrast: contrast, opaque: opaque,
+                                                   pressed: pressed, opacity: opacity)
                 for level in stride(from: 0.0, through: 1.0, by: 0.05) {
                     let surface = try composite(colors.fill, over: SIMD3<Double>(repeating: level))
                     let thumb = try composite(colors.thumb, over: surface)
@@ -87,6 +104,8 @@ struct TouchGamepadTests {
             let first = try #require(TouchAppearance.symbol(name, colors: colors))
             #expect(first.renderingMode == .alwaysOriginal)
             #expect(first === TouchAppearance.symbol(name, colors: colors))
+            let opaque = TouchAppearance.colors(style: style, contrast: false, opaque: true, pressed: false)
+            #expect(first === TouchAppearance.symbol(name, colors: opaque))
         }
         #expect(button.layer.shadowOpacity == 0)
     }
@@ -128,6 +147,58 @@ struct TouchGamepadTests {
         var red: CGFloat = 0
         #expect(button.titleColor(for: .normal)?.getRed(&red, green: nil, blue: nil, alpha: nil) == true)
         #expect(red < 0.2)
+        capture.detach()
+        await connection.stop()
+    }
+
+    @Test(arguments: [UIUserInterfaceStyle.light, .dark])
+    func opacityChangesEveryControlWithoutChangingInputOrGeometry(style: UIUserInterfaceStyle) async throws {
+        let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
+        var submissions = 0
+        let capture = TouchGamepadCapture(calls: .init(register: connection.input.registerController,
+            unregister: connection.input.unregisterController, submit: { _, _, _ in submissions += 1 }))
+        #expect(capture.attach())
+        capture.setEnabled(true)
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.overrideUserInterfaceStyle = style
+        let owner = UIViewController()
+        window.rootViewController = owner
+        let view = TouchGamepadView(frame: CGRect(x: 0, y: 0, width: 844, height: 390))
+        owner.view.addSubview(view)
+        window.isHidden = false
+        defer { window.isHidden = true }
+        let area = view.bounds.insetBy(dx: 24, dy: 12)
+        var layout = TouchLayout()
+        view.configure(capture: capture, layout: layout, area: area)
+        view.layoutIfNeeded()
+        let frames = view.controls.mapValues(\.frame)
+        let button = try #require(view.controls[.a] as? TouchButton)
+        let hold = try #require(button.accessibilityCustomActions?.first)
+        #expect(hold.actionHandler?(hold) == true)
+        let sent = submissions
+        for opacity in [0.1, 0.2, 0.6, 0.2] {
+            layout.opacity = opacity
+            view.configure(capture: capture, layout: layout, area: area)
+            view.layoutIfNeeded()
+            #expect(view.opacity == opacity)
+            #expect(view.controls.mapValues(\.frame) == frames && submissions == sent)
+            #expect(button.isHighlighted && capture.enabled)
+            for (element, control) in view.controls {
+                control.layoutIfNeeded()
+                let colors = TouchAppearance.colors(style: style, contrast: false, opaque: false,
+                                                   pressed: element == .a, opacity: opacity)
+                if element == .dpad {
+                    let cross = try #require(control.layer.sublayers?.compactMap { $0 as? CAShapeLayer }.first)
+                    #expect(cross.fillColor == colors.fill.cgColor && cross.strokeColor == colors.border.cgColor)
+                } else { #expect(control.backgroundColor == colors.fill) }
+                #expect(control.tintColor == colors.glyph && control.alpha == 1)
+                for label in control.subviews.compactMap({ $0 as? TouchGlyphLabel }) {
+                    #expect(label.colors == colors)
+                }
+                #expect(control.layer.animationKeys()?.isEmpty != false)
+            }
+        }
         capture.detach()
         await connection.stop()
     }

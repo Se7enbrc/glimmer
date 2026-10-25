@@ -132,7 +132,83 @@ struct TouchRenderTests {
         }
     }
 
-    private func record(_ content: some View, name: String, size: CGSize, dark: Bool) async throws {
+    @Test(arguments: viewports, [false, true])
+    func opacityBoundsAndEditor(viewport: Viewport, dark: Bool) async throws {
+        let size = viewport.fold ? CGSize(width: viewport.size.width, height: 395) : viewport.size
+        let area = CGRect(origin: .zero, size: size).insetBy(dx: 24, dy: 12)
+        let launch = testLaunch()
+        let store = TouchLayoutStore(defaults: .standard)
+        let family = TouchLayout.family(in: area)
+        let previous = store.load(pcID: launch.pcID, appID: launch.appID, family: family)
+        defer { store.save(previous, pcID: launch.pcID, appID: launch.appID, family: family) }
+        for opacity in [0.1, 0.2, 0.6] {
+            var layout = TouchLayout()
+            layout.opacity = opacity
+            store.save(layout, pcID: launch.pcID, appID: launch.appID, family: family)
+            for bright in [false, true] {
+                for editing in [false, true] {
+                    let content = ZStack {
+                        TouchSampleFrame(exposure: bright ? 0.9 : -0.75)
+                        if editing {
+                            TouchLayoutEditor(launch: launch, area: area, close: {})
+                        } else {
+                            TouchPlayControls(layout: layout, area: area, preview: true, showControls: {})
+                        }
+                    }
+                    let name = "opacity-\(viewport.name)-\(dark ? "dark" : "light")-\(Int(opacity * 100))"
+                        + "-\(bright ? "bright" : "dim")-\(editing ? "editor" : "play")"
+                    try await record(content, name: name, size: size, dark: dark,
+                                     opacity: editing ? opacity : nil)
+                }
+            }
+        }
+    }
+
+    @Test func nativeOpacitySliderPreviewsBothEndpointsWithoutSaving() async throws {
+        let launch = testLaunch()
+        let store = TouchLayoutStore(defaults: .standard)
+        let saved = store.load(pcID: launch.pcID, appID: launch.appID, family: .compact)
+        store.save(TouchLayout(), pcID: launch.pcID, appID: launch.appID, family: .compact)
+        defer { store.save(saved, pcID: launch.pcID, appID: launch.appID, family: .compact) }
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        let size = CGSize(width: 844, height: 390)
+        let area = CGRect(origin: .zero, size: size).insetBy(dx: 24, dy: 12)
+        let host = UIHostingController(rootView: TouchLayoutEditor(launch: launch, area: area, close: {})
+            .frame(width: size.width, height: size.height))
+        window.rootViewController = TouchViewportController(content: host, size: size)
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; previous?.makeKeyAndVisible() }
+        host.view.layoutIfNeeded()
+        _ = try await waitForOpacity(0.2, in: host.view)
+        let slider = try #require(descendants(host.view).compactMap { $0 as? UISlider }.last)
+        for (nativeValue, opacity) in [(slider.maximumValue, 0.6), (slider.minimumValue, 0.1)] {
+            slider.value = nativeValue
+            slider.sendActions(for: .valueChanged)
+            _ = try await waitForOpacity(opacity, in: host.view)
+            #expect(store.load(pcID: launch.pcID, appID: launch.appID, family: .compact).opacity == 0.2)
+        }
+    }
+
+    private func waitForOpacity(_ opacity: Double, in view: UIView) async throws -> TouchGamepadView {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while ContinuousClock.now < deadline {
+            if let preview = descendants(view).compactMap({ $0 as? TouchGamepadView }).first,
+               preview.opacity == opacity { return preview }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let preview = try #require(descendants(view).compactMap { $0 as? TouchGamepadView }.first)
+        try #require(preview.opacity == opacity)
+        return preview
+    }
+
+    private func descendants(_ view: UIView) -> [UIView] {
+        [view] + view.subviews.flatMap { descendants($0) }
+    }
+
+    private func record(_ content: some View, name: String, size: CGSize, dark: Bool,
+                        opacity: Double? = nil) async throws {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previous = scene.keyWindow
         let window = UIWindow(windowScene: scene)
@@ -145,6 +221,13 @@ struct TouchRenderTests {
         host.view.frame = CGRect(origin: .zero, size: size)
         host.view.layoutIfNeeded()
         try await Task.sleep(for: .milliseconds(150))
+        if let opacity {
+            let views = descendants(host.view)
+            let preview = try #require(views.compactMap { $0 as? TouchGamepadView }.first)
+            let slider = try #require(views.compactMap { $0 as? UISlider }.last)
+            #expect(preview.opacity == opacity)
+            #expect(abs(Double(slider.value) - (opacity - 0.1) / 0.5) < 0.00001)
+        }
         let renderer = UIGraphicsImageRenderer(size: size)
         let image = renderer.image { _ in host.view.drawHierarchy(in: CGRect(origin: .zero, size: size),
                                                                  afterScreenUpdates: true) }

@@ -60,20 +60,21 @@ struct TouchPlayControls: View {
                     .font(.callout).padding().background(.regularMaterial, in: .capsule)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            TouchControlsButton(area: area, showControls: showControls)
+            TouchControlsButton(area: area, opacity: layout.opacity, showControls: showControls)
         }
     }
 }
 
 private struct TouchControlsButton: View {
     let area: CGRect
+    var opacity = TouchLayout.defaultOpacity
     let showControls: () -> Void
 
     var body: some View {
         GeometryReader { geometry in
             let frame = TouchLayout.menuFrame(in: area)
             Button("Show controls", systemImage: "ellipsis", action: showControls)
-                .labelStyle(.iconOnly).buttonStyle(TouchMenuStyle())
+                .labelStyle(.iconOnly).buttonStyle(TouchMenuStyle(opacity: opacity))
                 .position(x: min(frame.midX, geometry.size.width - 22),
                           y: min(frame.midY, geometry.size.height - 22))
         }
@@ -81,6 +82,7 @@ private struct TouchControlsButton: View {
 }
 
 private struct TouchMenuStyle: ButtonStyle {
+    let opacity: Double
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
@@ -88,7 +90,7 @@ private struct TouchMenuStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let colors = TouchAppearance.colors(style: colorScheme == .dark ? .dark : .light,
                                            contrast: contrast == .increased, opaque: reduceTransparency,
-                                           pressed: configuration.isPressed)
+                                           pressed: configuration.isPressed, opacity: opacity)
         configuration.label.labelStyle(TouchMenuLabelStyle(colors: colors))
             .frame(width: 44, height: 44).contentShape(.rect)
             .background(Color(uiColor: colors.fill), in: .circle)

@@ -15,7 +15,29 @@ struct TouchLayout: Codable, Equatable {
         }
     }
     enum Family: String, Codable { case compact, expanded }
+    static let defaultOpacity = 0.2
+    static let opacityRange = 0.1...0.6
+    private var storedOpacity = defaultOpacity
     var changes: [TouchElement: Placement] = [:]
+    var opacity: Double {
+        get { storedOpacity }
+        set { storedOpacity = Self.boundedOpacity(newValue) }
+    }
+
+    private enum CodingKeys: String, CodingKey { case changes, storedOpacity = "opacity" }
+
+    init() {}
+
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        changes = try values.decode([TouchElement: Placement].self, forKey: .changes)
+        opacity = try values.decodeIfPresent(Double.self, forKey: .storedOpacity) ?? Self.defaultOpacity
+    }
+
+    static func boundedOpacity(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultOpacity }
+        return (min(opacityRange.upperBound, max(opacityRange.lowerBound, value)) * 20).rounded() / 20
+    }
 
     static func family(in area: CGRect) -> Family { area.height >= 500 && area.width >= 740 ? .expanded : .compact }
 
