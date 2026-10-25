@@ -10,9 +10,10 @@
   shortcuts. Show stats from the stream menu or Control-Z, stop with Control-Q,
   and change the shortcuts in Settings → Input.
 - Record controller shortcuts for Stop streaming and Stats on Mac, iPhone and
-  iPad. Hold the shortcut, then release. Stats defaults to L1 + R1 + L3 + R3;
-  Stop defaults to L1 + R1 + Create/Select + Options/Start. Ordinary game input
-  stays immediate.
+  iPad. Hold at least three buttons, then release. Stats defaults to L1 + R1 +
+  L3 + R3; Stop defaults to L1 + R1 + Create/Select + Options/Start. Saved
+  shortcuts stay unchanged, and recording warns when one thumb needs two
+  buttons. Ordinary game input stays immediate.
 
 - Reset settings to defaults from General on Mac, iPhone and iPad. Choose
   whether to include per-game controller layouts; paired PCs, your app library

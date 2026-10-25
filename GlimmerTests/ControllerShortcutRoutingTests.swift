@@ -24,7 +24,7 @@ struct ControllerShortcutRoutingTests {
         let actions = Mutex<[ControllerShortcutAction]>([])
         core.onControllerShortcut = { action in actions.withLock { $0.append(action) } }
         let full = Int32(bitPattern: config.stats.buttons)
-        let partial = Int32(bitPattern: ControllerMappedButton.options.rawValue)
+        let partial = Int32(bitPattern: ControllerMappedButton.leftShoulder.rawValue)
         core.receive(slot: 0, buttons: partial, analog: InputCore.neutral, capturedAt: 10)
         #expect(backend.calls.last?.buttons == partial)
         core.receive(slot: 0, buttons: full, analog: InputCore.neutral, capturedAt: 10.1)
@@ -45,7 +45,7 @@ struct ControllerShortcutRoutingTests {
 
     @Test func mappedChordOutputsReleaseBeforeTheActionAndFocusLossCancels() throws {
         let layout = ControllerLayout(bindings: [
-            .init(.button(.options), .button(.a)), .init(.button(.leftStick), .button(.b)),
+            .init(.button(.leftShoulder), .button(.a)), .init(.button(.leftStick), .button(.b)),
             .init(.button(.rightStick), .button(.x))
         ])
         let (core, backend, config) = try rig(layout: layout)

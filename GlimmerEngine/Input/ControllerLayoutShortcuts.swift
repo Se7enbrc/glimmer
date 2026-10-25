@@ -9,6 +9,9 @@ public struct ControllerLayoutShortcuts: Codable, Equatable, Sendable {
     ]
 
     public static let defaultStats: Set<ControllerLayoutSource> = [
+        .button(.leftShoulder), .button(.rightShoulder), .button(.leftStick), .button(.rightStick)
+    ]
+    private static let previousStats: Set<ControllerLayoutSource> = [
         .button(.options), .button(.leftStick), .button(.rightStick)
     ]
     public var stop: Set<ControllerLayoutSource>
@@ -81,8 +84,26 @@ public struct ControllerLayoutShortcuts: Codable, Equatable, Sendable {
             [.button(.leftShoulder), .button(.rightShoulder)],
             [.button(.menu), .button(.options)]
         ]
-        guard pairs.contains(where: { $0.isSubset(of: chord) }) else { return nil }
-        return "Some games use these buttons together. The PC sees them until the hold completes."
+        var warnings: [String] = []
+        if needsMultipleButtonsPerThumb(chord) {
+            warnings.append("This shortcut needs more than one button per thumb. Try shoulders or triggers instead.")
+        }
+        if pairs.contains(where: { $0.isSubset(of: chord) }) {
+            warnings.append("Some games use these buttons together. The PC sees them until the hold completes.")
+        }
+        return warnings.isEmpty ? nil : warnings.joined(separator: " ")
+    }
+
+    private static func needsMultipleButtonsPerThumb(_ chord: Set<ControllerLayoutSource>) -> Bool {
+        let left: Set<ControllerLayoutSource> = [
+            .button(.options), .button(.leftStick), .button(.up), .button(.down), .button(.left), .button(.right)
+        ]
+        let right: Set<ControllerLayoutSource> = [
+            .button(.menu), .button(.rightStick), .button(.a), .button(.b), .button(.x), .button(.y)
+        ]
+        let center: Set<ControllerLayoutSource> = [.button(.home), .button(.share), .button(.touchpad)]
+        return chord.intersection(left).count > 1 || chord.intersection(right).count > 1
+            || chord.intersection(left.union(right).union(center)).count > 2
     }
 
     public static func escape(available: Set<ControllerLayoutSource>) -> Set<ControllerLayoutSource> {
@@ -100,7 +121,9 @@ public struct ControllerLayoutShortcuts: Codable, Equatable, Sendable {
                 case .axis, .direction: false
                 }
             }
-            let supported = chord.isSubset(of: available) || chord == Self.fixedStop || chord == Self.defaultStats
+            // Previous defaults could be stored with Stop on controllers that did not expose every Stats button.
+            let supported = chord.isSubset(of: available)
+                || [Self.fixedStop, Self.defaultStats, Self.previousStats].contains(chord)
             guard chord.count <= 8, buttons, supported else { throw ControllerLayoutError.invalidBindings }
         }
         guard available.count <= 256 else { throw ControllerLayoutError.invalidBindings }

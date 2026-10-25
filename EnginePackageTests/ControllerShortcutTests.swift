@@ -27,7 +27,51 @@ struct ControllerShortcutTests {
     @Test func commonGamePairsWarnWithoutRejectingAnIntentionalChord() {
         #expect(ControllerLayoutShortcuts.warning(for: ControllerLayoutShortcuts.defaultStats) != nil)
         #expect(ControllerLayoutShortcuts.warning(for: ControllerLayoutShortcuts.fixedStop) != nil)
-        #expect(ControllerLayoutShortcuts.warning(for: [.button(.a), .button(.x), .button(.menu)]) == nil)
+        #expect(ControllerLayoutShortcuts.warning(for: [.button(.leftShoulder), .trigger(.right), .button(.a)]) == nil)
+    }
+
+    @Test func defaultStatsUsesShouldersAndSticksWithoutConflictingWithStop() {
+        let shortcuts = ControllerLayoutShortcuts()
+        #expect(shortcuts.stats == [.button(.leftShoulder), .button(.rightShoulder),
+                                    .button(.leftStick), .button(.rightStick)])
+        #expect(shortcuts.hasConflict == false)
+        for action in ControllerShortcutAction.allCases {
+            #expect(shortcuts.recordingProblem(for: action, available: available) == nil)
+            var conflict = shortcuts
+            conflict[action] = shortcuts[action == .stop ? .stats : .stop]
+            #expect(conflict.recordingProblem(for: action, available: available) != nil)
+            conflict[action].insert(.button(.a))
+            #expect(conflict.recordingProblem(for: action, available: available) != nil)
+        }
+    }
+
+    @Test(arguments: [
+        [ControllerMappedButton.options, .leftStick, .rightStick],
+        [.a, .rightStick], [.a, .b], [.menu, .rightStick], [.up, .leftStick], [.options, .left]
+    ])
+    func sameThumbButtonsWarnWithoutBlockingSave(buttons: [ControllerMappedButton]) {
+        let chord = Set(buttons.map { ControllerLayoutSource.button($0) }).union([.trigger(.left), .trigger(.right)])
+        #expect(ControllerLayoutShortcuts.warning(for: chord)?.contains("thumb") == true)
+        let shortcuts = ControllerLayoutShortcuts(stats: chord)
+        #expect(shortcuts.recordingProblem(for: .stats,
+            available: available.union([.trigger(.left), .trigger(.right)])) == nil)
+    }
+
+    @Test func defaultChordsUseAtMostOneButtonPerThumbAndRetainGameWarnings() {
+        for chord in [ControllerLayoutShortcuts.defaultStats, ControllerLayoutShortcuts.fixedStop] {
+            #expect(ControllerLayoutShortcuts.warning(for: chord)?.contains("thumb") == false)
+            #expect(ControllerLayoutShortcuts.warning(for: chord)?.contains("Some games") == true)
+        }
+    }
+
+    @Test func explicitlySavedPreviousStatsDefaultIsPreserved() throws {
+        let previous = ControllerLayoutShortcuts(stats: [.button(.options), .button(.leftStick), .button(.rightStick)])
+        let decoded = try JSONDecoder().decode(ControllerLayoutShortcuts.self, from: JSONEncoder().encode(previous))
+        #expect(decoded == previous)
+        #expect(decoded.stats != ControllerLayoutShortcuts.defaultStats)
+        try decoded.validate(available: available)
+        try decoded.validate(available: [.button(.a), .button(.b)])
+        #expect(decoded.hasConflict == false)
     }
 
     @Test func oldStopChoiceSurvivesAndNewStatsDefaultIsOnlyUsedWhenMissing() throws {

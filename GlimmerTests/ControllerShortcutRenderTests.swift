@@ -52,6 +52,16 @@ struct ControllerShortcutRenderTests {
         capture.stop()
         try await renderer.record(ControllerShortcutRecorder(model: model, device: device, action: .stats, capture: capture),
                                   name: "chords-review-\(style)", dark: dark)
+        capture.restart(cancel: {})
+        let previous = ControllerMappedButton.options.rawValue
+            | ControllerMappedButton.leftStick.rawValue | ControllerMappedButton.rightStick.rawValue
+        let deliverPrevious = receive.withLock { $0 }
+        deliverPrevious?(.init(buttons: previous), 12)
+        deliverPrevious?(.init(), 12.5)
+        #expect(capture.finished)
+        capture.stop()
+        try await renderer.record(ControllerShortcutRecorder(model: model, device: device, action: .stats, capture: capture),
+                                  name: "chords-thumb-warning-\(style)", dark: dark)
         try await renderer.record(StatsBoardView(), name: "chords-stats-\(style)", dark: dark)
     }
 }

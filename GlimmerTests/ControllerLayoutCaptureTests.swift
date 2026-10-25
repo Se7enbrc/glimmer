@@ -163,6 +163,28 @@ struct ControllerLayoutCaptureTests {
         #expect(try await ControllerLayoutStore(url: url).load().shortcuts.isEmpty)
     }
 
+    @Test func previousStatsDefaultSurvivesReloadUntilAnExplicitReset() async throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("layouts.json")
+        let name = "shortcut-defaults.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let model = ControllerLayoutsModel(url: url, defaults: defaults)
+        await model.load()
+        let device = ControllerLayoutRenderTests().fixture(.dualSense)
+        let previous: Set<ControllerLayoutSource> = [.button(.options), .button(.leftStick), .button(.rightStick)]
+        #expect(model.shortcuts(device).stats == ControllerLayoutShortcuts.defaultStats)
+        try await model.saveShortcut(previous, action: .stats, device: device)
+        let bytes = try Data(contentsOf: url)
+        let reloaded = ControllerLayoutsModel(url: url, defaults: defaults)
+        await reloaded.load()
+        #expect(reloaded.shortcuts(device).stats == previous)
+        #expect(try Data(contentsOf: url) == bytes)
+        try await reloaded.reset(includeGames: false)
+        #expect(reloaded.shortcuts(device).stats == ControllerLayoutShortcuts.defaultStats)
+    }
+
     @Test func protectedEscapeCancelsControlCapture() throws {
         let harness = Harness()
         let capture = ControllerLayoutCapture(input: harness.source())
