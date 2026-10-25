@@ -14,6 +14,8 @@ import zipfile
 import tarfile
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
@@ -24,7 +26,7 @@ from release_download import check_metadata
 SHA = 'a' * 40
 
 
-class ReleaseArtifactTests(unittest.TestCase):
+class ReleaseArtifactTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

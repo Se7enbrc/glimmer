@@ -6,6 +6,8 @@
 from pathlib import Path
 import re
 import unittest
+
+from fixture_git import FixtureTestCase
 import xml.etree.ElementTree as ET
 
 SAMPLES = Path(__file__).resolve().parents[2] / "docs/vdd"
@@ -116,7 +118,7 @@ def panel_modes(rows, include_half=False):
     return modes
 
 
-class VirtualDisplaySettingsTests(unittest.TestCase):
+class VirtualDisplaySettingsTests(FixtureTestCase):
     def test_every_resolution_has_a_device_comment(self):
         for sample in sorted(SAMPLES.glob("*.xml")):
             parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))

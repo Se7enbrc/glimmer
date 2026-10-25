@@ -8,10 +8,12 @@ import re
 import subprocess
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class VerificationTimeoutTests(unittest.TestCase):
+class VerificationTimeoutTests(FixtureTestCase):
     def job(self, name):
         source = (ROOT / ".github/workflows/verify.yml").read_text()
         return re.split(r"\n  [a-z][a-z-]*:\n", source.split(f"  {name}:\n", 1)[1])[0]

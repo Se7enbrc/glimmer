@@ -9,11 +9,13 @@ import ssl
 import sys
 import unittest
 
+from fixture_git import FixtureTestCase
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 signing = importlib.import_module('ios-testflight-sign')
 
 
-class SigningIdentityTests(unittest.TestCase):
+class SigningIdentityTests(FixtureTestCase):
     fingerprint = 'A' * 40
     identity = f'1) {fingerprint} "Apple Distribution: Example (ABCDEFGHIJ)"\n1 valid identities found'
     certificate = b'inert certificate bytes for membership tests'

@@ -14,6 +14,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
@@ -33,7 +35,7 @@ def channel(short="2026.10.5", build="20261008"):
         </item></channel>''')
 
 
-class ReleaseValidationTests(unittest.TestCase):
+class ReleaseValidationTests(FixtureTestCase):
     def test_sparkle_zip_target_packages_explicit_bundle_without_signing(self):
         with tempfile.TemporaryDirectory(prefix="glimmer zip fixture ") as directory:
             root = Path(directory)
@@ -215,7 +217,7 @@ class ReleaseValidationTests(unittest.TestCase):
             self.assertFalse((root / "cache/test/.verified-sha256").exists())
 
 
-class ReleaseVersionGateTests(unittest.TestCase):
+class ReleaseVersionGateTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -287,7 +289,7 @@ class ReleaseVersionGateTests(unittest.TestCase):
             self.assertIn(message, self.gate().stderr)
 
 
-class ReleasePublicationTests(unittest.TestCase):
+class ReleasePublicationTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="glimmer publish fixture ")
         self.addCleanup(self.temp.cleanup)
@@ -397,7 +399,7 @@ exit 1
                     self.assertFalse(Path(self.env[name]).exists())
 
 
-class BuildInfoTests(unittest.TestCase):
+class BuildInfoTests(FixtureTestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

@@ -9,6 +9,8 @@ import sys
 import unittest
 
 NATIVE = {"test_compare_builds", "test_update_signature", "test_ios_boundary"}
+INTEGRATION = NATIVE | {"test_ci_release", "test_release_candidate_cut",
+                        "test_candidate_reservation", "test_git_isolation"}
 
 
 def tests(suite):
@@ -21,15 +23,18 @@ def tests(suite):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("platform", choices=("all", "portable", "macos"), default="all", nargs="?")
+    parser.add_argument("platform", choices=("all", "portable", "macos", "fast"), default="all", nargs="?")
     platform = parser.parse_args().platform
     root = Path(__file__).resolve().parent / "tests"
     discovered = list(tests(unittest.defaultTestLoader.discover(str(root))))
     selected = [test for test in discovered if platform == "all" or
-                (test.__class__.__module__ in NATIVE) == (platform == "macos")]
+                (platform == "fast" and test.__class__.__module__ not in INTEGRATION) or
+                (platform != "fast" and (test.__class__.__module__ in NATIVE) == (platform == "macos"))]
     if not selected:
         parser.error("the selected test partition is empty")
-    result = unittest.TextTestRunner(verbosity=2).run(unittest.TestSuite(selected))
+    from fixture_git import poisoned_hook
+    with poisoned_hook():
+        result = unittest.TextTestRunner(verbosity=2).run(unittest.TestSuite(selected))
     return not result.wasSuccessful()
 
 

@@ -15,6 +15,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 from fixture_process import run_fixture
@@ -33,7 +35,7 @@ def response(signature=None, **fields):
     return json.dumps({"data": {"createCommitOnBranch": {"commit": commit}}, **fields})
 
 
-class GitHubSignedCommitTests(unittest.TestCase):
+class GitHubSignedCommitTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -183,7 +185,7 @@ elif name == "ditto":
 '''
 
 
-class HomebrewCommitPathTests(unittest.TestCase):
+class HomebrewCommitPathTests(FixtureTestCase):
     def test_hosted_uses_signed_api_while_local_keeps_normal_git_commits(self):
         import hashlib
         for hosted, tag, prerelease, implied in ((False, "2026.10.6", False, False), (True, "2026.10.6", False, False),
@@ -241,7 +243,7 @@ class HomebrewCommitPathTests(unittest.TestCase):
                                      (root / "tap/Casks/glimmer.rb").read_bytes())
 
 
-class AppcastCommitPathTests(unittest.TestCase):
+class AppcastCommitPathTests(FixtureTestCase):
     def test_appcast_commits_to_its_branch_after_release_with_cas_and_no_unsigned_fallback(self):
         for hosted, failure in ((False, False), (False, True), (True, False), (True, True)):
             with self.subTest(hosted=hosted, failure=failure), tempfile.TemporaryDirectory() as directory:

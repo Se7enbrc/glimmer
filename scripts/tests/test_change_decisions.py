@@ -11,12 +11,14 @@ import tempfile
 import textwrap
 import unittest
 
+from fixture_git import FixtureTestCase
+
 from fixture_process import run_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class ChangeDecisionTests(unittest.TestCase):
+class ChangeDecisionTests(FixtureTestCase):
     def decision(self, workflow, paths, classifier=None, api_status="0"):
         verify = workflow == "verify"
         script = "verify-changed.py" if verify else "codeql-swift-changed.py"

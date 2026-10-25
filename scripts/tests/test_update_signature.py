@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 SCRIPT = Path(__file__).resolve().parents[1] / "verify-update-signature.swift"
 
 # RFC 8032 section 7.1, test 1: the empty message.
@@ -23,7 +25,7 @@ def verify(public, signature, archive):
                           capture_output=True, check=False).returncode
 
 
-class UpdateSignatureTests(unittest.TestCase):
+class UpdateSignatureTests(FixtureTestCase):
     def test_signature_must_match_the_app_key(self):
         with tempfile.TemporaryDirectory() as directory:
             archive = Path(directory) / "Glimmer.zip"

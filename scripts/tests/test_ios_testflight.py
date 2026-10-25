@@ -17,6 +17,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import Mock, patch
 import warnings
 import zipfile
@@ -36,7 +38,7 @@ ENV = {
 UUIDS = [('AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA', 'arm64')]
 
 
-class TestFlightTests(unittest.TestCase):
+class TestFlightTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

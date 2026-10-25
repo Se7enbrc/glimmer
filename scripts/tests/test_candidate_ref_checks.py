@@ -5,13 +5,15 @@
 
 import json
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 from test_release_checks import CHECKS, SHA, MERGE, WORKFLOW, analyses, language_jobs, run
 
 REF = 'refs/heads/release-candidate'
 
 
-class CandidateRefChecksTests(unittest.TestCase):
+class CandidateRefChecksTests(FixtureTestCase):
     def setUp(self):
         self.data = analyses(ref=REF, commit_sha=SHA)
         for entry in self.data:
