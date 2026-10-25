@@ -64,10 +64,11 @@ struct GlimmerAutomationTests {
             case "wake": #expect(decision == .wake(pc()))
             case "quit": #expect(decision == .stop)
             default:
-                #expect(decision == .rejected(CommandChannel.alreadyStreaming))
-                var fresh = Set<String>()
-                #expect(CommandChannel.decide(info, handled: &fresh, hosts: model.hosts, streamingFrom: nil)
-                    == .stream(app, on: pc(), takeover: false))
+                // The streaming PC resumes or offers its replacement; only another PC is refused.
+                #expect(decision == .stream(app, on: pc(), takeover: false))
+                var other = Set<String>()
+                #expect(CommandChannel.decide(info, handled: &other, hosts: model.hosts, streamingFrom: "other-pc")
+                    == .rejected(CommandChannel.alreadyStreaming))
             }
         }
     }
