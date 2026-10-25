@@ -3,8 +3,6 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-// Reassembles Sunshine RTP payloads into decode units, preserving IDR/RFI recovery.
-// H.264/HEVC inspect Annex-B NALs; AV1 uses Sunshine's frame type and payload length.
 // Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 
 import Foundation

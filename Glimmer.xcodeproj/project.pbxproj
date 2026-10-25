@@ -128,8 +128,6 @@
 		A0D102202610091545000004 /* AudioDecoder+Spatial.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D102202610091545000003 /* AudioDecoder+Spatial.swift */; };
 		A0D102202610091545000002 /* SpatialAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D102202610091545000001 /* SpatialAudio.swift */; };
 		D2C00008 /* OpusDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C00007 /* OpusDecoder.swift */; };
-		EE6572F168D7406289351042 /* OpusDecoder+Packet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */; };
-		EE6572F168D7406289351044 /* OpusDecoder+Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE6572F168D7406289351043 /* OpusDecoder+Stream.swift */; };
 		AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000005 /* AudioDecoder+Prime.swift */; };
 		AC2026083000000000000008 /* AudioDecoder+Route.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000007 /* AudioDecoder+Route.swift */; };
 		AC202608300000000000000A /* AudioDecoder+Resampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000009 /* AudioDecoder+Resampler.swift */; };
@@ -943,8 +941,6 @@
 		A0D102202610091545000003 /* AudioDecoder+Spatial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/AudioDecoder+Spatial.swift"; sourceTree = SOURCE_ROOT; };
 		A0D102202610091545000001 /* SpatialAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/SpatialAudio.swift"; sourceTree = SOURCE_ROOT; };
 		D2C00007 /* OpusDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/OpusDecoder.swift"; sourceTree = SOURCE_ROOT; };
-		EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/OpusDecoder+Packet.swift"; sourceTree = SOURCE_ROOT; };
-		EE6572F168D7406289351043 /* OpusDecoder+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/OpusDecoder+Stream.swift"; sourceTree = SOURCE_ROOT; };
 		AC2026083000000000000005 /* AudioDecoder+Prime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Prime.swift"; sourceTree = SOURCE_ROOT; };
 		AC2026083000000000000007 /* AudioDecoder+Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Route.swift"; sourceTree = SOURCE_ROOT; };
 		AC2026083000000000000009 /* AudioDecoder+Resampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Resampler.swift"; sourceTree = SOURCE_ROOT; };
@@ -2266,10 +2262,8 @@
 				EA67908CD62144CBACFBBDAA /* AudioDecoder+Reconnect.swift */,
 				D2C00007 /* OpusDecoder.swift */,
 				A11020261012000300000000 /* AudioOutput+Silence.swift */,
-				EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */,
 				A11020261011000000000000 /* AudioPCMQueue.swift */,
 				AC2026083000000000000005 /* AudioDecoder+Prime.swift */,
-				EE6572F168D7406289351043 /* OpusDecoder+Stream.swift */,
 				AB00000015 /* AudioDecoder.swift */,
 				A0D10A110000000000000007 /* AudioDecoder+Worker.swift */,
 				AC2026083000000000000003 /* AudioDecoder+Decode.swift */,
@@ -3188,10 +3182,8 @@
 				851374F386A2419FB8B03DAF /* AudioDecoder+Reconnect.swift in Sources */,
 				D2C00008 /* OpusDecoder.swift in Sources */,
 				A11020261012000300000001 /* AudioOutput+Silence.swift in Sources */,
-				EE6572F168D7406289351042 /* OpusDecoder+Packet.swift in Sources */,
 				A11020261011000100000000 /* AudioPCMQueue.swift in Sources */,
 				AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */,
-				EE6572F168D7406289351044 /* OpusDecoder+Stream.swift in Sources */,
 				AB00000016 /* AudioDecoder.swift in Sources */,
 				A0D10A110000000000000008 /* AudioDecoder+Worker.swift in Sources */,
 				AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */,

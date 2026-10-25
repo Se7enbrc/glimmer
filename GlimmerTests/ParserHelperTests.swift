@@ -219,8 +219,6 @@ struct ParserHelperTests {
 
     // MARK: - VideoDepacketizer.isIdrFrameStart (untrusted Annex-B sniff)
     //
-    // Sunshine's IDRs carry SPS (H.264) or VPS (HEVC) after optional AUD/SEI NALs.
-    // Malformed prefixes must not open the key-frame recovery gate.
 
     @Test func isIdrFrameStartH264AcceptsSpsAfter4ByteStart() {
         // 00 00 00 01 | 0x67 (NAL header: type = 0x67 & 0x1F = 7 = SPS).
@@ -270,7 +268,6 @@ struct ParserHelperTests {
     }
 
     @Test func isIdrFrameStartMalformedInputsReturnFalseNoCrash() {
-        // Truncated prefixes must not read beyond the payload.
         #expect(!VideoDepacketizer.isIdrFrameStart([], hevc: false))
         #expect(!VideoDepacketizer.isIdrFrameStart([], hevc: true))
         #expect(!VideoDepacketizer.isIdrFrameStart([0], hevc: false))

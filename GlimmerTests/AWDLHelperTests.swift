@@ -370,73 +370,6 @@ struct AWDLLayoutMigrationTests {
 }
 
 struct HelperClientTests {
-    @Test(arguments: [false, true])
-    func timedOutRequestsRetireLiveConnections(duringCount: Bool) async throws {
-        let connections = Mutex<[HelperTestConnection]>([])
-        let proxy = HelperTestProxy(suspendDown: !duringCount, suspendCount: duringCount)
-        let delegate = HelperTestListener(proxy)
-        let listener = NSXPCListener.anonymous()
-        listener.delegate = delegate
-        listener.resume()
-        defer {
-            listener.invalidate()
-            withExtendedLifetime(delegate) {}
-        }
-        let endpoint = listener.endpoint
-        let bootstrap = HelperTestConnection(value: NSXPCConnection(listenerEndpoint: endpoint))
-        bootstrap.value.remoteObjectInterface = NSXPCInterface(with: Glimmer.GlimmerHelperProtocol.self)
-        bootstrap.value.resume()
-        defer { bootstrap.value.invalidate() }
-        // Listener startup is not part of the request deadline this test exercises.
-        try #require(await Self.ping(bootstrap) == .reply("test"))
-        let client = HelperClient(makeConnection: {
-            let connection = NSXPCConnection(listenerEndpoint: endpoint)
-            let probe = HelperTestConnection(value: connection)
-            connections.withLock { $0.append(probe) }
-            return connection
-        })
-        for attempt in 1...3 {
-            #expect(await client.currentStatus()?.0 == false)
-            let connection = try #require(connections.withLock { $0.last })
-            // No interruption handler: interrupted connections stay up for launchd's relaunch.
-            #expect(connection.value.interruptionHandler == nil)
-            #expect(await Self.ping(connection) == .reply("test"))
-            if duringCount {
-                #expect(await client.reSuppressCount() == nil)
-            } else {
-                #expect(!(await client.setAWDLDown(true, reason: "test")))
-            }
-            #expect(await Self.ping(connection)
-                == .error(NSCocoaErrorDomain, CocoaError.Code.xpcConnectionInvalid.rawValue))
-            #expect(connections.withLock { $0.count } == attempt)
-            proxy.finishDown()
-        }
-        #expect(await client.currentStatus()?.0 == false)
-        #expect(connections.withLock { $0.count } == 4)
-        await client.invalidate()
-    }
-
-    private enum Ping: Equatable, Sendable {
-        case reply(String)
-        case error(String, Int)
-        case noProxy
-    }
-
-    private static func ping(_ connection: HelperTestConnection) async -> Ping {
-        await withCheckedContinuation { continuation in
-            let once = SingleResume(continuation)
-            let remote = connection.value.remoteObjectProxyWithErrorHandler { error in
-                let cocoa = error as NSError
-                once.resume(.error(cocoa.domain, cocoa.code))
-            }
-            guard let proxy = remote as? Glimmer.GlimmerHelperProtocol else {
-                once.resume(.noProxy)
-                return
-            }
-            proxy.ping { once.resume(.reply($0)) }
-        }
-    }
-
     @Test func errorsRetainConnectionAndStaleInvalidationsCannotDropReplacement() async throws {
         let made = Mutex(0)
         let fail = Mutex(false)
@@ -477,26 +410,6 @@ struct HelperClientTests {
         #expect(await client.reSuppressCount() == 0)
         #expect(made.withLock { $0 } == 2)
         await client.invalidate()
-    }
-}
-
-// Configuration and invalidation never overlap a probe; Foundation owns message-queue synchronisation.
-private struct HelperTestConnection: @unchecked Sendable {
-    let value: NSXPCConnection
-}
-
-private final class HelperTestListener: NSObject, NSXPCListenerDelegate, Sendable {
-    private let proxy: HelperTestProxy
-
-    init(_ proxy: HelperTestProxy) {
-        self.proxy = proxy
-    }
-
-    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
-        connection.exportedInterface = NSXPCInterface(with: Glimmer.GlimmerHelperProtocol.self)
-        connection.exportedObject = proxy
-        connection.resume()
-        return true
     }
 }
 

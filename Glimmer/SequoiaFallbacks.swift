@@ -16,13 +16,7 @@ extension NSScreen {
 // and re-arms tracking together, so no change can slip in between.
 @MainActor
 func forEachTrackedValue<Value>(_ read: () -> Value, perform body: (Value) -> Void) async {
-    let (changes, signal) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
-    defer { signal.finish() }
-    var iterator = changes.makeAsyncIterator()
-    while !Task.isCancelled {
-        body(withObservationTracking(read) { signal.yield(()) })
-        guard await iterator.next() != nil else { break }
-    }
+    fatalError("clean-room: replace per spec-5")
 }
 
 // Liquid Glass on macOS 26. macOS 15 has no glass, so the same shapes get the system

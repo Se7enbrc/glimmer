@@ -190,31 +190,8 @@ struct AppIconsRow: View {
         }
     }
 
-    private var overflowMenu: some View {
-        Menu {
-            ForEach(overflowApps) { app in
-                Button {
-                    model.requestStream(app: app, on: host)
-                } label: {
-                    // macOS 27 hides a plain menu-item symbol image by default;
-                    // these items name an app, so force the icon back on.
-                    Label { Text("Stream \(app.name)") } icon: { app.icon }
-                        .labelStyle(.titleAndIcon)
-                }
-                .disabled(model.menuStopInProgress || model.readinessReason(for: host) != nil)
-                .accessibilityHint(model.readinessReason(for: host) ?? "")
-            }
-        } label: {
-            tileLabel(icon: Image(systemName: "ellipsis"), title: "\(overflowApps.count) more", trailing: "chevron.down")
-        }
-        .modifier(LauncherControlFocus(focus: focus, target: .overflow))
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        // Glass, not violet: it opens a list rather than streaming.
-        .glassSurface(in: .rect(cornerRadius: 14), interactive: true)
-        .help("Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")
-        .accessibilityLabel("\(overflowApps.count) more apps")
-        .accessibilityHint("Shows the rest of this PC's apps")
+    private var overflowMenu: AnyView {
+        fatalError("clean-room: replace per spec-4")
     }
 }
 
