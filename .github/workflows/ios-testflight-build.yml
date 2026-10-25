@@ -60,12 +60,37 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/ios-testflight.py build-gate
-      - name:
-          Archive without distribution credentials or default-branch cache
-          privileges
+      - name: Restore credential-free archive compiler cache
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/ios-testflight-derived/CompilationCache.noindex
+            ${{ runner.temp }}/ios-testflight-derived/SourcePackages
+            ${{ runner.temp }}/ios-testflight-derived/ModuleCache.noindex
+          key:
+            testflight-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.6-${{
+            inputs.flavour }}-${{ hashFiles('**/Package.resolved',
+            'Package.swift', 'third_party/**', '**/*.xcconfig',
+            '**/project.pbxproj') }}-${{ github.sha }}
+          restore-keys:
+            testflight-v1-${{ runner.os }}-${{ runner.arch }}-xcode26.6-${{
+            inputs.flavour }}-${{ hashFiles('**/Package.resolved',
+            'Package.swift', 'third_party/**', '**/*.xcconfig',
+            '**/project.pbxproj') }}-
+      - name: Archive without distribution credentials
         run: |
           python3 scripts/ios-testflight.py archive \
             --source "$GITHUB_WORKSPACE" --archive "$RUNNER_TEMP/Glimmer.xcarchive"
+      - name: Save credential-free archive compiler cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/ios-testflight-derived/CompilationCache.noindex
+            ${{ runner.temp }}/ios-testflight-derived/SourcePackages
+            ${{ runner.temp }}/ios-testflight-derived/ModuleCache.noindex
+          key: ${{ steps.cache.outputs.cache-primary-key }}
       - name: Seal source identity, archive and matching symbols
         run: |
           python3 scripts/ios-testflight.py seal \

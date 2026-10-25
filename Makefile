@@ -154,23 +154,7 @@ test:
 	  status=$$?; $(if $(COVERAGE),[ $$status -ne 0 ] || python3 scripts/coverage-report.py swift || status=$$?;) \
 	  $(UNREGISTER_BUILDS); exit $$status
 
-# The unit tests built once and run elsewhere: Verify builds them with the pinned
-# Xcode and runs them on the oldest supported macOS, whose image can't compile them.
-test-build:
-	@scripts/generate-build-info.sh
-	xcodebuild build-for-testing -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
-	  -xcconfig $(STREAM_XCCONFIG) \
-	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS'
-	@# The tests link this Xcode's Swift Testing; ship it, since the runner's Xcode may be older.
-	@platform="$$(xcrun --sdk macosx --show-sdk-platform-path)/Developer"; \
-	  ditto "$$platform/Library/Frameworks/Testing.framework" "$(DERIVED)/Build/Products/Debug/Testing.framework" && \
-	  ditto "$$platform/usr/lib/lib_TestingInterop.dylib" "$(DERIVED)/Build/Products/Debug/lib_TestingInterop.dylib"
-	@$(UNREGISTER_BUILDS)
-
-test-run:
-	@set -- "$(DERIVED)"/Build/Products/*.xctestrun; test -f "$$1" || { echo "ERR: run make test-build first" >&2; exit 1; }; \
-	  xcodebuild test-without-building -xctestrun "$$1" -destination 'platform=macOS' $(TEST_FLAGS); \
-	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
+include scripts/mac-test-products.mk
 
 # Exercise untrusted protocol input with memory error detection enabled.
 test-asan:
@@ -492,22 +476,7 @@ verify: check
 	@$(MAKE) TEST_SUITE= test
 	@$(MAKE) test-asan
 
-check:
-	@echo "▶ Check (workflows + lint --strict + release-tool tests)..."
-	@actionlint
-	@scripts/check-spdx.sh
-	@python3 scripts/check-engine-boundary.py
-	@python3 scripts/check-ios-boundary.py
-	@scripts/lint-swift.sh lint --strict --quiet
-	@$(MAKE) test-scripts
-
-# Fixture repositories need git's own discovery; a hook's GIT_DIR would aim them at this one.
-test-scripts:
-	$(if $(COVERAGE),@rm -rf $(DERIVED)/coverage/python && mkdir -p $(DERIVED)/coverage/python)
-	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
-		$(if $(COVERAGE),$(COVERAGE_PY) run --rcfile=scripts/tests/coveragerc,python3) -m unittest discover \
-		-s scripts/tests -p 'test_*.py'
-	$(if $(COVERAGE),@python3 scripts/coverage-report.py python)
+include scripts/ci-checks.mk
 
 rc:
 	@python3 scripts/release-candidate.py $(if $(DRY_RUN),--dry-run) $(if $(filter 1,$(DIAGNOSTIC)),--diagnostic)

@@ -23,7 +23,7 @@ class VerificationConcurrencyTests(unittest.TestCase):
                 self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", group)
 
     def test_closed_pr_replaces_work_without_checking_out_or_building(self):
-        for name, entry in (("verify", "changes"), ("codeql", "analyze")):
+        for name, entry in (("verify", "changes"), ("codeql", "changes")):
             with self.subTest(workflow=name):
                 source = (ROOT / f".github/workflows/{name}.yml").read_text()
                 events = source.split("  pull_request:\n", 1)[1].split("\n  ", 1)[0]
@@ -33,3 +33,5 @@ class VerificationConcurrencyTests(unittest.TestCase):
                 self.assertNotIn("pull_request_target:", source)
         gate = (ROOT / ".github/workflows/verify.yml").read_text().split("  gate:\n", 1)[1]
         self.assertRegex(gate, re.escape("if: always() && github.event.action != 'closed'"))
+        analysis = (ROOT / ".github/workflows/codeql.yml").read_text().split("  analyze:\n", 1)[1]
+        self.assertRegex(analysis, re.escape("if: always() && github.event.action != 'closed'"))

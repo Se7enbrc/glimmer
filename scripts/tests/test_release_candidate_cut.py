@@ -25,7 +25,11 @@ RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-pub
                  "scripts/candidate_delivery.py", ".github/workflows/candidate-delivery.yml",
                  ".github/workflows/verify.yml", ".github/workflows/codeql.yml",
                  ".github/workflows/ios-testflight-build.yml", "scripts/ios-testflight.py",
-                 "scripts/ios-testflight-artifact.py", "scripts/ios-testflight-sign.py")
+                 "scripts/ios-testflight-artifact.py", "scripts/ios-testflight-sign.py",
+                 ".github/actions/build-cache/action.yml", ".github/workflows/portable-checks.yml",
+                 "scripts/install-ci-linux-tools.sh", "scripts/install-ci-auditor.sh",
+                 "scripts/ci-python-requirements.txt", "scripts/coverage-requirements.txt",
+                 "scripts/ci-checks.mk", "scripts/mac-test-products.mk", "scripts/test-scripts.py")
 REQUIRED = ["macOS", "Analyze (swift)", "Analyze (python)", "Analyze (actions)"]
 
 

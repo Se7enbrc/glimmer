@@ -91,7 +91,7 @@ jobs:
       github.repository == 'Se7enbrc/glimmer' && github.ref == 'refs/heads/main'
     environment: ios-testflight
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 50
     permissions:
       contents: read
       actions: read

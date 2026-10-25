@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: Unsigned build cache
+description:
+  Cache compiler state without signing credentials or release artifacts
+inputs:
+  variant:
+    description: Distinguish SDK, instrumentation and configuration consumers
+    required: true
+outputs:
+  key:
+    value: ${{ steps.key.outputs.key }}
+    description: Exact snapshot key
+  paths:
+    value: ${{ steps.key.outputs.paths }}
+    description: Compiler and package paths
+  hit:
+    value: ${{ steps.restore.outputs.cache-hit }}
+    description: Whether the exact snapshot exists
+runs:
+  using: composite
+  steps:
+    - name: Key compiler state
+      id: key
+      shell: bash
+      env:
+        VARIANT: ${{ inputs.variant }}
+        LOCKS:
+          ${{ hashFiles('**/Package.resolved', 'Package.swift',
+          'third_party/**', '**/*.xcconfig', '**/project.pbxproj') }}
+      run: |
+        test "$(xcodebuild -version | head -1)" = 'Xcode 26.6'
+        xcode=$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$DEVELOPER_DIR/../version.plist")
+        prefix="compiler-v1-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS}-${ImageVersion}-${xcode}-${VARIANT}-${LOCKS}"
+        printf 'prefix=%s-\nkey=%s-%s\n' "$prefix" "$prefix" "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+        {
+          echo 'paths<<CACHE_PATHS'
+          echo 'build/SourcePackages'
+          echo 'build/ModuleCache.noindex'
+          echo 'build/CompilationCache.noindex'
+          echo 'build/SDKExplicitPrecompiledModules'
+          echo 'build/Build/Intermediates.noindex'
+          echo 'build/Build/Products'
+          echo 'build/engine-ios'
+          echo 'iOS/build/DerivedData/SourcePackages'
+          echo 'iOS/build/DerivedData/ModuleCache.noindex'
+          echo 'iOS/build/DerivedData/CompilationCache.noindex'
+          echo 'iOS/build/DerivedData/SDKExplicitPrecompiledModules'
+          echo 'iOS/build/DerivedData/Build'
+          echo '.build'
+          echo 'CACHE_PATHS'
+        } >> "$GITHUB_OUTPUT"
+    - name: Restore unsigned compiler state
+      id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.key.outputs.paths }}
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+    - name: Enable compilation caching
+      shell: bash
+      run: |
+        config="${XCODE_XCCONFIG_FILE:-$RUNNER_TEMP/glimmer-cache.xcconfig}"
+        printf '\nCOMPILATION_CACHE_ENABLE_CACHING = YES\nCOMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS = YES\n' >> "$config"

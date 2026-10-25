@@ -59,6 +59,7 @@ def archive(source, destination, expected):
                '-configuration', 'Release', '-destination', 'generic/platform=iOS',
                '-derivedDataPath', str(derived), '-archivePath', str(destination),
                'CODE_SIGNING_ALLOWED=NO', 'DEBUG_INFORMATION_FORMAT=dwarf-with-dsym',
+               'COMPILATION_CACHE_ENABLE_CACHING=YES', '-showBuildTimingSummary',
                'SWIFT_SUPPRESS_WARNINGS=NO', f'SWIFT_ACTIVE_COMPILATION_CONDITIONS={conditions}',
                f"GLIMMER_BUILD_FLAVOUR={expected['IOS_FLAVOUR']}", 'SWIFT_TREAT_WARNINGS_AS_ERRORS=YES',
                'GCC_TREAT_WARNINGS_AS_ERRORS=YES', f"MARKETING_VERSION={expected['IOS_VERSION']}",
