@@ -200,6 +200,15 @@ installer verifies the official binary checksum; commits never download it.
 
 ## Remaining hosted acceptance
 
+The first #196 hosted attempt exposed a Linux packaging mismatch: SwiftLint's
+static executable disables SourceKit, and Ubuntu's ShellCheck differs from local
+0.11.0. The correction selects the full SwiftLint executable and active Swift
+toolchain libraries, fails closed when SourceKit is missing, and pins ShellCheck
+0.11.0 by its official checksum. Regression fixtures prove the SourceKit
+environment is required. A replacement hosted run is necessary. The first hosted
+ASan job passed on Xcode 26.6, emitted CAS miss diagnostics on its cold build
+and saved the compiler cache. Warm hit rates remain unmeasured.
+
 Confirm Linux SwiftLint and all portable fixtures, Xcode 26.6 CAS hit rates,
 artifact transfer sizes, complete Simulator shard counts, macOS 15 execution,
 CodeQL extraction and queue-adjusted wall time. Docker's daemon was stopped
