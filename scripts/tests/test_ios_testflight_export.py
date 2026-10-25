@@ -34,7 +34,7 @@ class ExportPolicyTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
         self.expected = {'EXPECTED_SHA': 'a' * 40, 'IOS_VERSION': '0.1.1', 'IOS_BUILD_NUMBER': '3',
-                         'GITHUB_REPOSITORY': artifact.REPOSITORY,
+                         'IOS_FLAVOUR': 'production', 'GITHUB_REPOSITORY': artifact.REPOSITORY,
                          'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2'}
         env = {'RUNNER_TEMP': str(self.root), 'IOS_TEAM_ID': TEAM,
                'TRUSTED_TOOLING_SHA': 'b' * 40, 'GITHUB_RUN_ID': '456', 'GITHUB_RUN_ATTEMPT': '1',
@@ -46,7 +46,7 @@ class ExportPolicyTests(unittest.TestCase):
         self.cleanup = self.enterContext(patch.object(signing, 'cleanup'))
         (self.root / 'Glimmer.ipa').write_bytes(b'inert IPA fixture')
         self.receipt = {'schema': 2, 'identity': self.expected, 'external_testing_eligible': True,
-                        'team': TEAM, 'trusted_tooling_sha': 'b' * 40,
+                        'app_store_source_eligible': True, 'team': TEAM, 'trusted_tooling_sha': 'b' * 40,
                         'signing_run_id': '456', 'signing_run_attempt': '1',
                         'ipa_sha256': artifact.digest(self.root / 'Glimmer.ipa'),
                         'export_options': copy.deepcopy(OPTIONS), 'app_uuids': [[PROFILE, 'arm64']]}
@@ -122,6 +122,7 @@ class ExportPolicyTests(unittest.TestCase):
         with (patch.object(signing, 'credentials', return_value=copy.deepcopy(OPTIONS)),
               patch.object(artifact, 'validate_archive'), patch.object(artifact, 'unpack'),
               patch.object(signing, 'verify_signed_app'),
+              patch.object(importlib.import_module('check-ios-diagnostics'), 'inspect_app'),
               patch.object(artifact, 'uuids', return_value=[(PROFILE, 'arm64')])):
             signing.export(self.root / 'Glimmer.xcarchive', output, self.expected)
         receipt = json.loads((output / 'receipt.json').read_text())
