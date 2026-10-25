@@ -14,6 +14,19 @@ Both the Mac and iOS apps live here and build the same engine checkout. Use
 [repository ownership](APPLE_REPOSITORY.md) for paths and cross-platform checks,
 and [iOS contributing](../iOS/CONTRIBUTING.md) for Simulator and device setup.
 
+## Licensing of contributions
+
+By submitting a contribution, you agree to license it under GPL-3.0 together
+with the [additional permission in LICENSE](../LICENSE), including App Store and
+TestFlight distribution. Contributions use the same terms as the project; you
+keep your copyright.
+
+Please certify the
+[Developer Certificate of Origin 1.1](https://developercertificate.org) by
+adding a `Signed-off-by: Your Name <your.email@example.com>` trailer to each
+commit with `git commit -s`. The name and email must match the commit's author.
+This sign-off is separate from the cryptographic signature required below.
+
 ## Setup
 
 Use the same Mac toolchain as hosted verification.
