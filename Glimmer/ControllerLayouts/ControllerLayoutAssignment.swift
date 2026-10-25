@@ -4,6 +4,10 @@
 import GameController
 import GlimmerEngine
 import SwiftUI
+#if os(iOS)
+// handlesGameControllerEvents lives in this cross-import overlay, which CodeQL's extractor never loads implicitly.
+import _GameController_SwiftUI
+#endif
 
 struct ControllerLayoutAssignment: View {
     let model: ControllerLayoutsModel
