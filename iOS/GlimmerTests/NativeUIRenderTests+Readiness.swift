@@ -5,8 +5,34 @@ import SwiftUI
 import Synchronization
 import Testing
 import UIKit
+@testable import Glimmer
 
 extension NativeUIRenderTests {
+    @Test func geometryFailureCanArriveOnUIKitBackgroundQueue() async throws {
+        let active = try await activeRenderScene()
+        let method = try #require(class_getInstanceMethod(UIWindowScene.self,
+            #selector(UIWindowScene.requestGeometryUpdate(_:errorHandler:))))
+        let deliveries = AsyncStream<Void>.makeStream()
+        typealias ErrorHandler = @convention(block) (NSError) -> Void
+        let replacement: @convention(block) (AnyObject, AnyObject, ErrorHandler?) -> Void = { _, _, handler in
+            // Transfer the callback once, as UIKit does when its geometry request expires.
+            nonisolated(unsafe) let report = handler
+            DispatchQueue.global().async {
+                #expect(Thread.isMainThread == false)
+                #expect(report != nil)
+                report?(CocoaError(.userCancelled) as NSError)
+                deliveries.continuation.yield(())
+                deliveries.continuation.finish()
+            }
+        }
+        let implementation = imp_implementationWithBlock(replacement)
+        let original = method_setImplementation(method, implementation)
+        StreamViewController.requestLandscape(in: active)
+        method_setImplementation(method, original)
+        defer { imp_removeBlock(implementation) }
+        for await _ in deliveries.stream { break }
+    }
+
     // The deadline diagnoses a missing signal; it never makes a fixture ready.
     func waitForUIState(_ message: String, in view: UIView? = nil,
                         condition: @escaping @MainActor () -> Bool) async throws {

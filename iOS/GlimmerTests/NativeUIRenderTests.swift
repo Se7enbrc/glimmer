@@ -424,7 +424,7 @@ struct NativeUIRenderTests {
                 root.setNeedsUpdateOfSupportedInterfaceOrientations()
                 try await commitLayout(root.view)
                 try await observeGeometry(scene, request: {
-                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: requested)) { error in
+                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: requested)) { @Sendable error in
                         Issue.record("The render fixture's orientation request failed: \(error)")
                     }
                 }, matches: { requested.contains(UIInterfaceOrientationMask(

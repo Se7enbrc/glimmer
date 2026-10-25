@@ -64,6 +64,7 @@ final class StreamShortcutUITests: XCTestCase {
         app.launch()
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .portrait : .landscapeLeft
         XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 10))
+        app.connectHardwareKeyboard()
         return app
     }
 
@@ -74,5 +75,13 @@ final class StreamShortcutUITests: XCTestCase {
         }
         return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: video)], timeout: 5)
             == .completed
+    }
+}
+
+extension XCUIApplication {
+    func connectHardwareKeyboard() {
+        // A literal key initializes iOS keyboard routing; modifier-only setup emits no HID events.
+        typeKey("x", modifierFlags: [])
+        activate()
     }
 }
