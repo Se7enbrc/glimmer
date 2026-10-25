@@ -336,8 +336,6 @@ extension AppModel {
             "start_to_first_frame_ms": timing.clickToFirstFrameMs,
             "launch_path_ms": timing.launchPathMs,
             "serverinfo_ms": legs.launchServerinfoMs,
-            "cancel_ms": legs.launchCancelMs,
-            "busy_wait_ms": legs.launchBusyWaitMs,
             "launch_ms": legs.launchMs,
             "build_ms": legs.buildMs
         ]

@@ -91,8 +91,22 @@ struct ControllerLayoutRenderTests {
         }, name: "after-shoulder-selected-\(dark ? "dark" : "light")", dark: dark)
     }
 
+    @Test func everyVisibleDiagramControlHasASpokenName() {
+        for family in ControllerDiagramFamily.allCases {
+            let controls = fixture(family).controls
+            for rear in [false, true] where !rear || family == .dualSenseEdge || family == .xboxElite {
+                let names = controls.filter {
+                    ControllerDiagramGeometry.visiblePlacement($0, family: family, rear: rear) != nil
+                }.map(\.name)
+                #expect(!names.isEmpty && names.allSatisfy { !$0.isEmpty }, "\(family) rear: \(rear)")
+            }
+        }
+    }
+
     #if os(macOS)
-    @Test func diagramVoiceOverNamesEveryVisibleControl() throws {
+    // SwiftUI builds its macOS accessibility tree only for an assistive client, which needs trust.
+    @Test(.enabled(if: AXIsProcessTrusted(), "Needs Accessibility trust to read the live tree"))
+    func diagramVoiceOverNamesEveryVisibleControl() throws {
         for family in ControllerDiagramFamily.allCases {
             let device = fixture(family)
             for rear in [false, true] where !rear || family == .dualSenseEdge || family == .xboxElite {

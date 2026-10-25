@@ -64,15 +64,6 @@ extension TelemetryRenderer {
         builder.emit("glimmer_launch_serverinfo_ms",
                      "Launch sub-leg: /serverinfo fetch duration this session, ms.",
                      handshake.launchServerinfoMs)
-        builder.emit("glimmer_launch_cancel_ms",
-                     "Launch sub-leg: /cancel duration this session, ms.",
-                     handshake.launchCancelMs)
-        builder.emit("glimmer_launch_busy_wait_ms",
-                     "Launch sub-leg: waitForHostIdle busy-poll duration this session, ms.",
-                     handshake.launchBusyWaitMs)
-        builder.emit("glimmer_launch_busy_poll_count",
-                     "Launch sub-leg: /serverinfo polls in waitForHostIdle this session.",
-                     handshake.launchBusyPollCount)
         builder.emit("glimmer_launch_ms",
                      "Launch sub-leg: /launch duration this session, ms.",
                      handshake.launchMs)

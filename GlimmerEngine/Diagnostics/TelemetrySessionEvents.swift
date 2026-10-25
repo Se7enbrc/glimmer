@@ -105,9 +105,6 @@ package final class ConnectTimingTelemetry: @unchecked Sendable {
     // Launch-path SUB-LEGS (ms), stamped at the real call sites in
     // launchWithBusyRecovery so the opaque launch_path_ms is attributable.
     private var serverinfoMsValue: Double = 0
-    private var cancelMsValue: Double = 0
-    private var launchBusyWaitMsValue: Double = 0
-    private var launchBusyPollCountValue: Double = 0
     private var launchMsValue: Double = 0
     private var buildMsValue: Double = 0
     package init() { lock.initialize(to: os_unfair_lock_s()) }
@@ -144,16 +141,10 @@ package final class ConnectTimingTelemetry: @unchecked Sendable {
         os_unfair_lock_unlock(lock)
     }
     /// Record a launch sub-leg duration (ms). First non-zero write wins per leg
-    /// (the launch flow runs each leg once); off any hot path. `busyPollCount` is
-    /// the waitForHostIdle poll count for `launch_busy_wait_ms`.
-    package func recordLaunchLeg(serverinfoMs: Double? = nil, cancelMs: Double? = nil,
-                                 launchBusyWaitMs: Double? = nil, busyPollCount: Int? = nil,
-                                 launchMs: Double? = nil, buildMs: Double? = nil) {
+    /// (the launch flow runs each leg once); off any hot path.
+    package func recordLaunchLeg(serverinfoMs: Double? = nil, launchMs: Double? = nil, buildMs: Double? = nil) {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         if let ms = serverinfoMs, serverinfoMsValue == 0 { serverinfoMsValue = ms }
-        if let ms = cancelMs, cancelMsValue == 0 { cancelMsValue = ms }
-        if let ms = launchBusyWaitMs, launchBusyWaitMsValue == 0 { launchBusyWaitMsValue = ms }
-        if let count = busyPollCount, launchBusyPollCountValue == 0 { launchBusyPollCountValue = Double(count) }
         if let ms = launchMs, launchMsValue == 0 { launchMsValue = ms }
         if let ms = buildMs, buildMsValue == 0 { buildMsValue = ms }
     }
@@ -162,9 +153,6 @@ package final class ConnectTimingTelemetry: @unchecked Sendable {
     package func applyLaunchLegs(to out: inout HandshakeBreakdown) {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         out.launchServerinfoMs = serverinfoMsValue != 0 ? serverinfoMsValue : nil
-        out.launchCancelMs = cancelMsValue != 0 ? cancelMsValue : nil
-        out.launchBusyWaitMs = launchBusyWaitMsValue != 0 ? launchBusyWaitMsValue : nil
-        out.launchBusyPollCount = launchBusyPollCountValue != 0 ? launchBusyPollCountValue : nil
         out.launchMs = launchMsValue != 0 ? launchMsValue : nil
         out.buildMs = buildMsValue != 0 ? buildMsValue : nil
     }
@@ -182,8 +170,7 @@ package final class ConnectTimingTelemetry: @unchecked Sendable {
         os_unfair_lock_lock(lock)
         clickReference = 0; connectStartReference = 0
         clickToFirstFrameMsValue = 0; launchPathMsValue = 0
-        serverinfoMsValue = 0; cancelMsValue = 0; launchBusyWaitMsValue = 0
-        launchBusyPollCountValue = 0; launchMsValue = 0; buildMsValue = 0
+        serverinfoMsValue = 0; launchMsValue = 0; buildMsValue = 0
         os_unfair_lock_unlock(lock)
     }
 }
@@ -241,9 +228,6 @@ package struct HandshakeBreakdown: Sendable {
         clickToFirstFrameMs: Double? = nil,
         launchPathMs: Double? = nil,
         launchServerinfoMs: Double? = nil,
-        launchCancelMs: Double? = nil,
-        launchBusyWaitMs: Double? = nil,
-        launchBusyPollCount: Double? = nil,
         launchMs: Double? = nil,
         buildMs: Double? = nil,
         complete: Bool = false
@@ -256,9 +240,6 @@ package struct HandshakeBreakdown: Sendable {
         self.clickToFirstFrameMs = clickToFirstFrameMs
         self.launchPathMs = launchPathMs
         self.launchServerinfoMs = launchServerinfoMs
-        self.launchCancelMs = launchCancelMs
-        self.launchBusyWaitMs = launchBusyWaitMs
-        self.launchBusyPollCount = launchBusyPollCount
         self.launchMs = launchMs
         self.buildMs = buildMs
         self.complete = complete
@@ -277,18 +258,14 @@ package struct HandshakeBreakdown: Sendable {
     /// Total: connect start → first decoded video frame (the whole cold open).
     package var totalMs: Double?
     /// TRUE click-to-pixels: the user's launch click → first decoded frame, which
-    /// includes the serverinfo + launch + busy-poll legs `totalMs` excludes (it
+    /// includes the serverinfo + launch legs `totalMs` excludes (it
     /// anchors at connect-start). From `ConnectTimingTelemetry`.
     package var clickToFirstFrameMs: Double?
     /// Launch path: click → connect-start, isolating the pre-connect launch cost.
     package var launchPathMs: Double?
-    /// Launch-path SUB-LEGS attributing launchPathMs: /serverinfo, /cancel, the
-    /// waitForHostIdle busy-poll (+ its poll count), /launch, and the MainActor
-    /// subsystem/window build. Each nil until its call site stamps it.
+    /// Launch-path SUB-LEGS attributing launchPathMs: /serverinfo, /launch and the
+    /// MainActor subsystem/window build. Each nil until its call site stamps it.
     package var launchServerinfoMs: Double?
-    package var launchCancelMs: Double?
-    package var launchBusyWaitMs: Double?
-    package var launchBusyPollCount: Double?
     package var launchMs: Double?
     package var buildMs: Double?
     /// True once the first decoded frame landed (so the exporter emits the
