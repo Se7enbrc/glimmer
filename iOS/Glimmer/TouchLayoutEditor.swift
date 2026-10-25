@@ -116,7 +116,7 @@ struct TouchLayoutEditor: View {
     private var sizeControl: some View {
         HStack {
             Text("Size").font(.subheadline).accessibilityHidden(true)
-            Slider(value: Binding(get: { size }, set: resize), in: 0.75...1.5, step: 0.05) { Text("Size") }
+            Slider(value: Binding(get: { size }, set: { resize($0) }), in: 0.75...1.5, step: 0.05) { Text("Size") }
                 .accessibilityValue(size.formatted(.percent.precision(.fractionLength(0))))
         }.frame(minWidth: 140)
     }
