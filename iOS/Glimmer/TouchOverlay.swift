@@ -18,7 +18,9 @@ struct TouchOverlay: View {
                                   mouseMode: model.touchMouseActive,
                                   leftStick: model.launch.mouseStick == .left, showControls: model.showControls)
             } else if model.inputFocused {
-                TouchControlsButton(area: area, showControls: model.showControls)
+                let layout = TouchLayoutStore(defaults: .standard).load(
+                    pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
+                TouchControlsButton(area: area, opacity: layout.opacity, showControls: model.showControls)
             }
             Color.clear.allowsHitTesting(false).accessibilityHidden(true)
                 .onChange(of: area, initial: true) { _, area in
@@ -54,13 +56,13 @@ struct TouchPlayControls: View {
     var body: some View {
         ZStack {
             TouchGamepadRepresentation(capture: capture, layout: layout, area: area,
-                                       mouseMode: mouseMode, leftStick: leftStick, preview: preview)
+                                       mouseMode: mouseMode, leftStick: leftStick, preview: preview,
+                                       showControls: showControls)
             if TouchLayout().frames(in: area).isEmpty {
                 Text("Make this window larger to use touch controls.")
                     .font(.callout).padding().background(.regularMaterial, in: .capsule)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            TouchControlsButton(area: area, opacity: layout.opacity, showControls: showControls)
         }
     }
 }
@@ -118,9 +120,12 @@ struct TouchGamepadRepresentation: UIViewRepresentable {
     var leftStick = false
     var preview = false
 
+    var showControls: () -> Void = {}
+
     func makeUIView(context: Context) -> TouchGamepadView { TouchGamepadView() }
 
     func updateUIView(_ view: TouchGamepadView, context: Context) {
+        view.menuButton.showControls = showControls
         view.configure(capture: capture, layout: layout, area: area, preview: preview)
         view.mouseMode(mouseMode, leftStick: leftStick)
     }

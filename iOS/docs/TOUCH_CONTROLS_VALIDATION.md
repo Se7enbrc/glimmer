@@ -6,7 +6,48 @@ but the complete Phase 2 acceptance evidence is not available: actual iPad
 rotation, Duo inner/partial-fold postures, assistive interaction and device
 energy still have gaps.
 
-## Opacity editor follow-up
+## Overlay-wide opacity follow-up
+
+The editor starts with no selection. All controls contains the global Opacity
+slider above a divider; selecting an element adds its own Size row and Hide
+button below. Reset and hiding the selected element return to no selection. The
+inspector remains a native material surface at normal opacity.
+
+Previously every gamepad element shared the value, but the editor preview
+omitted “…” and play rendered that button separately. The gamepad view now owns
+a native menu button, including in the editor preview. One synchronous,
+non-animated UIKit pass applies an opacity change to every element, including
+the d-pad's shape, stick thumbs, shoulders and bottom utility buttons. The
+standalone mouse-only menu button also loads the saved layout opacity through
+the shared palette.
+
+168 correctness tests pass. The all-control test checks colors immediately after
+configuration, without forcing a later layout pass, preserves held input and hit
+frames, and checks the ellipsis palette and frame. Native slider tests run with
+no selection and a selected right stick, verify both endpoints update every
+control live, leave Size unchanged, and do not save until Done. Menu activation,
+its accessibility label and touch-mouse exclusion are also covered.
+
+The repeated idle fixture records zero recurring root layouts, draws or input
+submissions at 10%, 60% and stationary-held states in both appearances, over
+static and moving video. Static visible process CPU ranges from 0.15% to 0.20%
+of one Simulator host core. Median paired touch-minus-direct capture-to-network
+p95 differences are -0.003 ms idle, +0.001 ms under input load and approximately
+0 ms with main-thread work. Stage counts match; dropped timing records are zero.
+These are Simulator process/input counters, not child-layer GPU or device watts.
+
+The new strings are “All controls” and “Select a control to move or resize it.”
+Size is reused as a visible label. Both section names have accessibility heading
+traits; the slider retains its Opacity label and locale-formatted percentage.
+Physical VoiceOver interaction and device power remain unverified.
+
+Before/after panels, selected/unselected panels and 10%/20%/60% light/dark
+boards for iPhone Max and iPad mini are under `shots-48/phase2/opacity-global/`.
+The viewport fixtures do not establish actual iPad rotation or fold posture
+behavior. The existing simulator-only, no-Mac-tests, no-push and no-version-bump
+limits remain in force. No stream-session or quality-indicator files changed.
+
+## Original opacity editor follow-up
 
 Edit controls now includes a native Opacity slider beside Size, with a vertical
 fallback for narrow or large-text inspectors. The range is 10% to 60% in five

@@ -28,10 +28,11 @@ draft. Both return to the menu so you can choose when to resume. Reset layout
 affects only this app and layout size. Forgetting the PC also removes its
 layouts.
 
-In Edit controls, Opacity changes every control together while previewing the
-game. Done remembers it with this app's layout; Cancel discards it and Reset
-layout restores the default. The range is 10% to 60%, with 20% selected
-initially.
+In Edit controls, All controls contains the Opacity slider, even with nothing
+selected. It changes the whole overlay together, including “…”; the editor panel
+keeps its normal appearance. Select a control to reveal its separate Size row.
+Done remembers it with this app's layout; Cancel discards it and Reset layout
+restores the default. The range is 10% to 60%, with 20% selected initially.
 
 The controls follow Light and Dark appearance with quiet translucent fills over
 video. Held controls become clearer until you release them. They do not animate

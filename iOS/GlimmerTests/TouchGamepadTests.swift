@@ -180,12 +180,16 @@ struct TouchGamepadTests {
         for opacity in [0.1, 0.2, 0.6, 0.2] {
             layout.opacity = opacity
             view.configure(capture: capture, layout: layout, area: area)
-            view.layoutIfNeeded()
             #expect(view.opacity == opacity)
             #expect(view.controls.mapValues(\.frame) == frames && submissions == sent)
             #expect(button.isHighlighted && capture.enabled)
+            let menuColors = TouchAppearance.colors(style: style, contrast: false, opaque: false,
+                                                    pressed: false, opacity: opacity)
+            #expect(view.menuButton.backgroundColor == menuColors.fill)
+            #expect(view.menuButton.image(for: .normal) === TouchAppearance.symbol("ellipsis", colors: menuColors))
+            #expect(view.menuButton.frame == TouchLayout.menuFrame(in: area))
+            #expect(view.menuButton.layer.animationKeys()?.isEmpty != false)
             for (element, control) in view.controls {
-                control.layoutIfNeeded()
                 let colors = TouchAppearance.colors(style: style, contrast: false, opaque: false,
                                                    pressed: element == .a, opacity: opacity)
                 if element == .dpad {
@@ -201,6 +205,20 @@ struct TouchGamepadTests {
         }
         capture.detach()
         await connection.stop()
+    }
+
+    @Test func overlayMenuUsesNativeActivationAndExcludesTouchMouse() {
+        let view = TouchGamepadView(frame: CGRect(x: 0, y: 0, width: 956, height: 440))
+        let area = view.bounds.insetBy(dx: 24, dy: 12)
+        var shown = 0
+        view.menuButton.showControls = { shown += 1 }
+        view.configure(capture: nil, layout: TouchLayout(), area: area, preview: true)
+        view.layoutIfNeeded()
+        #expect(view.hitTest(view.menuButton.center, with: nil) === view.menuButton)
+        #expect(!StreamTouchCapture.acceptsTouch(startingIn: view.menuButton))
+        #expect(view.menuButton.accessibilityLabel == "Show controls")
+        view.menuButton.sendActions(for: .primaryActionTriggered)
+        #expect(shown == 1)
     }
 
     private func composite(_ color: UIColor, over background: SIMD3<Double>) throws -> SIMD3<Double> {

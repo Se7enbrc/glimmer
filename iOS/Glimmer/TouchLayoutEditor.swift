@@ -8,7 +8,7 @@ struct TouchLayoutEditor: View {
     let area: CGRect
     let close: () -> Void
     @State private var draft = TouchLayout()
-    @State private var selected: TouchElement = .rightStick
+    @State private var selected: TouchElement?
     @State private var size = 1.0
     @State private var dragging = false
     @State private var origin: TouchLayout.Placement?
@@ -19,10 +19,18 @@ struct TouchLayoutEditor: View {
     @State private var addBlocked = false
     @FocusState private var focused: TouchElement?
 
+    init(launch: StreamLaunch, area: CGRect, selected: TouchElement? = nil, close: @escaping () -> Void) {
+        self.launch = launch
+        self.area = area
+        self.close = close
+        _selected = State(initialValue: selected)
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             let frames = draft.frames(in: area)
-            TouchGamepadRepresentation(layout: draft, area: area, preview: true).allowsHitTesting(false)
+            TouchGamepadRepresentation(layout: draft, area: area, preview: true)
+                .allowsHitTesting(false).accessibilityHidden(true)
             ForEach(TouchElement.allCases) { element in
                 if let frame = frames[element] {
                     Button { select(element) } label: {
@@ -61,7 +69,7 @@ struct TouchLayoutEditor: View {
             load()
         }
         .confirmationDialog("Reset this app's layout?", isPresented: $resetRequested, titleVisibility: .visible) {
-            Button("Reset layout", role: .destructive) { draft = TouchLayout(); select(selected) }
+            Button("Reset layout", role: .destructive) { draft = TouchLayout(); select(nil) }
             Button("Cancel", role: .cancel) {}
         }
         .alert("Move a control to make room.", isPresented: $addBlocked) { Button("OK", role: .cancel) {} }
@@ -76,25 +84,38 @@ struct TouchLayoutEditor: View {
                     Spacer()
                     Button("Done", action: save).fontWeight(.semibold)
                 }
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 16) { sizeControl; opacityControl }
-                    VStack(spacing: 10) { sizeControl; opacityControl }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("All controls").font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                    opacityControl
+                }
+                Divider()
+                if let selected {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(selected.name).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                            Spacer()
+                            Button("Hide") { hide(selected) }.buttonStyle(.bordered)
+                        }
+                        sizeControl
+                        if selected.isTrigger {
+                            Text("Press fully, then drag inward to reduce the trigger.").font(.caption)
+                        }
+                    }
+                } else {
+                    Text("Select a control to move or resize it.").font(.callout).foregroundStyle(.secondary)
                 }
                 ViewThatFits(in: .horizontal) {
                     HStack { editingActions }
                     VStack { editingActions }
                 }.buttonStyle(.bordered)
-                if selected.isTrigger {
-                    Text("Press fully, then drag inward to reduce the trigger.").font(.caption)
-                }
             }.padding()
         }
         .background(.regularMaterial, in: .rect(cornerRadius: 24))
     }
 
     private var sizeControl: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(selected.name).font(.subheadline)
+        HStack {
+            Text("Size").font(.subheadline).accessibilityHidden(true)
             Slider(value: Binding(get: { size }, set: resize), in: 0.75...1.5, step: 0.05) { Text("Size") }
                 .accessibilityValue(size.formatted(.percent.precision(.fractionLength(0))))
         }.frame(minWidth: 140)
@@ -117,7 +138,8 @@ struct TouchLayoutEditor: View {
     }
 
     private var inspectorFrame: CGRect {
-        let selectedFrame = draft.frames(in: area)[selected] ?? CGRect(x: area.midX, y: area.maxY, width: 0, height: 0)
+        let selectedFrame = selected.flatMap { draft.frames(in: area)[$0] }
+            ?? CGRect(x: area.midX, y: area.maxY, width: 0, height: 0)
         let candidates = [
             CGRect(x: area.minX, y: area.minY, width: area.width, height: max(0, selectedFrame.minY - area.minY - 8)),
             CGRect(x: area.minX, y: selectedFrame.maxY + 8, width: area.width,
@@ -126,19 +148,14 @@ struct TouchLayoutEditor: View {
             CGRect(x: selectedFrame.maxX + 8, y: area.minY,
                    width: max(0, area.maxX - selectedFrame.maxX - 8), height: area.height)
         ].filter { $0.width >= 200 && $0.height >= 100 }
-        let region = candidates.max { min($0.width, 440) * min($0.height, 240)
-            < min($1.width, 440) * min($1.height, 240) } ?? area
+        let region = candidates.max { min($0.width, 440) * min($0.height, 340)
+            < min($1.width, 440) * min($1.height, 340) } ?? area
         let width = min(440, region.width - 16)
-        let height = min(240, region.height - 8)
+        let height = min(selected == nil ? 280 : 340, region.height - 8)
         return CGRect(x: region.midX - width / 2, y: region.minY + 4, width: width, height: height)
     }
 
     @ViewBuilder private var editingActions: some View {
-        Button("Hide") {
-            var value = draft.placement(selected, in: area)
-            value.hidden = true
-            draft.changes[selected] = value
-        }
         Menu("Add control…") {
             ForEach(TouchElement.allCases.filter { draft.placement($0, in: area).hidden }) { element in
                 Button(element.name) {
@@ -167,7 +184,7 @@ struct TouchLayoutEditor: View {
     }
 
     private func finishMove() {
-        if let origin, draft.editable(in: area).placement(selected, in: area) != origin {
+        if let selected, let origin, draft.editable(in: area).placement(selected, in: area) != origin {
             UISelectionFeedbackGenerator().selectionChanged()
         }
         dragging = false
@@ -182,12 +199,20 @@ struct TouchLayoutEditor: View {
         select(selected)
     }
 
-    private func select(_ element: TouchElement) {
+    private func select(_ element: TouchElement?) {
         selected = element
-        size = draft.editable(in: area).placement(element, in: area).scale
+        if let element { size = draft.editable(in: area).placement(element, in: area).scale }
+    }
+
+    private func hide(_ element: TouchElement) {
+        var value = draft.placement(element, in: area)
+        value.hidden = true
+        draft.changes[element] = value
+        select(nil)
     }
 
     private func resize(_ value: Double) {
+        guard let selected else { return }
         var placement = draft.editable(in: area).placement(selected, in: area)
         guard value != placement.scale else { return }
         placement.scale = value

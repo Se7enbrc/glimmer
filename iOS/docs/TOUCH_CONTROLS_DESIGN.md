@@ -181,11 +181,12 @@ the player's existing Touch mouse preference. Add no second mode setting.
 
 1. Open stream controls and choose “Edit controls…”. Release all PC input first.
    The game keeps running; do not claim to pause it or send a guessed Menu key.
-2. Select a control, then drag it. A violet selection ring identifies it. A
-   native inspector offers Size, overlay-wide Opacity and Hide; show its current
-   name and a brief usage hint. Collapse the inspector while dragging so it
-   cannot block a destination. Keep the selected control visible when the
-   inspector reappears.
+2. The inspector opens without a selection. Its All controls section always
+   offers overlay-wide Opacity. Select a control, then drag it. A violet
+   selection ring identifies it. Below the divider, the native inspector shows
+   its name, Size and Hide, plus a brief usage hint when needed. Collapse it
+   while dragging so it cannot block a destination. Keep the selected control
+   visible when the inspector reappears.
 3. Resize through the slider or accessible increment/decrement. Clamp the whole
    hit frame inside safe bounds and keep distinct targets separated by 8pt.
    Moving to an invalid position previews the last valid location.
@@ -194,13 +195,18 @@ the player's existing Touch mouse preference. Add no second mode setting.
    atomically and returns to the stream menu; Cancel discards all preview edits.
 5. Resume when ready. The editor's touches cannot become gameplay presses.
 
-Opacity previews all controls over the game, including their resting fills,
-outlines and glyphs. It ranges from 10% to 60% in 5-point steps; 20% preserves
-the approved translucent appearance. Glyphs retain an independent contrast floor
-so the minimum remains findable. Done saves opacity with explicit layout edits,
-including opacity-only changes; Cancel discards it. Reset layout restores 20%.
-Older saved layouts decode with that default. The percentage is the base surface
-opacity; light/dark fills retain their small appearance adjustment.
+Opacity occupies its own All controls section above a divider, independent of
+selection. A selected control has a separate Size row and Hide action below it.
+Opacity previews every control over the game, including sticks, d-pad,
+shoulders, face/utility buttons and the fixed “…” button. The inspector keeps
+its native material. One UIKit update applies the palette to all overlay
+elements without animation; no selected control gets an opacity override. It
+ranges from 10% to 60% in 5-point steps; 20% preserves the approved translucent
+appearance. Glyphs retain an independent contrast floor so the minimum remains
+findable. Done saves opacity with explicit layout edits, including opacity-only
+changes; Cancel discards it. Reset layout restores 20%. Older saved layouts
+decode with that default. The percentage is the base surface opacity; light/dark
+fills retain their small appearance adjustment.
 
 No jiggle loop, save-on-every-drag, layout gallery, presets picker, cloud sync
 or numerical coordinate form. Controls are neutral by default; violet belongs to

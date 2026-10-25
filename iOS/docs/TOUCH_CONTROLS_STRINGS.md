@@ -37,9 +37,18 @@ counterpart.
 Next:
 [review implementation evidence and remaining acceptance gaps](TOUCH_CONTROLS_VALIDATION.md).
 
-## Opacity follow-up
+## Original opacity follow-up
 
 The only new user-facing string is “Opacity”, used for the visible editor label
 and the native slider's VoiceOver label. Its visible and accessible value uses
 locale-formatted percentages (10% through 60%, default 20%). No new hint, alert,
 menu item or Settings string is introduced.
+
+## Overlay-wide opacity follow-up
+
+New strings: “All controls” (the global section heading) and “Select a control
+to move or resize it.” (the empty-selection instruction). “Size” is now a
+visible row label under the selected control; its string is reused. “Opacity”,
+its percentage value, “Hide”, and the menu button's “Show controls” label are
+unchanged. All controls and the selected control's name are accessibility
+headings.

@@ -6,6 +6,7 @@ import UIKit
 @MainActor
 class TouchGamepadView: UIView {
     private(set) var controls: [TouchElement: UIControl] = [:]
+    let menuButton = TouchMenuButton(frame: .zero)
     private(set) var opacity = TouchLayout.defaultOpacity
     private var capture: TouchGamepadCapture?
     private var lastFrames: [TouchElement: CGRect] = [:]
@@ -24,17 +25,18 @@ class TouchGamepadView: UIView {
             controls[element] = control
             addSubview(control)
         }
+        addSubview(menuButton)
         registerForTraitChanges(
             [UITraitAccessibilityContrast.self, UITraitUserInterfaceStyle.self]
         ) { (view: TouchGamepadView, _: UITraitCollection) in
-            for control in view.controls.values { control.setNeedsLayout() }
+            for control in view.appearanceControls { control.setNeedsLayout() }
         }
         transparencyObserver = NotificationCenter.default.addObserver(
             forName: UIAccessibility.reduceTransparencyStatusDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                for control in self.controls.values { control.setNeedsLayout() }
+                for control in self.appearanceControls { control.setNeedsLayout() }
             }
         }
     }
@@ -58,10 +60,6 @@ class TouchGamepadView: UIView {
             for control in controls.values { inputTracking(control)?.capture = capture }
             capture?.invalidated = { [weak self] in self?.invalidate() }
         }
-        if opacity != layout.opacity {
-            opacity = layout.opacity
-            for control in controls.values { control.setNeedsLayout() }
-        }
         let frames = layout.frames(in: area)
         if frames != lastFrames {
             capture?.cancel()
@@ -71,10 +69,28 @@ class TouchGamepadView: UIView {
                 if let frame = frames[element] { control.frame = frame }
             }
         }
+        let menuFrame = TouchLayout.menuFrame(in: area)
+        if menuButton.frame != menuFrame { menuButton.frame = menuFrame }
+        applyOpacity(layout.opacity)
         isHidden = !preview && capture?.enabled != true
     }
 
+    private var appearanceControls: [UIControl] { Array(controls.values) + [menuButton] }
+
+    private func applyOpacity(_ value: Double) {
+        guard opacity != value else { return }
+        opacity = value
+        UIView.performWithoutAnimation {
+            for control in appearanceControls {
+                control.setNeedsLayout()
+                control.layoutIfNeeded()
+            }
+        }
+    }
+
     func invalidate() {
+        menuButton.cancelTracking(with: nil)
+        menuButton.isHighlighted = false
         for control in controls.values {
             inputTracking(control)?.invalidate()
             control.cancelTracking(with: nil)

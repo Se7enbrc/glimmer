@@ -164,7 +164,8 @@ struct TouchRenderTests {
         }
     }
 
-    @Test func nativeOpacitySliderPreviewsBothEndpointsWithoutSaving() async throws {
+    @Test(arguments: [TouchElement?.none, .rightStick])
+    func nativeOpacitySliderPreviewsBothEndpointsWithoutSaving(selected: TouchElement?) async throws {
         let launch = testLaunch()
         let store = TouchLayoutStore(defaults: .standard)
         let saved = store.load(pcID: launch.pcID, appID: launch.appID, family: .compact)
@@ -175,19 +176,57 @@ struct TouchRenderTests {
         let window = UIWindow(windowScene: scene)
         let size = CGSize(width: 844, height: 390)
         let area = CGRect(origin: .zero, size: size).insetBy(dx: 24, dy: 12)
-        let host = UIHostingController(rootView: TouchLayoutEditor(launch: launch, area: area, close: {})
-            .frame(width: size.width, height: size.height))
+        let editor = TouchLayoutEditor(launch: launch, area: area, selected: selected, close: {})
+        let host = UIHostingController(rootView: editor.frame(width: size.width, height: size.height))
         window.rootViewController = TouchViewportController(content: host, size: size)
         window.makeKeyAndVisible()
         defer { window.isHidden = true; previous?.makeKeyAndVisible() }
         host.view.layoutIfNeeded()
         _ = try await waitForOpacity(0.2, in: host.view)
-        let slider = try #require(descendants(host.view).compactMap { $0 as? UISlider }.last)
+        let sliders = descendants(host.view).compactMap { $0 as? UISlider }.filter { !($0 is TouchTrigger) }
+        #expect(sliders.count == (selected == nil ? 1 : 2))
+        let slider = try #require(sliders.first)
+        let sizeValue = selected == nil ? nil : sliders.last?.value
         for (nativeValue, opacity) in [(slider.maximumValue, 0.6), (slider.minimumValue, 0.1)] {
             slider.value = nativeValue
             slider.sendActions(for: .valueChanged)
-            _ = try await waitForOpacity(opacity, in: host.view)
+            let preview = try await waitForOpacity(opacity, in: host.view)
+            try verifyWholeOverlay(preview, opacity: opacity)
+            if let sizeValue { #expect(sliders.last?.value == sizeValue) }
             #expect(store.load(pcID: launch.pcID, appID: launch.appID, family: .compact).opacity == 0.2)
+        }
+    }
+
+    private func verifyWholeOverlay(_ preview: TouchGamepadView, opacity: Double) throws {
+        let colors = TouchAppearance.colors(style: preview.traitCollection.userInterfaceStyle,
+                                           contrast: false, opaque: false, pressed: false, opacity: opacity)
+        #expect(preview.menuButton.backgroundColor == colors.fill)
+        for (element, control) in preview.controls {
+            if element == .dpad {
+                let cross = try #require(control.layer.sublayers?.compactMap { $0 as? CAShapeLayer }.first)
+                #expect(cross.fillColor == colors.fill.cgColor)
+            } else { #expect(control.backgroundColor == colors.fill) }
+            #expect(control.layer.animationKeys()?.isEmpty != false)
+        }
+    }
+
+    @Test(arguments: [viewports[1], viewports[2]], [false, true])
+    func globalOpacityPanelWithAndWithoutSelection(viewport: Viewport, dark: Bool) async throws {
+        let area = CGRect(origin: .zero, size: viewport.size).insetBy(dx: 24, dy: 12)
+        let launch = testLaunch()
+        let store = TouchLayoutStore(defaults: .standard)
+        let family = TouchLayout.family(in: area)
+        let saved = store.load(pcID: launch.pcID, appID: launch.appID, family: family)
+        store.save(TouchLayout(), pcID: launch.pcID, appID: launch.appID, family: family)
+        defer { store.save(saved, pcID: launch.pcID, appID: launch.appID, family: family) }
+        for selected in [TouchElement?.none, .rightStick] {
+            let content = ZStack {
+                TouchSampleFrame()
+                TouchLayoutEditor(launch: launch, area: area, selected: selected, close: {})
+            }
+            let name = "global-panel-\(viewport.name)-\(dark ? "dark" : "light")"
+                + "-\(selected == nil ? "none" : "selected")"
+            try await record(content, name: name, size: viewport.size, dark: dark, opacity: 0.2)
         }
     }
 
@@ -224,7 +263,7 @@ struct TouchRenderTests {
         if let opacity {
             let views = descendants(host.view)
             let preview = try #require(views.compactMap { $0 as? TouchGamepadView }.first)
-            let slider = try #require(views.compactMap { $0 as? UISlider }.last)
+            let slider = try #require(views.compactMap { $0 as? UISlider }.first { !($0 is TouchTrigger) })
             #expect(preview.opacity == opacity)
             #expect(abs(Double(slider.value) - (opacity - 0.1) / 0.5) < 0.00001)
         }

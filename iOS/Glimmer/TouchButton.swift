@@ -92,3 +92,28 @@ final class TouchButton: UIButton {
         TouchAppearance.apply(to: self, pressed: value)
     }
 }
+
+@MainActor
+final class TouchMenuButton: UIButton {
+    var showControls: () -> Void = {}
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        accessibilityLabel = "Show controls"
+        addAction(UIAction { [weak self] _ in self?.showControls() }, for: .primaryActionTriggered)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    override var isHighlighted: Bool {
+        didSet { if isHighlighted != oldValue { setNeedsLayout() } }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let colors = TouchAppearance.apply(to: self, pressed: isHighlighted)
+        let image = TouchAppearance.symbol("ellipsis", colors: colors)
+        if self.image(for: .normal) !== image { setImage(image, for: .normal) }
+    }
+}
