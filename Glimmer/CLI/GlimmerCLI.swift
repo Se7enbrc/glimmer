@@ -68,6 +68,8 @@ enum GlimmerCLI {
           diagnostics bundle <session> <directory> Export a session's diagnostic evidence
           help                           Show this help
 
+        While streaming, Control-Z shows or hides stats by default. Change it in Settings › Input.
+
         <pc> is a paired PC's name or address. Run glimmer with no command to open the app.
         Exit status: 0 success, 1 failure, 2 usage error, 3 PC unreachable, 4 PC not paired,
                      5 no active stream.

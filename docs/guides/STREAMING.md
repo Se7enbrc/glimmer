@@ -72,7 +72,7 @@ the picture stays below the camera. Choices stay saved.
 
 {% hint style="info" %}
 
-Control-I shows format. H.264, HEVC, supported AV1 and HDR10 require compatible
+Control-Z shows format. H.264, HEVC, supported AV1 and HDR10 require compatible
 hardware. Custom: 640–7680 × 480–4320, 30–240 fps. PC menu: codec preference.
 [Shortcuts](../SHORTCUTS.md): Game Mode.
 

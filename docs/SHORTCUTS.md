@@ -17,7 +17,7 @@ icon: keyboard
 | ---------------------------- | --------- | --------------------------------------------------------- |
 | Stop                         | Control-Q | Ends stream and quits PC app. Save first.                 |
 | Mini Player                  | Control-M | Toggles presentation.                                     |
-| Stats                        | Control-I | Toggles for this stream; next uses Settings › Quality.    |
+| Stats                        | Control-Z | Toggles for this stream; next uses Settings › Quality.    |
 | Pointer                      | Control-P | Toggles captured/free; keeps choice across focus changes. |
 
 | Text and diagnostics | Default   | Result                                        |

@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- Show or hide stream stats with Control-Z by default. Custom shortcuts stay
+  saved.
+
 - iPhone and iPad connections now check the route to the PC before choosing
   packet sizes, including when playing through a tunnel.
 

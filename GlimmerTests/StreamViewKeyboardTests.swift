@@ -362,11 +362,11 @@ struct StreamViewKeyboardTests {
         forwarder.onQuitHotkey = { quits.calls += 1 }
         forwarder.onStatsHotkey = { stats.calls += 1 }
         view.keyDown(with: try key(.keyDown, kVK_ANSI_Q, mods: [.control], chars: "q"))
-        view.keyDown(with: try key(.keyDown, kVK_ANSI_I, mods: [.control], chars: "i"))
-        view.keyDown(with: try key(.keyDown, kVK_ANSI_I, mods: [.control], chars: "i", isRepeat: true))
+        view.keyDown(with: try key(.keyDown, kVK_ANSI_Z, mods: [.control], chars: "z"))
+        view.keyDown(with: try key(.keyDown, kVK_ANSI_Z, mods: [.control], chars: "z", isRepeat: true))
         #expect(quits.calls == 1)
         #expect(stats.calls == 1)
-        #expect(!backend.keyboard.contains { $0.keyCode == wire(0x51) || $0.keyCode == wire(0x49) })
+        #expect(!backend.keyboard.contains { $0.keyCode == wire(0x51) || $0.keyCode == wire(0x5A) })
     }
 
     @Test func bookmarkChordWithoutAHandlerIsAKey() throws {

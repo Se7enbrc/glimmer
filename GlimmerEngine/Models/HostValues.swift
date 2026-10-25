@@ -87,11 +87,7 @@ package enum QualityPreset: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// A single user-configurable in-stream hotkey: modifier flags + one character
-/// key. One type covers every chord-shaped intercept Glimmer fires at the
-/// SwiftUI layer (currently: quit-stream, toggle-stats-overlay). The JSON
-/// shape matches the blob historically persisted under the UserDefaults key
-/// `"quitHotkey"`, so stored chords decode without a migration step.
+/// A remappable in-stream chord. Its JSON shape preserves saved keyboard shortcuts.
 package struct HotkeyChord: Codable, Equatable, Sendable {
     package var ctrl: Bool
     package var alt: Bool
@@ -104,15 +100,14 @@ package struct HotkeyChord: Codable, Equatable, Sendable {
         self.keyChar = keyChar
     }
 
-    // Every default is ⌃ plus one letter: two keys, one family. No ⌘, so they fire whether
-    // or not ⌘ is forwarded to the PC, and no ⇧, which games and Windows bind freely. The
-    // letters avoid crouch combos a shooter sends with ⌃ held (S, R, and the WASD cluster).
+    // Every default is ⌃ plus one letter: two keys, one family. No ⌘, so they fire
+    // whether or not ⌘ is forwarded to the PC. Players can remap game conflicts.
 
     /// ⌃Q. ⌃⌘Q is macOS's Lock Screen and never reaches an app.
     package static let defaultQuit = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "q")
 
-    /// ⌃I, not ⌃S: ⌃S is crouch plus walk back in most shooters.
-    package static let defaultStats = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+    /// ⌃Z, remappable. Glimmer consumes the chord; a game binding ⌃Z does not receive it.
+    package static let defaultStats = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "z")
 
     /// ⌃B, client-only and telemetry-gated: it only means anything in a diagnostic session.
     package static let defaultBookmark = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "b")

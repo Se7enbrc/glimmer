@@ -284,10 +284,7 @@ final class AppModel {
     }
     var statsHotkey: HotkeyChord = .defaultStats {
         didSet {
-            // The in-stream toggle of `showStreamStats` deliberately does
-            // NOT round-trip back to UserDefaults - the hotkey is a
-            // session-scope override, the defaults checkbox is the
-            // persistent surface.
+            // Persist the chord, while toggling the overlay stays scoped to this stream.
             if let data = try? JSONEncoder().encode(statsHotkey) {
                 settingsDefaults.set(data, forKey: "statsHotkey")
             }
@@ -535,7 +532,7 @@ final class AppModel {
         statsOverlayCustomRows = Self.persistedCustomRows(defaults: defaults) ?? statsOverlayCustomRows
         statsThresholds = Self.persistedStatsThresholds(defaults: defaults)
         quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self, defaults: defaults) ?? quitHotkey
-        statsHotkey = Self.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults) ?? statsHotkey
+        statsHotkey = Self.persistedStatsHotkey(defaults: defaults)
         hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
     }
 

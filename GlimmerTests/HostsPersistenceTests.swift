@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  HostsPersistenceTests.swift
-//
-//  The paired-PC store, the per-PC codec choice and the typed settings readers,
-//  all against a scratch UserDefaults suite and a temp directory so nothing
-//  touches the developer's real preferences or Application Support.
-//
+// Isolated stores keep persistence tests away from real preferences and paired PCs.
 
 import GlimmerEngine
 import Foundation
@@ -62,6 +56,31 @@ struct HostsPersistenceTests {
     private func bareHost(_ id: String) -> Glimmer.Host {
         Glimmer.Host(id: id, name: id, customName: nil, localAddress: nil, manualAddress: nil, apps: [],
              lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+    }
+
+    @Test(arguments: [nil, "i", "k"] as [String?])
+    func statsDefaultUpdatesWithoutReplacingCustomChords(savedKey: String?) throws {
+        let defaults = settings.defaults
+        if let savedKey {
+            let chord = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: savedKey)
+            defaults.set(try JSONEncoder().encode(chord), forKey: "statsHotkey")
+        }
+        let model = AppModel(defaults: defaults)
+        #expect(model.statsHotkey.serialized == (savedKey == "k" ? "ctrl+k" : "ctrl+z"))
+        let restored = try #require(AppModel.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults))
+        #expect(restored == model.statsHotkey)
+        #expect(AppModel(defaults: defaults).statsHotkey == model.statsHotkey)
+    }
+
+    @Test func statsMigrationPreservesModifiersAndLaterControlIChoice() throws {
+        let defaults = settings.defaults
+        let custom = HotkeyChord(ctrl: true, alt: false, shift: true, cmd: false, keyChar: "i")
+        defaults.set(try JSONEncoder().encode(custom), forKey: "statsHotkey")
+        let model = AppModel(defaults: defaults)
+        #expect(model.statsHotkey == custom)
+        let controlI = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        model.statsHotkey = controlI
+        #expect(AppModel(defaults: defaults).statsHotkey == controlI)
     }
 
     @Test func savingAPCWritesItsSlotAndLoadsIt() throws {

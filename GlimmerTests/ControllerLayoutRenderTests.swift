@@ -15,6 +15,19 @@ import UIKit
 @MainActor
 @Suite(.serialized)
 struct ControllerLayoutRenderTests {
+    #if os(macOS)
+    @Test(arguments: [false, true])
+    func statsShortcutScreens(dark: Bool) async throws {
+        let settings = IsolatedDefaults()
+        let model = AppModel(defaults: settings.defaults)
+        let style = dark ? "dark" : "light"
+        model.statsHotkey = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        try await record(ShortcutsPane().environment(model), name: "stats-before-\(style)", dark: dark)
+        model.statsHotkey = .defaultStats
+        try await record(ShortcutsPane().environment(model), name: "stats-after-\(style)", dark: dark)
+    }
+    #endif
+
     @Test(arguments: [false, true])
     func nativeLayoutScreens(dark: Bool) async throws {
         let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ModelTypesTests.swift
-//
-//  The small model types behind the UI: PC and app matching, chord labels,
-//  the stable hash, bitrate and codec choices, and Settings panes. Copy is
-//  checked against AGENTS.md (no em dashes, no exclamation marks, no "host").
-//
+// Shared values keep PC matching, shortcut labels and Settings choices consistent.
 
 import GlimmerEngine
 import Foundation
@@ -66,7 +60,8 @@ struct ModelTypesTests {
         #expect(all.displayString == "⌃⌥⇧⌘Q")
         #expect(all.serialized == "ctrl+alt+shift+cmd+q")
         #expect(HotkeyChord.defaultQuit.displayString == "⌃Q")
-        #expect(HotkeyChord.defaultStats.serialized == "ctrl+i")
+        #expect(HotkeyChord.defaultStats.serialized == "ctrl+z")
+        #expect(HotkeyChord.defaultStats.displayString == "⌃Z")
         let bare = HotkeyChord(ctrl: false, alt: false, shift: false, cmd: false, keyChar: "Z")
         #expect(bare.displayString == "Z")
         #expect(bare.serialized == "z")
@@ -76,6 +71,8 @@ struct ModelTypesTests {
         let defaults = [HotkeyChord.defaultQuit, .defaultStats, .defaultBookmark, .defaultReleasePointer, .defaultMiniPlayer]
         #expect(defaults.allSatisfy { $0.ctrl && !$0.alt && !$0.shift && !$0.cmd })
         #expect(Set(defaults.map(\.keyChar)).count == defaults.count)
+        let undo = HotkeyChord(ctrl: false, alt: false, shift: false, cmd: true, keyChar: "z")
+        #expect(!defaults.contains(undo))
     }
 
     @Test func aStoredChordDecodesFromItsJSONShape() throws {

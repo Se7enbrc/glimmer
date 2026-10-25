@@ -1,15 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  AppModel+Defaults.swift
-//
-//  The typed UserDefaults read helpers `AppModel.init()` loads its persisted
-//  settings through, plus the quality-preset migration. Split out of
-//  AppModel.swift to keep each unit focused (and that file under its length
-//  limit); they are `static` rather than file-private precisely so the
-//  initializer over there can still reach them.
-//
+// Typed reads and migrations keep persisted choices consistent during model initialization.
 
 import GlimmerEngine
 import Foundation
@@ -68,6 +60,15 @@ extension AppModel {
         _ key: String, _ type: T.Type, defaults: UserDefaults = .standard) -> T? {
         guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
+    }
+
+    /// Move only the old stats default once, preserving later choices of ⌃I.
+    static func persistedStatsHotkey(defaults: UserDefaults = .standard) -> HotkeyChord {
+        let saved = persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults) ?? .defaultStats
+        guard !defaults.bool(forKey: "statsControlZDefaultApplied") else { return saved }
+        defaults.set(true, forKey: "statsControlZDefaultApplied")
+        let oldDefault = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        return saved == oldDefault ? .defaultStats : saved
     }
 
     /// Retire the old default FPS alarms once while preserving custom thresholds.
