@@ -1,0 +1,7 @@
+{
+  "name": "mise-npm-install",
+  "private": true,
+  "dependencies": {
+    "prettier": "4.0.0-alpha.8"
+  }
+}
