@@ -21,11 +21,17 @@ with the [additional permission in LICENSE](../LICENSE), including App Store and
 TestFlight distribution. Contributions use the same terms as the project; you
 keep your copyright.
 
-Please certify the
+If you are not a project maintainer or writer, please certify the
 [Developer Certificate of Origin 1.1](https://developercertificate.org) by
-adding a `Signed-off-by: Your Name <your.email@example.com>` trailer to each
-commit with `git commit -s`. The name and email must match the commit's author.
-This sign-off is separate from the cryptographic signature required below.
+adding a `Signed-off-by: Your Name <your.email@example.com>` trailer to every
+commit in your PR with `git commit -s`. The name and email must match that
+commit's author. This sign-off is separate from the cryptographic signature
+required below.
+
+The DCO check exempts PRs whose author has admin, maintain or write access. If
+GitHub cannot return the author's repository permission, it falls back to an
+`OWNER`, `MEMBER` or `COLLABORATOR` association. Exempt PRs report success; all
+other PRs must have a matching sign-off on every commit.
 
 ## Setup
 

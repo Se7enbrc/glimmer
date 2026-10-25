@@ -21,7 +21,9 @@ Streaming-quality changes need before/after telemetry; see docs/PROFILING.md. --
 ## Checklist
 
 - [ ] I agree to GPL-3.0 with the [LICENSE additional permission](../LICENSE)
-      and certify the [DCO 1.1](https://developercertificate.org) with a
+      and, unless my PR is exempt as described in the
+      [contribution guide](../docs/CONTRIBUTING.md#licensing-of-contributions),
+      certify the [DCO 1.1](https://developercertificate.org) with a
       `Signed-off-by:` matching the author of each contribution commit
 - [ ] `make verify` passes on the exact PR head in a clean worktree; SHA and
       checks recorded above (strict lint, zero warnings, tests)
