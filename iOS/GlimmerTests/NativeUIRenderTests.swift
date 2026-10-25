@@ -421,8 +421,9 @@ struct NativeUIRenderTests {
         } else { root = host }
         window.rootViewController = root
         window.makeKeyAndVisible()
-        // Resizable iPad scenes ignore orientation requests; they record the window as it is.
-        if portrait || (size == nil && scene.traitCollection.userInterfaceIdiom != .pad) {
+        // Resizable iPad scenes ignore orientation requests; they record the window as it is. A landscape
+        // phone fixture left in a portrait scene inherits the top inset, as no landscape-locked stream can.
+        if portrait || (scene.traitCollection.userInterfaceIdiom != .pad && size.map { $0.width > $0.height } ?? true) {
             root.setNeedsUpdateOfSupportedInterfaceOrientations()
             let landscape: UIInterfaceOrientationMask = landscapeRight ? .landscapeRight : .landscapeLeft
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: portrait ? .portrait : landscape))
