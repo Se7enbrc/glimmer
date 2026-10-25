@@ -19,7 +19,7 @@ struct TouchDeviceRenderTests {
         var presence: ((Bool) -> Void)?
         let id = UUID()
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                            input: connection.input, focusInput: { capture.setEnabled($0) },
                            observeControllers: { presence = $0; $0(false) }, touchGamepad: capture,
                            showTouchControls: { requested in

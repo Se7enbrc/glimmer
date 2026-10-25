@@ -508,11 +508,13 @@ package final class StatsCollector: @unchecked Sendable {
     }
 }
 #else
-/// Production keeps only watchdog clocks. All state is protected by lock.
+/// Production keeps watchdog clocks and the byte count the bandwidth policy reads. The lock guards all state.
 package final class StatsCollector: @unchecked Sendable {
-    private let lock = OSAllocatedUnfairLock()
+    let lock = OSAllocatedUnfairLock()
     private var lastDecodedFrameTime: Double = 0
-    private var lastPresentTime: Double = 0
+    var firstPresentTime: Double = 0
+    var lastPresentTime: Double = 0
+    private var receivedBytes: UInt64 = 0
 
     package struct HostCadence: Sendable {
         package var intervalP50Ms: Double
@@ -522,11 +524,22 @@ package final class StatsCollector: @unchecked Sendable {
     }
 
     package init() {}
-    package func receivedBytesSnapshot() -> UInt64 { 0 }
+    package func receivedBytesSnapshot() -> UInt64 { lock.withLock { receivedBytes } }
     package func recordReceivedFrame(bytes: Int, isIDR: Bool = false, ptsUs: UInt64 = 0,
-                                     frameNumber: Int32, hostProcessingLatency: UInt16 = 0) {}
+                                     frameNumber: Int32, hostProcessingLatency: UInt16 = 0) {
+        lock.withLock { receivedBytes &+= UInt64(max(0, bytes)) }
+    }
     package func recordDecodedFrame() { lock.withLock { lastDecodedFrameTime = CACurrentMediaTime() } }
-    package func recordRendererEnqueue() { lock.withLock { lastPresentTime = CACurrentMediaTime() } }
+    package func recordRendererEnqueue() {
+        lock.withLock {
+            let now = CACurrentMediaTime()
+            if firstPresentTime == 0 { firstPresentTime = now }
+            lastPresentTime = now
+        }
+    }
+    package var presentationTimes: (first: Double?, last: Double?) {
+        lock.withLock { (firstPresentTime > 0 ? firstPresentTime : nil, lastPresentTime > 0 ? lastPresentTime : nil) }
+    }
     package func secondsSinceLastDecodedFrame() -> Double {
         lock.withLock { lastDecodedFrameTime > 0 ? CACurrentMediaTime() - lastDecodedFrameTime : .infinity }
     }
@@ -534,7 +547,7 @@ package final class StatsCollector: @unchecked Sendable {
         lock.withLock { lastPresentTime > 0 ? CACurrentMediaTime() - lastPresentTime : .infinity }
     }
     package func resetForConnection() {
-        lock.withLock { lastDecodedFrameTime = 0; lastPresentTime = 0 }
+        lock.withLock { lastDecodedFrameTime = 0; firstPresentTime = 0; lastPresentTime = 0 }
     }
     package func dropPendingDecodeSubmits() {}
     package func recordDecoderDiscard() {}

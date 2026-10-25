@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
-
 import Darwin
 
 enum SocketTimestamp {
-    static let controlSize = 64
     static let millisecondsPerTick: Double = {
         var timebase = mach_timebase_info_data_t()
         mach_timebase_info(&timebase)
         return Double(timebase.numer) / Double(timebase.denom) / 1_000_000
     }()
+}
+
+#if os(macOS) || GLIMMER_DIAGNOSTICS
+
+extension SocketTimestamp {
+    static let controlSize = 64
 
     @discardableResult
     static func enable(on socket: Int32) -> Bool {

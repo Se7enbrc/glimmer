@@ -36,7 +36,7 @@ struct TouchSessionTests {
     @Test func unusableGeometryReleasesInputAndPreservesExplicitMenuIntent() async {
         let id = UUID()
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {})
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {})
         })
         model.start(surface: StreamSurface())
         model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
@@ -58,7 +58,7 @@ struct TouchSessionTests {
     @Test func firstFrameWithoutHardwareStartsTouchPlay() async {
         let id = UUID()
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {})
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {})
         })
         model.start(surface: StreamSurface())
         model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
@@ -140,7 +140,7 @@ struct TouchSessionTests {
         var presence: ((Bool) -> Void)?
         var requests: [Bool] = []
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                            observeControllers: { presence = $0; $0(false) },
                            showTouchControls: { requests.append($0) })
         })

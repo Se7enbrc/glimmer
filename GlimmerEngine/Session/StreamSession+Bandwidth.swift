@@ -43,7 +43,7 @@ package struct BandwidthHealthSampler {
 
     package mutating func window(start: Double, end: Double, generation: UInt64, counters: Counters,
                                  rttSamplesMs: [Double],
-                                 receive: ReceiveTimingTelemetry.PolicyWindow = .init()) -> BandwidthHealth {
+                                 receive: ReceivePolicyWindow = .init()) -> BandwidthHealth {
         var health = BandwidthHealth(start: start, end: end, generation: generation)
         defer { last = counters }
         guard let previous = last else { return Self.unavailable(health) }
@@ -120,7 +120,7 @@ extension StreamSession {
         guard !isReconnecting, let decoder = videoDecoder else {
             bandwidthLastObservation = nil
             bandwidthSampler = BandwidthHealthSampler()
-            _ = ReceiveTimingTelemetry.video.takePolicyWindow()
+            _ = ReceivePolicyWindow.takeVideo()
             return
         }
         policy.replacePath(snapshot.path)
@@ -129,7 +129,7 @@ extension StreamSession {
         let health = bandwidthSampler.window(start: bandwidthLastObservation ?? time, end: time,
             generation: snapshot.path.generation,
             counters: .live(receivedBytes: decoder.statsCollector.receivedBytesSnapshot()),
-            rttSamplesMs: backend.drainRttSamples(), receive: ReceiveTimingTelemetry.video.takePolicyWindow())
+            rttSamplesMs: backend.drainRttSamples(), receive: ReceivePolicyWindow.takeVideo())
         bandwidthLastObservation = time
         var decision = policy.evaluate(health)
         if adaptiveBandwidth, bandwidthTransition == nil, bitrateTask == nil {
@@ -137,7 +137,9 @@ extension StreamSession {
             decision = policy.decision(decision.reason, health: health)
         }
         bandwidthPolicy = policy
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         TelemetryExporter.recordLiveEvent(bandwidthFields(decision))
+        #endif
     }
 
     /// A Low Data Mode edge also moves the encoder size, carrying any pending rate in the same transition.

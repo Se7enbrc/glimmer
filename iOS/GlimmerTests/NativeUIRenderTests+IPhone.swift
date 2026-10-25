@@ -63,7 +63,7 @@ extension NativeUIRenderTests {
         for state in ["connecting", "streaming", "playing", "waiting", "reconnecting", "ended"] {
             let id = UUID()
             let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-                StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+                StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                                format: StreamFormat(width: 2622, height: 1206, fps: 120),
                                observeControllers: { $0(true) })
             })
@@ -109,7 +109,7 @@ extension NativeUIRenderTests {
                                            textSize: DynamicTypeSize) async throws {
         let id = UUID()
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                            format: StreamFormat(width: 2622, height: 1206, fps: 120),
                            observeControllers: { $0(true) })
         })
@@ -157,7 +157,7 @@ extension NativeUIRenderTests {
     @Test func endedStatusRemainsScrollableAtMaximumTextSize() async throws {
         let id = UUID()
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                            format: StreamFormat(width: 2622, height: 1206, fps: 120))
         })
         model.start(surface: StreamSurface())

@@ -19,7 +19,8 @@ struct StreamWindowResizeTests {
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { launch, view, _ in
             preparations += 1
             return StreamPlayback(id: id, events: AsyncStream { _ in },
-                start: { await MainActor.run { starts += 1 } }, stop: { await MainActor.run { stops += 1 } },
+                start: { await MainActor.run { starts += 1 }; return nil },
+                stop: { await MainActor.run { stops += 1 } },
                 screenChanged: {}, format: try launch.profile.resolve(surface: view))
         })
         let controller = StreamViewController(model: model, close: {})

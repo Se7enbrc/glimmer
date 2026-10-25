@@ -87,16 +87,7 @@ package final class ReceiveTimingTelemetry: Sendable {
         package var policyJitter = Distribution()
     }
 
-    /// Median kernel-to-read queue delay and p95 frame-delivery jitter since the last call.
-    package struct PolicyWindow: Sendable, Equatable {
-        package var queueDelayP50Ms: Double?
-        package var jitterP95Ms: Double?
-
-        package init(queueDelayP50Ms: Double? = nil, jitterP95Ms: Double? = nil) {
-            self.queueDelayP50Ms = queueDelayP50Ms
-            self.jitterP95Ms = jitterP95Ms
-        }
-    }
+    package typealias PolicyWindow = ReceivePolicyWindow
 
     package struct Snapshot: Sendable {
 
@@ -160,3 +151,23 @@ package final class ReceiveTimingTelemetry: Sendable {
 }
 
 #endif
+
+/// Median kernel-to-read queue delay and p95 frame-delivery jitter since the last call.
+package struct ReceivePolicyWindow: Sendable, Equatable {
+    package var queueDelayP50Ms: Double?
+    package var jitterP95Ms: Double?
+
+    package init(queueDelayP50Ms: Double? = nil, jitterP95Ms: Double? = nil) {
+        self.queueDelayP50Ms = queueDelayP50Ms
+        self.jitterP95Ms = jitterP95Ms
+    }
+
+    /// Production iOS does not time datagrams, so its policy sees no queue or jitter evidence.
+    static func takeVideo() -> ReceivePolicyWindow {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        ReceiveTimingTelemetry.video.takePolicyWindow()
+        #else
+        ReceivePolicyWindow()
+        #endif
+    }
+}

@@ -395,7 +395,9 @@ final class RtpVideoQueue {
             let transitDelta = abs(receiveDelta - timestampDelta)
             // jitter += (|D| - jitter) / 16  (RFC 3550 6.4.1).
             jitterUs += (transitDelta - jitterUs) / 16.0
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             if timestampDelta != 0 { ReceiveTimingTelemetry.video.observeFrameJitter(transitDelta / 1_000) }
+            #endif
         }
         lastTimestamp = timestamp
         lastReceiveUs = receiveTimeUs

@@ -124,7 +124,7 @@ extension NativeUIRenderTests {
                 let selected = StreamLaunch(network: launch.network, pcID: launch.pcID, pcName: launch.pcName,
                                             appID: launch.appID, appName: launch.appName, profile: profile)
                 let model = StreamSessionModel(launch: selected, makePlayback: { launch, surface, _ in
-                    StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+                    StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                                    format: try launch.profile.resolve(surface: surface))
                 })
                 let controller = StreamViewController(model: model, close: {})
@@ -158,7 +158,7 @@ extension NativeUIRenderTests {
     @Test func iPadNarrowStreamInventory() async throws {
         let id = UUID()
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { launch, surface, _ in
-            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                            format: try launch.profile.resolve(surface: surface))
         })
         let controller = StreamViewController(model: model, close: {})
@@ -198,7 +198,7 @@ extension NativeUIRenderTests {
         for state in ["connecting", "controls", "playing", "waiting", "reconnecting", "disconnected"] {
             let id = UUID()
             let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-                StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+                StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                                format: StreamFormat(width: 1920, height: 1080, fps: 60))
             })
             model.start(surface: StreamSurface())

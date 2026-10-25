@@ -85,7 +85,7 @@ struct TouchRenderTests {
         let capture = TouchGamepadCapture(input: connection.input)
         let id = UUID()
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
-            StreamPlayback(id: id, events: AsyncStream { _ in }, start: {}, stop: {}, screenChanged: {},
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
                            focusInput: { capture.setEnabled($0) }, observeControllers: { $0(true) },
                            touchGamepad: capture, showTouchControls: { requested in
                                if requested { capture.attach() } else { capture.detach() }

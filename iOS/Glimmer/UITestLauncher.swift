@@ -40,6 +40,7 @@ enum UITestLauncher {
                 let events = AsyncStream<StreamSession.Update>.makeStream()
                 return StreamPlayback(id: id, events: events.stream, start: {
                     events.continuation.yield(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+                    return nil
                 }, stop: { events.continuation.finish() }, screenChanged: {},
                    format: try launch.profile.resolve(surface: surface))
             })

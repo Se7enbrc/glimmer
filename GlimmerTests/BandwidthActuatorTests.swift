@@ -135,6 +135,7 @@ struct BandwidthHeadroomTests {
         #expect(missing.policy.pending?.reason == .recovery)
     }
 
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     @Test func receivePathFeedsQueueDelayAndJitterWithoutTheExporterDrainingThem() {
         let telemetry = ReceiveTimingTelemetry()
         for delay in [0.2, 0.4, 0.4, 3.0] { telemetry.observe(delayMs: delay, gapMs: nil) }
@@ -144,6 +145,7 @@ struct BandwidthHeadroomTests {
         #expect(window.queueDelayP50Ms == 0.5 && window.jitterP95Ms == 0.5)
         #expect(telemetry.takePolicyWindow() == ReceiveTimingTelemetry.PolicyWindow())
     }
+    #endif
 }
 
 struct BandwidthHealthSamplerTests {

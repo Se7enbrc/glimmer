@@ -65,11 +65,14 @@ struct DiagnosticsDefaultsTests {
         stats.recordReceivedFrame(bytes: 128, frameNumber: 1)
         stats.recordDecodedFrame()
         stats.recordRendererEnqueue()
-        #expect(stats.receivedBytesSnapshot() == (DiagnosticsAvailability.compiledIn ? 128 : 0))
+        // The bandwidth policy reads received bytes and presentation times in both flavours.
+        #expect(stats.receivedBytesSnapshot() == 128)
+        #expect(stats.presentationTimes.last != nil)
         #expect(stats.secondsSinceLastDecodedFrame().isFinite)
         #expect(stats.secondsSinceLastPresent().isFinite)
         stats.resetForConnection()
-        #expect(stats.receivedBytesSnapshot() == (DiagnosticsAvailability.compiledIn ? 128 : 0))
+        #expect(stats.receivedBytesSnapshot() == 128)
+        #expect(stats.presentationTimes.last == nil)
         #expect(stats.secondsSinceLastDecodedFrame().isInfinite)
         #expect(stats.secondsSinceLastPresent().isInfinite)
     }
