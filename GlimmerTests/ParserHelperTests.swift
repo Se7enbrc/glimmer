@@ -246,7 +246,7 @@ struct ParserHelperTests {
     }
 
     @Test func isIdrFrameStartAccepts3ByteStartCode() {
-        // Moonlight's getAnnexBStartSequence takes either start-code length.
+        // Annex B permits the three-byte prefix and an additional preceding zero byte.
         #expect(VideoDepacketizer.isIdrFrameStart([0, 0, 1, 0x67, 0x42], hevc: false))
         #expect(VideoDepacketizer.isIdrFrameStart([0, 0, 1, 0x40, 0x01], hevc: true))
     }
@@ -262,7 +262,7 @@ struct ParserHelperTests {
         // SEI before an ordinary slice is not a key frame.
         let seiThenSlice: [UInt8] = [0, 0, 0, 1, 0x06, 0x80, 0, 0, 1, 0x41, 0x9A]
         #expect(!VideoDepacketizer.isIdrFrameStart(seiThenSlice, hevc: false))
-        // Only HEVC's prefix SEI (39) is skipped, as in Moonlight; a suffix SEI (40) ends the scan.
+        // HEVC suffix SEI (40) cannot stand in for leading prefix SEI (39).
         let suffixSeiThenVps: [UInt8] = [0, 0, 0, 1, 0x50, 0x01, 0x80, 0, 0, 0, 1, 0x40, 0x01]
         #expect(!VideoDepacketizer.isIdrFrameStart(suffixSeiThenVps, hevc: true))
     }

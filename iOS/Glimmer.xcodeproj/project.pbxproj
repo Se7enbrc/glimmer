@@ -9,6 +9,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		33C0D17E262F4D809887601F /* VideoDepacketizerRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 341CAF7988644E99A10BC53D /* VideoDepacketizerRecoveryTests.swift */; };
 		250E25E573A443BE9C3BBD08 /* SurroundToneData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD2E9ABEEA564234A78BE3B8 /* SurroundToneData.swift */; };
 		73CAFAE2E75840F2A20E657D /* OpusDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A107D9A4D66D492CBF3A5CC1 /* OpusDecoderTests.swift */; };
 		4474E8B9FD1A47A480A396C4 /* NativeUIRenderTests+IPhone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */; };
@@ -187,6 +188,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		341CAF7988644E99A10BC53D /* VideoDepacketizerRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/VideoDepacketizerRecoveryTests.swift"; sourceTree = SOURCE_ROOT; };
 		BD2E9ABEEA564234A78BE3B8 /* SurroundToneData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/SurroundToneData.swift"; sourceTree = SOURCE_ROOT; };
 		A107D9A4D66D492CBF3A5CC1 /* OpusDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/OpusDecoderTests.swift"; sourceTree = SOURCE_ROOT; };
 		78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests+IPhone.swift"; sourceTree = "<group>"; };
@@ -493,6 +495,7 @@
 				1C163E6C978F43E4932CF0C1 /* SoakInputBackend.swift */,
 				DD9157DDD93149D59A3866D6 /* InputSoakTests.swift */,
 				C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */,
+				341CAF7988644E99A10BC53D /* VideoDepacketizerRecoveryTests.swift */,
 				BD2E9ABEEA564234A78BE3B8 /* SurroundToneData.swift */,
 				A107D9A4D66D492CBF3A5CC1 /* OpusDecoderTests.swift */,
 				3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */,
@@ -795,6 +798,7 @@
 				6749DCF4412642DE8E4A260C /* SoakInputBackend.swift in Sources */,
 				363006B84E794619B32525DF /* InputSoakTests.swift in Sources */,
 				2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */,
+				33C0D17E262F4D809887601F /* VideoDepacketizerRecoveryTests.swift in Sources */,
 				250E25E573A443BE9C3BBD08 /* SurroundToneData.swift in Sources */,
 				73CAFAE2E75840F2A20E657D /* OpusDecoderTests.swift in Sources */,
 				448039B562D4A381F641CF03 /* AppDeclarationTests.swift in Sources */,
