@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
+# Git hooks export these; leaked into xcodebuild they redirect SwiftPM clones into this repo.
+unexport GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR GIT_QUARANTINE_PATH GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+
 .DEFAULT_GOAL := help
 
 # Multiple Xcode actions share DerivedData; independent checks still run in parallel.
