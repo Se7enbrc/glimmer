@@ -66,7 +66,7 @@ else
 fi
 TAP_HEAD="$(git -C "$TAP_DIR" rev-parse HEAD)"
 
-sed -i '' \
+sed -i.bak \
 	-e "s|^  version \".*\"$|  version \"$VERSION\"|" \
 	-e "s|^  sha256 \".*\"$|  sha256 \"$SHA\"|" \
 	-e "s|^  url \".*\"$|  url \"https://github.com/$RELEASES_REPO/releases/download/$TAG/Glimmer-#{version}.dmg\"|" \
@@ -75,8 +75,10 @@ sed -i '' \
 # The `glimmer` command is the app binary itself, linked under that name; the
 # app re-execs through the real path. Added once, right after the app stanza.
 BINARY='  binary "#{appdir}/Glimmer.app/Contents/MacOS/Glimmer", target: "glimmer"'
-grep -qxF "$BINARY" "$TAP_DIR/$CASK" || sed -i '' -e "s|^  app \"Glimmer.app\"\$|&\\
+grep -qxF "$BINARY" "$TAP_DIR/$CASK" || sed -i.bak -e "s|^  app \"Glimmer.app\"\$|&\\
 $BINARY|" "$TAP_DIR/$CASK"
+
+rm -f "$TAP_DIR/$CASK.bak"
 
 # Fail loud rather than pushing a cask the seds didn't actually touch (a renamed
 # stanza or reindent would silently no-op the expressions above).
