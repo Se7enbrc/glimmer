@@ -75,7 +75,8 @@ struct TouchDeviceRenderTests {
             if state == "physical" || state == "hidden" { verifyMouseOnly(host) }
             if state == "after" { playingFrames = try verifyAppearance(host, dark: dark) }
             if state == "mouse" {
-                let frames = try #require(touchView(in: host.view)?.controls.mapValues(\.frame))
+                let view = try #require(touchView(in: host.view))
+                let frames = view.controls.mapValues(\.frame)
                 #expect(playingFrames == frames)
             }
             let style = "\(dark ? "dark" : "light")-\(reverse ? "right" : "left")"
