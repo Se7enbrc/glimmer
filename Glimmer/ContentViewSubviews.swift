@@ -34,9 +34,11 @@ struct AppIconsRow: View {
 
     private var inlineApps: [LibraryApp] { Self.inlineApps(apps) }
 
-    private var overflowApps: [LibraryApp] {
-        apps.count <= Self.maxInlineTiles ? [] : Array(apps.dropFirst(Self.maxInlineTiles - 1))
+    static func overflowApps(_ apps: [LibraryApp]) -> [LibraryApp] {
+        Array(apps.dropFirst(inlineApps(apps).count))
     }
+
+    private var overflowApps: [LibraryApp] { Self.overflowApps(apps) }
 
     var body: some View {
         Group {
@@ -190,8 +192,29 @@ struct AppIconsRow: View {
         }
     }
 
-    private var overflowMenu: AnyView {
-        fatalError("clean-room: replace per spec-4")
+    private var overflowMenu: some View {
+        Menu {
+            ForEach(overflowApps) { app in
+                Button {
+                    model.requestStream(app: app, on: host)
+                } label: {
+                    Label { Text(app.name) } icon: { app.icon }
+                }
+                .disabled(model.menuStopInProgress || model.readinessReason(for: host) != nil)
+                .help(model.readinessReason(for: host) ?? "Stream \(app.name)")
+            }
+        } label: {
+            Label("\(overflowApps.count) more apps", systemImage: "ellipsis")
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 60)
+                .contentShape(.rect(cornerRadius: 14))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .glassSurface(in: .rect(cornerRadius: 14), interactive: true)
+        .modifier(LauncherControlFocus(focus: focus, target: .overflow))
+        .accessibilityLabel("\(overflowApps.count) more apps on \(host.displayName)")
+        .accessibilityHint("Opens the remaining apps for this PC.")
     }
 }
 
