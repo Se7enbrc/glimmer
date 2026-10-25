@@ -65,7 +65,15 @@ def ipad_window_modes():
         for numerator, denominator in ((1, 2), (2, 3), (1, 3)):
             modes.add(((width - 20) * numerator // denominator & ~1, height, 60))
         modes.add(((width - 20) // 2 & ~1, height - 246, 60))
+    # The two oldest panels' 1/3 Split View slivers make room for the Duo and TV modes.
+    modes -= {(676, 1536, 60), (712, 1620, 60)}
     return modes | {(750, 972, 60), (750, 1706, 60), (1280, 1200, 60)}
+
+
+# Active UIKit measurement on the iOS 27.1 Duo Simulator; hardware sizes stay above.
+DUO_SIMULATOR_MODES = {(2852, 2006, 60)}
+# A 4K TV on the dedicated external-display scene requests its native panel.
+EXTERNAL_TV_MODES = {(3840, 2160, 60)}
 
 
 STANDARD_MODES = (
@@ -182,7 +190,7 @@ class VirtualDisplaySettingsTests(unittest.TestCase):
             "mac-builtin.xml": panel_modes(builtin, include_half=True),
             "mac-apple-displays.xml": panel_modes(displays, include_half=True),
             "iphone-ipad.xml": panel_modes(MOBILE_MODES) | ipad_window_modes()
-                               | {(1920, 1080, 60), (1920, 1080, 120)},
+                               | {(1920, 1080, 60), (1920, 1080, 120)} | DUO_SIMULATOR_MODES | EXTERNAL_TV_MODES,
             "standard-external.xml": panel_modes(STANDARD_MODES),
         }
         self.assertEqual({path.name for path in SAMPLES.glob("*.xml")}, set(expected))

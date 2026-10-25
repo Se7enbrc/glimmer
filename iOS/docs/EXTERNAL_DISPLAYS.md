@@ -16,21 +16,24 @@ returns video to the application window.
 An interactive Stage Manager window remains an application scene. iPad streaming
 follows its window orientation; only iPhone streaming requests landscape. Its
 drawable size determines native stream dimensions at connection time. Resizing
-keeps the requested size and fills the new bounds, cropping edges when the
-aspect changes. To request new dimensions, disconnect and start again after
-resizing or moving the window.
+fills the new bounds, cropping edges when the aspect changes, and once the
+window settles the stream moves to its listed mode through the resume-only size
+seam without quitting the game.
 
 A dedicated external scene selects the display's preferred mode while streaming
 and restores its previous mode and overscan compensation afterward. A subsequent
-system mode change takes precedence over restoration. The renderer uses
-aspect-fit, and UIKit's overscan scaling protects the edges on TVs.
+system mode change takes precedence over restoration. The renderer fills the
+display like every other stream window, and UIKit's overscan scaling protects
+the edges on TVs.
 
 ## Capabilities and input
 
 Native dimensions, refresh limits and EDR headroom come from the output
-surface's screen. The stream's selected profile still limits its frame rate. The
-display link follows that screen, including when the window moves between
-displays. Resolution, rate and codec remain fixed for the running connection.
+surface's screen. Native requests the closest mode in the iPhone/iPad display
+sample, which lists 1920 × 1080 at 60/120 Hz and 3840 × 2160 at 60 Hz for TVs.
+The stream's selected profile still limits its frame rate. The display link
+follows that screen, including when the window moves between displays.
+Resolution, rate and codec remain fixed for the running connection.
 
 The current mobile profiles negotiate H.264 SDR. Reading an external display's
 EDR headroom does not enable HDR or establish HDR playback support. Enabling a
@@ -38,9 +41,9 @@ EDR headroom does not enable HDR or establish HDR playback support. Enabling a
 separate change. No bitrate, pacing, buffering or decode defaults change here.
 
 Relative touch motion maps control-window points to negotiated stream pixels
-using the aspect-fitted picture's scale. It does not use the external monitor's
-point scale. Controller mouse motion continues through the shared input path.
-Absolute touch, external keyboard capture and remapping are separate work.
+using the filled picture's scale. It does not use the external monitor's point
+scale. Controller mouse motion continues through the shared input path. Absolute
+touch, external keyboard capture and remapping are separate work.
 
 ## Simulator checks
 

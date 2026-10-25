@@ -151,10 +151,10 @@ that changing screens during a stream has been verified.
 
 On Xcode 27.1 with iOS 27.1 (24A94232), the active Duo inner screen reports
 `nativeBounds` of 2007 × 2853 pixels and `maximumFramesPerSecond` of 60. Glimmer
-requests the closest listed mode rather than this exact size. Both samples are
-at their 90-mode budget and omit this Simulator-only inner mode; the published
-2670 × 1878 hardware size above remains in both. Add it by replacing an unused
-mode using the [combining instructions](HOST_SETUP.md#combine-two-files).
+requests the closest listed mode. The iPhone/iPad sample lists this measured
+**2852 × 2006 @ 60** beside the published 2670 × 1878 hardware size; Simulator
+geometry does not replace hardware specifications. The mixed-client sample is at
+its 90-mode budget and omits it.
 
 ## iPad
 
@@ -186,8 +186,8 @@ the panel's 60/120 Hz rates. Split and Stage Manager targets use **60 Hz**.
 
 | Landscape panel | Portrait    | Split 1/2   | Split 2/3   | Split 1/3  | Stage Manager half tile |
 | --------------- | ----------- | ----------- | ----------- | ---------- | ----------------------- |
-| 2048 × 1536     | 1536 × 2048 | 1014 × 1536 | 1352 × 1536 | 676 × 1536 | 1014 × 1290             |
-| 2160 × 1620     | 1620 × 2160 | 1070 × 1620 | 1426 × 1620 | 712 × 1620 | 1070 × 1374             |
+| 2048 × 1536     | 1536 × 2048 | 1014 × 1536 | 1352 × 1536 | —          | 1014 × 1290             |
+| 2160 × 1620     | 1620 × 2160 | 1070 × 1620 | 1426 × 1620 | —          | 1070 × 1374             |
 | 2224 × 1668     | 1668 × 2224 | 1102 × 1668 | 1468 × 1668 | 734 × 1668 | 1102 × 1422             |
 | 2266 × 1488     | 1488 × 2266 | 1122 × 1488 | 1496 × 1488 | 748 × 1488 | 1122 × 1242             |
 | 2360 × 1640     | 1640 × 2360 | 1170 × 1640 | 1560 × 1640 | 780 × 1640 | 1170 × 1394             |
@@ -214,7 +214,8 @@ and crops edges when aspects differ; 1080p can crop substantially in a narrow
 portrait window. It never stretches.
 
 The **90-mode budget** retains 36 native landscape combinations and two 1080p
-combinations, then adds 52 window combinations. Trade-offs:
+combinations, adds 50 window combinations, the Duo Simulator inner mode and 3840
+× 2160 @ 60 for a 4K TV on the external-display scene. Trade-offs:
 
 - Remove all 36 optional half-size combinations; iOS never offered that preset.
 - Keep 120 Hz for full-panel ProMotion and 1080p; window-specific modes use 60
@@ -222,6 +223,11 @@ combinations, then adds 52 window combinations. Trade-offs:
 - Prefer measured Dock-visible half tiles over estimated three-quarter sizes.
   Use representative sizes for continuous resizing, portrait splits and other
   Stage Manager sizes. No finite list can cover every window pixel size.
+- Drop the 1/3 Split View slivers of the two oldest panels (676 × 1536 on iPad
+  mini 5, 712 × 1620 on iPad 8/9) to fit the Duo and 4K TV modes. Those narrow
+  windows select the closest listed mode, 750 × 1706 or a 1/2 split, and fill
+  with cropping. A 1080p TV uses the shared 1920 × 1080 modes; 4K at 120 Hz and
+  other TV sizes are not listed.
 - Keep the older mixed-client sample unchanged. It lacks these window modes;
   iPhone/iPad users need the mobile file, not the combined file.
 
@@ -232,9 +238,10 @@ header gives its exact count and the **90-mode budget**. The
 [setup guide's file table](HOST_SETUP.md#pick-your-file) lists their counts.
 `mac-builtin.xml` covers every built-in Mac panel above at native and even half
 size (26 modes); `mac-apple-displays.xml` covers the Apple external table (10
-modes). `iphone-ipad.xml` covers every mobile native row, both 1080p rates and
-the window targets above (90 modes). The Mac files retain their half-size modes;
-the mobile file spends those entries on usable window shapes.
+modes). `iphone-ipad.xml` covers every mobile native row, both 1080p rates, the
+window targets above, the Duo Simulator inner mode and 4K TV at 60 Hz (90
+modes). The Mac files retain their half-size modes; the mobile file spends those
+entries on usable window shapes.
 
 ### Default for mixed clients
 
@@ -322,8 +329,8 @@ still needs a Windows installation check.
 
 ### What the default file leaves out
 
-- The iOS 27.1 Duo Simulator inner mode, 2852 × 2006 @ 60. The published Duo
-  hardware sizes remain in both files.
+- The iOS 27.1 Duo Simulator inner mode, 2852 × 2006 @ 60. The mobile sample
+  includes it; the published Duo hardware sizes remain in both files.
 - iPhone/iPad half-size modes and MacBook Neo's half size. No current Glimmer
   preset requests them. All actual Mac Balanced sizes remain.
 - Additional Custom rates: 24, 72, 90, 100, 144, 165 and 200 Hz throughout the

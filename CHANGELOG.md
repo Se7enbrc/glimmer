@@ -113,6 +113,8 @@
 - Returning to Glimmer keeps the launcher ready when the PC answered recently,
   while checking its status in the background. A running game no longer makes
   the launcher wait for the PC to become idle.
+- The iPhone/iPad virtual display sample now includes the Native resolution
+  requested by the open iPhone Duo in the iOS 27.1 Simulator.
 - PlayStation controllers, including the PlayStation Backbone, are identified
   consistently on Mac, iPhone and iPad so compatible PC games can show matching
   button prompts.
