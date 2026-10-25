@@ -12,10 +12,11 @@ final class NativeInputLifetime {
     private var touchRequested = false
     private var focusRevision: UInt64 = 0
 
-    func start(input: StreamInput, controllers suppliedControllers: IOSControllerCapture? = nil,
+    func start(input: StreamInput, scope: ControllerLayoutScope = .allGames,
+               controllers suppliedControllers: IOSControllerCapture? = nil,
                touch suppliedTouch: TouchGamepadCapture? = nil) {
         let touch = suppliedTouch ?? TouchGamepadCapture(input: input)
-        let controllers = suppliedControllers ?? IOSControllerCapture(input: input)
+        let controllers = suppliedControllers ?? IOSControllerCapture(input: input, scope: scope)
         self.touch = touch
         self.controllers = controllers
         controllers.beforeAttach = { [weak self] in

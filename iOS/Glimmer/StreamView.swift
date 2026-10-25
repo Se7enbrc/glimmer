@@ -183,6 +183,7 @@ struct StreamControls: View {
         .opacity(model.dismissWhenStopped ? 0 : 1)
         .allowsHitTesting(!model.dismissWhenStopped)
         .accessibilityHidden(model.dismissWhenStopped)
+        .modifier(IOSControllerLayoutStreamControls(model: model))
         .onChange(of: model.phase.isEnded && model.dismissWhenStopped, initial: true) { _, finished in
             if finished { close() }
         }
@@ -285,6 +286,7 @@ struct StreamControls: View {
 
     @ViewBuilder private var controlActions: some View {
         if model.phase == .streaming {
+            IOSControllerLayoutStreamButton(model: model)
             Button("Edit controls…", systemImage: "hand.draw") {
                 model.showControls()
                 model.editingTouchControls = true

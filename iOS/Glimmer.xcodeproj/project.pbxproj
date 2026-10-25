@@ -134,6 +134,8 @@
 		DFF8B6DF512A17FFE0F2F0FD /* ControllerLayoutPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 274787A400D70EA06F8D14C4 /* ControllerLayoutPersistenceTests.swift */; };
 		A0E02F4F853173A2E82B830A /* ControllerLayoutEscapeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0279B56219E39DE8B0E7D75 /* ControllerLayoutEscapeTests.swift */; };
 		549C8756973A8B3B2F9D80E0 /* ControllerLayoutBeforeSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50083031CBD23FA2005B76B4 /* ControllerLayoutBeforeSettings.swift */; };
+		D162E918753F1A7DF4908674 /* IOSControllerLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CEFB04D7C50BCA3212857BA /* IOSControllerLayouts.swift */; };
+		8B8BE11FD2507C6F7DBB0C57 /* IOSControllerLayoutStreamControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1945301F1DC095317773DD00 /* IOSControllerLayoutStreamControls.swift */; };
 		754B8A3DB3F6137CE99DB4A6 /* ControllerDiagramGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0D6053323DDA9B9E9B045F /* ControllerDiagramGeometry.swift */; };
 		AC3D71723C87AA05D590B304 /* ControllerLayoutDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB23EA1F483F54E8A8E253B0 /* ControllerLayoutDiagram.swift */; };
 		38FF5BA317EAB7535622EE67 /* ControllerDiagramTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF6E1D4A71F05874BA58C03 /* ControllerDiagramTests.swift */; };
@@ -300,6 +302,8 @@
 		274787A400D70EA06F8D14C4 /* ControllerLayoutPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/ControllerLayoutPersistenceTests.swift"; sourceTree = SOURCE_ROOT; };
 		A0279B56219E39DE8B0E7D75 /* ControllerLayoutEscapeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/ControllerLayoutEscapeTests.swift"; sourceTree = SOURCE_ROOT; };
 		50083031CBD23FA2005B76B4 /* ControllerLayoutBeforeSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutBeforeSettings.swift"; sourceTree = SOURCE_ROOT; };
+		1CEFB04D7C50BCA3212857BA /* IOSControllerLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/IOSControllerLayouts.swift"; sourceTree = SOURCE_ROOT; };
+		1945301F1DC095317773DD00 /* IOSControllerLayoutStreamControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/IOSControllerLayoutStreamControls.swift"; sourceTree = SOURCE_ROOT; };
 		1F0D6053323DDA9B9E9B045F /* ControllerDiagramGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerDiagramGeometry.swift"; sourceTree = SOURCE_ROOT; };
 		AB23EA1F483F54E8A8E253B0 /* ControllerLayoutDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutDiagram.swift"; sourceTree = SOURCE_ROOT; };
 		BAF6E1D4A71F05874BA58C03 /* ControllerDiagramTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerDiagramTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -478,6 +482,8 @@
 				DD42C3B423B34AE79C2E82FB /* ControllerSurfaceShape.swift */,
 				00636B6950364D9BA252719E /* ControllerBodyShape.swift */,
 				1F0D6053323DDA9B9E9B045F /* ControllerDiagramGeometry.swift */,
+				1945301F1DC095317773DD00 /* IOSControllerLayoutStreamControls.swift */,
+				1CEFB04D7C50BCA3212857BA /* IOSControllerLayouts.swift */,
 				2B4B2F8017E0FB2092F9C0E4 /* ControllerLayoutShortcutSummary.swift */,
 				E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */,
 				E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */,
@@ -748,6 +754,8 @@
 				6036EAF3695F430EB244F129 /* ControllerSurfaceShape.swift in Sources */,
 				B0E275DBC5304E5294179950 /* ControllerBodyShape.swift in Sources */,
 				754B8A3DB3F6137CE99DB4A6 /* ControllerDiagramGeometry.swift in Sources */,
+				8B8BE11FD2507C6F7DBB0C57 /* IOSControllerLayoutStreamControls.swift in Sources */,
+				D162E918753F1A7DF4908674 /* IOSControllerLayouts.swift in Sources */,
 				A1C2C5E3D10A1AC79DB000E4 /* ControllerLayoutShortcutSummary.swift in Sources */,
 				94F7B1607EBE0F53941883A9 /* ControllerLayoutEditing.swift in Sources */,
 				BBDF302987FAF9F7402A6D84 /* ControllerLayoutNavigation.swift in Sources */,

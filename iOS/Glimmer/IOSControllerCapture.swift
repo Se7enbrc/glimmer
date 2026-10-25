@@ -43,16 +43,19 @@ final class IOSControllerCapture {
     private var focused = false
     private var focusRevision: UInt64 = 0
     private var stopped = false
+    private var layouts: IOSControllerLayouts?
+    private var layoutLoading: Task<Void, Never>?
     private var connectionChanged: (@MainActor (Bool) -> Void)?
     var beforeAttach: (() -> Void)?
     var refreshed: ((Bool) -> Void)?
 
-    convenience init(input: StreamInput) {
+    convenience init(input: StreamInput, scope: ControllerLayoutScope = .allGames) {
         self.init(calls: Calls(register: input.registerController, unregister: input.unregisterController,
                               submit: input.submitController, focus: { input.setFocused($0) },
                               feedback: { input.attachFeedback($1, to: $0) },
                               motion: { input.attachMotion($1, to: $0) },
                               battery: { input.attachBattery($1, to: $0) }))
+        layouts = IOSControllerLayouts(input: input, scope: scope, queue: captureQueue)
     }
 
     init(calls: Calls, center: NotificationCenter = .default,
@@ -70,15 +73,31 @@ final class IOSControllerCapture {
         guard !stopped, observations.isEmpty else { return }
         generation &+= 1
         let attempt = generation
-        for name in [Notification.Name.GCControllerDidConnect, .GCControllerDidDisconnect] {
+        for name in [Notification.Name.GCControllerDidConnect, .GCControllerDidDisconnect,
+                     ControllerLayoutsModel.didChange] {
             observations.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self, self.generation == attempt else { return }
-                    self.refresh()
+                    if name == ControllerLayoutsModel.didChange { self.reloadLayouts() } else { self.refresh() }
                 }
             })
         }
         refresh()
+        if layouts != nil {
+            layoutLoading = Task { [weak self] in
+                await ControllerLayoutsModel.shared.load()
+                guard !Task.isCancelled else { return }
+                self?.reloadLayouts()
+            }
+        }
+    }
+
+    private func reloadLayouts() {
+        guard !stopped else { return }
+        let resume = focused
+        if resume { setFocused(false) }
+        for entry in attached.values { layouts?.configure(entry.controller, registration: entry.registration) }
+        if resume { setFocused(true) }
     }
 
     func refresh() {
@@ -110,7 +129,7 @@ final class IOSControllerCapture {
             // These are fresh reads while unfocused, so shared latches include controls held in the UI.
             for entry in attached.values {
                 guard let pad = entry.controller.extendedGamepad else { continue }
-                calls.submit(entry.registration, Self.sample(pad), clock())
+                calls.submit(entry.registration, layouts?.sample(entry.controller) ?? Self.sample(pad), clock())
             }
             calls.focus(true)
             self.focused = true
@@ -129,6 +148,8 @@ final class IOSControllerCapture {
         calls.focus(false)
         focused = false
         stopped = true
+        layoutLoading?.cancel()
+        layoutLoading = nil
         generation &+= 1
         for observation in observations { center.removeObserver(observation) }
         observations.removeAll()
@@ -162,9 +183,10 @@ final class IOSControllerCapture {
                              priorHandler: pad.valueChangedHandler,
                              gestures: buttons.map { ($0, $0.preferredSystemGestureState) })
         attached[ObjectIdentifier(controller)] = entry
+        layouts?.configure(controller, registration: registration)
         if focused {
             // A newly attached pad may hold controls without delivering another native change.
-            calls.submit(registration, Self.sample(pad), clock())
+            calls.submit(registration, layouts?.sample(controller) ?? Self.sample(pad), clock())
             install(entry)
         }
     }
@@ -191,6 +213,7 @@ final class IOSControllerCapture {
     #endif
 
     private func install(_ entry: Attached) {
+        if layouts?.install(entry.controller) == true { return }
         let registration = entry.registration
         let epoch = UUID()
         let submit = calls.submit
@@ -207,6 +230,7 @@ final class IOSControllerCapture {
     }
 
     private func restore(_ entry: Attached) {
+        layouts?.suspend(entry.controller)
         _ = delivery.registrations.withLock { $0.removeValue(forKey: entry.registration) }
         entry.controller.extendedGamepad?.valueChangedHandler = entry.priorHandler
         entry.controller.handlerQueue = entry.priorQueue
@@ -216,6 +240,7 @@ final class IOSControllerCapture {
     private func detach(_ id: ObjectIdentifier) {
         guard let entry = attached.removeValue(forKey: id) else { return }
         restore(entry)
+        layouts?.remove(entry.controller)
         calls.unregister(entry.registration)
         entry.feedback.invalidate()
         entry.motion.invalidate()

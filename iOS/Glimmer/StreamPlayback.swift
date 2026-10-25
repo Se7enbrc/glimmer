@@ -95,7 +95,7 @@ struct StreamPlayback {
             diagnosticsDirectory: DiagnosticsDefaults.directory)
         input.setStopChord(.menuOptionsShoulders)
         input.setControllerMouseMapping(launch.mouseStick.mapping)
-        nativeInput.start(input: input)
+        nativeInput.start(input: input, scope: .game(pcID: launch.pcID, appID: UInt32(clamping: launch.appID)))
         return StreamPlayback(id: session.id, events: session.events, start: {
             if launch.continuing {
                 await session.requireContinuation(previous: launch.useScreenSize ? launch.previousFormat : nil)
