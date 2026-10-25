@@ -11,6 +11,8 @@ import plistlib
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
@@ -60,7 +62,7 @@ def run_main(module, argv):
     return code, out.getvalue(), err.getvalue()
 
 
-class ChangelogTests(unittest.TestCase):
+class ChangelogTests(FixtureTestCase):
     def test_section_stops_at_next_heading_and_empty_or_missing_is_none(self):
         body = changelog.section(LOG, "2026.10.6")
         self.assertIn("### Fixed", body)
@@ -125,7 +127,7 @@ RETRY = ["--short-version", "2026.10.5", "--version", "20261008", "--url", "http
          "--ed-signature", "oldsig", "--length", "10"]
 
 
-class AppcastTests(unittest.TestCase):
+class AppcastTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.dir = Path(self.temp.name)
@@ -266,7 +268,7 @@ linux,line
 """
 
 
-class GameControllerDbTests(unittest.TestCase):
+class GameControllerDbTests(FixtureTestCase):
     def test_only_the_macos_section_is_kept(self):
         self.assertEqual(GAMEDB.macos_entries(DB),
                          ["030000,Pad A,a:b0,platform:Mac OS X", "030001,Pad B,a:b1,platform:Mac OS X"])

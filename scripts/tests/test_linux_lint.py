@@ -10,10 +10,12 @@ import subprocess
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class LinuxLintTests(unittest.TestCase):
+class LinuxLintTests(FixtureTestCase):
     def run_lint(self, with_sourcekit):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

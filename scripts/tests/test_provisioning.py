@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
@@ -52,7 +54,7 @@ def approved_profile():
     }
 
 
-class ProvisioningValidationTests(unittest.TestCase):
+class ProvisioningValidationTests(FixtureTestCase):
     def validate(self, profile, requested=None):
         return validate_profile(profile, BUNDLE_ID, requested if requested is not None else requested_entitlements(), now=NOW)
 
@@ -254,7 +256,7 @@ class ProvisioningValidationTests(unittest.TestCase):
                 self.assertFalse(same_entitlement_value(requested, granted))
 
 
-class ProvisioningFileTests(unittest.TestCase):
+class ProvisioningFileTests(FixtureTestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

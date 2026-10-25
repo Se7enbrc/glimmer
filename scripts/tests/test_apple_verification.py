@@ -10,10 +10,12 @@ import subprocess
 import textwrap
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class AppleVerificationTests(unittest.TestCase):
+class AppleVerificationTests(FixtureTestCase):
     def gate(self, **overrides):
         source = (ROOT / ".github/workflows/verify.yml").read_text().split("  gate:\n", 1)[1]
         match = re.search(r"        run: \|\n((?:          .*\n|\n)+)", source)

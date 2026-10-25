@@ -12,6 +12,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("codeql_coverage", Path(__file__).parents[1] / "codeql-coverage.py")
@@ -20,7 +22,7 @@ SPEC.loader.exec_module(COVERAGE)
 EXPECTED = {"Glimmer/GlimmerApp.swift", "LoginHelper/main.swift", "helper/main.swift"}
 
 
-class CodeQLCoverageTests(unittest.TestCase):
+class CodeQLCoverageTests(FixtureTestCase):
     def test_complete_extraction_allows_dependencies_and_duplicate_paths(self):
         output = "\n".join(f'"{path}"' for path in sorted(EXPECTED))
         self.assertEqual(COVERAGE.validate_coverage(EXPECTED, output + '\n"build/dependency.swift"\n'

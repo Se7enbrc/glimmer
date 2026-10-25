@@ -11,6 +11,8 @@ import sys
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 from fixture_process import run_fixture
 
 SIGN_SCRIPT = Path(__file__).resolve().parents[1] / "sign-bundle.sh"
@@ -43,7 +45,7 @@ if "--verify" in args and os.environ.get("SIGN_TEST_VERIFY_FAILURE"):
 '''
 
 
-class SignBundleTests(unittest.TestCase):
+class SignBundleTests(FixtureTestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="glimmer signing fixture ")
         self.addCleanup(self.temporary.cleanup)

@@ -10,6 +10,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -27,7 +29,7 @@ if args[:3] == ['xcrun', 'notarytool', 'submit']:
 '''
 
 
-class DmgSigningTests(unittest.TestCase):
+class DmgSigningTests(FixtureTestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix='glimmer dmg fixture ')
         self.addCleanup(temporary.cleanup)
@@ -100,7 +102,7 @@ class DmgSigningTests(unittest.TestCase):
         self.assertEqual(self.calls(), [])
 
 
-class DmgValidationTests(unittest.TestCase):
+class DmgValidationTests(FixtureTestCase):
     def test_each_dmg_check_gates_zip_validation(self):
         root = Path('/inert fixture')
         dmg = str(root / 'Glimmer-2026.10.9.dmg')

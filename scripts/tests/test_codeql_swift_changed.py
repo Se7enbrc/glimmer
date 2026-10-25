@@ -7,13 +7,15 @@ import subprocess
 import sys
 import unittest
 
+from fixture_git import FixtureTestCase
+
 SCRIPT = Path(__file__).resolve().parents[1] / "codeql-swift-changed.py"
 SPEC = importlib.util.spec_from_file_location("codeql_swift_changed", SCRIPT)
 CHANGED = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHANGED)
 
 
-class SwiftScanScopeTests(unittest.TestCase):
+class SwiftScanScopeTests(FixtureTestCase):
     def test_anything_the_traced_build_reads_needs_the_scan(self):
         for path in ("Glimmer/Stream/VideoDecoder.swift", "helper/main.swift", "LoginHelper/main.swift",
                      "Glimmer.xcodeproj/project.pbxproj",

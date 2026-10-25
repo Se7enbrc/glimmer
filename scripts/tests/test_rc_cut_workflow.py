@@ -10,12 +10,14 @@ import tempfile
 import textwrap
 import unittest
 
+from fixture_git import FixtureTestCase
+
 from fixture_process import run_fixture
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/release-candidate.yml"
 
 
-class RCCutWorkflowTests(unittest.TestCase):
+class RCCutWorkflowTests(FixtureTestCase):
     def guard(self, **overrides):
         source = WORKFLOW.read_text()
         step = source.split("- name: Require main tooling before credentials\n", 1)[1]
