@@ -3,7 +3,6 @@
 
 import GlimmerEngine
 import SwiftUI
-import Synchronization
 import Testing
 import UIKit
 @testable import Glimmer
@@ -244,10 +243,7 @@ struct NativeUIRenderTests {
     }
 
     @Test func actualLauncherAllowsPortraitAfterStreamDismissal() async throws {
-        let scene = try await testWindowScene()
-        let previous = scene.keyWindow
-        let window = UIWindow(windowScene: scene)
-        window.frame = scene.effectiveGeometry.coordinateSpace.bounds
+        let scene = try await activeRenderScene()
         let fixture = LauncherFixture()
         let id = UUID()
         fixture.makeSession = { launch in
@@ -259,9 +255,15 @@ struct NativeUIRenderTests {
         }
         let model = fixture.model()
         let launcher = UIHostingController(rootView: LauncherView(model: model))
-        window.rootViewController = launcher
-        window.makeKeyAndVisible()
-        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
+        try await withRenderPresentation(launcher, scene: scene) { window in
+            try await exerciseLauncherRotation(launcher, model: model, fixture: fixture, id: id,
+                                               scene: scene, window: window)
+        }
+    }
+
+    private func exerciseLauncherRotation(_ launcher: UIViewController, model: LauncherModel,
+                                          fixture: LauncherFixture, id: UUID,
+                                          scene: UIWindowScene, window: UIWindow) async throws {
         launcher.setNeedsUpdateOfSupportedInterfaceOrientations()
         if scene.traitCollection.userInterfaceIdiom != .pad {
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
@@ -281,14 +283,16 @@ struct NativeUIRenderTests {
                 launcher.presentedViewController != nil
             }
             let player = try #require(launcher.presentedViewController)
-            try await waitForUIState("The stream did not start in the presented window.") {
-                stream.phase == .connecting
-            }
+            await finishTransition(player)
             let pad = window.traitCollection.userInterfaceIdiom == .pad
             if !pad {
                 try await waitForOrientation(scene, portrait: false, controller: player)
                 #expect(player.view.bounds.width > player.view.bounds.height)
+            } else {
+                try await commitLayout(player.view)
             }
+            await stream.waitUntilStartFinishes()
+            try #require(stream.phase == .connecting)
             stream.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
             #expect(AppDelegate.orientationMask(for: window)
                 == AppDelegate.streamOrientations(for: window.traitCollection.userInterfaceIdiom))
@@ -391,7 +395,9 @@ struct NativeUIRenderTests {
                                captureWindow: Bool = false,
                                prepare: (() async -> Void)? = nil,
                                inspect: ((UIView) throws -> Void)? = nil) async throws {
-        let defaults = UserDefaults(suiteName: "render-\(UUID().uuidString)") ?? UserDefaults()
+        let suite = "render-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(leaveRunning, forKey: "leaveGamesRunning")
         let host = UIHostingController(rootView: content.defaultAppStorage(defaults).dynamicTypeSize(textSize))
         try await recordController(host, name: name, size: size, dark: dark, portrait: portrait,
@@ -404,49 +410,49 @@ struct NativeUIRenderTests {
                           prepare: (() async -> Void)? = nil,
                           textSize: DynamicTypeSize = .xxxLarge, landscapeRight: Bool = false,
                           inspect: ((UIView) throws -> Void)? = nil) async throws {
-        let scene = try await testWindowScene()
-        let previous = scene.windows.first(where: \.isKeyWindow)
-        let phone = scene.traitCollection.userInterfaceIdiom != .pad
-        let rotates = portrait || (phone && size.map { $0.width > $0.height } ?? true)
-        let landscape: UIInterfaceOrientationMask = landscapeRight ? .landscapeRight : .landscapeLeft
-        let requested: UIInterfaceOrientationMask = portrait ? .portrait : landscape
-        let (window, root) = makeRenderWindow(host, scene: scene, name: name, size: size,
-                                              dark: dark, textSize: textSize,
-                                              orientations: phone && rotates ? requested : .all)
-        defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKey() }
-        window.makeKeyAndVisible()
-        try await waitForUIState("The render fixture did not become the visible key window.") {
-            root.hasAppeared && window.isKeyWindow && scene.activationState == .foregroundActive
-        }
-        await finishTransition(root)
-        if rotates, phone {
-            root.setNeedsUpdateOfSupportedInterfaceOrientations()
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: requested)) { error in
-                Issue.record("The render fixture's orientation request failed: \(error)")
+        let scene = try await activeRenderScene()
+        let root = makeRenderRoot(host, name: name, size: size, dark: dark, textSize: textSize)
+        defer { host.traitOverrides.remove(UITraitHorizontalSizeClass.self) }
+        try await withRenderPresentation(root, scene: scene) { window in
+            try #require(root.hasAppeared)
+            let phone = scene.traitCollection.userInterfaceIdiom != .pad
+            let landscape: UIInterfaceOrientationMask = landscapeRight ? .landscapeRight : .landscapeLeft
+            let requested: UIInterfaceOrientationMask = portrait ? .portrait : landscape
+            let rotates = portrait || (phone && size.map { $0.width > $0.height } ?? true)
+            if rotates, phone {
+                root.orientations = requested
+                root.setNeedsUpdateOfSupportedInterfaceOrientations()
+                try await commitLayout(root.view)
+                try await observeGeometry(scene, request: {
+                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: requested)) { error in
+                        Issue.record("The render fixture's orientation request failed: \(error)")
+                    }
+                }, matches: { requested.contains(UIInterfaceOrientationMask(
+                    rawValue: 1 << scene.effectiveGeometry.interfaceOrientation.rawValue)) })
             }
-            try await waitForOrientation(scene, portrait: portrait, controller: root)
-            if landscapeRight {
-                try await waitForUIState("The scene did not rotate to landscape right.") {
-                    scene.effectiveGeometry.interfaceOrientation == .landscapeRight
-                }
-            }
+            await finishTransition(root)
+            try await commitLayout(root.view)
+            await prepare?()
+            try await commitLayout(host.view)
+            #expect(host.traitCollection.preferredContentSizeCategory == UIContentSizeCategory(textSize))
+            #expect(host.traitCollection.userInterfaceStyle == (dark ? .dark : .light))
+            try await captureFixture(host, window: window, name: name, size: size,
+                                     portrait: portrait, captureWindow: captureWindow, inspect: inspect)
         }
-        root.view.setNeedsLayout()
-        root.view.layoutIfNeeded()
-        // Give SwiftUI one finite layout transaction on the hosted Simulator.
-        try await Task.sleep(for: .milliseconds(200))
-        await finishTransition(root)
-        await prepare?()
-        root.view.setNeedsLayout()
-        root.view.layoutIfNeeded()
-        host.view.setNeedsLayout()
-        host.view.layoutIfNeeded()
-        try await Task.sleep(for: .milliseconds(200))
+    }
+
+    private func captureFixture(_ host: UIViewController, window: UIWindow,
+                                name: String, size: CGSize?, portrait: Bool, captureWindow: Bool,
+                                inspect: ((UIView) throws -> Void)?) async throws {
+        let scene = try #require(window.windowScene)
+        let root = try #require(host.parent)
         let expectedSize = size ?? scene.effectiveGeometry.coordinateSpace.bounds.size
         #expect(host.view.bounds.size == expectedSize)
         if host is StreamViewController {
             #expect(host.children.allSatisfy { $0.view.bounds.size == expectedSize })
-            #expect(host.children.allSatisfy { $0.traitCollection.userInterfaceStyle == (dark ? .dark : .light) })
+            #expect(host.children.allSatisfy {
+                $0.traitCollection.userInterfaceStyle == root.overrideUserInterfaceStyle
+            })
         }
         if portrait, scene.traitCollection.userInterfaceIdiom != .pad {
             #expect(scene.effectiveGeometry.interfaceOrientation == .portrait)
@@ -495,12 +501,6 @@ struct NativeUIRenderTests {
         Attachment.record(Array(data), named: "\(name).png")
     }
 
-    private func waitForUIState(_ message: String, condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
-        while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
-        try #require(condition(), "\(message)")
-    }
-
     private func waitForLauncherLayout(_ host: UIViewController, window: UIWindow) async throws {
         for child in host.children { await finishTransition(child) }
         try await waitForUIState("The launcher's navigation or scroll viewport remained outside the rotated window.") {
@@ -527,38 +527,5 @@ struct NativeUIRenderTests {
         guard view.isHidden == false, view.alpha > 0 else { return [] }
         let own = view is UINavigationBar || view is UIScrollView ? [view] : []
         return own + view.subviews.flatMap { launcherViewports(in: $0) }
-    }
-
-    private func waitForOrientation(_ scene: UIWindowScene, portrait: Bool,
-                                    controller: UIViewController) async throws {
-        if scene.traitCollection.userInterfaceIdiom == .pad {
-            await finishTransition(controller)
-            controller.view.layoutIfNeeded()
-            #expect(controller.view.bounds.size == scene.effectiveGeometry.coordinateSpace.bounds.size)
-            return
-        }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
-        func matches() -> Bool {
-            let orientation = scene.effectiveGeometry.interfaceOrientation
-            return portrait ? orientation == .portrait : orientation.isLandscape
-        }
-        while !matches(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
-        try #require(matches(), "The scene did not reach its requested interface orientation.")
-        await finishTransition(controller)
-        controller.view.layoutIfNeeded()
-    }
-
-    private func finishTransition(_ host: UIViewController) async {
-        guard let transition = host.transitionCoordinator else { return }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let pending = Mutex<CheckedContinuation<Void, Never>?>(continuation)
-            let finish: @Sendable () -> Void = {
-                let value = pending.withLock { value in defer { value = nil }; return value }
-                value?.resume()
-            }
-            let joined = transition.animate(alongsideTransition: nil) { _ in finish() }
-            #expect(joined)
-            if !joined { finish() }
-        }
     }
 }

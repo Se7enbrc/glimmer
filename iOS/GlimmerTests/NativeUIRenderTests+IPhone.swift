@@ -8,11 +8,43 @@ import UIKit
 @testable import Glimmer
 
 extension NativeUIRenderTests {
+    @Test func fixtureRestoresSceneAndTraitsAfterCapture() async throws {
+        let scene = try await testWindowScene()
+        let window = try #require(scene.keyWindow)
+        let orientation = scene.effectiveGeometry.interfaceOrientation
+        let style = window.traitCollection.userInterfaceStyle
+        let textSize = window.traitCollection.preferredContentSizeCategory
+        for largeText in [true, false] {
+            try await record(Color.gray, name: "fixture-reset-\(largeText)", size: nil,
+                             dark: largeText, textSize: largeText ? .accessibility5 : .large,
+                             portrait: !orientation.isPortrait)
+            #expect(scene.keyWindow === window)
+            #expect(scene.effectiveGeometry.interfaceOrientation == orientation)
+            #expect(window.traitCollection.userInterfaceStyle == style)
+            #expect(window.traitCollection.preferredContentSizeCategory == textSize)
+            #expect(window.rootViewController?.presentedViewController == nil)
+        }
+    }
+
+    @Test func failedCaptureAlsoRestoresScene() async throws {
+        let scene = try await activeRenderScene()
+        let window = try #require(scene.keyWindow)
+        let orientation = scene.effectiveGeometry.interfaceOrientation
+        await #expect(throws: CocoaError.self) {
+            try await record(Color.gray, name: "fixture-failed-capture", size: nil, dark: true,
+                             textSize: .accessibility5, portrait: !orientation.isPortrait,
+                             inspect: { _ in throw CocoaError(.userCancelled) })
+        }
+        #expect(scene.keyWindow === window)
+        #expect(scene.effectiveGeometry.interfaceOrientation == orientation)
+        #expect(window.rootViewController?.presentedViewController == nil)
+    }
+
     @Test(arguments: [false, true])
     func fixtureKeepsRequestedOrientation(portrait: Bool) async throws {
         try await record(Color.gray, name: "fixture-orientation-\(portrait)", size: nil,
                          dark: false, portrait: portrait, inspect: { view in
-            let root = try #require(view.window?.rootViewController)
+            let root = try #require(view.window?.rootViewController?.presentedViewController)
             let requested: UIInterfaceOrientationMask = portrait ? .portrait : .landscapeLeft
             let expected = view.traitCollection.userInterfaceIdiom == .pad ? .all : requested
             #expect(root.supportedInterfaceOrientations == expected)

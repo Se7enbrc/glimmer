@@ -47,7 +47,7 @@ extension NativeUIRenderTests {
                     #expect(controller.surface.displayLayer === layer)
                     #expect(layer.superlayer === controller.surface.layer)
                     #expect(model.inputFocused == (phase == "before" || phase == "after"))
-                    try await Task.sleep(for: .milliseconds(200))
+                    try await commitLayout(controller.view)
                     try recordPhase(controller.view, name: "\(name)-\(phase)")
                 }
             } catch { captureError = error }

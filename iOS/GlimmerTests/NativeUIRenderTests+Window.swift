@@ -2,13 +2,14 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import SwiftUI
+import Testing
 import UIKit
 
 @MainActor
 final class FixtureViewportController: UIViewController {
     private let content: UIViewController
     private let size: CGSize?
-    private let orientations: UIInterfaceOrientationMask
+    var orientations: UIInterfaceOrientationMask
     private(set) var hasAppeared = false
 
     init(content: UIViewController, size: CGSize?, orientations: UIInterfaceOrientationMask) {
@@ -47,20 +48,59 @@ final class FixtureViewportController: UIViewController {
 }
 
 extension NativeUIRenderTests {
-    func makeRenderWindow(_ host: UIViewController, scene: UIWindowScene, name: String, size: CGSize?,
-                          dark: Bool, textSize: DynamicTypeSize,
-                          orientations: UIInterfaceOrientationMask) -> (UIWindow, FixtureViewportController) {
-        let window = UIWindow(windowScene: scene)
-        window.overrideUserInterfaceStyle = dark ? .dark : .light
-        window.frame = scene.effectiveGeometry.coordinateSpace.bounds
-        window.traitOverrides.preferredContentSizeCategory = textSize == .accessibility5
-            ? .accessibilityExtraExtraExtraLarge : (textSize == .large ? .large : .extraExtraExtraLarge)
-        host.overrideUserInterfaceStyle = dark ? .dark : .light
-        let root = FixtureViewportController(content: host, size: size, orientations: orientations)
+    func makeRenderRoot(_ host: UIViewController, name: String, size: CGSize?,
+                        dark: Bool, textSize: DynamicTypeSize) -> FixtureViewportController {
+        let root = FixtureViewportController(content: host, size: size, orientations: .all)
+        root.overrideUserInterfaceStyle = dark ? .dark : .light
+        root.traitOverrides.preferredContentSizeCategory = UIContentSizeCategory(textSize)
         if let size, name.hasPrefix("ipad-") {
             host.traitOverrides.horizontalSizeClass = size.width < 600 ? .compact : .regular
         }
-        window.rootViewController = root
-        return (window, root)
+        return root
+    }
+
+    func withRenderPresentation(_ root: UIViewController, scene: UIWindowScene,
+                                body: (UIWindow) async throws -> Void) async throws {
+        let window = try #require(scene.keyWindow)
+        let presenter = try #require(window.rootViewController)
+        let orientation = scene.effectiveGeometry.interfaceOrientation
+        try #require(presenter.presentedViewController == nil)
+        try await commitLayout(presenter.view)
+        await finishTransition(presenter)
+        root.modalPresentationStyle = .fullScreen
+        await withCheckedContinuation { continuation in
+            presenter.present(root, animated: false) { continuation.resume() }
+        }
+        var failure: Error?
+        do { try await body(window) } catch { failure = error }
+        // Dismiss the dialog first: collapsing both presentations leaves its orientation lock pending.
+        if let presented = root.presentedViewController {
+            await finishTransition(presented)
+            await dismissRenderPresentation(from: root)
+        }
+        await finishTransition(root)
+        await dismissRenderPresentation(from: presenter)
+        root.traitOverrides.remove(UITraitPreferredContentSizeCategory.self)
+        root.overrideUserInterfaceStyle = .unspecified
+        if scene.traitCollection.userInterfaceIdiom != .pad {
+            presenter.setNeedsUpdateOfSupportedInterfaceOrientations()
+            try await commitLayout(presenter.view)
+            try await observeGeometry(scene, request: {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations:
+                    UIInterfaceOrientationMask(rawValue: 1 << orientation.rawValue))) { error in
+                        Issue.record("The render fixture could not restore scene orientation: \(error)")
+                    }
+            }, matches: { scene.effectiveGeometry.interfaceOrientation == orientation })
+        }
+        await finishTransition(presenter)
+        try await commitLayout(presenter.view)
+        try #require(scene.keyWindow === window && presenter.presentedViewController == nil)
+        if let failure { throw failure }
+    }
+
+    private func dismissRenderPresentation(from controller: UIViewController) async {
+        await withCheckedContinuation { continuation in
+            controller.dismiss(animated: false) { continuation.resume() }
+        }
     }
 }
