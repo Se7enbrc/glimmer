@@ -7,7 +7,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened, closed]
   schedule:
     - cron: "23 9 * * 2"
   workflow_dispatch:
@@ -15,16 +14,15 @@ on:
 permissions:
   contents: read
 
-# A PR update or closure replaces its run; all other events keep independent runs.
+# A pull request's newer push replaces its run; every main commit keeps its own.
 concurrency:
   group:
-    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref
-    }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    ${{ github.workflow }}-${{ github.ref }}-${{
+    github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   analyze:
-    if: github.event.action != 'closed'
     name: Analyze (${{ matrix.language }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
