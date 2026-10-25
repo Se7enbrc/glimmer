@@ -7,10 +7,12 @@ from pathlib import Path
 import subprocess
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class IOSCIShardTests(unittest.TestCase):
+class IOSCIShardTests(FixtureTestCase):
     def test_shards_are_exact_complements_and_both_required(self):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text()
         self.assertIn("shard: [core, render]", workflow)

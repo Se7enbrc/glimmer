@@ -15,6 +15,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 import test_candidate_ref_checks as candidate_fixture
 from unittest.mock import Mock, patch
 
@@ -32,7 +34,7 @@ SHORT = "2026.10.6"
 BUILD = "20261010"
 
 
-class CandidatePromotionTests(unittest.TestCase):
+class CandidatePromotionTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="glimmer promotion fixture ")
         self.addCleanup(self.temp.cleanup)
@@ -462,7 +464,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class ShippedSourceTests(unittest.TestCase):
+class ShippedSourceTests(FixtureTestCase):
     def test_only_shipped_inputs_must_match_the_candidate(self):
         with tempfile.TemporaryDirectory() as directory:
             def git(*args):

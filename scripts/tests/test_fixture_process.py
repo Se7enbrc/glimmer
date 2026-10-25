@@ -9,13 +9,15 @@ import signal
 import subprocess
 import sys
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import call, patch
 
 import fixture_process
 from fixture_process import run_fixture
 
 
-class FixtureProcessTests(unittest.TestCase):
+class FixtureProcessTests(FixtureTestCase):
     def test_timeout_kills_the_process_group_and_drains_before_returning(self):
         timeout = subprocess.TimeoutExpired(["fixture"], 300)
         events = []

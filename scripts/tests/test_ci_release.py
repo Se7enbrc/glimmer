@@ -14,6 +14,8 @@ import sys
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 from fixture_process import run_fixture
 
 SCRIPT = Path(__file__).resolve().parents[1] / "ci-release.sh"
@@ -107,7 +109,7 @@ if name == "security" and os.environ.get("FIXTURE_FAIL_DELETE"):
 '''
 
 
-class HostedReleaseTests(unittest.TestCase):
+class HostedReleaseTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="glimmer ci fixture ")
         self.addCleanup(self.temp.cleanup)

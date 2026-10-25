@@ -7,11 +7,13 @@ from pathlib import Path
 import sys
 import unittest
 
+from fixture_git import FixtureTestCase
+
 sys.path.insert(0, str(Path(__file__).parents[1]))
 from release_candidate_kind import diagnostic_marker, parse_tag, validate_marker
 
 
-class CandidateKindTests(unittest.TestCase):
+class CandidateKindTests(FixtureTestCase):
     def test_tag_parser_accepts_only_explicit_candidate_forms(self):
         self.assertEqual(parse_tag('2026.10.8-rc.12'), ('2026.10.8', 12, False))
         self.assertEqual(parse_tag('2026.10.8-rc.13-diag'), ('2026.10.8', 13, True))

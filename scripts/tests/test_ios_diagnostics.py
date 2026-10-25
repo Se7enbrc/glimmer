@@ -8,11 +8,13 @@ from pathlib import Path
 import sys
 import unittest
 
+from fixture_git import FixtureTestCase
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 inspection = importlib.import_module('check-ios-diagnostics')
 
 
-class DiagnosticsInspectionTests(unittest.TestCase):
+class DiagnosticsInspectionTests(FixtureTestCase):
     def test_production_rejects_each_diagnostic_marker(self):
         for marker in inspection.COMPONENTS + inspection.SURFACES:
             with self.subTest(marker=marker), self.assertRaises(ValueError):

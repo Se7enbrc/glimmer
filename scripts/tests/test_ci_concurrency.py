@@ -7,10 +7,12 @@ from pathlib import Path
 import re
 import unittest
 
+from fixture_git import FixtureTestCase
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-class VerificationConcurrencyTests(unittest.TestCase):
+class VerificationConcurrencyTests(FixtureTestCase):
     def test_only_pr_runs_can_cancel_and_non_pr_runs_have_unique_groups(self):
         for name in ("verify", "codeql"):
             with self.subTest(workflow=name):

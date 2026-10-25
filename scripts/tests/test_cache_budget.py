@@ -10,6 +10,8 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,7 +20,7 @@ budget = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(budget)
 
 
-class CacheBudgetTests(unittest.TestCase):
+class CacheBudgetTests(FixtureTestCase):
     def test_only_shared_trusted_branches_may_write(self):
         for ref in ('refs/pull/196/merge', 'refs/heads/feature', 'refs/tags/2026.10.8'):
             self.assertFalse(budget.admitted(ref, 'push', 1, 0))
