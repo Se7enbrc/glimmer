@@ -14,6 +14,8 @@ import sys
 import tempfile
 import unittest
 
+from fixture_process import run_fixture
+
 SCRIPT = Path(__file__).resolve().parents[1] / "ci-release.sh"
 SHA = "a" * 40
 TOOL = r'''
@@ -156,8 +158,7 @@ class HostedReleaseTests(unittest.TestCase):
         for key in signing | {"SPARKLE_ED_PRIVATE_KEY", "RELEASE_CONTENTS_TOKEN"}:
             if key not in allowed:
                 environment.pop(key, None)
-        return subprocess.run(["/bin/bash", "scripts/ci-release.sh", phase], cwd=self.root,
-                              env=environment, capture_output=True, text=True, timeout=10)
+        return run_fixture(["/bin/bash", "scripts/ci-release.sh", phase], cwd=self.root, env=environment)
 
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []

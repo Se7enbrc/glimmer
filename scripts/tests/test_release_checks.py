@@ -12,9 +12,7 @@ import sys
 import tempfile
 import json
 import unittest
-import time
-from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
@@ -52,6 +50,11 @@ def language_jobs(**changes):
 
 
 class RequiredChecksTests(unittest.TestCase):
+    def setUp(self):
+        clock = patch.object(CHECKS, 'time')
+        clock.start().monotonic.return_value = 0
+        self.addCleanup(clock.stop)
+
     def test_latest_run_must_be_green_even_if_older_run_passed(self):
         for conclusion, status in (("failure", "completed"), ("cancelled", "completed"),
                                    (None, "in_progress"), ("skipped", "completed")):
@@ -242,38 +245,28 @@ class GitHubReadRetryTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        executable = self.root / 'gh'
-        executable.write_text(f'#!{sys.executable}\n' + '''import json
-from pathlib import Path
-import sys
-root = Path(__file__).parent
-log = root / 'calls.json'
-calls = json.loads(log.read_text()) if log.exists() else []
-calls.append(sys.argv[1:])
-log.write_text(json.dumps(calls))
-responses = json.loads((root / 'responses.json').read_text())
-response = responses[min(len(calls) - 1, len(responses) - 1)]
-sys.stdout.write(response['stdout'])
-sys.stderr.write(response['stderr'])
-sys.exit(response['returncode'])
-''')
-        executable.chmod(0o755)
-        env = patch.dict(CHECKS.os.environ, PATH=str(self.root) + ':' + CHECKS.os.environ['PATH'])
-        env.start()
-        self.addCleanup(env.stop)
-        self.sleep = Mock()
-        clock = patch.object(CHECKS, 'time', SimpleNamespace(
-            monotonic=lambda: time.monotonic(), sleep=self.sleep))
-        clock.start()
+        # Keep timing mocks out of subprocess.wait's polling loop.
+        execute = patch.object(CHECKS.subprocess, 'run', side_effect=self.execute)
+        execute.start()
+        self.addCleanup(execute.stop)
+        clock = patch.object(CHECKS, 'time')
+        timing = clock.start()
+        timing.monotonic.return_value = 0
+        self.sleep = timing.sleep
         self.addCleanup(clock.stop)
 
     def responses(self, *responses):
-        (self.root / 'responses.json').write_text(json.dumps(responses))
-        (self.root / 'calls.json').unlink(missing_ok=True)
+        self.results = responses
+        self.requests = []
         self.sleep.reset_mock()
 
+    def execute(self, args, **kwargs):
+        self.requests.append(args[1:])
+        response = self.results[min(len(self.requests) - 1, len(self.results) - 1)]
+        return subprocess.CompletedProcess(args, response['returncode'], response['stdout'], response['stderr'])
+
     def calls(self):
-        return json.loads((self.root / 'calls.json').read_text())
+        return self.requests
 
     def test_fake_gh_recovers_transient_failure_on_the_same_endpoint(self):
         success = {'returncode': 0, 'stdout': '[{"id": 1}]', 'stderr': ''}
@@ -343,7 +336,7 @@ sys.exit(response['returncode'])
 
     def test_total_read_budget_stops_retries_and_bounds_subprocess_timeout(self):
         failure = subprocess.CompletedProcess([], 1, '', 'gh: Bad Gateway (HTTP 502)')
-        with patch('time.monotonic', side_effect=[0, 0, 60]), \
+        with patch.object(CHECKS.time, 'monotonic', side_effect=[0, 0, 60]), \
                 patch.object(CHECKS.subprocess, 'run', return_value=failure) as execute:
             with self.assertRaisesRegex(ValueError, 'lookup failed.*nothing authorized'):
                 CHECKS.api('actions/workflows/1')
