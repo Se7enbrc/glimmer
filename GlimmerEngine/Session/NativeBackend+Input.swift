@@ -24,6 +24,8 @@ extension NativeBackend {
         withState { enetChannel }?.health()
     }
 
+    package func drainRttSamples() -> [Double] { withState { enetChannel }?.drainRttSamples() ?? [] }
+
     package func requestIdrFrame() {
         withState { enetChannel }?.requestIdrFrame()
     }

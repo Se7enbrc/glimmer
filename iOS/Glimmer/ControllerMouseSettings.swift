@@ -107,6 +107,7 @@ private struct GlimmerSettingsPage: View {
     @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
     #if GLIMMER_DIAGNOSTICS
     @AppStorage("telemetryEnabled") private var diagnostics = true
+    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
     #endif
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -205,9 +206,11 @@ private struct GlimmerSettingsPage: View {
     private var diagnosticSettings: some View {
         Section {
             Toggle("Record diagnostics", isOn: $diagnostics)
+            Toggle("Adaptive stream quality", isOn: $adaptiveBandwidth)
         } footer: {
             Text("Saves performance and troubleshooting files on this device for the next stream. "
-                 + "Nothing is uploaded. Beta builds turn this on by default.")
+                 + "Nothing is uploaded. Adaptive stream quality lowers the bitrate when the connection "
+                 + "struggles and raises it again once it recovers. Beta builds turn both on by default.")
         }
     }
     #endif

@@ -27,6 +27,7 @@ public struct BandwidthDecision: Sendable, Equatable, Codable {
     public let confidence: BandwidthConfidence
     public let request: BandwidthRequest?
     public let actuatorOutcome: BandwidthActuatorOutcome?
+    public let flap: BandwidthFlapGuard
 }
 
 public struct BandwidthConnectRTT: Sendable, Codable {

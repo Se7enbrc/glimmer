@@ -21,6 +21,9 @@ public actor StreamSession {
     package var bandwidthLastObservation: Double?
     package var bandwidthConnectRTT: RttStats?
     package var bandwidthProbeGeneration: UInt64?
+    package var bandwidthSampler = BandwidthHealthSampler()
+    package var bandwidthTransition: BandwidthRequest?
+    package var adaptiveBandwidth = false
     package var waitingForVideo = false
     package var attemptID = UUID()
     package var telemetryGeneration: UInt64 = 0

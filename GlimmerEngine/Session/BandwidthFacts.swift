@@ -50,8 +50,9 @@ public struct BandwidthEnvironment: Sendable, Equatable, Codable {
     public var foreground = true
     public init() {}
 
+    /// Low Power Mode is recorded but changes nothing: bitrate is not the device's energy lever.
     var allowsPromotion: Bool {
-        foreground && lowPower == false && (thermal == .nominal || thermal == .fair)
+        foreground && (thermal == .nominal || thermal == .fair)
     }
 }
 
@@ -160,7 +161,49 @@ public struct BandwidthRequest: Sendable, Equatable, Codable {
 
 public enum BandwidthActuatorOutcome: String, Sendable, Codable { case accepted, deferred, rejected }
 
-/// Acceptance queues a request; only confirmation of a successful ANNOUNCE changes the applied rate.
-public protocol BandwidthActuator: Sendable {
-    func request(rate: Int, reason: BandwidthReason) async -> BandwidthActuatorOutcome
+/// Anti-oscillation state. Times are session uptime seconds, so dwell bounds the real change rate.
+public struct BandwidthFlapGuard: Sendable, Equatable, Codable {
+    /// Each renegotiation freezes play for ~0.2–2 s; one per 10 s caps that cost whatever evidence does.
+    public static let minDwellSeconds: Double = 10
+    /// Increases only add fidelity, so they wait six times the protective minimum after any change.
+    public static let stepUpDwellSeconds: Double = 60
+    /// A cut this soon after an increase means the increase failed, and the next retry waits twice as long.
+    public static let failedStepUpWindowSeconds: Double = 300
+    /// The clean time before the first retry after a cut, and the floor the backoff decays back to.
+    public static let baseBackoffSeconds: Double = 300
+    /// Finite on purpose: recovery is always attempted again.
+    public static let maxBackoffSeconds: Double = 2_400
+    public internal(set) var lastChangeAt: Double?
+    public internal(set) var lastIncreaseAt: Double?
+    public internal(set) var lastAttemptAt: Double?
+    public internal(set) var backoffSeconds = baseBackoffSeconds
+    public internal(set) var failedStepUps = 0
+
+    public init() {}
+
+    func allows(increase: Bool, at time: Double) -> Bool {
+        guard let lastChangeAt else { return true }
+        return time - lastChangeAt >= (increase ? Self.stepUpDwellSeconds : Self.minDwellSeconds)
+    }
+
+    mutating func recordChange(increase: Bool, at time: Double) {
+        if !increase, let up = lastIncreaseAt, time - up < Self.failedStepUpWindowSeconds {
+            failedStepUps += 1
+            backoffSeconds = min(Self.maxBackoffSeconds, backoffSeconds * 2)
+        }
+        lastChangeAt = time
+        lastIncreaseAt = increase ? time : nil
+    }
+
+    /// An increase that outlives the failure window has proven itself; the penalty decays to base.
+    mutating func decay(at time: Double) {
+        guard let up = lastIncreaseAt, time - up >= Self.failedStepUpWindowSeconds else { return }
+        forgetStepUp()
+    }
+
+    mutating func forgetStepUp() {
+        lastIncreaseAt = nil
+        backoffSeconds = Self.baseBackoffSeconds
+        failedStepUps = 0
+    }
 }

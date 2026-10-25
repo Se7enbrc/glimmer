@@ -104,6 +104,38 @@ struct BitrateActuatorTests {
         await fixture.stopLocally()
     }
 
+    @Test(arguments: [true, false])
+    func livePolicyDrivesResumeOnlyCutOnlyWhenEnabled(enabled: Bool) async throws {
+        var replay = BandwidthReplay()
+        replay.distress()
+        #expect(replay.policy.pending?.rateKbps == 24_000)
+        let inputs = BandwidthInputs(.init(path: replay.policy.path, environment: replay.policy.environment))
+        let fixture = await BitrateFixture(bandwidthInputs: inputs)
+        await fixture.session.armBandwidthForTest(replay.policy, enabled: enabled)
+        await fixture.session.observeBandwidth(at: replay.now + 1, attempt: fixture.session.attemptID)
+        await fixture.session.waitForBitrateTask()
+        let expected = enabled ? 24_000 : 40_000
+        #expect(await fixture.session.appliedBitrateKbps == expected)
+        #expect(await fixture.session.bandwidthPolicy?.appliedKbps == expected)
+        #expect(fixture.pc.paths == (enabled ? ["serverinfo", "resume"] : []))
+        await fixture.stopLocally()
+    }
+
+    @Test func resizeSeamRenegotiatesSizeAtTheSameRate() async throws {
+        let fixture = await BitrateFixture()
+        #expect(await fixture.session.request(width: 1920, height: 1080) == .rejected)
+        #expect(await fixture.session.request(width: 1365, height: 2064) == .rejected)
+        #expect(await fixture.session.request(width: 1366, height: 2064) == .accepted)
+        await fixture.session.waitForBitrateTask()
+        #expect(fixture.pc.paths == ["serverinfo", "resume"])
+        let config = try #require(fixture.fresh.startedConfigs.first)
+        #expect(config.width == 1366 && config.height == 2064 && config.bitrate == 40_000)
+        let report = try #require(await fixture.session.lastBitrateChange)
+        #expect(report.outcome == .applied && report.reason == .resize && report.width == 1366)
+        #expect(await fixture.session.reconnectConfig?.height == 2064)
+        await fixture.stopLocally()
+    }
+
     @Test func admissionDoesNotQueueOrRaceExistingRecovery() async {
         let fixture = await BitrateFixture()
         #expect(await fixture.session.request(rate: 0, reason: .trial) == .rejected)
@@ -294,7 +326,7 @@ private struct BitrateFixture: Sendable {
 
     @MainActor
     init(disposition: StreamHostDisposition = .cancelOwnedHostSession, app: Int = 7,
-         failing: Bool = false, present: Bool = true,
+         failing: Bool = false, present: Bool = true, bandwidthInputs: BandwidthInputs? = nil,
          beforeConnect: @escaping @Sendable () async throws -> Void = {}) async {
         let pc = FakeSunshine.scripted([
             "serverinfo": [.success(FakeSunshine.xml("<currentgame>\(app)</currentgame><PairStatus>1</PairStatus>"))],
@@ -332,7 +364,9 @@ private struct BitrateFixture: Sendable {
         let hooks = SessionInputHooks(setBackend: { _ in }, setReady: { _ in },
             quiesce: { quiesces.withLock { $0 += 1 } }, detach: {}, configure: { _ in })
         let audio = AudioDecoder(platform: Self.dormantAudio())
-        let session = StreamSession(hostDisposition: disposition, audioDecoder: audio, services: SessionServices(),
+        var services = SessionServices()
+        services.bandwidthInputs = bandwidthInputs
+        let session = StreamSession(hostDisposition: disposition, audioDecoder: audio, services: services,
             backend: InputRecordingBackend(), makeNetwork: { pc.client($0) }, makeBackend: { fresh }, clock: clock)
         self.session = session
         let banners = banners
@@ -382,6 +416,10 @@ private extension StreamSession {
     }
 
     func markRecoveryBusy(_ value: Bool) { isReconnecting = value }
+    func armBandwidthForTest(_ policy: BandwidthPolicy, enabled: Bool) {
+        bandwidthPolicy = policy
+        adaptiveBandwidth = enabled
+    }
     func setOwnershipForTest(_ owned: Bool) { ownsHostSession = owned }
     func waitForBitrateTask() async { await bitrateTask?.value }
 

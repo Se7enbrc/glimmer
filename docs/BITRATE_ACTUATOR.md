@@ -35,6 +35,27 @@ grace remains unchanged when no transition is underway. A user stop during a
 transition also leaves the game running; normal Mac stop semantics return after
 a successful transition.
 
+## Format seam for window resizing
+
+```swift
+let admission = await session.request(width: 1366, height: 2064)
+```
+
+The iPad resize coordinator calls this after its 750 ms debounce, with the even,
+bounds-checked encoder size it already computes. It runs the same resume-only
+transition at the current rate and frame rate: same running app, `/resume` only,
+no `/cancel` or `/launch`, input released first, session stop policy preserved.
+Admission matches `request(rate:reason:)`; a size equal to the current request,
+odd, or outside `StreamSizeBounds` is `rejected`.
+
+Acknowledge `.applied` only from `lastBitrateChange` with reason `resize`,
+outcome `applied` and the requested `width`/`height`: that report is written
+after replacement video reaches the renderer. `cancelled` and `failed` keep the
+previous size; the coordinator may retry with fresh bounds. On success the
+session's reconnect configuration and the bandwidth policy's demand adopt the
+new size, so later recoveries and rate decisions use it. The frame rate does not
+change; a pacing change needs its own transition.
+
 ## Transport and presentation
 
 The first attempt has no recovery backoff. Input releases precede transport

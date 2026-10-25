@@ -146,8 +146,11 @@ extension AppModel {
                 cleanupAfterStream(host: host, caughtError: CancellationError())
                 return
             }
-            let session = await makeNativeSession(disposition: disposition, takeoverAuthorized: takeoverAuthorized,
-                                                  approvedOccupant: approvedOccupant, continuing: continuing)
+            // The Swift-native engine is the only path. Path facts feed the shared bandwidth policy.
+            let (session, bandwidth) = await makeNativeSession(
+                server: info, disposition: disposition, takeoverAuthorized: takeoverAuthorized,
+                approvedOccupant: approvedOccupant, continuing: continuing)
+            defer { bandwidth.stop() }
             if let launch = cfg.bitrateDecision {
                 await session.setRouteAskProvider(routeAskProvider(launch: launch, hostID: host.id))
             }

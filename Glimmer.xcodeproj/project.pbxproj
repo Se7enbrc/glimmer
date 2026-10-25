@@ -745,11 +745,11 @@
 		6522CA2897C84E85880D35E4 /* BandwidthFacts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5E5B3ABC059450A9CE28AAB /* BandwidthFacts.swift */; };
 		DBF4BBA1E4AC4E2C81AFC869 /* BandwidthPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB3736186CB443DC989F3BB6 /* BandwidthPolicy.swift */; };
 		842EB9FFDD854AF78BDF8853 /* BandwidthPolicy+Evidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DFF021186004524A34D5AE4 /* BandwidthPolicy+Evidence.swift */; };
-		0580FD74FBE44CD1922A8181 /* BandwidthPolicyDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78EF2295E63E48AAA739FF84 /* BandwidthPolicyDriver.swift */; };
 		29C536C987C64EFDBF4C26E9 /* BandwidthDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6C8F38A7C4945BA9B103C36 /* BandwidthDecision.swift */; };
 		32ABF7EFA3EF41CD8B0C439C /* BandwidthPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A8BE41BBD645B6BFB5C3BE /* BandwidthPolicyTests.swift */; };
 		5CE392C6DE5644299EB1BB6D /* StreamDestinationProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B9A0176487C43DDA0108AF1 /* StreamDestinationProbe.swift */; };
 		CA0FA240435F42A3BEB6F107 /* BandwidthInputs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC52268ADEE4C37A9B4FBC2 /* BandwidthInputs.swift */; };
+		B5A7C1E0D2F34A6B8C9D0E11 /* BandwidthSignals.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A7C1E0D2F34A6B8C9D0E12 /* BandwidthSignals.swift */; };
 		D533A4260AA14705836FE716 /* StreamSession+Bandwidth.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF02F645DDC741DE839C0B73 /* StreamSession+Bandwidth.swift */; };
 		36F2C4D5722740A9ABAFEAD5 /* BandwidthActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 233DB1B4C6884DFE94410F95 /* BandwidthActuatorTests.swift */; };
 		9A913317D15D48E1B54D8F33 /* BandwidthTrainEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */; };
@@ -1552,11 +1552,11 @@
 		F5E5B3ABC059450A9CE28AAB /* BandwidthFacts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthFacts.swift"; sourceTree = SOURCE_ROOT; };
 		AB3736186CB443DC989F3BB6 /* BandwidthPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthPolicy.swift"; sourceTree = SOURCE_ROOT; };
 		6DFF021186004524A34D5AE4 /* BandwidthPolicy+Evidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthPolicy+Evidence.swift"; sourceTree = SOURCE_ROOT; };
-		78EF2295E63E48AAA739FF84 /* BandwidthPolicyDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthPolicyDriver.swift"; sourceTree = SOURCE_ROOT; };
 		C6C8F38A7C4945BA9B103C36 /* BandwidthDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/BandwidthDecision.swift"; sourceTree = SOURCE_ROOT; };
 		68A8BE41BBD645B6BFB5C3BE /* BandwidthPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/BandwidthPolicyTests.swift"; sourceTree = SOURCE_ROOT; };
 		9B9A0176487C43DDA0108AF1 /* StreamDestinationProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/StreamDestinationProbe.swift"; sourceTree = SOURCE_ROOT; };
 		FDC52268ADEE4C37A9B4FBC2 /* BandwidthInputs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthInputs.swift"; sourceTree = SOURCE_ROOT; };
+		B5A7C1E0D2F34A6B8C9D0E12 /* BandwidthSignals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthSignals.swift"; sourceTree = SOURCE_ROOT; };
 		EF02F645DDC741DE839C0B73 /* StreamSession+Bandwidth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamSession+Bandwidth.swift"; sourceTree = SOURCE_ROOT; };
 		233DB1B4C6884DFE94410F95 /* BandwidthActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/BandwidthActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
 		7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthTrainEvidence.swift"; sourceTree = SOURCE_ROOT; };
@@ -2143,7 +2143,7 @@
 				7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */,
 				EF02F645DDC741DE839C0B73 /* StreamSession+Bandwidth.swift */,
 				FDC52268ADEE4C37A9B4FBC2 /* BandwidthInputs.swift */,
-				78EF2295E63E48AAA739FF84 /* BandwidthPolicyDriver.swift */,
+				B5A7C1E0D2F34A6B8C9D0E12 /* BandwidthSignals.swift */,
 				6DFF021186004524A34D5AE4 /* BandwidthPolicy+Evidence.swift */,
 				AB3736186CB443DC989F3BB6 /* BandwidthPolicy.swift */,
 				F5E5B3ABC059450A9CE28AAB /* BandwidthFacts.swift */,
@@ -3061,7 +3061,7 @@
 				9A913317D15D48E1B54D8F33 /* BandwidthTrainEvidence.swift in Sources */,
 				D533A4260AA14705836FE716 /* StreamSession+Bandwidth.swift in Sources */,
 				CA0FA240435F42A3BEB6F107 /* BandwidthInputs.swift in Sources */,
-				0580FD74FBE44CD1922A8181 /* BandwidthPolicyDriver.swift in Sources */,
+				B5A7C1E0D2F34A6B8C9D0E11 /* BandwidthSignals.swift in Sources */,
 				842EB9FFDD854AF78BDF8853 /* BandwidthPolicy+Evidence.swift in Sources */,
 				DBF4BBA1E4AC4E2C81AFC869 /* BandwidthPolicy.swift in Sources */,
 				6522CA2897C84E85880D35E4 /* BandwidthFacts.swift in Sources */,

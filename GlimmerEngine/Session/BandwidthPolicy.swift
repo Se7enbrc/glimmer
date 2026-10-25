@@ -13,7 +13,8 @@ public struct BandwidthPolicy: Sendable {
     public internal(set) var baseKbps: Int
     public internal(set) var activeSeconds: Double = 0
     public internal(set) var cleanSeconds: Double = 0
-    public internal(set) var retrySeconds: Double = 300
+    public internal(set) var flap = BandwidthFlapGuard()
+    public var retrySeconds: Double { flap.backoffSeconds }
     public internal(set) var baselineMs: Double?
     public internal(set) var pending: BandwidthRequest?
     public internal(set) var outcome: BandwidthActuatorOutcome?
@@ -25,11 +26,12 @@ public struct BandwidthPolicy: Sendable {
     var sequence: UInt64 = 0
     var badSeconds: Double = 0
     var severeTimes: [Double] = []
-    var lastCutAt: Double = -.infinity
     var recovering = false
     var trial = false
     var pathNeedsReseed = false
     var provenKbps: Int
+    /// The launch ask stays a recovery target on its own path; a new path starts from its own prior.
+    var launchKbps: Int?
     var stopped = false
     var foregroundAt: Double = 0
     var thermalRecoveryRemaining: Double = 0
@@ -39,7 +41,8 @@ public struct BandwidthPolicy: Sendable {
         self.demand = demand
         self.path = path
         self.environment = environment
-        baseKbps = Self.startRate(demand: demand, path: path)
+        launchKbps = appliedKbps
+        baseKbps = max(Self.startRate(demand: demand, path: path), appliedKbps ?? 0)
         self.appliedKbps = max(1, appliedKbps ?? baseKbps)
         targetKbps = baseKbps
         provenKbps = baseKbps
@@ -62,14 +65,16 @@ public struct BandwidthPolicy: Sendable {
     /// Same-interface replacements also reset every learned transport fact and rollback rung.
     public mutating func replacePath(_ replacement: BandwidthPath) {
         guard replacement.generation >= path.generation else { return }
-        let changed = replacement.generation != path.generation
+        // The first real observation completes the launch path; it is not a handoff.
+        let changed = replacement.generation != path.generation && path.source != .unavailable
         path = replacement
-        baseKbps = Self.startRate(demand: demand, path: path)
+        if changed { launchKbps = nil }
+        baseKbps = max(Self.startRate(demand: demand, path: path), launchKbps ?? 0)
         if changed {
             resetEvidence()
             provenKbps = baseKbps
             recovering = false
-            retrySeconds = 300
+            flap.forgetStepUp()
             trial = false
             pending = nil
             outcome = nil
@@ -166,10 +171,11 @@ public struct BandwidthPolicy: Sendable {
         if thermalRecoveryRemaining > 0 { thermalRecoveryRemaining -= health.end - health.start }
         windows.append(health)
         windows.removeAll { health.end - $0.end >= 120 }
+        flap.decay(at: health.end)
         if trial && cleanSeconds >= 120 && busySeconds(last: 60) >= 30 {
             trial = false
             recovering = false
-            retrySeconds = 300
+            flap.forgetStepUp()
             provenKbps = appliedKbps
         }
         return earn(health)
@@ -177,9 +183,6 @@ public struct BandwidthPolicy: Sendable {
 
     mutating func cut(_ health: BandwidthHealth) -> BandwidthDecision {
         let rollback = trial && provenKbps < appliedKbps
-        guard rollback || activeSeconds - lastCutAt >= 90 else {
-            return decision(.transportDistress, health: health)
-        }
         let rate = rollback ? provenKbps : max(1, Int(Double(appliedKbps) * 0.6))
         guard rate < appliedKbps else { return decision(.unsupportedPath, health: health) }
         return propose(rate, reason: rollback ? .rollback : .transportDistress, health: health)
@@ -219,7 +222,7 @@ public struct BandwidthPolicy: Sendable {
 
     func qualificationSeconds(_ health: BandwidthHealth) -> Double {
         let corroborated = validPHY(at: health.end) != nil || health.train?.budgetIPKbps(at: health.end) != nil
-        return recovering ? retrySeconds : (corroborated && !trial && appliedKbps == baseKbps ? 60 : 120)
+        return recovering ? flap.backoffSeconds : (corroborated && !trial && appliedKbps == baseKbps ? 60 : 120)
     }
 
     func busySeconds(last seconds: Double) -> Double {

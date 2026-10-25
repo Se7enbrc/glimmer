@@ -22,9 +22,9 @@ extension BandwidthPolicy {
               let recovered = health.recovered, recovered < 0.005,
               health.unrecoverableFrames == 0, health.decoderBacklog == false,
               let gap = health.gapMs, gap.isFinite, gap >= 0, gap <= 50,
-              let queue = health.localQueueMs, queue.isFinite, queue >= 0, queue <= 2,
+              health.localQueueMs.map({ $0.isFinite && $0 >= 0 && $0 <= 2 }) != false,
               let encoded = health.encodedKbps, encoded.isFinite, encoded >= 0,
-              health.risingQueue == false,
+              health.risingQueue != true,
               let median = Self.quantile(health.rttSamplesMs.sorted(), 0.5),
               let high = Self.quantile(health.rttSamplesMs.sorted(), 0.95) else { return false }
         guard let baselineMs else { return true }
@@ -47,6 +47,7 @@ extension BandwidthPolicy {
     }
 
     mutating func propose(_ rate: Int, reason: BandwidthReason, health: BandwidthHealth) -> BandwidthDecision {
+        guard flap.allows(increase: rate > appliedKbps, at: health.end) else { return decision(.hold, health: health) }
         if pending?.rateKbps != rate || pending?.reason != reason {
             sequence &+= 1
             pending = BandwidthRequest(rateKbps: rate, reason: reason, generation: path.generation, sequence: sequence)
@@ -59,6 +60,40 @@ extension BandwidthPolicy {
     public mutating func recordOutcome(_ result: BandwidthActuatorOutcome, for request: BandwidthRequest) {
         guard !stopped, pending == request, path.generation == request.generation else { return }
         outcome = result
+        flap.lastAttemptAt = lastEnd
+    }
+
+    /// The request to hand the actuator now. A deferred or failed one retries after the minimum dwell.
+    public func submission(at time: Double) -> BandwidthRequest? {
+        guard let pending, outcome != .accepted else { return nil }
+        guard outcome == nil || flap.lastAttemptAt.map({ time - $0 >= BandwidthFlapGuard.minDwellSeconds }) != false
+        else { return nil }
+        return pending
+    }
+
+    /// Another owner (watchdog downshift, resize) changed the rate; it counts as a change for dwell.
+    public mutating func adoptApplied(_ rate: Int) {
+        guard !stopped, rate > 0, rate != appliedKbps else { return }
+        flap.recordChange(increase: rate > appliedKbps, at: lastEnd ?? 0)
+        appliedKbps = rate
+        targetKbps = rate
+        pending = nil
+        outcome = nil
+        trial = false
+        cleanSeconds = 0
+        badSeconds = 0
+        windows.removeAll()
+        severeTimes.removeAll()
+    }
+
+    /// An applied format change moves demand; evidence about the old picture no longer qualifies.
+    public mutating func replaceDemand(_ value: BandwidthDemand) {
+        guard value != demand else { return }
+        demand = value
+        launchKbps = nil
+        baseKbps = Self.startRate(demand: demand, path: path)
+        cleanSeconds = 0
+        windows.removeAll()
     }
 
     /// Call only after the actuator verifies the negotiated request on this attempt and path.
@@ -67,11 +102,9 @@ extension BandwidthPolicy {
             return false
         }
         let wasReduction = request.rateKbps < appliedKbps
-        let failedTrial = trial && wasReduction
+        flap.recordChange(increase: !wasReduction, at: lastEnd ?? 0)
         if wasReduction {
             recovering = true
-            retrySeconds = failedTrial ? min(2_400, retrySeconds * 2) : retrySeconds
-            lastCutAt = activeSeconds
             provenKbps = min(provenKbps, request.rateKbps)
             trial = false
         } else {
@@ -99,6 +132,6 @@ extension BandwidthPolicy {
             baselineMs: baselineMs, activeSeconds: activeSeconds, cleanSeconds: cleanSeconds,
             nextEligibleActiveSeconds: activeSeconds + max(0, qualificationSeconds(health) - cleanSeconds),
             reason: reason, confidence: reason == .missingEvidence ? .unknown : (baselineMs == nil ? .provisional : .measured),
-            request: pending, actuatorOutcome: outcome)
+            request: pending, actuatorOutcome: outcome, flap: flap)
     }
 }

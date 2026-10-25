@@ -88,7 +88,7 @@ struct StreamPlayback {
         video.attach(to: surface.displayLayer)
         video.startPacing(display: surface.pacerDisplay, configuredFps: format.pacingFPS)
         let nativeInput = NativeInputLifetime()
-        let bandwidth = IOSBandwidthSignals()
+        let bandwidth = BandwidthSignals()
         let media = StreamSession.PreparedMedia(video: video, audio: audio,
             quiesce: { nativeInput.focus(false); quiesce() }, finalDispose: { nativeInput.stop(); bandwidth.stop() })
         let (session, input) = StreamSession.make(media: media, network: launch.network,

@@ -100,6 +100,9 @@ struct GlimmerApp: App {
             "rawHIDPromptAnswered": false,
             "showDiagnostics": diagnosticBuild,
             "telemetryEnabled": diagnosticBuild,
+            // Beta only: diagnostic builds and Macs enrolled in release candidates.
+            AdaptiveBandwidth.defaultsKey: diagnosticBuild
+                || defaults.string(forKey: StreamAwareUpdateAlerts.updateChannelPreferenceKey) == "rc",
             // "Show the stream": full screen unless the user picks Window. The
             // registered value keeps the raw read and AppModel's declared
             // default in agreement (see StreamDisplayMode.defaultMode).

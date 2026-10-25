@@ -87,17 +87,14 @@ struct BandwidthPolicyTests {
         #expect(BandwidthPolicy.startRate(demand: demand, path: path) == 2_000)
     }
 
-    @Test func identicalPublicClientReplays() async throws {
+    @Test func identicalPublicClientReplays() {
         var mac = BandwidthReplay(client: .mac)
         var ios = BandwidthReplay(client: .ios)
-        let actuator = FakeBandwidthActuator(immediate: .deferred)
-        let driver = BandwidthPolicyDriver(policy: ios.policy, actuator: actuator)
         for _ in 0..<120 {
-            let direct = mac.tick()
-            let window = try #require(ios.tick().window)
-            let driven = await driver.evaluate(window)
-            if let request = direct.request { mac.policy.recordOutcome(.deferred, for: request) }
-            #expect(mac.policy.decision(direct.reason, health: window) == driven)
+            let macDecision = mac.tick()
+            #expect(ios.tick() == macDecision)
+            if let request = mac.policy.pending { mac.policy.recordOutcome(.deferred, for: request) }
+            if let request = ios.policy.pending { ios.policy.recordOutcome(.deferred, for: request) }
         }
         #expect(mac.policy.pending?.rateKbps == 44_000)
         #expect(mac.policy.appliedKbps == 40_000)
@@ -171,6 +168,8 @@ struct BandwidthPolicyTests {
             replay.run(Int(replay.policy.retrySeconds))
             try replay.apply()
             replay.distress()
+            #expect(replay.policy.pending == nil)
+            replay.run(Int(BandwidthFlapGuard.minDwellSeconds) - 3) { $0.lostPackets = 20; $0.gapMs = 80 }
             #expect(replay.policy.pending?.reason == .rollback)
             try replay.apply()
         }
@@ -383,16 +382,15 @@ struct BandwidthBoundaryTests {
         #expect(fec.policy.pending == nil)
     }
 
-    @Test func lowPowerAndPoorRadioHintsNeverBecomePermanentGiveUp() {
+    @Test func lowPowerChangesNothingAndPoorRadioHintsNeverGiveUp() throws {
         var replay = BandwidthReplay()
         var environment = BandwidthEnvironment()
         environment.thermal = .nominal
         environment.lowPower = true
         replay.policy.setEnvironment(environment)
-        replay.run(240)
-        #expect(replay.policy.pending == nil)
-        environment.lowPower = false
-        replay.policy.setEnvironment(environment)
+        replay.run(120)
+        #expect(replay.policy.pending?.rateKbps == 44_000)
+        replay = BandwidthReplay()
         var path = replay.policy.path
         path.linkQuality = .minimal
         path.radio = .lte

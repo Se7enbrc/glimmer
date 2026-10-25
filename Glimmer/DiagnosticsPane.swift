@@ -28,6 +28,8 @@ struct DiagnosticsPane: View {
     /// Debug lines reach the in-app log and session file only with this on (a debug
     /// session once ran 30-105k lines an hour). Resolved at session start, like telemetry.
     @AppStorage("diagFileLogDebug") private var fileLogDebug = false
+    /// Beta builds start with adaptive quality on; turning it off gives a before/after trial.
+    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
 
     var body: some View {
         // @Bindable shim - surfaces $model.x bindings from the @Observable
@@ -87,6 +89,16 @@ struct DiagnosticsPane: View {
                         }
                     }
                     .accessibilityLabel("Verbose session log file")
+                    Toggle(isOn: $adaptiveBandwidth) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Adaptive stream quality").fontWeight(.medium)
+                            Text("Lowers the bitrate within seconds when the connection struggles and "
+                                + "raises it again once it recovers. Turn off to compare.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityLabel("Adaptive stream quality")
                     // The exporter (and the file sink's level) snapshot their gates
                     // when a session starts, so a mid-session flip does nothing
                     // until the next stream.

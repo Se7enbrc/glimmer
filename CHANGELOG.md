@@ -45,6 +45,11 @@
   most once a minute unless it takes longer than 2 seconds; brief ones show
   nothing.
 
+- Beta builds adapt stream quality to the connection on Mac, iPhone and iPad:
+  the bitrate drops within a few seconds when the network struggles and climbs
+  back once it recovers. iPhone and iPad start at 40 Mbps on Wi-Fi, 20 Mbps on
+  cellular and 9 Mbps in Low Data Mode. Turn it off in Diagnostics to compare.
+
 - Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
   Sequoia, windows and controls use the system's standard materials in place of
   Liquid Glass.

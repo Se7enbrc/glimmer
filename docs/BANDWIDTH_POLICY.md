@@ -9,32 +9,73 @@ or image quality.
 
 `BandwidthPolicy` is a pure value. It accepts current destination/path facts,
 accepted-format demand, device state and fresh transport windows. Both clients
-use the same decisions. `RouteBitratePolicy` is now a compatibility alias for
-the shared policy's existing Mac launch calculations: wired/Wi-Fi boosts,
-codec/custom semantics, caps and the Mac PHY gate retain their previous
-arithmetic.
+use the same decisions. `RouteBitratePolicy` is a compatibility alias for the
+Mac launch calculations: wired/Wi-Fi boosts, codec/custom semantics, caps and
+the Mac PHY gate retain their previous arithmetic.
 
-`BandwidthPolicyDriver` calls `BandwidthActuator.request(rate:reason:)` and
-coalesces outstanding work. Accepted means queued, not applied. Only
-`confirmApplied` after successful negotiation advances the applied rate. Each
-request carries a path generation and sequence; retiring the path or stopping
-the driver invalidates late completions. The integration must also retire the
-driver on takeover or attempt replacement. Deferred/rejected requests remain
-retryable. If accepted work later fails, report its rejection through
-`recordOutcome`; acceptance must not become a permanent waiting state.
+The session owns the policy and drives the resume-only bitrate actuator from the
+1 Hz frame watchdog. `BandwidthHealthSampler` turns the always-live receive
+counters (pre-FEC loss, FEC recoveries, unrecoverable frames, 50/100 ms gap
+events, decoder-backlog overflows, received bytes) and fresh matched-ACK RTT
+samples into one-second windows. The receive path folds its counts about every
+two seconds; a tick between folds reuses the last fold's fractions, and two
+missed folds mark the window unavailable. No window spans a transition.
 
-No production actuator is attached here. The public session records shadow
-startup/path targets and retains its configured ANNOUNCE rate. It does not
-perform an elective reconnect, change the display format, cancel the PC game or
-claim seamless handoff. Wire the driver into the shared recovery arbiter in the
-actuator integration, preserving the same PC app and input-release ordering.
+`submission(at:)` hands at most one request to `request(rate:reason:)`. Accepted
+means queued; only a completed `applied` transition confirms the rate. Deferred
+and failed requests retry after the minimum dwell. Rate changes made by another
+owner (the watchdog downshift tier, an ordinary reconnect's route ask, a resize)
+are adopted and count as changes for dwell.
+
+`BandwidthSignals` (shared engine) supplies path facts on Mac, iPhone and iPad:
+an event-driven `NWPathMonitor`, a destination route lookup that marks facts
+`destination` when the kernel's route to the PC matches a current interface,
+thermal and Low Power notifications, and on iPhone the data-service RAT hint.
+
+### Switch
+
+`AdaptiveBandwidth.defaultsKey` (`adaptiveBandwidthEnabled`) is read once per
+stream. Its registered default is on for beta builds only: TestFlight and Xcode
+installs on iOS, diagnostic builds and `GlimmerUpdateChannel=rc` Macs. The
+Diagnostics toggle (iOS Settings, Mac Diagnostics pane) overrides it for
+before/after trials. Off keeps the configured launch rate and never actuates;
+decisions are still recorded when telemetry is on.
+
+### Owner decisions
+
+- Start rates at the reference format: Wi-Fi/wired 40, cellular/unknown 20, Low
+  Data Mode at most 9 Mbps. iPhone and iPad use them as the ANNOUNCE rate when
+  the switch is on. The Mac keeps its launch ask and adapts from it.
+- A protective cut follows three bad seconds (or two severe episodes in ten).
+- Low Data Mode caps the rate at 9 Mbps on every interface; play continues.
+- Wi-Fi to cellular keeps playing; the new path reseeds from its own prior.
+- iOS seeds from current conditions, never from remembered sessions.
+- Low Power Mode is recorded and changes nothing.
+- Every reduction stays recoverable: backoff is finite and decays.
+
+### Flap guard
+
+`BandwidthFlapGuard` uses session uptime, so it bounds the real change rate.
+
+| Constant                    | Value   | Why                                                             |
+| --------------------------- | ------- | --------------------------------------------------------------- |
+| `minDwellSeconds`           | 10 s    | Each change freezes play ~0.2–2 s; one per 10 s caps that cost. |
+| `stepUpDwellSeconds`        | 60 s    | Increases only add fidelity, so they wait longer than cuts.     |
+| `failedStepUpWindowSeconds` | 300 s   | A cut this soon after an increase marks it failed.              |
+| `baseBackoffSeconds`        | 300 s   | Clean time before the first retry after a cut.                  |
+| `maxBackoffSeconds`         | 2,400 s | Failed step-ups double the wait up to here, never further.      |
+
+An increase that survives the failure window, or proves itself in 120 clean busy
+seconds, decays the backoff to base. Path replacement resets it. The guard state
+(`lastChangeAt`, `lastIncreaseAt`, `lastAttemptAt`, `backoffSeconds`,
+`failedStepUps`) is part of every `BandwidthDecision` ledger row.
 
 ## Changed files
 
 | Area                     | Files                                                                                                                                                                                                     |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pure policy and contract | `BandwidthFacts.swift`, `BandwidthPolicy.swift`, `BandwidthPolicy+Evidence.swift`, `BandwidthPolicyDriver.swift`, `BandwidthTrainEvidence.swift`, `RouteBitratePolicy.swift`                              |
-| Native facts             | `IOSBandwidthSignals.swift`, `BandwidthInputs.swift`, shared `StreamDestinationProbe.swift`, Mac compatibility alias, `NetworkClient+Endpoints.swift`                                                     |
+| Pure policy and contract | `BandwidthFacts.swift`, `BandwidthPolicy.swift`, `BandwidthPolicy+Evidence.swift`, `BandwidthTrainEvidence.swift`, `RouteBitratePolicy.swift`                                                             |
+| Native facts             | `BandwidthSignals.swift`, `BandwidthInputs.swift`, shared `StreamDestinationProbe.swift`, Mac compatibility alias, `NetworkClient+Endpoints.swift`                                                        |
 | Session wiring           | `StreamPlayback.swift`, `SessionAdapters.swift`, `StreamSession.swift`, `StreamSession+Public.swift`, `StreamSession+Connect.swift`, `StreamSession+FrameWatchdog.swift`, `StreamSession+Bandwidth.swift` |
 | Ledger                   | `GlimmerEngine/Diagnostics/BandwidthDecision.swift` through the existing shared recorder                                                                                                                  |
 | Verification             | Shared policy/actuator test files, both Xcode projects, `scripts/check-ios-boundary.py`                                                                                                                   |
@@ -61,9 +102,9 @@ Rates are decimal Kbps. The reference format is 1920 × 1080, 60 fps, H.264, SDR
 | Baseline                                | Provisional p10 after ≥10 ACKs across ≥2 seconds; then lowest healthy ten-second median in five minutes                            | TCP startup and live ENet evidence remain separate. Distress freezes baseline updates.      |
 | Protective cut                          | Three bad active seconds, or two severe episodes in ten seconds, with transport corroboration                                      | Distinguish transport damage from local decode/scheduling stalls.                           |
 | Cut size                                | Proven current-generation rung, otherwise 0.6× applied                                                                             | Decisive protection calculated from the real request. No recursive launch gate.             |
-| Ordinary cut cooldown                   | 90 active seconds; reserved immediate failed-trial rollback                                                                        | Avoid repeated disruptive negotiations without blocking rollback.                           |
+| Change dwell                            | See the flap guard: 10 s between any changes, 60 s before an increase                                                              | Bounds disruption in real time without delaying a protective cut for long.                  |
 | Recovery                                | 300 clean active seconds; failed trials double to a finite maximum of 2,400                                                        | No permanent disablement. A successful 120-second trial clears the penalty.                 |
-| Thermal/Low Power                       | Inhibit increases while serious/critical or Low Power; 300 clean seconds after thermal stress                                      | Bitrate is not a substitute for reducing pixel decode work.                                 |
+| Thermal                                 | Inhibit increases while serious/critical; 300 clean seconds after thermal stress. Low Power Mode changes nothing                   | Bitrate is not a substitute for reducing pixel decode work.                                 |
 | Foreground                              | No learning in background; discard evidence and requalify on return                                                                | Background grace is owned by the existing lifecycle, not a second timer.                    |
 
 A default-path hint cannot authorize promotion. Fresh train corroboration needs
@@ -74,11 +115,12 @@ or PHY observation establishes downlink capacity by itself.
 
 ## Inputs and recording
 
-The iOS adapter owns an event-driven `NWPathMonitor`, current data-service RAT
-classification, thermal and Low Power notifications. It stops observation in the
-background and at final disposal. It uses no SSID, carrier/subscriber identity,
-location permission, radio scan, throughput test or background polling. RAT and
-link quality remain qualitative facts, not Mbps multipliers or permanent caps.
+The shared `BandwidthSignals` adapter owns an event-driven `NWPathMonitor`,
+current data-service RAT classification, thermal and Low Power notifications. It
+stops observation in the background and at final disposal. It uses no SSID,
+carrier/subscriber identity, location permission, radio scan, throughput test or
+background polling. RAT and link quality remain qualitative facts, not Mbps
+multipliers or permanent caps.
 
 The destination route/MTU lookup and TCP sampler are shared with Mac. The UDP
 route lookup sends no traffic. iOS now supplies the existing bounded prelaunch
@@ -89,12 +131,11 @@ policy without adopting the Mac absolute-RTT bitrate discount. Unknown, cellular
 and other-interface hints retain conservative packet sizes until destination
 evidence is available.
 
-The general monitor remains `defaultPath` provenance, even if a fresh route
-lookup finds a matching interface. It cannot establish the route of
-already-connected BSD sockets or expose a tunnel's underlay. Actuator
-integration must reconcile the active media/control sockets before marking
-evidence `destination`, and must invalidate evidence on same-interface route
-replacement.
+A monitor update is `defaultPath` provenance until the destination route lookup
+(the kernel's choice for the PC's address, which the media sockets share) names
+one of its interfaces; then it is `destination`. Every monitor event bumps the
+generation, so a same-interface route replacement invalidates evidence. A
+tunnel's underlay stays unknown.
 
 `BandwidthDecision` and `BandwidthLedger` serialize through the existing shared
 recorder. They separate display demand, base, every supplied ceiling, target,
@@ -105,14 +146,10 @@ connect/media clocks, interruption lengths and byte/transition totals.
 Integration must supply those actual values; an unknown engine revision is not
 the app revision.
 
-The current session shadow explicitly records unavailable interval health. It
-never converts the existing two-second loss gauges, EWMA RTT/variance or
-reset-on-export histograms into fresh one-second percentiles. The full pure
-`BandwidthHealth` input and deterministic replay are ready for the live producer
-connection in actuator integration. That integration must provide mature counts,
-fresh bounded ACK samples, matching byte windows and local-backlog attribution
-independently of telemetry export. Until then, runtime shadow rows establish
-startup/path decisions, not live promotion readiness.
+Live windows come from `BandwidthHealthSampler` (see the integration boundary).
+Local queue delay, rising-queue trend, jitter percentiles and packet trains are
+not produced yet; absent values never block health, so the 2× Wi-Fi headroom
+(which needs jitter p95) stays unearned until a producer exists.
 
 ## Deterministic verification
 

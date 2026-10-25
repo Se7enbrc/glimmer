@@ -5,7 +5,7 @@ import Foundation
 
 extension StreamSession {
     public enum BitrateReason: String, Sendable, Codable {
-        case congestion, recovery, trial, rollback
+        case congestion, recovery, trial, rollback, resize
     }
 
     public enum BitrateAdmission: Sendable, Equatable {
@@ -20,6 +20,9 @@ extension StreamSession {
         public let fromKbps: Int
         public let requestedKbps: Int
         public let reason: BitrateReason
+        /// Present only for a format change; the encoded size the replacement requests.
+        public var width: Int?
+        public var height: Int?
         public var outcome: Outcome?
         public var attempts = 0
         public var elapsedMs: Double?
@@ -62,8 +65,22 @@ extension StreamSession {
     /// Accepted reserves the sole recovery owner immediately. Deferred requests are not queued:
     /// the policy must reconsider fresh evidence. Completion is reported separately from admission.
     public func request(rate: Int, reason: BitrateReason) -> BitrateAdmission {
+        guard let current = appliedBitrateKbps, rate != current else { return .rejected }
+        return beginTransition(rate: rate, reason: reason, size: nil)
+    }
+
+    /// Resume-only encoded-size change for a resized window, at the current rate and frame rate.
+    /// Same admission and completion contract as `request(rate:reason:)`; see docs/BITRATE_ACTUATOR.md.
+    public func request(width: Int, height: Int) -> BitrateAdmission {
+        guard StreamSizeBounds.width.contains(width), StreamSizeBounds.height.contains(height),
+              width.isMultiple(of: 2), height.isMultiple(of: 2), let config = reconnectConfig,
+              (width, height) != (config.width, config.height), let rate = appliedBitrateKbps else { return .rejected }
+        return beginTransition(rate: rate, reason: .resize, size: (width, height))
+    }
+
+    private func beginTransition(rate: Int, reason: BitrateReason, size: (width: Int, height: Int)?) -> BitrateAdmission {
         guard rate > 0, Int32(exactly: rate) != nil, isStreaming, !stopInProgress,
-              let current = appliedBitrateKbps, rate != current else { return .rejected }
+              let current = appliedBitrateKbps else { return .rejected }
         guard reachedLiveState, ownsHostSession, !isReconnecting, bitrateTask == nil, bitrateAvailable,
               videoDecoder?.statsCollector.presentationTimes.last != nil,
               wakeProbeTask == nil, pendingLaunch == nil, launchTask == nil,
@@ -72,8 +89,10 @@ extension StreamSession {
         bitrateAudioTail = nil
         preserveGameOnStop = true
         isReconnecting = true
-        bitrateChange = BitrateChange(started: uptimeSeconds,
-            report: BitrateChangeReport(id: UUID(), fromKbps: current, requestedKbps: rate, reason: reason))
+        var report = BitrateChangeReport(id: UUID(), fromKbps: current, requestedKbps: rate, reason: reason)
+        report.width = size?.width
+        report.height = size?.height
+        bitrateChange = BitrateChange(started: uptimeSeconds, report: report)
         bitrateTask = Task { await self.performBitrateChange() }
         return .accepted
     }
@@ -122,6 +141,12 @@ extension StreamSession {
             appliedBitrateKbps = change.report.requestedKbps
             reconnectConfig?.bitrateKbps = change.report.requestedKbps
             reconnectConfig?.bitrateBoost = 1
+            if let width = change.report.width, let height = change.report.height, var config = reconnectConfig {
+                config.width = width
+                config.height = height
+                reconnectConfig = config
+                bandwidthPolicy?.replaceDemand(Self.bandwidthDemand(config))
+            }
             if change.report.audioGapMs == nil, let oldLast = change.oldLastAudio {
                 bitrateAudioTail = (change.report.id, attemptID, oldLast)
             }
@@ -129,6 +154,7 @@ extension StreamSession {
         bitrateChange = change
         lastBitrateChange = change.report
         recordBitrateReport(change.report)
+        finishBandwidthTransition(applied: outcome == .applied)
     }
 
     private func recordBitrateReport(_ report: BitrateChangeReport) {

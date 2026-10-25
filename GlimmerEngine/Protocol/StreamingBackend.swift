@@ -348,6 +348,8 @@ package protocol StreamingBackend: AnyObject, Sendable {
     /// has no control channel up. Surfaced ONLY by the opt-in telemetry
     /// exporter; the protocol default returns nil.
     func enetHealth() -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)?
+    /// Matched-ACK round trips (ms) since the last call; empty without a control channel.
+    func drainRttSamples() -> [Double]
     /// Re-anchor the ENet dead-peer silence clock to NOW and send an immediate
     /// solicited ping. Called on wake-from-sleep: the silence clock paused during
     /// the nap, so without this a post-wake probe reads false-fresh. No-op when
@@ -398,6 +400,7 @@ extension StreamingBackend {
     /// control channel (NativeBackend) override this; a future C backend would
     /// inherit nil rather than be forced to fabricate the numbers.
     package func enetHealth() -> (sentReliable: Int, oldestUnackedMs: UInt32, sinceLastAckMs: UInt32)? { nil }
+    package func drainRttSamples() -> [Double] { [] }
 
     /// Default: no control channel to re-anchor/ping. NativeBackend overrides this.
     package func wakeReanchorAndPing() {}

@@ -19,10 +19,12 @@ struct DiagnosticsDefaultsTests {
         #expect(DiagnosticsAvailability.compiledIn)
         #expect(DiagnosticsAvailability.isEnabled(defaults: defaults) == (saved ?? true))
         #expect(DiagnosticsDefaults.directory != nil)
+        #expect(defaults.bool(forKey: AdaptiveBandwidth.defaultsKey))
         #else
         #expect(DiagnosticsAvailability.compiledIn == false)
         #expect(DiagnosticsAvailability.isEnabled(defaults: defaults) == false)
         #expect(DiagnosticsDefaults.directory == nil)
+        #expect(defaults.bool(forKey: AdaptiveBandwidth.defaultsKey) == false)
         for override in [nil, "1", "unknown"] as [String?] {
             #expect(TelemetryGate.isEnabled(defaults: defaults, environmentValue: override) == false)
         }

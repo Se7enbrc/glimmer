@@ -151,7 +151,6 @@
 		24515FAF7C6E4E5AA5A42BBA /* ControllerShoulderGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D1B1C261634418B659D5CB /* ControllerShoulderGeometry.swift */; };
 		DEA3E708B2B3486488721058 /* ControllerShoulderControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F37D021E6E54166A96FFD0A /* ControllerShoulderControls.swift */; };
 		CFB1AD00C82D4222AF70ABDE /* BandwidthPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */; };
-		7A2730EEC865414F92ADEEBE /* IOSBandwidthSignals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06D497C0F6074E44BB73034D /* IOSBandwidthSignals.swift */; };
 		6A7D680A0F1A46C181605D73 /* BandwidthActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C228A78E7CE4F408100275C /* BandwidthActuatorTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -326,7 +325,6 @@
 		F3D1B1C261634418B659D5CB /* ControllerShoulderGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerShoulderGeometry.swift"; sourceTree = SOURCE_ROOT; };
 		7F37D021E6E54166A96FFD0A /* ControllerShoulderControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerShoulderControls.swift"; sourceTree = SOURCE_ROOT; };
 		0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/BandwidthPolicyTests.swift"; sourceTree = SOURCE_ROOT; };
-		06D497C0F6074E44BB73034D /* IOSBandwidthSignals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/IOSBandwidthSignals.swift"; sourceTree = SOURCE_ROOT; };
 		9C228A78E7CE4F408100275C /* BandwidthActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/BandwidthActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -531,7 +529,6 @@
 				449C39977453B76D4D682FFF /* StreamSessionModel.swift */,
 				E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */,
 				57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */,
-				06D497C0F6074E44BB73034D /* IOSBandwidthSignals.swift */,
 				5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */,
 				CC4120261024000000000002 /* StreamDisplayModes.swift */,
 				CC4120261024000000000004 /* iphone-ipad.xml */,
@@ -810,7 +807,6 @@
 				BFCC9B0DBFB951A6374D2892 /* StreamSessionModel.swift in Sources */,
 				D2CF67DA276842128B900E3A /* StreamSessionFailureCopy.swift in Sources */,
 				902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */,
-				7A2730EEC865414F92ADEEBE /* IOSBandwidthSignals.swift in Sources */,
 				FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */,
 				CC4120261024000000000001 /* StreamDisplayModes.swift in Sources */,
 				A3D372A8CF7E4C02AC0926B7 /* StreamBackgroundGrace.swift in Sources */,

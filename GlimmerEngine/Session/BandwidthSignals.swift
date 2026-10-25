@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(iOS)
 import CoreTelephony
+#endif
 import Foundation
-import GlimmerEngine
 import Network
 
-/// Session-scoped hints never identify a carrier, network name or subscriber in shared diagnostics.
-@MainActor final class IOSBandwidthSignals: NSObject, CTTelephonyNetworkInfoDelegate {
-    let inputs: BandwidthInputs
+/// Session-scoped path, cost and device facts for every client. Hints never identify a carrier,
+/// network name or subscriber in shared diagnostics.
+@MainActor public final class BandwidthSignals: NSObject {
+    public let inputs: BandwidthInputs
+    #if os(iOS)
     private let radio = CTTelephonyNetworkInfo()
+    #endif
     private var monitor: NWPathMonitor?
     private var observers: [NSObjectProtocol] = []
     private var generation: UInt64 = 0
@@ -17,19 +21,21 @@ import Network
     private var lastPath: NWPath?
     private var foreground = true
 
-    override init() {
+    override public init() {
         inputs = BandwidthInputs(.init(path: BandwidthPath(observedAt: ProcessInfo.processInfo.systemUptime),
                                       environment: Self.environment(foreground: true)))
         super.init()
     }
 
-    func start(host: String) {
+    public func start(host: String) {
         guard monitor == nil else { return }
         self.host = host
-        radio.delegate = self
         observe(ProcessInfo.thermalStateDidChangeNotification)
         observe(.NSProcessInfoPowerStateDidChange)
+        #if os(iOS)
+        radio.delegate = self
         observe(.CTServiceRadioAccessTechnologyDidChange)
+        #endif
         let monitor = NWPathMonitor()
         self.monitor = monitor
         monitor.pathUpdateHandler = { [weak self] path in
@@ -39,18 +45,20 @@ import Network
         publish()
     }
 
-    func stop() {
+    public func stop() {
         monitor?.cancel()
         monitor?.pathUpdateHandler = nil
         monitor = nil
         lastPath = nil
         host = nil
+        #if os(iOS)
         radio.delegate = nil
+        #endif
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers.removeAll()
     }
 
-    func setForeground(_ value: Bool) {
+    public func setForeground(_ value: Bool) {
         foreground = value
         if !value {
             let retainedHost = host
@@ -58,10 +66,6 @@ import Network
             host = retainedHost
             publish()
         } else if let host { start(host: host) }
-    }
-
-    nonisolated func dataServiceIdentifierDidChange(_ identifier: String) {
-        Task { @MainActor [weak self] in self?.publish() }
     }
 
     private func observe(_ name: Notification.Name) {
@@ -81,7 +85,7 @@ import Network
         publish()
     }
 
-    private func publish() {
+    fileprivate func publish() {
         let now = ProcessInfo.processInfo.systemUptime
         var facts = BandwidthPath(generation: generation, observedAt: now)
         if let path = lastPath, foreground {
@@ -90,16 +94,19 @@ import Network
                 let route = StreamDestinationProbe.destination(host: host)
                 facts.mtu = route.mtu
                 facts.tunnel = route.interfaceName == nil ? nil : route.tunnel
-                // Default-path flags stay hints even when a fresh destination route agrees.
+                // The kernel's route to the PC is the media sockets' route; only then do path flags apply to it.
                 if let name = route.interfaceName,
                    let interface = path.availableInterfaces.first(where: { $0.name == name }) {
                     facts.interface = Self.interface(interface.type)
+                    facts.source = .destination
                 }
             }
+            #if os(iOS)
             if facts.interface == .cellular, let service = radio.dataServiceIdentifier,
                let technology = radio.serviceCurrentRadioAccessTechnology?[service] {
                 facts.radio = Self.radioHint(technology)
             }
+            #endif
         }
         inputs.update(.init(path: facts, environment: Self.environment(foreground: foreground)))
     }
@@ -111,13 +118,15 @@ import Network
             interface: type.map(interface) ?? .unknown, source: .defaultPath,
             satisfied: path.status == .satisfied, expensive: path.isExpensive, constrained: path.isConstrained)
         facts.interfaces = types.filter { path.usesInterfaceType($0) }.map(interface)
-        facts.ultraConstrained = path.isUltraConstrained
-        switch path.linkQuality {
-        case .unknown: facts.linkQuality = .unknown
-        case .minimal: facts.linkQuality = .minimal
-        case .moderate: facts.linkQuality = .moderate
-        case .good: facts.linkQuality = .good
-        @unknown default: facts.linkQuality = .unknown
+        if #available(macOS 26, iOS 26, *) {
+            facts.ultraConstrained = path.isUltraConstrained
+            switch path.linkQuality {
+            case .unknown: facts.linkQuality = .unknown
+            case .minimal: facts.linkQuality = .minimal
+            case .moderate: facts.linkQuality = .moderate
+            case .good: facts.linkQuality = .good
+            @unknown default: facts.linkQuality = .unknown
+            }
         }
         return facts
     }
@@ -132,6 +141,7 @@ import Network
         }
     }
 
+    #if os(iOS)
     static func radioHint(_ value: String) -> BandwidthPath.Radio {
         switch value {
         case CTRadioAccessTechnologyLTE: .lte
@@ -140,6 +150,7 @@ import Network
         default: .other
         }
     }
+    #endif
 
     private static func environment(foreground: Bool) -> BandwidthEnvironment {
         var result = BandwidthEnvironment()
@@ -155,3 +166,11 @@ import Network
         return result
     }
 }
+
+#if os(iOS)
+extension BandwidthSignals: CTTelephonyNetworkInfoDelegate {
+    public nonisolated func dataServiceIdentifierDidChange(_ identifier: String) {
+        Task { @MainActor [weak self] in self?.publish() }
+    }
+}
+#endif

@@ -23,21 +23,22 @@ extension StreamSession {
         case .local, .remote:
             resolvedRemoteness = config.remoteness
         case .auto:
-            let facts = services.bandwidthInputs?.snapshot().path
+            let facts = publicMedia == nil ? nil : services.bandwidthInputs?.snapshot().path
             let conservative = facts.map { path.interfaceName == nil || $0.needsConservativePacketSize } ?? false
             resolvedRemoteness = path.isRemotePath || conservative ? .remote : .local
         }
         // Retain Mac compatibility gates; current-environment shadow decisions do not inherit a latency-based cap.
-        let pathCappedKbps = services.bandwidthInputs == nil
+        let pathCappedKbps = publicMedia == nil
             ? StreamPathMTU.cappedBitrateKbps(configured: config.bitrateKbps, path: path) : config.bitrateKbps
         // The wired boost assumed Ethernet at both ends; the measured RTT is
         // the host side's answer, and a Wi-Fi hop there takes the boost off.
-        let cappedBitrateKbps = exactBitrate ? config.bitrateKbps : StreamPathMTU.wiredAskKbps(
+        let routeAskKbps = exactBitrate ? config.bitrateKbps : StreamPathMTU.wiredAskKbps(
             capped: pathCappedKbps, boost: config.bitrateBoost, steadyRttMs: path.rttMs)
-        if cappedBitrateKbps < pathCappedKbps {
+        let cappedBitrateKbps = seedBandwidth(config: config, appliedKbps: routeAskKbps, rtt: rtt, preLaunch: rttPreLaunch)
+        if routeAskKbps < pathCappedKbps {
             Diag.notice("Wired bitrate boost withdrawn: steady RTT "
                 + "\(path.rttMs.map { String(format: "%.1f", $0) } ?? "?") ms says a Wi-Fi hop is on the path - "
-                + "asking for \(cappedBitrateKbps / 1000) Mbps instead of \(pathCappedKbps / 1000).", "Stream")
+                + "asking for \(routeAskKbps / 1000) Mbps instead of \(pathCappedKbps / 1000).", "Stream")
         }
         if config.remoteness == .auto {
             log.info("""
@@ -82,7 +83,6 @@ extension StreamSession {
             interfaceName: path.interfaceName, mtu: routeMTU, isTunnel: path.isTunnel,
             rtt: path.rtt, rttPreLaunch: rttPreLaunch, configuredBitrateKbps: config.bitrateKbps,
             askedBitrateKbps: cappedBitrateKbps, packetSize: resolvedPacketSize))
-        seedBandwidth(config: config, appliedKbps: cappedBitrateKbps, rtt: rtt, preLaunch: rttPreLaunch)
         return BackendStreamConfig(
             width: Int32(config.width),
             height: Int32(config.height),

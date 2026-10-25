@@ -54,14 +54,14 @@ extension AppModel {
         } else { confirm(alert.runModal()) }
     }
 
-    func makeNativeSession(disposition: StreamHostDisposition, takeoverAuthorized: Bool,
-                           approvedOccupant: Int?, continuing: Bool) async -> StreamSession {
-        let session = StreamSession(hostDisposition: disposition, backend: MacTransport.makeBackend(), makeNetwork: makeNetwork)
+    func makeNativeSession(server: ServerInfo, disposition: StreamHostDisposition, takeoverAuthorized: Bool,
+                           approvedOccupant: Int?, continuing: Bool) async -> (StreamSession, BandwidthSignals) {
+        let (session, bandwidth) = StreamSession.mac(server: server, disposition: disposition, makeNetwork: makeNetwork)
         nativeSession = session
         await session.authorizeTakeover(takeoverAuthorized)
         if let approvedOccupant { await session.approveReplacement(of: approvedOccupant) }
         if continuing { await session.requireContinuation(previous: pictureTrial?.previous) }
-        return session
+        return (session, bandwidth)
     }
 
     func runningApp(on host: Host) -> LibraryApp? {

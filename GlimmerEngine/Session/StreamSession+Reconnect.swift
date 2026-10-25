@@ -248,6 +248,8 @@ extension StreamSession {
         if let change = bitrateChange {
             config.bitrateKbps = change.report.requestedKbps
             config.bitrateBoost = 1
+            config.width = change.report.width ?? config.width
+            config.height = change.report.height ?? config.height
         }
         let setup = SessionMedia(presentation: win, input: inp, video: dec)
         do {

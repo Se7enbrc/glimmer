@@ -358,6 +358,8 @@ extension EnetControlChannel {
                 // guard) would understate the EWMA. EWMA gains mirror ENet's peer
                 // update (1/8 mean, 1/4 variance), now in Double for sub-ms signal.
                 let rtt = max(monotonicMs - localSent, 0.001)
+                if rttSamples.count >= Self.rttSampleLimit { rttSamples.removeFirst() }
+                rttSamples.append(rtt)
                 if hasRttSample {
                     rttVariance -= rttVariance / 4
                     if rtt >= roundTripTime {
