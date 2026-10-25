@@ -7,10 +7,11 @@ import json
 import os
 from pathlib import Path
 import plistlib
-import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_process import run_fixture
 
 SIGN_SCRIPT = Path(__file__).resolve().parents[1] / "sign-bundle.sh"
 
@@ -90,9 +91,9 @@ class SignBundleTests(unittest.TestCase):
         self.environment.pop("SIGN_TEST_VERIFY_FAILURE", None)
 
     def run_sign(self, identity="Developer ID Application: Fixture", environment=None):
-        return subprocess.run(
+        return run_fixture(
             ["/bin/bash", str(SIGN_SCRIPT), str(self.app), identity, self.keychain, str(self.entitlements)],
-            cwd=self.root, env=environment or self.environment, capture_output=True, text=True, timeout=10,
+            cwd=self.root, env=environment or self.environment,
         )
 
     def calls(self):

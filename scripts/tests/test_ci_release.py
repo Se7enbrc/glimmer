@@ -14,6 +14,8 @@ import sys
 import tempfile
 import unittest
 
+from fixture_process import run_fixture
+
 SCRIPT = Path(__file__).resolve().parents[1] / "ci-release.sh"
 SHA = "a" * 40
 TOOL = r'''
@@ -62,11 +64,16 @@ elif name == "make" and args == ["CONFIG=Release", "guard-release-version", "cle
     diagnostic = config.rstrip().endswith('GLIMMER_DIAGNOSTIC_BUILD = YES')
     (app / 'Info.plist').write_bytes(plistlib.dumps({'GlimmerDiagnosticBuild': diagnostic}))
     record['diagnostic'] = diagnostic
-elif name == "make" and args == ["CONFIG=Release", "dmg", "sparkle-zip"]:
-    for suffix in ("dmg", "zip"):
-        path = pathlib.Path(f"build/dist/Glimmer-2026.10.6.{suffix}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"inert {suffix} distribution fixture")
+elif name == "make" and args == ["CONFIG=Release", "dmg"]:
+    path = pathlib.Path("build/dist/Glimmer-2026.10.6.dmg")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("inert unsigned dmg fixture")
+elif name == "make" and args == ["CONFIG=Release", "notarize-dmg"]:
+    pathlib.Path("build/dist/Glimmer-2026.10.6.dmg").write_text("inert signed and stapled dmg fixture")
+    record["signing_available"] = (private / "signing.keychain-db").exists()
+elif name == "make" and args == ["CONFIG=Release", "sparkle-zip"]:
+    path = pathlib.Path("build/dist/Glimmer-2026.10.6.zip")
+    path.write_text("inert zip distribution fixture")
     record["private_exists"] = private.exists()
     record["secret_env_present"] = "P12_PASSWORD" in os.environ or "RELEASE_CONTENTS_TOKEN" in os.environ
 elif name == "gh":
@@ -151,14 +158,15 @@ class HostedReleaseTests(unittest.TestCase):
         for key in signing | {"SPARKLE_ED_PRIVATE_KEY", "RELEASE_CONTENTS_TOKEN"}:
             if key not in allowed:
                 environment.pop(key, None)
-        return subprocess.run(["/bin/bash", "scripts/ci-release.sh", phase], cwd=self.root,
-                              env=environment, capture_output=True, text=True, timeout=10)
+        return run_fixture(["/bin/bash", "scripts/ci-release.sh", phase], cwd=self.root, env=environment)
 
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
     def verified(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
+        self.assertEqual([call["args"] for call in self.calls() if call["tool"] == "release-checks.py"][-1],
+                         [SHA, "--candidate", "--delivery"])
         for part in ("checks", "tests", "asan"):
             output = Path(self.env["GITHUB_OUTPUT"])
             output.write_text("")
@@ -319,7 +327,7 @@ class HostedReleaseTests(unittest.TestCase):
         self.env["FIXTURE_FAIL"] = "git:fetch --quiet origin refs/tags/2026.10.6-rc.1"
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "release-checks.py" for call in self.calls()))
-        self.env["FIXTURE_FAIL"] = "release-checks.py:" + SHA
+        self.env["FIXTURE_FAIL"] = "release-checks.py:" + SHA + " --candidate --delivery"
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
         self.assertNotEqual(self.run_phase("verify-checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "security" or
@@ -346,6 +354,16 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual(clone["args"][2], "https://github.com/Se7enbrc/homebrew-glimmer.git")
         tap = next(call for call in self.calls() if call["tool"] == "homebrew-bump.sh")
         self.assertEqual(tap["args"], ["2026.10.6", "2026.10.6-rc.1"])
+
+    def test_promotion_checks_main_and_candidate_before_authorizing_any_phase(self):
+        self.env.update(RELEASE_OPERATION="promote", GITHUB_REF="refs/heads/main")
+        self.assertEqual(self.run_phase("checks").returncode, 0)
+        checks = [call["args"] for call in self.calls() if call["tool"] == "release-checks.py"]
+        self.assertEqual(checks, [[SHA], ["b" * 40, "--candidate", "--delivery"]])
+        self.env["FIXTURE_FAIL"] = "release-checks.py:" + "b" * 40 + " --candidate --delivery"
+        self.assertNotEqual(self.run_phase("checks").returncode, 0)
+        self.assertNotEqual(self.run_phase("prepare-promotion").returncode, 0)
+        self.assertFalse(any(call["tool"] == "promote-release.py" for call in self.calls()))
 
     def test_failed_precommit_stops_before_verify_and_cannot_authorize_build(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
@@ -442,6 +460,37 @@ class HostedReleaseTests(unittest.TestCase):
         for path in paths:
             self.assertIn(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path}\n", digests)
 
+    def test_package_preserves_stapled_dmg_and_retry_never_rebuilds_it(self):
+        self.env['GITHUB_STEP_SUMMARY'] = str(self.runner / 'summary')
+        self.packaged()
+        dmg = self.root / 'build/dist/Glimmer-2026.10.6.dmg'
+        self.assertEqual(dmg.read_text(), 'inert signed and stapled dmg fixture')
+        self.assertEqual(self.run_phase('package').returncode, 0)
+        self.assertEqual(dmg.read_text(), 'inert signed and stapled dmg fixture')
+        calls = self.calls()
+        args = [call['args'] for call in calls if call['tool'] == 'make']
+        self.assertEqual(args.count(['CONFIG=Release', 'dmg']), 1)
+        self.assertEqual(args.count(['CONFIG=Release', 'notarize-dmg']), 1)
+        self.assertLess(args.index(['CONFIG=Release', 'preflight', 'notarize-bundle']),
+                        args.index(['CONFIG=Release', 'dmg']))
+        self.assertLess(args.index(['CONFIG=Release', 'dmg']), args.index(['CONFIG=Release', 'notarize-dmg']))
+        signed = next(index for index, call in enumerate(calls) if call.get('signing_available'))
+        cleanup = next(index for index, call in enumerate(calls) if call['tool'] == 'security')
+        packaged = next(index for index, call in enumerate(calls) if call['args'] == ['CONFIG=Release', 'sparkle-zip'])
+        self.assertLess(signed, cleanup)
+        self.assertLess(cleanup, packaged)
+        self.assertIn('DMG packaging, signing, notarization and stapling:',
+                      Path(self.env['GITHUB_STEP_SUMMARY']).read_text())
+
+    def test_dmg_failure_cleans_credentials_and_cannot_authorize_package(self):
+        self.built()
+        for target in ('dmg', 'notarize-dmg'):
+            with self.subTest(target=target):
+                self.env['FIXTURE_FAIL'] = f'make:CONFIG=Release {target}'
+                self.assertNotEqual(self.run_phase('sign').returncode, 0)
+                self.assertFalse(self.private.exists())
+                self.assertFalse((self.runner / 'glimmer-verified-12-1-signed').exists())
+                self.assertNotEqual(self.run_phase('package').returncode, 0)
 
 
 

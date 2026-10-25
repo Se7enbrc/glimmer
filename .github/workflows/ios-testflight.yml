@@ -14,12 +14,12 @@ on:
         default: production
       expected_sha:
         description:
-          Reviewed source commit with green Verify and CodeQL (40 lowercase hex
-          characters)
+          Reserved candidate commit with direct Verify and CodeQL (40 lowercase
+          hex characters)
         required: true
         type: string
       archive_run_id:
-        description: Successful candidate-branch iOS TestFlight Build run ID
+        description: Successful release-candidate iOS TestFlight Build run ID
         required: true
         type: string
       marketing_version:
@@ -55,7 +55,7 @@ jobs:
     if:
       github.repository == 'Se7enbrc/glimmer' && github.ref == 'refs/heads/main'
     runs-on: macos-26
-    timeout-minutes: 10
+    timeout-minutes: 30
     outputs:
       artifact: ${{ steps.resolve.outputs.artifact }}
       attempt: ${{ steps.resolve.outputs.attempt }}
@@ -70,6 +70,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Wait for trusted delivery admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/candidate_reservation.py wait "$EXPECTED_SHA"
       - name: Require exact-commit Verify and all CodeQL results
         env:
           GH_TOKEN: ${{ github.token }}
@@ -126,7 +130,8 @@ jobs:
             --output "$RUNNER_TEMP/ios-payload" \
             --archive "$RUNNER_TEMP/ios-import/Glimmer.xcarchive"
       - name:
-          Export for internal TestFlight without compilation or app execution
+          Export for internal and external TestFlight without compilation or app
+          execution
         env:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
           IOS_DISTRIBUTION_P12_BASE64:
@@ -157,7 +162,11 @@ jobs:
             ${{ runner.temp }}/ios-export/receipt.json
           if-no-files-found: error
           retention-days: 30
-      - name: Upload the inspected internal-only build to Apple
+      - name: Recheck candidate before accessing upload credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ios-testflight.py gate
+      - name: Upload the inspected TestFlight build to Apple
         env:
           ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}

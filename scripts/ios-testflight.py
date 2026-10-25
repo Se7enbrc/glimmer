@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-"""Manual, exact-commit TestFlight build, verified handoff and internal-only upload."""
+"""Manual, exact-commit TestFlight build, verified handoff and upload for internal and external testing."""
 
 import argparse
 import hashlib
@@ -35,7 +35,8 @@ BUILD_WORKFLOW = '.github/workflows/ios-testflight-build.yml'
 
 def gate(expected, builder=False):
     artifact.require_builder() if builder else artifact.require_dispatch()
-    checks = importlib.import_module('release-checks').check(expected['EXPECTED_SHA'])
+    checks = importlib.import_module('release-checks').check(
+        expected['EXPECTED_SHA'], candidate=True, delivery=not builder)
     output = Path(os.environ['RUNNER_TEMP']) / 'ios-testflight-checks.json'
     output.write_text(json.dumps(checks, sort_keys=True) + '\n')
     return checks
@@ -86,6 +87,7 @@ def check_build_run(data, expected, workflow_id, default_branch):
             or data.get('event') != 'workflow_dispatch' or data.get('path') != BUILD_WORKFLOW
             or data.get('workflow_id') != workflow_id or data.get('status') != 'completed'
             or data.get('conclusion') != 'success' or not default_branch or not data.get('head_branch')
+            or data.get('head_branch') != 'release-candidate'
             or data.get('head_branch') in ('main', default_branch)
             or not re.fullmatch(r'[1-9][0-9]*', str(data.get('run_attempt', '')))):
         raise ValueError('archive run must be a successful exact-source candidate-branch build')

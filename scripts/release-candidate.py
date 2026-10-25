@@ -21,6 +21,7 @@ import xml.etree.ElementTree as ET
 
 from release_validation import SPARKLE, validate_feed
 from release_candidate_kind import parse_tag
+import candidate_reservation
 
 SCRIPTS = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("release_checks", SCRIPTS / "release-checks.py")
@@ -32,7 +33,11 @@ BRANCH = "release-candidate"
 RELEASE_PATHS = (".github/workflows/release.yml", ".github/workflows/release-publication.yml",
                  "scripts/ci-release.sh", "scripts/install-ci-scanner.sh", "scripts/release-checks.py",
                  "scripts/release_publication.py", "scripts/release_artifact.py", "scripts/release_validation.py",
-                 "scripts/release_candidate_kind.py", "scripts/release_symbols.py")
+                 "scripts/release_candidate_kind.py", "scripts/release_symbols.py", "scripts/candidate_reservation.py",
+                 "scripts/candidate_delivery.py", ".github/workflows/candidate-delivery.yml",
+                 ".github/workflows/verify.yml", ".github/workflows/codeql.yml",
+                 ".github/workflows/ios-testflight-build.yml", "scripts/ios-testflight.py",
+                 "scripts/ios-testflight-artifact.py", "scripts/ios-testflight-sign.py")
 POLL_SECONDS = 60
 TIMEOUT_SECONDS = 90 * 60
 
@@ -125,18 +130,51 @@ def wait_for_checks(sha, dry_run):
         time.sleep(POLL_SECONDS)
 
 
-def point_branch(sha, dry_run):
-    old = remote_refs(f"refs/heads/{BRANCH}").get(f"refs/heads/{BRANCH}")
-    if old == sha:
-        print(f"{BRANCH} is already at {sha}")
+def prepare_reviewed(sha, dry_run, pr=None):
+    _, held = candidate_reservation.snapshot()
+    if not held or held['state'] != 'reserved' or held['sha'] != sha:
+        wait_for_checks(sha, dry_run)
+        if pr and output(["gh", "pr", "view", str(pr), "--json", "headRefOid", "-q", ".headRefOid"],
+                         "couldn't read the pull request head") != sha:
+            raise ValueError(f"pull request #{pr} moved past {sha[:12]}; its new head gets its own candidate")
+    prepare_candidate(sha, dry_run)
+
+
+def candidate_runs(sha, workflow):
+    pages = CHECKS.api(f"actions/workflows/{workflow}/runs?head_sha={sha}&per_page=100")
+    if any(page.get("total_count", 0) >= 1000 for page in pages):
+        raise ValueError("candidate run search may be truncated")
+    return [run for page in pages for run in page.get("workflow_runs", [])
+            if run.get("event") == "workflow_dispatch" and run.get("head_branch") == BRANCH
+            and run.get("head_sha") == sha]
+
+
+def prepare_candidate(sha, dry_run):
+    fresh = candidate_reservation.reserve(sha, dry_run, CHECKS)
+    minimum = {}
+    for workflow in CHECKS.REQUIRED:
+        runs = candidate_runs(sha, workflow.rsplit("/", 1)[1])
+        if fresh or not runs:
+            minimum[workflow] = max((run["id"] for run in runs), default=0)
+            step(dry_run, ["gh", "workflow", "run", workflow.rsplit("/", 1)[1], "--ref", BRANCH],
+                 f"couldn't dispatch {workflow}; reservation retained, rerun the cutter")
+    if dry_run:
+        print("Would wait up to 45 min for direct candidate Verify, CodeQL processing and alert checks")
         return
-    push = ["git", "push", "origin", f"{sha}:refs/heads/{BRANCH}"]
-    moved = old and subprocess.run(["git", "merge-base", "--is-ancestor", old, sha]).returncode != 0
-    if moved:
-        push.insert(2, f"--force-with-lease={BRANCH}:{old}")
-    step(dry_run, push, f"couldn't push {BRANCH}")
-    if moved:
-        print(f"{'Would move' if dry_run else 'Moved'} {BRANCH} from {old[:12]} to {sha[:12]} (not a fast-forward)")
+    deadline = time.monotonic() + 45 * 60
+    while time.monotonic() < deadline:
+        try:
+            with CHECKS.read_budget(deadline):
+                for workflow, previous in minimum.items():
+                    runs = candidate_runs(sha, workflow.rsplit("/", 1)[1])
+                    if not any(run["id"] > previous for run in runs):
+                        raise CHECKS.ChecksPending(f"waiting for dispatched {workflow}")
+                CHECKS.check(sha, candidate=True)
+            return
+        except CHECKS.ChecksPending as error:
+            print(f"Waiting for candidate evidence: {error}", flush=True)
+        time.sleep(min(POLL_SECONDS, max(0, deadline - time.monotonic())))
+    raise ValueError("candidate checks timed out; reservation retained, rerun failed jobs or resume the cutter")
 
 
 def signed(tag):
@@ -183,7 +221,7 @@ def candidate_tag(version, build, sha, tags, diagnostic):
     return f"{version}-rc.{number}{'-diag' if diagnostic else ''}", False
 
 
-def cut(dry_run, ci_sha=None, pr=None, diagnostic=False):
+def cut(dry_run, ci_sha=None, pr=None, diagnostic=False, prepare_only=False):
     if ci_sha:
         # CI never checks out the pull request; it reads the candidate commit from history.
         sha, branch = ci_sha, f"pull request #{pr}"
@@ -194,6 +232,11 @@ def cut(dry_run, ci_sha=None, pr=None, diagnostic=False):
     output(["git", "diff", "--quiet", "origin/main", sha, "--", *RELEASE_PATHS],
            "candidate release workflow or script differs from main; "
            "land workflow and release-script changes on main first")
+    if prepare_only:
+        prepare_reviewed(sha, dry_run)
+        state = "would be prepared" if dry_run else "prepared"
+        print(f"Candidate {sha} {state} for credential-free iOS archive dispatch on {BRANCH}")
+        return
     config = output(["git", "show", f"{sha}:Glimmer/Version.xcconfig"], "couldn't read the candidate version")
     values = dict(re.findall(r"^(MARKETING_VERSION|CURRENT_PROJECT_VERSION)\s*=\s*(\S+)\s*$", config, re.M))
     version, build = values["MARKETING_VERSION"], values["CURRENT_PROJECT_VERSION"]
@@ -211,11 +254,7 @@ def cut(dry_run, ci_sha=None, pr=None, diagnostic=False):
         raise ValueError(f"tag {tag} already identifies {local[:12]}, not {sha[:12]}; tags are never replaced")
     print(f"Candidate {tag}: {version} build {build} at {sha} ({branch})")
     check_build(version, build)
-    wait_for_checks(sha, dry_run)
-    if ci_sha and output(["gh", "pr", "view", str(pr), "--json", "headRefOid", "-q", ".headRefOid"],
-                         "couldn't read the pull request head") != sha:
-        raise ValueError(f"pull request #{pr} moved past {sha[:12]}; its new head gets its own candidate")
-    point_branch(sha, dry_run)
+    prepare_reviewed(sha, dry_run, pr if ci_sha else None)
     if tag not in tags:
         if ci_sha and not local:
             # The release app tags as itself; its token and the run's attestation identify it.
@@ -242,15 +281,18 @@ def cut(dry_run, ci_sha=None, pr=None, diagnostic=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="print every step without pushing, tagging or dispatching")
+    parser.add_argument("--prepare-only", action="store_true", help="reserve and scan for iOS without tagging or releasing Mac")
     parser.add_argument("--diagnostic", action="store_true", help="manual-install diagnostic candidate; never promoted")
     parser.add_argument("--ci-sha", help="CI only: the labelled pull request head to cut")
     parser.add_argument("--pr", type=int, help="CI only: the pull request to comment the run on")
     args = parser.parse_args()
     if bool(args.ci_sha) != bool(args.pr) or (args.ci_sha and not re.fullmatch(r"[0-9a-f]{40}", args.ci_sha)):
         parser.error("--ci-sha needs a full commit SHA and --pr")
+    if args.prepare_only and (args.ci_sha or args.diagnostic):
+        parser.error("--prepare-only is a local preparation for both platforms, without --ci-sha or --diagnostic")
     os.chdir(SCRIPTS.parent)
     try:
-        cut(args.dry_run, args.ci_sha, args.pr, args.diagnostic)
+        cut(args.dry_run, args.ci_sha, args.pr, args.diagnostic, args.prepare_only)
     except (ValueError, KeyError, OSError, ET.ParseError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
         parser.exit(1, f"ERR: {error}\n")
 

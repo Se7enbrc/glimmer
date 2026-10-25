@@ -67,7 +67,7 @@ def require_builder(env=None):
     default = env.get('DEFAULT_BRANCH', '')
     workflow = f'{REPOSITORY}/.github/workflows/ios-testflight-build.yml@{ref}'
     if (env.get('GITHUB_REPOSITORY') != REPOSITORY or env.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
-            or not default or not ref.startswith('refs/heads/') or ref in ('refs/heads/main', f'refs/heads/{default}')
+            or not default or ref != 'refs/heads/release-candidate' or ref in ('refs/heads/main', f'refs/heads/{default}')
             or env.get('GITHUB_WORKFLOW_REF') != workflow or env.get('GITHUB_SHA') != env.get('EXPECTED_SHA')):
         raise ValueError('archive must run on its exact candidate branch commit, never the default branch')
 

@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import test_candidate_ref_checks as candidate_fixture
 from unittest.mock import Mock, patch
 
 SCRIPTS = Path(__file__).parents[1]
@@ -63,7 +64,7 @@ class CandidatePromotionTests(unittest.TestCase):
         self.mock.start()
         self.addCleanup(self.mock.stop)
 
-    def command(self, args, message):
+    def command(self, args, message, *, read_only=False):
         self.calls.append(args)
         if args[:2] in (["git", "ls-remote"], ["git", "tag"], ["git", "push"]) or (
                 args[:2] == ["git", "rev-parse"] and args[2].startswith("refs/tags/")):
@@ -103,6 +104,9 @@ class CandidatePromotionTests(unittest.TestCase):
             self.assertIn("--latest", args)
             self.data["prerelease"] = False
             return ""
+        if args[1] == "scripts/release-checks.py":
+            self.assertEqual(args[2:], [SHA, "--candidate", "--delivery"])
+            return ""
         if args[1] == "scripts/update-appcast.py":
             result = subprocess.run([sys.executable, str(SCRIPTS / "update-appcast.py"), *args[2:]],
                                     capture_output=True, text=True)
@@ -138,6 +142,57 @@ class CandidatePromotionTests(unittest.TestCase):
             self.remote_tags.update({ref: "d" * 40, f"{ref}^{{}}": self.local_tags[SHORT]})
             return ""
         raise AssertionError(args)
+
+    def test_current_candidate_verdict_is_required_for_prepare_tag_publish_and_tap_validation(self):
+        PROMOTE.prepare(TAG, SHA)
+        for reason in ('unreserved', 'ref moved', 'ref missing', 'direct scans absent', 'candidate alert open'):
+            fixture = candidate_fixture.CandidateRefChecksTests()
+            with patch.object(candidate_fixture, 'SHA', SHA):
+                fixture.setUp()
+                for run in fixture.runs:
+                    run['head_sha'] = SHA
+                for job in fixture.jobs.values():
+                    job['head_sha'] = SHA
+                original = fixture.objects
+                def objects(path):
+                    if reason == 'ref missing' and path == 'git/ref/heads/release-candidate':
+                        raise ValueError('missing candidate ref')
+                    result = original(path)
+                    if reason == 'unreserved' and path.startswith('git/commits/'):
+                        result['message'] = json.dumps({'schema': 1, 'sha': SHA, 'state': 'released'})
+                    return result
+                fixture.objects = objects
+                if reason == 'ref moved':
+                    fixture.branch = 'c' * 40
+                if reason == 'direct scans absent':
+                    fixture.data = []
+                if reason == 'candidate alert open':
+                    fixture.alerts = [{'number': 7}]
+                def candidate_gate(args, message, *, read_only=False):
+                    if args[1:2] == ['scripts/release-checks.py']:
+                        self.assertEqual(args[2:], [SHA, '--candidate', '--delivery'])
+                        self.assertTrue(read_only)
+                        fixture.check()
+                        return ''
+                    return self.command(args, message)
+                for phase in (PROMOTE.prepare, PROMOTE.validate, PROMOTE.final_tag, PROMOTE.publish):
+                    with self.subTest(reason=reason, phase=phase.__name__), \
+                            patch.object(PROMOTE, 'command', side_effect=candidate_gate):
+                        with self.assertRaises(ValueError):
+                            phase(TAG, SHA)
+                    self.assertEqual(self.remote_tags, {})
+                    self.assertTrue(self.data['prerelease'])
+
+    def test_candidate_gate_uses_read_token_without_replacing_publication_credentials(self):
+        self.mock.stop()
+        with patch.dict(os.environ, GH_TOKEN='fixture-write', RELEASE_READ_TOKEN='fixture-read'), \
+                patch.object(PROMOTE.subprocess, 'run', return_value=Mock(returncode=0, stdout='')) as execute:
+            PROMOTE.command(['python3', 'scripts/release-checks.py', SHA, '--candidate'],
+                            'checks failed', read_only=True)
+            self.assertEqual(execute.call_args.kwargs['env']['GH_TOKEN'], 'fixture-read')
+            self.assertEqual(os.environ['GH_TOKEN'], 'fixture-write')
+            PROMOTE.command(['gh', 'release', 'edit'], 'publication failed')
+            self.assertEqual(execute.call_args.kwargs['env']['GH_TOKEN'], 'fixture-write')
 
     def test_diagnostic_candidate_is_rejected_before_network_or_publication(self):
         with patch.object(PROMOTE, 'command') as command:
@@ -230,10 +285,10 @@ class CandidatePromotionTests(unittest.TestCase):
     def test_failed_tag_push_leaves_release_unpublished_and_can_retry(self):
         PROMOTE.prepare(TAG, SHA)
         real = self.command
-        def failed_push(args, message):
+        def failed_push(args, message, **kwargs):
             if args[:2] == ["git", "push"]:
                 raise ValueError(message)
-            return real(args, message)
+            return real(args, message, **kwargs)
         with patch.object(PROMOTE, "command", side_effect=failed_push), \
                 self.assertRaisesRegex(ValueError, "cannot push final tag"):
             PROMOTE.final_tag(TAG, SHA)

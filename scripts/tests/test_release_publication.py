@@ -270,18 +270,18 @@ class RetryablePublicationTests(unittest.TestCase):
             return None if reads <= 3 else lookup(tag)
 
         with patch.object(publication, 'release_data', side_effect=lagged), \
-                patch.object(publication.time, 'sleep') as sleep:
+                patch.object(publication, 'time') as clock:
             publication.publish(self.assets)
-        self.assertEqual([call.args[0] for call in sleep.call_args_list], [0.25, 0.5])
+        self.assertEqual([call.args[0] for call in clock.sleep.call_args_list], [0.25, 0.5])
         self.assertEqual(sum(call[:3] == ['gh', 'release', 'create'] for call in self.calls), 1)
         self.assertFalse(self.data['draft'])
 
     def test_missing_created_draft_reports_visibility_not_stability(self):
         with patch.object(publication, 'release_data', return_value=None), \
-                patch.object(publication.time, 'sleep') as sleep:
+                patch.object(publication, 'time') as clock:
             with self.assertRaisesRegex(ValueError, 'not visible.*retry publication'):
                 publication.publish(self.assets)
-        self.assertEqual(sleep.call_count, 3)
+        self.assertEqual(clock.sleep.call_count, 3)
         self.assertFalse(any(call[:3] == ['gh', 'release', 'upload'] for call in self.calls))
 
     def test_genuine_stable_release_requires_promotion_recovery_without_writes(self):
@@ -292,10 +292,10 @@ class RetryablePublicationTests(unittest.TestCase):
 
     def test_lookup_service_failure_is_not_retried_as_visibility_lag(self):
         with patch.object(publication, 'release_data', side_effect=ValueError('service failure')), \
-                patch.object(publication.time, 'sleep') as sleep:
+                patch.object(publication, 'time') as clock:
             with self.assertRaisesRegex(ValueError, 'service failure'):
                 publication.await_release(TAG)
-        sleep.assert_not_called()
+        clock.sleep.assert_not_called()
 
 
 class PublicationPreparationTests(unittest.TestCase):
