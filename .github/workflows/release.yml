@@ -48,6 +48,12 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Wait for trusted delivery admission
         env:
           GH_TOKEN: ${{ github.token }}
@@ -72,7 +78,6 @@ jobs:
     outputs:
       record: ${{ steps.verify.outputs.record }}
     env:
-      SKIP: swiftlint
       EXPECTED_SHA: ${{ inputs.expected_sha }}
       RELEASE_OPERATION: ${{ inputs.operation }}
       RC_TAG: ${{ inputs.rc_tag }}
@@ -94,16 +99,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks
 
-      - name: Select verification Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: "3.14.8"
-      - name: Prepare portable verification
-        run: |
-          scripts/install-ci-linux-tools.sh
-          python3 -m venv "$RUNNER_TEMP/glimmer-tools/python"
-          "$RUNNER_TEMP/glimmer-tools/python/bin/pip" install --only-binary :all: --require-hashes -r scripts/ci-python-requirements.txt
-          echo "$RUNNER_TEMP/glimmer-tools/python/bin" >> "$GITHUB_PATH"
+      - name: Prepare pinned tools
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
       - name: Verify without signing credentials
         id: verify
         run: scripts/ci-release.sh verify-checks
@@ -143,9 +140,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks
 
+      - name: Prepare pinned tools
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+
       - name: Prepare verification
         run: |
-          if ! command -v swiftlint >/dev/null 2>&1; then brew install swiftlint; fi
           test "$(uname -m)" = arm64
           xcodebuild -version
           xcrun --sdk macosx --show-sdk-version
@@ -205,6 +204,12 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
           fetch-depth: 0
+
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
 
       - name: Require direct candidate checks on the reserved source
         env:
@@ -270,6 +275,12 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
           fetch-depth: 0
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Require hosted prerequisites
         env:
           GH_TOKEN: ${{ github.token }}
@@ -354,6 +365,12 @@ jobs:
             exit 1
           }
           git checkout --detach "$TOOLING_SHA"
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Recheck source and prerequisites
         env:
           GH_TOKEN: ${{ github.token }}
@@ -448,6 +465,12 @@ jobs:
             exit 1
           }
           git checkout --detach "$TOOLING_SHA"
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Validate final bundle without release credentials
         env:
           GH_TOKEN: ${{ github.token }}
@@ -522,6 +545,12 @@ jobs:
           ref: main
           persist-credentials: false
           fetch-depth: 0
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Read persisted hashes when available
         if: needs.sign.result == 'success'
         continue-on-error: true

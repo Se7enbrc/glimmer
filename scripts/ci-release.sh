@@ -120,7 +120,7 @@ verify_part() {
     fi
     [ -n "${GITHUB_OUTPUT:-}" ] || die "workflow output file missing"
     case "$part" in
-        checks) target=check-portable; GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files ;;
+        checks) target=check-portable; GLIMMER_SECRET_SCAN_ALL_FILES=1 hk check --all ;;
         tests) target="test"; make check-macos ;;
         asan) target=test-asan ;;
         *) die "unknown verification part" ;;
@@ -271,7 +271,9 @@ case "${1:-}" in
         diagnostic=NO
         [[ "$RC_TAG" != *-diag ]] || diagnostic=YES
         printf '\nGLIMMER_DIAGNOSTIC_BUILD = %s\n' "$diagnostic" >> "$XCODE_XCCONFIG_FILE"
-        make CONFIG=Release guard-release-version clean app embed-helper
+        make CONFIG=Release guard-release-version
+        make CONFIG=Release clean
+        make CONFIG=Release embed-helper
         python3 scripts/release_candidate_kind.py "$RC_TAG" "$APP"
         check_source
         printf '%s\n' "$EXPECTED_SHA" > "$BUILT"
@@ -303,12 +305,12 @@ case "${1:-}" in
         export SIGNING_CREDS="$PRIVATE/signing.env" SIGN_KEYCHAIN="$KEYCHAIN"
         export PROVISIONING_PROFILE="$PRIVATE/app.provisionprofile"
         export HELPER_PROVISIONING_PROFILE="$PRIVATE/helper.provisionprofile"
-        make codesign-setup setup-notary
+        make -f scripts/ci-signing.mk codesign-setup setup-notary
         # Compilation and helper embedding already succeeded without credentials.
-        make CONFIG=Release preflight notarize-bundle
+        make -f scripts/ci-signing.mk CONFIG=Release signing-preflight notarize-bundle
         started=$SECONDS
-        make CONFIG=Release dmg
-        make CONFIG=Release notarize-dmg
+        make -f scripts/ci-signing.mk CONFIG=Release dmg
+        make -f scripts/ci-signing.mk CONFIG=Release notarize-dmg
         if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
             printf 'DMG packaging, signing, notarization and stapling: %ss\n' "$((SECONDS - started))" \
                 >> "$GITHUB_STEP_SUMMARY"
@@ -322,7 +324,7 @@ case "${1:-}" in
         require_phase "$SIGNED"
         [ ! -e "$PRIVATE" ] || die "signing credentials have not been removed"
         [ -n "${GITHUB_OUTPUT:-}" ] || die "workflow output file missing"
-        make CONFIG=Release sparkle-zip
+        make -f scripts/ci-signing.mk CONFIG=Release sparkle-zip
         if ! { [ -s "$DMG" ] && [ -s "$ZIP" ]; }; then
             die "packaged release asset missing"
         fi

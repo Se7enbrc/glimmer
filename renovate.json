@@ -10,9 +10,6 @@
   "separateMinorPatch": false,
   "prConcurrentLimit": 1,
   "branchConcurrentLimit": 1,
-  "pre-commit": {
-    "enabled": true
-  },
   "customManagers": [
     {
       "customType": "regex",
@@ -58,5 +55,8 @@
         "Sparkle changed. Verify the new `Sparkle-<version>.tar.xz` release archive and add its SHA-256 to `scripts/sparkle-tools.sh` (the release-tool tests fail until you do), and check `Glimmer/ThirdPartyNotices.txt` against the new LICENSE."
       ]
     }
-  ]
+  ],
+  "mise": {
+    "enabled": true
+  }
 }

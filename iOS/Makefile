@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-.DEFAULT_GOAL := app
+.DEFAULT_GOAL := help
+
+# Multiple Xcode actions share DerivedData; independent checks still run in parallel.
+ifneq ($(word 2,$(filter app test test-build test-run,$(MAKECMDGOALS))),)
 .NOTPARALLEL:
+endif
 CONFIG ?= Debug
 IOS_FLAVOUR ?= production
 ifneq ($(IOS_FLAVOUR),beta)
@@ -24,7 +28,19 @@ XCODE = xcodebuild -project "$(PROJECT)" -scheme Glimmer-iOS -configuration "$(C
 	SWIFT_ACTIVE_COMPILATION_CONDITIONS="$(SWIFT_CONDITIONS)" \
 	SWIFT_SUPPRESS_WARNINGS=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES
 
-.PHONY: app test test-build test-run check
+.PHONY: help app test test-build test-run check ci-parity
+help:
+	@printf '%s\n' 'Develop' '  app          Compile the unsigned Simulator app' \
+	  'Test' '  test         Build and run Simulator tests' \
+	  '  test-build   Build reusable Simulator test products' \
+	  '  test-run     Run tests without rebuilding' \
+	  'Check' '  check        Run the shared repository checks' \
+	  'CI parity' '  ci-parity    Compile both apps/tests with Xcode 26.6' \
+	  'Profile and release' '  See make help from the repository root; signing stays in CI'
+
+ci-parity:
+	@$(MAKE) -C .. ci-parity
+
 app:
 	$(XCODE) -destination '$(DESTINATION)' $(BUILD_FLAGS) build
 

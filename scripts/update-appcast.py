@@ -133,7 +133,7 @@ def write(tree: ET.ElementTree, path: str, dry_run: bool) -> None:
         sys.stdout.write(out + "\n")
         return
     tree.write(path, encoding="utf-8", xml_declaration=True)
-    # ET.write leaves no trailing newline; add one so pre-commit's end-of-file-fixer
+    # ET.write leaves no trailing newline; add one so hk's end-of-file-fixer
     # doesn't reformat the file and abort the publish commit.
     with open(path, "a", encoding="utf-8") as f:
         f.write("\n")

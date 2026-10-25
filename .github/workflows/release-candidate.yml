@@ -46,6 +46,12 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Decide
         id: decide
         env:
@@ -131,6 +137,12 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
           persist-credentials: false
+
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
 
       - name: Cut the candidate
         env:

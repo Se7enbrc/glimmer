@@ -21,5 +21,5 @@ test-run:
 	  xcodebuild test-without-building -xctestrun "$$1" -destination 'platform=macOS' \
 	  -derivedDataPath $(DERIVED) $(TEST_FLAGS) \
 	  $(if $(COVERAGE),-enableCodeCoverage YES -resultBundlePath $(DERIVED)/coverage/swift/glimmer.xcresult); \
-	  status=$$?; $(if $(COVERAGE),[ $$status -ne 0 ] || python3 scripts/coverage-report.py swift || status=$$?;) \
+	  status=$$?; $(if $(COVERAGE),[ $$status -ne 0 ] || $(TOOLS) python3 scripts/coverage-report.py swift || status=$$?;) \
 	  $(UNREGISTER_BUILDS); exit $$status
