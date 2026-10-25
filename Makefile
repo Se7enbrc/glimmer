@@ -110,11 +110,7 @@ app:
 		CODE_SIGNING_ALLOWED=NO \
 		-derivedDataPath $(DERIVED) -destination 'platform=macOS' build
 	@$(UNREGISTER_BUILDS)
-# CODE_SIGNING_ALLOWED=NO: signing is owned EXCLUSIVELY by the `sign` target
-# (keychain-pinned, prompt-free). Xcode's Automatic signing during the build
-# resolves identities from the login keychain and produces a password prompt
-# per nested bundle - the `sign` target re-signs inside out right after,
-# so xcodebuild's own signatures were pure prompt-noise.
+# Builds stay unsigned; the CI-only release path signs the accepted bundle.
 
 $(HELPER_BIN): $(HELPER_SRCS)
 	@echo "▶ Building AWDL helper (swiftc, $(HELPER_TARGET))..."
