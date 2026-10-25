@@ -47,6 +47,10 @@ def archive(source, destination, expected):
                             text=True, check=True, timeout=30).stdout.strip()
     if actual != expected['EXPECTED_SHA'] or destination.exists():
         raise ValueError('source differs from the approved SHA or archive already exists')
+    config = (source / 'Glimmer/Version.xcconfig').read_text()
+    version = re.search(r'^MARKETING_VERSION\s*=\s*(\d{4}\.\d+\.\d+)\s*$', config, re.M)
+    if version is None or version[1] != expected['IOS_VERSION']:
+        raise ValueError('iOS version must match the reviewed source CalVer')
     artifact.validate_flavour(expected['IOS_FLAVOUR'])
     conditions = 'GLIMMER_DIAGNOSTICS' if expected['IOS_FLAVOUR'] == 'beta' else ''
     compiler = toolchain()
@@ -55,7 +59,8 @@ def archive(source, destination, expected):
                '-configuration', 'Release', '-destination', 'generic/platform=iOS',
                '-derivedDataPath', str(derived), '-archivePath', str(destination),
                'CODE_SIGNING_ALLOWED=NO', 'DEBUG_INFORMATION_FORMAT=dwarf-with-dsym',
-               f'SWIFT_ACTIVE_COMPILATION_CONDITIONS={conditions}',
+               'COMPILATION_CACHE_ENABLE_CACHING=YES', '-showBuildTimingSummary',
+               'SWIFT_SUPPRESS_WARNINGS=NO', f'SWIFT_ACTIVE_COMPILATION_CONDITIONS={conditions}',
                f"GLIMMER_BUILD_FLAVOUR={expected['IOS_FLAVOUR']}", 'SWIFT_TREAT_WARNINGS_AS_ERRORS=YES',
                'GCC_TREAT_WARNINGS_AS_ERRORS=YES', f"MARKETING_VERSION={expected['IOS_VERSION']}",
                f"CURRENT_PROJECT_VERSION={expected['IOS_BUILD_NUMBER']}", 'archive']

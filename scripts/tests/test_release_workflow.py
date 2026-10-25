@@ -36,11 +36,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
                 next_job = workflow.find("\n  verify-", start + 1)
                 end = next_job if next_job != -1 else workflow.index("\n  build:", start)
                 job = workflow[start:end]
-                for required in ("ref: ${{ github.sha }}", "EXPECTED_SHA: ${{ inputs.expected_sha }}",
-                                 "record: ${{ steps.verify.outputs.record }}", "runs-on: macos-26",
-                                 "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer",
-                                 "SWIFT_TREAT_WARNINGS_AS_ERRORS = YES", "GCC_TREAT_WARNINGS_AS_ERRORS = YES"):
-                    self.assertIn(required, job)
+                required = ["ref: ${{ github.sha }}", "EXPECTED_SHA: ${{ inputs.expected_sha }}",
+                            "record: ${{ steps.verify.outputs.record }}",
+                            f"runs-on: {'ubuntu-24.04' if part == 'checks' else 'macos-26'}"]
+                if part != "checks":
+                    required += ["DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer",
+                                 "SWIFT_TREAT_WARNINGS_AS_ERRORS = YES", "GCC_TREAT_WARNINGS_AS_ERRORS = YES"]
+                for value in required:
+                    self.assertIn(value, job)
                 for forbidden in ("needs:", "environment:", "secrets.", "id-token:", "attestations:"):
                     self.assertNotIn(forbidden, job)
                 self.assertLess(job.index("scripts/ci-release.sh checks"), job.index(f"ci-release.sh verify-{part}"))

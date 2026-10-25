@@ -78,3 +78,10 @@ class CIScannerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / "curl_args").exists())
         self.assertEqual(list(self.runner.iterdir()), [])
+
+    def test_linux_uses_its_own_pinned_archive_and_checksum(self):
+        self.stub("uname", 'case "$1" in -s) echo Linux ;; -m) echo x86_64 ;; esac\n')
+        result = self.run_installer(FIXTURE_EXPECTED_HASH=
+                                    "8f71019bcb8c6c44242b6e34f68c3755f8f9c8496d3063b7a8b5626fb9bff220")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("trufflehog_3.97.8_linux_amd64.tar.gz", (self.root / "curl_args").read_text())

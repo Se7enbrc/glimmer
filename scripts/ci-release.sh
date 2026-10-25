@@ -52,15 +52,18 @@ finish() {
 }
 
 check_context() {
-    [ "${GITHUB_ACTIONS:-}" = true ] && [ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ] ||
+    if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${GITHUB_EVENT_NAME:-}" != workflow_dispatch ]; then
         die "manual Actions release required"
+    fi
     [ "${GITHUB_REPOSITORY:-}" = Se7enbrc/glimmer ] || die "release requires upstream repository"
     case "$OPERATION:${GITHUB_REF:-}" in
         candidate:refs/heads/release-candidate|promote:refs/heads/main) ;;
         *) die "candidate requires release-candidate branch; promotion requires main" ;;
     esac
-    [[ "${RC_TAG:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*(-diag)?$ ]] &&
-        [ "${RC_TAG%-rc.*}" = "$VERSION" ] || die "invalid candidate tag"
+    if ! [[ "${RC_TAG:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*(-diag)?$ ]] ||
+        [ "${RC_TAG%-rc.*}" != "$VERSION" ]; then
+        die "invalid candidate tag"
+    fi
     if [[ "$RC_TAG" = *-diag ]] && [ "$OPERATION" = promote ]; then
         die "diagnostic candidates cannot be promoted"
     fi
@@ -103,22 +106,30 @@ check_source() {
 
 require_verified() {
     check_source
-    [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$EXPECTED_SHA" ] || die "this SHA has not passed verification in this run"
+    if ! { [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$EXPECTED_SHA" ]; }; then
+        die "this SHA has not passed verification in this run"
+    fi
 }
 
 verify_part() {
     local part="$1" target started=$SECONDS
     check_source
     [ "$OPERATION" = candidate ] || die "promotion never builds"
-    [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
+    if ! { [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ]; }; then
+        die "required checks have not passed"
+    fi
     [ -n "${GITHUB_OUTPUT:-}" ] || die "workflow output file missing"
     case "$part" in
-        checks) target=check; GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files ;;
-        tests) target="test" ;;
+        checks) target=check-portable; GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files ;;
+        tests) target="test"; make check-macos ;;
         asan) target=test-asan ;;
         *) die "unknown verification part" ;;
     esac
-    make "$target" "DERIVED=$ROOT/build/verify-$part" TEST_SUITE=
+    if [ "$part" = tests ]; then
+        make "$target" "DERIVED=$ROOT/build" TEST_SUITE= COVERAGE=1
+    else
+        make "$target" "DERIVED=$ROOT/build" TEST_SUITE=
+    fi
     check_source
     printf 'record=%s %s %s %s\n' "$EXPECTED_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$part" \
         >> "$GITHUB_OUTPUT"
@@ -133,7 +144,9 @@ accept_verification() {
     rm -f "$STAMP" "$BUILT" "$SIGNED" "$PACKAGED" "$ARTIFACTS"
     check_source
     [ "$OPERATION" = candidate ] || die "promotion never builds"
-    [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
+    if ! { [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ]; }; then
+        die "required checks have not passed"
+    fi
     local part result record name attempt pattern
     for part in checks tests asan; do
         name="$(printf '%s' "$part" | tr '[:lower:]' '[:upper:]')"
@@ -150,10 +163,16 @@ accept_verification() {
 
 require_phase() {
     require_verified
-    [ -f "$1" ] && [ "$(cat "$1")" = "$EXPECTED_SHA" ] || die "required release phase has not succeeded in this run"
-    [ -x "$APP/Contents/MacOS/Glimmer" ] && [ -f "$APP/Contents/Info.plist" ] || die "built app missing"
+    if ! { [ -f "$1" ] && [ "$(cat "$1")" = "$EXPECTED_SHA" ]; }; then
+        die "required release phase has not succeeded in this run"
+    fi
+    if ! { [ -x "$APP/Contents/MacOS/Glimmer" ] && [ -f "$APP/Contents/Info.plist" ]; }; then
+        die "built app missing"
+    fi
     local helper="$APP/Contents/Library/LaunchServices/Glimmer Network Helper.app/Contents"
-    [ -x "$helper/MacOS/io.ugfugl.glimmer.helper" ] && [ -f "$helper/Info.plist" ] || die "built helper missing"
+    if ! { [ -x "$helper/MacOS/io.ugfugl.glimmer.helper" ] && [ -f "$helper/Info.plist" ]; }; then
+        die "built helper missing"
+    fi
 }
 
 private_directory() {
@@ -213,7 +232,9 @@ protocol= host=
 while IFS='=' read -r key value; do
     case "$key" in protocol) protocol="$value" ;; host) host="$value" ;; esac
 done
-[ "$protocol" = https ] && [ "$host" = github.com ] || exit 0
+if ! { [ "$protocol" = https ] && [ "$host" = github.com ]; }; then
+    exit 0
+fi
 printf 'username=x-access-token\npassword=%s\n' "$RELEASE_CONTENTS_TOKEN"
 HELPER
     chmod 700 "$PRIVATE/git-credential"
@@ -259,7 +280,9 @@ case "${1:-}" in
         rm -f "$STAMP" "$BUILT" "$SIGNED" "$PACKAGED" "$ARTIFACTS"
         check_source
         [ "$OPERATION" = candidate ] || die "promotion never imports unsigned code"
-        [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
+        if ! { [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ]; }; then
+            die "required checks have not passed"
+        fi
         [ -n "${TRUSTED_TOOLING_SHA:-}" ] || die "signing requires main tooling"
         python3 scripts/release_artifact.py unpack "$RUNNER_TEMP/unsigned" \
             --manifest "${UNSIGNED_MANIFEST:-}" --attempt "${UNSIGNED_ATTEMPT:-}" \
@@ -300,7 +323,9 @@ case "${1:-}" in
         [ ! -e "$PRIVATE" ] || die "signing credentials have not been removed"
         [ -n "${GITHUB_OUTPUT:-}" ] || die "workflow output file missing"
         make CONFIG=Release sparkle-zip
-        [ -s "$DMG" ] && [ -s "$ZIP" ] || die "packaged release asset missing"
+        if ! { [ -s "$DMG" ] && [ -s "$ZIP" ]; }; then
+            die "packaged release asset missing"
+        fi
         shasum -a 256 "$DMG" "$ZIP" > "$ARTIFACTS"
         printf 'dmg-path=%s\nzip-path=%s\n' "$DMG" "$ZIP" >> "$GITHUB_OUTPUT"
         printf '%s\n' "$EXPECTED_SHA" > "$PACKAGED"
@@ -316,13 +341,17 @@ case "${1:-}" in
     prepare-promotion)
         check_source
         [ "$OPERATION" = promote ] || die "promotion requires main"
-        [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
+        if ! { [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ]; }; then
+            die "required checks have not passed"
+        fi
         python3 scripts/promote-release.py prepare "$RC_TAG" "${CANDIDATE_SHA:-}"
         ;;
     promote)
         check_source
         [ "$OPERATION" = promote ] || die "promotion requires main"
-        [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
+        if ! { [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ]; }; then
+            die "required checks have not passed"
+        fi
         python3 scripts/promote-release.py validate "$RC_TAG" "${CANDIDATE_SHA:-}"
         private_directory
         publish_credentials

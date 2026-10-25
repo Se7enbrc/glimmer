@@ -179,8 +179,8 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def verification_args(self, part):
-        target = {"checks": "check", "tests": "test", "asan": "test-asan"}[part]
-        return [target, f"DERIVED={self.root.resolve()}/build/verify-{part}", "TEST_SUITE="]
+        target = {"checks": "check-portable", "tests": "test", "asan": "test-asan"}[part]
+        return [target, f"DERIVED={self.root.resolve()}/build", "TEST_SUITE="] + (["COVERAGE=1"] if part == "tests" else [])
 
     def built(self):
         self.verified()
@@ -272,6 +272,14 @@ class HostedReleaseTests(unittest.TestCase):
         self.env.pop("FIXTURE_FAIL")
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
         self.assertFalse(self.private.exists())
+
+    def test_native_checks_must_finish_before_the_test_record(self):
+        self.assertEqual(self.run_phase("checks").returncode, 0)
+        output = Path(self.env["GITHUB_OUTPUT"])
+        output.write_text("")
+        self.env["FIXTURE_FAIL"] = "make:check-macos"
+        self.assertNotEqual(self.run_phase("verify-tests").returncode, 0)
+        self.assertNotIn("record=", output.read_text())
 
     def test_each_verification_part_must_finish_before_emitting_a_record(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)

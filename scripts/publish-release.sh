@@ -38,8 +38,10 @@ git -C "$HERE" fetch --quiet origin main "+refs/heads/$APPCAST_BRANCH:refs/remot
 HEAD_SHA="$(git -C "$HERE" rev-parse HEAD)"
 MAIN_SHA="$(git -C "$HERE" rev-parse origin/main)"
 if [ "$CHANNEL" = rc ]; then
-	[ "$HEAD_SHA" = "${GITHUB_SHA:-}" ] && [ "$HEAD_SHA" = "${EXPECTED_SHA:-}" ] || {
-		echo "ERR: candidate source does not match the reviewed workflow SHA" >&2; exit 1; }
+	if [ "$HEAD_SHA" != "${GITHUB_SHA:-}" ] || [ "$HEAD_SHA" != "${EXPECTED_SHA:-}" ]; then
+		echo "ERR: candidate source does not match the reviewed workflow SHA" >&2
+		exit 1
+	fi
 	TAG_SHA="$(gh api "repos/$REPO/commits/$TAG" --jq .sha)"
 	[ "$TAG_SHA" = "$HEAD_SHA" ] || { echo "ERR: candidate tag must already identify the reviewed source" >&2; exit 1; }
 elif [ "$HEAD_SHA" != "$MAIN_SHA" ]; then
@@ -49,7 +51,7 @@ elif [ "$HEAD_SHA" != "$MAIN_SHA" ]; then
 	exit 1
 fi
 
-WORK="$(mktemp -d -t glimmer-publication)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/glimmer-publication.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 # The feed lives alone on its own branch so releases never move main.
 FEED="$WORK/$APPCAST"
@@ -59,14 +61,19 @@ python3 "$HERE/scripts/release_validation.py" \
 	--config "$HERE/Glimmer/Version.xcconfig" --appcast "$FEED" --channel "$CHANNEL" \
 	--short-version "$SHORT" --build "$BUILD" --app "$APP" --validate-distribution
 
+read_bundle_value() {
+	python3 -c 'import plistlib, sys
+with open(sys.argv[1], "rb") as source:
+    print(plistlib.load(source).get(sys.argv[2], ""))' "$APP/Contents/Info.plist" "$1"
+}
+
 # Version assertion: the committed version at the tag, the built bundle, and the
 # advertised version ($SHORT) must all agree. A dirty .48 shipped with a bundle
 # version that the committed source didn't carry; assert all three match so the
 # tag's GPLv3 source always reproduces the binary. Fail loud on any mismatch.
 COMMITTED_VERSION="$(git -C "$HERE" show "HEAD:Glimmer/Version.xcconfig" \
 	| sed -n 's/^MARKETING_VERSION = \(.*\)/\1/p' | tr -d ' ')"
-BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
-	"$APP/Contents/Info.plist" 2>/dev/null || true)"
+BUNDLE_VERSION="$(read_bundle_value CFBundleShortVersionString 2>/dev/null || true)"
 [ "$COMMITTED_VERSION" = "$SHORT" ] || {
 	echo "ERR: committed MARKETING_VERSION ($COMMITTED_VERSION) at HEAD != advertised version ($SHORT)." >&2
 	echo "  Bump + commit Version.xcconfig so the tag's source matches what you're publishing." >&2
@@ -90,8 +97,11 @@ if ! SIG_LINE="$("$CREDS" get SPARKLE_ED_PRIVATE_KEY | "$TOOLS/sign_update" --ed
 fi
 ED_SIG="$(printf '%s' "$SIG_LINE" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
 LENGTH="$(printf '%s' "$SIG_LINE" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"
-[ -n "$ED_SIG" ] && [ -n "$LENGTH" ] || { echo "ERR: sign_update produced no signature" >&2; exit 1; }
-APP_ED_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)"
+if [ -z "$ED_SIG" ] || [ -z "$LENGTH" ]; then
+    echo "ERR: sign_update produced no signature" >&2
+    exit 1
+fi
+APP_ED_KEY="$(read_bundle_value SUPublicEDKey 2>/dev/null || true)"
 "$HERE/scripts/verify-update-signature.swift" "$APP_ED_KEY" "$ED_SIG" "$ZIP" || {
 	echo "ERR: the update signature doesn't match the app's SUPublicEDKey; installed copies would reject it." >&2
 	exit 1

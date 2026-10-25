@@ -8,7 +8,8 @@ name: Pages
 on:
   push:
     branches: [main]
-  workflow_run:
+  # Only trusted main code runs; triggering runs supply identifiers, never executable artifacts.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [Release]
     types: [completed]
   workflow_dispatch:

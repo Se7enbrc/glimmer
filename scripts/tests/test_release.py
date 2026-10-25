@@ -42,7 +42,8 @@ class ReleaseValidationTests(unittest.TestCase):
                 "MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 400\n")
             shutil.copy2(SCRIPTS.parent / "Makefile", root / "Makefile")
             (root / "scripts").mkdir()
-            shutil.copy2(SCRIPTS / "release-bundle.mk", root / "scripts/release-bundle.mk")
+            for name in ("release-bundle.mk", "ci-checks.mk", "mac-test-products.mk"):
+                shutil.copy2(SCRIPTS / name, root / "scripts" / name)
             app = root / "prepared app/Glimmer.app"
             app.mkdir(parents=True)
             output = root / "prepared assets"
@@ -69,10 +70,11 @@ class ReleaseValidationTests(unittest.TestCase):
 
     def test_local_suite_filter_cannot_narrow_the_full_gate(self):
         # The default gate, not one inherited from an outer make such as a COVERAGE=1 run.
-        clean = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL", "COVERAGE")}
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL", "MAKEOVERRIDES", "COVERAGE", "TEST_PLATFORM")}
 
-        def plan(target):
-            return subprocess.run(["make", "--dry-run", target, "TEST_SUITE=DatagramBatchTests"], env=clean,
+        def plan(target, *settings):
+            return subprocess.run(["make", "--dry-run", target, "TEST_SUITE=DatagramBatchTests", *settings], env=clean,
                                   cwd=SCRIPTS.parent, capture_output=True, text=True, check=True).stdout
         self.assertIn("-only-testing:GlimmerTests/DatagramBatchTests", plan("test"))
         full = plan("verify")
@@ -83,8 +85,9 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertIn("-enableAddressSanitizer YES", commands[1])
         self.assertIn("-only-testing:GlimmerTests/FuzzTests", commands[1])
         self.assertIn("-only-testing:GlimmerTests/StreamFuzzTests", commands[1])
-        self.assertIn("swiftlint lint --strict", full)
-        self.assertIn("python3 -m unittest", full)
+        self.assertIn("scripts/lint-swift.sh lint --strict", full)
+        self.assertIn("python3 scripts/test-scripts.py all", full)
+        self.assertIn("python3 scripts/test-scripts.py all", plan("verify", "TEST_PLATFORM=portable"))
 
     def test_build_gates_read_the_feed_from_the_appcast_branch(self):
         makefile = (SCRIPTS.parent / "Makefile").read_text()
@@ -356,6 +359,19 @@ exit 1
         self.assertEqual(Path(self.env["FIXTURE_SIGNED_ZIP"]).read_bytes(), b"prepared update bytes")
         self.assertEqual(self.zip.read_bytes(), b"prepared update bytes")
         self.assertFalse(Path(self.env["FIXTURE_DITTO_MARKER"]).exists())
+
+    def test_publication_reads_binary_bundle_values_without_native_plist_tools(self):
+        info = {"CFBundleShortVersionString": "2026.10.6", "CFBundleVersion": "400",
+                "SUPublicEDKey": "fixture-public-key"}
+        (self.root / "Glimmer.app/Contents/Info.plist").write_bytes(plistlib.dumps(info, fmt=plistlib.FMT_BINARY))
+        (self.root / "tools/sign_update").write_text(
+            '#!/bin/bash\ncat >/dev/null\nprintf \'sparkle:edSignature="fixture" length="21"\\n\'\n')
+        verifier = self.root / "scripts/verify-update-signature.swift"
+        verifier.write_text('#!/bin/sh\n[ "$1" = fixture-public-key ] && [ "$2" = fixture ]\n')
+        result = self.publish()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(Path(self.env["FIXTURE_PUBLISH_MARKER"]).exists(), result.stderr)
+        self.assertNotIn("doesn't match the app's SUPublicEDKey", result.stderr)
 
     def test_signature_the_app_would_reject_stops_publication(self):
         (self.root / "tools/sign_update").write_text(

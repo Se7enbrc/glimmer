@@ -125,6 +125,7 @@ class RetryablePublicationTests(unittest.TestCase):
     def test_candidate_floor_survives_real_feed_publication_and_retry(self):
         app = self.root / 'Glimmer.app'
         (app / 'Contents').mkdir(parents=True)
+        write_helper_floors(app)
         (app / 'Contents/Info.plist').write_bytes(plistlib.dumps({
             'CFBundleShortVersionString': SHORT, 'CFBundleVersion': '400',
             'SUPublicEDKey': 'fixture', 'LSMinimumSystemVersion': '15.7'}))
@@ -170,16 +171,21 @@ class RetryablePublicationTests(unittest.TestCase):
             if args[0] == 'ditto':
                 path = Path(args[-1]) / 'Glimmer.app/Contents/Info.plist'
                 path.parent.mkdir(parents=True)
+                write_helper_floors(path.parent.parent, helper_floor)
                 path.write_bytes(plistlib.dumps({'CFBundleShortVersionString': SHORT,
                                                 'CFBundleVersion': '400', 'LSMinimumSystemVersion': floor}))
             return ''
         with patch.object(publication, 'command', side_effect=extract), \
                 patch.object(publication, 'validate_distribution') as distribution:
-            floor = '26.0'
+            floor, helper_floor = '26.0', '15.7'
             with self.assertRaisesRegex(ValueError, 'minimum system version'):
                 publication.validate(self.assets)
             distribution.assert_not_called()
-            floor = '15.7'
+            floor, helper_floor = '15.7', '26.0'
+            with self.assertRaisesRegex(ValueError, 'minimum system version'):
+                publication.validate(self.assets)
+            distribution.assert_not_called()
+            helper_floor = '15.7'
             publication.validate(self.assets)
             distribution.assert_called_once()
 
@@ -298,6 +304,19 @@ class RetryablePublicationTests(unittest.TestCase):
         clock.sleep.assert_not_called()
 
 
+HELPER_PLISTS = (
+    'Contents/Library/LoginItems/Glimmer Login Helper.app/Contents/Info.plist',
+    'Contents/Library/LaunchServices/Glimmer Network Helper.app/Contents/Info.plist',
+)
+
+
+def write_helper_floors(app, floor='15.7'):
+    for name in HELPER_PLISTS:
+        path = app / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(plistlib.dumps({'LSMinimumSystemVersion': floor}))
+
+
 class PublicationPreparationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -305,6 +324,7 @@ class PublicationPreparationTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.app = self.root / 'Glimmer.app'
         (self.app / 'Contents').mkdir(parents=True)
+        write_helper_floors(self.app)
         self.dist = self.root / 'dist'
         self.dist.mkdir()
         for suffix in ('zip', 'dmg'):
@@ -362,6 +382,22 @@ class PublicationPreparationTests(unittest.TestCase):
         self.assertIn('prerequisites.json', proof['hashes'])
         for path in self.dist.iterdir():
             self.assertNotIn(b'fixture-private-key', path.read_bytes())
+
+    def test_helper_floor_mismatch_missing_or_malformed_blocks_signing(self):
+        for name in HELPER_PLISTS:
+            path = self.app / name
+            for value in ('26.0', '15.6', None, '15.7beta', 15.7):
+                with self.subTest(helper=name, floor=value):
+                    write_helper_floors(self.app)
+                    info = {} if value is None else {'LSMinimumSystemVersion': value}
+                    path.write_bytes(plistlib.dumps(info))
+                    with self.assertRaisesRegex(ValueError, 'minimum system version'):
+                        publication.prepare(self.dist, self.app)
+            path.unlink()
+            with self.assertRaisesRegex(ValueError, 'minimum system version'):
+                publication.prepare(self.dist, self.app)
+            write_helper_floors(self.app)
+        self.assertFalse(any(call[0][0] == '/pinned-tools/sign_update' for call in self.calls))
 
     def test_candidate_floor_is_validated_before_signing(self):
         for value in (None, '', 15.7, '15.7beta'):
