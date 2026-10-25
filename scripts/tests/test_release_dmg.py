@@ -46,7 +46,7 @@ class DmgSigningTests(unittest.TestCase):
         (self.root / 'Makefile').write_text(
             f'include {recipe}\n.PHONY: ensure-signing\nensure-signing:\n\t@true\n')
         self.env = {'PATH': f'{self.bin}:/usr/bin:/bin', 'HOME': str(self.root),
-                    'DMG_TEST_LOG': str(self.log)}
+                    'DMG_TEST_LOG': str(self.log), 'CI': 'true', 'GITHUB_ACTIONS': 'true'}
 
     def run_sign(self, identity='Developer ID Application: Fixture'):
         return subprocess.run(['/usr/bin/make', 'notarize-dmg', f'DIST_DIR={self.root}',
@@ -57,6 +57,11 @@ class DmgSigningTests(unittest.TestCase):
 
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
+
+    def test_local_invocation_cannot_reach_signing(self):
+        self.env.pop('GITHUB_ACTIONS')
+        self.assertNotEqual(self.run_sign().returncode, 0)
+        self.assertEqual(self.calls(), [])
 
     def test_timestamped_identity_then_submission_then_staple(self):
         result = self.run_sign()

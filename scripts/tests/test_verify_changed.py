@@ -24,7 +24,7 @@ class VerifyScopeTests(unittest.TestCase):
         for path in ("Glimmer/AppModel.swift", "GlimmerTests/FramePacerTests.swift", "helper/main.swift",
                      "Glimmer.xcodeproj/project.pbxproj", "Glimmer/Version.xcconfig", "Makefile",
                      "scripts/release-checks.py", "scripts/verify-changed.py", "fuzz/rtsp.swift",
-                     ".github/workflows/verify.yml", ".pre-commit-config.yaml", "renovate.json"):
+                     ".github/workflows/verify.yml", "mise.toml", "mise.lock", "hk.pkl", "renovate.json"):
             with self.subTest(path=path):
                 self.assertTrue(CHANGED.must_build([path, "docs/README.md"]))
 

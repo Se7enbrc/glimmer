@@ -23,7 +23,7 @@ import json, os, pathlib, plistlib, stat, subprocess, sys
 name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 record = {"tool": name, "args": args}
-if name == "pre-commit":
+if name == "hk":
     record["scan_all_files"] = os.environ.get("GLIMMER_SECRET_SCAN_ALL_FILES")
 private = pathlib.Path(os.environ["RUNNER_TEMP"]) / "glimmer-release-12-1"
 app = pathlib.Path("build/Build/Products/Release/Glimmer.app/Contents")
@@ -46,11 +46,11 @@ elif name == "git":
         print(os.environ.get("FIXTURE_ORIGIN", "https://github.com/Se7enbrc/glimmer"))
     elif args[:1] == ["clone"]:
         pathlib.Path(args[-1]).mkdir()
-elif name == "make" and args == ["codesign-setup", "setup-notary"]:
+elif name == "make" and args == ["-f", "scripts/ci-signing.mk", "codesign-setup", "setup-notary"]:
     (private / "signing.keychain-db").touch()
     record["modes"] = {p.name: stat.S_IMODE(p.stat().st_mode) for p in private.iterdir()}
     record["secret_env_removed"] = "P12_PASSWORD" not in os.environ
-elif name == "make" and args == ["CONFIG=Release", "guard-release-version", "clean", "app", "embed-helper"]:
+elif name == "make" and args == ["CONFIG=Release", "embed-helper"]:
     for relative in ("MacOS/Glimmer", "Info.plist",
                      "Library/LaunchServices/Glimmer Network Helper.app/Contents/MacOS/io.ugfugl.glimmer.helper",
                      "Library/LaunchServices/Glimmer Network Helper.app/Contents/Info.plist"):
@@ -64,14 +64,14 @@ elif name == "make" and args == ["CONFIG=Release", "guard-release-version", "cle
     diagnostic = config.rstrip().endswith('GLIMMER_DIAGNOSTIC_BUILD = YES')
     (app / 'Info.plist').write_bytes(plistlib.dumps({'GlimmerDiagnosticBuild': diagnostic}))
     record['diagnostic'] = diagnostic
-elif name == "make" and args == ["CONFIG=Release", "dmg"]:
+elif name == "make" and args == ["-f", "scripts/ci-signing.mk", "CONFIG=Release", "dmg"]:
     path = pathlib.Path("build/dist/Glimmer-2026.10.6.dmg")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("inert unsigned dmg fixture")
-elif name == "make" and args == ["CONFIG=Release", "notarize-dmg"]:
+elif name == "make" and args == ["-f", "scripts/ci-signing.mk", "CONFIG=Release", "notarize-dmg"]:
     pathlib.Path("build/dist/Glimmer-2026.10.6.dmg").write_text("inert signed and stapled dmg fixture")
     record["signing_available"] = (private / "signing.keychain-db").exists()
-elif name == "make" and args == ["CONFIG=Release", "sparkle-zip"]:
+elif name == "make" and args == ["-f", "scripts/ci-signing.mk", "CONFIG=Release", "sparkle-zip"]:
     path = pathlib.Path("build/dist/Glimmer-2026.10.6.zip")
     path.write_text("inert zip distribution fixture")
     record["private_exists"] = private.exists()
@@ -126,7 +126,7 @@ class HostedReleaseTests(unittest.TestCase):
         (self.runner / "attestation.jsonl").write_text('{"fixture": "bundle"}\n')
         self.private = self.runner / "glimmer-release-12-1"
         self.log = self.root / "calls.jsonl"
-        for name in ("make", "git", "security", "rm", "pre-commit", "publish-release.sh", "homebrew-bump.sh",
+        for name in ("make", "git", "security", "rm", "hk", "publish-release.sh", "homebrew-bump.sh",
                      "release-checks.py", "promote-release.py", "release_publication.py", "gh"):
             path = (self.root / "scripts" if name.endswith((".sh", ".py")) else self.bin) / name
             path.write_text(f"#!{sys.executable}\n" + TOOL)
@@ -148,7 +148,6 @@ class HostedReleaseTests(unittest.TestCase):
         for key in ("DEVELOPER_ID_P12_BASE64", "NOTARY_KEY_BASE64",
                     "APP_PROVISIONPROFILE_BASE64", "HELPER_PROVISIONPROFILE_BASE64"):
             self.env[key] = base64.b64encode(b"inert fixture").decode()
-
     def run_phase(self, phase):
         environment = dict(self.env)
         signing = {"DEVELOPER_ID_P12_BASE64", "P12_PASSWORD", "NOTARY_KEY_BASE64", "NOTARY_KEY_ID",
@@ -159,10 +158,8 @@ class HostedReleaseTests(unittest.TestCase):
             if key not in allowed:
                 environment.pop(key, None)
         return run_fixture(["/bin/bash", "scripts/ci-release.sh", phase], cwd=self.root, env=environment)
-
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
-
     def verified(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
         self.assertEqual([call["args"] for call in self.calls() if call["tool"] == "release-checks.py"][-1],
@@ -177,28 +174,23 @@ class HostedReleaseTests(unittest.TestCase):
         output.write_text("")
         result = self.run_phase("verified")
         self.assertEqual(result.returncode, 0, result.stderr)
-
     def verification_args(self, part):
         target = {"checks": "check-portable", "tests": "test", "asan": "test-asan"}[part]
         return [target, f"DERIVED={self.root.resolve()}/build", "TEST_SUITE="] + (["COVERAGE=1"] if part == "tests" else [])
-
     def built(self):
         self.verified()
         result = self.run_phase("build")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.env["TRUSTED_TOOLING_SHA"] = SHA
-
     def signed_artifact(self):
         path = self.runner / "signed"
         path.mkdir(exist_ok=True)
         (path / "manifest.json").write_text("inert fixture, verified by the artifact tests")
-
     def packaged(self):
         self.built()
         for phase in ("sign", "package"):
             result = self.run_phase(phase)
             self.assertEqual(result.returncode, 0, result.stderr)
-
     def transfer_unsigned(self):
         self.built()
         shutil.copy2(SCRIPT.parent / "release_artifact.py", self.root / "scripts/release_artifact.py")
@@ -214,7 +206,6 @@ class HostedReleaseTests(unittest.TestCase):
         shutil.rmtree(self.root / "build/Build/Products/Release")
         for suffix in ("", "-built"):
             (self.runner / f"glimmer-verified-12-1{suffix}").unlink()
-
     def test_fresh_signer_requires_verified_handoff_before_credentials(self):
         self.transfer_unsigned()
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
@@ -222,9 +213,8 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.run_phase("sign").returncode, 0)
         args = [call["args"] for call in self.calls() if call["tool"] == "make"]
-        self.assertEqual(args.count(["CONFIG=Release", "guard-release-version", "clean", "app", "embed-helper"]), 1)
-        self.assertIn(["CONFIG=Release", "preflight", "notarize-bundle"], args)
-
+        self.assertEqual(args.count(["CONFIG=Release", "embed-helper"]), 1)
+        self.assertIn(["-f", "scripts/ci-signing.mk", "CONFIG=Release", "signing-preflight", "notarize-bundle"], args)
     def test_tampered_handoff_cannot_create_signing_authorization(self):
         self.transfer_unsigned()
         (self.runner / "unsigned/Glimmer.app.tar.gz").write_bytes(b"tampered")
@@ -232,7 +222,6 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
         self.assertFalse(self.private.exists())
         self.assertFalse(any(call["tool"] == "security" for call in self.calls()))
-
     def test_untrusted_contexts_stop_before_build_or_credentials(self):
         for key, value in (("GITHUB_REF", "refs/heads/feature"), ("GITHUB_REPOSITORY", "fork/glimmer"),
                            ("GITHUB_EVENT_NAME", "pull_request"), ("GITHUB_SHA", "b" * 40),
@@ -253,7 +242,6 @@ class HostedReleaseTests(unittest.TestCase):
                 else:
                     self.env[key] = previous
         self.assertFalse(any(call["tool"] in ("make", "security") for call in self.calls()))
-
     def test_diagnostic_build_marker_comes_from_tag_and_promotion_is_rejected(self):
         self.env['RC_TAG'] += '-diag'
         self.verified()
@@ -264,7 +252,6 @@ class HostedReleaseTests(unittest.TestCase):
         result = self.run_phase('check')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('diagnostic candidates cannot be promoted', result.stderr)
-
     def test_failed_verify_cannot_authorize_signing(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
         self.env["FIXTURE_FAIL"] = "make:" + " ".join(self.verification_args("checks"))
@@ -272,7 +259,6 @@ class HostedReleaseTests(unittest.TestCase):
         self.env.pop("FIXTURE_FAIL")
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
         self.assertFalse(self.private.exists())
-
     def test_native_checks_must_finish_before_the_test_record(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
         output = Path(self.env["GITHUB_OUTPUT"])
@@ -280,7 +266,6 @@ class HostedReleaseTests(unittest.TestCase):
         self.env["FIXTURE_FAIL"] = "make:check-macos"
         self.assertNotEqual(self.run_phase("verify-tests").returncode, 0)
         self.assertNotIn("record=", output.read_text())
-
     def test_each_verification_part_must_finish_before_emitting_a_record(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
         output = Path(self.env["GITHUB_OUTPUT"])
@@ -295,7 +280,6 @@ class HostedReleaseTests(unittest.TestCase):
                 self.assertNotEqual(self.run_phase("build").returncode, 0)
                 self.assertNotEqual(self.run_phase("sign").returncode, 0)
                 self.assertFalse(self.private.exists())
-
     def test_unsuccessful_or_mismatched_job_records_cannot_authorize_build_or_sign(self):
         self.verified()
         for part in ("checks", "tests", "asan"):
@@ -317,7 +301,6 @@ class HostedReleaseTests(unittest.TestCase):
                     self.assertFalse(self.private.exists())
                     self.env[key] = previous
         self.assertFalse(any(call["tool"] == "security" for call in self.calls()))
-
     def test_verification_records_identify_each_isolated_job_and_report_duration(self):
         self.env["GITHUB_STEP_SUMMARY"] = str(self.runner / "summary")
         self.verified()
@@ -326,7 +309,6 @@ class HostedReleaseTests(unittest.TestCase):
             self.assertIn(self.verification_args(part), [call["args"] for call in self.calls()])
             self.assertIn(f"Verification {part}: {SHA}, run 12, attempt 1,",
                           Path(self.env["GITHUB_STEP_SUMMARY"]).read_text())
-
     def test_checks_and_precreated_tag_are_required_before_any_compilation(self):
         self.assertNotEqual(self.run_phase("verify-checks").returncode, 0)
         self.assertFalse(any(call["tool"] == "security" or
@@ -341,7 +323,6 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertFalse(any(call["tool"] == "security" or
                              (call["tool"] == "make" and "guard-clean-tree" not in call["args"])
                              for call in self.calls()))
-
     def test_promotion_never_builds_or_signs_and_tap_requires_successful_promotion(self):
         self.env.update(RELEASE_OPERATION="promote", GITHUB_REF="refs/heads/main")
         for phase in ("verify-checks", "verify-tests", "verify-asan", "verified",
@@ -362,7 +343,6 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual(clone["args"][2], "https://github.com/Se7enbrc/homebrew-glimmer.git")
         tap = next(call for call in self.calls() if call["tool"] == "homebrew-bump.sh")
         self.assertEqual(tap["args"], ["2026.10.6", "2026.10.6-rc.1"])
-
     def test_promotion_checks_main_and_candidate_before_authorizing_any_phase(self):
         self.env.update(RELEASE_OPERATION="promote", GITHUB_REF="refs/heads/main")
         self.assertEqual(self.run_phase("checks").returncode, 0)
@@ -372,39 +352,35 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertNotEqual(self.run_phase("checks").returncode, 0)
         self.assertNotEqual(self.run_phase("prepare-promotion").returncode, 0)
         self.assertFalse(any(call["tool"] == "promote-release.py" for call in self.calls()))
-
     def test_failed_precommit_stops_before_verify_and_cannot_authorize_build(self):
         self.assertEqual(self.run_phase("checks").returncode, 0)
-        self.env["FIXTURE_FAIL"] = "pre-commit:run --all-files"
+        self.env["FIXTURE_FAIL"] = "hk:check --all"
         self.assertNotEqual(self.run_phase("verify-checks").returncode, 0)
         self.env.pop("FIXTURE_FAIL")
         self.assertNotEqual(self.run_phase("build").returncode, 0)
         calls = self.calls()
-        hook = next(call for call in calls if call["tool"] == "pre-commit")
+        hook = next(call for call in calls if call["tool"] == "hk")
         self.assertEqual(hook["scan_all_files"], "1")
         self.assertFalse(any(call["tool"] == "make" and call["args"] == self.verification_args("checks")
                              for call in calls))
         self.assertFalse(self.private.exists())
-
     def test_signing_failure_reaps_temporary_keychain_and_files(self):
         self.built()
-        self.env["FIXTURE_FAIL"] = "make:CONFIG=Release preflight notarize-bundle"
+        self.env["FIXTURE_FAIL"] = "make:-f scripts/ci-signing.mk CONFIG=Release signing-preflight notarize-bundle"
         result = self.run_phase("sign")
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.private.exists())
-        setup = next(call for call in self.calls() if call["args"] == ["codesign-setup", "setup-notary"])
+        setup = next(call for call in self.calls() if call["args"] == ["-f", "scripts/ci-signing.mk", "codesign-setup", "setup-notary"])
         self.assertTrue(setup["secret_env_removed"])
         self.assertTrue(all(mode == 0o600 for mode in setup["modes"].values()))
         self.assertTrue(any(call["tool"] == "security" and call["args"][0] == "delete-keychain"
                             for call in self.calls()))
         self.assertNotIn("fixture-password", result.stdout + result.stderr)
-
     def test_moved_candidate_after_verify_cannot_sign(self):
         self.built()
         self.env["FIXTURE_SOURCE"] = "b" * 40
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
         self.assertFalse(self.private.exists())
-
     def test_publication_token_is_not_written_and_helper_restricts_host(self):
         self.signed_artifact()
         self.env["FIXTURE_FAIL_PUBLISH"] = "1"
@@ -418,18 +394,16 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual(publication["credential_mode"], 0o700)
         self.assertFalse(self.private.exists())
         self.assertNotIn(self.env["RELEASE_CONTENTS_TOKEN"], result.stdout + result.stderr)
-
     def test_invalid_material_fails_before_keychain_setup(self):
         self.built()
         self.env["DEVELOPER_ID_P12_BASE64"] = "invalid base64"
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
         self.assertFalse(self.private.exists())
-        self.assertFalse(any(call["args"] == ["codesign-setup", "setup-notary"] for call in self.calls()))
-
+        self.assertFalse(any(call["args"] == ["-f", "scripts/ci-signing.mk", "codesign-setup", "setup-notary"] for call in self.calls()))
     def test_complete_sequence_cleans_each_phase_and_clones_tap_over_https(self):
         self.verified()
         calls = self.calls()
-        hook_index = next(index for index, call in enumerate(calls) if call["tool"] == "pre-commit")
+        hook_index = next(index for index, call in enumerate(calls) if call["tool"] == "hk")
         verify_index = next(index for index, call in enumerate(calls)
                             if call["tool"] == "make" and call["args"] == self.verification_args("checks"))
         self.assertLess(hook_index, verify_index)
@@ -447,9 +421,8 @@ class HostedReleaseTests(unittest.TestCase):
                 self.assertFalse(call["private_exists"])
                 self.assertFalse(call["secret_env_present"])
         make_args = [call["args"] for call in self.calls() if call["tool"] == "make"]
-        self.assertIn(["CONFIG=Release", "preflight", "notarize-bundle"], make_args)
+        self.assertIn(["-f", "scripts/ci-signing.mk", "CONFIG=Release", "signing-preflight", "notarize-bundle"], make_args)
         self.assertFalse(any("dist" in args for args in make_args))
-
     def test_tooling_outside_main_history_cannot_publish(self):
         self.packaged()
         self.env["FIXTURE_FAIL"] = f"git:merge-base --is-ancestor {SHA} origin/main"
@@ -457,7 +430,6 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertFalse(self.private.exists())
         self.assertFalse(any(call["tool"] == "release_publication.py" and call["args"][0] == "publish"
                              for call in self.calls()))
-
     def test_packaging_outputs_only_the_two_final_assets_and_records_their_bytes(self):
         self.packaged()
         paths = [self.root.resolve() / f"build/dist/Glimmer-2026.10.6.{suffix}" for suffix in ("dmg", "zip")]
@@ -467,7 +439,6 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual(len(digests.splitlines()), 2)
         for path in paths:
             self.assertIn(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path}\n", digests)
-
     def test_package_preserves_stapled_dmg_and_retry_never_rebuilds_it(self):
         self.env['GITHUB_STEP_SUMMARY'] = str(self.runner / 'summary')
         self.packaged()
@@ -477,29 +448,27 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual(dmg.read_text(), 'inert signed and stapled dmg fixture')
         calls = self.calls()
         args = [call['args'] for call in calls if call['tool'] == 'make']
-        self.assertEqual(args.count(['CONFIG=Release', 'dmg']), 1)
-        self.assertEqual(args.count(['CONFIG=Release', 'notarize-dmg']), 1)
-        self.assertLess(args.index(['CONFIG=Release', 'preflight', 'notarize-bundle']),
-                        args.index(['CONFIG=Release', 'dmg']))
-        self.assertLess(args.index(['CONFIG=Release', 'dmg']), args.index(['CONFIG=Release', 'notarize-dmg']))
+        self.assertEqual(args.count(['-f', 'scripts/ci-signing.mk', 'CONFIG=Release', 'dmg']), 1)
+        self.assertEqual(args.count(['-f', 'scripts/ci-signing.mk', 'CONFIG=Release', 'notarize-dmg']), 1)
+        self.assertLess(args.index(['-f', 'scripts/ci-signing.mk', 'CONFIG=Release', 'signing-preflight', 'notarize-bundle']),
+                        args.index(['-f', 'scripts/ci-signing.mk', 'CONFIG=Release', 'dmg']))
+        self.assertLess(args.index(['-f', 'scripts/ci-signing.mk', 'CONFIG=Release', 'dmg']), args.index(['-f', 'scripts/ci-signing.mk', 'CONFIG=Release', 'notarize-dmg']))
         signed = next(index for index, call in enumerate(calls) if call.get('signing_available'))
         cleanup = next(index for index, call in enumerate(calls) if call['tool'] == 'security')
-        packaged = next(index for index, call in enumerate(calls) if call['args'] == ['CONFIG=Release', 'sparkle-zip'])
+        packaged = next(index for index, call in enumerate(calls) if call['args'] == ['-f', 'scripts/ci-signing.mk', 'CONFIG=Release', 'sparkle-zip'])
         self.assertLess(signed, cleanup)
         self.assertLess(cleanup, packaged)
         self.assertIn('DMG packaging, signing, notarization and stapling:',
                       Path(self.env['GITHUB_STEP_SUMMARY']).read_text())
-
     def test_dmg_failure_cleans_credentials_and_cannot_authorize_package(self):
         self.built()
         for target in ('dmg', 'notarize-dmg'):
             with self.subTest(target=target):
-                self.env['FIXTURE_FAIL'] = f'make:CONFIG=Release {target}'
+                self.env['FIXTURE_FAIL'] = f'make:-f scripts/ci-signing.mk CONFIG=Release {target}'
                 self.assertNotEqual(self.run_phase('sign').returncode, 0)
                 self.assertFalse(self.private.exists())
                 self.assertFalse((self.runner / 'glimmer-verified-12-1-signed').exists())
                 self.assertNotEqual(self.run_phase('package').returncode, 0)
-
 
 
 
@@ -514,7 +483,6 @@ class HostedReleaseTests(unittest.TestCase):
                          "fixture%250Avalue%0A-----END INERT KEY-----%0A")
         self.assertEqual(len(masks), 2)
         self.assertNotIn(pem, result.stdout + result.stderr)
-
     def test_notary_key_invalid_utf8_rejected_without_printing_material(self):
         self.built()
         self.env["NOTARY_KEY_BASE64"] = base64.b64encode(b"inert-sensitive-fragment\xff").decode()
@@ -523,16 +491,14 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertIn("notarization key is not UTF-8", result.stderr)
         self.assertNotIn("inert-sensitive-fragment", result.stdout + result.stderr)
         self.assertFalse(self.private.exists())
-        self.assertFalse(any(call["args"] == ["codesign-setup", "setup-notary"] for call in self.calls()))
-
+        self.assertFalse(any(call["args"] == ["-f", "scripts/ci-signing.mk", "codesign-setup", "setup-notary"] for call in self.calls()))
     def test_failed_unsigned_build_cannot_authorize_signing(self):
         self.verified()
-        self.env["FIXTURE_FAIL"] = "make:CONFIG=Release guard-release-version clean app embed-helper"
+        self.env["FIXTURE_FAIL"] = "make:CONFIG=Release embed-helper"
         self.assertNotEqual(self.run_phase("build").returncode, 0)
         self.env.pop("FIXTURE_FAIL")
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
         self.assertFalse(self.private.exists())
-
     def test_missing_build_sign_and_package_proofs_fail_closed(self):
         self.verified()
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
@@ -541,14 +507,12 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertNotEqual(self.run_phase("publish").returncode, 0)
         self.assertEqual(self.run_phase("sign").returncode, 0)
         self.assertNotEqual(self.run_phase("publish").returncode, 0)
-
     def test_missing_embedded_helper_stops_before_credentials(self):
         self.built()
         helper = self.root / "build/Build/Products/Release/Glimmer.app/Contents/Library/LaunchServices"
         shutil.rmtree(helper)
         self.assertNotEqual(self.run_phase("sign").returncode, 0)
         self.assertFalse(self.private.exists())
-
     def test_keychain_delete_failure_removes_files_but_cannot_authorize_package(self):
         self.built()
         self.env["FIXTURE_FAIL_DELETE"] = "1"
@@ -557,7 +521,6 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertFalse(self.private.exists())
         self.assertFalse((self.runner / "glimmer-verified-12-1-signed").exists())
         self.assertNotEqual(self.run_phase("package").returncode, 0)
-
     def test_file_cleanup_failure_cannot_authorize_package(self):
         self.built()
         self.env["FIXTURE_FAIL_REMOVE"] = "1"
@@ -566,16 +529,14 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertTrue(self.private.exists())
         self.assertFalse((self.runner / "glimmer-verified-12-1-signed").exists())
         self.assertNotEqual(self.run_phase("package").returncode, 0)
-
     def test_exit_cleanup_preserves_original_signing_error(self):
         self.built()
-        self.env["FIXTURE_FAIL"] = "make:CONFIG=Release preflight notarize-bundle"
+        self.env["FIXTURE_FAIL"] = "make:-f scripts/ci-signing.mk CONFIG=Release signing-preflight notarize-bundle"
         self.env["FIXTURE_FAIL_DELETE"] = "1"
         result = self.run_phase("sign")
         self.assertEqual(result.returncode, 1)
         self.assertFalse(self.private.exists())
         self.assertFalse((self.runner / "glimmer-verified-12-1-signed").exists())
-
     def test_pinned_tooling_survives_main_advancing_before_publication(self):
         self.env.update(TRUSTED_TOOLING_SHA=SHA, FIXTURE_MAIN="b" * 40)
         self.signed_artifact()
@@ -583,7 +544,6 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(["merge-base", "--is-ancestor", SHA, "origin/main"],
                       [call["args"] for call in self.calls()])
-
     def test_build_retry_accepts_successful_verification_from_earlier_attempts(self):
         self.verified()
         self.env["GITHUB_RUN_ATTEMPT"] = "3"
@@ -595,7 +555,6 @@ class HostedReleaseTests(unittest.TestCase):
         self.assertEqual((self.runner / "glimmer-verified-12-3").read_text().strip(), SHA)
         result = self.run_phase("build")
         self.assertEqual(result.returncode, 0, result.stderr)
-
     def test_missing_publication_token_stops_before_any_write(self):
         self.signed_artifact()
         self.env["RELEASE_CONTENTS_TOKEN"] = ""

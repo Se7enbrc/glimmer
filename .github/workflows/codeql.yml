@@ -41,6 +41,12 @@ jobs:
 
       # Main, scheduled and dispatched runs scan everything; a pull request skips
       # only the Swift build when it changes nothing that build reads.
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Decide what to scan
         id: changes
         env:
@@ -97,6 +103,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
 
       - name: Select analysis scope
         id: changes

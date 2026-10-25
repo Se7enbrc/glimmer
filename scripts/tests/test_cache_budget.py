@@ -71,5 +71,7 @@ class CacheBudgetTests(unittest.TestCase):
             for step in re.split(r'(?m)^      - name:', path.read_text()):
                 if 'uses: actions/upload-artifact@' in step:
                     self.assertIn('retention-days: 1', step, path)
-        checks = (ROOT / 'scripts/ci-checks.mk').read_text().split('check-macos:\n', 1)[1]
-        self.assertIn('scripts/lint-swift.sh lint --strict --quiet', checks)
+        checks = (ROOT / 'scripts/ci-checks.mk').read_text().split('check-macos:', 1)[1]
+        self.assertIn('hk check --all --step swiftlint', checks)
+        hooks = (ROOT / 'hk.pkl').read_text()
+        self.assertIn('macos = "scripts/lint-swift.sh lint --strict --quiet"', hooks)

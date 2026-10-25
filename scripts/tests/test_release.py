@@ -42,7 +42,7 @@ class ReleaseValidationTests(unittest.TestCase):
                 "MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 400\n")
             shutil.copy2(SCRIPTS.parent / "Makefile", root / "Makefile")
             (root / "scripts").mkdir()
-            for name in ("release-bundle.mk", "ci-checks.mk", "mac-test-products.mk"):
+            for name in ("ci-signing.mk", "release-bundle.mk", "apple-apps.mk", "ci-checks.mk", "mac-test-products.mk"):
                 shutil.copy2(SCRIPTS / name, root / "scripts" / name)
             app = root / "prepared app/Glimmer.app"
             app.mkdir(parents=True)
@@ -58,7 +58,8 @@ class ReleaseValidationTests(unittest.TestCase):
                 (tools / name).write_text("#!/bin/bash\nexit 1\n")
             for tool in tools.iterdir():
                 tool.chmod(0o755)
-            result = run_fixture(["/usr/bin/make", "sparkle-zip", "CONFIG=Release",
+            result = run_fixture(["/usr/bin/make", "-f", "scripts/ci-signing.mk", "sparkle-zip", "CONFIG=Release",
+                                  "CI=true", "GITHUB_ACTIONS=true", f"RUNNER_TEMP={root}",
                                   f"GLIMMER_APP_SRC={app}", f"DIST_DIR={output}"], cwd=root,
                                  env={"PATH": f"{tools}:/usr/bin:/bin", "HOME": str(root),
                                       "FIXTURE_LOG": str(log)})
@@ -85,7 +86,7 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertIn("-enableAddressSanitizer YES", commands[1])
         self.assertIn("-only-testing:GlimmerTests/FuzzTests", commands[1])
         self.assertIn("-only-testing:GlimmerTests/StreamFuzzTests", commands[1])
-        self.assertIn("scripts/lint-swift.sh lint --strict", full)
+        self.assertIn("hk check --all", full)
         self.assertIn("python3 scripts/test-scripts.py all", full)
         self.assertIn("python3 scripts/test-scripts.py all", plan("verify", "TEST_PLATFORM=portable"))
 
