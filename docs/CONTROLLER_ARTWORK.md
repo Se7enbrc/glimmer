@@ -16,6 +16,18 @@ no surface fills, gradients, shadows, textures or colored legends. The existing
 selection feedback belongs to native controls. Shell lines are clipped behind
 controls without adding opaque fills.
 
+`ControllerShoulderGeometry` independently draws the five shoulder assemblies:
+DualSense/Edge, DualShock 4, Xbox/Elite, Backbone and generic MFi. Bumpers
+follow the top grip contours; front triggers sit behind both the bumper and
+shell. Plain part lettering replaces boxed glyphs. Rear triggers retain their
+exposed depth, with physical left/right mirrored. The approved body and face
+controls keep their existing geometry and stroke weights.
+
+On iOS, each close-set shoulder pair opens a native menu with separate bumper
+and trigger choices. Its hit shape contains a 44 by 44 point core above the
+other controls plus the visible parts. Mac selects each part directly. Selection
+and pressed feedback color the actual part outline, never a detached chip.
+
 `ControllerDiagramGeometry` places the controls in a 480 by 330 coordinate
 space. The editor scales this space uniformly. Native buttons use
 `ControllerButtonShape` for both their visible outline and full hit region;
@@ -73,7 +85,8 @@ receiving invented physical locations.
 Run only the touched `ControllerDiagramTests` and `ControllerLayoutRenderTests`
 suites for an artwork revision. The geometry tests check family resolution,
 control containment, nonoverlapping button bounds, touchpad bounds, mirrored
-rear targets and shell-line occlusion beneath control caps at multiple scales.
+rear targets, shell-line occlusion, shoulder overlap and 44 point target cores
+that clear the other buttons. Part labels remain inside their visible paths.
 Native renders cover all families and the two paddle backs in light and dark on
 Mac, iPhone Simulator and iPad Simulator. Mac tests also inspect the native
 accessibility tree for every visible control and each stick/d-pad menu.

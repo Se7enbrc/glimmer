@@ -34,6 +34,8 @@
 - Controller layouts show clean line drawings of DualSense, DualSense Edge,
   DualShock 4, Xbox Series, Xbox Elite Series 2 and both Backbone One editions,
   with back views for supported paddles and a diagram for other MFi controllers.
+  Shoulder buttons curve along the grips, with triggers partly hidden behind
+  them.
 
 - Glimmer now runs on macOS Sequoia 15.7 or later, not only macOS Tahoe. On
   Sequoia, windows and controls use the system's standard materials in place of
