@@ -8,6 +8,65 @@ import Testing
 @testable import Glimmer
 
 struct ControllerDiagramTests {
+    @Test func shouldersAndTriggersShareAnOverlappingAssembly() throws {
+        for family in ControllerDiagramFamily.allCases {
+            for rear in [false, true] {
+                let bumper = ControllerLayoutControl(id: .button(.leftShoulder), name: "Left bumper", symbol: "")
+                let trigger = ControllerLayoutControl(id: .trigger(.left), name: "Left trigger", symbol: "")
+                let bumperPosition = try #require(ControllerDiagramGeometry.visiblePlacement(bumper, family: family, rear: rear))
+                let triggerPosition = try #require(ControllerDiagramGeometry.visiblePlacement(trigger, family: family, rear: rear))
+                #expect(bumperPosition.bounds.intersects(triggerPosition.bounds), "Detached parts: \(family), rear \(rear)")
+            }
+        }
+    }
+
+    @Test func shoulderTouchTargetsContainA44PointCoreAndEveryVisiblePart() {
+        for family in ControllerDiagramFamily.allCases {
+            for rear in [false, true] {
+                for left in [false, true] {
+                    let sources: [ControllerLayoutSource] = [.button(left ? .leftShoulder : .rightShoulder),
+                                                            .trigger(left ? .left : .right)]
+                    let controls = sources.map { ControllerLayoutControl(id: $0, name: $0.layoutName, symbol: "") }
+                    for scale: CGFloat in [0.6, 1, 1.16] {
+                        let core = ControllerShoulderGeometry.targetCore(family: family, left: left, rear: rear, scale: scale)
+                        let frame = ControllerShoulderGeometry.targetFrame(family: family, left: left, rear: rear, scale: scale)
+                        #expect(core.width >= 44 && core.height >= 44)
+                        #expect(frame.contains(core))
+                        if !rear {
+                            for button in ControllerMappedButton.allCases {
+                                let control = ControllerLayoutControl(id: .button(button), name: "", symbol: "")
+                                guard !ControllerShoulderGeometry.isShoulder(control.id),
+                                      let body = ControllerDiagramGeometry.visiblePlacement(control, family: family,
+                                                                                            rear: false) else { continue }
+                                let bounds = body.bounds.applying(.init(scaleX: scale, y: scale))
+                                #expect(core.intersects(bounds) == false, "Shoulder target covers \(family) \(button)")
+                            }
+                        }
+                        let target = ControllerShoulderTarget(family: family, controls: controls, rear: rear, left: left,
+                                                              scale: scale).path(in: frame).cgPath
+                        for row in 0..<8 {
+                            for column in 0..<8 {
+                                let point = CGPoint(x: core.minX + (CGFloat(column) + 0.5) * core.width / 8,
+                                                    y: core.minY + (CGFloat(row) + 0.5) * core.height / 8)
+                                #expect(target.contains(point))
+                            }
+                        }
+                        for control in controls {
+                            let placement = ControllerShoulderGeometry.placement(family: family, source: control.id, rear: rear)
+                            let label = ControllerShoulderGeometry.labelPoint(family: family,
+                                trigger: ControllerShoulderGeometry.isTrigger(control.id), rear: rear)
+                            let point = CGPoint(x: (left != rear ? label.x : 480 - label.x) * scale, y: label.y * scale)
+                            let part = ControllerButtonShape(family: family, placement: placement, source: control.id)
+                                .path(in: placement.bounds.applying(.init(scaleX: scale, y: scale))).cgPath
+                            #expect(part.contains(point), "Label outside \(family) \(control.id), rear \(rear)")
+                            #expect(target.contains(point))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @Test func lineArtworkHidesShellBehindControlsWithoutChangingHitRegions() {
         let sources: [ControllerLayoutSource] = [.button(.a), .button(.b), .button(.x), .button(.y),
             .button(.touchpad), .button(.leftShoulder), .button(.rightShoulder), .trigger(.left), .trigger(.right),
@@ -200,8 +259,14 @@ struct ControllerDiagramTests {
                 for scale: CGFloat in [0.6, 1, 1.16, 2] {
                     let bounds = placement.bounds.applying(.init(scaleX: scale, y: scale))
                     let path = shape.path(in: bounds)
-                    let center = CGPoint(x: placement.point.x * scale, y: placement.point.y * scale)
-                    #expect(path.contains(center), "\(family) \(source) center is not clickable")
+                    var point = placement.point
+                    if ControllerShoulderGeometry.isShoulder(source) {
+                        point = ControllerShoulderGeometry.labelPoint(family: family,
+                            trigger: ControllerShoulderGeometry.isTrigger(source), rear: false)
+                        if !ControllerShoulderGeometry.isLeft(source) { point.x = 480 - point.x }
+                    }
+                    let center = CGPoint(x: point.x * scale, y: point.y * scale)
+                    #expect(path.cgPath.contains(center), "\(family) \(source) center is not clickable")
                     #expect(bounds.insetBy(dx: -scale, dy: -scale).contains(path.boundingRect))
                     let originPath = shape.path(in: CGRect(origin: .zero, size: bounds.size))
                         .applying(.init(translationX: bounds.minX, y: bounds.minY))

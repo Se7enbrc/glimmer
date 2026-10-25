@@ -78,7 +78,6 @@ enum ControllerDiagramFamily: String, CaseIterable {
     }
     var faces: CGPoint { isBackbone ? CGPoint(x: 426, y: 128) : CGPoint(x: 380, y: 126) }
     var faceSpacing: CGFloat { isBackbone ? 21 : 33 }
-    var shoulderX: CGFloat { isBackbone ? 55 : isXbox ? 113 : 102 }
     var touchpad: CGRect {
         CGRect(x: 164, y: isDualSense ? 49 : 68, width: 152, height: isDualSense ? 85 : 74)
     }
@@ -100,10 +99,8 @@ enum ControllerDiagramGeometry {
         if let position = control.position { return extra(position, family: family) }
         switch control.id {
         case .button(let button): return buttonPlacement(button, family: family)
-        case .trigger(let trigger):
-            return .init(point: CGPoint(x: trigger == .left ? family.shoulderX : 480 - family.shoulderX,
-                                       y: family.isBackbone ? 64 : 40),
-                         width: family.isBackbone ? 52 : 66, height: 22)
+        case .trigger:
+            return ControllerShoulderGeometry.placement(family: family, source: control.id, rear: false)
         default: return nil
         }
     }
@@ -111,16 +108,8 @@ enum ControllerDiagramGeometry {
     static func visiblePlacement(_ control: ControllerLayoutControl, family: ControllerDiagramFamily,
                                  rear: Bool) -> ControllerDiagramPlacement? {
         guard let placement = placement(control, family: family) else { return nil }
-        let onBothSides: Bool
-        switch control.id {
-        case .trigger, .button(.leftShoulder), .button(.rightShoulder): onBothSides = true
-        default: onBothSides = false
-        }
-        if rear && onBothSides {
-            let trigger: Bool
-            if case .trigger = control.id { trigger = true } else { trigger = false }
-            return .init(point: CGPoint(x: 480 - placement.point.x, y: trigger ? 72 : 42),
-                         width: placement.width, height: trigger ? 42 : 16, rear: true)
+        if ControllerShoulderGeometry.isShoulder(control.id) {
+            return ControllerShoulderGeometry.placement(family: family, source: control.id, rear: rear)
         }
         return placement.rear == rear ? placement : nil
     }
@@ -136,9 +125,7 @@ enum ControllerDiagramGeometry {
         case .x: return .init(point: CGPoint(x: faces.x - offset, y: faces.y), width: size, height: size)
         case .y: return .init(point: CGPoint(x: faces.x, y: faces.y - offset), width: size, height: size)
         case .leftShoulder, .rightShoulder:
-            return .init(point: CGPoint(x: button == .leftShoulder ? family.shoulderX : 480 - family.shoulderX,
-                                       y: family.isBackbone ? 84 : 63),
-                         width: family.isBackbone ? 64 : 78, height: 20)
+            return ControllerShoulderGeometry.placement(family: family, source: .button(button), rear: false)
         case .menu, .options:
             let x: CGFloat = family.isBackbone ? 43 : family.isPlayStation ? 147 : 206
             return .init(point: CGPoint(x: button == .options ? x : 480 - x,

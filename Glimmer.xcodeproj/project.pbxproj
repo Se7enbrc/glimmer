@@ -737,6 +737,8 @@
 		329F02FEBDD44DAFA28300BC /* ControllerArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = D31A6D9DC42043D096EDE55D /* ControllerArtwork.swift */; };
 		059E9C4832CB459FB0FB8300 /* ControllerControlArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */; };
 		966232EF57614C298EE9BFD6 /* ControllerDpadSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */; };
+		E87A9A327F0348218C4BA2E5 /* ControllerShoulderGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CC85B1E0714644BBFC1C3E /* ControllerShoulderGeometry.swift */; };
+		10668594F8644C5E802B0541 /* ControllerShoulderControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6EA36684EE48E5B46CE965 /* ControllerShoulderControls.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1528,6 +1530,8 @@
 		D31A6D9DC42043D096EDE55D /* ControllerArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerArtwork.swift"; sourceTree = SOURCE_ROOT; };
 		7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerControlArtwork.swift"; sourceTree = SOURCE_ROOT; };
 		B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerDpadSurface.swift"; sourceTree = SOURCE_ROOT; };
+		E0CC85B1E0714644BBFC1C3E /* ControllerShoulderGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerShoulderGeometry.swift"; sourceTree = SOURCE_ROOT; };
+		AE6EA36684EE48E5B46CE965 /* ControllerShoulderControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerShoulderControls.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1625,6 +1629,8 @@
 				E92A400B198D99C4E81A5016 /* ControllerLayoutDiagram.swift */,
 				7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */,
 				B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */,
+				AE6EA36684EE48E5B46CE965 /* ControllerShoulderControls.swift */,
+				E0CC85B1E0714644BBFC1C3E /* ControllerShoulderGeometry.swift */,
 				D31A6D9DC42043D096EDE55D /* ControllerArtwork.swift */,
 				356D8AE2FC704A91ADF9EBE9 /* ControllerSurfaceShape.swift */,
 				E739566E42134718B281E78F /* ControllerBodyShape.swift */,
@@ -2542,6 +2548,8 @@
 				51DAB01AF73E7404229D81AF /* ControllerLayoutDiagram.swift in Sources */,
 				059E9C4832CB459FB0FB8300 /* ControllerControlArtwork.swift in Sources */,
 				966232EF57614C298EE9BFD6 /* ControllerDpadSurface.swift in Sources */,
+				10668594F8644C5E802B0541 /* ControllerShoulderControls.swift in Sources */,
+				E87A9A327F0348218C4BA2E5 /* ControllerShoulderGeometry.swift in Sources */,
 				329F02FEBDD44DAFA28300BC /* ControllerArtwork.swift in Sources */,
 				D0F3D158B8404F6780B9AE6A /* ControllerSurfaceShape.swift in Sources */,
 				7E4AFBDE5A4F4F8C9A27299D /* ControllerBodyShape.swift in Sources */,

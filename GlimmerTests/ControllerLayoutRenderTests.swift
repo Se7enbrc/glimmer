@@ -78,6 +78,19 @@ struct ControllerLayoutRenderTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func selectedShoulderOutlinesThePhysicalPart(dark: Bool) async throws {
+        let device = fixture(.dualSenseEdge)
+        try await record(NavigationStack {
+            Form {
+                ControllerLayoutDiagram(family: .dualSenseEdge, controls: device.controls,
+                                        selectedShoulder: .trigger(.left)) { _ in }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("DualSense Edge")
+        }, name: "after-shoulder-selected-\(dark ? "dark" : "light")", dark: dark)
+    }
+
     #if os(macOS)
     @Test func diagramVoiceOverNamesEveryVisibleControl() throws {
         for family in ControllerDiagramFamily.allCases {

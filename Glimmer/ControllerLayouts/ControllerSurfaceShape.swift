@@ -190,20 +190,16 @@ struct ControllerButtonShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
+        if ControllerShoulderGeometry.isShoulder(source) { return shoulderPath(in: rect) }
         if source == .button(.touchpad) { return ControllerTouchpadShape(family: family).path(in: rect) }
         let contour: Path
-        switch source {
-        case .trigger: contour = shoulder(trigger: true)
-        case .button(.leftShoulder), .button(.rightShoulder): contour = shoulder(trigger: false)
-        default:
-            guard isPaddle else {
-                return rect.width == rect.height ? Path(ellipseIn: rect) : Capsule().path(in: rect)
-            }
-            if family == .xboxElite {
-                contour = placement.height > 40 ? lowerPaddle : horizontalPaddle
-            } else {
-                contour = verticalPaddle
-            }
+        guard isPaddle else {
+            return rect.width == rect.height ? Path(ellipseIn: rect) : Capsule().path(in: rect)
+        }
+        if family == .xboxElite {
+            contour = placement.height > 40 ? lowerPaddle : horizontalPaddle
+        } else {
+            contour = verticalPaddle
         }
         let facing = placement.point.x < 240 ? contour
             : contour.applying(.init(a: -1, b: 0, c: 0, d: 1, tx: 1, ty: 0))
@@ -211,18 +207,14 @@ struct ControllerButtonShape: Shape {
             .applying(.init(translationX: rect.minX, y: rect.minY))
     }
 
-    private func shoulder(trigger: Bool) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: 0.04, y: 0.4))
-            path.addQuadCurve(to: CGPoint(x: 0.23, y: 0.04), control: CGPoint(x: 0.05, y: 0.12))
-            path.addQuadCurve(to: CGPoint(x: 0.88, y: 0.07), control: CGPoint(x: 0.6, y: -0.02))
-            path.addQuadCurve(to: CGPoint(x: 0.98, y: 0.3), control: CGPoint(x: 1, y: 0.1))
-            path.addLine(to: CGPoint(x: trigger ? 0.89 : 0.97, y: 0.83))
-            path.addQuadCurve(to: CGPoint(x: 0.68, y: 0.96), control: CGPoint(x: 0.87, y: 1))
-            path.addLine(to: CGPoint(x: 0.13, y: 0.92))
-            path.addQuadCurve(to: CGPoint(x: 0.04, y: 0.4), control: CGPoint(x: -0.02, y: 0.9))
-            path.closeSubpath()
-        }
+    private func shoulderPath(in rect: CGRect) -> Path {
+        let trigger = ControllerShoulderGeometry.isTrigger(source)
+        let bounds = ControllerShoulderGeometry.rawPath(family: family, trigger: trigger, rear: placement.rear).boundingRect
+        var part = ControllerShoulderGeometry.path(family: family, trigger: trigger, rear: placement.rear)
+            .applying(.init(translationX: -bounds.minX, y: -bounds.minY))
+        if placement.point.x > 240 { part = part.applying(.init(a: -1, b: 0, c: 0, d: 1, tx: bounds.width, ty: 0)) }
+        return part.applying(.init(scaleX: rect.width / bounds.width, y: rect.height / bounds.height))
+            .applying(.init(translationX: rect.minX, y: rect.minY))
     }
 
     private var horizontalPaddle: Path {

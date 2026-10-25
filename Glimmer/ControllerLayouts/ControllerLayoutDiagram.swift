@@ -8,6 +8,7 @@ struct ControllerLayoutDiagram: View {
     let family: ControllerDiagramFamily
     let controls: [ControllerLayoutControl]
     @State var rear = false
+    @State var selectedShoulder: ControllerLayoutSource?
     var select: (ControllerLayoutControl) -> Void
 
     private var positioned: [(ControllerLayoutControl, ControllerDiagramPlacement)] {
@@ -46,6 +47,14 @@ struct ControllerLayoutDiagram: View {
                     ForEach(visibleControls, id: \.0.id) { control, placement in
                         controlButton(control, placement: placement, scale: scale)
                     }
+                    #if os(iOS)
+                    ForEach([true, false], id: \.self) { left in
+                        ControllerShoulderMenu(family: family, controls: controls, rear: rear, left: left,
+                                               scale: scale, selected: selectedShoulder) { control in
+                            choose(control)
+                        }
+                    }
+                    #endif
                 }
             }
             .aspectRatio(480.0 / 330, contentMode: .fit)
@@ -62,9 +71,29 @@ struct ControllerLayoutDiagram: View {
         .frame(maxWidth: .infinity)
     }
 
+    private func choose(_ control: ControllerLayoutControl) {
+        selectedShoulder = ControllerShoulderGeometry.isShoulder(control.id) ? control.id : nil
+        select(control)
+    }
+
+    @ViewBuilder
     private func controlButton(_ control: ControllerLayoutControl, placement: ControllerDiagramPlacement,
                                scale: CGFloat) -> some View {
-        Button { select(control) } label: {
+        if ControllerShoulderGeometry.isShoulder(control.id) {
+            #if os(macOS)
+            ControllerShoulderButton(family: family, control: control, placement: placement,
+                                     scale: scale, selected: selectedShoulder == control.id) {
+                choose(control)
+            }
+            #endif
+        } else {
+            ordinaryButton(control, placement: placement, scale: scale)
+        }
+    }
+
+    private func ordinaryButton(_ control: ControllerLayoutControl, placement: ControllerDiagramPlacement,
+                                scale: CGFloat) -> some View {
+        Button { choose(control) } label: {
             ControllerControlArtwork(control: control, placement: placement, family: family, scale: scale)
                 .contentShape(ControllerButtonShape(family: family, placement: placement,
                                                     source: control.id))
@@ -79,7 +108,7 @@ struct ControllerLayoutDiagram: View {
         let directions: [ControllerMappedButton] = [.up, .down, .left, .right]
         let available = controls.filter { control in directions.contains { control.id == .button($0) } }
         return Menu {
-            ForEach(available) { control in Button(control.name) { select(control) } }
+            ForEach(available) { control in Button(control.name) { choose(control) } }
         } label: {
             ControllerDpadArtwork(family: family, scale: scale)
                 .contentShape(.rect)
@@ -101,7 +130,7 @@ struct ControllerLayoutDiagram: View {
         }
         let point = left ? family.leftStick : family.rightStick
         return Menu {
-            ForEach(available) { control in Button(control.name) { select(control) } }
+            ForEach(available) { control in Button(control.name) { choose(control) } }
         } label: {
             ControllerStickArtwork(family: family, scale: scale)
                 .contentShape(.circle)
