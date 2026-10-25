@@ -73,7 +73,11 @@ final class StreamTouchCapture: NSObject, UIGestureRecognizerDelegate {
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard enabled else { return false }
-        var candidate = touch.view
+        return Self.acceptsTouch(startingIn: touch.view)
+    }
+
+    static func acceptsTouch(startingIn view: UIView?) -> Bool {
+        var candidate = view
         while let target = candidate {
             if target is UIControl { return false }
             candidate = target.superview

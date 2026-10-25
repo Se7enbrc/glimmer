@@ -32,19 +32,22 @@ extension AppModel {
     // actually negotiated can differ from what's requested (Intel Macs drop AV1
     // → HEVC), so showing it risks displaying a value that's simply wrong. Users
     // care that it looks good, not which encoder produced it.
-    var streamSpecSummary: String {
-        let mbps = displayBitrateKbps / 1000
+    /// Adaptive quality moves the rate during play, so no fixed number is promised before it starts.
+    func streamSpecSummary(adaptive: Bool) -> String {
         let hdrTag = effectiveHDR ? " · HDR" : ""
-        return "\(effectiveWidth) × \(effectiveHeight) · \(effectiveFPS) Hz\(hdrTag) · \(mbps) Mbps"
+        return "\(effectiveWidth) × \(effectiveHeight) · \(effectiveFPS) Hz\(hdrTag) · \(bitrateLabel(adaptive: adaptive))"
     }
 
-    var streamSpecChips: [String] {
-        let mbps = displayBitrateKbps / 1000
+    func streamSpecChips(adaptive: Bool) -> [String] {
         var chips = [Self.resolutionLabel(width: effectiveWidth, height: effectiveHeight),
                      "\(effectiveFPS) Hz"]
         if effectiveHDR { chips.append("HDR") }
-        chips.append("\(mbps) Mbps")
+        chips.append(bitrateLabel(adaptive: adaptive))
         return chips
+    }
+
+    private func bitrateLabel(adaptive: Bool) -> String {
+        adaptive ? "adaptive bitrate" : "\(displayBitrateKbps / 1000) Mbps"
     }
 
     /// Codec-aware bitrate the spec surfaces show: what the engine actually sends

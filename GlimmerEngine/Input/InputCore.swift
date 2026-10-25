@@ -40,12 +40,25 @@ package final class InputCore: @unchecked Sendable {
     package var buttons: [UInt8: Int32] = [:]
     package var analogs: [UInt8: GamepadAnalog] = [:]
     package var current: [UInt8: (buttons: Int32, analog: GamepadAnalog)] = [:]
+    package var layouts: ControllerLayoutRouting?
+    package var onControllerEscape: (@Sendable () -> Void)?
     package struct ControllerSample {
         package let slot: UInt8
         package let token: UUID
         package let registeredAt: TimeInterval
         package var buttons: Int32
         package var analog: GamepadAnalog
+        package var extras = SIMD2<UInt64>.zero
+
+        package init(slot: UInt8, token: UUID, registeredAt: TimeInterval, buttons: Int32,
+                     analog: GamepadAnalog, extras: SIMD2<UInt64> = .zero) {
+            self.slot = slot
+            self.token = token
+            self.registeredAt = registeredAt
+            self.buttons = buttons
+            self.analog = analog
+            self.extras = extras
+        }
     }
     package var hidRegistrations: [UInt8: UUID] = [:]
     package var controllers: [ObjectIdentifier: ControllerSample] = [:]
@@ -96,7 +109,9 @@ package final class InputCore: @unchecked Sendable {
                 value.acceptEventsAfter = ProcessInfo.processInfo.systemUptime
             }
             if self.backend !== backend || (value.ready && !snapshot.ready) { failureCodes.removeAll() }
+            let chordChanged = snapshot.chord != value.chord || snapshot.customChord != value.customChord
             snapshot = value
+            if chordChanged { refreshLayoutStopPolicy() }
             self.backend = backend
         }
     }
@@ -114,7 +129,8 @@ package final class InputCore: @unchecked Sendable {
 
     @discardableResult
     package func receive(slot: UInt8, buttons: Int32, analog: GamepadAnalog, chordButtons: Int32? = nil,
-                         capturedAt: TimeInterval? = nil) -> ControllerAcceptance {
+                         capturedAt: TimeInterval? = nil, extras: SIMD2<UInt64> = .zero,
+                         physicalSample: ControllerMappingSample? = nil) -> ControllerAcceptance {
         withLock {
             guard snapshot.ready, snapshot.focused, snapshot.mask & (1 << slot) != 0 else { return .gated }
             if let capturedAt, capturedAt < snapshot.acceptEventsAfter { return .gated }
@@ -122,6 +138,12 @@ package final class InputCore: @unchecked Sendable {
                 flushReleases()
                 if !activityPublished { activityPublished = true; onActivity?() }
                 return .gated
+            }
+            if let state = layouts?.states[Int(slot)] {
+                return receiveLayout(state, slot: slot,
+                    sample: physicalSample ?? .init(buttons: chordButtons ?? buttons, analog: analog, extras: extras),
+                    systemSample: .init(buttons: buttons, analog: analog, extras: extras),
+                    at: capturedAt ?? ProcessInfo.processInfo.systemUptime)
             }
             current[slot] = (chordButtons ?? buttons, analog)
             let held = heldControllerButtons(buttons: chordButtons ?? buttons,

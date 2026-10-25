@@ -27,10 +27,11 @@ extension AppModel {
     /// of the launcher is on screen (frontmost or not, since the chip shows either way)
     /// and every 20 s otherwise. Only the selected PC is polled.
     func restartHostStatusPolling(
-        afterStream: Bool = false,
+        afterStream: Bool = false, now: Date = Date(),
         sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
     ) {
         if afterStream {
+            hostUnreachableStreak = 0
             extendPollSettle()
             if let hostID = hostPolling.establishedHostID {
                 hostPolling.provenAwake = (hostID, Date())
@@ -51,12 +52,7 @@ extension AppModel {
         // requests; an activation must not re-arm it. A wake holds only its own PC's poll.
         guard pairingAttempt == nil, wakingHostID != host.id else { return }
 
-        beginHostReadiness(for: host, afterStream: afterStream && lastLaunchAttempt?.host.id == host.id)
-
-        // Fresh poll loop → fresh unreachable streak. A miss accrued against
-        // the previous host (or before a stream) must not count toward
-        // `asleepProbeThreshold` for this loop.
-        hostUnreachableStreak = 0
+        beginHostReadiness(for: host, afterStream: afterStream && lastLaunchAttempt?.host.id == host.id, now: now)
 
         let task = Task { [weak self] in
             // A selection change cannot publish this PC's answer onto another PC.
@@ -201,7 +197,7 @@ extension AppModel {
         // Once TCP answers, ask /serverinfo who the PC is and whether it's busy.
         // A fresh NetworkClient per poll has no persistent connection to reuse.
         do {
-            let info = try await client.fetchServerInfo()
+            let info = try await client.fetchServerInfo(timeout: 2, diagnosePinnedFailure: false)
             await client.shutdown()
             if Task.isCancelled { return appListFor }
             return await publishAnswer(info, rttMs: rttMs, hostID: hostID, appListFor: appListFor)
@@ -242,28 +238,26 @@ extension AppModel {
         return appListFor
     }
 
-    /// A /serverinfo answer: backfill the MAC (only learnable while the PC is on),
-    /// refresh the app list when `needsAppList` says so, then publish idle or the
-    /// running app by name.
-    private func publishAnswer(_ info: ServerInfo, rttMs: Int, hostID: String, appListFor: Int?) async -> Int? {
+    /// Publish reachability before library work, so a slow /applist never holds the chip.
+    func publishAnswer(_ info: ServerInfo, rttMs: Int, hostID: String, appListFor: Int?,
+                       refreshApps: ((Host) async -> Bool)? = nil) async -> Int? {
         guard let host = selectedHost, host.id == hostID else { return appListFor }
         updateHostMac(hostID: hostID, mac: info.macAddress, defaults: hostsDefaults)
-        var fetchedFor = appListFor
         let running = info.currentGameID
-        if Self.needsAppList(runningID: running, known: Set(host.apps.map(\.id)), fetchedFor: appListFor) {
-            if await refreshAppList(for: host) { fetchedFor = running }
-            if Task.isCancelled { return fetchedFor }
-        }
-        let state = Self.liveState(info, apps: selectedHost?.apps ?? host.apps)
-        await publishLiveStatus(HostLiveStatus(
-            hostID: hostID,
-            state: state,
-            rttMs: rttMs,
-            sunshineVersion: info.appVersion,
-            capturedAt: Date(),
-            runningAppID: running == 0 ? nil : running
-        ), expectedHostID: hostID)
-        return fetchedFor
+        if running == 0, !info.isBusy { continuationHistory.invalidate(pc: hostID) }
+        var status = HostLiveStatus(
+            hostID: hostID, state: Self.liveState(info, apps: host.apps), rttMs: rttMs,
+            sunshineVersion: info.appVersion, capturedAt: Date(), runningAppID: running == 0 ? nil : running
+        )
+        await publishLiveStatus(status, expectedHostID: hostID)
+        guard !Task.isCancelled,
+              Self.needsAppList(runningID: running, known: Set(host.apps.map(\.id)), fetchedFor: appListFor),
+              await (refreshApps ?? refreshAppList)(host) else { return appListFor }
+        guard !Task.isCancelled else { return running }
+        // Resolving the name does not make the earlier reachability evidence any younger.
+        status.state = Self.liveState(info, apps: selectedHost?.apps ?? host.apps)
+        await publishLiveStatus(status, expectedHostID: hostID)
+        return running
     }
 
     /// The first Asleep for a PC may really be a DHCP move: look for it by mDNS for
@@ -297,25 +291,28 @@ extension AppModel {
     }
 
     /// A separate bounded task survives the ordinary chip poller's activation and launch restarts.
-    func beginHostReadiness(for host: Host, afterStream: Bool = false) {
+    func beginHostReadiness(for host: Host, afterStream: Bool = false, waitUntilIdle: Bool = false,
+                            now: Date = Date()) {
         guard hostPolling.readinessTasks[host.id] == nil, !hostPollingPausedForSleep else { return }
+        // The 60 s evidence window covers two missed hidden polls; activation revalidates immediately.
+        // Teardown and stream starts still need an idle answer even when recent evidence proved the PC reachable.
+        let waitUntilIdle = afterStream || waitUntilIdle
+        if !waitUntilIdle, Self.hasRecentReachableStatus(hostLiveStatus, hostID: host.id, now: now) { return }
         let reason = afterStream ? "Finishing the last stream…" : "Checking the PC…"
         hostPolling.readinessReasons[host.id] = reason
         let server = nativeServerInfo(for: host)
         let makeClient = makeNetwork
         hostPolling.readinessTasks[host.id] = Task { [weak self] in
             let client = makeClient(server)
-            let deadline = Date().addingTimeInterval(5)
+            let deadline = Date().addingTimeInterval(waitUntilIdle ? 5 : 1)
             await client.setRequestDeadline(deadline)
-            let answer = await Self.pollReadiness(until: deadline, fetch: {
+            let answer = await Self.pollReadiness(until: deadline, waitUntilIdle: waitUntilIdle, fetch: {
                 try await client.fetchServerInfo(timeout: 1, diagnosePinnedFailure: false)
-            }, busy: { [weak self] in
-                self?.hostPolling.readinessReasons[host.id] = afterStream
-                    ? "Finishing the last stream…" : "Waiting for the PC…"
             })
             await client.shutdown()
             guard !Task.isCancelled, let self else { return }
             if let answer {
+                if selectedHost?.id == host.id { hostUnreachableStreak = 0 }
                 let state = Self.liveState(answer, apps: host.apps)
                 await publishLiveStatus(HostLiveStatus(
                     hostID: host.id, state: state, rttMs: nil, sunshineVersion: answer.appVersion,
@@ -324,6 +321,14 @@ extension AppModel {
             }
             hostPolling.readinessReasons[host.id] = nil
             hostPolling.readinessTasks[host.id] = nil
+        }
+    }
+
+    nonisolated static func hasRecentReachableStatus(_ live: HostLiveStatus?, hostID: String, now: Date) -> Bool {
+        guard let live, HostLiveStatus.isFresh(live, for: hostID, at: now) else { return false }
+        switch live.state {
+        case .idle, .streamingApp, .streamingUnknownApp: return true
+        case .unknown, .asleep, .certMismatch: return false
         }
     }
 
@@ -338,13 +343,16 @@ extension AppModel {
     }
 
     static func pollReadiness(
-        until deadline: Date,
+        until deadline: Date, waitUntilIdle: Bool = true,
         fetch: @escaping @Sendable () async throws -> ServerInfo,
         busy: () -> Void = {},
         now: () -> Date = Date.init,
         sleep: (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
     ) async -> ServerInfo? {
-        await HostReadiness.pollReadiness(until: deadline, fetch: fetch, busy: busy, now: now, sleep: sleep)
+        guard !Task.isCancelled, now() < deadline else { return nil }
+        // A running game is a valid status, not a reason to spend five seconds waiting for idle.
+        if !waitUntilIdle { return try? await fetch() }
+        return await HostReadiness.pollReadiness(until: deadline, fetch: fetch, busy: busy, now: now, sleep: sleep)
     }
 
     func cancelHostReadiness(for hostID: String? = nil) {

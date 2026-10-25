@@ -45,4 +45,14 @@ defaults write io.ugfugl.Glimmer GlimmerUpdateChannel -string stable
 
 {% endhint %}
 
+Send feedback on a candidate to
+[glimmer-prerelease@ugfugl.io](mailto:glimmer-prerelease@ugfugl.io).
+
+## Test the iPhone and iPad app
+
+The iPhone and iPad app is in beta on TestFlight. To join, email
+[glimmer-prerelease@ugfugl.io](mailto:glimmer-prerelease@ugfugl.io) with the
+device you'll test on, and you'll get an invitation. You need a PC running
+Sunshine and iOS or iPadOS 26 or later.
+
 Next: [read the release notes](https://github.com/Se7enbrc/glimmer/releases).

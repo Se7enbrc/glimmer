@@ -45,7 +45,9 @@ extension StreamSession {
 
     @MainActor
     package func emitPresentMetric(dec: VideoDecoder) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let now = clock.absolute()
+        #endif
         let decodeIdle = dec.secondsSinceLastDecodedFrame()
         // Only emit once frames have started flowing, so a quiet handshake
         // window doesn't spam the log.
@@ -54,6 +56,7 @@ extension StreamSession {
         // The pacer's only grow step: one frame per window toward the level the env-signal
         // controller published, so depth grows only on sustained evidence.
         dec.pacingGrowDepthTowardTarget()
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard !dec.presentSuppressed else { return }
         // sincePresent is the MODE-AGNOSTIC present clock - meaningful in BOTH
         // paced and direct mode, so the metric line shows how long since a frame
@@ -93,6 +96,7 @@ extension StreamSession {
             streamInterval=\(live.streamFrameIntervalSeconds * 1000, format: .fixed(precision: 2), privacy: .public)ms \
             decodeIdle=\(decodeIdle * 1000, format: .fixed(precision: 1), privacy: .public)ms
             """)
+        #endif
     }
 
     package static func presentMetricNeedsNotice(

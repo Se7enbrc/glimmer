@@ -122,23 +122,16 @@ extension AudioDecoder {
     //  packet per 5ms of accrued skew" micro-stretch (AudioDecoder.swift notes
     //  the swap).
 
-    /// Drift-tracking resampler PI loop. Called ~per decoded packet from
-    /// `publishAudioState`; self-rate-limits to ~4Hz (drift is ppm-slow). When
-    /// `engaged` (steady playout - `primed && !playoutDrained`) it steers the
-    /// varispeed rate by the buffer-fill error: the INTEGRAL absorbs the steady
-    /// host↔Mac clock offset (its whole job), the PROPORTIONAL answers transient
-    /// fill excursions, both slew-limited so the rate (hence pitch) never steps
-    /// audibly. When NOT engaged (pre-roll / re-prime / drain) it slews back to
-    /// rate 1.0 but HOLDS the integral (the clock offset survives a drain). PI
-    /// state is `audioMeterLock`-guarded (both publishAudioState callers).
-    func driveResampler(fillMs: Double, targetMs: Double, engaged: Bool) {
+    /// Repay clock skew without abrupt pitch changes; preserve the learned offset through drains.
+    /// An explicit timestamp lets deterministic tests advance the same rate limit and event holds.
+    func driveResampler(fillMs: Double, targetMs: Double, engaged: Bool, at time: UInt64? = nil) {
         // PI state guarded by `audioMeterLock` (this runs from both publishAudioState
         // callers - decode path AND completion handler). Apply the computed rate
         // after unlocking, since applyVarispeedRate only enqueues onto its queue.
         audioMeterLock.lock()
         // Self-rate-limit to ~4Hz: publishAudioState fires per decoded packet
         // (~200Hz) and drift is ppm-slow, so a fast loop only adds noise.
-        let now = DispatchTime.now().uptimeNanoseconds
+        let now = time ?? DispatchTime.now().uptimeNanoseconds
         guard now &- lastResamplerUpdateNanos >= Self.resamplerUpdateIntervalNanos else {
             audioMeterLock.unlock(); return
         }

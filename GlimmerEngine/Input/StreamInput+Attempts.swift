@@ -34,10 +34,11 @@ extension StreamInput {
 
     /// Only a detached, nonterminal owner can adopt a new attempt; no backend is allocated here.
     @discardableResult
-    package func rebind(to backend: any StreamingBackend, attempt: UUID) -> Bool {
+    package func rebind(to backend: any StreamingBackend, attempt: UUID, holdActivation: Bool = false) -> Bool {
         core.withLock {
             guard !terminal, activeAttempt == nil, core.backend == nil else { return false }
             activeAttempt = attempt
+            self.holdActivation = holdActivation
             var snapshot = core.snapshot
             snapshot.ready = false
             snapshot.focused = false
@@ -48,6 +49,14 @@ extension StreamInput {
                 registrations[slot]?.rearm.suppressHeld()
             }
             return true
+        }
+    }
+
+    package func resumeAfterReplacement(attempt: UUID) {
+        core.withLock {
+            guard activeAttempt == attempt else { return }
+            holdActivation = false
+            activate(true, attempt: attempt)
         }
     }
 

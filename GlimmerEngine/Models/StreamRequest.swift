@@ -4,6 +4,8 @@
 import Foundation
 
 package struct StreamRequest: Sendable {
+    package var resumeResolutionChange = false
+    package var changeResolution = true
     package var width: Int
     package var height: Int
     package var fps: Int
@@ -31,6 +33,8 @@ package struct StreamRequest: Sendable {
     /// How `bitrateKbps` was chosen, for the telemetry config event only.
     package var bitrateDecision: BitrateDecision?
     package var remoteness: Remoteness = .auto
+    /// Sizes to move between, resume-only, as Low Data Mode changes; nil keeps the size fixed.
+    package var dataModeSizes: DataModeSizes?
     /// Keep a surround bed available when outputs change during a stream.
     /// The Mac renders it for the active speakers or headphones.
     package var audio: AudioConfig = .surround71

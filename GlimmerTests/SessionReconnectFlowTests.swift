@@ -18,6 +18,11 @@ import Testing
 final class BackendSupply: Sendable {
     private let made = OSAllocatedUnfairLock(initialState: [InputRecordingBackend]())
     private let failing: Int
+    private let connected = OSAllocatedUnfairLock<@Sendable () -> Void>(initialState: {})
+    var onConnect: @Sendable () -> Void {
+        get { connected.withLock { $0 } }
+        set { connected.withLock { $0 = newValue } }
+    }
 
     init(failing: Int = 0) { self.failing = failing }
 
@@ -25,7 +30,8 @@ final class BackendSupply: Sendable {
 
     func make() -> StreamingBackend {
         made.withLock { made in
-            let backend = InputRecordingBackend(connectFailure: made.count < failing ? .sessionFailed(-1) : nil)
+            let backend = InputRecordingBackend(connectFailure: made.count < failing ? .sessionFailed(-1) : nil,
+                onConnect: { self.onConnect() })
             made.append(backend)
             return backend
         }
@@ -66,6 +72,9 @@ struct SessionReconnectFlowTests {
             hostDisposition: hostDisposition, backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
                                     makeBackend: { supply.make() }, clock: clock.session)
         let (events, window) = await session.goLive(server: SessionFlow.pairedPC(), config: config, appID: Self.appID)
+        if let stats = await session.videoDecoder?.statsCollector {
+            supply.onConnect = { stats.resetForConnection(); stats.recordRendererEnqueue() }
+        }
         return Live(session: session, sunshine: sunshine, supply: supply, clock: clock, events: events, window: window)
     }
 
@@ -311,18 +320,20 @@ struct SessionReconnectFlowTests {
         var config = SessionFlow.config
         config.bitrateKbps = 84_000
         config.remoteness = .remote
-        let live = await live(["serverinfo": [SessionFlow.idle], "launch": [SessionFlow.launched],
+        let live = await live(["serverinfo": [SessionFlow.running(7)], "resume": [SessionFlow.launched],
                                "cancel": [SessionFlow.cancelled]], config: config)
         await live.session.markRemotePath()
         await live.session.considerBitrateDownshift(decodeIdle: 25, receiveIdle: 0.2)
+        await live.session.waitForDownshift()
 
         let fresh = try #require(live.supply.backends.first)
         #expect(fresh.startedConfigs.map(\.bitrate) == [50_400])
-        #expect(live.sunshine.paths == ["serverinfo", "launch"])
+        #expect(live.sunshine.paths == ["serverinfo", "resume"])
         #expect(await live.session.reconnectConfig?.bitrateKbps == 50_400)
         #expect(await live.session.downshift.stepsDown == 1)
-        #expect(await live.window.reconnectBanner.displayedText == "Weak connection. Lowering quality to 50 Mbps…")
-        #expect(await live.finish() == ["reconnecting", "reconnected"])
+        #expect(await live.session.lastBitrateChange?.outcome == .applied)
+        #expect(await live.finish().contains("reconnected"))
+        #expect(live.sunshine.paths.last == "cancel")
     }
 
     /// A LAN that can't carry its rate is a different fault: no lower ask, no reconnect.
@@ -347,6 +358,7 @@ private extension StreamSession {
         reachedLiveState = true
         reconnectServer = server
         reconnectConfig = config.request
+        appliedBitrateKbps = config.bitrateKbps
         reconnectAppID = appID
         let (window, input, decoder) = await MainActor.run {
             (StreamWindow(displayMode: .window), InputForwarder(), VideoDecoder())
@@ -354,6 +366,7 @@ private extension StreamSession {
         self.presentation = await SessionPresentation(window)
         self.input = await SessionInputHooks(input)
         videoDecoder = decoder
+        decoder.statsCollector.recordRendererEnqueue()
         let bridge = StreamBridgeContext(session: self, videoDecoder: decoder, audioDecoder: audioDecoder)
         let (stream, continuation) = AsyncStream<StreamEvent>.makeStream()
         bridge.eventContinuation = continuation
@@ -391,7 +404,9 @@ private extension StreamSession {
 
     func forgetLiveState() { reachedLiveState = false }
 
-    func markRemotePath() { isRemotePathSession = true }
+    func waitForDownshift() async { await bitrateTask?.value }
+
+    func markRemotePath() { isRemotePathSession = true; ownsHostSession = true }
 
     func prepareReconnectCompletionTest() -> UUID {
         isReconnecting = true

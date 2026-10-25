@@ -122,6 +122,7 @@ extension InputForwarder {
             guard let self, self.forwardsControllerEvents,
                   self.inputCore.withLock({ self.inputCore.chordEdges[slot] == edge }),
                   let state = readState() else { return false }
+            if let held = self.inputCore.layoutStopHeld(slot: slot) { return held }
             return self.matchesControllerQuitChord(buttons: state.buttons,
                 leftTrigger: state.analog.leftTrigger, rightTrigger: state.analog.rightTrigger)
         }, armed: { [weak self, weak pad] in

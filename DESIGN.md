@@ -343,8 +343,8 @@ Tactile and confident: the things on screen that ask to be pressed.
   play glyph becomes a spinner and a click or Escape is the way out; while its
   stream window is hidden it stays violet, reads “Back to Stream” in place of
   its play glyph, and a click or Return goes back to the stream. The other app
-  buttons dim while a stream exists. Covers keep the same button actions, with
-  artwork and labels below.
+  buttons remain available to offer a named quit-and-start confirmation. Covers
+  keep the same button actions, with artwork and labels below.
 - **State button (`StreamButtonStyle`):** a capsule at least 46pt tall, with
   22pt of horizontal and 12pt of vertical padding, white title2 semibold label.
   It appears under the app buttons only when the PC needs something other than a
@@ -399,6 +399,18 @@ Tactile and confident: the things on screen that ask to be pressed.
   headline, the address in caption monospaced, and "Last played" in tertiary.
   The PC's apps appear as up to three plain secondary glyphs, not buttons. Plain
   glass at 16pt. The yellow star alone marks the default PC.
+
+### Running games
+
+A running game appears beneath the PC's name with Resume or Continue here and
+Quit. Selecting a different app asks once to quit the named game and start the
+selected app. A live local stream returns to its existing window.
+
+Disconnect quits the PC game by default. “Leave games running when you
+disconnect” is the only setting for continuation. When enabled, a contextual
+size action can try this screen's size; failed changes offer a restart. The
+picture fits locally. No device ownership or exclusive handoff is inferred from
+PC occupancy.
 
 ### Inputs / Fields
 

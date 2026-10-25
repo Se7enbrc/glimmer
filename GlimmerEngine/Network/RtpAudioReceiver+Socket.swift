@@ -68,9 +68,11 @@ extension RtpAudioReceiver {
         }
         guard bound else { close(sock); throw EnetError.socketFailure("bind() errno \(errno)") }
 
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if !SocketTimestamp.enable(on: sock) {
             Diag.notice("Kernel receive timestamps unavailable errno \(errno)", Self.cat)
         }
+        #endif
         fd = sock
         Diag.info("NativeAudio UDP socket ready (peer IP filtered, any source port) "
             + "→ \(host, privacy: .private):\(audioPort)",

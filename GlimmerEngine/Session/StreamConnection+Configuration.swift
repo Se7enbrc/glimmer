@@ -3,6 +3,23 @@
 
 import Foundation
 
+/// Encoder sizes for ordinary and Low Data Mode play, both from the client's listed-mode resolver.
+public struct DataModeSizes: Sendable, Equatable {
+    public let fullWidth: Int, fullHeight: Int
+    public let lowDataWidth: Int, lowDataHeight: Int
+
+    public init(fullWidth: Int, fullHeight: Int, lowDataWidth: Int, lowDataHeight: Int) {
+        self.fullWidth = fullWidth
+        self.fullHeight = fullHeight
+        self.lowDataWidth = lowDataWidth
+        self.lowDataHeight = lowDataHeight
+    }
+
+    func size(lowData: Bool) -> (width: Int, height: Int) {
+        lowData ? (lowDataWidth, lowDataHeight) : (fullWidth, fullHeight)
+    }
+}
+
 extension StreamConnection {
     public struct Configuration: Sendable {
         let request: StreamRequest
@@ -11,9 +28,13 @@ extension StreamConnection {
         /// Advertise only formats the supplied video sink can decode. Route observations are supplied by the shell.
         public init(width: Int, height: Int, fps: Int, bitrateKbps: Int,
                     videoFormats: VideoFormats, audio: AudioConfig = .stereo,
-                    remote: Bool = false, routeMTU: Int? = nil) {
+                    remote: Bool = false, routeMTU: Int? = nil, changeResolution: Bool = true,
+                    resumeResolutionChange: Bool = false, dataModeSizes: DataModeSizes? = nil) {
             var request = StreamRequest(width: width, height: height, fps: fps,
                                         bitrateKbps: bitrateKbps, videoFormats: videoFormats)
+            request.changeResolution = changeResolution
+            request.resumeResolutionChange = resumeResolutionChange
+            request.dataModeSizes = dataModeSizes
             request.audio = audio
             request.remoteness = remote ? .remote : .local
             self.request = request

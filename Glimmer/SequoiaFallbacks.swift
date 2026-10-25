@@ -16,10 +16,12 @@ extension NSScreen {
 // and re-arms tracking together, so no change can slip in between.
 @MainActor
 func forEachTrackedValue<Value>(_ read: () -> Value, perform body: (Value) -> Void) async {
+    let (changes, signal) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    defer { signal.finish() }
+    var iterator = changes.makeAsyncIterator()
     while !Task.isCancelled {
-        await withCheckedContinuation { (changed: CheckedContinuation<Void, Never>) in
-            body(withObservationTracking(read) { changed.resume() })
-        }
+        body(withObservationTracking(read) { signal.yield(()) })
+        guard await iterator.next() != nil else { break }
     }
 }
 

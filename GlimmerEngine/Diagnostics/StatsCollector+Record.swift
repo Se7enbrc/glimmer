@@ -8,6 +8,7 @@ import Foundation
 import QuartzCore
 import os
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 extension StatsCollector {
 
     /// Sunshine's timed captures exclude its repeats when timing is available.
@@ -124,6 +125,12 @@ extension StatsCollector {
         defer { lock.unlock() }
         guard lastPresentTime > 0 else { return .infinity }
         return CACurrentMediaTime() - lastPresentTime
+    }
+
+    package var presentationTimes: (first: Double?, last: Double?) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (firstPresentTime > 0 ? firstPresentTime : nil, lastPresentTime > 0 ? lastPresentTime : nil)
     }
 
     /// Fold timing with its received frame under the same lock so a snapshot
@@ -255,6 +262,7 @@ extension StatsCollector {
         // fps_rendered both source from the actual screen-update moment and
         // never gap on a pacer disable/re-enable transition.
         let now = CACurrentMediaTime()
+        if firstPresentTime == 0 { firstPresentTime = now }
         lastPresentTime = now
         // Perceived-gap judge: a drought since the last present with frames
         // still ARRIVING in between means the screen held while content flowed
@@ -465,3 +473,4 @@ extension StatsCollector {
         lastHostDeltaMs = deltaMs
     }
 }
+#endif

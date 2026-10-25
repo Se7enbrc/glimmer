@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- MTT VDD 25.7.23. Save as C:\VirtualDisplayDriver\vdd_settings.xml. -->
-<!-- 74 modes; budget: 90 modes. Count every resolution x refresh combination. -->
+<!-- 90 modes; budget: 90 modes. Count every resolution x refresh combination. -->
 <!-- Coverage, omissions and sources: ../VIRTUAL_DISPLAY_MODES.md. Setup: ../HOST_SETUP.md. -->
 <vdd_settings>
     <monitors><count>1</count></monitors>
@@ -16,6 +16,11 @@
             <width>1920</width><height>1080</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
+        <!-- iPhone and iPad external displays: a 4K TV's native panel, Native quality on its dedicated scene. -->
+        <resolution>
+            <width>3840</width><height>2160</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
 
         <!-- iPhone. -->
         <!-- iPhone SE (3rd generation), iPhone SE (2nd generation): native landscape, Native quality. -->
@@ -23,19 +28,9 @@
             <width>1334</width><height>750</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPhone SE (3rd generation), iPhone SE (2nd generation): optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>666</width><height>374</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
         <!-- iPhone 11: native landscape, Native quality. -->
         <resolution>
             <width>1792</width><height>828</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
-        <!-- iPhone 11: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>896</width><height>414</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPhone 13 mini, iPhone 12 mini: native landscape, Native quality. -->
@@ -43,19 +38,9 @@
             <width>2340</width><height>1080</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPhone 13 mini, iPhone 12 mini: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1170</width><height>540</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
         <!-- iPhone 11 Pro: native landscape, Native quality. -->
         <resolution>
             <width>2436</width><height>1124</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
-        <!-- iPhone 11 Pro: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1218</width><height>562</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPhone 17e, iPhone 16e, iPhone 14, iPhone 13, iPhone 12 Pro, iPhone 12; iPhone 13 Pro: native landscape, Native quality. -->
@@ -63,19 +48,9 @@
             <width>2532</width><height>1170</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
-        <!-- iPhone 17e, iPhone 16e, iPhone 14, iPhone 13, iPhone 12 Pro, iPhone 12; iPhone 13 Pro: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1266</width><height>584</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
         <!-- iPhone 16, iPhone 15; iPhone 15 Pro, iPhone 14 Pro: native landscape, Native quality. -->
         <resolution>
             <width>2556</width><height>1178</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
-        <!-- iPhone 16, iPhone 15; iPhone 15 Pro, iPhone 14 Pro: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1278</width><height>588</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
         <!-- iPhone 17 Pro, iPhone 17, iPhone 16 Pro; iPhone 18 Pro: native landscape, Native quality. -->
@@ -83,19 +58,9 @@
             <width>2622</width><height>1206</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
-        <!-- iPhone 17 Pro, iPhone 17, iPhone 16 Pro; iPhone 18 Pro: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1310</width><height>602</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
         <!-- iPhone 11 Pro Max: native landscape, Native quality. -->
         <resolution>
             <width>2688</width><height>1242</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
-        <!-- iPhone 11 Pro Max: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1344</width><height>620</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPhone Air: native landscape, Native quality. -->
@@ -103,19 +68,9 @@
             <width>2736</width><height>1260</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
-        <!-- iPhone Air: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1368</width><height>630</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
         <!-- iPhone 14 Plus, iPhone 12 Pro Max; iPhone 13 Pro Max: native landscape, Native quality. -->
         <resolution>
             <width>2778</width><height>1284</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
-        <!-- iPhone 14 Plus, iPhone 12 Pro Max; iPhone 13 Pro Max: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1388</width><height>642</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
         <!-- iPhone 16 Plus, iPhone 15 Plus; iPhone 15 Pro Max, iPhone 14 Pro Max: native landscape, Native quality. -->
@@ -123,19 +78,9 @@
             <width>2796</width><height>1290</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
-        <!-- iPhone 16 Plus, iPhone 15 Plus; iPhone 15 Pro Max, iPhone 14 Pro Max: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1398</width><height>644</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
         <!-- iPhone 17 Pro Max, iPhone 16 Pro Max; iPhone 18 Pro Max: native landscape, Native quality. -->
         <resolution>
             <width>2868</width><height>1320</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
-        <!-- iPhone 17 Pro Max, iPhone 16 Pro Max; iPhone 18 Pro Max: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1434</width><height>660</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
 
@@ -145,19 +90,14 @@
             <width>2670</width><height>1878</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
-        <!-- iPhone Duo (inner display): optional half landscape (no Glimmer iOS quality preset). -->
+        <!-- iPhone Duo (iOS 27.1 Simulator inner display): measured Native quality, even landscape pixels. -->
         <resolution>
-            <width>1334</width><height>938</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
+            <width>2852</width><height>2006</height>
+            <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPhone Duo (cover display): native landscape, Native quality. -->
         <resolution>
             <width>2034</width><height>1398</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
-        <!-- iPhone Duo (cover display): optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1016</width><height>698</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
 
@@ -167,19 +107,9 @@
             <width>2048</width><height>1536</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad mini (5th generation): optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1024</width><height>768</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
         <!-- iPad (9th generation), iPad (8th generation): native landscape, Native quality. -->
         <resolution>
             <width>2160</width><height>1620</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
-        <!-- iPad (9th generation), iPad (8th generation): optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1080</width><height>810</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPad Air (3rd generation): native landscape, Native quality. -->
@@ -187,19 +117,9 @@
             <width>2224</width><height>1668</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad Air (3rd generation): optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1112</width><height>834</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
         <!-- iPad mini (A17 Pro), iPad mini (6th generation): native landscape, Native quality. -->
         <resolution>
             <width>2266</width><height>1488</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
-        <!-- iPad mini (A17 Pro), iPad mini (6th generation): optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1132</width><height>744</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation): native landscape, Native quality. -->
@@ -207,19 +127,9 @@
             <width>2360</width><height>1640</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation): optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1180</width><height>820</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
         <!-- iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch: native landscape, Native quality. -->
         <resolution>
             <width>2388</width><height>1668</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
-        <!-- iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch: optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1194</width><height>834</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
         <!-- iPad Pro 11-inch (M5), iPad Pro 11-inch (M4): native landscape, Native quality. -->
@@ -227,19 +137,9 @@
             <width>2420</width><height>1668</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
-        <!-- iPad Pro 11-inch (M5), iPad Pro 11-inch (M4): optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1210</width><height>834</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
         <!-- iPad Air 13-inch (M4), iPad Air 13-inch (M3), iPad Air 13-inch (M2); iPad Pro 12.9-inch (6th generation), iPad Pro 12.9-inch (5th generation), iPad Pro 12.9-inch (4th generation), iPad Pro 12.9-inch (3rd generation): native landscape, Native quality. -->
         <resolution>
             <width>2732</width><height>2048</height>
-            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
-        </resolution>
-        <!-- iPad Air 13-inch (M4), iPad Air 13-inch (M3), iPad Air 13-inch (M2); iPad Pro 12.9-inch (6th generation), iPad Pro 12.9-inch (5th generation), iPad Pro 12.9-inch (4th generation), iPad Pro 12.9-inch (3rd generation): optional half landscape (no Glimmer iOS quality preset). -->
-        <resolution>
-            <width>1366</width><height>1024</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
         <!-- iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): native landscape, Native quality. -->
@@ -247,10 +147,237 @@
             <width>2752</width><height>2064</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
         </resolution>
-        <!-- iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): optional half landscape (no Glimmer iOS quality preset). -->
+
+        <!-- Window targets; see the reference for measured sizes and representative sizes. -->
+        <!-- iPad mini (5th generation): Native quality, portrait. -->
         <resolution>
-            <width>1376</width><height>1032</height>
+            <width>1536</width><height>2048</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad mini (5th generation): Native quality, 1/2 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1014</width><height>1536</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad mini (5th generation): Native quality, 2/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1352</width><height>1536</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad mini (5th generation): Native quality, Dock-visible half-width Stage Manager target. -->
+        <resolution>
+            <width>1014</width><height>1290</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad (9th generation), iPad (8th generation): Native quality, portrait. -->
+        <resolution>
+            <width>1620</width><height>2160</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad (9th generation), iPad (8th generation): Native quality, 1/2 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1070</width><height>1620</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad (9th generation), iPad (8th generation): Native quality, 2/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1426</width><height>1620</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad (9th generation), iPad (8th generation): Native quality, Dock-visible half-width Stage Manager target. -->
+        <resolution>
+            <width>1070</width><height>1374</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air (3rd generation): Native quality, portrait. -->
+        <resolution>
+            <width>1668</width><height>2224</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air (3rd generation): Native quality, 1/2 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1102</width><height>1668</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air (3rd generation): Native quality, 2/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1468</width><height>1668</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air (3rd generation): Native quality, 1/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>734</width><height>1668</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air (3rd generation): Native quality, Dock-visible half-width Stage Manager target. -->
+        <resolution>
+            <width>1102</width><height>1422</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad mini (A17 Pro), iPad mini (6th generation): Native quality, portrait. -->
+        <resolution>
+            <width>1488</width><height>2266</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad mini (A17 Pro), iPad mini (6th generation): Native quality, 1/2 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1122</width><height>1488</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad mini (A17 Pro), iPad mini (6th generation): Native quality, 2/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1496</width><height>1488</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad mini (A17 Pro), iPad mini (6th generation): Native quality, 1/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>748</width><height>1488</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad mini (A17 Pro), iPad mini (6th generation): Native quality, Dock-visible half-width Stage Manager target. -->
+        <resolution>
+            <width>1122</width><height>1242</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation): Native quality, portrait. -->
+        <resolution>
+            <width>1640</width><height>2360</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation): Native quality, 1/2 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1170</width><height>1640</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation): Native quality, 2/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1560</width><height>1640</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation): Native quality, 1/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>780</width><height>1640</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation): Native quality, Dock-visible half-width Stage Manager target. -->
+        <resolution>
+            <width>1170</width><height>1394</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch: Native quality, portrait. -->
+        <resolution>
+            <width>1668</width><height>2388</height>
             <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch: Native quality, 1/2 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1184</width><height>1668</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch: Native quality, 2/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1578</width><height>1668</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch: Native quality, 1/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>788</width><height>1668</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch: Native quality, Dock-visible half-width Stage Manager target. -->
+        <resolution>
+            <width>1184</width><height>1422</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 11-inch (M5), iPad Pro 11-inch (M4): Native quality, portrait. -->
+        <resolution>
+            <width>1668</width><height>2420</height>
+            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 11-inch (M5), iPad Pro 11-inch (M4): Native quality, 1/2 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1200</width><height>1668</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 11-inch (M5), iPad Pro 11-inch (M4): Native quality, 2/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1600</width><height>1668</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 11-inch (M5), iPad Pro 11-inch (M4): Native quality, 1/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>800</width><height>1668</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 11-inch (M5), iPad Pro 11-inch (M4): Native quality, Dock-visible half-width Stage Manager target. -->
+        <resolution>
+            <width>1200</width><height>1422</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air 13-inch (M4), iPad Air 13-inch (M3), iPad Air 13-inch (M2); iPad Pro 12.9-inch (6th generation), iPad Pro 12.9-inch (5th generation), iPad Pro 12.9-inch (4th generation), iPad Pro 12.9-inch (3rd generation): Native quality, portrait. -->
+        <resolution>
+            <width>2048</width><height>2732</height>
+            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
+        </resolution>
+        <!-- iPad Air 13-inch (M4), iPad Air 13-inch (M3), iPad Air 13-inch (M2); iPad Pro 12.9-inch (6th generation), iPad Pro 12.9-inch (5th generation), iPad Pro 12.9-inch (4th generation), iPad Pro 12.9-inch (3rd generation): Native quality, 1/2 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1356</width><height>2048</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air 13-inch (M4), iPad Air 13-inch (M3), iPad Air 13-inch (M2); iPad Pro 12.9-inch (6th generation), iPad Pro 12.9-inch (5th generation), iPad Pro 12.9-inch (4th generation), iPad Pro 12.9-inch (3rd generation): Native quality, 2/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1808</width><height>2048</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air 13-inch (M4), iPad Air 13-inch (M3), iPad Air 13-inch (M2); iPad Pro 12.9-inch (6th generation), iPad Pro 12.9-inch (5th generation), iPad Pro 12.9-inch (4th generation), iPad Pro 12.9-inch (3rd generation): Native quality, 1/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>904</width><height>2048</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Air 13-inch (M4), iPad Air 13-inch (M3), iPad Air 13-inch (M2); iPad Pro 12.9-inch (6th generation), iPad Pro 12.9-inch (5th generation), iPad Pro 12.9-inch (4th generation), iPad Pro 12.9-inch (3rd generation): Native quality, Dock-visible half-width Stage Manager target. -->
+        <resolution>
+            <width>1356</width><height>1802</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): Native quality, portrait. -->
+        <resolution>
+            <width>2064</width><height>2752</height>
+            <refresh_rate>60</refresh_rate><refresh_rate>120</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): Native quality, 1/2 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1366</width><height>2064</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): Native quality, 2/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>1820</width><height>2064</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): Native quality, 1/3 landscape Split View target with a 10-point divider. -->
+        <resolution>
+            <width>910</width><height>2064</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): Native quality, Dock-visible half-width Stage Manager target. -->
+        <resolution>
+            <width>1366</width><height>1818</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad mini (5th generation), iPad Pro 13-inch (M5), all iPad geometries above: Native quality, small Stage Manager window. -->
+        <resolution>
+            <width>750</width><height>972</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- iPad Pro 13-inch (M5), all iPad geometries above: Native quality, narrow Slide Over target. -->
+        <resolution>
+            <width>750</width><height>1706</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
+        <!-- All iPad geometries above: Native quality, medium Stage Manager window. -->
+        <resolution>
+            <width>1280</width><height>1200</height>
+            <refresh_rate>60</refresh_rate>
         </resolution>
     </resolutions>
     <logging>

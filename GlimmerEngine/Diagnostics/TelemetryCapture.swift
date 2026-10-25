@@ -69,6 +69,7 @@ package struct EnvironmentEvidence: Sendable {
     package var audioPingsSentTotal: UInt64 = 0
 }
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 package struct TelemetryCapture: Sendable {
 
     package init(
@@ -112,3 +113,5 @@ package struct TelemetryCapture: Sendable {
     package var environment: @Sendable () -> EnvironmentEvidence? = { nil }
     package var linkGate: @Sendable () -> LinkGateDecision? = { nil }
 }
+
+#endif

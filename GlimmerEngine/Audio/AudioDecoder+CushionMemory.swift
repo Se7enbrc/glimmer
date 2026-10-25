@@ -297,9 +297,11 @@ extension AudioDecoder {
     /// it for the `audio_ttf` event + the 1Hz floor gauge. Secret-free: the
     /// LINK rides the line, the host half of the key never leaves UserDefaults.
     func announceCushionSeed(_ seed: CushionSeed) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         AudioCushionTelemetry.shared.latchSeed(AudioCushionTelemetry.Seed(
             link: seed.link, targetMs: seed.targetMs, floorMs: seed.floorMs,
             fromMemory: seed.fromMemory))
+        #endif
         Diag.notice(
             "audio cushion seed: target \(Int(seed.targetMs.rounded()))ms floor "
             + "\(Int(seed.floorMs.rounded()))ms - link \(seed.link), "
@@ -400,7 +402,9 @@ extension AudioDecoder {
                                           defaults: self.defaults)
             }
         }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         AudioCushionTelemetry.shared.setFloorMs(write.floorMs)
+        #endif
     }
 
     // MARK: - One-shot link resolve (the seed re-key)
@@ -531,11 +535,18 @@ extension AudioDecoder {
         let floor = learnedFloorMs
         let cap = effectiveCushionMaxMs
         audioMeterLock.unlock()
+        recordResolvedCushion(link: link, hasMemory: stored != nil, target: target,
+                              floor: floor, cap: cap, coldSeedApplied: coldSeedApplied)
+    }
+
+    private func recordResolvedCushion(link: String, hasMemory: Bool, target: Double,
+                                       floor: Double, cap: Double, coldSeedApplied: Bool) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         AudioCushionTelemetry.shared.setFloorMs(floor)
         Diag.notice(
             "audio cushion link resolved: \(link) - target \(Int(target.rounded()))ms "
             + "floor \(Int(floor.rounded()))ms"
-            + (stored != nil ? " (per-host memory adopted)" : " (no memory for this link yet)"),
+            + (hasMemory ? " (per-host memory adopted)" : " (no memory for this link yet)"),
             "Stream")
         // Cold-seed breadcrumb: greppable record of the jitter-aware decision when
         // it actually lifted the seed above base on this fresh link. Updates the
@@ -551,5 +562,6 @@ extension AudioDecoder {
                     "Audio")
             }
         }
+        #endif
     }
 }

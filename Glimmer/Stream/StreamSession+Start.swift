@@ -44,6 +44,8 @@ extension StreamSession {
             makeSampler: { MacStreamPath.makeSampler(host: server.address, port: UInt16(server.httpsPort)) },
             prepare: { [self] negotiated in
                 let setup = buildStreamSubsystems(options)
+                setup.1.controllerLayouts = MacControllerLayouts(forwarder: setup.1,
+                    scope: .game(pcID: server.uniqueId, appID: UInt32(clamping: appID)))
                 setup.2.setNegotiatedBitrateKbps(negotiated)
                 let prepared = Self.prepareMacMedia(setup, session: self,
                     statsRowsProvider: statsRowsProvider, statsThresholdsProvider: statsThresholdsProvider)

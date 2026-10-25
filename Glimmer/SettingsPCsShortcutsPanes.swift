@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  SettingsPCsShortcutsPanes.swift
-//
-//  The PCs and Input settings panes (+ the PC tile), split out of
-//  SettingsView.swift. Internal so SettingsRoot can compose them across files.
-//  The shortcut and chord recorders live in SettingsShortcutRecorders.swift.
-//
+// PCs and Input settings share the native keyboard shortcut recorder.
 
+import GameController
 import GlimmerEngine
 import SwiftUI
 
@@ -158,15 +153,15 @@ struct ShortcutsPane: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
-    @State private var showChordCapture = false
     @State private var nintendoPresence = NintendoControllerPresence()
+    @State private var dualSenseConnected = false
     // Default-ON: no acceleration curve in game, Tracking Speed kept (macOS linear
     // scaling). Key mirrors MouseAccelerationControl.enabledDefaultsKey.
     @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
 
-    /// The chosen chord can't fire on a DualSense until the raw-HID reader is on.
+    /// Some DualSense connections need the raw reader for the fixed stop chord.
     private var chordNeedsExtraButtons: Bool {
-        !model.rawHIDControllerEnabled
+        dualSenseConnected && !model.rawHIDControllerEnabled
             && InputForwarder.needsRawHIDCenterButtons(chord: model.controllerQuitChord,
                                                        custom: model.customControllerChord)
     }
@@ -213,24 +208,8 @@ struct ShortcutsPane: View {
             }
 
             Section("Stop streaming with a controller") {
-                // Hold-to-quit chord on the gamepad. Fires the same path as
-                // the keyboard quit hotkey above - useful for couch
-                // streaming where the keyboard isn't reachable.
-                Picker("Hold to stop streaming", selection: $model.controllerQuitChord) {
-                    ForEach(ControllerQuitChord.allCases, id: \.self) { chord in
-                        Text(chord.displayName).tag(chord)
-                    }
-                }
-                if model.controllerQuitChord == .custom {
-                    HStack {
-                        Text(model.customControllerChord.isEmpty
-                             ? "No chord recorded yet"
-                             : ControllerButton.describe(model.customControllerChord))
-                            .foregroundStyle(model.customControllerChord.isEmpty ? .secondary : .primary)
-                        Spacer()
-                        Button("Record…") { showChordCapture = true }
-                    }
-                }
+                ControllerLayoutShortcutSummary()
+                NavigationLink("Controller layouts") { ControllerLayoutsView() }
                 // RawHIDControl while off is its "Turn On…" button and explainer.
                 if chordNeedsExtraButtons {
                     HStack(spacing: 8) {
@@ -241,10 +220,6 @@ struct ShortcutsPane: View {
                         RawHIDControl()
                     }
                 }
-                Text("Hold these buttons together on the controller for a moment to stop streaming. "
-                    + "L3 + R3 by default; the keyboard shortcut above always works too.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             // Raw-HID DualSense reader. Shown when a pad is connected or the
@@ -302,11 +277,18 @@ struct ShortcutsPane: View {
         .formStyle(.grouped)
         .animation(Motion.layout(reduceMotion: reduceMotion), value: model.controllerConnected)
         .animation(Motion.layout(reduceMotion: reduceMotion), value: model.rawHIDControllerEnabled)
-        .onAppear { nintendoPresence.start() }
-        .onDisappear { nintendoPresence.stop() }
-        .sheet(isPresented: $showChordCapture) {
-            ChordCaptureSheet().environment(model)
+        .onAppear {
+            nintendoPresence.start()
+            updateControllerPresence()
+            ControllerLayoutsModel.shared.games = model.controllerLayoutGames()
         }
+        .onDisappear { nintendoPresence.stop() }
+        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in updateControllerPresence() }
+        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in updateControllerPresence() }
+    }
+
+    private func updateControllerPresence() {
+        dualSenseConnected = GCController.controllers().contains { $0.extendedGamepad is GCDualSenseGamepad }
     }
 }
 

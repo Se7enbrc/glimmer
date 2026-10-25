@@ -9,6 +9,15 @@ import Synchronization
 
 @MainActor
 struct IOSControllerCaptureTests {
+    @Test func playStationCategoryDoesNotRequireASonyProfileOrGlyphs() throws {
+        let controller = PlayStationCategoryController()
+        let pad = try #require(GCController.withExtendedGamepad().extendedGamepad)
+        let descriptor = IOSControllerCapture.descriptor(controller, pad: pad)
+        #expect(descriptor.kind == .playStation)
+        #expect(descriptor.capabilities == [.analogTriggers])
+        #expect(descriptor.supportedButtons.contains(.touchpad) == false)
+    }
+
     @Test func focusedCaptureSubmitsWhileMainThreadIsOccupied() async throws {
         let controller = GCController.withExtendedGamepad()
         let pad = try #require(controller.extendedGamepad)
@@ -289,6 +298,10 @@ struct IOSControllerCaptureTests {
         #expect(fixture.registrations.count == 2)
         await fixture.connection.stop()
     }
+}
+
+private final class PlayStationCategoryController: GCController {
+    override var productCategory: String { GCProductCategoryDualSense }
 }
 
 @MainActor

@@ -19,7 +19,13 @@ struct AudioPCMQueue: ~Copyable {
     let minimumFill = Atomic<Int>(Int.max)
     let enabled = Atomic<Bool>(false)
     let muted = Atomic<Bool>(false)
+    let fadingOut = Atomic<Bool>(false)
+    let fadeGain = Atomic<Float>(1)
+    let firstRenderHostTime = Atomic<UInt64>(0)
+    let lastRenderHostTime = Atomic<UInt64>(0)
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     let outputProbe = AudioOutputProbe()
+    #endif
     // Only the render callback touches this latch, and only after initialization.
     let drained = Atomic<Bool>(false)
 
@@ -51,7 +57,7 @@ struct AudioPCMQueue: ~Copyable {
         return true
     }
 
-    func render(frames: Int, buffers: UnsafeMutablePointer<AudioBufferList>) -> OSStatus {
+    func render(frames: Int, buffers: UnsafeMutablePointer<AudioBufferList>, hostTime: UInt64 = 0) -> OSStatus {
         // AudioBuffer byte counts are UInt32; reject oversized requests before any pointer arithmetic.
         guard frames >= 0, frames <= 1_073_741_823 else { return kAudio_ParamError }
         guard Int(buffers.pointee.mNumberBuffers) == channels else { return kAudioUnitErr_FormatNotSupported }
@@ -72,27 +78,18 @@ struct AudioPCMQueue: ~Copyable {
         let active = enabled.load(ordering: .acquiring)
         let available = Int(truncatingIfNeeded: end &- start)
         let count = active ? (frames < available ? frames : available) : 0
-        let gain: Float = muted.load(ordering: .relaxed) ? 0 : 1
-        channel = 0
-        while channel < channels {
-            if let pointer = output[channel].mData {
-                let data = pointer.assumingMemoryBound(to: Float.self)
-                var frame = 0
-                while frame < count {
-                    let position = start &+ UInt64(truncatingIfNeeded: frame)
-                    let slot = Int(truncatingIfNeeded: position.remainderReportingOverflow(dividingBy: ringCapacity)
-                        .partialValue)
-                    data[frame] = samples[channel &* capacity &+ slot] * gain
-                    frame &+= 1
-                }
-                while frame < frames {
-                    data[frame] = 0
-                    frame &+= 1
-                }
-            }
-            channel &+= 1
-        }
+        let hasGain = !muted.load(ordering: .relaxed)
+            && (fadeGain.load(ordering: .relaxed) > 0 || !fadingOut.load(ordering: .acquiring))
+        renderSamples(output, start: start, count: count, frames: frames)
         guard active else { return 0 }
+        if count > 0 {
+            if hostTime > 0, hasGain {
+                if firstRenderHostTime.load(ordering: .relaxed) == 0 {
+                    firstRenderHostTime.store(hostTime, ordering: .relaxed)
+                }
+                lastRenderHostTime.store(hostTime, ordering: .relaxed)
+            }
+        }
         var silent: UInt64 = 0
         var frame = 0
         while frame < count {
@@ -115,6 +112,37 @@ struct AudioPCMQueue: ~Copyable {
         return 0
     }
 
+    private func renderSamples(_ output: UnsafeMutablePointer<AudioBuffer>, start: UInt64, count: Int, frames: Int) {
+        let ringCapacity = UInt64(truncatingIfNeeded: capacity)
+        let gain: Float = muted.load(ordering: .relaxed) ? 0 : 1
+        let initialGain = fadeGain.load(ordering: .relaxed)
+        let targetGain: Float = fadingOut.load(ordering: .acquiring) ? 0 : 1
+        let step: Float = targetGain < initialGain ? -1 / 240 : 1 / 240
+        var channel = 0
+        while channel < channels {
+            if let pointer = output[channel].mData {
+                let data = pointer.assumingMemoryBound(to: Float.self)
+                var frame = 0
+                while frame < count {
+                    let position = start &+ UInt64(truncatingIfNeeded: frame)
+                    let slot = Int(truncatingIfNeeded: position.remainderReportingOverflow(dividingBy: ringCapacity)
+                        .partialValue)
+                    let ramp = initialGain == targetGain ? targetGain
+                        : min(1, max(0, initialGain + Float(frame &+ 1) * step))
+                    data[frame] = samples[channel &* capacity &+ slot] * gain * ramp
+                    frame &+= 1
+                }
+                while frame < frames {
+                    data[frame] = 0
+                    frame &+= 1
+                }
+            }
+            channel &+= 1
+        }
+        fadeGain.store(initialGain == targetGain ? targetGain
+            : min(1, max(0, initialGain + Float(count) * step)), ordering: .relaxed)
+    }
+
     // The observer may skip an in-flight update; silence and consumption must describe the same pull.
     func observation() -> (frames: UInt64, silence: UInt64, underruns: UInt64)? {
         let version = observationVersion.load(ordering: .acquiring)
@@ -131,7 +159,11 @@ func renderAudioPCM(_ context: UnsafeMutableRawPointer, _ flags: UnsafeMutablePo
                     _ buffers: UnsafeMutablePointer<AudioBufferList>?) -> OSStatus {
     guard let buffers else { return kAudio_ParamError }
     let queue = context.assumingMemoryBound(to: AudioPCMQueue.self)
-    let status = queue.pointee.render(frames: Int(frames), buffers: buffers)
+    let hostTime = timestamp.pointee.mFlags.contains(.hostTimeValid)
+        ? timestamp.pointee.mHostTime : 0
+    let status = queue.pointee.render(frames: Int(frames), buffers: buffers, hostTime: hostTime)
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     if status == noErr { queue.pointee.outputProbe.captureInput(buffers, frames: frames) }
+    #endif
     return status
 }

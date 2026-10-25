@@ -62,12 +62,17 @@ quits Glimmer. Save first.
 
 ## Controller stop shortcut
 
-| Chord held ~half a second             | Requirement                                |
-| ------------------------------------- | ------------------------------------------ |
-| L3 + R3                               | Default; alternatives in Settings › Input. |
-| Start + Select + L1 + R1              | Alternate chord.                           |
-| DualSense: Options + Create + L1 + R1 | Extra DualSense buttons enabled.           |
-| Xbox: Menu + View + LB + RB           | Alternate chord.                           |
+Hold **L1 + R1 + Start + Select** together for half a second. This stop chord is
+fixed on Mac, iPhone and iPad. Controller layouts cannot change it.
+
+| Controller        | Button names                |
+| ----------------- | --------------------------- |
+| PlayStation       | L1 + R1 + Options + Create. |
+| Xbox              | LB + RB + Menu + View.      |
+| Other controllers | L1 + R1 + Start + Select.   |
+
+On a Mac, a DualSense connection that hides Options or Create needs **Extra
+DualSense buttons** enabled in Settings › Input.
 
 ## Controller options
 

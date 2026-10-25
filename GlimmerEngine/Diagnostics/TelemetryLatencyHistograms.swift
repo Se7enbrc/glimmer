@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
+
 //
 //  TelemetryLatencyHistograms.swift
 //
@@ -227,3 +229,5 @@ package final class LatencyHistograms: @unchecked Sendable {
 // stage's cumulative buckets) lives in TelemetryLatencySnapshot.swift, split out
 // so this file stays under the length budget and focused on the live histograms +
 // the per-frame tracker.
+
+#endif

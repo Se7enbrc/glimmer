@@ -36,7 +36,7 @@ extension GlimmerCLI {
             return Exit.usage
         }
         var takeover = command.flags.contains("--force")
-        if !takeover,
+        if !takeover, live?.runningAppID != app.id,
            let occupant = live.flatMap({ AppModel.occupant(of: $0.state) }) {
             // Glimmer's own stream may be what keeps the PC busy; it refuses a second one.
             if runningGlimmer() != nil, let reply = await ask([Key.verb: "check", Key.host: host.id], within: .seconds(2)),
@@ -48,7 +48,8 @@ extension GlimmerCLI {
             takeover = true
         }
         model.hostRoute.monitor(address: nil)
-        return await handOff(app: app, host: host, takeover: takeover, command: command)
+        return await handOff(app: app, host: host, takeover: takeover, command: command,
+                             approvedOccupant: takeover ? live?.runningAppID : nil)
     }
 
     /// The named app, matched as Stream from PC matches it, or the launcher's hero
@@ -73,7 +74,7 @@ extension GlimmerCLI {
             return false
         }
         printError("\(pc) is running \(occupant). Unsaved progress may be lost. "
-            + "Quit it and start \(app)? [y/N] ", newline: false)
+            + "Quit \(occupant) and start \(app)? [y/N] ", newline: false)
         let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased()
         return answer == "y" || answer == "yes"
     }
@@ -81,7 +82,7 @@ extension GlimmerCLI {
     /// Open (or bring forward) the app through Launch Services, then post the
     /// request until it answers. Returns after the handoff unless asked to wait.
     static func handOff(
-        app: LibraryApp, host: Host, takeover: Bool, command: Command,
+        app: LibraryApp, host: Host, takeover: Bool, command: Command, approvedOccupant: Int? = nil,
         open: () async -> NSRunningApplication? = { await openGlimmer() },
         post: ([String: String], CommandReplies) async -> [String: String]? = {
             await ask($0, within: .seconds(20), replies: $1)
@@ -89,7 +90,8 @@ extension GlimmerCLI {
     ) async -> Int32 {
         guard let glimmer = await open() else { return Exit.failed }
         let replies = CommandReplies()
-        let request = [Key.verb: "stream", Key.host: host.id, Key.app: String(app.id), Key.takeover: takeover ? "1" : "0"]
+        var request = [Key.verb: "stream", Key.host: host.id, Key.app: String(app.id), Key.takeover: takeover ? "1" : "0"]
+        if let approvedOccupant { request[Key.occupant] = String(approvedOccupant) }
         guard let first = await post(request, replies) else {
             printError("Glimmer didn't answer. Open it and try again.")
             return Exit.failed

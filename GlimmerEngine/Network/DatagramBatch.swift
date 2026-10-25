@@ -26,17 +26,21 @@ final class DatagramBatch {
     let storage: UnsafeMutablePointer<UInt8>
     private let iovecs: UnsafeMutablePointer<iovec>
     private let records: UnsafeMutablePointer<Record>
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     private let controls: UnsafeMutableRawPointer
     private(set) var readTicks: UInt64 = 0
     private(set) var readStartedTicks: UInt64 = 0
     private(set) var previousReadTicks: UInt64 = 0
+    #endif
     private let sources: UnsafeMutablePointer<sockaddr_storage>
 
     init(capacity: Int, stride: Int, receiveBatch: TransportPlatform.ReceiveBatch? = nil) {
         receiveX = receiveBatch
         self.capacity = capacity
         self.stride = stride
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         controls = .allocate(byteCount: capacity * SocketTimestamp.controlSize, alignment: 8)
+        #endif
         storage = .allocate(capacity: capacity * stride)
         iovecs = .allocate(capacity: capacity)
         records = .allocate(capacity: capacity)
@@ -49,7 +53,9 @@ final class DatagramBatch {
     }
 
     deinit {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         controls.deallocate()
+        #endif
         storage.deallocate()
         iovecs.deallocate()
         records.deallocate()
@@ -67,35 +73,61 @@ final class DatagramBatch {
             records[index] = Record(name: sources + index,
                                     nameLength: socklen_t(MemoryLayout<sockaddr_storage>.size),
                                     iov: iovecs + index, iovCount: 1,
-                                    control: controls + index * SocketTimestamp.controlSize,
-                                    controlLength: socklen_t(SocketTimestamp.controlSize))
+                                    control: controlBuffer(at: index),
+                                    controlLength: Self.controlSize)
         }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         previousReadTicks = readTicks
         readStartedTicks = mach_absolute_time()
+        #endif
         let count = receiveX(socket, records, UInt32(capacity), 0)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         readTicks = mach_absolute_time()
+        #endif
         return count
     }
 
     func receiveOne(from socket: Int32) -> Int {
         var message = msghdr(msg_name: sources,
                              msg_namelen: socklen_t(MemoryLayout<sockaddr_storage>.size),
-                             msg_iov: iovecs, msg_iovlen: 1, msg_control: controls,
-                             msg_controllen: socklen_t(SocketTimestamp.controlSize), msg_flags: 0)
+                             msg_iov: iovecs, msg_iovlen: 1, msg_control: controlBuffer(at: 0),
+                             msg_controllen: Self.controlSize, msg_flags: 0)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         previousReadTicks = readTicks
         readStartedTicks = mach_absolute_time()
+        #endif
         let count = recvmsg(socket, &message, 0)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         readTicks = mach_absolute_time()
+        #endif
         guard count >= 0 else { return -1 }
         records[0] = Record(name: sources, nameLength: message.msg_namelen,
-                            control: controls, controlLength: message.msg_controllen,
+                            control: controlBuffer(at: 0), controlLength: message.msg_controllen,
                             flags: message.msg_flags, dataLength: count)
         return 1
     }
 
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     func arrivalTicks(at index: Int) -> UInt64? {
         SocketTimestamp.arrival(in: records[index].control, length: Int(records[index].controlLength),
                                 flags: records[index].flags)
+    }
+    #endif
+
+    private static var controlSize: socklen_t {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        socklen_t(SocketTimestamp.controlSize)
+        #else
+        0
+        #endif
+    }
+
+    private func controlBuffer(at index: Int) -> UnsafeMutableRawPointer? {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        controls + index * SocketTimestamp.controlSize
+        #else
+        nil
+        #endif
     }
 
     func isExpectedPeer(at index: Int, expected: sockaddr_storage, expectedLength: socklen_t) -> Bool {

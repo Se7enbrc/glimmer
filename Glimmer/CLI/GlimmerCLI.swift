@@ -201,7 +201,7 @@ enum GlimmerCLI {
             _ = await model.pollHostStatusOnce(for: host.id, appListFor: nil)
             if let live = model.hostLiveStatus, live.hostID == host.id {
                 if waitUntilIdle, AppModel.occupant(of: live.state) != nil {
-                    model.beginHostReadiness(for: host)
+                    model.beginHostReadiness(for: host, waitUntilIdle: true)
                     await model.hostPolling.readinessTasks[host.id]?.value
                 }
                 return model.hostLiveStatus

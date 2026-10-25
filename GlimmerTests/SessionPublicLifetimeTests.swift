@@ -58,8 +58,9 @@ struct SessionPublicLifetimeTests {
     }
 
     @Test(arguments: [0, 7])
-    func publicStartKeepsCachedRequestCountAndLocalStop(runningApp: Int) async throws {
-        let sunshine = FakeSunshine.scripted(["launch": [Self.launched()], "resume": [Self.launched()]])
+    func publicStartRefreshesOccupancyAndKeepsLocalStop(runningApp: Int) async throws {
+        let sunshine = FakeSunshine.scripted(["serverinfo": [runningApp == 0 ? SessionFlow.idle : SessionFlow.running(runningApp)],
+                                               "launch": [Self.launched()], "resume": [Self.launched()]])
         var server = SessionFlow.pairedPC()
         server.currentGameID = runningApp
         server.pairStatus = .paired
@@ -74,7 +75,7 @@ struct SessionPublicLifetimeTests {
         await pair.session.installPublicTestBackend(backend)
         try await pair.session.start(appID: 7, configuration: configuration)
         await pair.session.stop()
-        #expect(sunshine.paths == [runningApp == 7 ? "resume" : "launch"])
+        #expect(sunshine.paths == ["serverinfo", runningApp == 7 ? "resume" : "launch"])
         #expect(await disposal.value == 1)
         #expect(pair.input.core.backend == nil)
     }
@@ -90,7 +91,7 @@ struct SessionPublicLifetimeTests {
     @Test(arguments: [false, true])
     func malformedPublicLaunchKeyNeverStartsTransport(shortKey: Bool) async {
         let response = shortKey ? Self.launched(key: "00010203") : Self.launched(iv: "00010203")
-        let sunshine = FakeSunshine.scripted(["launch": [response]])
+        let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.idle], "launch": [response]])
         var server = SessionFlow.pairedPC()
         server.pairStatus = .paired
         let disposal = SafetyTestCounter()
@@ -107,13 +108,13 @@ struct SessionPublicLifetimeTests {
             Issue.record("Malformed session key was accepted")
         } catch StreamConnection.Failure.invalidSessionKey {} catch { Issue.record("Unexpected error: \(error)") }
         #expect(backend.startedServers.isEmpty)
-        #expect(sunshine.paths == ["launch"])
+        #expect(sunshine.paths == ["serverinfo", "launch"])
         #expect(await disposal.value == 1)
         #expect(pair.input.core.backend == nil)
     }
 
     @Test func suppliedMTUSurvivesCanonicalConfigurationAndRecovery() async throws {
-        let sunshine = FakeSunshine.scripted(["launch": [Self.launched()]])
+        let sunshine = FakeSunshine.scripted(["serverinfo": [SessionFlow.idle], "launch": [Self.launched()]])
         var server = SessionFlow.pairedPC()
         server.pairStatus = .paired
         let pair = await MainActor.run {

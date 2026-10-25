@@ -49,6 +49,7 @@ package struct RendererPathTransition: Sendable, Equatable {
     }
 }
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 package struct RendererPathTracker {
 
     package init() {}
@@ -84,3 +85,5 @@ package struct RendererPathTracker {
         return transition
     }
 }
+
+#endif

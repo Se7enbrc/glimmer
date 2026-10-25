@@ -43,6 +43,7 @@ import Foundation
 extension SessionServices {
     /// Uses existing gated recorders; public consumers supply a local directory, never a LAN listener.
     package static func recording(directory: URL?, enabled: Bool = TelemetryGate.isEnabled) -> SessionServices {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         var services = SessionServices()
         guard enabled, let directory, directory.isFileURL else { return services }
         services.startLog = { SessionLogFileSink.startIfEnabled(enabled: true, directory: directory) }
@@ -51,6 +52,9 @@ extension SessionServices {
             TelemetryExporter(source: source, serverName: name, outputDirectory: directory, listenOnLAN: false)
         }
         return services
+        #else
+        return SessionServices()
+        #endif
     }
 }
 
@@ -67,6 +71,7 @@ package struct SessionMedia: Sendable {
 
 /// Native session services run only at lifecycle edges or existing diagnostic cadence.
 package struct SessionServices: Sendable {
+    package var bandwidthInputs: BandwidthInputs?
     package var beginActivity: @Sendable () -> Void = {}
     package var endActivity: @Sendable () -> Void = {}
     package var refreshActivity: @Sendable (Bool) -> Void = { _ in }
@@ -75,14 +80,70 @@ package struct SessionServices: Sendable {
     package var stopLog: @Sendable () -> Void = {}
     package var captureEnd: @Sendable (Double?, StatsCollector?) -> Void = { _, _ in }
     package var armWake: @Sendable (@escaping @Sendable () -> Void) -> Void = { _ in }
+    package var armAvailability: @Sendable (@escaping @Sendable (Bool) -> Void) -> Void = { _ in }
     package var stopWake: @Sendable () -> Void = {}
     package var latchHost: @Sendable (String) -> Void = { _ in }
     package var route: @Sendable (ServerInfo, RttStats?) -> StreamPathProbe = { _, _ in StreamPathProbe() }
     package var makeEnvironment: @Sendable () -> EnvObservationSource? = { nil }
     package var feedback = SessionFeedback()
     package var defaultDisplayMode = ""
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     package var makeCapture: @Sendable () -> TelemetryCapture = { TelemetryCapture() }
     package var makeExporter: @Sendable (TelemetrySource, String) -> TelemetryExporter? = { _, _ in nil }
+    #endif
     package var bookmarkHint: @Sendable () -> Void = {}
     package init() {}
+}
+
+/// Distribution is a compiler decision; preferences cannot grant a missing capability.
+public enum DiagnosticsAvailability {
+    public static var compiledIn: Bool {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        true
+        #else
+        false
+        #endif
+    }
+
+    public static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        defaults.object(forKey: "telemetryEnabled") as? Bool ?? true
+        #else
+        false
+        #endif
+    }
+}
+
+package enum TelemetryGate {
+    package static var isEnabled: Bool {
+        #if os(macOS)
+        isEnabled(defaults: .standard, environmentValue: ProcessInfo.processInfo.environment["GLIMMER_TELEMETRY"])
+        #else
+        DiagnosticsAvailability.isEnabled()
+        #endif
+    }
+
+    package static func isEnabled(defaults: UserDefaults, environmentValue: String?) -> Bool {
+        #if os(macOS)
+        environmentValue == "1" || defaults.bool(forKey: "telemetryEnabled")
+        #else
+        DiagnosticsAvailability.isEnabled(defaults: defaults)
+        #endif
+    }
+
+    package static func diagnosticsVisible(defaults: UserDefaults = .standard) -> Bool {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        defaults.bool(forKey: "showDiagnostics")
+        #else
+        false
+        #endif
+    }
+
+    package static func listensOnLAN(defaults: UserDefaults = .standard) -> Bool {
+        #if os(macOS)
+        defaults.bool(forKey: TelemetryExporter.lanBindDefaultsKey)
+        #else
+        false
+        #endif
+    }
 }

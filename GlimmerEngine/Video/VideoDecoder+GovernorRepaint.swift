@@ -42,11 +42,13 @@ extension VideoDecoder {
 
     /// The existing bounded frame writer owns I/O; telemetry-off never extracts frame identity.
     nonisolated func recordRendererDecision(
-        _ decision: FrameTimingTracker.RendererDecision, sampleBuffer: CMSampleBuffer
+        _ decision: FrameInstrumentation.RendererDecision, sampleBuffer: CMSampleBuffer
     ) {
-        guard let tracker = FrameTimingTracker.shared else { return }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        guard let tracker = FrameInstrumentation.shared else { return }
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         tracker.recordRendererDecision(decision, rtpTimestamp: Self.rtpTimestamp(from: pts))
+        #endif
     }
 
     /// Only the first refusal and next accepted frame read these additional framework properties.
@@ -54,7 +56,8 @@ extension VideoDecoder {
         renderer: AVSampleBufferVideoRenderer, sampleBuffer: CMSampleBuffer,
         rejectedFrames: Int, recovered: Bool
     ) {
-        guard let tracker = FrameTimingTracker.shared else { return }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        guard let tracker = FrameInstrumentation.shared else { return }
         let attachments = CMSampleBufferGetSampleAttachmentsArray(
             sampleBuffer, createIfNecessary: false) as? [[String: Any]]
         let immediate = attachments?.first?[kCMSampleAttachmentKey_DisplayImmediately as String] as? Bool ?? false
@@ -64,16 +67,19 @@ extension VideoDecoder {
             requiresFlush: renderer.requiresFlushToResumeDecoding,
             generation: attachmentGeneration(for: renderer), rejectedFrames: rejectedFrames,
             pts: CMSampleBufferGetPresentationTimeStamp(sampleBuffer), displayImmediately: immediate))
+        #endif
     }
 
     /// Capture the observed state around a flush call without asserting asynchronous completion.
     nonisolated func recordRendererRecoveryState(
-        renderer: AVSampleBufferVideoRenderer, phase: FrameTimingTracker.RendererStatePhase
+        renderer: AVSampleBufferVideoRenderer, phase: FrameInstrumentation.RendererStatePhase
     ) {
-        guard let tracker = FrameTimingTracker.shared else { return }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        guard let tracker = FrameInstrumentation.shared else { return }
         tracker.recordRendererState(.init(
             phase: phase, status: renderer.status.rawValue, ready: renderer.isReadyForMoreMediaData,
             requiresFlush: renderer.requiresFlushToResumeDecoding,
             generation: attachmentGeneration(for: renderer)))
+        #endif
     }
 }

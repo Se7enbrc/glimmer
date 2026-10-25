@@ -18,10 +18,11 @@ cannot be promoted unchanged to production.
 
 Follow the [iOS TestFlight process](../iOS/docs/TESTFLIGHT.md). Keep flavour in
 the sealed archive identity and attested receipt, and inspect the executable and
-resources before delivery. The current delivery workflow remains internal-only;
-public submission requires its own reviewed export from the tested production
-archive. Land trusted workflow and script changes on `main` before dispatching;
-land app and shared-engine exclusions on the reviewed feature branch.
+resources before delivery. Delivery may reach internal and external TestFlight
+testers; public submission requires its own reviewed export from the tested
+production archive. Land trusted workflow and script changes on `main` before
+dispatching; land app and shared-engine exclusions on the reviewed feature
+branch.
 
 ## 1. Prepare the candidate
 

@@ -79,9 +79,11 @@ main actor. Consume its ordered events before starting, and retain the stable
 `StreamInput` through reconnects. Final stop awaits native disposal before the
 single terminal event. Old attempt callbacks cannot affect a replacement.
 
-The Mac uses `.cancelOwnedHostSession`; iPhone uses `.disconnectOnly`, which
-leaves the PC game running even after a late launch or failed recovery. Public
-clients reuse their paired network client without an extra initial status probe.
+Both apps default to `.cancelOwnedHostSession`. The optional “Leave games
+running when you disconnect” setting selects `.disconnectOnly` for that session,
+including background grace and app termination. Every initial launch refreshes
+authenticated PC occupancy. Explicit quit and replacement recheck the approved
+app ID.
 
 Native display code calls `VideoDecoder.setPresentSuppressed(_:)` while hidden.
 It reuses newest-frame retention, decode gating and watchdog suppression.
@@ -188,12 +190,12 @@ and decode alive. No raw head-pose/profile data is collected. See
 ## Stream session lifecycle
 
 Create the event stream and display target before starting the connection. The
-steps below describe the Mac adapter; disconnect-only consumers resume the same
-app or launch once, without entering the cancel/retry path.
+steps below share the same occupancy decisions on both platforms.
 
 1. Fetch PC status and require pairing.
-2. Launch if idle; otherwise confirm takeover when needed, cancel and wait up to
-   five seconds for idle before launching. Let Sunshine finish Undo commands.
+2. Launch once if idle or resume the same app. Replacing another app requires
+   approval of its ID, one cancel, and confirmed idle before one launch. An
+   uncertain cancel refreshes status instead of repeating the command.
 3. Build `BackendStreamConfig`, including formats, colour, bitrate and session
    keys.
 4. Build the window, decoder and input on main; attach the display layer.
@@ -202,12 +204,19 @@ app or launch once, without entering the cancel/retry path.
 6. Await native bring-up; callbacks yield stage events during connection.
 7. Install stats, frame, present and two-second session timers.
 
-The Mac always renegotiates a new launch; disconnect-only clients may resume the
-same PC app under their explicit disposition. The frame watchdog requests
-keyframes after two seconds of decode silence. At ten seconds it tears down
-unless video previously flowed and control ACKs remain recent; a remote route
-may reduce bitrate instead. Hidden decode gates suppress inappropriate watchdog
-recovery.
+Continuation never silently becomes a new launch when the game ends. Known,
+compatible stream requests are reused; unknown formats suppress
+resolution-change intent. Local presentation fills the window. Requested video
+size is not proof of the PC's display mode. Local, bounded format history
+contains no ownership claim.
+
+Ordinary Mac recovery renegotiates a new launch; disconnect-only clients may
+resume the same PC app under their explicit disposition. Bitrate-only recovery
+uses the shared [resume-only actuator](BITRATE_ACTUATOR.md), regardless of
+final-stop disposition. The frame watchdog requests keyframes after two seconds
+of decode silence. At ten seconds it tears down unless video previously flowed
+and control ACKs remain recent; a remote route may reduce bitrate instead.
+Hidden decode gates suppress inappropriate watchdog recovery.
 
 ### Teardown
 

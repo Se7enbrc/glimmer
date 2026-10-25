@@ -1,18 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  VideoRtpReceiver+Recovery.swift
-//
-//  Loss and key-frame bookkeeping on the video receive thread: each RFI loss
-//  episode as one `loss_episode` event, each IDR as `idr_received`. Split from
-//  VideoRtpReceiver.swift to keep it under the length budget.
-//
-
 import Foundation
 
 /// One RFI loss episode: the first loss the depacketizer reports to the frame that
 /// ends it (the host's recovery frame or an IDR). Frame numbers are wrap-safe u32.
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 struct VideoLossEpisode {
 
     struct Summary: Equatable {
@@ -70,11 +63,14 @@ struct VideoLossEpisode {
     }
 }
 
+#endif
+
 extension VideoRtpReceiver {
 
     /// The `idr_received` row; `requested` when an IDR request or an RFI was outstanding.
     static func idrReceivedFields(frame: Int32, atNanos: UInt64, requested: Bool,
                                   roundTripMs: Double?, bytes: Int32) -> [String] {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         var fields = [
             "\"event\":\"idr_received\"",
             "\"t_ns\":\(atNanos)",
@@ -84,20 +80,26 @@ extension VideoRtpReceiver {
         ]
         if let roundTripMs { fields.append("\"round_trip_ms\":" + TelemetryRenderer.jsonNumber(roundTripMs)) }
         return fields
+        #else
+        return []
+        #endif
     }
 
     func depacketizerDetectedFrameLoss(from: Int, to: Int) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         // One line when the episode opens; its summary logs at recovery.
         if lossEpisode.noteLoss(from: from, to: to, nowNanos: TelemetryCounters.monotonicNowNanos(),
                                 rfisSent: TelemetryCounters.shared.rfiTotal.value) {
             Diag.info("NativeVideo frame loss from frame \(from) → RFI", Self.cat)
         }
+        #endif
         invalidateReferenceFrames(from, to)
     }
 
     /// End the open loss episode at the first frame assembled after it: one log
     /// line, one `loss_episode` row, and an rfi_recovery observation.
     func closeLossEpisode(at unit: DecodeUnit, isIDR: Bool) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let now = TelemetryCounters.monotonicNowNanos()
         guard let episode = lossEpisode.close(frame: unit.frameNumber, isIDR: isIDR, nowNanos: now,
                                               rfisSent: TelemetryCounters.shared.rfiTotal.value) else { return }
@@ -106,10 +108,12 @@ extension VideoRtpReceiver {
             + "recovered by \(isIDR ? "IDR" : "RFI") frame \(episode.recoveryFrame) after "
             + "\(String(format: "%.0f", episode.recoveryMs)) ms (\(episode.rfisSent) RFIs sent)", Self.cat)
         TelemetryExporter.recordLiveEvent(episode.eventFields(atNanos: now))
+        #endif
     }
 
     /// An IDR landed: resolve the explicit-IDR round trip when one was pending,
     /// and emit `idr_received`. Gate-on only, like the round-trip arm it pairs with.
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     func noteKeyFrame(_ unit: DecodeUnit, tracker: FrameTimingTracker) {
         let now = TelemetryCounters.monotonicNowNanos()
         let roundTripMs = TelemetryCounters.shared.p2.resolveIdrArrival(now)
@@ -121,4 +125,5 @@ extension VideoRtpReceiver {
             frame: unit.frameNumber, atNanos: now, requested: roundTripMs != nil || lossEpisode.isOpen,
             roundTripMs: roundTripMs, bytes: unit.fullLength))
     }
+    #endif
 }

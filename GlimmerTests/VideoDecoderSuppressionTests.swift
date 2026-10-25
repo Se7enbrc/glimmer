@@ -67,6 +67,52 @@ struct VideoDecoderSuppressionTests {
         #expect(decoder.rendererPresentationState == .init(generation: 2, suppressed: false))
     }
 
+    @Test func suppressionEdgesRecordPredicateInputsWithoutIdentifyingData() throws {
+        let decoder = VideoDecoder(now: { 3_000_000_000 })
+        defer { decoder.teardown() }
+        let generation = UUID()
+        var visibility = VideoDecoder.PresentationVisibility(reason: .occlusionChanged)
+        visibility.windowVisible = true
+        visibility.minimized = false
+        visibility.occlusionVisible = false
+        visibility.occlusionState = 0
+        visibility.revealing = true
+        visibility.alphaZero = false
+        visibility.miniPlayer = true
+        visibility.appActive = false
+        visibility.fullScreen = true
+        visibility.fullScreenTransition = .exiting
+        decoder.setPresentSuppressed(true, visibility: visibility, sessionGeneration: generation)
+        decoder.setPresentSuppressed(true, visibility: visibility, sessionGeneration: generation)
+        visibility.reason = .coverReturnCompleted
+        decoder.setPresentSuppressed(false, visibility: visibility, sessionGeneration: generation)
+        decoder.setPresentSuppressed(false, visibility: visibility, sessionGeneration: generation)
+        let entries = LogStore.shared.snapshot().filter { $0.message.contains(generation.uuidString) }
+        #expect(entries.count == 2)
+        for (index, entry) in entries.enumerated() {
+            let json = try #require(entry.message.split(separator: " ", maxSplits: 2).last)
+            let row = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+            #expect(row["event"] as? String == "presentation_suppression")
+            #expect(row["suppressed"] as? Bool == (index == 0))
+            #expect(row["reason"] as? String == (index == 0 ? "occlusion_changed" : "cover_return_completed"))
+            #expect(row["session_generation"] as? String == generation.uuidString)
+            #expect(row["presentation_generation"] as? UInt64 == UInt64(index + 1))
+            #expect(row["t_ms"] as? Double == 3000)
+            #expect(row["window_visible"] as? Bool == true)
+            #expect(row["minimized"] as? Bool == false)
+            #expect(row["occlusion_visible"] as? Bool == false)
+            #expect(row["occlusion_state"] as? UInt64 == 0)
+            #expect(row["revealing"] as? Bool == true)
+            #expect(row["alpha_zero"] as? Bool == false)
+            #expect(row["mini_player"] as? Bool == true)
+            #expect(row["app_active"] as? Bool == false)
+            #expect(row["full_screen"] as? Bool == true)
+            #expect(row["full_screen_transition"] as? String == "exiting")
+            #expect(row.count == 16)
+            #expect(entry.redactedMessage == nil)
+        }
+    }
+
     /// After a gated span the resync latch owns the refocus keyframe: no second request,
     /// and the first P-frame routes the depacketizer to wait for an IDR.
     @Test func gatedRefocusLeavesTheKeyframeToTheResync() {

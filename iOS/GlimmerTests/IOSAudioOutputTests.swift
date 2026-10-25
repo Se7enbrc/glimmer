@@ -25,7 +25,11 @@ struct IOSAudioOutputTests {
         #expect(units.read { $0.formats.map(\.mSampleRate) } == [48_000, 44_100, 44_100, 44_100, 44_100])
         #expect(units.read { $0.formats.map(\.mChannelsPerFrame) } == [2, 2, 2, 1, 1])
         #expect(units.read { $0.callbackContexts } == [graph?.storage.context])
+        #if GLIMMER_DIAGNOSTICS
         #expect(units.read { $0.observerContexts } == [graph?.storage.context])
+        #else
+        #expect(units.read { $0.observerContexts.isEmpty })
+        #endif
         #expect(graph?.start() == noErr)
         #expect(graph?.isRunning == true)
         sessionFixture.close(session)

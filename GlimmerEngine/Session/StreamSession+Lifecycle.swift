@@ -12,6 +12,11 @@ extension StreamSession {
 
     /// End local work according to the required host disposition and await native disposal.
     /// Internal paths preserve their diagnostic cause; public calls record a user-requested stop.
+    public func disconnectLeavingGameRunning() async {
+        hostDisposition = .disconnectOnly
+        await stop()
+    }
+
     public func stop() async {
         await stop(cause: .userStopped)
     }
@@ -32,7 +37,9 @@ extension StreamSession {
         if stopCause == nil { stopCause = cause }
         stopInProgress = true
         isStreaming = false
+        bridge?.revokeInput()
         setWaitingForVideo(false)
+        bitrateTask?.cancel()
         initialServerInfoTask?.cancel()
         launchTask?.cancel()
         let pendingPreparation = mediaPreparation
@@ -103,11 +110,13 @@ extension StreamSession {
         // would show as a runaway-open span in Instruments. Closing here
         // with outcome=aborted is the universal cleanup for every stop
         // path (user quit, connection terminated, startConnection error).
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let state = connectFlowState {
             OSSignposter.network.endInterval(
                 "ConnectFlow", state, "outcome=aborted")
             connectFlowState = nil
         }
+        #endif
 
         // Teardown order: stop the backend (drains its threads), take down what
         // the user sees, shut audio, /cancel, then release the bridge. Its refs
@@ -160,8 +169,9 @@ extension StreamSession {
         // 4. Briefly wait for ownership, then cancel. A late successful launch
         //    gets its own cleanup without holding the launcher open.
         let net = cleanupNetwork
+        let cancellation = hostDisposition.cancellation
         await settlePendingLaunch {
-            if let net, let cancellation = self.hostDisposition.cancellation {
+            if let net, let cancellation {
                 await Self.cancelOwnedSession(net, cancellation: cancellation)
             }
         }
@@ -174,6 +184,7 @@ extension StreamSession {
         hostSessionClientID = nil
         network = nil
 
+        completeBitrateChange(cause == .userStopped || !bitrateAvailable ? .cancelled : .failed)
         // Close after teardown so the session log records backend, audio and /cancel outcomes.
         services.stopLog()
 
@@ -230,52 +241,71 @@ extension StreamSession {
 
     // MARK: - Launch with busy recovery
 
-    /// Idle host: /launch. Anything else: /cancel + /launch, so the host
-    /// renegotiates our config instead of /resume-ing a stale one.
+    /// Continuing never relaunches. Replacement requires approval of the specific occupant.
     package func launchWithBusyRecovery(
         network: NetworkClient, appID: Int, config: StreamRequest, info: ServerInfo, deadline: Date
     ) async throws -> LaunchResponse {
-        try checkAttempt(deadline: deadline)
-        guard hostDisposition.cancellation != nil else {
-            return try await launchWithoutCancellation(network: network, appID: appID,
-                                                       config: config, info: info, deadline: deadline)
-        }
-        try await authorizeOccupancy(info, network: network, deadline: deadline)
-        do {
-            if info.currentGameID != 0 || info.isBusy {
-                return try await cancelThenLaunch(network: network, appID: appID, config: config, deadline: deadline)
-            }
-            return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
-        } catch let first as StreamError {
-            log.error("primary launch path failed: \(String(describing: first), privacy: .private)")
-            try checkAttempt(deadline: deadline)
-            let fresh = try await network.fetchServerInfo()
-            try checkAttempt(deadline: deadline)
-            try await authorizeOccupancy(fresh, network: network, deadline: deadline)
-            return try await cancelThenLaunch(network: network, appID: appID, config: config, deadline: deadline)
+        let pc = await network.server.uniqueId
+        return try await Self.launchMutations.performCommand(pc: pc) { queued in
+            let current = queued ? try await network.fetchServerInfo() : info
+            return try await self.launchUsingOccupancy(network: network, appID: appID,
+                                                       config: config, info: current, deadline: deadline)
         }
     }
 
-    private func launchWithoutCancellation(
+    private func launchUsingOccupancy(
         network: NetworkClient, appID: Int, config: StreamRequest, info: ServerInfo, deadline: Date
+    ) async throws -> LaunchResponse {
+        try checkAttempt(deadline: deadline)
+        if continuationOnly, info.currentGameID != appID {
+            ownsHostSession = false
+            if info.currentGameID == 0 { throw RunningAppFailure.ended }
+            throw TakeoverRequired(appID: info.currentGameID)
+        }
+        if info.currentGameID == appID, approvedOccupant != appID {
+            return try await resumeHost(network: network, appID: appID, config: config, deadline: deadline)
+        }
+        if info.currentGameID != 0 || info.isBusy {
+            try await authorizeOccupancy(info, network: network, deadline: deadline)
+            try await Self.quitRunningAppChecked(network: network, expectedAppID: info.currentGameID)
+            try checkAttempt(deadline: deadline)
+            await network.setRequestDeadline(deadline)
+        } else if continuationOnly {
+            throw RunningAppFailure.ended
+        }
+        do {
+            return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
+        } catch let error as StreamError {
+            guard case .hostRefused = error else { throw error }
+            try checkAttempt(deadline: deadline)
+            let fresh = try await network.fetchServerInfo()
+            try checkAttempt(deadline: deadline)
+            if fresh.currentGameID != 0, fresh.currentGameID != appID {
+                throw TakeoverRequired(appID: fresh.currentGameID)
+            }
+            throw error
+        }
+    }
+
+    private func resumeHost(
+        network: NetworkClient, appID: Int, config: StreamRequest, deadline: Date
     ) async throws -> LaunchResponse {
         let client = await network.clientUniqueID
         try checkAttempt(deadline: deadline)
         let response = try await launchAndRecordOwnership(client: client, appID: appID) {
-            if info.currentGameID == appID { return try await network.resume(config: config) }
-            return try await network.launch(appID: appID, config: config)
+            var request = config
+            if !request.resumeResolutionChange { request.changeResolution = false }
+            return try await network.resume(config: request)
         }
         try checkAttempt(deadline: deadline)
         return response
     }
 
     package func authorizeOccupancy(_ info: ServerInfo, network: NetworkClient, deadline: Date) async throws {
-        let client = await network.clientUniqueID
         try checkAttempt(deadline: deadline)
-        let owner = ownsHostSession && info.currentGameID == hostSessionAppID ? hostSessionClientID : nil
-        if StreamAttempt.requiresTakeover(
-            occupied: info.currentGameID != 0 || info.isBusy,
-            owner: owner, client: client, authorized: takeoverAuthorized) {
+        let occupied = info.currentGameID != 0 || info.isBusy
+        guard occupied else { return }
+        guard approvedOccupant == info.currentGameID || (approvedOccupant == nil && takeoverAuthorized) else {
             ownsHostSession = false
             hostSessionClientID = nil
             throw TakeoverRequired(appID: info.currentGameID)
@@ -287,8 +317,10 @@ extension StreamSession {
     ) async throws -> LaunchResponse {
         let client = await network.clientUniqueID
         try checkAttempt(deadline: deadline)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let start = Date()
         defer { ConnectTimingTelemetry.shared.recordLaunchLeg(launchMs: Date().timeIntervalSince(start) * 1000) }
+        #endif
         let response = try await launchAndRecordOwnership(client: client, appID: appID) {
             try await network.launch(appID: appID, config: config)
         }
@@ -331,7 +363,7 @@ extension StreamSession {
     private var launchPCKey: String { reconnectServer?.uniqueId ?? "" }
 
     package func settlePendingLaunch(cancel: @escaping @Sendable () async -> Void) async {
-        guard hostDisposition.cancellation != nil else { return }
+        guard hostDisposition.cancellation != nil, !preserveGameOnStop else { return }
         let task = pendingLaunch
         let key = launchPCKey
         let epoch = hostLaunchEpoch
@@ -364,41 +396,6 @@ extension StreamSession {
     package static func retainsLaunchOwnership(after error: Error) -> Bool {
         if case .hostRefused = error as? StreamError { return false }
         return true
-    }
-
-    private func cancelThenLaunch(
-        network: NetworkClient, appID: Int, config: StreamRequest, deadline: Date
-    ) async throws -> LaunchResponse {
-        try checkAttempt(deadline: deadline)
-        guard let cancellation = hostDisposition.cancellation else { throw CancellationError() }
-        let start = Date()
-        try await cancellation.cancel(network)
-        try checkAttempt(deadline: deadline)
-        ConnectTimingTelemetry.shared.recordLaunchLeg(cancelMs: Date().timeIntervalSince(start) * 1000)
-        try await waitForHostIdle(network: network, deadline: deadline)
-        try checkAttempt(deadline: deadline)
-        return try await launchHost(network: network, appID: appID, config: config, deadline: deadline)
-    }
-
-    private func waitForHostIdle(network: NetworkClient, deadline: Date) async throws {
-        let start = Date()
-        let idleDeadline = min(deadline, start.addingTimeInterval(5))
-        var polls = 0
-        defer {
-            ConnectTimingTelemetry.shared.recordLaunchLeg(
-                launchBusyWaitMs: Date().timeIntervalSince(start) * 1000, busyPollCount: polls)
-        }
-        while Date() < idleDeadline {
-            try checkAttempt(deadline: deadline)
-            try await Task.sleep(for: .milliseconds(250))
-            try checkAttempt(deadline: deadline)
-            polls += 1
-            let info = try await network.fetchServerInfo()
-            try checkAttempt(deadline: deadline)
-            if info.currentGameID == 0, !info.isBusy { return }
-            try await authorizeOccupancy(info, network: network, deadline: deadline)
-        }
-        try checkAttempt(deadline: deadline)
     }
 
     package var isTearingDown: Bool { !isStreaming || stopInProgress }

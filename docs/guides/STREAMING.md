@@ -12,9 +12,25 @@ icon: display
 {% hint style="warning" %}
 
 Save before stopping or takeover. Control-Q, closing the window and quitting
-Glimmer quit the PC app. No disconnect-and-resume mode.
+Glimmer quit the PC app by default. To keep a game running, turn on “Leave games
+running when you disconnect” in Settings. Use this only with games and PCs that
+handle a change in screen size.
 
 {% endhint %}
+
+## Continue a running game
+
+1. Select the PC.
+2. Choose “Resume” or “Continue here” beside the running game.
+
+Glimmer keeps the previous stream size when it knows it and fits the picture to
+your screen. Another device may still be connected. To try a different size,
+choose “Use this screen's size…” and save your progress first. A game that
+failed that change offers a restart instead.
+
+Select another app to quit the running game and start the new one in a single
+confirmed action. “Quit <game>…” remains available when you only want to stop
+it.
 
 ## Leave the picture running
 

@@ -1,0 +1,73 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+import AppKit
+import GlimmerEngine
+import SwiftUI
+import Testing
+@testable import Glimmer
+
+@MainActor
+@Suite(.serialized)
+struct ControllerLayoutOwnershipTests {
+    @Test func persistedQuitPreferencesCannotChangeTheFixedStopChord() {
+        let settings = IsolatedDefaults()
+        settings.defaults.set("none", forKey: "controllerQuitChord")
+        let model = AppModel(defaults: settings.defaults)
+        #expect(model.controllerQuitChord == .startSelectL1R1)
+        #expect(model.customControllerChord.isEmpty)
+    }
+
+    @Test func closingWhileLayoutsLoadDoesNotStartDeviceObservationAfterDismissal() async throws {
+        let identity = ControllerLayoutIdentity(category: "fixture", profile: "physical", controls: [])
+        let record = ControllerLayoutRecord(key: .init(owner: .type(identity.type), scope: .allGames),
+            name: "Saved controller", layout: .init(bindings: [.init(.button(.a), .button(.b))]))
+        var pending: CheckedContinuation<Void, Never>?
+        let model = ControllerLayoutsModel(read: {
+            await withCheckedContinuation { pending = $0 }
+            return .init(records: [record])
+        })
+        let window = NSWindow(contentViewController: NSHostingController(rootView: NavigationStack {
+            ControllerLayoutsView(model: model)
+        }))
+        window.setContentSize(CGSize(width: 620, height: 500))
+        window.makeKeyAndOrderFront(nil)
+        try await waitUntil { pending != nil }
+        window.contentViewController = nil
+        window.close()
+        pending?.resume()
+        pending = nil
+        await model.load()
+        await DispatchQueue.main.drainForTest()
+        #expect(model.loaded)
+        #expect(model.devices.isEmpty)
+        #expect(!ControllerLayoutEditing.active)
+    }
+
+    @Test func closingTheEditorReturnsMiniPlayerOwnershipAndReleasesTheEditor() async throws {
+        let streamWindow = PointerFocusTestWindow(contentRect: .zero, styleMask: .borderless,
+                                                   backing: .buffered, defer: true)
+        streamWindow.focused = true
+        let forwarder = InputForwarder()
+        forwarder.window = streamWindow
+        forwarder.isMiniPlayer = true
+        forwarder.isReady = true
+        let layouts = MacControllerLayouts(forwarder: forwarder, scope: .allGames)
+        defer { layouts.stop(); forwarder.detach() }
+        layouts.showControls()
+        try await waitUntil { ControllerLayoutEditing.active }
+        #expect(forwarder.controllerOwnershipSuspended)
+        #expect(!forwarder.inputCore.snapshot.focused)
+        let editor = try #require(NSApplication.shared.windows.first { $0.title == "Controller layouts" })
+        editor.close()
+        try await waitUntil { !ControllerLayoutEditing.active && !forwarder.controllerOwnershipSuspended }
+        #expect(editor.contentViewController == nil)
+        #expect(ControllerLayoutEditing.capture == nil)
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        try #require(condition())
+    }
+}

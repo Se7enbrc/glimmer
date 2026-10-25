@@ -112,6 +112,7 @@ public final class InputForwarder {
 
     weak var window: NSWindow?
     weak var inputView: StreamInputView?
+    var controllerLayouts: MacControllerLayouts?
 
     /// Called when the user presses the configured quit hotkey. The session
     /// owner wires this to stop streaming.

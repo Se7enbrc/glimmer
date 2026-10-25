@@ -9,6 +9,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4474E8B9FD1A47A480A396C4 /* NativeUIRenderTests+IPhone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */; };
+		F01EE836436E483F863DF4F4 /* UITestLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4083AB719BDD4036984B93B7 /* UITestLauncher.swift */; };
+		BFC410B98DE44455B3A9D872 /* NativeUIRenderTests+iPad.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D536F6F337545DEB9369D51 /* NativeUIRenderTests+iPad.swift */; };
+		B17A7E0C0B1A4C0D9E2F3A41 /* NativeUIRenderTests+Bitrate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B17A7E0C0B1A4C0D9E2F3A42 /* NativeUIRenderTests+Bitrate.swift */; };
 		9D8E655FEF584B17AD847218 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */; };
 		40E56A34C6B84BFD97F585B0 /* PairingRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */; };
 		9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */; };
@@ -22,7 +26,9 @@
 		2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */; };
 		348684B76496EAF753290EF6 /* EngineLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC8777C55611710BADD7484 /* EngineLink.swift */; };
 		352C1011524E806B983A697E /* GlimmerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB5FA496B339386824307D80 /* GlimmerApp.swift */; };
+		B426095DE40544C9800A59D3 /* DiagnosticsDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB04CBAA442A417DB7141C7D /* DiagnosticsDefaults.swift */; };
 		448039B562D4A381F641CF03 /* AppDeclarationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */; };
+		80AAC985744D4D0CA0D130C1 /* DiagnosticsDefaultsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B8F39A9BC8494A8BBC0149 /* DiagnosticsDefaultsTests.swift */; };
 		4F9A1E395BAE1D05802CA568 /* CREDITS.md in Resources */ = {isa = PBXBuildFile; fileRef = 405AF81E78D41E1E222D5991 /* CREDITS.md */; };
 		56379B99BE31A1E9E8BAC42F /* ControllerMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36171098F2FC6D807B7809E9 /* ControllerMonitor.swift */; };
 		76D18FAA5093262D2C6C77E9 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 4E152D5238E668E8A9E5531F /* AppIcon.icon */; };
@@ -48,8 +54,15 @@
 		53442F74573A5960DB86B797 /* StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A97E5B4E562286545BA6412 /* StreamView.swift */; };
 		83B27EBA9F210DF76B77D772 /* LauncherServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087279E7E4417E5B10AADB05 /* LauncherServices.swift */; };
 		AF9547F4F7817E3F82B8F721 /* LauncherModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */; };
+		8B4D6483C510474393BBEAEE /* RunningGameRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17D2D3911834B9DA3DC2F22 /* RunningGameRow.swift */; };
+		4C9ABCB297864F26B9A5FF83 /* LauncherModel+Continuation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F03E8069FC0B4E0EBDEA4E97 /* LauncherModel+Continuation.swift */; };
 		CF6514282E3FDE69E7FE6EA8 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3225303E73FF1C74315DDB3 /* PairingView.swift */; };
 		F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */; };
+		A7AC93D39FA963B32B3BFBB6 /* StreamSessionTests+Background.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91AEBC7BEEA8D776F94EE649 /* StreamSessionTests+Background.swift */; };
+		3673DD4793174262BBFC6B1A /* ContinuationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 947296C064544F1C93F274F7 /* ContinuationTests.swift */; };
+		E3425F1AD9C14B03B79FCBBE /* InputRecordingBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4842A686711140868F26ABAA /* InputRecordingBackend.swift */; };
+		6888DE0E431441AEA6A34799 /* FakeSunshine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8555DB5EA75B418E897CCF7A /* FakeSunshine.swift */; };
+		8658F00DB4C641D0AAF1281A /* BitrateActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 874E99130A9D48429E652464 /* BitrateActuatorTests.swift */; };
 		7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69AB6019C55BC9409A7FA80F /* LauncherTests.swift */; };
 		E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */; };
 		2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = F08434884699435EA80067AB /* StreamTouchCapture.swift */; };
@@ -65,7 +78,82 @@
 		610DFE85BF994F3ABF7A541A /* IOSControllerSensorsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */; };
 		FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */; };
 		00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */; };
+		AE6A23CC6494422DB3DB8C77 /* VideoColorPatternTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9C36C65CD684E2EB8BCC2EC /* VideoColorPatternTests.swift */; };
+		CE05955C447440DD911016EF /* StreamVideoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B855180B1A544A85B5CEF0FD /* StreamVideoTests.swift */; };
 		38C80A9D0A874449A43CE593 /* AddPCView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */; };
+		9A840CDBA4454BB792C44D65 = {
+			isa = PBXBuildFile;
+			fileRef = 87663570874C427BB408C4D9;
+		};
+		CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */; };
+		CC4120261024000000000001 /* StreamDisplayModes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4120261024000000000002 /* StreamDisplayModes.swift */; };
+		CC4120261025000000000001 /* StreamWindowResize.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4120261025000000000002 /* StreamWindowResize.swift */; };
+		CC4120261025000000000003 /* StreamWindowResizeCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4120261025000000000004 /* StreamWindowResizeCoordinatorTests.swift */; };
+		CC4120261024000000000003 /* iphone-ipad.xml in Resources */ = {isa = PBXBuildFile; fileRef = CC4120261024000000000004 /* iphone-ipad.xml */; };
+		106C7EC9D1E1487BAF6C2359 /* StreamDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF7BE61574AE4D52A1AE9CDE /* StreamDisplayTests.swift */; };
+		30DF5DF2DB3A49AF95CF00C3 /* StreamDisplayGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5648C90AB5D14927899ED5EB /* StreamDisplayGeometry.swift */; };
+		A51AFF9A315143B9A97DE8D0 /* StreamDisplayGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F59986B2668A4ADAA0BDA4A8 /* StreamDisplayGeometryTests.swift */; };
+		8E0BB801DA9F44F09FBDE727 /* StreamDisplayRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 048B943867A648E2BDDB0D5B /* StreamDisplayRenderTests.swift */; };
+		06B884AEC0A0442A816ACD1D /* StreamOutputCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12625EF14E6340CDBB34192D /* StreamOutputCoordinator.swift */; };
+		B4D8A1F4662A448B88A9ABCC /* StreamDisplayMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E6D3B59D0034724BF096CCA /* StreamDisplayMode.swift */; };
+		C98A81575E2E43DB9264E7A7 /* ExternalStreamSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 561F95F4E6DA4B03A68B34D7 /* ExternalStreamSceneDelegate.swift */; };
+		B5BF87137D7941F0B279F257 /* ExternalStreamOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21AF75350764B66B907C5FE /* ExternalStreamOutputTests.swift */; };
+		E0CA41170F6D4AC3AE93FADB /* SoakTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF3C696C71946A8B934C0D7 /* SoakTransport.swift */; };
+		6B93908BCA6F4EE7900227AB /* SessionSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B568AB4020F4D058FB81D6A /* SessionSoakTests.swift */; };
+		1B853B11365C442C9C7D8A83 /* AudioSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD2F6A8EE12B4523B0843294 /* AudioSoakTests.swift */; };
+		6749DCF4412642DE8E4A260C /* SoakInputBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C163E6C978F43E4932CF0C1 /* SoakInputBackend.swift */; };
+		363006B84E794619B32525DF /* InputSoakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD9157DDD93149D59A3866D6 /* InputSoakTests.swift */; };
+		DEBAC36260FA4390952C9D1E /* TouchSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9E83A47F40A43F29D3B8CE0 /* TouchSessionTests.swift */; };
+		B31A7ED272F743128976E242 /* TouchElement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39635D55176B424A921A367A /* TouchElement.swift */; };
+		F61CCAED0B834DEE848A5BD2 /* TouchGamepadState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73CC95F8EC63419BB7F0CE6A /* TouchGamepadState.swift */; };
+		91EC65E9AF4A45B4A3D97340 /* TouchGamepadCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C8FAAD8CDA94E67B8FAD847 /* TouchGamepadCapture.swift */; };
+		A9257CD04E7F4AAFBFA2ADCF /* TouchLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 500F059263644A8CAF629793 /* TouchLayout.swift */; };
+		97C5F0D29A9E4ECCABD56BA5 /* TouchLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4004CBE93A5B4A9FABF532D1 /* TouchLayoutStore.swift */; };
+		77C208DEDEDB48589B61A4EB /* TouchTracking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7153A0C27CBC4954AF18A400 /* TouchTracking.swift */; };
+		98A92B4FCF7E4FB0B8B4C586 /* TouchButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 423981332AF543C8AB4547E4 /* TouchButton.swift */; };
+		E0B3A6C8F9E446E9B18A2310 /* TouchAxisControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C1C85D1E8B4854BBCDCDDC /* TouchAxisControl.swift */; };
+		B34082E7EED443D0B81A5849 /* TouchTrigger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5468949A506C4E83B372EAD8 /* TouchTrigger.swift */; };
+		5BA3CECBD4674E619C97A9C4 /* TouchGamepadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F12A56D518A41D786E1DEB9 /* TouchGamepadView.swift */; };
+		638FEE2A9267486B9D24C181 /* TouchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27F0B1C5D299420CADB725DB /* TouchOverlay.swift */; };
+		99D81EE643F14D3FB1FDB250 /* TouchLayoutEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF0AE5437814E84A7B51A43 /* TouchLayoutEditor.swift */; };
+		9E12EE79B752454994A3EDBF /* NativeInputLifetime.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED971F0EC0A74A1390A03CC6 /* NativeInputLifetime.swift */; };
+		548C531EFF2940A894E74BE3 /* TouchGamepadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */; };
+		1AFD56F03E7B48E790FB679C /* TouchLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF8C717822E54668881721CD /* TouchLayoutTests.swift */; };
+		DFD1E8AB957B4248801A929E /* TouchRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564C2513232040DDA240E15E /* TouchRenderTests.swift */; };
+		EC0C3550ABCC46ABA0E937F7 /* TouchInputEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C84049618503434691CEAC5B /* TouchInputEvidenceTests.swift */; };
+		CF8FB8B4432F487FB40E8472 /* TouchIdleEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B67E7156E5409AA9F9708C /* TouchIdleEvidenceTests.swift */; };
+		20A5B2E0106945C889D94DD5 /* TouchDeviceRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265BEE350AD240AE9718A4D2 /* TouchDeviceRenderTests.swift */; };
+		54B75E820761434DAFC10CD7 /* TouchEvidenceVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A53E4B24FC641FA9C4B7BE8 /* TouchEvidenceVideo.swift */; };
+		6FBA79D4ED33801CD946BBC2 /* ControllerLayoutAssignment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5F3AB2CA6D980F924AB1412 /* ControllerLayoutAssignment.swift */; };
+		5E71D7C95C723976B56D0193 /* ControllerLayoutCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1300D59AE86D301021E4C726 /* ControllerLayoutCapture.swift */; };
+		C2889EAB755DB8DA2915567E /* ControllerLayoutLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 429840F75A32F17BF8188529 /* ControllerLayoutLabels.swift */; };
+		E8D64CBA243B4C4127AC6822 /* ControllerLayoutReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5975B6DBC2D9A59387B94836 /* ControllerLayoutReader.swift */; };
+		A6FCDC72230E30441A033ACA /* ControllerLayoutsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44B50286D22A3C8078096356 /* ControllerLayoutsModel.swift */; };
+		F497A4F8F76F1C87F038BBF9 /* ControllerLayoutsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591FAE9B3D565EAF1AE6D39C /* ControllerLayoutsView.swift */; };
+		109571950D51CA4E9AC2299A /* IOSControllerLayoutPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0FE091D647DB80FC7CBB04F /* IOSControllerLayoutPresentation.swift */; };
+		BBDF302987FAF9F7402A6D84 /* ControllerLayoutNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */; };
+		94F7B1607EBE0F53941883A9 /* ControllerLayoutEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */; };
+		8033B9ABE605D5A2C6102F12 /* ControllerLayoutRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D45B4D6D520493193F710F5 /* ControllerLayoutRenderTests.swift */; };
+		A05516581C0597B57F9B76F9 /* ControllerLayoutCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF7552AB0051D0CF5CDA66C /* ControllerLayoutCaptureTests.swift */; };
+		A1C2C5E3D10A1AC79DB000E4 /* ControllerLayoutShortcutSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B4B2F8017E0FB2092F9C0E4 /* ControllerLayoutShortcutSummary.swift */; };
+		165AA6E728C1A6FC28DC8ACE /* ControllerMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7746C436977D71BFC46F6315 /* ControllerMappingTests.swift */; };
+		DFF8B6DF512A17FFE0F2F0FD /* ControllerLayoutPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 274787A400D70EA06F8D14C4 /* ControllerLayoutPersistenceTests.swift */; };
+		A0E02F4F853173A2E82B830A /* ControllerLayoutEscapeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0279B56219E39DE8B0E7D75 /* ControllerLayoutEscapeTests.swift */; };
+		549C8756973A8B3B2F9D80E0 /* ControllerLayoutBeforeSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50083031CBD23FA2005B76B4 /* ControllerLayoutBeforeSettings.swift */; };
+		D162E918753F1A7DF4908674 /* IOSControllerLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CEFB04D7C50BCA3212857BA /* IOSControllerLayouts.swift */; };
+		8B8BE11FD2507C6F7DBB0C57 /* IOSControllerLayoutStreamControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1945301F1DC095317773DD00 /* IOSControllerLayoutStreamControls.swift */; };
+		754B8A3DB3F6137CE99DB4A6 /* ControllerDiagramGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0D6053323DDA9B9E9B045F /* ControllerDiagramGeometry.swift */; };
+		AC3D71723C87AA05D590B304 /* ControllerLayoutDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB23EA1F483F54E8A8E253B0 /* ControllerLayoutDiagram.swift */; };
+		38FF5BA317EAB7535622EE67 /* ControllerDiagramTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF6E1D4A71F05874BA58C03 /* ControllerDiagramTests.swift */; };
+		B0E275DBC5304E5294179950 /* ControllerBodyShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00636B6950364D9BA252719E /* ControllerBodyShape.swift */; };
+		6036EAF3695F430EB244F129 /* ControllerSurfaceShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD42C3B423B34AE79C2E82FB /* ControllerSurfaceShape.swift */; };
+		00C57D57B0684C3DB3E3BA5A /* ControllerArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40D50BC15A943579EDCDFAE /* ControllerArtwork.swift */; };
+		04118575E4384832A7C75F77 /* ControllerControlArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6228325111154BF28193D564 /* ControllerControlArtwork.swift */; };
+		AFC585F573F4436AAC70BD67 /* ControllerDpadSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6157B25E00E64C8EA422CF21 /* ControllerDpadSurface.swift */; };
+		24515FAF7C6E4E5AA5A42BBA /* ControllerShoulderGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D1B1C261634418B659D5CB /* ControllerShoulderGeometry.swift */; };
+		DEA3E708B2B3486488721058 /* ControllerShoulderControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F37D021E6E54166A96FFD0A /* ControllerShoulderControls.swift */; };
+		CFB1AD00C82D4222AF70ABDE /* BandwidthPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */; };
+		6A7D680A0F1A46C181605D73 /* BandwidthActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C228A78E7CE4F408100275C /* BandwidthActuatorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,9 +164,20 @@
 			remoteGlobalIDString = B681FC77EEFBB7565D886601;
 			remoteInfo = Glimmer;
 		};
+		BDD57603553F4C218B863231 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 49E2BD31141729547DDE4FFD;
+			proxyType = 1;
+			remoteGlobalIDString = B681FC77EEFBB7565D886601;
+			remoteInfo = Glimmer;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests+IPhone.swift"; sourceTree = "<group>"; };
+		4083AB719BDD4036984B93B7 /* UITestLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestLauncher.swift; sourceTree = "<group>"; };
+		9D536F6F337545DEB9369D51 /* NativeUIRenderTests+iPad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests+iPad.swift"; sourceTree = "<group>"; };
+		B17A7E0C0B1A4C0D9E2F3A42 /* NativeUIRenderTests+Bitrate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests+Bitrate.swift"; sourceTree = "<group>"; };
 		8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingRecoveryTests.swift; sourceTree = "<group>"; };
 		E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherGalleryTests.swift"; sourceTree = "<group>"; };
@@ -90,6 +189,7 @@
 		34C1CD2D3621B447D33B3F8C /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		36171098F2FC6D807B7809E9 /* ControllerMonitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ControllerMonitor.swift; sourceTree = "<group>"; };
 		3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDeclarationTests.swift; sourceTree = "<group>"; };
+		39B8F39A9BC8494A8BBC0149 /* DiagnosticsDefaultsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsDefaultsTests.swift; sourceTree = "<group>"; };
 		3D8BD9F49FCFD5C8571088CE /* Signing.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		405AF81E78D41E1E222D5991 /* CREDITS.md */ = {isa = PBXFileReference; includeInIndex = 1; path = CREDITS.md; sourceTree = "<group>"; };
 		45D50F4C90AB68CB5149E594 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -102,6 +202,7 @@
 		C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineLinkTests.swift; sourceTree = "<group>"; };
 		C27E8A6F7449606A4E16DB8B /* LauncherView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LauncherView.swift; sourceTree = "<group>"; };
 		CB5FA496B339386824307D80 /* GlimmerApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlimmerApp.swift; sourceTree = "<group>"; };
+		BB04CBAA442A417DB7141C7D /* DiagnosticsDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsDefaults.swift; sourceTree = "<group>"; };
 		DBDB247C151A5B0F3BCE13B6 /* App.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
 		EDC8777C55611710BADD7484 /* EngineLink.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineLink.swift; sourceTree = "<group>"; };
 		FAD2215B8AB2557B667379E3 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -121,8 +222,15 @@
 		5A97E5B4E562286545BA6412 /* StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamView.swift"; sourceTree = "<group>"; };
 		087279E7E4417E5B10AADB05 /* LauncherServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherServices.swift"; sourceTree = "<group>"; };
 		1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherModel.swift"; sourceTree = "<group>"; };
+		E17D2D3911834B9DA3DC2F22 /* RunningGameRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/RunningGameRow.swift"; sourceTree = SOURCE_ROOT; };
+		F03E8069FC0B4E0EBDEA4E97 /* LauncherModel+Continuation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/LauncherModel+Continuation.swift"; sourceTree = SOURCE_ROOT; };
 		E3225303E73FF1C74315DDB3 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairingView.swift"; sourceTree = "<group>"; };
 		155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionTests.swift"; sourceTree = "<group>"; };
+		91AEBC7BEEA8D776F94EE649 /* StreamSessionTests+Background.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionTests+Background.swift"; sourceTree = "<group>"; };
+		947296C064544F1C93F274F7 /* ContinuationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ContinuationTests.swift"; sourceTree = SOURCE_ROOT; };
+		4842A686711140868F26ABAA /* InputRecordingBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/InputRecordingBackend.swift"; sourceTree = SOURCE_ROOT; };
+		8555DB5EA75B418E897CCF7A /* FakeSunshine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/FakeSunshine.swift"; sourceTree = SOURCE_ROOT; };
+		874E99130A9D48429E652464 /* BitrateActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/BitrateActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
 		69AB6019C55BC9409A7FA80F /* LauncherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherTests.swift"; sourceTree = "<group>"; };
 		2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests.swift"; sourceTree = "<group>"; };
 		F08434884699435EA80067AB /* StreamTouchCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCapture.swift"; sourceTree = "<group>"; };
@@ -138,7 +246,90 @@
 		7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerSensorsTests.swift"; sourceTree = "<group>"; };
 		5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamProfile.swift"; sourceTree = "<group>"; };
 		DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamProfileTests.swift"; sourceTree = "<group>"; };
+		B9C36C65CD684E2EB8BCC2EC /* VideoColorPatternTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/VideoColorPatternTests.swift"; sourceTree = SOURCE_ROOT; };
+		B855180B1A544A85B5CEF0FD /* StreamVideoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/StreamVideoTests.swift"; sourceTree = SOURCE_ROOT; };
 		E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AddPCView.swift"; sourceTree = "<group>"; };
+		87663570874C427BB408C4D9 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = IPadNavigationTests.swift;
+			sourceTree = "<group>";
+		};
+		CFDC306434484E819354E45B = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.cfbundle;
+			path = GlimmerUITests.xctest;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamWindowResizeTests.swift; sourceTree = "<group>"; };
+		CC4120261024000000000002 /* StreamDisplayModes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayModes.swift; sourceTree = "<group>"; };
+		CC4120261025000000000002 /* StreamWindowResize.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamWindowResize.swift; sourceTree = "<group>"; };
+		CC4120261025000000000004 /* StreamWindowResizeCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamWindowResizeCoordinatorTests.swift; sourceTree = "<group>"; };
+		CC4120261024000000000004 /* iphone-ipad.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "../../docs/vdd/iphone-ipad.xml"; sourceTree = "<group>"; };
+		EF7BE61574AE4D52A1AE9CDE /* StreamDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDisplayTests.swift; sourceTree = "<group>"; };
+		5648C90AB5D14927899ED5EB /* StreamDisplayGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamDisplayGeometry.swift"; sourceTree = "<group>"; };
+		F59986B2668A4ADAA0BDA4A8 /* StreamDisplayGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamDisplayGeometryTests.swift"; sourceTree = "<group>"; };
+		048B943867A648E2BDDB0D5B /* StreamDisplayRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamDisplayRenderTests.swift"; sourceTree = "<group>"; };
+		12625EF14E6340CDBB34192D /* StreamOutputCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamOutputCoordinator.swift"; sourceTree = "<group>"; };
+		5E6D3B59D0034724BF096CCA /* StreamDisplayMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamDisplayMode.swift"; sourceTree = "<group>"; };
+		561F95F4E6DA4B03A68B34D7 /* ExternalStreamSceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExternalStreamSceneDelegate.swift"; sourceTree = "<group>"; };
+		C21AF75350764B66B907C5FE /* ExternalStreamOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ExternalStreamOutputTests.swift"; sourceTree = "<group>"; };
+		0CF3C696C71946A8B934C0D7 /* SoakTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/SoakTransport.swift"; sourceTree = SOURCE_ROOT; };
+		2B568AB4020F4D058FB81D6A /* SessionSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/SessionSoakTests.swift"; sourceTree = SOURCE_ROOT; };
+		BD2F6A8EE12B4523B0843294 /* AudioSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/AudioSoakTests.swift"; sourceTree = SOURCE_ROOT; };
+		1C163E6C978F43E4932CF0C1 /* SoakInputBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/SoakInputBackend.swift"; sourceTree = SOURCE_ROOT; };
+		DD9157DDD93149D59A3866D6 /* InputSoakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/InputSoakTests.swift"; sourceTree = SOURCE_ROOT; };
+		B9E83A47F40A43F29D3B8CE0 /* TouchSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchSessionTests.swift"; sourceTree = "<group>"; };
+		39635D55176B424A921A367A /* TouchElement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchElement.swift"; sourceTree = "<group>"; };
+		73CC95F8EC63419BB7F0CE6A /* TouchGamepadState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchGamepadState.swift"; sourceTree = "<group>"; };
+		4C8FAAD8CDA94E67B8FAD847 /* TouchGamepadCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchGamepadCapture.swift"; sourceTree = "<group>"; };
+		500F059263644A8CAF629793 /* TouchLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchLayout.swift"; sourceTree = "<group>"; };
+		4004CBE93A5B4A9FABF532D1 /* TouchLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchLayoutStore.swift"; sourceTree = "<group>"; };
+		7153A0C27CBC4954AF18A400 /* TouchTracking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchTracking.swift"; sourceTree = "<group>"; };
+		423981332AF543C8AB4547E4 /* TouchButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchButton.swift"; sourceTree = "<group>"; };
+		45C1C85D1E8B4854BBCDCDDC /* TouchAxisControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchAxisControl.swift"; sourceTree = "<group>"; };
+		5468949A506C4E83B372EAD8 /* TouchTrigger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchTrigger.swift"; sourceTree = "<group>"; };
+		9F12A56D518A41D786E1DEB9 /* TouchGamepadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchGamepadView.swift"; sourceTree = "<group>"; };
+		27F0B1C5D299420CADB725DB /* TouchOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchOverlay.swift"; sourceTree = "<group>"; };
+		BEF0AE5437814E84A7B51A43 /* TouchLayoutEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchLayoutEditor.swift"; sourceTree = "<group>"; };
+		ED971F0EC0A74A1390A03CC6 /* NativeInputLifetime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeInputLifetime.swift"; sourceTree = "<group>"; };
+		F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchGamepadTests.swift"; sourceTree = "<group>"; };
+		FF8C717822E54668881721CD /* TouchLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchLayoutTests.swift"; sourceTree = "<group>"; };
+		564C2513232040DDA240E15E /* TouchRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchRenderTests.swift"; sourceTree = "<group>"; };
+		C84049618503434691CEAC5B /* TouchInputEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchInputEvidenceTests.swift"; sourceTree = "<group>"; };
+		00B67E7156E5409AA9F9708C /* TouchIdleEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchIdleEvidenceTests.swift"; sourceTree = "<group>"; };
+		265BEE350AD240AE9718A4D2 /* TouchDeviceRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchDeviceRenderTests.swift"; sourceTree = "<group>"; };
+		6A53E4B24FC641FA9C4B7BE8 /* TouchEvidenceVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchEvidenceVideo.swift"; sourceTree = "<group>"; };
+		B5F3AB2CA6D980F924AB1412 /* ControllerLayoutAssignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutAssignment.swift"; sourceTree = SOURCE_ROOT; };
+		1300D59AE86D301021E4C726 /* ControllerLayoutCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutCapture.swift"; sourceTree = SOURCE_ROOT; };
+		429840F75A32F17BF8188529 /* ControllerLayoutLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutLabels.swift"; sourceTree = SOURCE_ROOT; };
+		5975B6DBC2D9A59387B94836 /* ControllerLayoutReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutReader.swift"; sourceTree = SOURCE_ROOT; };
+		44B50286D22A3C8078096356 /* ControllerLayoutsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutsModel.swift"; sourceTree = SOURCE_ROOT; };
+		591FAE9B3D565EAF1AE6D39C /* ControllerLayoutsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutsView.swift"; sourceTree = SOURCE_ROOT; };
+		A0FE091D647DB80FC7CBB04F /* IOSControllerLayoutPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/IOSControllerLayoutPresentation.swift"; sourceTree = SOURCE_ROOT; };
+		E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutNavigation.swift"; sourceTree = SOURCE_ROOT; };
+		E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutEditing.swift"; sourceTree = SOURCE_ROOT; };
+		8D45B4D6D520493193F710F5 /* ControllerLayoutRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerLayoutRenderTests.swift"; sourceTree = SOURCE_ROOT; };
+		BFF7552AB0051D0CF5CDA66C /* ControllerLayoutCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerLayoutCaptureTests.swift"; sourceTree = SOURCE_ROOT; };
+		2B4B2F8017E0FB2092F9C0E4 /* ControllerLayoutShortcutSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutShortcutSummary.swift"; sourceTree = SOURCE_ROOT; };
+		7746C436977D71BFC46F6315 /* ControllerMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/ControllerMappingTests.swift"; sourceTree = SOURCE_ROOT; };
+		274787A400D70EA06F8D14C4 /* ControllerLayoutPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/ControllerLayoutPersistenceTests.swift"; sourceTree = SOURCE_ROOT; };
+		A0279B56219E39DE8B0E7D75 /* ControllerLayoutEscapeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../EnginePackageTests/ControllerLayoutEscapeTests.swift"; sourceTree = SOURCE_ROOT; };
+		50083031CBD23FA2005B76B4 /* ControllerLayoutBeforeSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutBeforeSettings.swift"; sourceTree = SOURCE_ROOT; };
+		1CEFB04D7C50BCA3212857BA /* IOSControllerLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/IOSControllerLayouts.swift"; sourceTree = SOURCE_ROOT; };
+		1945301F1DC095317773DD00 /* IOSControllerLayoutStreamControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/IOSControllerLayoutStreamControls.swift"; sourceTree = SOURCE_ROOT; };
+		1F0D6053323DDA9B9E9B045F /* ControllerDiagramGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerDiagramGeometry.swift"; sourceTree = SOURCE_ROOT; };
+		AB23EA1F483F54E8A8E253B0 /* ControllerLayoutDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutDiagram.swift"; sourceTree = SOURCE_ROOT; };
+		BAF6E1D4A71F05874BA58C03 /* ControllerDiagramTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerDiagramTests.swift"; sourceTree = SOURCE_ROOT; };
+		00636B6950364D9BA252719E /* ControllerBodyShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerBodyShape.swift"; sourceTree = SOURCE_ROOT; };
+		DD42C3B423B34AE79C2E82FB /* ControllerSurfaceShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerSurfaceShape.swift"; sourceTree = SOURCE_ROOT; };
+		A40D50BC15A943579EDCDFAE /* ControllerArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerArtwork.swift"; sourceTree = SOURCE_ROOT; };
+		6228325111154BF28193D564 /* ControllerControlArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerControlArtwork.swift"; sourceTree = SOURCE_ROOT; };
+		6157B25E00E64C8EA422CF21 /* ControllerDpadSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerDpadSurface.swift"; sourceTree = SOURCE_ROOT; };
+		F3D1B1C261634418B659D5CB /* ControllerShoulderGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerShoulderGeometry.swift"; sourceTree = SOURCE_ROOT; };
+		7F37D021E6E54166A96FFD0A /* ControllerShoulderControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerShoulderControls.swift"; sourceTree = SOURCE_ROOT; };
+		0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/BandwidthPolicyTests.swift"; sourceTree = SOURCE_ROOT; };
+		9C228A78E7CE4F408100275C /* BandwidthActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/BandwidthActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -162,6 +353,12 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A60BC19E8EEC4A53B44DA83D = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -180,6 +377,7 @@
 			children = (
 				7433B1C5C30BE45717AEA2C5 /* Glimmer.app */,
 				6C6D3739822077E944BB55B4 /* GlimmerTests.xctest */,
+				CFDC306434484E819354E45B /* GlimmerUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -202,6 +400,7 @@
 				B482507685B00F4A42D044A3 /* Frameworks */,
 				BEC83DE52194C0A67A8F75F5 /* Glimmer */,
 				94A1479D3C65CC3651C769B5 /* GlimmerTests */,
+				7A473BD2CBB94CF688A22DA7 /* GlimmerUITests */,
 				0B3385B9A10AECC582EA11AB /* Config */,
 				34245D5D017E137C796AE2AA /* LICENSE */,
 				405AF81E78D41E1E222D5991 /* CREDITS.md */,
@@ -211,11 +410,44 @@
 		94A1479D3C65CC3651C769B5 /* GlimmerTests */ = {
 			isa = PBXGroup;
 			children = (
+				78BEC74EFF444062924BB02A /* NativeUIRenderTests+IPhone.swift */,
+				6A53E4B24FC641FA9C4B7BE8 /* TouchEvidenceVideo.swift */,
+				265BEE350AD240AE9718A4D2 /* TouchDeviceRenderTests.swift */,
+				00B67E7156E5409AA9F9708C /* TouchIdleEvidenceTests.swift */,
+				C84049618503434691CEAC5B /* TouchInputEvidenceTests.swift */,
+				564C2513232040DDA240E15E /* TouchRenderTests.swift */,
+				FF8C717822E54668881721CD /* TouchLayoutTests.swift */,
+				F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */,
+				B9E83A47F40A43F29D3B8CE0 /* TouchSessionTests.swift */,
+				BAF6E1D4A71F05874BA58C03 /* ControllerDiagramTests.swift */,
+				50083031CBD23FA2005B76B4 /* ControllerLayoutBeforeSettings.swift */,
+				A0279B56219E39DE8B0E7D75 /* ControllerLayoutEscapeTests.swift */,
+				274787A400D70EA06F8D14C4 /* ControllerLayoutPersistenceTests.swift */,
+				7746C436977D71BFC46F6315 /* ControllerMappingTests.swift */,
+				BFF7552AB0051D0CF5CDA66C /* ControllerLayoutCaptureTests.swift */,
+				8D45B4D6D520493193F710F5 /* ControllerLayoutRenderTests.swift */,
 				2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */,
+				9D536F6F337545DEB9369D51 /* NativeUIRenderTests+iPad.swift */,
+				B17A7E0C0B1A4C0D9E2F3A42 /* NativeUIRenderTests+Bitrate.swift */,
 				69AB6019C55BC9409A7FA80F /* LauncherTests.swift */,
 				D4D34931001A4AD48EF7984E /* PairingRecoveryTests.swift */,
 				155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */,
+				91AEBC7BEEA8D776F94EE649 /* StreamSessionTests+Background.swift */,
+				EF7BE61574AE4D52A1AE9CDE /* StreamDisplayTests.swift */,
+				F59986B2668A4ADAA0BDA4A8 /* StreamDisplayGeometryTests.swift */,
+				048B943867A648E2BDDB0D5B /* StreamDisplayRenderTests.swift */,
+				C21AF75350764B66B907C5FE /* ExternalStreamOutputTests.swift */,
+				947296C064544F1C93F274F7 /* ContinuationTests.swift */,
+				4842A686711140868F26ABAA /* InputRecordingBackend.swift */,
+				8555DB5EA75B418E897CCF7A /* FakeSunshine.swift */,
+				874E99130A9D48429E652464 /* BitrateActuatorTests.swift */,
 				DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */,
+				DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */,
+				CC4120261025000000000004 /* StreamWindowResizeCoordinatorTests.swift */,
+				B9C36C65CD684E2EB8BCC2EC /* VideoColorPatternTests.swift */,
+				B855180B1A544A85B5CEF0FD /* StreamVideoTests.swift */,
+				9C228A78E7CE4F408100275C /* BandwidthActuatorTests.swift */,
+				0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */,
 				E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */,
 				4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */,
 				1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */,
@@ -227,8 +459,14 @@
 				CAEE98C2A04C4861AF0185B2 /* IOSAudioPipelineTests.swift */,
 				8BC08841A03D6DD9FE8FFD26 /* IOSAudioSessionTests.swift */,
 				22712B3F8967F5B4875F85A0 /* IOSAudioFixtures.swift */,
+				0CF3C696C71946A8B934C0D7 /* SoakTransport.swift */,
+				2B568AB4020F4D058FB81D6A /* SessionSoakTests.swift */,
+				BD2F6A8EE12B4523B0843294 /* AudioSoakTests.swift */,
+				1C163E6C978F43E4932CF0C1 /* SoakInputBackend.swift */,
+				DD9157DDD93149D59A3866D6 /* InputSoakTests.swift */,
 				C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */,
 				3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */,
+				39B8F39A9BC8494A8BBC0149 /* DiagnosticsDefaultsTests.swift */,
 			);
 			name = GlimmerTests;
 			path = GlimmerTests;
@@ -245,11 +483,51 @@
 		BEC83DE52194C0A67A8F75F5 /* Glimmer */ = {
 			isa = PBXGroup;
 			children = (
+				ED971F0EC0A74A1390A03CC6 /* NativeInputLifetime.swift */,
+				BEF0AE5437814E84A7B51A43 /* TouchLayoutEditor.swift */,
+				27F0B1C5D299420CADB725DB /* TouchOverlay.swift */,
+				9F12A56D518A41D786E1DEB9 /* TouchGamepadView.swift */,
+				5468949A506C4E83B372EAD8 /* TouchTrigger.swift */,
+				45C1C85D1E8B4854BBCDCDDC /* TouchAxisControl.swift */,
+				423981332AF543C8AB4547E4 /* TouchButton.swift */,
+				7153A0C27CBC4954AF18A400 /* TouchTracking.swift */,
+				4004CBE93A5B4A9FABF532D1 /* TouchLayoutStore.swift */,
+				500F059263644A8CAF629793 /* TouchLayout.swift */,
+				4C8FAAD8CDA94E67B8FAD847 /* TouchGamepadCapture.swift */,
+				73CC95F8EC63419BB7F0CE6A /* TouchGamepadState.swift */,
+				39635D55176B424A921A367A /* TouchElement.swift */,
+				AB23EA1F483F54E8A8E253B0 /* ControllerLayoutDiagram.swift */,
+				6228325111154BF28193D564 /* ControllerControlArtwork.swift */,
+				6157B25E00E64C8EA422CF21 /* ControllerDpadSurface.swift */,
+				7F37D021E6E54166A96FFD0A /* ControllerShoulderControls.swift */,
+				F3D1B1C261634418B659D5CB /* ControllerShoulderGeometry.swift */,
+				A40D50BC15A943579EDCDFAE /* ControllerArtwork.swift */,
+				DD42C3B423B34AE79C2E82FB /* ControllerSurfaceShape.swift */,
+				00636B6950364D9BA252719E /* ControllerBodyShape.swift */,
+				1F0D6053323DDA9B9E9B045F /* ControllerDiagramGeometry.swift */,
+				1945301F1DC095317773DD00 /* IOSControllerLayoutStreamControls.swift */,
+				1CEFB04D7C50BCA3212857BA /* IOSControllerLayouts.swift */,
+				2B4B2F8017E0FB2092F9C0E4 /* ControllerLayoutShortcutSummary.swift */,
+				E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */,
+				E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */,
+				A0FE091D647DB80FC7CBB04F /* IOSControllerLayoutPresentation.swift */,
+				591FAE9B3D565EAF1AE6D39C /* ControllerLayoutsView.swift */,
+				44B50286D22A3C8078096356 /* ControllerLayoutsModel.swift */,
+				5975B6DBC2D9A59387B94836 /* ControllerLayoutReader.swift */,
+				429840F75A32F17BF8188529 /* ControllerLayoutLabels.swift */,
+				1300D59AE86D301021E4C726 /* ControllerLayoutCapture.swift */,
+				B5F3AB2CA6D980F924AB1412 /* ControllerLayoutAssignment.swift */,
 				E3225303E73FF1C74315DDB3 /* PairingView.swift */,
 				E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */,
 				1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */,
+				E17D2D3911834B9DA3DC2F22 /* RunningGameRow.swift */,
+				F03E8069FC0B4E0EBDEA4E97 /* LauncherModel+Continuation.swift */,
 				087279E7E4417E5B10AADB05 /* LauncherServices.swift */,
 				5A97E5B4E562286545BA6412 /* StreamView.swift */,
+				5648C90AB5D14927899ED5EB /* StreamDisplayGeometry.swift */,
+				12625EF14E6340CDBB34192D /* StreamOutputCoordinator.swift */,
+				5E6D3B59D0034724BF096CCA /* StreamDisplayMode.swift */,
+				561F95F4E6DA4B03A68B34D7 /* ExternalStreamSceneDelegate.swift */,
 				11C92E9EC00985D64D0C1CC7 /* StreamSurface.swift */,
 				F08434884699435EA80067AB /* StreamTouchCapture.swift */,
 				5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */,
@@ -257,6 +535,9 @@
 				E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */,
 				57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */,
 				5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */,
+				CC4120261024000000000002 /* StreamDisplayModes.swift */,
+				CC4120261025000000000002 /* StreamWindowResize.swift */,
+				CC4120261024000000000004 /* iphone-ipad.xml */,
 				D654A9FE399E4DA090290322 /* StreamBackgroundGrace.swift */,
 				6D57DEF880324835B4BA487E /* LauncherGallery.swift */,
 				A49D3096BFB64C23AE91AC56 /* ControllerMouseSettings.swift */,
@@ -272,7 +553,9 @@
 				D46ADEF81D9B207FD34CBB22 /* IOSAudio.swift */,
 				EDC8777C55611710BADD7484 /* EngineLink.swift */,
 				CB5FA496B339386824307D80 /* GlimmerApp.swift */,
+				BB04CBAA442A417DB7141C7D /* DiagnosticsDefaults.swift */,
 				C27E8A6F7449606A4E16DB8B /* LauncherView.swift */,
+				4083AB719BDD4036984B93B7 /* UITestLauncher.swift */,
 				34C1CD2D3621B447D33B3F8C /* Info.plist */,
 				8B357B4B97C746CF91261E26 /* PrivacyInfo.xcprivacy */,
 				FAD2215B8AB2557B667379E3 /* Assets.xcassets */,
@@ -280,6 +563,14 @@
 			);
 			name = Glimmer;
 			path = Glimmer;
+			sourceTree = "<group>";
+		};
+		7A473BD2CBB94CF688A22DA7 = {
+			isa = PBXGroup;
+			children = (
+				87663570874C427BB408C4D9,
+			);
+			path = GlimmerUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -323,6 +614,23 @@
 			productReference = 7433B1C5C30BE45717AEA2C5 /* Glimmer.app */;
 			productType = "com.apple.product-type.application";
 		};
+		14758248D427402BB033CEEE = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F10ABE99B9194566B548A153;
+			buildPhases = (
+				4162CD7AE6E441DA899A22CB,
+				A60BC19E8EEC4A53B44DA83D,
+				46A82684AE2B4173A6BA25E0,
+			);
+			buildRules = ();
+			dependencies = (
+				0B5864E590AE43B9BB293032,
+			);
+			name = GlimmerUITests;
+			productName = GlimmerUITests;
+			productReference = CFDC306434484E819354E45B;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -352,6 +660,7 @@
 			targets = (
 				B681FC77EEFBB7565D886601 /* Glimmer */,
 				4D366FCA64D124361CF79023 /* GlimmerTests */,
+				14758248D427402BB033CEEE /* GlimmerUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -368,12 +677,19 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CC4120261024000000000003 /* iphone-ipad.xml in Resources */,
 				D24F000A4BCC4C65C8508D0A /* Assets.xcassets in Resources */,
 				9D8E655FEF584B17AD847218 /* PrivacyInfo.xcprivacy in Resources */,
 				76D18FAA5093262D2C6C77E9 /* AppIcon.icon in Resources */,
 				07F5AD5B787425E258D9C086 /* LICENSE in Resources */,
 				4F9A1E395BAE1D05802CA568 /* CREDITS.md in Resources */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		46A82684AE2B4173A6BA25E0 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
@@ -383,11 +699,44 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4474E8B9FD1A47A480A396C4 /* NativeUIRenderTests+IPhone.swift in Sources */,
+				54B75E820761434DAFC10CD7 /* TouchEvidenceVideo.swift in Sources */,
+				20A5B2E0106945C889D94DD5 /* TouchDeviceRenderTests.swift in Sources */,
+				CF8FB8B4432F487FB40E8472 /* TouchIdleEvidenceTests.swift in Sources */,
+				EC0C3550ABCC46ABA0E937F7 /* TouchInputEvidenceTests.swift in Sources */,
+				DFD1E8AB957B4248801A929E /* TouchRenderTests.swift in Sources */,
+				1AFD56F03E7B48E790FB679C /* TouchLayoutTests.swift in Sources */,
+				548C531EFF2940A894E74BE3 /* TouchGamepadTests.swift in Sources */,
+				DEBAC36260FA4390952C9D1E /* TouchSessionTests.swift in Sources */,
+				38FF5BA317EAB7535622EE67 /* ControllerDiagramTests.swift in Sources */,
+				549C8756973A8B3B2F9D80E0 /* ControllerLayoutBeforeSettings.swift in Sources */,
+				A0E02F4F853173A2E82B830A /* ControllerLayoutEscapeTests.swift in Sources */,
+				DFF8B6DF512A17FFE0F2F0FD /* ControllerLayoutPersistenceTests.swift in Sources */,
+				165AA6E728C1A6FC28DC8ACE /* ControllerMappingTests.swift in Sources */,
+				A05516581C0597B57F9B76F9 /* ControllerLayoutCaptureTests.swift in Sources */,
+				8033B9ABE605D5A2C6102F12 /* ControllerLayoutRenderTests.swift in Sources */,
 				E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */,
+				BFC410B98DE44455B3A9D872 /* NativeUIRenderTests+iPad.swift in Sources */,
+				B17A7E0C0B1A4C0D9E2F3A41 /* NativeUIRenderTests+Bitrate.swift in Sources */,
 				7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */,
 				40E56A34C6B84BFD97F585B0 /* PairingRecoveryTests.swift in Sources */,
 				F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */,
+				A7AC93D39FA963B32B3BFBB6 /* StreamSessionTests+Background.swift in Sources */,
+				106C7EC9D1E1487BAF6C2359 /* StreamDisplayTests.swift in Sources */,
+				A51AFF9A315143B9A97DE8D0 /* StreamDisplayGeometryTests.swift in Sources */,
+				8E0BB801DA9F44F09FBDE727 /* StreamDisplayRenderTests.swift in Sources */,
+				B5BF87137D7941F0B279F257 /* ExternalStreamOutputTests.swift in Sources */,
+				3673DD4793174262BBFC6B1A /* ContinuationTests.swift in Sources */,
+				E3425F1AD9C14B03B79FCBBE /* InputRecordingBackend.swift in Sources */,
+				6888DE0E431441AEA6A34799 /* FakeSunshine.swift in Sources */,
+				8658F00DB4C641D0AAF1281A /* BitrateActuatorTests.swift in Sources */,
 				00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */,
+				CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */,
+				CC4120261025000000000003 /* StreamWindowResizeCoordinatorTests.swift in Sources */,
+				AE6A23CC6494422DB3DB8C77 /* VideoColorPatternTests.swift in Sources */,
+				CE05955C447440DD911016EF /* StreamVideoTests.swift in Sources */,
+				6A7D680A0F1A46C181605D73 /* BandwidthActuatorTests.swift in Sources */,
+				CFB1AD00C82D4222AF70ABDE /* BandwidthPolicyTests.swift in Sources */,
 				9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */,
 				BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */,
 				A037E3519F7846D6958E34F0 /* ControllerMouseMotionTests.swift in Sources */,
@@ -399,8 +748,14 @@
 				E53BAE83AE664B16A3908721 /* IOSAudioPipelineTests.swift in Sources */,
 				5357DD73479F12579699A792 /* IOSAudioSessionTests.swift in Sources */,
 				1A26CF1176BA5F2D37E40F0A /* IOSAudioFixtures.swift in Sources */,
+				E0CA41170F6D4AC3AE93FADB /* SoakTransport.swift in Sources */,
+				6B93908BCA6F4EE7900227AB /* SessionSoakTests.swift in Sources */,
+				1B853B11365C442C9C7D8A83 /* AudioSoakTests.swift in Sources */,
+				6749DCF4412642DE8E4A260C /* SoakInputBackend.swift in Sources */,
+				363006B84E794619B32525DF /* InputSoakTests.swift in Sources */,
 				2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */,
 				448039B562D4A381F641CF03 /* AppDeclarationTests.swift in Sources */,
+				80AAC985744D4D0CA0D130C1 /* DiagnosticsDefaultsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -408,11 +763,51 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9E12EE79B752454994A3EDBF /* NativeInputLifetime.swift in Sources */,
+				99D81EE643F14D3FB1FDB250 /* TouchLayoutEditor.swift in Sources */,
+				638FEE2A9267486B9D24C181 /* TouchOverlay.swift in Sources */,
+				5BA3CECBD4674E619C97A9C4 /* TouchGamepadView.swift in Sources */,
+				B34082E7EED443D0B81A5849 /* TouchTrigger.swift in Sources */,
+				E0B3A6C8F9E446E9B18A2310 /* TouchAxisControl.swift in Sources */,
+				98A92B4FCF7E4FB0B8B4C586 /* TouchButton.swift in Sources */,
+				77C208DEDEDB48589B61A4EB /* TouchTracking.swift in Sources */,
+				97C5F0D29A9E4ECCABD56BA5 /* TouchLayoutStore.swift in Sources */,
+				A9257CD04E7F4AAFBFA2ADCF /* TouchLayout.swift in Sources */,
+				91EC65E9AF4A45B4A3D97340 /* TouchGamepadCapture.swift in Sources */,
+				F61CCAED0B834DEE848A5BD2 /* TouchGamepadState.swift in Sources */,
+				B31A7ED272F743128976E242 /* TouchElement.swift in Sources */,
+				AC3D71723C87AA05D590B304 /* ControllerLayoutDiagram.swift in Sources */,
+				04118575E4384832A7C75F77 /* ControllerControlArtwork.swift in Sources */,
+				AFC585F573F4436AAC70BD67 /* ControllerDpadSurface.swift in Sources */,
+				DEA3E708B2B3486488721058 /* ControllerShoulderControls.swift in Sources */,
+				24515FAF7C6E4E5AA5A42BBA /* ControllerShoulderGeometry.swift in Sources */,
+				00C57D57B0684C3DB3E3BA5A /* ControllerArtwork.swift in Sources */,
+				6036EAF3695F430EB244F129 /* ControllerSurfaceShape.swift in Sources */,
+				B0E275DBC5304E5294179950 /* ControllerBodyShape.swift in Sources */,
+				754B8A3DB3F6137CE99DB4A6 /* ControllerDiagramGeometry.swift in Sources */,
+				8B8BE11FD2507C6F7DBB0C57 /* IOSControllerLayoutStreamControls.swift in Sources */,
+				D162E918753F1A7DF4908674 /* IOSControllerLayouts.swift in Sources */,
+				A1C2C5E3D10A1AC79DB000E4 /* ControllerLayoutShortcutSummary.swift in Sources */,
+				94F7B1607EBE0F53941883A9 /* ControllerLayoutEditing.swift in Sources */,
+				BBDF302987FAF9F7402A6D84 /* ControllerLayoutNavigation.swift in Sources */,
+				109571950D51CA4E9AC2299A /* IOSControllerLayoutPresentation.swift in Sources */,
+				F497A4F8F76F1C87F038BBF9 /* ControllerLayoutsView.swift in Sources */,
+				A6FCDC72230E30441A033ACA /* ControllerLayoutsModel.swift in Sources */,
+				E8D64CBA243B4C4127AC6822 /* ControllerLayoutReader.swift in Sources */,
+				C2889EAB755DB8DA2915567E /* ControllerLayoutLabels.swift in Sources */,
+				5E71D7C95C723976B56D0193 /* ControllerLayoutCapture.swift in Sources */,
+				6FBA79D4ED33801CD946BBC2 /* ControllerLayoutAssignment.swift in Sources */,
 				CF6514282E3FDE69E7FE6EA8 /* PairingView.swift in Sources */,
 				38C80A9D0A874449A43CE593 /* AddPCView.swift in Sources */,
 				AF9547F4F7817E3F82B8F721 /* LauncherModel.swift in Sources */,
+				8B4D6483C510474393BBEAEE /* RunningGameRow.swift in Sources */,
+				4C9ABCB297864F26B9A5FF83 /* LauncherModel+Continuation.swift in Sources */,
 				83B27EBA9F210DF76B77D772 /* LauncherServices.swift in Sources */,
 				53442F74573A5960DB86B797 /* StreamView.swift in Sources */,
+				30DF5DF2DB3A49AF95CF00C3 /* StreamDisplayGeometry.swift in Sources */,
+				06B884AEC0A0442A816ACD1D /* StreamOutputCoordinator.swift in Sources */,
+				B4D8A1F4662A448B88A9ABCC /* StreamDisplayMode.swift in Sources */,
+				C98A81575E2E43DB9264E7A7 /* ExternalStreamSceneDelegate.swift in Sources */,
 				9A28A0B31BBB599B016AAED4 /* StreamSurface.swift in Sources */,
 				2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */,
 				2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */,
@@ -420,6 +815,8 @@
 				D2CF67DA276842128B900E3A /* StreamSessionFailureCopy.swift in Sources */,
 				902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */,
 				FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */,
+				CC4120261024000000000001 /* StreamDisplayModes.swift in Sources */,
+				CC4120261025000000000001 /* StreamWindowResize.swift in Sources */,
 				A3D372A8CF7E4C02AC0926B7 /* StreamBackgroundGrace.swift in Sources */,
 				E5079E847C204146BDF540F1 /* LauncherGallery.swift in Sources */,
 				46257D27DA574232935DD699 /* ControllerMouseSettings.swift in Sources */,
@@ -435,7 +832,17 @@
 				670FF5C58DCCB38D0C0F55D6 /* IOSAudio.swift in Sources */,
 				348684B76496EAF753290EF6 /* EngineLink.swift in Sources */,
 				352C1011524E806B983A697E /* GlimmerApp.swift in Sources */,
+				B426095DE40544C9800A59D3 /* DiagnosticsDefaults.swift in Sources */,
 				10896918E526BAFB88FC984F /* LauncherView.swift in Sources */,
+				F01EE836436E483F863DF4F4 /* UITestLauncher.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4162CD7AE6E441DA899A22CB = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9A840CDBA4454BB792C44D65,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -447,6 +854,11 @@
 			name = Glimmer;
 			target = B681FC77EEFBB7565D886601 /* Glimmer */;
 			targetProxy = 04301636E0723C20FF6F7FC8 /* PBXContainerItemProxy */;
+		};
+		0B5864E590AE43B9BB293032 = {
+			isa = PBXTargetDependency;
+			target = B681FC77EEFBB7565D886601;
+			targetProxy = BDD57603553F4C218B863231;
 		};
 /* End PBXTargetDependency section */
 
@@ -531,6 +943,7 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.0;
+				GLIMMER_BUILD_FLAVOUR = production;
 			};
 			name = Debug;
 		};
@@ -591,6 +1004,7 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.0;
+				GLIMMER_BUILD_FLAVOUR = production;
 			};
 			name = Release;
 		};
@@ -598,6 +1012,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				OTHER_SWIFT_FLAGS = "$(inherited) $(GLIMMER_INPUT_EVIDENCE_FLAGS)";
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -627,6 +1042,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				OTHER_SWIFT_FLAGS = "$(inherited) $(GLIMMER_INPUT_EVIDENCE_FLAGS)";
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -635,6 +1051,30 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Glimmer.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Glimmer";
 				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		BB8B78CF7EC7493CB8837BA8 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.iOS.UITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = Glimmer;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SDKROOT = iphoneos;
+			};
+			name = Debug;
+		};
+		66D6AA26EF874F1D84D1B355 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.iOS.UITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = Glimmer;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SDKROOT = iphoneos;
 			};
 			name = Release;
 		};
@@ -664,6 +1104,15 @@
 			buildConfigurations = (
 				6BAF46ECF259CB06717C61CD /* Debug */,
 				6C4A437F43D91819ACFE456B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F10ABE99B9194566B548A153 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB8B78CF7EC7493CB8837BA8,
+				66D6AA26EF874F1D84D1B355,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

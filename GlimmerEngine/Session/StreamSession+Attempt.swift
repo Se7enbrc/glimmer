@@ -3,12 +3,21 @@
 
 import Foundation
 
-package struct TakeoverRequired: Error {
-    package let appID: Int
+public struct TakeoverRequired: Error {
+    public let appID: Int
 }
 
 extension StreamSession {
     package func authorizeTakeover(_ authorized: Bool) { takeoverAuthorized = authorized }
+
+    public func approveReplacement(of appID: Int) {
+        approvedOccupant = appID
+    }
+
+    public func requireContinuation(previous: ContinuationFormat? = nil) {
+        continuationOnly = true
+        continuationRecovery = previous
+    }
 
     package func checkAttempt(deadline: Date? = nil) throws {
         guard StreamAttempt.shouldContinue(
@@ -30,9 +39,28 @@ package actor SharedTeardown {
     }
 }
 
-/// Only /cancel is serialized with the next launch; a hung /launch never holds this gate.
+/// PC commands serialize their mutations; epochs fence late cleanup from a newer launch.
 package actor HostLaunchMutations {
+    private var commands: [String: Task<Void, Never>] = [:]
     private var epochs: [String: Int] = [:]
+
+    package func performCommand<Value: Sendable>(
+        pc: String, operation: @escaping @Sendable (Bool) async throws -> Value
+    ) async throws -> Value {
+        let previous = commands[pc]
+        let task = Task {
+            await previous?.value
+            try Task.checkCancellation()
+            return try await StreamAttempt.run(until: Date().addingTimeInterval(30)) {
+                try await operation(previous != nil)
+            }
+        }
+        let completion = Task { _ = await task.result }
+        commands[pc] = completion
+        defer { if commands[pc] == completion { commands[pc] = nil } }
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+
     private var cancellations: [String: Task<Void, Never>] = [:]
 
     package func beginLaunch(for pc: String) async throws -> Int {

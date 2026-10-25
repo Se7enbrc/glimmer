@@ -292,6 +292,14 @@ final class EnetControlChannel: @unchecked Sendable {
     /// a quarter second of dead air before the sweep runs at all.
     static let localSentMaxEntries = 256
 
+    /// Fresh matched-ACK round trips for the bandwidth policy's one-second windows, oldest dropped first.
+    var rttSamples: [Double] = []
+    static let rttSampleLimit = 256
+
+    func drainRttSamples() -> [Double] {
+        withState { defer { rttSamples.removeAll(keepingCapacity: true) }; return rttSamples }
+    }
+
     /// Current RTT (ms) + variance as fractional ms, or nil before the first ACK.
     func estimatedRtt() -> (rttMs: Double, varianceMs: Double)? {
         withState { hasRttSample ? (roundTripTime, rttVariance) : nil }

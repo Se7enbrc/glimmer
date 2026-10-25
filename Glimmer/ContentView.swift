@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import SwiftUI
 import AppKit
 
@@ -13,7 +14,7 @@ enum TakeoverDialogCopy {
         "\(occupantApp ?? "Another app") is running on \(hostName)."
     }
 
-    static let message = "It will quit and your stream will start. Unsaved progress may be lost."
+    static let message = "Unsaved progress may be lost. Other streams from this PC will stop."
 }
 
 struct MainWindow: View {
@@ -124,8 +125,10 @@ struct MainWindow: View {
             ),
             titleVisibility: .visible,
             presenting: model.pendingTakeover
-        ) { _ in
-            Button("Quit and Stream", role: .destructive) { model.confirmPendingTakeover() }
+        ) { pending in
+            Button("Quit \(pending.occupantApp ?? "the running app") and start \(pending.app.name)", role: .destructive) {
+                model.confirmPendingTakeover()
+            }
             Button("Cancel", role: .cancel) { model.pendingTakeover = nil }
         } message: { _ in
             Text(TakeoverDialogCopy.message)
@@ -194,6 +197,15 @@ struct StreamMenu: View {
 
     var body: some View {
         primaryItem
+        if let host = model.selectedHost, let app = model.runningApp(on: host) {
+            Button("Quit \(app.name)…", role: .destructive) { model.requestQuitGame(on: host, app: app) }
+                .disabled(model.menuStopInProgress)
+        }
+        if let trial = model.pictureTrial {
+            Text("Does \(trial.app.name) look right?")
+            Button("Keep this size", action: model.keepPictureSize)
+            Button("Use the previous size", action: model.restorePictureSize)
+        }
         Toggle("Mini Player", isOn: Binding(get: { model.isMiniPlayer }, set: { _ in model.toggleMiniPlayer() }))
             .disabled(!model.isStreaming)
         Button("Stop Streaming") { model.stopStreamFromMenu(source: "the Stream menu") }
@@ -234,7 +246,7 @@ struct StreamMenu: View {
 
 // MARK: - Connect surface
 
-private struct ConnectSurface: View {
+struct ConnectSurface: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let focus: FocusState<LauncherFocus?>.Binding
     @Environment(AppModel.self) private var model
@@ -289,6 +301,14 @@ private struct ConnectSurface: View {
             // errors must surface the instant they exist.
             ConnectBanner()
             PCHeader(host: model.selectedHost, focus: focus)
+            if let ended = model.endedContinuation, model.selectedHost?.id == ended.host.id {
+                Text(StreamFailureCopy.gameEnded(ended.app.name, pc: ended.host.displayName))
+                Button(ended.format == nil ? "Start \(ended.app.name)" : "Start \(ended.app.name) at the previous size",
+                       action: model.startEndedGame)
+            }
+            if let host = model.selectedHost, let app = model.runningApp(on: host) {
+                RunningGameRow(host: host, app: app, focus: focus)
+            }
             if let host = model.selectedHost, !host.apps.isEmpty {
                 AppIconsRow(apps: host.apps, host: host, focus: focus, connectingShown: showsConnectingUI)
                     .id(host.id)

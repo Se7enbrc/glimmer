@@ -71,25 +71,37 @@ extension TelemetryCounters {
     /// Publish the live DECODE state. Called off the hot path - the decode queue
     /// stamps it at VT-session create and on a colorspace change (both rare).
     package func setDecodeState(_ state: DecodeState) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(decodeStateLock); decodeStateValue = state; os_unfair_lock_unlock(decodeStateLock)
+        #endif
     }
     /// Latest DECODE state, or nil before the first decoded frame. Read by the
     /// exporter on its 1Hz queue (never the hot path).
     package var decodeState: DecodeState? {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(decodeStateLock); defer { os_unfair_lock_unlock(decodeStateLock) }
         return decodeStateValue
+        #else
+        return nil
+        #endif
     }
 
     /// Publish the latest inter-packet-gap distribution. Called once per ~2s
     /// receive-metrics window by the RTP path - never the hot per-datagram path.
     package func setPacketGap(_ gap: PacketGapSnapshot) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(gapLock); packetGapValue = gap; os_unfair_lock_unlock(gapLock)
+        #endif
     }
     /// Latest inter-packet-gap distribution, or nil before the first window. Read
     /// by the exporter on its 1Hz queue (never the hot path).
     package var packetGap: PacketGapSnapshot? {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(gapLock); defer { os_unfair_lock_unlock(gapLock) }
         return packetGapValue
+        #else
+        return nil
+        #endif
     }
 
     /// Live FEC-HEALTH gauge: the host's FEC percentage and the per-frame parity
@@ -116,13 +128,19 @@ extension TelemetryCounters {
     /// Publish the FEC-health gauge. Called once per ~2s window by the RTP receive
     /// path (never the per-datagram hot path).
     package func setFecHealth(_ snapshot: FecHealthSnapshot) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(fecHealthLock); fecHealthValue = snapshot; os_unfair_lock_unlock(fecHealthLock)
+        #endif
     }
     /// Latest FEC-health gauge, or nil before the first window. Read by the
     /// exporter on its 1Hz queue (never the hot path).
     package var fecHealth: FecHealthSnapshot? {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(fecHealthLock); defer { os_unfair_lock_unlock(fecHealthLock) }
         return fecHealthValue
+        #else
+        return nil
+        #endif
     }
 
     /// REORDER-DISPLACEMENT gauge: session-max lateness of reordered packets
@@ -146,13 +164,19 @@ extension TelemetryCounters {
         package var holdMs: Double
     }
     package func setReorderDisplacement(_ snapshot: ReorderDisplacementSnapshot) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(reorderDispLock); reorderDispValue = snapshot; os_unfair_lock_unlock(reorderDispLock)
+        #endif
     }
     /// Latest reorder-displacement gauge, or nil before the first window. Read
     /// by the exporter on its 1Hz queue.
     package var reorderDisplacement: ReorderDisplacementSnapshot? {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(reorderDispLock); defer { os_unfair_lock_unlock(reorderDispLock) }
         return reorderDispValue
+        #else
+        return nil
+        #endif
     }
 
     /// AWDL-helper gauge: awdl0 parked this stream + how many times macOS re-raised
@@ -170,8 +194,10 @@ extension TelemetryCounters {
         package var suppressing: Bool
         package var reSuppressTotal: UInt64
     }
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     package func setAWDLHelper(_ snapshot: AWDLHelperSnapshot) { awdlHelperState.withLock { $0 = snapshot } }
     package var awdlHelper: AWDLHelperSnapshot? { awdlHelperState.withLock { $0 } }
+    #endif
 
     package func setRecvJitterMs(_ ms: Double) {
         os_unfair_lock_lock(jitterLock); recvJitterMsValue = ms; os_unfair_lock_unlock(jitterLock)
@@ -184,41 +210,59 @@ extension TelemetryCounters {
     /// Refresh the live RTT gauge (ms). Called once per ~1Hz telemetry tick by
     /// the exporter - never the hot path.
     package func setRttMs(_ ms: Double) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(rttLock); rttMsValue = ms; os_unfair_lock_unlock(rttLock)
+        #endif
     }
     /// Current smoothed RTT (ms), 0 if none yet. Read by the per-frame
     /// glass-to-glass computation at present (one short lock; only on the
     /// gate-on telemetry path).
     package var rttMs: Double {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(rttLock); defer { os_unfair_lock_unlock(rttLock) }
         return rttMsValue
+        #else
+        return 0
+        #endif
     }
 
     /// Stamp the latest VTDecompressionSessionCreate wall-clock cost (ms).
     /// Called by the decode queue at each create (rare) - never the hot path.
     package func setVtSessionCreateMs(_ ms: Double) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(vtSessionCreateLock); vtSessionCreateMsValue = ms
         os_unfair_lock_unlock(vtSessionCreateLock)
+        #endif
     }
     /// Latest VT-session create cost (ms), 0 if none yet. Read by the exporter on
     /// its 1Hz queue (never the hot path).
     package var vtSessionCreateMs: Double {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(vtSessionCreateLock); defer { os_unfair_lock_unlock(vtSessionCreateLock) }
         return vtSessionCreateMsValue
+        #else
+        return 0
+        #endif
     }
 
     /// Fold one applied Cruise gain into the per-session max (1.0 = unboosted).
     /// Called from the mouse-batch path; cheap last-writer-max under the lock.
     package func noteCruiseGain(_ g: Double) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(cruiseMaxGainLock)
         if g > cruiseMaxGainValue { cruiseMaxGainValue = g }
         os_unfair_lock_unlock(cruiseMaxGainLock)
+        #endif
     }
     /// Largest Cruise gain applied this session (1.0 if never boosted). Read by
     /// the exporter on its 1Hz queue (never the hot path).
     package var cruiseMaxGain: Double {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(cruiseMaxGainLock); defer { os_unfair_lock_unlock(cruiseMaxGainLock) }
         return cruiseMaxGainValue
+        #else
+        return 1
+        #endif
     }
 
     /// Set/clear the present-suppression gauge. Called at the suppression edges
@@ -231,6 +275,7 @@ extension TelemetryCounters {
     /// tracker is already gone (stopped at prior teardown), so a reset-time
     /// true→false flip arms nothing.
     package func setPresentSuppressed(_ suppressed: Bool) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(presentSuppressedLock)
         let wasSuppressed = presentSuppressedValue
         presentSuppressedValue = suppressed
@@ -238,42 +283,59 @@ extension TelemetryCounters {
         if wasSuppressed && !suppressed {
             FrameTimingTracker.shared?.armResumePresentTag()
         }
+        #endif
     }
     /// Current present-suppression state. Read by the exporter on its 1Hz queue, and
     /// once per assembled frame by the latency tracker (telemetry on only).
     package var presentSuppressed: Bool {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(presentSuppressedLock); defer { os_unfair_lock_unlock(presentSuppressedLock) }
         return presentSuppressedValue
+        #else
+        return false
+        #endif
     }
 
     /// Set/clear the decode-gate gauge. Called at the gate's engage/lift edges
     /// by VideoDecoder (already-rare sites, never per frame) - the mirror of
     /// `setPresentSuppressed` for the third hidden-window state.
     package func setDecodeGated(_ gated: Bool) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(decodeGatedLock)
         decodeGatedValue = gated
         os_unfair_lock_unlock(decodeGatedLock)
+        #endif
     }
     /// Current decode-gate state. Read by the exporter on its 1Hz queue, and once
     /// per assembled frame by the latency tracker (telemetry on only).
     package var decodeGated: Bool {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(decodeGatedLock); defer { os_unfair_lock_unlock(decodeGatedLock) }
         return decodeGatedValue
+        #else
+        return false
+        #endif
     }
 
     /// Stamp the pacer-tick REALTIME gauge. Called once at tick-thread start by
     /// PacerTickThread (RT-applied success/failure, or the flag-off path) - never
     /// per frame.
     package func setPacerTickRealtime(_ applied: Bool) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(pacerTickRealtimeLock)
         pacerTickRealtimeValue = applied
         os_unfair_lock_unlock(pacerTickRealtimeLock)
+        #endif
     }
     /// Current pacer-tick realtime state. Read by the exporter on its 1Hz queue
     /// (never the hot path).
     package var pacerTickRealtime: Bool {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         os_unfair_lock_lock(pacerTickRealtimeLock); defer { os_unfair_lock_unlock(pacerTickRealtimeLock) }
         return pacerTickRealtimeValue
+        #else
+        return false
+        #endif
     }
 
     // MARK: - Ignored-control per-type tallies
@@ -284,8 +346,10 @@ extension TelemetryCounters {
     /// `ctrlIgnoredTotal.increment()` for this. A small-dict hash add on the
     /// low-rate control path - not the video/audio datagram path.
     package func noteCtrlIgnored(type: UInt16) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         ctrlIgnoredTotal.increment()
         ctrlIgnoredPerType.increment(type: type)
+        #endif
     }
 }
 
@@ -298,6 +362,7 @@ extension TelemetryCounters {
 /// a per-type key (distinct types per session is ~1-3 in practice). Self-locked
 /// like `P2State` so the rare control-path writes stay off every other
 /// counter's lock.
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 package final class CtrlIgnoredPerType: @unchecked Sendable {
     /// Cap on distinct tracked types - far above the observed 1-3, small enough
     /// that a hostile/buggy host spraying fresh type words can't grow the map.
@@ -324,3 +389,5 @@ package final class CtrlIgnoredPerType: @unchecked Sendable {
         os_unfair_lock_lock(lock); counts = [:]; os_unfair_lock_unlock(lock)
     }
 }
+
+#endif

@@ -55,9 +55,23 @@ that inspired Glimmer; it is not the protocol's name.
 
 The iPhone and iPad app requires iOS or iPadOS 26 or later. It shares the Mac
 app's Swift engine and uses SwiftUI and UIKit for pairing, the launcher and
-streaming. Menus work in portrait or landscape; streaming stays in landscape and
-supports physical controller input. Disconnecting leaves the game running on the
-PC.
+streaming. Menus work in portrait or landscape. iPhone streams use landscape;
+iPad streams use their window in any orientation, including narrow windows. Both
+use the same ordered choices: Native, 1080p 60 and 1080p 120. Native uses the
+window's pixel size as its target and chooses the closest mode listed in
+`docs/vdd/iphone-ipad.xml`. 1080p requests 1920 × 1080. All requests respect the
+display's refresh limit and share the same codec, HDR and quality rules. A
+connected external display can show the picture while the device keeps the
+controls. Both support physical controllers. Disconnecting quits the game on the
+PC by default. “Leave games running when you disconnect” enables continuation
+for games and PCs that handle a screen-size change. Running games offer Resume
+or Continue here and an explicit Quit action on both platforms.
+
+Video fills the window, cropping edges when the aspect changes. Once a window
+resize settles, the stream moves to the new window's listed mode through a
+resume-only change; rotation keeps the format. No resize quits or relaunches the
+game. The [window streaming contract](docs/IPAD_WINDOW_STREAMING.md) explains
+mode selection, the 90-mode budget and PC setup requirements.
 
 Distribution is internal TestFlight only so far, with no App Store release. tvOS
 and visionOS are possible future ports.

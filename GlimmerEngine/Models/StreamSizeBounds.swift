@@ -3,9 +3,9 @@
 
 import Foundation
 
-package enum StreamSizeBounds {
-    package static let width = 640...7680
-    package static let height = 480...4320
+public enum StreamSizeBounds {
+    public static let width = 640...7680
+    public static let height = 480...4320
     package static let fps = 30...240
 
     package static func clampWidth(_ value: Int) -> Int { min(max(value, width.lowerBound), width.upperBound) }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 // Opt-in, per-session telemetry: one 1 Hz snapshot feeds loopback HTTP and NDJSON.
 // LAN access needs a second opt-in; telemetry contains performance data, never credentials.
 // The disabled path constructs no exporter, timers, listener or files.
@@ -9,34 +10,6 @@ import Foundation
 import Network
 import os
 import Darwin
-
-// MARK: - Gating
-
-/// Resolves the opt-in gate ONCE per process-relevant check. Kept tiny + free of
-/// any allocation so the OFF path is a pure boolean read.
-package enum TelemetryGate {
-    /// True iff telemetry should run. Either the UserDefaults flag or the env
-    /// var enables it; default OFF. Read at session start only.
-    package static var isEnabled: Bool {
-        isEnabled(defaults: .standard, environmentValue: getenv("GLIMMER_TELEMETRY").map { String(cString: $0) })
-    }
-
-    package static func isEnabled(defaults: UserDefaults, environmentValue: String?) -> Bool {
-        environmentValue == "1" || defaults.bool(forKey: "telemetryEnabled")
-    }
-
-    package static func diagnosticsVisible(defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: "showDiagnostics")
-    }
-
-    package static func listensOnLAN(defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: TelemetryExporter.lanBindDefaultsKey)
-    }
-}
-
-// The process-global event counters + activity gauges this exporter snapshots
-// (`TelemetryCounters`) live in TelemetryCounters.swift - they are always-live
-// (not gated) and shared across the engine, so they are kept in their own unit.
 
 // MARK: - Exporter
 
@@ -564,3 +537,5 @@ package final class TelemetryExporter: @unchecked Sendable {
     // stay under the file-length budget. They run on `workQueue`, the same
     // serial context as everything else here.
 }
+
+#endif

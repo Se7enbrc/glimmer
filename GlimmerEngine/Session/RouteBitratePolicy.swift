@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-/// Scalar route policy; native callers supply their configured boosts, caps and observed route.
-package enum RouteBitratePolicy {
+// Compatibility entry points preserve the measured Mac launch gates until hardware trials pass.
+package typealias RouteBitratePolicy = BandwidthPolicy
+
+extension BandwidthPolicy {
     package enum Route: String, Sendable { case wired, wifi, tunnel, unknown }
 
     package struct Settings: Sendable {

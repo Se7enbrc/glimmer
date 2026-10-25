@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 //
 //  TelemetryExporter+CaptureSections.swift
 //
@@ -332,9 +333,6 @@ extension TelemetryExporter {
         add("launch_path_ms", breakdown.launchPathMs)
         // Launch sub-legs attributing launch_path_ms.
         add("launch_serverinfo_ms", breakdown.launchServerinfoMs)
-        add("launch_cancel_ms", breakdown.launchCancelMs)
-        add("launch_busy_wait_ms", breakdown.launchBusyWaitMs)
-        add("launch_busy_poll_count", breakdown.launchBusyPollCount)
         add("launch_ms", breakdown.launchMs)
         add("launch_build_ms", breakdown.buildMs)
         return "{" + fields.joined(separator: ",") + "}"
@@ -416,3 +414,5 @@ extension TelemetryExporter {
         snap.lowPowerModeEnabled = processInfo.isLowPowerModeEnabled
     }
 }
+
+#endif

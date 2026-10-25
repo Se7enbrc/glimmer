@@ -6,6 +6,40 @@ import GlimmerEngine
 import Testing
 
 struct InputAPITests {
+    @Test func controllerCategoryIdentifiesLayoutWithoutRequiringExtraControls() {
+        let cases: [(String, ControllerDescriptor.Kind)] = [
+            ("DualSense", .playStation), ("DualShock 4", .playStation), ("Xbox One", .xbox),
+            ("Switch Pro Controller", .nintendo), ("Nintendo Switch Joy-Con (L)", .nintendo),
+            ("Nintendo Switch Joy-Con (R)", .nintendo), ("MFi", .unknown), ("HID", .unknown), ("Other", .unknown)
+        ]
+        for (category, kind) in cases {
+            #expect(ControllerDescriptor.Kind.identify(productCategory: category) == kind, "\(category)")
+        }
+    }
+
+    @Test(arguments: [ControllerDescriptor.Kind.playStation, .xbox, .nintendo])
+    func nativeProfileIdentifiesLayoutWithAGenericCategory(kind: ControllerDescriptor.Kind) {
+        #expect(ControllerDescriptor.Kind.identify(productCategory: "MFi", profile: kind) == kind)
+    }
+
+    @Test(arguments: [false, true])
+    func completePlayStationGlyphsIdentifyAGenericProfile(filled: Bool) {
+        let symbols = ["xmark.circle", "circle.circle", "square.circle", "triangle.circle"]
+            .map { Optional(filled ? $0 + ".fill" : $0) }
+        #expect(ControllerDescriptor.Kind.identify(productCategory: "MFi", faceSymbols: symbols) == .playStation)
+        #expect(ControllerDescriptor.Kind.identify(productCategory: "HID", faceSymbols: symbols) == .playStation)
+        #expect(ControllerDescriptor.Kind.identify(productCategory: "Xbox One", faceSymbols: symbols) == .xbox)
+    }
+
+    @Test func missingOrMixedGlyphsDoNotInventAPlayStationController() {
+        let cases: [[String?]] = [[], [nil, nil, nil, nil], ["a.circle", "b.circle", "x.circle", "y.circle"],
+            ["xmark.circle", "b.circle", "square.circle", "triangle.circle"],
+            ["xmark.circle", nil, "square.circle", "triangle.circle"]]
+        for symbols in cases {
+            #expect(ControllerDescriptor.Kind.identify(productCategory: "MFi", faceSymbols: symbols) == .unknown)
+        }
+    }
+
     private final class Sink: VideoSink {
         let capabilities: Int32 = 0
         func setup(videoFormat: Int32, width: Int32, height: Int32, redrawRate: Int32) -> Int32 { 0 }

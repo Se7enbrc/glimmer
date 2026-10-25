@@ -26,7 +26,7 @@ extension StreamSession {
         decodeIdle: Double, receiveIdle: Double
     ) async {
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
-        guard let current = reconnectConfig?.bitrateKbps else { return }
+        guard let current = appliedBitrateKbps else { return }
 
         let decision = downshift.evaluate(
             isRemote: isRemotePathSession,
@@ -47,15 +47,14 @@ extension StreamSession {
             return
         }
 
-        // Spend the budget BEFORE any await so a second watchdog tick landing
-        // mid-reconnect can't book a second downshift off the same evidence.
-        downshift.recordDownshift(atUptime: uptimeSeconds)
-        reconnectConfig?.bitrateKbps = toKbps
-        didLogDownshiftDecision = true
-        // The route the stall was judged on, so a later route change can set the downshift aside.
-        downshift.route = await currentRouteAsk()?.route
+        // Refresh the route before reserving recovery and spending the downshift budget atomically.
+        let route = await currentRouteAsk()?.route
         guard isStreaming, !stopInProgress, !isReconnecting else { return }
 
+        guard request(rate: toKbps, reason: .congestion) == .accepted else { return }
+        downshift.recordDownshift(atUptime: uptimeSeconds)
+        downshift.route = route
+        didLogDownshiftDecision = true
         Diag.warn(
             "Link cannot carry \(current / 1000) Mbps - \(String(format: "%.0f", decodeIdle))s of "
             + "received-but-undecodable video on a remote path. Downshifting to \(toKbps / 1000) Mbps "
@@ -64,17 +63,13 @@ extension StreamSession {
             Bitrate downshift: \(current, privacy: .public) → \(toKbps, privacy: .public) kbps \
             after \(decodeIdle, privacy: .public)s decode-only stall on a remote path
             """)
-
-        await runSelfInitiatedReconnect(
-            cause: "lowering the bitrate to \(toKbps / 1000) Mbps",
-            bannerText: "Weak connection. Lowering quality to \(toKbps / 1000) Mbps…")
     }
 
     /// After a clean window at a lowered rate, one step back toward the route's ask, applied the way the
     /// downshift was: a reconnect in place under a banner that says why. Called on healthy watchdog ticks.
     package func considerBitrateStepUp() async {
         guard isStreaming, !stopInProgress, !isReconnecting, downshift.isDownshifted,
-              let current = reconnectConfig?.bitrateKbps else { return }
+              let current = appliedBitrateKbps else { return }
         let now = uptimeSeconds
         // The clean window is checked before the main-actor hop for the route, so the hop is rare.
         guard downshift.stepUp(currentKbps: current, routeKbps: .max, nowUptime: now) != nil else { return }
@@ -83,8 +78,8 @@ extension StreamSession {
               let toKbps = downshift.stepUp(currentKbps: current, routeKbps: route.kbps, nowUptime: now)
         else { return }
         let clean = downshift.cleanSeconds(nowUptime: now) ?? 0
+        guard request(rate: toKbps, reason: .recovery) == .accepted else { return }
         downshift.recordStepUp(atUptime: now, reachedRoute: toKbps >= route.kbps)
-        reconnectConfig?.bitrateKbps = toKbps
 
         Diag.notice("Link clean for \(Int(clean / 60)) min at \(current / 1000) Mbps - stepping back up to "
             + "\(toKbps / 1000) Mbps and reconnecting in place.", "Stream")
@@ -92,8 +87,5 @@ extension StreamSession {
             Bitrate step-up: \(current, privacy: .public) → \(toKbps, privacy: .public) kbps after \
             \(clean, privacy: .public)s clean at the lowered rate
             """)
-        await runSelfInitiatedReconnect(
-            cause: "raising the bitrate to \(toKbps / 1000) Mbps",
-            bannerText: "Connection improved. Raising quality to \(toKbps / 1000) Mbps…")
     }
 }

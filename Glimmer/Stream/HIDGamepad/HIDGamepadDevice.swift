@@ -14,6 +14,8 @@ final class HIDGamepadDevice: Identifiable {
     let version: UInt16
     let transport: String
     let name: String
+    let serialNumber: String?
+    let layoutExtras: [(index: Int, name: String)]
     let mapping: HIDGamepadMapping
     let rumble: HIDGamepadRumble
     let capture: HIDGamepadCapture
@@ -38,6 +40,7 @@ final class HIDGamepadDevice: Identifiable {
         product = number(kIOHIDProductIDKey)
         version = number(kIOHIDVersionNumberKey)
         name = IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String ?? "HID Gamepad"
+        serialNumber = IOHIDDeviceGetProperty(device, kIOHIDSerialNumberKey as CFString) as? String
         transport = IOHIDDeviceGetProperty(device, kIOHIDTransportKey as CFString) as? String ?? "Unknown"
         let discovered = Self.discover(device)
         elements = discovered.references
@@ -47,6 +50,18 @@ final class HIDGamepadDevice: Identifiable {
         mapping = GameControllerDB.lookup(vendor: vendor, product: product, version: version,
                                           bus: GameControllerDB.bus(forTransport: transport))
             ?? .heuristic(elements: discovered.descriptors)
+        let boundButtons = Set(mapping.bindings.values.compactMap { input -> Int? in
+            if case .button(let index) = input { return index }
+            return nil
+        })
+        var occurrences: [String: Int] = [:]
+        layoutExtras = HIDGamepadElement.ordered(discovered.descriptors, kind: .button).enumerated().compactMap { index, element in
+            let usage = "hid.button.\(element.page).\(element.usage)"
+            let occurrence = occurrences[usage, default: 0]
+            occurrences[usage] = occurrence + 1
+            guard !boundButtons.contains(index) else { return nil }
+            return (index, "\(usage).\(occurrence)")
+        }.prefix(128).map { $0 }
         capture = HIDGamepadCapture(readings: readings, mapping: mapping)
         rumble = HIDGamepadRumble(service: IOHIDDeviceGetService(device))
         if mapping.isHeuristic {

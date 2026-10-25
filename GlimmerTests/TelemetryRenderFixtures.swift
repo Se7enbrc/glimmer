@@ -200,9 +200,6 @@ enum TelemetryRenderFixtures {
         handshake.clickToFirstFrameMs = 900
         handshake.launchPathMs = 470
         handshake.launchServerinfoMs = 30
-        handshake.launchCancelMs = 40
-        handshake.launchBusyWaitMs = 50
-        handshake.launchBusyPollCount = 3
         handshake.launchMs = 60
         handshake.buildMs = 70
         snap.handshake = handshake
