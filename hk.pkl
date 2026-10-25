@@ -44,8 +44,8 @@ local linters = new Mapping<String, Step | Group> {
   ["markdownlint"] {
     types = List("markdown")
     exclude = "third_party/**"
-    check = "markdownlint --disable MD013 MD029 MD036 MD041 {{files}}"
-    fix = "markdownlint --fix --disable MD013 MD029 MD036 MD041 {{files}}"
+    check = "markdownlint --disable MD013 MD029 MD036 MD041 -- {{files}}"
+    fix = "markdownlint --fix --disable MD013 MD029 MD036 MD041 -- {{files}}"
   }
   ["prettier"] {
     types = List("yaml", "markdown", "json")
