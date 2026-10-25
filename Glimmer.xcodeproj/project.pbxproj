@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FC1A1D15E9FD497EB88F904A /* SurroundToneData.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */; };
+		EB34C1CBD1FD44719A09B90D /* OpusDecoder+Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */; };
+		5B34A98402AB49D2BE6C0B26 /* OpusDecoder+Packet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D1AB0F71D740F7972C4A1F /* OpusDecoder+Packet.swift */; };
         D1A620261022000000000001 /* instruments-clock-references.xml in Resources */ = {isa = PBXBuildFile; fileRef = D1A620261022000000000002 /* instruments-clock-references.xml */; };
 		A27101400000000000000002 /* ArtworkAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27101400000000000000001 /* ArtworkAPITests.swift */; };
 		A11020261012000300000001 /* AudioOutput+Silence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11020261012000300000000 /* AudioOutput+Silence.swift */; };
@@ -814,6 +817,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurroundToneData.swift; sourceTree = "<group>"; };
+		4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/OpusDecoder+Stream.swift"; sourceTree = "<group>"; };
+		30D1AB0F71D740F7972C4A1F /* OpusDecoder+Packet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/OpusDecoder+Packet.swift"; sourceTree = "<group>"; };
         D1A620261022000000000002 /* instruments-clock-references.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "GlimmerTests/Fixtures/instruments-clock-references.xml"; sourceTree = SOURCE_ROOT; };
 		A27101400000000000000001 /* ArtworkAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ArtworkAPITests.swift"; sourceTree = SOURCE_ROOT; };
 		A11020261012000300000000 /* AudioOutput+Silence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioOutput+Silence.swift"; sourceTree = SOURCE_ROOT; };
@@ -1957,6 +1963,7 @@
 				D2B0000F /* HostResolutionTests.swift */,
 				D2C00001 /* ControlTransportTests.swift */,
 				D2C00009 /* OpusDecoderTests.swift */,
+				C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */,
 				D81200000000000000000008 /* ReceiveTimingTests.swift */,
 				D2C0000F /* DatagramBatchTests.swift */,
 				D2000030 /* StreamCryptoTests.swift */,
@@ -2261,6 +2268,8 @@
 				AC2026083000000000000001 /* AudioDecoder+Engine.swift */,
 				EA67908CD62144CBACFBBDAA /* AudioDecoder+Reconnect.swift */,
 				D2C00007 /* OpusDecoder.swift */,
+				4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */,
+				30D1AB0F71D740F7972C4A1F /* OpusDecoder+Packet.swift */,
 				A11020261012000300000000 /* AudioOutput+Silence.swift */,
 				A11020261011000000000000 /* AudioPCMQueue.swift */,
 				AC2026083000000000000005 /* AudioDecoder+Prime.swift */,
@@ -2879,6 +2888,7 @@
 				D2B00010 /* HostResolutionTests.swift in Sources */,
 				D2C00002 /* ControlTransportTests.swift in Sources */,
 				D2C0000A /* OpusDecoderTests.swift in Sources */,
+				FC1A1D15E9FD497EB88F904A /* SurroundToneData.swift in Sources */,
 				D81200000000000000000009 /* ReceiveTimingTests.swift in Sources */,
 				D2C00010 /* DatagramBatchTests.swift in Sources */,
 				D2000031 /* StreamCryptoTests.swift in Sources */,
@@ -3181,6 +3191,8 @@
 				AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */,
 				851374F386A2419FB8B03DAF /* AudioDecoder+Reconnect.swift in Sources */,
 				D2C00008 /* OpusDecoder.swift in Sources */,
+				EB34C1CBD1FD44719A09B90D /* OpusDecoder+Stream.swift in Sources */,
+				5B34A98402AB49D2BE6C0B26 /* OpusDecoder+Packet.swift in Sources */,
 				A11020261012000300000001 /* AudioOutput+Silence.swift in Sources */,
 				A11020261011000100000000 /* AudioPCMQueue.swift in Sources */,
 				AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */,
