@@ -125,8 +125,8 @@
 - Returning to Glimmer keeps the launcher ready when the PC answered recently,
   while checking its status in the background. A running game no longer makes
   the launcher wait for the PC to become idle.
-- On iPhone Duo, the supplied PC display modes include the Native size for
-  the open display.
+- On iPhone Duo, the supplied PC display modes include the Native size for the
+  open display.
 - PlayStation controllers, including the PlayStation Backbone, are identified
   consistently on Mac, iPhone and iPad so compatible PC games can show matching
   button prompts.
