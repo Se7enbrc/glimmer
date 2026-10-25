@@ -190,12 +190,14 @@ jobs:
           key: ${{ steps.frameworks.outputs.key }}
 
       - name: Analyze
+        id: analyze
         if: steps.changes.outputs.scan == 'true'
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           category: /language:${{ matrix.language }}
           output: ${{ runner.temp }}/codeql-results
           upload-database: false
+          wait-for-processing: true
 
       - name: Require complete Swift extraction
         id: coverage
@@ -212,3 +214,9 @@ jobs:
           path: ${{ runner.temp }}/codeql-results/swift.sarif
           if-no-files-found: error
           retention-days: 3
+      # The jobs API binds this upload receipt to its successful run and attempt.
+      - name: CodeQL upload ${{ steps.analyze.outputs.sarif-id }}
+        if: steps.changes.outputs.scan == 'true'
+        env:
+          SARIF_ID: ${{ steps.analyze.outputs.sarif-id }}
+        run: test -n "$SARIF_ID"

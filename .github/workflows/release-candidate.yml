@@ -85,7 +85,7 @@ jobs:
       group: rc-cut
       cancel-in-progress: false
     environment: rc-cut
-    timeout-minutes: 30
+    timeout-minutes: 55
     defaults:
       run:
         shell: bash

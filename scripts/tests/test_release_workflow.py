@@ -65,10 +65,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertLess(sign.index("import-unsigned"), sign.index("ci-release.sh sign"))
         self.assertNotIn("ci-release.sh build", sign)
         self.assertNotIn("RELEASE_CONTENTS_TOKEN", sign)
+        self.assertLess(sign.index("ci-release.sh sign"), sign.index("ci-release.sh package"))
+        self.assertLess(sign.index("ci-release.sh package"), sign.index("- name: Attest final release assets"))
+        self.assertLess(sign.index("- name: Attest final release assets"), sign.index("release_publication.py persist"))
         validation = workflow.split("\n  validate:\n")[1].split("\n  publication:")[0]
         self.assertNotIn("environment:", validation)
         self.assertNotIn("secrets.", validation)
         self.assertNotIn("id-token:", validation)
+        self.assertIn('release_publication.py validate "$RUNNER_TEMP/signed"', validation)
 
     def test_promotion_reads_before_minting_repository_scoped_tokens(self):
         workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/release-publication.yml").read_text()
@@ -128,10 +132,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
         makefile = (Path(__file__).resolve().parents[1] / "release-bundle.mk").read_text()
         sign = makefile.split("\nsign-bundle:", 1)[1].split("\n\n", 1)[0]
         notarize = makefile.split("\nnotarize-bundle:", 1)[1].split("\n\n", 1)[0]
+        dmg = makefile.split("\nnotarize-dmg:", 1)[1].split("\n\n", 1)[0]
         self.assertTrue(sign.startswith(" ensure-signing\n"))
         self.assertTrue(notarize.startswith(" sign-bundle appcast-feed\n"))
         for forbidden in ("xcodebuild", "swiftc", "embed-helper", "--validate-distribution"):
-            self.assertNotIn(forbidden, sign + notarize)
+            self.assertNotIn(forbidden, sign + notarize + dmg)
 
     def jobs(self, workflow, names):
         source = (Path(__file__).resolve().parents[2] / ".github/workflows" / workflow).read_text()

@@ -13,7 +13,9 @@ on:
         type: choice
         options: [candidate, promote]
       expected_sha:
-        description: Reviewed dispatch branch commit (full 40-character SHA)
+        description:
+          Reviewed dispatch SHA; candidates require a held reservation and
+          direct scans
         required: true
         type: string
       rc_tag:
@@ -37,7 +39,7 @@ jobs:
   tooling:
     if: github.repository == 'Se7enbrc/glimmer'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     outputs:
       sha: ${{ steps.pin.outputs.sha }}
     steps:
@@ -46,6 +48,13 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+      - name: Wait for trusted delivery admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HELD_SHA:
+            ${{ inputs.operation == 'promote' && inputs.candidate_sha ||
+            inputs.expected_sha }}
+        run: python3 scripts/candidate_reservation.py wait "$HELD_SHA"
       - id: pin
         run: printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
@@ -79,7 +88,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Require all checks green for the reviewed commit
+      - name: Require direct candidate checks on the reserved source
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks
@@ -136,7 +145,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Require all checks green for the reviewed commit
+      - name: Require direct candidate checks on the reserved source
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks
@@ -187,7 +196,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Require all checks green for the reviewed commit
+      - name: Require direct candidate checks on the reserved source
         env:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks

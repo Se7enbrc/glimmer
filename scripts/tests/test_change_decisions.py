@@ -6,11 +6,12 @@
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
+
+from fixture_process import run_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -40,8 +41,7 @@ class ChangeDecisionTests(unittest.TestCase):
             env = {**os.environ, "PATH": f"{root}:/usr/bin:/bin", "PR_NUMBER": "1", "LANGUAGE": "swift",
                    "GITHUB_REPOSITORY": "fixture/repo", "GITHUB_OUTPUT": str(output),
                    "FIXTURE_PATHS": paths, "FIXTURE_API_STATUS": api_status}
-            result = subprocess.run(["/bin/bash", "-euo", "pipefail", "-c", shell], cwd=root,
-                                    env=env, text=True, capture_output=True, timeout=10)
+            result = run_fixture(["/bin/bash", "-euo", "pipefail", "-c", shell], cwd=root, env=env)
             self.assertEqual(result.returncode, 0, result.stderr)
             return dict(line.split("=", 1) for line in output.read_text().splitlines())[key]
 

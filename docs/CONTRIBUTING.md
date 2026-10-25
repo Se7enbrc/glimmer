@@ -57,9 +57,16 @@ build.
 container. It needs Docker; `FUZZ_SECONDS` controls each target and crashing
 inputs stay in `build/fuzz/`.
 
-Tests run serially so socket deadline assertions are not starved by unrelated
-suites. Concurrency tests still create overlapping work; keep their deadlines
-intact.
+Release-tool integration fixtures use `scripts/tests/fixture_process.py` to stop
+the entire process group before removing temporary files. Its five-minute hang
+guard can be raised with `GLIMMER_TEST_TIMEOUT` (seconds) on loaded runners.
+Tests of production deadlines use fake responses and clocks instead of elapsed
+wall time; production timeout values stay independent of this guard.
+
+The shared scheme runs tests one at a time. Socket deadline tests measure real
+elapsed time; launching every test together can starve their callbacks on hosted
+runners. Each concurrency test still creates its own overlapping tasks or
+threads. Keep those assertions and time limits intact.
 
 ### Run the app
 
