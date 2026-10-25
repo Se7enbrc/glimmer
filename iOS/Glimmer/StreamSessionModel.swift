@@ -320,6 +320,7 @@ final class StreamSessionModel {
     private func receiveInput(_ event: StreamInput.Event) {
         switch event {
         case .stopRequested: disconnect()
+        case .statsRequested: toggleStats()
         // Engine activity includes the touch registration; only native discovery reports physical presence.
         case .controllersActive: break
         case .mouseMode(let controller, let enabled):

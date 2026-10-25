@@ -62,6 +62,12 @@ extension InputForwarder {
 
     func connectInputCore() {
         inputCore.withLock {
+            inputCore.onControllerShortcut = { [weak self] action in
+                Task { @MainActor in
+                    guard let self, self.forwardsControllerEvents else { return }
+                    if action == .stop { self.onQuitHotkey?() } else { self.onStatsHotkey?() }
+                }
+            }
             inputCore.onMotionInputEnabled = { slot, enabled in
                 ControllerMotion.shared.setInputEnabled(enabled, slot: slot)
             }

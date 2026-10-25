@@ -214,11 +214,15 @@ final class StatsTrace {
     }
 
     func draw() {
+        let bounds = layer.bounds.insetBy(dx: 2, dy: 2)
+        guard !bounds.isEmpty else {
+            for shape in [baseline, line, cautions, criticals, dot] { shape.path = nil }
+            return
+        }
         let normalPath = CGMutablePath()
         let cautionPath = CGMutablePath()
         let criticalPath = CGMutablePath()
         let referencePath = CGMutablePath()
-        let bounds = layer.bounds.insetBy(dx: 2, dy: 2)
         let scale = scale
         func y(_ value: Double) -> CGFloat {
             bounds.minY + CGFloat(min(1, max(0, (value - scale.lower) / (scale.upper - scale.lower)))) * bounds.height

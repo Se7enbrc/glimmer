@@ -41,7 +41,7 @@ package final class InputCore: @unchecked Sendable {
     package var analogs: [UInt8: GamepadAnalog] = [:]
     package var current: [UInt8: (buttons: Int32, analog: GamepadAnalog)] = [:]
     package var layouts: ControllerLayoutRouting?
-    package var onControllerEscape: (@Sendable () -> Void)?
+    package var onControllerShortcut: (@Sendable (ControllerShortcutAction) -> Void)?
     package struct ControllerSample {
         package let slot: UInt8
         package let token: UUID
@@ -109,9 +109,7 @@ package final class InputCore: @unchecked Sendable {
                 value.acceptEventsAfter = ProcessInfo.processInfo.systemUptime
             }
             if self.backend !== backend || (value.ready && !snapshot.ready) { failureCodes.removeAll() }
-            let chordChanged = snapshot.chord != value.chord || snapshot.customChord != value.customChord
             snapshot = value
-            if chordChanged { refreshLayoutStopPolicy() }
             self.backend = backend
         }
     }
@@ -138,6 +136,14 @@ package final class InputCore: @unchecked Sendable {
                 flushReleases()
                 if !activityPublished { activityPublished = true; onActivity?() }
                 return .gated
+            }
+            if layouts?.states[Int(slot)] == nil, snapshot.chord == .startSelectL1R1 {
+                let available = Set(ControllerMappedButton.allCases.map { ControllerLayoutSource.button($0) })
+                if let config = try? ControllerLayoutConfiguration(layout: nil, shortcuts: nil, available: available) {
+                    if layouts == nil { layouts = ControllerLayoutRouting() }
+                    layouts?.states[Int(slot)] = ControllerLayoutRouting.State(config, held: .init(),
+                        systemHeld: .init(), acceptAfter: snapshot.acceptEventsAfter)
+                }
             }
             if let state = layouts?.states[Int(slot)] {
                 return receiveLayout(state, slot: slot,

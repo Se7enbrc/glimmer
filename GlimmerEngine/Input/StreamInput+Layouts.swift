@@ -16,8 +16,4 @@ extension StreamInput {
             scheduleReconciliation()
         }
     }
-
-    public func observeControllerEscape(_ handler: (@Sendable () -> Void)?) {
-        core.withLock { core.onControllerEscape = handler }
-    }
 }

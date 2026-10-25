@@ -23,7 +23,6 @@ extension StreamInput {
         core.withLock {
             guard !terminal else { return }
             core.snapshot.chord = chord.coreValue
-            core.refreshLayoutStopPolicy()
             invalidateChordContext()
         }
     }

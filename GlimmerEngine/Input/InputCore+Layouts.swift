@@ -6,35 +6,39 @@ import Foundation
 package final class ControllerLayoutRouting {
     package final class State {
         package var plan: ControllerMappingPlan?
-        package let stop: ControllerPhysicalChord?
-        package var escape: ControllerEscapeGesture
+        package var gesture: ControllerShortcutGesture
+        package var timer: DispatchWorkItem?
+        package var systemSuppression: ControllerPhysicalChord?
         package var rearm: ControllerLayoutRearm
         package var gameRearm: ControllerLayoutRearm
         package var last = ControllerMappingSample()
         package var lastSystem = ControllerMappingSample()
         package let acceptAfter: TimeInterval
         package var originalArrival: ControllerArrival?
-        package var blocksLegacyStop = false
         package let removing: Bool
 
         package init(_ configuration: ControllerLayoutConfiguration?, held: ControllerMappingSample,
                      systemHeld: ControllerMappingSample,
                      acceptAfter: TimeInterval) {
             plan = configuration?.plan
-            stop = configuration?.stop
-            escape = ControllerEscapeGesture(chord: configuration?.escape ?? .empty)
+            gesture = ControllerShortcutGesture(stop: configuration?.stop ?? .empty, stats: configuration?.stats ?? .empty)
             rearm = ControllerLayoutRearm(held: held)
             gameRearm = ControllerLayoutRearm(held: systemHeld)
             self.acceptAfter = acceptAfter
             removing = configuration == nil
         }
+
+        deinit { timer?.cancel() }
     }
 
     package var states = [State?](repeating: nil, count: 16)
 
     package func reset() {
         for state in states.compactMap({ $0 }) {
-            state.escape.reset()
+            state.gesture.reset()
+            state.timer?.cancel()
+            state.timer = nil
+            state.systemSuppression = nil
             state.plan?.reset()
             state.rearm = ControllerLayoutRearm(held: state.last)
             state.gameRearm = ControllerLayoutRearm(held: state.lastSystem)
@@ -69,10 +73,6 @@ extension InputCore {
                 let state = ControllerLayoutRouting.State(configuration, held: held, systemHeld: systemHeld ?? held,
                                                            acceptAfter: now)
                 state.originalArrival = arrival
-                let escapeButtons = heldControllerButtons(buttons: Int32(bitPattern: configuration.escape.buttons),
-                                                           leftTrigger: 0, rightTrigger: 0)
-                state.blocksLegacyStop = ControllerChord.satisfied(snapshot.chord, custom: snapshot.customChord,
-                                                                   held: escapeButtons)
                 layouts?.states[Int(slot)] = state
             } else {
                 let state = ControllerLayoutRouting.State(nil, held: held, systemHeld: systemHeld ?? held, acceptAfter: now)
@@ -99,15 +99,6 @@ extension InputCore {
         }
     }
 
-    package func refreshLayoutStopPolicy() {
-        guard let layouts else { return }
-        for state in layouts.states.compactMap({ $0 }) {
-            state.blocksLegacyStop = ControllerChord.satisfied(snapshot.chord, custom: snapshot.customChord,
-                held: heldControllerButtons(buttons: Int32(bitPattern: state.escape.chord.buttons),
-                                             leftTrigger: 0, rightTrigger: 0))
-        }
-    }
-
     package func receiveLayout(_ state: ControllerLayoutRouting.State, slot: UInt8,
                                sample: ControllerMappingSample, systemSample: ControllerMappingSample,
                                at now: TimeInterval) -> ControllerAcceptance {
@@ -119,38 +110,62 @@ extension InputCore {
         if state.removing, state.rearm.isNeutral, state.gameRearm.isNeutral {
             removeLayout(slot: slot)
         }
-        let buttons = Int32(bitPattern: sample.buttons)
-        let analog = sample.gamepadAnalog
-        current[slot] = (buttons, analog)
-        let escaped = state.escape.update(sample, at: now)
-        let escapePending = state.escape.isPending
-        let chord: Bool
-        if let stop = state.stop {
-            chord = stop.held(in: sample)
-        } else if state.blocksLegacyStop {
-            chord = false
-        } else {
-            chord = ControllerChord.satisfied(snapshot.chord, custom: snapshot.customChord,
-                held: heldControllerButtons(buttons: buttons, leftTrigger: analog.leftTrigger,
-                                             rightTrigger: analog.rightTrigger))
+        current[slot] = (Int32(bitPattern: sample.buttons), sample.gamepadAnalog)
+        let wasLatched = state.gesture.latched != nil
+        let action = state.gesture.update(sample, at: now)
+        let suppression = state.gesture.suppressing
+        if !wasLatched, suppression != nil {
+            let sameButtons = sample.buttons == gameSample.buttons && sample.analog[0] == gameSample.analog[0]
+                && sample.analog[1] == gameSample.analog[1]
+            // A system remap has no compiled plan; release its held outputs conservatively.
+            state.systemSuppression = sameButtons ? suppression : ControllerPhysicalChord(sample: gameSample)
         }
-        updateChord(slot: slot, held: chord && !escapePending)
-        let consumes = chord || escapePending || escaped
-        let isMouse = routeControllerMouse(slot: slot, buttons: buttons, analog: analog, chordHeld: consumes, now: now)
-        if consumes {
-            sendController(slot: slot, buttons: 0, analog: Self.neutral)
-            if escaped { onControllerEscape?() }
-        } else if !isMouse {
-            if let output = state.plan?.apply(sample) {
+        let filtered = suppression?.removing(from: sample) ?? sample
+        let system = state.systemSuppression?.removing(from: gameSample) ?? gameSample
+        let consumes = suppression != nil || action != nil
+        let isMouse = routeControllerMouse(slot: slot, buttons: Int32(bitPattern: filtered.buttons),
+            analog: filtered.gamepadAnalog, chordHeld: consumes || state.gesture.deadline != nil, now: now)
+        if !isMouse {
+            if let output = state.plan?.apply(filtered) {
                 sendController(slot: slot, buttons: Int32(bitPattern: output.buttons), analog: output.gamepadAnalog)
             } else {
-                let mapped = ControllerButtonLayout.apply(Int32(bitPattern: gameSample.buttons),
+                let mapped = ControllerButtonLayout.apply(Int32(bitPattern: system.buttons),
                                                           useNintendoLabels: snapshot.nintendoSlots.contains(slot))
-                sendController(slot: slot, buttons: mapped, analog: gameSample.gamepadAnalog)
+                sendController(slot: slot, buttons: mapped, analog: system.gamepadAnalog)
             }
+        }
+        scheduleLayoutHold(state, slot: slot, at: now)
+        if let action {
+            state.systemSuppression = nil
+            if releases.pending.isEmpty { onControllerShortcut?(action) }
         }
         if !activityPublished, needsReconciliation { activityPublished = true; onActivity?() }
         return consumes ? .chord : (isMouse ? .mouse : .forwarded)
+    }
+
+    private func scheduleLayoutHold(_ state: ControllerLayoutRouting.State, slot: UInt8, at now: TimeInterval) {
+        guard let deadline = state.gesture.deadline else {
+            state.timer?.cancel()
+            state.timer = nil
+            return
+        }
+        guard state.timer == nil else { return }
+        let work = DispatchWorkItem { [weak self, weak state] in
+            guard let self, let state else { return }
+            self.advanceLayoutHold(state, slot: slot, at: ProcessInfo.processInfo.systemUptime)
+        }
+        state.timer = work
+        mouseQueue.asyncAfter(deadline: .now() + max(0, deadline - now), execute: work)
+    }
+
+    package func advanceLayoutHold(_ state: ControllerLayoutRouting.State, slot: UInt8, at now: TimeInterval) {
+        withLock {
+            state.timer?.cancel()
+            state.timer = nil
+            guard layouts?.states[Int(slot)] === state, snapshot.ready, snapshot.focused,
+                  snapshot.mask & (1 << slot) != 0 else { return }
+            _ = receiveLayout(state, slot: slot, sample: state.last, systemSample: state.lastSystem, at: now)
+        }
     }
 
     package func rememberUnfocusedLayout(slot: UInt8, physical: ControllerMappingSample?, system: ControllerMappingSample) {

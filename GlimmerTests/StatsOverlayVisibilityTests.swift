@@ -288,6 +288,19 @@ struct StatsOverlayVisibilityTests {
         }
     }
 
+    @Test func tracesWaitForDrawableBoundsAndClearTheirPathsWhenCollapsed() {
+        let trace = StatsTrace(metric: .render)
+        trace.draw()
+        let shapes = (trace.layer.sublayers ?? []).compactMap { $0 as? CAShapeLayer }
+        #expect(shapes.allSatisfy { $0.path == nil })
+        trace.layer.bounds = CGRect(x: 0, y: 0, width: 160, height: 17)
+        trace.draw()
+        #expect(shapes.contains { $0.path?.isEmpty == false })
+        trace.layer.bounds = .zero
+        trace.draw()
+        #expect(shapes.allSatisfy { $0.path == nil })
+    }
+
     @Test func sampleRectRecoversAcrossAttachmentVideoSizeAndRendererReplacement() {
         let overlay = StatsOverlayLayer()
         overlay.update(snapshot: StreamStatsSnapshot(), enabled: [.renderFps], targetFps: 60)

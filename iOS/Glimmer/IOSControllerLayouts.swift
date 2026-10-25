@@ -28,12 +28,11 @@ final class IOSControllerLayouts {
     func configure(_ controller: GCController, registration: ControllerRegistration) {
         remove(controller)
         let model = ControllerLayoutsModel.shared
-        guard model.loaded, !model.library.records.isEmpty || !model.library.shortcuts.isEmpty,
+        guard model.loaded,
               let reader = ControllerLayoutReader(controller) else { return }
         let record = model.library.resolve(reader.identity, scope: scope)
-        let shortcuts = model.library.shortcuts(for: reader.identity)
-        guard record != nil || shortcuts != nil,
-              let configuration = try? ControllerLayoutConfiguration(layout: record?.layout, shortcuts: shortcuts,
+        let shortcuts = model.shortcuts(for: reader.identity)
+        guard let configuration = try? ControllerLayoutConfiguration(layout: record?.layout, shortcuts: shortcuts,
                 available: reader.available, extras: reader.extras) else { return }
         input.setControllerLayout(configuration, for: registration,
                                   held: reader.sample(), systemHeld: reader.systemSample())

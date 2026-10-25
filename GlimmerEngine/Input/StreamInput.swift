@@ -37,6 +37,7 @@ public final class StreamInput: @unchecked Sendable {
         case controllersActive(Bool)
         case mouseMode(ControllerRegistration, enabled: Bool)
         case stopRequested
+        case statsRequested
     }
 
     enum ControllerFeedback: Sendable {
@@ -52,6 +53,9 @@ public final class StreamInput: @unchecked Sendable {
         self.emit = emit
         core.onMotionInputEnabled = { [weak motion] slot, enabled in
             motion?.setInputEnabled(enabled, slot: slot)
+        }
+        core.onControllerShortcut = { [weak self] action in
+            self?.emit(action == .stop ? .stopRequested : .statsRequested)
         }
         core.onChord = { [weak self] slot, held, edge in self?.chordChanged(slot: slot, held: held, edge: edge) }
         core.onMouseMode = { [weak self] slot, enabled in

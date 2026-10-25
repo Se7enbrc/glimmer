@@ -72,7 +72,7 @@ def expected_sources(root):
                                    "ControllerDiagramTests.swift", "SettingsResetTests.swift"])
     expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in
                                   ["ControllerMappingTests.swift", "ControllerLayoutPersistenceTests.swift",
-                                   "ControllerLayoutEscapeTests.swift"])
+                                   "ControllerLayoutEscapeTests.swift", "ControllerShortcutTests.swift"])
     # These transport fakes and session tests also compile in the Mac test target.
     shared = ("BitrateActuatorTests.swift", "FakeSunshine.swift", "InputRecordingBackend.swift",
               "BandwidthPolicyTests.swift", "BandwidthActuatorTests.swift",

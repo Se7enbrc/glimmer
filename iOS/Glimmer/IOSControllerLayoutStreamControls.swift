@@ -25,16 +25,3 @@ struct IOSControllerLayoutStreamButton: View {
         }
     }
 }
-
-struct IOSControllerLayoutStreamControls: ViewModifier {
-    let model: StreamSessionModel
-
-    func body(content: Content) -> some View {
-        content.onChange(of: model.inputFocused, initial: true) { [weak model] _, _ in
-            model?.streamInput?.observeControllerEscape { [weak model] in
-                Task { @MainActor in model?.showControls() }
-            }
-        }
-        .onDisappear { model.streamInput?.observeControllerEscape(nil) }
-    }
-}
