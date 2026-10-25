@@ -147,6 +147,9 @@ final class IPadNavigationTests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         let suffix = largeText ? "ax5" : "default"
+        // Connect the simulated keyboard before opening the menu, as the Settings shortcut test does.
+        app.typeKey(.shift, modifierFlags: [])
+        app.activate()
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
         recordScreen(app, name: "native-window-full-\(suffix)")
@@ -252,6 +255,27 @@ final class IPadNavigationTests: XCTestCase {
         XCTAssertTrue(general.waitForExistence(timeout: 5))
         recordScreen(app, name: "largest-text-short-settings-name")
         XCTAssertLessThan(general.frame.height, 110)
+    }
+
+    func testLargestTextShowsFullQualityChoices() {
+        let app = XCUIApplication()
+        app.launchEnvironment["GLIMMER_UI_TESTING"] = "empty"
+        app.launchArguments = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        defer { app.terminate() }
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+        app.buttons["Settings"].tap()
+        app.buttons["Quality"].tap()
+        recordScreen(app, name: "largest-text-quality-choices")
+        for label in ["Native · 120 fps", "1080p · 60 fps", "1080p · 120 fps"] {
+            let choice = app.descendants(matching: .any).matching(identifier: label).firstMatch
+            for _ in 0..<3 where !choice.isHittable { app.swipeUp() }
+            XCTAssertTrue(choice.waitForExistence(timeout: 5))
+            XCTAssertTrue(choice.isHittable)
+            XCTAssertGreaterThan(choice.frame.height, 44)
+        }
+        recordScreen(app, name: "largest-text-quality-scrolled")
     }
 
     private func recordScreen(_ app: XCUIApplication, name: String) {

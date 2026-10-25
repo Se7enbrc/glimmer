@@ -118,7 +118,7 @@ private struct GlimmerSettingsPage: View {
                         ForEach(LauncherStyle.allCases) { Text($0.label).tag($0) }
                     }
                 }
-            case .quality: streamSettings
+            case .quality: StreamQualitySettings(profile: $profile)
             case .pcs: computerSettings
             case .input: controllerSettings
             #if GLIMMER_DIAGNOSTICS
@@ -161,30 +161,6 @@ private struct GlimmerSettingsPage: View {
             Text(model.discoveryDenied ? "Allow local network access in Settings to find the PC."
                  : "Open Sunshine on the PC and connect to the same network.")
         }
-    }
-
-    private var streamSettings: some View {
-        Section {
-            if dynamicTypeSize.isAccessibilitySize {
-                streamFormatPicker.pickerStyle(.inline)
-            } else { streamFormatPicker }
-        } header: {
-            Text("Stream")
-        } footer: {
-            Text(streamExplanation)
-        }
-    }
-
-    private var streamFormatPicker: some View {
-        Picker("Stream format", selection: $profile) {
-            ForEach(StreamProfile.allCases) { option in Text(option.label).tag(option) }
-        }
-    }
-
-    private var streamExplanation: String {
-        "Native chooses the closest size from the iPhone and iPad display modes. "
-            + "Install those modes on the PC. The picture fills the window and may crop at the edges. "
-            + "Some games need 16:9. Choose 1080p if the picture looks wrong. Changes apply to the next stream."
     }
 
     @ViewBuilder private var controllerSettings: some View {
@@ -243,5 +219,39 @@ private struct PairedPCRow: View {
                 HStack { title; Spacer(); forget }
             }
         }
+    }
+}
+
+@MainActor
+private struct StreamQualitySettings: View {
+    @Binding var profile: StreamProfile
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        Section {
+            if dynamicTypeSize.isAccessibilitySize {
+                streamProfilePicker.pickerStyle(.inline)
+            } else {
+                streamProfilePicker
+            }
+        } header: {
+            Text("Stream")
+        } footer: {
+            Text(streamExplanation)
+        }
+    }
+
+    private var streamProfilePicker: some View {
+        Picker("Stream format", selection: $profile) {
+            ForEach(StreamProfile.allCases) { option in
+                Text(option.label).fixedSize(horizontal: false, vertical: true).tag(option)
+            }
+        }
+    }
+
+    private var streamExplanation: String {
+        "Native chooses the closest size from the iPhone and iPad display modes. "
+            + "Install those modes on the PC. The picture fills the window and may crop at the edges. "
+            + "Some games need 16:9. Choose 1080p if the picture looks wrong. Changes apply to the next stream."
     }
 }

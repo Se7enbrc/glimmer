@@ -93,6 +93,7 @@
 - iPad app buttons keep their grid size with a small library. Large text has
   more room in PC names, saved-PC actions and stream controls. Connection
   messages can scroll when space is tight.
+- Quality choices stay readable at accessibility text sizes on iPhone and iPad.
 - Open iPhone and iPad Settings with Command-comma and close them with
   Command-period.
 - Steam's icon renders reliably in the launcher.
