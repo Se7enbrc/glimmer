@@ -151,6 +151,8 @@ struct StreamSessionTests {
 
     @Test func sceneSuppressionForwardsAvailabilityInputs() async throws {
         let fixture = PlaybackFixture()
+        // Without granted background time, leaving disconnects and the return is never forwarded.
+        fixture.backgroundCalls = .init(begin: { _ in .init(rawValue: 42) }, end: { _ in }, now: { 0 })
         let model = fixture.model()
         model.start(surface: StreamSurface())
         model.availabilityChanged(active: false, background: true, protectedDataAvailable: true)
