@@ -64,8 +64,8 @@ def ipad_window_modes():
         modes.update((height, width, fps) for fps in rates)
         for numerator, denominator in ((1, 2), (2, 3), (1, 3)):
             modes.add(((width - 20) * numerator // denominator & ~1, height, 60))
-        modes.add((width * 3 // 4 & ~1, height * 3 // 4 & ~1, 60))
-    return modes | {(750, 972, 60), (750, 1706, 60), (1014, 1290, 60), (1280, 1200, 60)}
+        modes.add(((width - 20) // 2 & ~1, height - 246, 60))
+    return modes | {(750, 972, 60), (750, 1706, 60), (1280, 1200, 60)}
 
 
 STANDARD_MODES = (

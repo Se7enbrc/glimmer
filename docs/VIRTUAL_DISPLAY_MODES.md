@@ -184,42 +184,43 @@ Each row maps to the device names in the preceding table; XML blocks repeat the
 device names. Sizes are physical pixels, with even dimensions. Portrait retains
 the panel's 60/120 Hz rates. Split and Stage Manager targets use **60 Hz**.
 
-| Landscape panel | Portrait    | Split 1/2   | Split 2/3   | Split 1/3  | Stage Manager 3/4 size |
-| --------------- | ----------- | ----------- | ----------- | ---------- | ---------------------- |
-| 2048 × 1536     | 1536 × 2048 | 1014 × 1536 | 1352 × 1536 | 676 × 1536 | 1536 × 1152            |
-| 2160 × 1620     | 1620 × 2160 | 1070 × 1620 | 1426 × 1620 | 712 × 1620 | 1620 × 1214            |
-| 2224 × 1668     | 1668 × 2224 | 1102 × 1668 | 1468 × 1668 | 734 × 1668 | 1668 × 1250            |
-| 2266 × 1488     | 1488 × 2266 | 1122 × 1488 | 1496 × 1488 | 748 × 1488 | 1698 × 1116            |
-| 2360 × 1640     | 1640 × 2360 | 1170 × 1640 | 1560 × 1640 | 780 × 1640 | 1770 × 1230            |
-| 2388 × 1668     | 1668 × 2388 | 1184 × 1668 | 1578 × 1668 | 788 × 1668 | 1790 × 1250            |
-| 2420 × 1668     | 1668 × 2420 | 1200 × 1668 | 1600 × 1668 | 800 × 1668 | 1814 × 1250            |
-| 2732 × 2048     | 2048 × 2732 | 1356 × 2048 | 1808 × 2048 | 904 × 2048 | 2048 × 1536            |
-| 2752 × 2064     | 2064 × 2752 | 1366 × 2064 | 1820 × 2064 | 910 × 2064 | 2064 × 1548            |
+| Landscape panel | Portrait    | Split 1/2   | Split 2/3   | Split 1/3  | Stage Manager half tile |
+| --------------- | ----------- | ----------- | ----------- | ---------- | ----------------------- |
+| 2048 × 1536     | 1536 × 2048 | 1014 × 1536 | 1352 × 1536 | 676 × 1536 | 1014 × 1290             |
+| 2160 × 1620     | 1620 × 2160 | 1070 × 1620 | 1426 × 1620 | 712 × 1620 | 1070 × 1374             |
+| 2224 × 1668     | 1668 × 2224 | 1102 × 1668 | 1468 × 1668 | 734 × 1668 | 1102 × 1422             |
+| 2266 × 1488     | 1488 × 2266 | 1122 × 1488 | 1496 × 1488 | 748 × 1488 | 1122 × 1242             |
+| 2360 × 1640     | 1640 × 2360 | 1170 × 1640 | 1560 × 1640 | 780 × 1640 | 1170 × 1394             |
+| 2388 × 1668     | 1668 × 2388 | 1184 × 1668 | 1578 × 1668 | 788 × 1668 | 1184 × 1422             |
+| 2420 × 1668     | 1668 × 2420 | 1200 × 1668 | 1600 × 1668 | 800 × 1668 | 1200 × 1422             |
+| 2732 × 2048     | 2048 × 2732 | 1356 × 2048 | 1808 × 2048 | 904 × 2048 | 1356 × 1802             |
+| 2752 × 2064     | 2064 × 2752 | 1366 × 2064 | 1820 × 2064 | 910 × 2064 | 1366 × 1818             |
 
 Split targets divide the landscape width after a 20-pixel (10-point) gap, round
 down to even, and retain the panel height. The half tiles were measured at 1014
 × 1536 on mini 5/iPadOS 26 and 1366 × 2064 on Pro 13/iPadOS 27. The other
 fractions are representative targets, not claims of fixed system window sizes.
 Decorations, OS version and display zoom can change the actual bounds.
-Three-quarter Stage Manager targets scale both panel dimensions by 0.75 and
-round down to even. They cover a common medium-large aspect for every geometry;
-they are sample choices, not an Apple-defined preset.
+Dock-visible Stage Manager half tiles use the half-width target and reserve 246
+pixels (123 points) vertically. Measurements on mini 5 (1014 × 1290) and Pro 13
+(1366 × 1818) support this representative target. Other geometries are derived,
+not individually measured or Apple-defined presets.
 
 The catalog also includes 750 × 972 (small Stage Manager, measured on mini 5 and
-Pro 13), 1280 × 1200 (the audit's medium window fixture), 1014 × 1290 (mini 5
-Stage Manager tile) and 750 × 1706 (Pro 13 Slide Over). All use 60 Hz. Other
-widths, heights and portrait split arrangements select the closest listed mode.
-Aspect fill scales proportionally and crops edges when aspects differ; 1080p can
-crop substantially in a narrow portrait window. It never stretches.
+Pro 13), 1280 × 1200 (the audit's medium window fixture) and 750 × 1706 (Pro 13
+Slide Over). All use 60 Hz. Other widths, heights and portrait split
+arrangements select the closest listed mode. Aspect fill scales proportionally
+and crops edges when aspects differ; 1080p can crop substantially in a narrow
+portrait window. It never stretches.
 
 The **90-mode budget** retains 36 native landscape combinations and two 1080p
-combinations, then adds 52 window combinations. The three-quarter 2732 × 2048
-target shares mini 5's 2048 × 1536 mode, so it costs no extra entry. Trade-offs:
+combinations, then adds 52 window combinations. Trade-offs:
 
 - Remove all 36 optional half-size combinations; iOS never offered that preset.
 - Keep 120 Hz for full-panel ProMotion and 1080p; window-specific modes use 60
   Hz.
-- Use representative sizes for continuous resizing, portrait splits and other
+- Prefer measured Dock-visible half tiles over estimated three-quarter sizes.
+  Use representative sizes for continuous resizing, portrait splits and other
   Stage Manager sizes. No finite list can cover every window pixel size.
 - Keep the older mixed-client sample unchanged. It lacks these window modes;
   iPhone/iPad users need the mobile file, not the combined file.

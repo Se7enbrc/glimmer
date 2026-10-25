@@ -92,7 +92,7 @@
         </resolution>
 
         <!-- iPad. -->
-        <!-- iPad mini (5th generation): native landscape, Native quality; also the three-quarter-size Stage Manager target for iPad Pro 12.9-inch (3rd-6th generation) and iPad Air 13-inch (M2/M3/M4). -->
+        <!-- iPad mini (5th generation): native landscape, Native quality. -->
         <resolution>
             <width>2048</width><height>1536</height>
             <refresh_rate>60</refresh_rate>
@@ -159,9 +159,9 @@
             <width>676</width><height>1536</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad mini (5th generation): Native quality, three-quarter-size Stage Manager target. -->
+        <!-- iPad mini (5th generation): Native quality, Dock-visible half-width Stage Manager target. -->
         <resolution>
-            <width>1536</width><height>1152</height>
+            <width>1014</width><height>1290</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPad (9th generation), iPad (8th generation): Native quality, portrait. -->
@@ -184,9 +184,9 @@
             <width>712</width><height>1620</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad (9th generation), iPad (8th generation): Native quality, three-quarter-size Stage Manager target. -->
+        <!-- iPad (9th generation), iPad (8th generation): Native quality, Dock-visible half-width Stage Manager target. -->
         <resolution>
-            <width>1620</width><height>1214</height>
+            <width>1070</width><height>1374</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPad Air (3rd generation): Native quality, portrait. -->
@@ -209,9 +209,9 @@
             <width>734</width><height>1668</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad Air (3rd generation): Native quality, three-quarter-size Stage Manager target. -->
+        <!-- iPad Air (3rd generation): Native quality, Dock-visible half-width Stage Manager target. -->
         <resolution>
-            <width>1668</width><height>1250</height>
+            <width>1102</width><height>1422</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPad mini (A17 Pro), iPad mini (6th generation): Native quality, portrait. -->
@@ -234,9 +234,9 @@
             <width>748</width><height>1488</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad mini (A17 Pro), iPad mini (6th generation): Native quality, three-quarter-size Stage Manager target. -->
+        <!-- iPad mini (A17 Pro), iPad mini (6th generation): Native quality, Dock-visible half-width Stage Manager target. -->
         <resolution>
-            <width>1698</width><height>1116</height>
+            <width>1122</width><height>1242</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation): Native quality, portrait. -->
@@ -259,9 +259,9 @@
             <width>780</width><height>1640</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation): Native quality, three-quarter-size Stage Manager target. -->
+        <!-- iPad Air 11-inch (M4), iPad Air 11-inch (M3), iPad Air 11-inch (M2), iPad Air (5th generation), iPad Air (4th generation), iPad (A16), iPad (10th generation): Native quality, Dock-visible half-width Stage Manager target. -->
         <resolution>
-            <width>1770</width><height>1230</height>
+            <width>1170</width><height>1394</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch: Native quality, portrait. -->
@@ -284,9 +284,9 @@
             <width>788</width><height>1668</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch: Native quality, three-quarter-size Stage Manager target. -->
+        <!-- iPad Pro 11-inch (4th generation), iPad Pro 11-inch (3rd generation), iPad Pro 11-inch (2nd generation), iPad Pro 11-inch: Native quality, Dock-visible half-width Stage Manager target. -->
         <resolution>
-            <width>1790</width><height>1250</height>
+            <width>1184</width><height>1422</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPad Pro 11-inch (M5), iPad Pro 11-inch (M4): Native quality, portrait. -->
@@ -309,9 +309,9 @@
             <width>800</width><height>1668</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad Pro 11-inch (M5), iPad Pro 11-inch (M4): Native quality, three-quarter-size Stage Manager target. -->
+        <!-- iPad Pro 11-inch (M5), iPad Pro 11-inch (M4): Native quality, Dock-visible half-width Stage Manager target. -->
         <resolution>
-            <width>1814</width><height>1250</height>
+            <width>1200</width><height>1422</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPad Air 13-inch (M4), iPad Air 13-inch (M3), iPad Air 13-inch (M2); iPad Pro 12.9-inch (6th generation), iPad Pro 12.9-inch (5th generation), iPad Pro 12.9-inch (4th generation), iPad Pro 12.9-inch (3rd generation): Native quality, portrait. -->
@@ -334,6 +334,11 @@
             <width>904</width><height>2048</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
+        <!-- iPad Air 13-inch (M4), iPad Air 13-inch (M3), iPad Air 13-inch (M2); iPad Pro 12.9-inch (6th generation), iPad Pro 12.9-inch (5th generation), iPad Pro 12.9-inch (4th generation), iPad Pro 12.9-inch (3rd generation): Native quality, Dock-visible half-width Stage Manager target. -->
+        <resolution>
+            <width>1356</width><height>1802</height>
+            <refresh_rate>60</refresh_rate>
+        </resolution>
         <!-- iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): Native quality, portrait. -->
         <resolution>
             <width>2064</width><height>2752</height>
@@ -354,9 +359,9 @@
             <width>910</width><height>2064</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
-        <!-- iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): Native quality, three-quarter-size Stage Manager target. -->
+        <!-- iPad Pro 13-inch (M5), iPad Pro 13-inch (M4): Native quality, Dock-visible half-width Stage Manager target. -->
         <resolution>
-            <width>2064</width><height>1548</height>
+            <width>1366</width><height>1818</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- iPad mini (5th generation), iPad Pro 13-inch (M5), all iPad geometries above: Native quality, small Stage Manager window. -->
@@ -367,11 +372,6 @@
         <!-- iPad Pro 13-inch (M5), all iPad geometries above: Native quality, narrow Slide Over target. -->
         <resolution>
             <width>750</width><height>1706</height>
-            <refresh_rate>60</refresh_rate>
-        </resolution>
-        <!-- iPad mini (5th generation): Native quality, Stage Manager half-width tile. -->
-        <resolution>
-            <width>1014</width><height>1290</height>
             <refresh_rate>60</refresh_rate>
         </resolution>
         <!-- All iPad geometries above: Native quality, medium Stage Manager window. -->

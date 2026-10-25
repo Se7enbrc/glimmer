@@ -64,7 +64,7 @@ all 36 native landscape combinations and both 1080p rates, replaces 36 unused
 optional half-size combinations, and adds 52 window combinations. The
 [mode reference](VIRTUAL_DISPLAY_MODES.md#ipad-window-targets) gives each
 geometry and the trade-offs. Every iPad pixel geometry has portrait, half,
-two-thirds, one-third and three-quarter-size Stage Manager targets. Shared
+two-thirds, one-third and Dock-visible half-width Stage Manager targets. Shared
 minimum/medium Stage Manager and Slide Over targets cover additional audited
 windows.
 
