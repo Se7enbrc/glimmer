@@ -161,8 +161,9 @@ struct SequoiaFallbacksTests {
     }
 
     @Test func idleCancellationDropsTheLastModelOwner() async throws {
+        weak var released: Counter?
         var model: Counter? = Counter()
-        weak var released = model
+        released = model
         let delivered = DispatchSemaphore(value: 0)
         let finished = DispatchSemaphore(value: 0)
         let observer = Task { [model] in
