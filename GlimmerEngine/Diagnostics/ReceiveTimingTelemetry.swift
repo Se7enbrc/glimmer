@@ -141,9 +141,10 @@ package final class ReceiveTimingTelemetry: Sendable {
     }
 
     package func takePolicyWindow() -> PolicyWindow {
-        state.withLock {
-            defer { $0.policyDelay = Distribution(); $0.policyJitter = Distribution() }
-            return PolicyWindow(queueDelayP50Ms: $0.policyDelay.quantile(0.5), jitterP95Ms: $0.policyJitter.quantile(0.95))
+        state.withLock { window in
+            defer { window.policyDelay = Distribution(); window.policyJitter = Distribution() }
+            return PolicyWindow(
+                queueDelayP50Ms: window.policyDelay.quantile(0.5), jitterP95Ms: window.policyJitter.quantile(0.95))
         }
     }
 
