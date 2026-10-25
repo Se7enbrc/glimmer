@@ -97,7 +97,12 @@ final class IPadNavigationTests: XCTestCase {
             }
             settings.tap()
             XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
-            for page in ["General", "Quality", "Input", "Diagnostics"] {
+            #if GLIMMER_DIAGNOSTICS
+            let pages = ["General", "Quality", "Input", "Diagnostics"]
+            #else
+            let pages = ["General", "Quality", "Input"]
+            #endif
+            for page in pages {
                 app.buttons[page].tap()
                 XCTAssertTrue(app.navigationBars[page].waitForExistence(timeout: 5))
                 recordScreen(app, name: "native-\(page)-\(orientation.rawValue)")

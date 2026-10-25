@@ -39,9 +39,8 @@ final class StreamSurface: UIView {
         return displayLayer
     }
 
-    private var presentationGravity: AVLayerVideoGravity {
-        traitCollection.userInterfaceIdiom == .pad ? .resizeAspect : .resizeAspectFill
-    }
+    // iPhone and iPad share one rule: fill the window, cropping edges after an aspect change.
+    private let presentationGravity = AVLayerVideoGravity.resizeAspectFill
 
     private func configureDisplayLayer() {
         displayLayer.videoGravity = presentationGravity
