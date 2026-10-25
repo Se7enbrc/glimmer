@@ -170,6 +170,7 @@
 		68ABC059685942C0934C319D /* StreamShortcutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 861EE67A9ECB492D8E16666F /* StreamShortcutUITests.swift */; };
 		328FE68F03EA2F59C7820A91 /* SettingsResetSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E5F29C7D58C61CECA51EAD /* SettingsResetSection.swift */; };
 		B6E7744FC3D57253692A1E23 /* SettingsResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39AA07EBFE1478632FD9C82 /* SettingsResetTests.swift */; };
+		E10A281422C6F8AC8794767A /* ControllerShortcutSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01256C02993A397A5EFFE5AD /* ControllerShortcutSection.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -362,6 +363,7 @@
 		861EE67A9ECB492D8E16666F /* StreamShortcutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamShortcutUITests.swift"; sourceTree = "<group>"; };
 		88E5F29C7D58C61CECA51EAD /* SettingsResetSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/SettingsResetSection.swift"; sourceTree = SOURCE_ROOT; };
 		B39AA07EBFE1478632FD9C82 /* SettingsResetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/SettingsResetTests.swift"; sourceTree = SOURCE_ROOT; };
+		01256C02993A397A5EFFE5AD /* ControllerShortcutSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerShortcutSection.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -554,6 +556,7 @@
 				1945301F1DC095317773DD00 /* IOSControllerLayoutStreamControls.swift */,
 				1CEFB04D7C50BCA3212857BA /* IOSControllerLayouts.swift */,
 				2B4B2F8017E0FB2092F9C0E4 /* ControllerLayoutShortcutSummary.swift */,
+				01256C02993A397A5EFFE5AD /* ControllerShortcutSection.swift */,
 				88E5F29C7D58C61CECA51EAD /* SettingsResetSection.swift */,
 				E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */,
 				E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */,
@@ -850,6 +853,7 @@
 				8B8BE11FD2507C6F7DBB0C57 /* IOSControllerLayoutStreamControls.swift in Sources */,
 				D162E918753F1A7DF4908674 /* IOSControllerLayouts.swift in Sources */,
 				A1C2C5E3D10A1AC79DB000E4 /* ControllerLayoutShortcutSummary.swift in Sources */,
+				E10A281422C6F8AC8794767A /* ControllerShortcutSection.swift in Sources */,
 				328FE68F03EA2F59C7820A91 /* SettingsResetSection.swift in Sources */,
 				94F7B1607EBE0F53941883A9 /* ControllerLayoutEditing.swift in Sources */,
 				BBDF302987FAF9F7402A6D84 /* ControllerLayoutNavigation.swift in Sources */,

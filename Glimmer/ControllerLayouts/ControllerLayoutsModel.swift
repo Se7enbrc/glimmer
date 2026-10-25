@@ -48,13 +48,16 @@ final class ControllerLayoutsModel {
     private(set) var devices: [ControllerLayoutDevice] = []
     var games: [ControllerLayoutGame] = []
     private let store: ControllerLayoutStore
+    private let defaults: UserDefaults
     private let readLibrary: () async throws -> ControllerLayoutLibrary
     private var loadTask: Task<Void, Never>?
     private var observations: [NSObjectProtocol] = []
     private var observers = 0
     private var saving = false
 
-    init(url: URL = ControllerLayoutsModel.storeURL, read: (() async throws -> ControllerLayoutLibrary)? = nil) {
+    init(url: URL = ControllerLayoutsModel.storeURL, defaults: UserDefaults = .standard,
+         read: (() async throws -> ControllerLayoutLibrary)? = nil) {
+        self.defaults = defaults
         let store = ControllerLayoutStore(url: url)
         self.store = store
         readLibrary = read ?? { try await store.load() }
@@ -102,6 +105,33 @@ final class ControllerLayoutsModel {
         defer { saving = false }
         var next = library
         next.remove(key)
+        try await commit(next)
+    }
+
+    func shortcuts(for identity: ControllerLayoutIdentity) -> ControllerLayoutShortcuts {
+        library.shortcuts(for: identity) ?? ControllerLayoutShortcuts.savedGlobal(in: defaults) ?? .init()
+    }
+
+    func shortcuts(_ device: ControllerLayoutDevice) -> ControllerLayoutShortcuts {
+        if let identity = device.identity { return shortcuts(for: identity) }
+        return library.shortcuts.first { $0.owner == device.owner }?.shortcuts
+            ?? ControllerLayoutShortcuts.savedGlobal(in: defaults) ?? .init()
+    }
+
+    func saveShortcut(_ buttons: Set<ControllerLayoutSource>, action: ControllerShortcutAction,
+                      device: ControllerLayoutDevice) async throws {
+        guard loaded, !saving else { throw ControllerLayoutError.invalidDocument }
+        var value = shortcuts(device)
+        value[action] = buttons
+        let available = Set(device.controls.map(\.id))
+        guard value.recordingProblem(for: action, available: available) == nil else {
+            throw ControllerLayoutError.invalidBindings
+        }
+        saving = true
+        defer { saving = false }
+        var next = library
+        try next.saveShortcuts(.init(owner: device.owner, shortcuts: value, available: available,
+                                    name: device.name, controls: device.controls, category: device.category))
         try await commit(next)
     }
 
@@ -182,6 +212,13 @@ final class ControllerLayoutsModel {
                 controls: record.controls.isEmpty ? record.layout.bindings.map {
                     .init(id: $0.source, name: $0.source.layoutName, symbol: $0.source.layoutSymbol)
                 } : record.controls, nintendoLabels: false, savedCategory: record.category))
+        }
+        for record in library.shortcuts where owners.insert(record.owner).inserted {
+            devices.append(ControllerLayoutDevice(id: "saved:\(String(describing: record.owner))",
+                name: record.name ?? "Controller", identity: nil, owner: record.owner, reader: nil, controller: nil,
+                controls: record.controls ?? record.available.sorted { $0.layoutName < $1.layoutName }.map {
+                    .init(id: $0, name: $0.layoutName, symbol: $0.layoutSymbol)
+                }, nintendoLabels: false, savedCategory: record.category))
         }
         self.devices = devices
     }

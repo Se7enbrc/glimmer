@@ -65,6 +65,7 @@ struct ControllerShoulderMenu: View {
     let left: Bool
     let scale: CGFloat
     let selected: ControllerLayoutSource?
+    var highlighted: Set<ControllerLayoutSource> = []
     let select: (ControllerLayoutControl) -> Void
 
     private var available: [ControllerLayoutControl] {
@@ -82,7 +83,7 @@ struct ControllerShoulderMenu: View {
                 ForEach(available) { control in
                     let placement = ControllerShoulderGeometry.placement(family: family, source: control.id, rear: rear)
                     ControllerShoulderArtwork(family: family, control: control, placement: placement, scale: scale)
-                        .foregroundStyle(selected == control.id ? Color.accentColor : Color.primary)
+                        .foregroundStyle(selected == control.id || highlighted.contains(control.id) ? Color.accentColor : Color.primary)
                         .position(x: placement.point.x * scale - frame.minX, y: placement.point.y * scale - frame.minY)
                 }
             }

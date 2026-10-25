@@ -95,6 +95,74 @@ struct ControllerLayoutCaptureTests {
         #expect(harness.state.withLock { $0.releases } == 1)
     }
 
+    @Test func chordRecordingRequiresASimultaneousHoldAndRelease() {
+        let harness = Harness()
+        let capture = ControllerLayoutCapture(input: harness.source(), recordingChord: true)
+        capture.start(cancel: {})
+        let buttons = ControllerMappedButton.a.rawValue | ControllerMappedButton.b.rawValue | ControllerMappedButton.menu.rawValue
+        harness.send(.init(buttons: buttons), at: 10)
+        #expect(!capture.finished)
+        harness.send(.init(buttons: ControllerMappedButton.menu.rawValue), at: 10.5)
+        #expect(!capture.finished)
+        harness.send(.init(), at: 10.6)
+        #expect(capture.finished)
+        #expect(capture.chord == [.button(.a), .button(.b), .button(.menu)])
+        capture.restart(cancel: {})
+        #expect(!capture.finished && capture.chord.isEmpty)
+        harness.send(.init(buttons: buttons), at: 12)
+        harness.send(.init(), at: 12.5)
+        #expect(capture.finished)
+        capture.stop()
+    }
+
+    @Test func chordRecordingRejectsRollingPressesAndCancellationDropsLateEvents() {
+        let harness = Harness()
+        let capture = ControllerLayoutCapture(input: harness.source(), recordingChord: true)
+        capture.start(cancel: {})
+        harness.send(.init(buttons: ControllerMappedButton.a.rawValue | ControllerMappedButton.b.rawValue), at: 10)
+        harness.send(.init(buttons: ControllerMappedButton.b.rawValue | ControllerMappedButton.menu.rawValue), at: 10.5)
+        harness.send(.init(), at: 11)
+        #expect(!capture.finished)
+        #expect(capture.chord.isEmpty)
+        let late = harness.state.withLock { $0.receive }
+        capture.stop()
+        late?(.init(buttons: ControllerMappedButton.a.rawValue), 12)
+        #expect(capture.chord.isEmpty)
+        #expect(harness.state.withLock { $0.releases } == 1)
+    }
+
+    @Test func savingShortcutsRoundTripsBothChoicesAndRejectsConflictsWithoutChangingTheFile() async throws {
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("layouts.json")
+        let name = "shortcut-tests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let model = ControllerLayoutsModel(url: url, defaults: defaults)
+        await model.load()
+        let source = Harness().source()
+        let identity = ControllerLayoutIdentity(category: "Fixture", profile: "test", controls: [])
+        let device = ControllerLayoutDevice(id: "fixture", name: "Saved controller", identity: identity,
+            owner: .type(identity.type), reader: nil, controller: nil, controls: source.controls, nintendoLabels: false)
+        let stop: Set<ControllerLayoutSource> = [.button(.a), .button(.b), .button(.menu)]
+        let stats: Set<ControllerLayoutSource> = [.button(.options), .trigger(.left), .extra("back")]
+        try await model.saveShortcut(stop, action: .stop, device: device)
+        try await model.saveShortcut(stats, action: .stats, device: device)
+        let bytes = try Data(contentsOf: url)
+        await #expect(throws: ControllerLayoutError.invalidBindings) {
+            try await model.saveShortcut(stop.union([.button(.options)]), action: .stats, device: device)
+        }
+        #expect(try Data(contentsOf: url) == bytes)
+        let reloaded = ControllerLayoutsModel(url: url, defaults: defaults)
+        await reloaded.load()
+        #expect(reloaded.shortcuts(device) == ControllerLayoutShortcuts(stop: stop, stats: stats))
+        reloaded.refreshDevices()
+        #expect(reloaded.devices.contains { $0.name == device.name && !$0.connected })
+        try await reloaded.reset(includeGames: false)
+        #expect(reloaded.shortcuts(device) == ControllerLayoutShortcuts())
+        #expect(try await ControllerLayoutStore(url: url).load().shortcuts.isEmpty)
+    }
+
     @Test func protectedEscapeCancelsControlCapture() throws {
         let harness = Harness()
         let capture = ControllerLayoutCapture(input: harness.source())
