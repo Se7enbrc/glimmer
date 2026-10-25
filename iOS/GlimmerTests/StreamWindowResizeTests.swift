@@ -10,7 +10,7 @@ import UIKit
 struct StreamWindowResizeTests {
     @Test(arguments: [UIUserInterfaceIdiom.phone, .pad])
     func resizeAndRotationKeepTheStreamAndNeverStopOrRelaunch(idiom: UIUserInterfaceIdiom) async throws {
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let scene = try await testWindowScene()
         let window = UIWindow(windowScene: scene)
         let id = UUID()
         var starts = 0

@@ -87,7 +87,7 @@ struct StreamSessionTests {
 
     @Test func realPreparedPlaybackCanStopBeforeStartWithoutContactingPC() async throws {
         var quiesces = 0
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let scene = try await testWindowScene()
         let window = UIWindow(windowScene: scene)
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 852, height: 393))
         window.addSubview(surface)
@@ -484,4 +484,14 @@ actor StreamTestGate {
         for waiter in waiters { waiter.resume() }
         waiters = []
     }
+}
+
+@MainActor
+func testWindowScene() async throws -> UIWindowScene {
+    let activations = NotificationCenter.default.notifications(named: UIScene.didActivateNotification).map { _ in () }
+    if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first { return scene }
+    for await _ in activations {
+        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first { return scene }
+    }
+    throw CancellationError()
 }

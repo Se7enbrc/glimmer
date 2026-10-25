@@ -81,8 +81,8 @@ struct StreamProfileTests {
         #expect(StreamDisplayModes.parse(Data("<vdd_settings>".utf8)).isEmpty)
     }
 
-    @Test @MainActor func surfaceUsesIdenticalRulesForPhoneAndPad() throws {
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    @Test @MainActor func surfaceUsesIdenticalRulesForPhoneAndPad() async throws {
+        let scene = try await testWindowScene()
         let window = UIWindow(windowScene: scene)
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 683, height: 1032))
         window.addSubview(surface)
@@ -95,8 +95,8 @@ struct StreamProfileTests {
         }
     }
 
-    @Test @MainActor func nativeUsesPhysicalPixelsWhenRenderScaleDiffers() throws {
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    @Test @MainActor func nativeUsesPhysicalPixelsWhenRenderScaleDiffers() async throws {
+        let scene = try await testWindowScene()
         let window = UIWindow(windowScene: scene)
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 640, height: 480))
         window.addSubview(surface)
@@ -114,8 +114,8 @@ struct StreamProfileTests {
             == StreamFormat(width: 750, height: 972, fps: 60))
     }
 
-    @Test @MainActor func fullScreenNativeKeepsTheListedPhysicalPanelSize() throws {
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    @Test @MainActor func fullScreenNativeKeepsTheListedPhysicalPanelSize() async throws {
+        let scene = try await testWindowScene()
         let screen = scene.screen
         let window = UIWindow(windowScene: scene)
         let bounds = screen.bounds.size

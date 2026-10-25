@@ -224,7 +224,7 @@ struct NativeUIRenderTests {
     }
 
     @Test func actualLauncherAllowsPortraitAfterStreamDismissal() async throws {
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let scene = try await testWindowScene()
         let previous = scene.keyWindow
         let window = UIWindow(windowScene: scene)
         window.frame = scene.effectiveGeometry.coordinateSpace.bounds
@@ -372,7 +372,7 @@ struct NativeUIRenderTests {
                           portrait: Bool = false, prepare: (() async -> Void)? = nil,
                           textSize: DynamicTypeSize = .xxxLarge, landscapeRight: Bool = false,
                           inspect: ((UIView) throws -> Void)? = nil) async throws {
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let scene = try await testWindowScene()
         let previous = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
         window.frame = scene.effectiveGeometry.coordinateSpace.bounds

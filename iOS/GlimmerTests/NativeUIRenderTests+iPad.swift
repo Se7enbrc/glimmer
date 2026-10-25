@@ -28,7 +28,7 @@ extension NativeUIRenderTests {
 
     @Test(arguments: ["portrait", "landscape", "narrow", "medium"], [false, true])
     func iPadInventory(layout: String, dark: Bool) async throws {
-        let size = try iPadViewport(layout: layout)
+        let size = try await iPadViewport(layout: layout)
         for textSize in [DynamicTypeSize.large, .accessibility5] {
             let label = "ipad-\(layout)-\(dark ? "dark" : "light")-\(textSize == .large ? "default" : "ax5")"
             try await iPadLauncherInventory(label: label, size: size, dark: dark, textSize: textSize)
@@ -38,7 +38,7 @@ extension NativeUIRenderTests {
 
     @Test(arguments: ["portrait", "landscape", "narrow", "medium"], [false, true])
     func iPadSettingsInventory(layout: String, dark: Bool) async throws {
-        let size = try iPadViewport(layout: layout)
+        let size = try await iPadViewport(layout: layout)
         let model = iPadLibrary(count: 12)
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
         for textSize in [DynamicTypeSize.large, .accessibility5] {
@@ -55,7 +55,7 @@ extension NativeUIRenderTests {
 
     @Test(arguments: ["portrait", "landscape", "narrow", "medium"], [false, true])
     func iPadLabelInventory(layout: String, dark: Bool) async throws {
-        let size = try iPadViewport(layout: layout)
+        let size = try await iPadViewport(layout: layout)
         for textSize in [DynamicTypeSize.large, .accessibility5] {
             let label = "ipad-\(layout)-\(dark ? "dark" : "light")-\(textSize == .large ? "default" : "ax5")"
             try await iPadLauncherInventory(label: label, size: size, dark: dark, textSize: textSize)
@@ -65,8 +65,8 @@ extension NativeUIRenderTests {
         }
     }
 
-    private func iPadViewport(layout: String) throws -> CGSize? {
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    private func iPadViewport(layout: String) async throws -> CGSize? {
+        let scene = try await testWindowScene()
         let bounds = scene.screen.bounds
         let size: CGSize? = switch layout {
         case "narrow": CGSize(width: 320, height: 600)
@@ -109,7 +109,7 @@ extension NativeUIRenderTests {
 
     @Test(arguments: [false, true], [DynamicTypeSize.large, .accessibility5])
     func iPadWholeWindowInventory(dark: Bool, textSize: DynamicTypeSize) async throws {
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let scene = try await testWindowScene()
         let screen = scene.screen.bounds.size
         let portrait = CGSize(width: min(screen.width, screen.height), height: max(screen.width, screen.height))
         let layouts: [(String, CGSize)] = [

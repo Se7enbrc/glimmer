@@ -81,8 +81,8 @@ struct AppDeclarationTests {
         ])
     }
 
-    @Test func onlyAnIPhoneWindowContainingTheStreamLocksLandscape() throws {
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    @Test func onlyAnIPhoneWindowContainingTheStreamLocksLandscape() async throws {
+        let scene = try await testWindowScene()
         let menu = UIViewController()
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
