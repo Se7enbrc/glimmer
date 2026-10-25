@@ -53,7 +53,9 @@ class RCCutWorkflowTests(unittest.TestCase):
         for name in ('verify.yml', 'codeql.yml'):
             source = (WORKFLOW.parent / name).read_text()
             concurrency = source.split('\nconcurrency:\n', 1)[1].split('\njobs:', 1)[0]
-            self.assertIn('${{ github.ref }}', concurrency)
+            self.assertIn('github.ref', concurrency)
+            self.assertIn('github.run_id', concurrency)
+            self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", concurrency)
         self.assertIn('wait-for-processing: true', (WORKFLOW.parent / 'codeql.yml').read_text())
         self.assertIn('timeout-minutes: 55', WORKFLOW.read_text())
 

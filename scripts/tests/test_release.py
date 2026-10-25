@@ -42,7 +42,8 @@ class ReleaseValidationTests(unittest.TestCase):
                 "MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 400\n")
             shutil.copy2(SCRIPTS.parent / "Makefile", root / "Makefile")
             (root / "scripts").mkdir()
-            shutil.copy2(SCRIPTS / "release-bundle.mk", root / "scripts/release-bundle.mk")
+            for name in ("release-bundle.mk", "ci-checks.mk", "mac-test-products.mk"):
+                shutil.copy2(SCRIPTS / name, root / "scripts" / name)
             app = root / "prepared app/Glimmer.app"
             app.mkdir(parents=True)
             output = root / "prepared assets"
@@ -83,8 +84,8 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertIn("-enableAddressSanitizer YES", commands[1])
         self.assertIn("-only-testing:GlimmerTests/FuzzTests", commands[1])
         self.assertIn("-only-testing:GlimmerTests/StreamFuzzTests", commands[1])
-        self.assertIn("swiftlint lint --strict", full)
-        self.assertIn("python3 -m unittest", full)
+        self.assertIn("scripts/lint-swift.sh lint --strict", full)
+        self.assertIn("python3 scripts/test-scripts.py all", full)
 
     def test_build_gates_read_the_feed_from_the_appcast_branch(self):
         makefile = (SCRIPTS.parent / "Makefile").read_text()

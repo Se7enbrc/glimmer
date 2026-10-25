@@ -113,12 +113,16 @@ verify_part() {
     [ -f "$GREEN" ] && [ "$(cat "$GREEN")" = "$EXPECTED_SHA" ] || die "required checks have not passed"
     [ -n "${GITHUB_OUTPUT:-}" ] || die "workflow output file missing"
     case "$part" in
-        checks) target=check; GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files ;;
-        tests) target="test" ;;
+        checks) target=check-portable; GLIMMER_SECRET_SCAN_ALL_FILES=1 pre-commit run --all-files ;;
+        tests) target="test"; make check-macos ;;
         asan) target=test-asan ;;
         *) die "unknown verification part" ;;
     esac
-    make "$target" "DERIVED=$ROOT/build/verify-$part" TEST_SUITE=
+    if [ "$part" = tests ]; then
+        make "$target" "DERIVED=$ROOT/build" TEST_SUITE= COVERAGE=1
+    else
+        make "$target" "DERIVED=$ROOT/build" TEST_SUITE=
+    fi
     check_source
     printf 'record=%s %s %s %s\n' "$EXPECTED_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$part" \
         >> "$GITHUB_OUTPUT"

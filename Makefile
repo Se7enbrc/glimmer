@@ -154,6 +154,8 @@ test:
 	  status=$$?; $(if $(COVERAGE),[ $$status -ne 0 ] || python3 scripts/coverage-report.py swift || status=$$?;) \
 	  $(UNREGISTER_BUILDS); exit $$status
 
+include scripts/mac-test-products.mk
+
 # Exercise untrusted protocol input with memory error detection enabled.
 test-asan:
 	@scripts/generate-build-info.sh
@@ -474,20 +476,7 @@ verify: check
 	@$(MAKE) TEST_SUITE= test
 	@$(MAKE) test-asan
 
-check:
-	@echo "▶ Check (workflows + lint --strict + release-tool tests)..."
-	@actionlint
-	@scripts/check-spdx.sh
-	@swiftlint lint --strict --quiet
-	@$(MAKE) test-scripts
-
-# Fixture repositories need git's own discovery; a hook's GIT_DIR would aim them at this one.
-test-scripts:
-	$(if $(COVERAGE),@rm -rf $(DERIVED)/coverage/python && mkdir -p $(DERIVED)/coverage/python)
-	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
-		$(if $(COVERAGE),$(COVERAGE_PY) run --rcfile=scripts/tests/coveragerc,python3) -m unittest discover \
-		-s scripts/tests -p 'test_*.py'
-	$(if $(COVERAGE),@python3 scripts/coverage-report.py python)
+include scripts/ci-checks.mk
 
 rc:
 	@python3 scripts/release-candidate.py $(if $(DRY_RUN),--dry-run) $(if $(filter 1,$(DIAGNOSTIC)),--diagnostic)

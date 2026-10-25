@@ -23,7 +23,7 @@ on:
         required: true
         type: string
       marketing_version:
-        description: iOS version, for example 0.1.1
+        description: Shared CalVer, for example 2026.10.8
         required: true
         type: string
       build_number:
@@ -91,7 +91,7 @@ jobs:
       github.repository == 'Se7enbrc/glimmer' && github.ref == 'refs/heads/main'
     environment: ios-testflight
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 50
     permissions:
       contents: read
       actions: read

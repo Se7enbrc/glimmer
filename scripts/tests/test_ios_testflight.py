@@ -29,7 +29,7 @@ cli = importlib.import_module('ios-testflight')
 ENV = {
     'GITHUB_REPOSITORY': 'Se7enbrc/glimmer', 'GITHUB_RUN_ID': '123', 'GITHUB_RUN_ATTEMPT': '2',
     'EXPECTED_SHA': 'a' * 40, 'TRUSTED_TOOLING_SHA': 'b' * 40, 'GITHUB_SHA': 'b' * 40,
-    'IOS_FLAVOUR': 'production', 'IOS_VERSION': '0.1.1', 'IOS_BUILD_NUMBER': '3', 'GITHUB_REF': 'refs/heads/main',
+    'IOS_FLAVOUR': 'production', 'IOS_VERSION': '2026.10.8', 'IOS_BUILD_NUMBER': '3', 'GITHUB_REF': 'refs/heads/main',
     'GITHUB_EVENT_NAME': 'workflow_dispatch',
     'GITHUB_WORKFLOW_REF': 'Se7enbrc/glimmer/.github/workflows/ios-testflight.yml@refs/heads/main',
 }
@@ -52,7 +52,7 @@ class TestFlightTests(unittest.TestCase):
         app = root / artifact.APP
         app.mkdir(parents=True)
         info = {'CFBundleIdentifier': artifact.BUNDLE, 'CFBundleExecutable': 'Glimmer',
-                'CFBundleShortVersionString': '0.1.1', 'CFBundleVersion': '3',
+                'CFBundleShortVersionString': '2026.10.8', 'CFBundleVersion': '3',
                 'CFBundleSupportedPlatforms': ['iPhoneOS'], 'GlimmerBuildFlavour': 'production'}
         (app / 'Info.plist').write_bytes(plistlib.dumps(info))
         (app / 'Glimmer').write_bytes(b'inert executable fixture')
@@ -86,17 +86,30 @@ class TestFlightTests(unittest.TestCase):
 
     def test_apple_version_and_build_inputs(self):
         for build in ('1', '9999', '3.99', '3.99.99'):
-            artifact.validate_inputs('a' * 40, '0.1.1', build)
-        for sha, version, build in [('a' * 39, '0.1.1', '3'), ('A' * 40, '0.1.1', '3'),
-                                    ('a' * 40, '1; touch bad', '3'), ('a' * 40, '0.1.1', '10000'),
-                                    ('a' * 40, '0.1.1', '3.100'), ('a' * 40, '0.1.1', '3.1.100'),
-                                    ('a' * 40, '0.1.1', '0'), ('a' * 40, '0.1.1', '03')]:
+            artifact.validate_inputs('a' * 40, '2026.10.8', build)
+        for sha, version, build in [('a' * 39, '2026.10.8', '3'), ('A' * 40, '2026.10.8', '3'),
+                                    ('a' * 40, '1; touch bad', '3'), ('a' * 40, '2026.10.8', '10000'),
+                                    ('a' * 40, '2026.10.8', '3.100'), ('a' * 40, '2026.10.8', '3.1.100'),
+                                    ('a' * 40, '2026.10.8', '0'), ('a' * 40, '2026.10.8', '03')]:
             with self.subTest(build=build, version=version), self.assertRaises(ValueError):
                 artifact.validate_inputs(sha, version, build)
 
+    def test_archive_rejects_version_drift_before_compilation(self):
+        source = self.root / 'source'
+        (source / 'Glimmer').mkdir(parents=True)
+        config = source / 'Glimmer/Version.xcconfig'
+        config.write_text('MARKETING_VERSION = 2026.10.8\n')
+        head = subprocess.CompletedProcess([], 0, stdout=ENV['EXPECTED_SHA'])
+        with patch.object(cli.subprocess, 'run', return_value=head), patch.object(cli, 'toolchain') as compiler:
+            for value in ('0.1.1', '2026.10.9'):
+                with self.subTest(version=value), self.assertRaisesRegex(ValueError, 'source CalVer'):
+                    cli.archive(source, self.root / 'archive', {**self.expected, 'IOS_VERSION': value})
+            compiler.assert_not_called()
+
     def test_archive_keeps_package_warnings_visible_and_fatal(self):
         source = self.root / 'source'
-        source.mkdir()
+        (source / 'Glimmer').mkdir(parents=True)
+        (source / 'Glimmer/Version.xcconfig').write_text('MARKETING_VERSION = 2026.10.8\n')
         head = subprocess.CompletedProcess([], 0, stdout=ENV['EXPECTED_SHA'])
         for flavour in ('beta', 'production'):
             with self.subTest(flavour=flavour), patch.object(cli.subprocess, 'run', return_value=head) as run, \
@@ -104,6 +117,7 @@ class TestFlightTests(unittest.TestCase):
                     patch.object(artifact, 'validate_archive'):
                 cli.archive(source, self.root / 'archive', {**self.expected, 'IOS_FLAVOUR': flavour})
             command = run.call_args.args[0]
+            self.assertIn('SWIFT_SUPPRESS_WARNINGS=NO', command)
             self.assertIn('SWIFT_TREAT_WARNINGS_AS_ERRORS=YES', command)
             self.assertIn('GCC_TREAT_WARNINGS_AS_ERRORS=YES', command)
             conditions = 'GLIMMER_DIAGNOSTICS' if flavour == 'beta' else ''
@@ -501,7 +515,9 @@ class TestFlightTests(unittest.TestCase):
         self.assertNotIn('secrets.', build)
         self.assertNotIn('environment:', build)
         self.assertNotIn('id-token:', build)
-        self.assertNotIn('actions/cache', build)
+        self.assertIn('CompilationCache.noindex', build)
+        self.assertNotIn('actions/cache', signing_job)
+        self.assertLess(build.index('ios-testflight.py build-gate'), build.index('actions/cache'))
         self.assertIn('ref: ${{ github.sha }}', build)
         self.assertNotIn('ref: ${{ inputs.expected_sha }}', build)
         self.assertIn("github.ref ==\n      'refs/heads/release-candidate'", build)

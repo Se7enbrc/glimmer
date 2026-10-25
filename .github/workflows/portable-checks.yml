@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: Portable checks
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  checks:
+    name: Linux checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select verification Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.8"
+      - name: Restore portable tools
+        id: tools
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/glimmer-tools
+            ~/.cache/pre-commit
+          key:
+            linux-tools-v1-${{ runner.arch }}-${{
+            hashFiles('.pre-commit-config.yaml', 'scripts/install-ci-*.sh',
+            'scripts/ci-python-requirements.txt') }}
+      - name: Prepare portable tools
+        env:
+          CACHE_HIT: ${{ steps.tools.outputs.cache-hit }}
+        run: |
+          if [ "$CACHE_HIT" != true ]; then
+            scripts/install-ci-linux-tools.sh
+            python3 -m venv "$RUNNER_TEMP/glimmer-tools/python"
+            "$RUNNER_TEMP/glimmer-tools/python/bin/pip" install --require-hashes -r scripts/ci-python-requirements.txt
+          fi
+          echo "$RUNNER_TEMP/glimmer-tools/bin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/glimmer-tools/python/bin" >> "$GITHUB_PATH"
+      - name: Run every portable hook and script fixture
+        env:
+          GLIMMER_SECRET_SCAN_ALL_FILES: "1"
+          SCAN_FROM:
+            ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$SCAN_FROM" ] && [ "$SCAN_FROM" != 0000000000000000000000000000000000000000 ]; then
+            export PRE_COMMIT_FROM_REF="$SCAN_FROM" PRE_COMMIT_TO_REF="$GITHUB_SHA"
+          fi
+          pre-commit run --all-files
+          scripts/check-spdx.sh
+          make test-scripts TEST_PLATFORM=portable COVERAGE=1
+      - name: Save trusted portable tools
+        if:
+          github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          steps.tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/glimmer-tools
+            ~/.cache/pre-commit
+          key: ${{ steps.tools.outputs.cache-primary-key }}
+      - name: Upload portable coverage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-python-portable
+          path: build/coverage/python/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

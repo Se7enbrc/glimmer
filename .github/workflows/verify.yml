@@ -7,22 +7,24 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# A pull request's newer push replaces its run; every main commit keeps its own.
+# A PR update or closure replaces its run; all other events keep independent runs.
 concurrency:
   group:
-    ${{ github.workflow }}-${{ github.ref }}-${{
-    github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+    ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref
+    }}-${{ github.event_name == 'pull_request' && 'pr' || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Main and dispatched runs build everything; a pull request skips the build and
-  # tests only when it changes nothing but documentation and the website.
+  # tests only for documentation or verified numeric version metadata.
   changes:
+    if: github.event.action != 'closed'
     name: Decide what to verify
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -32,18 +34,27 @@ jobs:
     outputs:
       build: ${{ steps.decide.outputs.build }}
       parts: ${{ steps.decide.outputs.parts }}
+      apple: ${{ steps.decide.outputs.apple }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Decide
         id: decide
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          apple=false
+          if [ -f Package.swift ] || [ -d GlimmerEngine ] || [ -f iOS/Makefile ]; then
+            test -f Package.swift && test -f iOS/Makefile && test -d GlimmerEngine
+            apple=true
+          fi
+          printf 'apple=%s\n' "$apple" >> "$GITHUB_OUTPUT"
           build=true
           if [ -n "$PR_NUMBER" ]; then
             if paths="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
@@ -52,11 +63,11 @@ jobs:
                 decision="$(printf '%s\n' "$paths" | python3 scripts/verify-changed.py)" &&
                 [ "$decision" = skip ]; then
               build=false
-              echo "Documentation only; the build and tests run when main gets it."
+              echo "Documentation or numeric version metadata only; main still runs the full gate."
             fi
           fi
-          checks='{"part":"checks","target":"check","coverage":"python"}'
-          tests='{"part":"tests","target":"test","coverage":"swift"}'
+          checks='{"part":"checks","target":"check-macos","coverage":"python"}'
+          tests='{"part":"tests","target":"test-run","coverage":"swift"}'
           fuzz='{"part":"fuzz","target":"test-asan","coverage":""}'
           if [ "$build" = true ]; then parts="[$checks,$tests,$fuzz]"; else parts="[$checks]"; fi
           printf 'build=%s\nparts=%s\n' "$build" "$parts" >> "$GITHUB_OUTPUT"
@@ -105,12 +116,11 @@ jobs:
           PART: ${{ matrix.part }}
         run: |
           if [ "$PART" = checks ]; then
-            for tool in swiftlint actionlint pre-commit; do
+            for tool in swiftlint; do
               if ! command -v "$tool" >/dev/null 2>&1; then
                 brew install "$tool"
               fi
             done
-            scripts/install-ci-scanner.sh
             swiftlint version
           fi
           if [ "$COVERAGE_KIND" = python ]; then
@@ -121,52 +131,62 @@ jobs:
           printf 'HOOK_PYTHON=%s\n' "$(python3 -c 'import platform; print(platform.python_version())')" >> "$GITHUB_ENV"
           XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-ci.xcconfig"
           cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          COMPILATION_CACHE_ENABLE_CACHING = YES
+          COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS = YES
+          SWIFT_SUPPRESS_WARNINGS = NO
           SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
           GCC_TREAT_WARNINGS_AS_ERRORS = YES
           XCCONFIG
           printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
 
-      - name: Restore hook environments
-        if: matrix.part == 'checks'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Restore compiler and dependency caches
+        id: build-cache
+        # Same-ref repository code; no external checkout or action mutation precedes this call.
+        uses: ./.github/actions/build-cache # zizmor: ignore[self-repository]
         with:
-          path: ~/.cache/pre-commit
-          key:
-            ${{ runner.os }}-${{ runner.arch }}-hooks-v1-${{ env.HOOK_PYTHON
-            }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          variant: ${{ matrix.part }}
 
-      - name: Pre-commit
-        id: precommit
-        if: matrix.part == 'checks'
-        env:
-          GLIMMER_SECRET_SCAN_ALL_FILES: "1"
-          SCAN_FROM:
-            ${{ github.event.pull_request.base.sha || github.event.before }}
+      - name: Build the shared Mac test products
+        if: matrix.part == 'tests'
+        timeout-minutes: 10
         run: |
-          if [ -n "$SCAN_FROM" ] && [ "$SCAN_FROM" != 0000000000000000000000000000000000000000 ]; then
-            export PRE_COMMIT_FROM_REF="$SCAN_FROM"
-            export PRE_COMMIT_TO_REF="$GITHUB_SHA"
-          fi
-          pre-commit run --all-files
+          set -o pipefail
+          mkdir -p build/logs
+          make test-build COVERAGE=1 2>&1 | tee build/logs/test-build.log
+          tar -C build/Build -czf "$RUNNER_TEMP/sequoia-tests.tgz" Products
 
-      - name: Save trusted hook environments
-        if:
-          matrix.part == 'checks' && github.event_name == 'push' && github.ref
-          == 'refs/heads/main'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Hand the test products to the macOS 15 runner
+        if: matrix.part == 'tests'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          path: ~/.cache/pre-commit
-          key:
-            ${{ runner.os }}-${{ runner.arch }}-hooks-v1-${{ env.HOOK_PYTHON
-            }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          name: sequoia-tests
+          path: ${{ runner.temp }}/sequoia-tests.tgz
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Verify
+        timeout-minutes: 20
         id: verify
         env:
           TARGET: ${{ matrix.target }}
           COVERAGE_KIND: ${{ matrix.coverage }}
           COVERAGE_PY: ${{ runner.temp }}/coverage/bin/python -m coverage
-        run: make "$TARGET" TEST_SUITE= ${COVERAGE_KIND:+COVERAGE=1}
+        run: |
+          set -o pipefail
+          mkdir -p build/logs
+          make "$TARGET" TEST_SUITE= ${COVERAGE_KIND:+COVERAGE=1} 2>&1 | tee build/logs/verify.log
+
+      - name: Save Mac results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mac-${{ matrix.part }}-results
+          path: |
+            build/logs/
+            build/Logs/Test/
+            build/coverage/swift/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Coverage summary
         if: matrix.coverage != ''
@@ -180,19 +200,75 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage
-        if: matrix.coverage != ''
+        if: always() && matrix.coverage != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: coverage-${{ matrix.coverage }}
+          name: coverage-${{ matrix.coverage }}-macos
           path: build/coverage/${{ matrix.coverage }}/
           if-no-files-found: error
           retention-days: 30
+          include-hidden-files: true
+
+      - name: Build and test the source package
+        if:
+          matrix.part == 'checks' && needs.changes.outputs.build == 'true' &&
+          needs.changes.outputs.apple == 'true'
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          mkdir -p build/logs
+          swift build -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-build.log
+          swift test -Xswiftc -warnings-as-errors 2>&1 | tee build/logs/package-test.log
+
+      - name: Build engine for device and Simulator
+        if:
+          matrix.part == 'checks' && needs.changes.outputs.build == 'true' &&
+          needs.changes.outputs.apple == 'true'
+        timeout-minutes: 5
+        run: |
+          xcodebuild -version
+          for destination in 'generic/platform=iOS' 'generic/platform=iOS Simulator'; do
+            xcodebuild -project Glimmer.xcodeproj -scheme GlimmerEngine -configuration Release \
+              -destination "$destination" -derivedDataPath build/engine-ios \
+              CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES build
+          done
+
+      - name: Build production iPhone app without signing
+        if:
+          matrix.part == 'checks' && needs.changes.outputs.build == 'true' &&
+          needs.changes.outputs.apple == 'true'
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p iOS/build/logs
+          make ios-device 2>&1 | tee iOS/build/logs/device.log
+          if grep -E '(^|[[:space:]])warning:' iOS/build/logs/device.log; then exit 1; fi
+
+      - name: Save package results
+        if:
+          always() && matrix.part == 'checks' && needs.changes.outputs.build ==
+          'true' && needs.changes.outputs.apple == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: engine-package-results
+          path: |
+            build/logs/
+            iOS/build/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Save compiler and dependency caches
+        if: success() && steps.build-cache.outputs.hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.build-cache.outputs.paths }}
+          key: ${{ steps.build-cache.outputs.key }}
 
       - name: Failure summary
         if: failure()
         env:
           TESTED_SHA: ${{ github.sha }}
-          PRECOMMIT_OUTCOME: ${{ steps.precommit.outcome }}
+          PRECOMMIT_OUTCOME: See portable checks
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
           PART: ${{ matrix.part }}
           TARGET: ${{ matrix.target }}
@@ -208,6 +284,174 @@ jobs:
             printf 'Credential scanner findings are withheld; never paste keys or tokens into an issue.\n'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  ios-build:
+    name: iOS (build for testing)
+    needs: changes
+    if:
+      needs.changes.outputs.build == 'true' && needs.changes.outputs.apple ==
+      'true'
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Restore compiler and dependency caches
+        id: build-cache
+        # Same-ref repository code; no external checkout or action mutation precedes this call.
+        uses: ./.github/actions/build-cache # zizmor: ignore[self-repository]
+        with:
+          variant: ios-tests
+
+      - name: Build all Simulator tests once
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          mkdir -p iOS/build/logs
+          destination=$(scripts/ci-ios-simulator.sh)
+          export XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-cache.xcconfig"
+          make -C iOS test-build TEST_DESTINATION="$destination" TEST_FLAGS='-enableCodeCoverage YES' \
+            2>&1 | tee iOS/build/logs/test-build.log
+          if grep -E '(^|[[:space:]])warning:' iOS/build/logs/test-build.log; then exit 1; fi
+          tar -C iOS/build/DerivedData/Build -czf "$RUNNER_TEMP/ios-tests.tgz" Products
+
+      - name: Share the Simulator test products
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-tests
+          path: ${{ runner.temp }}/ios-tests.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Save compiler and dependency caches
+        if: success() && steps.build-cache.outputs.hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.build-cache.outputs.paths }}
+          key: ${{ steps.build-cache.outputs.key }}
+
+      - name: Save Simulator build results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-build-results
+          path: iOS/build/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  ios:
+    name: iOS (Simulator ${{ matrix.shard }})
+    needs: [changes, ios-build]
+    if:
+      needs.changes.outputs.build == 'true' && needs.changes.outputs.apple ==
+      'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [core, render]
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Receive the Simulator test products
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ios-tests
+          path: ${{ runner.temp }}
+
+      - name: Test iPhone app against this checkout
+        timeout-minutes: 20
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -o pipefail
+          mkdir -p iOS/build/logs iOS/build/DerivedData/Build
+          tar -C iOS/build/DerivedData/Build -xzf "$RUNNER_TEMP/ios-tests.tgz"
+          destination=$(scripts/ci-ios-simulator.sh)
+          case "$SHARD" in
+            render) filter="-only-testing:GlimmerTests/NativeUIRenderTests" ;;
+            core) filter="-skip-testing:GlimmerTests/NativeUIRenderTests" ;;
+            *) exit 1 ;;
+          esac
+          make -C iOS test-run TEST_DESTINATION="$destination" \
+            TEST_FLAGS="-enableCodeCoverage YES -resultBundlePath build/CI-tests.xcresult $filter" \
+            2>&1 | tee iOS/build/logs/test.log
+          if grep -E '(^|[[:space:]])warning:' iOS/build/logs/test.log; then exit 1; fi
+          xcrun xccov view --report --json iOS/build/CI-tests.xcresult > iOS/build/logs/coverage.json
+          xcrun xccov view --report iOS/build/CI-tests.xcresult > iOS/build/logs/coverage.txt
+          {
+            printf '### iOS Simulator coverage (%s shard)\n\n```text\n' "$SHARD"
+            cat iOS/build/logs/coverage.txt
+            printf '\n```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save iOS results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-${{ matrix.shard }}-results
+          path: |
+            iOS/build/logs/
+            iOS/build/CI-tests.xcresult
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Run the same instrumented products on the oldest supported macOS.
+  sequoia:
+    name: Verify (sequoia)
+    needs: [changes, verify]
+    if:
+      needs.changes.outputs.build == 'true' && needs.changes.outputs.apple ==
+      'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      # Runs, never compiles: the image's newest Xcode is 26.3.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Receive the test products
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sequoia-tests
+          path: ${{ runner.temp }}
+
+      - name: Run the unit tests on macOS 15
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          sw_vers
+          mkdir -p build/Build build/logs
+          tar -C build/Build -xzf "$RUNNER_TEMP/sequoia-tests.tgz"
+          make test-run TEST_FLAGS='-resultBundlePath build/sequoia.xcresult' \
+            2>&1 | tee build/logs/sequoia.log
+
+      - name: Save macOS 15 results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sequoia-results
+          path: |
+            build/logs/
+            build/sequoia.xcresult
+          if-no-files-found: ignore
+          retention-days: 14
+
   fuzz:
     name: libFuzzer
     needs: changes
@@ -221,14 +465,35 @@ jobs:
           persist-credentials: false
 
       - name: Fuzz protocol parsers
+        timeout-minutes: 4
         env:
           FUZZ_SECONDS: "30"
-        run: scripts/fuzz.sh
+        run: |
+          set -o pipefail
+          mkdir -p build/logs
+          scripts/fuzz.sh 2>&1 | tee build/logs/fuzz.log
+
+      - name: Save fuzzer results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: libfuzzer-results
+          path: |
+            build/logs/
+            build/fuzz/
+          if-no-files-found: ignore
+          retention-days: 14
+  checks:
+    name: Portable checks
+    needs: changes
+    # Same-ref repository code; no external checkout or action mutation precedes this call.
+    uses: ./.github/workflows/portable-checks.yml # zizmor: ignore[self-repository]
+
   # The required check: green only when every part of the gate passed.
   gate:
     name: macOS
-    needs: [changes, verify]
-    if: always()
+    needs: [changes, checks, verify, ios-build, ios, sequoia, fuzz]
+    if: always() && github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -236,4 +501,61 @@ jobs:
         env:
           DECIDED: ${{ needs.changes.result }}
           RESULT: ${{ needs.verify.result }}
-        run: test "$DECIDED" = success && test "$RESULT" = success
+          BUILD: ${{ needs.changes.outputs.build }}
+          APPLE: ${{ needs.changes.outputs.apple }}
+          CHECKS: ${{ needs.checks.result }}
+          IOS_BUILD: ${{ needs.ios-build.result }}
+          IOS: ${{ needs.ios.result }}
+          SEQUOIA: ${{ needs.sequoia.result }}
+          FUZZ: ${{ needs.fuzz.result }}
+        run: |
+          test "$DECIDED" = success
+          test "$RESULT" = success
+          test "$CHECKS" = success
+          case "$APPLE" in true|false) ;; *) exit 1 ;; esac
+          case "$BUILD" in
+            true) test "$FUZZ" = success ;;
+            false) test "$FUZZ" = skipped ;;
+            *) exit 1 ;;
+          esac
+          if [ "$BUILD" = true ] && [ "$APPLE" = true ]; then
+            test "$IOS_BUILD" = success
+            test "$IOS" = success
+            test "$SEQUOIA" = success
+          else
+            test "$IOS_BUILD" = skipped
+            test "$IOS" = skipped
+            test "$SEQUOIA" = skipped
+          fi
+
+      - name: Check out coverage tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select coverage Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.8"
+      - name: Receive every script coverage partition
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: coverage-python-*
+          path: build/coverage/parts
+      - name: Combine complete script coverage
+        run: |
+          python3 -m venv "$RUNNER_TEMP/coverage"
+          "$RUNNER_TEMP/coverage/bin/pip" install --only-binary :all: --require-hashes -r scripts/coverage-requirements.txt
+          export COVERAGE_PY="$RUNNER_TEMP/coverage/bin/python -m coverage"
+          mkdir -p build/coverage/python
+          cp build/coverage/parts/coverage-python-portable/.coverage build/coverage/python/.coverage.portable
+          cp build/coverage/parts/coverage-python-macos/.coverage build/coverage/python/.coverage.macos
+          python3 scripts/coverage-report.py python
+          cat build/coverage/python/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload complete script coverage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-python
+          path: build/coverage/python/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

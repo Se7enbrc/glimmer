@@ -63,7 +63,7 @@ jobs:
     if: >-
       github.repository == 'Se7enbrc/glimmer' && inputs.operation == 'candidate'
       && github.ref == 'refs/heads/release-candidate'
-    runs-on: macos-26
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -93,24 +93,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: scripts/ci-release.sh checks
 
-      - name: Prepare verification
+      - name: Select verification Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14.8"
+      - name: Prepare portable verification
         run: |
-          test "$(uname -m)" = arm64
-          xcodebuild -version
-          xcrun --sdk macosx --show-sdk-version
-          for tool in swiftlint actionlint pre-commit; do
-            if ! command -v "$tool" >/dev/null 2>&1; then
-              brew install "$tool"
-            fi
-          done
-          scripts/install-ci-scanner.sh
-          XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-release.xcconfig"
-          cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
-          SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
-          GCC_TREAT_WARNINGS_AS_ERRORS = YES
-          XCCONFIG
-          printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
-
+          scripts/install-ci-linux-tools.sh
+          python3 -m venv "$RUNNER_TEMP/glimmer-tools/python"
+          "$RUNNER_TEMP/glimmer-tools/python/bin/pip" install --only-binary :all: --require-hashes -r scripts/ci-python-requirements.txt
+          echo "$RUNNER_TEMP/glimmer-tools/python/bin" >> "$GITHUB_PATH"
       - name: Verify without signing credentials
         id: verify
         run: scripts/ci-release.sh verify-checks
@@ -157,14 +149,29 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
           XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-release.xcconfig"
           cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          SWIFT_SUPPRESS_WARNINGS = NO
           SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
           GCC_TREAT_WARNINGS_AS_ERRORS = YES
           XCCONFIG
           printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
 
+      - name: Restore unsigned compiler state
+        id: build-cache
+        # Same-ref source runs only in this credential-free verification job.
+        uses: ./.github/actions/build-cache # zizmor: ignore[self-repository]
+        with:
+          variant: tests
+
       - name: Verify without signing credentials
         id: verify
         run: scripts/ci-release.sh verify-tests
+
+      - name: Save unsigned compiler state
+        if: success() && steps.build-cache.outputs.hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.build-cache.outputs.paths }}
+          key: ${{ steps.build-cache.outputs.key }}
 
   verify-asan:
     name: AddressSanitizer
@@ -208,14 +215,29 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
           XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-release.xcconfig"
           cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          SWIFT_SUPPRESS_WARNINGS = NO
           SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
           GCC_TREAT_WARNINGS_AS_ERRORS = YES
           XCCONFIG
           printf 'XCODE_XCCONFIG_FILE=%s\n' "$XCODE_XCCONFIG_FILE" >> "$GITHUB_ENV"
 
+      - name: Restore unsigned compiler state
+        id: build-cache
+        # Same-ref source runs only in this credential-free verification job.
+        uses: ./.github/actions/build-cache # zizmor: ignore[self-repository]
+        with:
+          variant: fuzz
+
       - name: Verify without signing credentials
         id: verify
         run: scripts/ci-release.sh verify-asan
+
+      - name: Save unsigned compiler state
+        if: success() && steps.build-cache.outputs.hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.build-cache.outputs.paths }}
+          key: ${{ steps.build-cache.outputs.key }}
 
   build:
     needs: [verify-checks, verify-tests, verify-asan]
@@ -437,7 +459,8 @@ jobs:
       needs.tooling.result == 'success' && ((inputs.operation == 'candidate' &&
       needs.validate.result == 'success') || (inputs.operation == 'promote' &&
       github.ref == 'refs/heads/main'))
-    uses: ./.github/workflows/release-publication.yml
+    # Same-ref repository code; no external checkout or action mutation precedes this call.
+    uses: ./.github/workflows/release-publication.yml # zizmor: ignore[self-repository]
     # Environment secrets resolve empty in a called workflow unless the caller
     # passes them; pass only what publication uses, by name.
     secrets:
