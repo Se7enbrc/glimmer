@@ -1,11 +1,15 @@
 ---
-description: Update Glimmer or join the release-candidate channel.
+description: Update Glimmer on Mac, iPhone or iPad, or try a beta release.
 icon: arrows-rotate
 ---
 
 # Update Glimmer
 
-1. Choose Glimmer › Check for updates…
+On Mac, Glimmer checks for updates through Sparkle. On iPhone and iPad, use
+[TestFlight](#test-the-iphone-and-ipad-app) for beta updates. App Store updates
+will be available when Glimmer is released there.
+
+1. On Mac, choose Glimmer › Check for Updates…
 
 {% hint style="info" %}
 
@@ -23,6 +27,8 @@ run immediately. Turning off automatic checks stays saved.
    ```
 
 ## Try release candidates
+
+For the Mac app:
 
 1. [Download a candidate](https://github.com/Se7enbrc/glimmer/releases).
 2. [Verify the download](VERIFY_DOWNLOAD.md).
@@ -53,6 +59,6 @@ Send feedback on a candidate to
 The iPhone and iPad app is in beta on TestFlight. To join, email
 [glimmer-prerelease@ugfugl.io](mailto:glimmer-prerelease@ugfugl.io) with the
 device you'll test on, and you'll get an invitation. You need a PC running
-Sunshine and iOS or iPadOS 26 or later.
+Sunshine, plus iOS 26 or later on iPhone or iPadOS 26 or later on iPad.
 
 Next: [read the release notes](https://github.com/Se7enbrc/glimmer/releases).

@@ -6,13 +6,16 @@ icon: list-check
 
 # Check what you need to play
 
-| Part           | You need                                                                                    |
-| -------------- | ------------------------------------------------------------------------------------------- |
-| Mac            | Apple Silicon, macOS 15.7 or later.                                                         |
-| iPhone or iPad | iOS or iPadOS 26 or later. Available through TestFlight now; App Store release coming soon. |
-| PC             | Current, unmodified [Sunshine](https://github.com/LizardByte/Sunshine), running and awake.  |
-| PC display     | Physical or [virtual](HOST_SETUP.md), supporting your chosen mode.                          |
-| Network        | A reachable PC; start on the same network.                                                  |
+Choose a Mac, iPhone or iPad to play from your Sunshine PC. The PC runs the
+game; Glimmer sends your controls and brings back the picture and sound.
+
+| Part           | You need                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| Mac            | Apple Silicon, macOS 15.7 or later.                                                        |
+| iPhone or iPad | iOS 26 or later on iPhone; iPadOS 26 or later on iPad.                                     |
+| PC             | Current, unmodified [Sunshine](https://github.com/LizardByte/Sunshine), running and awake. |
+| PC display     | Physical or [virtual](HOST_SETUP.md), supporting your chosen mode.                         |
+| Network        | A reachable PC; start on the same network.                                                 |
 
 {% hint style="info" %}
 

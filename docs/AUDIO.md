@@ -8,11 +8,13 @@ layout:
 
 # Audio and voice chat
 
-Pick your speakers or headphones in macOS. Glimmer follows, even mid-stream.
+Listen through your device's speakers or headphones. iPhone and iPad streams use
+stereo sound.
 
-AirPods get spatial audio with head tracking. Other headphones and speakers get
-spatial audio without it, and 5.1 or 7.1 outputs play each channel as is.
-There's nothing to set up.
+On Mac, pick your speakers or headphones in macOS. Glimmer follows, even
+mid-stream. AirPods get spatial audio with head tracking. Other headphones and
+speakers get spatial audio without it, and 5.1 or 7.1 outputs play each channel
+as is. There's nothing to set up.
 
 {% hint style="info" %}
 

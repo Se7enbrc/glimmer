@@ -5,9 +5,9 @@ icon: play
 
 # Start your first stream
 
-1. Install Glimmer on a [compatible device](REQUIREMENTS.md): use the
-   [Mac installer](INSTALL.md), or open your TestFlight invitation on iPhone or
-   iPad and install Glimmer. The App Store release is coming soon.
+Pair with your Sunshine PC and choose a game on Mac, iPhone or iPad.
+
+1. [Install Glimmer](INSTALL.md) on a [compatible device](REQUIREMENTS.md).
 
 2. [Set up Sunshine](HOST_SETUP.md).
 

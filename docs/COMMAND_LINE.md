@@ -1,4 +1,7 @@
-# Run Glimmer from Terminal
+# Run Glimmer from Terminal on Mac
+
+Use the Mac app's command line to pair, launch and control streams with the same
+PCs and settings as the launcher.
 
 ## Install the command
 
@@ -12,13 +15,13 @@
 
 ## Commands and flags
 
-| Command                                | Result                                                                    |
-| -------------------------------------- | ------------------------------------------------------------------------- |
-| `glimmer pair 192.0.2.10 [--pin NNNN]` | Pair; enter generated or supplied four-digit PIN on Sunshine's PIN page.  |
-| `glimmer list [<pc>] [--csv\|--json]`  | List PCs, or a PC's apps. CSV app columns: Name, ID, HDR Support, Hidden. |
-| `glimmer stop [<pc>] [--json]`         | End the local stream and its PC app; optional PC must match.              |
-| `glimmer status [--json]`              | Local stream; doesn't open Glimmer or contact PC.                         |
-| `glimmer stream <pc> [<app>]`          | Stream; omitted app prefers running app, then Start with.                 |
+| Command                                | Result                                                                           |
+| -------------------------------------- | -------------------------------------------------------------------------------- |
+| `glimmer pair 192.0.2.10 [--pin NNNN]` | Pair; enter generated or supplied four-digit PIN on Sunshine's PIN page.         |
+| `glimmer list [<pc>] [--csv\|--json]`  | List PCs, or a PC's apps. CSV app columns: Name, ID, HDR Support, Hidden.        |
+| `glimmer stop [<pc>] [--json]`         | End the local stream, following your disconnect setting; optional PC must match. |
+| `glimmer status [--json]`              | Local stream; doesn't open Glimmer or contact PC.                                |
+| `glimmer stream <pc> [<app>]`          | Stream; omitted app prefers running app, then Start with.                        |
 
 | PC action                    | Result                                                                                      |
 | ---------------------------- | ------------------------------------------------------------------------------------------- |
@@ -37,8 +40,9 @@
 
 {% hint style="warning" %}
 
-Stopping, closing the window or quitting Glimmer quits the PC app. Save first.
-There is no disconnect command.
+Stopping, closing the window or quitting Glimmer follows “Leave games running
+when you disconnect” in Settings › General. It is off by default, so save first.
+An explicit `glimmer quit` still quits the PC app.
 
 {% endhint %}
 

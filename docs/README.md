@@ -1,5 +1,5 @@
 ---
-description: Install Glimmer, set up the PC, and find your way around a stream.
+description: Stream from your PC to Mac, iPhone or iPad with Glimmer.
 icon: house
 layout:
   outline:
@@ -12,10 +12,15 @@ layout:
 
 # Play your PC games on Mac, iPhone and iPad
 
-Pair with Sunshine on your PC, choose a game and play. Glimmer brings the same
-launcher, controller layouts and running-game controls to Mac, iPhone and iPad.
-The iPhone and iPad app is available through TestFlight now; the App Store
-release is coming soon.
+Glimmer is a native Swift [Sunshine](https://github.com/LizardByte/Sunshine)
+client for Apple devices. Pair with your PC, choose a game and play. The
+launcher, controller layouts and running-game controls work across Mac, iPhone
+and iPad.
+
+Use an Apple Silicon Mac with macOS 15.7 or later, an iPhone with iOS 26 or
+later, or an iPad with iPadOS 26 or later. [Install Glimmer](INSTALL.md) on Mac
+through Homebrew or a DMG, and on iPhone or iPad through TestFlight now, or the
+App Store when released.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/launcher-art-dark.png">
@@ -25,7 +30,7 @@ release is coming soon.
 | Need       | Go here                                                              |
 | ---------- | -------------------------------------------------------------------- |
 | Setup      | [Requirements](REQUIREMENTS.md) · [FAQ](FAQ.md)                      |
-| Controls   | [Guides](FEATURES.md) · [Automation](AUTOMATION.md)                  |
+| Controls   | [Guides](FEATURES.md) · [Mac automation](AUTOMATION.md)              |
 | Help       | [Troubleshooting](guides/TROUBLESHOOTING.md) · [Updates](UPDATES.md) |
 | Your data  | [Privacy](PRIVACY.md) · [Security](SECURITY.md)                      |
 | Contribute | [Developer guide](CONTRIBUTING.md) · [Roadmap](ROADMAP.md)           |

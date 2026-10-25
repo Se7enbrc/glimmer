@@ -5,23 +5,26 @@ icon: circle-question
 
 # Find a quick answer
 
+Glimmer is a native Swift Sunshine client for Mac, iPhone and iPad. Pair your
+device with the PC, choose a game and play.
+
 ## Setup
 
-| Question                 | Answer                                                                                                                           |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| Intel Mac or GameStream? | No. Use [Apple Silicon, macOS 15.7 and Sunshine](REQUIREMENTS.md).                                                               |
-| iPhone or iPad?          | Yes, with iOS or iPadOS 26 or later. [Install through TestFlight](GETTING_STARTED.md) now; the App Store release is coming soon. |
-| Virtual display needed?  | Only for a headless PC or [unsupported display mode](HOST_SETUP.md).                                                             |
-| Tailscale?               | Enter the PC's address. [Wake on LAN](guides/PCS.md) stays on your home network.                                                 |
-| Why a Wi-Fi helper?      | It pauses [AirDrop radio interruptions](guides/WIFI.md).                                                                         |
+| Question                   | Answer                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Intel Mac or GameStream?   | No. Use [Apple Silicon, macOS 15.7 and Sunshine](REQUIREMENTS.md).                                                                                           |
+| iPhone or iPad?            | Yes: iOS 26 or later on iPhone, or iPadOS 26 or later on iPad. [Install through TestFlight](INSTALL.md#iphone-and-ipad) now, or the App Store when released. |
+| Virtual display needed?    | Only for a headless PC or [unsupported display mode](HOST_SETUP.md).                                                                                         |
+| Tailscale?                 | Enter the PC's address. [Wake on LAN](guides/PCS.md) stays on your home network.                                                                             |
+| Why a Wi-Fi helper on Mac? | It pauses [AirDrop radio interruptions](guides/WIFI.md) during a stream.                                                                                     |
 
 ## Playing
 
 | Question                             | Answer                                                                                                                                                                                          |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Stop without quitting the game?      | Turn on “Leave games running when you disconnect” in Settings › General before streaming. Then [Resume or Continue here](guides/STREAMING.md#continue-a-running-game) on another paired device. |
-| Pointer trapped?                     | Press Control-P. See [mouse controls](guides/KEYBOARD_MOUSE.md).                                                                                                                                |
-| Muffled AirPods?                     | Use the Mac or USB microphone for [voice chat](AUDIO.md). Glimmer doesn't forward microphones.                                                                                                  |
+| Pointer trapped on Mac?              | Press Control-P. See [mouse controls](guides/KEYBOARD_MOUSE.md).                                                                                                                                |
+| Muffled AirPods on Mac?              | Use the Mac or USB microphone for [voice chat](AUDIO.md). Glimmer doesn't forward microphones.                                                                                                  |
 | Copy from the PC?                    | No clipboard sync. You can [paste Mac text into the PC](guides/KEYBOARD_MOUSE.md#paste-text-into-the-pc).                                                                                       |
 | Need a controller on iPhone or iPad? | No. Use [touch controls](guides/CONTROLLERS.md#play-with-touch-controls-on-iphone-and-ipad), or touch to move and click the mouse.                                                              |
 
@@ -35,12 +38,12 @@ icon: circle-question
 
 ## More
 
-| Question                    | Answer                                                                                                                                        |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Raycast or Stream Deck?     | Use [automation](AUTOMATION.md).                                                                                                              |
-| Analytics?                  | None. [Diagnostics stay local](PRIVACY.md).                                                                                                   |
-| Why Glimmer over Moonlight? | Mac controls, Mini Player and Shortcuts. Moonlight inspired Glimmer; see [credits](https://github.com/Se7enbrc/glimmer/blob/main/CREDITS.md). |
-| What's next?                | [Updates](UPDATES.md) and the [roadmap](ROADMAP.md), without delivery dates.                                                                  |
+| Question                       | Answer                                                                                                                                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Raycast or Stream Deck on Mac? | Use [automation](AUTOMATION.md).                                                                                                                                                               |
+| Analytics?                     | None. [Diagnostics stay local](PRIVACY.md).                                                                                                                                                    |
+| Why Glimmer over Moonlight?    | Glimmer brings native controls and a shared streaming experience to Mac, iPhone and iPad. Moonlight inspired Glimmer; see [credits](https://github.com/Se7enbrc/glimmer/blob/main/CREDITS.md). |
+| What's next?                   | [Updates](UPDATES.md) and the [roadmap](ROADMAP.md), without delivery dates.                                                                                                                   |
 
 Next: [troubleshoot a problem](guides/TROUBLESHOOTING.md) or
 [find an existing report](https://github.com/Se7enbrc/glimmer/issues).
