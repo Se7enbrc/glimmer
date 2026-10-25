@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: Candidate delivery admission
+
+on:
+  workflow_run:
+    workflows: [Release, iOS TestFlight]
+    types: [requested, in_progress, completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Delivery run ID to reconcile
+        required: true
+        type: string
+      attempt:
+        description: Exact delivery attempt to reconcile
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    if: >-
+      github.repository == 'Se7enbrc/glimmer' && github.ref == 'refs/heads/main'
+      && github.event.repository.default_branch == 'main'
+    environment: rc-cut
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require trusted main controller before credentials
+        run: |
+          test "$GITHUB_REPOSITORY" = Se7enbrc/glimmer
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/candidate-delivery.yml@refs/heads/main"
+          case "$GITHUB_EVENT_NAME" in workflow_run|workflow_dispatch) ;; *) exit 1 ;; esac
+      - name: Check out trusted main controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Mint reservation controller token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.GLIMMER_RC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GLIMMER_RC_APP_PRIVATE_KEY }}
+          owner: Se7enbrc
+          repositories: glimmer
+          permission-contents: write
+          permission-actions: read
+      - name: Admit or finish the exact delivery attempt
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          DELIVERY_RUN: ${{ github.event.workflow_run.id || inputs.run_id }}
+          DELIVERY_ATTEMPT:
+            ${{ github.event.workflow_run.run_attempt || inputs.attempt }}
+        run: |
+          gh auth setup-git
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+          python3 scripts/candidate_delivery.py "$DELIVERY_RUN" "$DELIVERY_ATTEMPT"

@@ -10,6 +10,20 @@ change goes through a PR. A candidate must pass the hosted checks before it is
 built, then pass a playback test before the PR is merged or the candidate is
 promoted. A green build alone is not release acceptance.
 
+## iPhone and iPad artifacts
+
+Choose the compiled flavour before archiving: `beta` includes local diagnostics;
+`production` excludes them, even when installed through TestFlight. Only a
+production archive may be used as App Store submission source. A beta build
+cannot be promoted unchanged to production.
+
+Follow the [iOS TestFlight process](../iOS/docs/TESTFLIGHT.md). Keep flavour in
+the sealed archive identity and attested receipt, and inspect the executable and
+resources before delivery. The current delivery workflow remains internal-only;
+public submission requires its own reviewed export from the tested production
+archive. Land trusted workflow and script changes on `main` before dispatching;
+land app and shared-engine exclusions on the reviewed feature branch.
+
 ## 1. Prepare the candidate
 
 Keep the final numeric marketing version in `Glimmer/Version.xcconfig`, such as
@@ -24,20 +38,27 @@ tests under AddressSanitizer. Inspect compiler output for warnings. Ordinary
 unsigned compile checks and tests can run while fixing a failing check; signing
 or packaging a candidate must wait for the hosted checks to pass.
 
-Push the reviewed PR commit and wait for Verify's macOS job and all three CodeQL
-jobs (Swift, Python and Actions) to succeed. The release workflow checks that
-exact commit, the upstream workflow identities and their analysis results.
-Missing, pending, skipped, cancelled or failed required checks stop it before
-compilation. Open CodeQL alerts on the analyzed ref also stop the release;
-findings from other code-scanning tools, such as Scorecard, do not.
+Push the reviewed PR commit X and wait for Verify's macOS job and all three
+CodeQL jobs (Swift, Python and Actions) to succeed. These PR checks remain the
+integration review prerequisite. They do not authorize candidate delivery.
 
-Once all checks pass, point the maintainer-controlled `release-candidate` branch
-at that exact reviewed commit. Fork-owned workflow runs cannot authorize a
-release: after mirroring a reviewed fork commit, run Verify and CodeQL on
-`release-candidate` and wait for both to pass. Create its candidate tag with the
-maintainer's normal signed Git workflow and push it over SSH. Do not replace an
-existing tag. The publisher requires the tag to exist already, so the scoped
-release token does not create a tag for a commit containing workflow changes.
+Use the cutter below to atomically reserve X and move `release-candidate` to X.
+It dispatches Verify and CodeQL on that branch and waits for their latest
+attempts. Candidate gates require successful upstream dispatches on that exact
+branch, all expected language categories with `commit_sha == X`, completed SARIF
+processing, and no currently open CodeQL alerts on
+`refs/heads/release-candidate`. PR merge analyses never substitute for this
+evidence. Successful language jobs and analyses retained by a failed-job rerun
+remain valid; a newer pending, failed or cancelled candidate run blocks the
+gate. Current global dismissals remain valid, and reopening an alert blocks
+delivery again.
+
+The gate checks the branch and reservation before and after reading evidence,
+and compares analysis IDs and run attempts around the alert lookup. Missing,
+deleted, truncated or changing evidence fails closed. Evidence records include
+analysis and upload IDs for diagnosis, not a frozen authorization receipt. The
+feature branch may advance to Y or regenerate its PR merge while X remains
+reserved. A fix on Y cannot clear an open alert on the candidate ref at X.
 
 Dispatch **Release** on `release-candidate`, choose `candidate`, and supply
 `expected_sha` and `rc_tag`. Review the exact SHA and workflow before approving
@@ -49,11 +70,18 @@ update Homebrew.
 **One command.** From the pushed PR branch, `make rc` does the steps above. It
 refuses a dirty or unpushed tree, a build number that doesn't exceed every build
 on the `appcast` branch, and a marketing version that already has a final tag.
-It waits up to 90 minutes for the required checks, stopping at once on a
-failure, then moves `release-candidate` to HEAD, creates and pushes the next
-signed `-rc.N` tag and dispatches **Release**. It opens the run; approving the
-protected `release` deployment there is the remaining step. Rerunning prints the
-existing run. `make rc DRY_RUN=1` prints each step without changing anything.
+It waits up to 90 minutes for integration checks, then atomically reserves X and
+moves `release-candidate`. It dispatches credential-free Verify and CodeQL and
+waits up to 45 minutes for candidate checks and processing, stopping on a
+terminal failure. Only then does it create and push the next signed `-rc.N` tag
+and dispatch **Release**. It opens the run; approving the protected `release`
+deployment there is the remaining step. Rerunning prints an existing Release
+run, or resumes the held scans without replacing a failed attempt. Rerun failed
+jobs in Actions before resuming. `make rc DRY_RUN=1` prints the steps without
+changing remote state. A timeout or failed dispatch keeps the reservation. If
+the PR has advanced, resume the original cutter workflow or check out the held
+`release-candidate` branch locally and rerun the cutter there. Resumption does
+not ask the moving PR ref to prove X again.
 
 **From the pull request.** Adding the `rc` label to a pull request from this
 repository runs the same cut in the **Release candidate** workflow, which
@@ -62,15 +90,120 @@ the maintainer's step. It runs when the label is added and again each time
 Verify or CodeQL finishes, and cuts only once every required check is green on
 the pull request's current head; until then it stops in seconds without loading
 the app's key. It runs main's tooling and never checks out the pull request.
-While the label stays, each new head that passes gets the next candidate. The
-workflow tags as the release GitHub App rather than with a personal signature;
-the run's attestation identifies the build. It needs a GitHub App installed only
-on this repository, with read and write access to contents, workflows, actions
-and pull requests and read access to checks and code scanning alerts, no
-webhook, and a bypass on the ruleset that protects `release-candidate`. Its
-client ID and private key live in the `rc-cut` environment (no required
-reviewers) as `GLIMMER_RC_APP_CLIENT_ID` and `GLIMMER_RC_APP_PRIVATE_KEY`,
-synced from Doppler like the release secrets.
+While the label stays, a new head can get the next candidate only after the
+previous reservation is explicitly released or abandoned. If a cut was refused
+while reserved, remove and reapply the label after releasing it. The workflow
+tags as the release GitHub App rather than with a personal signature; the run's
+attestation identifies the build. It needs a GitHub App installed only on this
+repository, with read and write access to contents, workflows, actions and pull
+requests and read access to checks and code scanning alerts, no webhook, and a
+bypass on the ruleset that protects `release-candidate`. Its client ID and
+private key live in the `rc-cut` environment (no required reviewers) as
+`GLIMMER_RC_APP_CLIENT_ID` and `GLIMMER_RC_APP_PRIVATE_KEY`, synced from Doppler
+like the release secrets.
+
+CodeQL records its `sarif-id` as a successful job step after the extraction
+safeguard. The gate joins that receipt to the selected run ID, producing
+attempt, head SHA and ref, and requires the analysis timestamp inside that job's
+interval. A later rerun of an older run supersedes earlier execution evidence;
+pending, failed or cancelled executions cannot borrow a different run's green
+verdict. Partial reruns may retain successful language jobs only from the same
+run.
+
+Stable promotion keeps main's prerequisite gate and also rechecks the held
+candidate SHA before tag creation, publication and tap authorization. Valid
+attestations and unchanged shipped inputs do not replace the current candidate
+reservation, direct scans or ref-scoped alert verdict. Keep X reserved until its
+intended promotion and any publication or tap repair finish.
+
+### Shared Mac and iOS reservation
+
+`candidate-reservation` is a durable metadata branch. Its commit message records
+the held source SHA and state; it contains no source or credentials. The cutter
+updates this record and `release-candidate` in one atomic Git push, with
+explicit leases on both refs. Concurrent cutters cannot both allocate the
+branch. The reservation covers all Mac publication and iOS delivery of X
+together; there is no automatic expiry or release on cancellation, failure or
+successful publication. Both platform gates require the reservation still to be
+held. Schema 2 records also contain durable delivery claims, each bound to a
+workflow, run ID, attempt, head SHA and ref.
+
+Keep both branches under the maintainer/RC App write restrictions. All branch
+moves must use the cutter; manual bypass writes can break availability and are
+rejected by subsequent gates. No workflow changes rulesets or credential-bearing
+allowed refs. Before first use, confirm the RC App can atomically update both
+refs under the existing rules. Bootstrap refuses any active Mac or iOS delivery;
+finish the shipping release before deploying this tooling.
+
+The **Candidate delivery admission** controller runs only main's tooling in
+`rc-cut`. It handles requested, in-progress (including reruns) and completed Mac
+Release and iOS TestFlight executions, verifies their live API identity, and
+updates claims with a reservation lease. It never downloads or executes
+candidate artifacts. Its RC App token has only repository contents write and
+Actions read; candidate build jobs keep read-only credentials. Before signing,
+publication or Apple upload, the delivery gate requires its exact claim as well
+as the current candidate analysis verdict. Admission checks wait at most 20
+minutes for admission; missing or failed admission stops delivery without
+credentials. Credential gates wait for their current attempt again on partial
+reruns; a retained earlier wait or approval cannot admit the new attempt.
+
+Completion removes only that exact attempt's claim after GitHub reports it
+completed. Cancellation and failure count as completion, not as permission to
+retire the candidate. A missing completion event leaves a durable claim. Recover
+by dispatching **Candidate delivery admission** on main with the exact `run_id`
+and `attempt`; it rereads GitHub and cannot clear an active attempt. Do not
+manually erase claims. A failed or cancelled controller never frees a hold.
+
+After **all intended Mac and iOS deliveries, including stable promotion and tap
+repair**, are complete, the maintainer runs from a trusted tooling checkout with
+the normal origin credentials:
+
+```bash
+python3 scripts/candidate_reservation.py release FULL_CANDIDATE_SHA
+```
+
+If abandoning X, first cancel its pending workflows and wait for them to stop,
+then run `python3 scripts/candidate_reservation.py abandon FULL_CANDIDATE_SHA`.
+Both commands first atomically fence the reservation as `closing`, denying new
+admissions. A delivery whose claim won the lease first may finish, with its live
+analysis gate still enforced; retirement cannot complete while any claim
+remains. The command also refuses while any Mac Release or iOS build/delivery
+run is active, including approval waits. A failure leaves the fence in place.
+Drain or cancel the admitted attempts, reconcile their completed claims, then
+repeat the same release/abandon command. A closing candidate cannot be reopened
+or replaced. Release is an explicit assertion that no further platform delivery
+is intended; absence of a running workflow is not proof of publication or
+Apple's acceptance. These commands close X's delivery gates and leave an
+auditable state transition. They do not delete artifacts, tags or releases.
+Never release while publication repair or iOS delivery is still intended. A
+released or abandoned SHA cannot immediately be reallocated; use a new reviewed
+commit. A moved reservation or candidate ref needs maintainer recovery, not a
+force push to make a gate pass.
+
+### iOS TestFlight from the held candidate
+
+For iOS without a Mac candidate, run
+`python3 scripts/release-candidate.py --prepare-only` from the clean, pushed PR
+checkout. It checks that guarded tooling matches main, waits for integration
+checks, reserves X, dispatches direct scans and waits for them, without making a
+Mac tag or dispatching Release. If Mac already holds X, this resumes the same
+reservation. A different platform SHA must wait until X is finished or
+abandoned.
+
+Dispatch **iOS TestFlight Build** on `release-candidate` with `expected_sha=X`
+and the intended iOS version/build. The credential-free archive checkout and
+manifest must identify X. Dispatch **iOS TestFlight** on main with that SHA,
+version/build and the successful archive run ID. The trusted-main gate and the
+rechecks before signing and Apple upload all require the same held candidate-ref
+evidence. Archive ID, producing attempt, digest, signing policy and attestation
+checks remain mandatory; the delivery job never compiles or executes the app.
+The `ios-testflight` approval and main-only credential boundary are unchanged.
+
+Land this tooling on main after 2026.10.8 ships, then synchronize the guarded
+workflow/scripts into the next candidate before preparing it. Existing archives
+or tags with only PR-merge analysis do not acquire eligibility from this change.
+Their recovery requires a separate maintainer decision; do not rebuild accepted
+bytes or invent evidence to bypass the old gate.
 
 ### Diagnostic candidates
 
@@ -270,21 +403,46 @@ links and writes through symlink parents are rejected. Signing policy
 entitlements must match main; land signing-policy changes on main before making
 a candidate that depends on them.
 
-Signing calls `notarize-bundle`, whose dependency graph cannot compile or embed
-the helper. Tooling, entitlements and packaging scripts come from main, never
-from the transferred bundle. The candidate's version config and changelog are
-read as data from its exact Git commit. Apple credentials are decoded under
-`RUNNER_TEMP` with private permissions and removed with the temporary keychain
-before packaging. Cleanup failure blocks packaging. An unconditional cleanup
-step also runs when the job finishes.
+Signing calls `notarize-bundle`, creates the DMG, then calls `notarize-dmg`;
+none of these targets compile or embed the helper. Tooling, entitlements and
+packaging scripts come from main, never from the transferred bundle. The
+candidate's version config and changelog are read as data from its exact Git
+commit. Apple credentials are decoded under `RUNNER_TEMP` with private
+permissions and removed with the temporary keychain after DMG stapling and
+before ZIP packaging, final hashes or attestation. Cleanup failure blocks that
+handoff. An unconditional cleanup step also runs when the job finishes. The
+package phase preserves the finished DMG; it must never recreate it.
+
+The DMG uses the same Developer ID Application identity and temporary keychain
+as the app, a secure timestamp, and identifier `io.ugfugl.Glimmer.dmg`. It has
+no app entitlements. After the app is notarized and stapled, the compressed DMG
+is signed, submitted with `notarytool --wait`, required to return `Accepted`,
+and stapled. Apple recommends signing nested containers and notarizing the
+outermost distribution in
+[Packaging Mac software for distribution](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution).
+We retain the app's ZIP submission for the separate Sparkle distribution and
+submit the signed DMG as its own distribution. Apple's
+[custom notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
+explains stapling the app before creating the final ZIP; ZIPs cannot themselves
+be stapled. The DMG's ticket is stapled directly to the image.
+
+This adds one serial DMG upload and notary wait per candidate, plus signing and
+stapling. Apple's queue time is variable; there is no measured Glimmer duration
+yet. The run summary records the DMG packaging/signing/notarization/stapling
+duration. The signing job retains its 45-minute timeout; measure both
+submissions in hosted acceptance before deciding whether that budget needs to
+change.
 
 The protected runner never launches the transferred app or helper. Their
 Gatekeeper, signature, notarization and launch probes, plus verification of the
 Sparkle update signature, run on another fresh runner without the release
-environment. Those checks gate publication. No build or release job restores a
-cache. The approved workflow, main's tooling, reviewed source and dependencies
-remain trusted: a digest binds the handoff, it does not make a malicious build
-trustworthy. This is not a SLSA-level claim.
+environment. That validate stage also checks the DMG with
+`codesign --verify --strict`,
+`spctl -a -t open --context context:primary-signature`, and
+`xcrun stapler validate`. Any failure blocks publication. No build or release
+job restores a cache. The approved workflow, main's tooling, reviewed source and
+dependencies remain trusted: a digest binds the handoff, it does not make a
+malicious build trustworthy. This is not a SLSA-level claim.
 
 Only the signing job has `id-token: write` and `attestations: write`. The pinned
 `actions/attest` action attests the final DMG and ZIP using the candidate
@@ -303,13 +461,26 @@ Developer ID, notarization and Sparkle signatures. See
 [GitHub's artifact attestation guide](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations).
 
 Land these workflow and tooling changes on main before dispatching a candidate
-with them. The candidate cutter refuses differences from main in either release
-workflow or the release scripts executed by candidate jobs and their imported
-helpers. This check runs before moving the candidate branch or creating a tag.
-Review the candidate SHA and pinned tooling SHA before approving. Keep the
-`release` environment's reviewer, allowed branches (`main` and
-`release-candidate`) and disabled administrator bypass. Do not change `rc-cut`:
-its main-only environment and separate App retain their existing roles.
+with them, then sync main into the release branch. DMG signing lands after
+2026.10.8; do not retrofit or replace its accepted assets. The candidate cutter
+refuses differences from main in either release workflow or the release scripts
+executed by candidate jobs and their imported helpers. This check runs before
+moving the candidate branch or creating a tag. Review the candidate SHA and
+pinned tooling SHA before approving. Keep the `release` environment's reviewer,
+allowed branches (`main` and `release-candidate`) and disabled administrator
+bypass. Do not change `rc-cut`: its main-only environment and separate App
+retain their existing roles.
+
+For the first hosted candidate with DMG signing, record both notary submissions
+as accepted, credential cleanup, and all three DMG validation results. Download
+the published DMG and repeat those read-only checks; `codesign -dv --verbose=2`
+must show the app's Developer ID authority/team and a timestamp. Verify the
+attestation against that final stapled file. On a separate Mac, test a fresh
+quarantined download offline, including opening the image and launching its
+installed app. Confirm the ZIP's app and helper still pass their existing
+checks. After acceptance, promotion and a publication retry must preserve both
+asset digests. The unsigned-payload reproducibility comparison below is
+unchanged; DMG signatures and tickets remain outside that comparison.
 
 ### E. Publication and Homebrew recovery
 
@@ -466,6 +637,34 @@ App commit signatures, Apple notarization, or Pages propagation. Verify those on
 the first hosted candidate and promotion, including an intentional late failure.
 The owner must still install and test the published candidate on a real PC using
 section 2's acceptance checks, and inspect the DMG's Finder presentation.
+
+For the candidate-ref policy, first exercise only credential-free gates. Hold X,
+finish direct Verify and CodeQL, then advance the feature PR to Y and regenerate
+its merge. Both Mac and iOS selectors must still accept X, recording the same
+candidate ref and direct-X analysis identities. Do not approve signing or upload
+anything merely to test selection. Confirm GitHub's ref-scoped open-alert query
+blocks a candidate finding even after a feature fix, accepts a current global
+dismissal, and blocks reopening. Exercise processing delays, missing analysis, a
+newer pending/failed candidate run, and a failed-job rerun retaining the other
+two successful language analyses. Specifically rerun lower-numbered A after
+successful B: pending, failed or cancelled A must close both gates, and an
+upload from A must never join B's successful job, even with overlapping
+timestamps. Confirm the jobs API exposes the successful upload receipt and
+retained producing attempts. Check API permissions and request volume.
+
+Prove that a second cut cannot move the branch during either platform's approval
+wait, both platforms can use X concurrently, and release/abandon refuses active
+runs. Pause retirement at its delivery snapshot and race admission against the
+closing lease: only an already admitted attempt may drain, and retirement must
+wait for its completion. Repeat with concurrent Mac and iOS claims, delayed
+completion events, cancellation and partial job reruns. After explicit
+completion, Y can be allocated atomically; stale writers and old gates must
+fail. Promotion must reject unreserved X, a moved/deleted ref, absent scans or
+an open candidate alert even with valid assets, attestations, unchanged shipped
+inputs and green main. Confirm prerequisite reads still use the read token after
+publication and tag credentials are selected. Confirm the branch protections
+cover the new reservation ref and that an interrupted cut resumes without a
+second Release. Local fixtures do not establish these hosted behaviors.
 
 Do not enable Actions debug logging; release context validation rejects it.
 Never upload temporary credential directories, keychains or raw signing inputs.
