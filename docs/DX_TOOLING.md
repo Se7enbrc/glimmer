@@ -9,7 +9,7 @@ pushing. Start with [the developer setup](CONTRIBUTING.md#setup).
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Kept    | `app`, `helper-build`, `embed-helper`, `test`, `test-build`, `test-run`, `test-asan`, `test-scripts`, `check`, `check-portable`, `check-macos`, `verify`, `verify-all`, `ios-app`, `ios-test`, `ios-device`, `clean`, `rc` and `DRY_RUN` |
 | Added   | Default `help`, `ci-parity`, `check-hooks`, `check-boundaries`                                                                                                                                                                           |
-| Changed | `all` shows help; `preflight` is the single pre-push gate; profiling uses an installed CI build                                                                                                                                          |
+| Changed | `all` shows help; `preflight` checks affected builds and fast tests; profiling uses an installed CI build                                                                                                                                |
 | CI only | `codesign-setup`, `setup-notary`, `ensure-signing`, `sign-bundle`, `notarize-bundle`, `notarize-dmg`, `dmg`, `sparkle-zip`; old signing `preflight` becomes `signing-preflight`                                                          |
 | Removed | `dev`, `install`, `reinstall`, `open`, `release`, `dist`, `release-publish`, `brew-bump`, `sign`, `notarize`, `asan-reinstall`, `quit-running`, `uninstall`, `creds-init`, `codesign-teardown`, `sparkle-keys`, `dmg-background`         |
 
@@ -33,9 +33,11 @@ strict SwiftLint, and adds a standard-library Python import guard. Fixers share
 hk's file locks; whole-tree SwiftLint is exclusive. Fixes stop a commit for
 review and explicit staging. SwiftLint runs only on macOS.
 
-The old markdownlint invocation consumes filenames as values of `--disable` and
-checks no files. This migration preserves that invocation as requested;
-activating the rules requires a separate review of existing Markdown findings.
+Markdownlint now receives file arguments after `--` and rejects malformed
+headings. Duplicate headings are checked among siblings, so release sections can
+reuse labels; front-matter titles do not replace the visible heading. The HTML
+rule permits the existing image and link markup. The four original rule
+exclusions are unchanged; no additional rule is disabled.
 
 ## Cache budget
 
@@ -67,5 +69,43 @@ Linux execution, notarization and publication remain unverified locally.
 The companion branch from merged PR #196 passed `make check` in 152.24 s (459
 fixtures) and `make ci-parity` in 54.83 s. That branch has no iOS app yet; the
 compile check reports that explicitly.
+
+## Push safety and warm timings
+
+Preflight passed in 63.56 s on the feature branch and 52.34 s on the main
+companion, including hook checks, boundary audits, fast tests and affected Xcode
+26.6 builds. Neither run reported compiler warnings. Full integration, Mac and
+AddressSanitizer tests remain in `make verify` and hosted verification.
+
+All script fixtures isolate Git and XDG variables, home, configuration and
+working directory before setup; Git transports permit only local files. Every
+suite runs with poisoned hook variables pointing at a decoy repository and
+checks that its bytes remain unchanged. The feature suite passed all 516 tests
+in 203.81 s, including a second candidate-suite run against the decoy. The
+companion passed all 466 tests; its complete `make check` took 182.36 s.
+
+Install the [guarded hooks](CONTRIBUTING.md#migrate-shared-hooks) once. The old
+framework accepts missing configuration until every active branch has migrated;
+then uninstall its hooks. Hook installation and Git configuration were not
+changed as part of this follow-up.
+
+## Swift CodeQL timing
+
+[Run 40202604052](https://github.com/Se7enbrc/glimmer/actions/runs/40202604052)
+took 31m24s: traced builds consumed 26m15s and analysis 2m22s, with a framework
+cache hit. The Simulator built both arm64 and x86_64; the redundant x86_64
+engine and app work occupied about 3m55s. The helper ran for another 69s after
+the Mac app completed.
+
+The traced build now uses arm64 for both SDKs and builds the helper alongside
+the Mac app. No production file or query is removed; both apps, the engine and
+helpers still must pass the complete-extraction gate. No production source uses
+an architecture conditional. A conservative warm estimate is 28–30 minutes,
+allowing for overlap and CPU contention; this requires a hosted run to measure.
+
+[Swift supports manual or autobuild, not build-mode none](https://docs.github.com/en/code-security/reference/code-scanning/codeql/build-options-for-compiled-languages#building-swift).
+Compiler caches remain off because a cache hit can bypass extraction. Mac and
+iOS extraction already overlap in one database; reusing ordinary compiled
+products would lose coverage.
 
 Continue with [the release process](RELEASE.md) for hosted candidate acceptance.
