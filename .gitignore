@@ -114,3 +114,4 @@ __pycache__/
 
 # Generated from docs/PRIVACY.md by scripts/build-policy-page.py.
 /privacy/index.html
+/build-*/
