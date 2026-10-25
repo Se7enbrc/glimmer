@@ -168,6 +168,8 @@
 		87C061C7DD2F49A490D2FD64 /* StreamStatsShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 166A546B1C874204A64047B4 /* StreamStatsShortcutTests.swift */; };
 		8BCC2D7346BA4AE5859226AF /* StreamStatsRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CD585C1BA434406A551C188 /* StreamStatsRenderTests.swift */; };
 		68ABC059685942C0934C319D /* StreamShortcutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 861EE67A9ECB492D8E16666F /* StreamShortcutUITests.swift */; };
+		328FE68F03EA2F59C7820A91 /* SettingsResetSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E5F29C7D58C61CECA51EAD /* SettingsResetSection.swift */; };
+		B6E7744FC3D57253692A1E23 /* SettingsResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39AA07EBFE1478632FD9C82 /* SettingsResetTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -358,6 +360,8 @@
 		166A546B1C874204A64047B4 /* StreamStatsShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamStatsShortcutTests.swift"; sourceTree = "<group>"; };
 		7CD585C1BA434406A551C188 /* StreamStatsRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamStatsRenderTests.swift"; sourceTree = "<group>"; };
 		861EE67A9ECB492D8E16666F /* StreamShortcutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamShortcutUITests.swift"; sourceTree = "<group>"; };
+		88E5F29C7D58C61CECA51EAD /* SettingsResetSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/SettingsResetSection.swift"; sourceTree = SOURCE_ROOT; };
+		B39AA07EBFE1478632FD9C82 /* SettingsResetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/SettingsResetTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -455,6 +459,7 @@
 				274787A400D70EA06F8D14C4 /* ControllerLayoutPersistenceTests.swift */,
 				7746C436977D71BFC46F6315 /* ControllerMappingTests.swift */,
 				BFF7552AB0051D0CF5CDA66C /* ControllerLayoutCaptureTests.swift */,
+				B39AA07EBFE1478632FD9C82 /* SettingsResetTests.swift */,
 				8D45B4D6D520493193F710F5 /* ControllerLayoutRenderTests.swift */,
 				2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */,
 				9D536F6F337545DEB9369D51 /* NativeUIRenderTests+iPad.swift */,
@@ -549,6 +554,7 @@
 				1945301F1DC095317773DD00 /* IOSControllerLayoutStreamControls.swift */,
 				1CEFB04D7C50BCA3212857BA /* IOSControllerLayouts.swift */,
 				2B4B2F8017E0FB2092F9C0E4 /* ControllerLayoutShortcutSummary.swift */,
+				88E5F29C7D58C61CECA51EAD /* SettingsResetSection.swift */,
 				E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */,
 				E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */,
 				A0FE091D647DB80FC7CBB04F /* IOSControllerLayoutPresentation.swift */,
@@ -758,6 +764,7 @@
 				DFF8B6DF512A17FFE0F2F0FD /* ControllerLayoutPersistenceTests.swift in Sources */,
 				165AA6E728C1A6FC28DC8ACE /* ControllerMappingTests.swift in Sources */,
 				A05516581C0597B57F9B76F9 /* ControllerLayoutCaptureTests.swift in Sources */,
+				B6E7744FC3D57253692A1E23 /* SettingsResetTests.swift in Sources */,
 				8033B9ABE605D5A2C6102F12 /* ControllerLayoutRenderTests.swift in Sources */,
 				E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */,
 				BFC410B98DE44455B3A9D872 /* NativeUIRenderTests+iPad.swift in Sources */,
@@ -843,6 +850,7 @@
 				8B8BE11FD2507C6F7DBB0C57 /* IOSControllerLayoutStreamControls.swift in Sources */,
 				D162E918753F1A7DF4908674 /* IOSControllerLayouts.swift in Sources */,
 				A1C2C5E3D10A1AC79DB000E4 /* ControllerLayoutShortcutSummary.swift in Sources */,
+				328FE68F03EA2F59C7820A91 /* SettingsResetSection.swift in Sources */,
 				94F7B1607EBE0F53941883A9 /* ControllerLayoutEditing.swift in Sources */,
 				BBDF302987FAF9F7402A6D84 /* ControllerLayoutNavigation.swift in Sources */,
 				109571950D51CA4E9AC2299A /* IOSControllerLayoutPresentation.swift in Sources */,

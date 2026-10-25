@@ -64,11 +64,12 @@ def expected_sources(root):
         "StatsOverlayLayer", "StatsOverlayLayer+Rows", "StatsOverlayLayer+Traces", "StatsOverlayLayer+Platform"
     ))
     expected["GlimmerTests"].add("../GlimmerTests/VideoColorPatternTests.swift")
+    expected["Glimmer"].add("../Glimmer/SettingsResetSection.swift")
     expected["Glimmer"].update("../" + str(path.relative_to(root))
                                for path in (root / "Glimmer/ControllerLayouts").glob("*.swift"))
     expected["GlimmerTests"].update("../GlimmerTests/" + name for name in
                                   ["ControllerLayoutRenderTests.swift", "ControllerLayoutCaptureTests.swift",
-                                   "ControllerDiagramTests.swift"])
+                                   "ControllerDiagramTests.swift", "SettingsResetTests.swift"])
     expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in
                                   ["ControllerMappingTests.swift", "ControllerLayoutPersistenceTests.swift",
                                    "ControllerLayoutEscapeTests.swift"])

@@ -12,6 +12,7 @@ import SwiftUI
 // MARK: - General
 
 struct GeneralPane: View {
+    var reconcileLoginItem: @MainActor () async -> SMAppService.Status? = { await LoginItemManager.reconcile() }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
@@ -130,6 +131,9 @@ struct GeneralPane: View {
             } footer: {
                 Text("To stream a different app once, click it in the launcher.")
             }
+            SettingsResetSection(enabled: !model.isStreaming) { includeGames in
+                try await model.resetSettings(includeGames: includeGames)
+            }
         }
         .formStyle(.grouped)
         .animation(Motion.layout(reduceMotion: reduceMotion), value: launchAtLogin)
@@ -144,7 +148,7 @@ struct GeneralPane: View {
     /// registration above, since reconcile may re-register.
     private func refreshLoginItemState() {
         Task { @MainActor in
-            let status = await LoginItemManager.reconcile()
+            let status = await reconcileLoginItem()
             if status != nil || loginItemIssue != .failed {
                 loginItemIssue = LoginItemManager.registrationIssue(for: status)
             }

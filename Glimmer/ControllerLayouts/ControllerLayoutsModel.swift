@@ -105,6 +105,15 @@ final class ControllerLayoutsModel {
         try await commit(next)
     }
 
+    func reset(includeGames: Bool) async throws {
+        await load()
+        guard loaded, !saving else { throw ControllerLayoutError.invalidDocument }
+        saving = true
+        defer { saving = false }
+        let kept = includeGames ? [] : library.records.filter { $0.key.scope != .allGames }
+        try await commit(ControllerLayoutLibrary(records: kept))
+    }
+
     private func commit(_ next: ControllerLayoutLibrary) async throws {
         var next = next
         next.games = Array(games.prefix(1024))

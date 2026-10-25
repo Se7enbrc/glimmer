@@ -126,6 +126,10 @@ private struct GlimmerSettingsPage: View {
                     Text("For games and PCs that handle a change in screen size. "
                          + "Otherwise, disconnecting quits the game.")
                 }
+                SettingsResetSection(enabled: model.session == nil && !model.busy) { includeGames in
+                    try await ControllerLayoutsModel.shared.reset(includeGames: includeGames)
+                    SettingsReset.reset(defaults: .standard)
+                }
             case .quality: StreamQualitySettings(profile: $profile)
             case .pcs: computerSettings
             case .input: controllerSettings

@@ -29,6 +29,31 @@ struct ControllerLayoutRenderTests {
     #endif
 
     @Test(arguments: [false, true])
+    func resetSettingsScreens(dark: Bool) async throws {
+        let style = dark ? "dark" : "light"
+        #if os(macOS)
+        let settings = IsolatedDefaults()
+        let app = AppModel(defaults: settings.defaults)
+        try await record(GeneralPane(reconcileLoginItem: { nil }).environment(app)
+            .defaultAppStorage(settings.defaults), name: "after-general-\(style)", dark: dark)
+        #else
+        let launcher = LauncherFixture().model()
+        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: launcher)
+        try await record(NavigationStack { settings.settingsPage(.general) },
+                         name: "after-general-\(style)", dark: dark)
+        #endif
+        try await record(SettingsResetConfirmation(reset: { _ in }),
+                         name: "after-reset-confirmation-\(style)", dark: dark)
+        let device = fixture(.dualSense)
+        try await record(NavigationStack {
+            Form {
+                Section { ControllerLayoutDiagram(family: device.diagramFamily, controls: device.controls) { _ in } }
+                Section("Glimmer controls") { ControllerLayoutShortcutSummary() }
+            }.formStyle(.grouped).navigationTitle(device.name)
+        }, name: "after-chords-\(style)", dark: dark)
+    }
+
+    @Test(arguments: [false, true])
     func nativeLayoutScreens(dark: Bool) async throws {
         let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -216,7 +241,9 @@ struct ControllerLayoutRenderTests {
         #if os(macOS)
         let host = NSHostingController(rootView: content.environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentViewController: host)
-        window.title = "Controller layouts"
+        window.title = name.contains("general") ? "General" : "Controller layouts"
+        if name.contains("reset-confirmation") { window.title = "Reset to defaults?" }
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.styleMask = [.titled, .closable, .resizable]
         window.setContentSize(CGSize(width: 620, height: 760))
         let view = host.view

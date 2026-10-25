@@ -15,6 +15,9 @@
 - iPhone and iPad now share the Mac's stream stats and hardware-keyboard
   shortcuts. Show stats from the stream menu or Control-Z, stop with Control-Q,
   and change the shortcuts in Settings → Input.
+- Reset settings to defaults from General on Mac, iPhone and iPad. Choose
+  whether to include per-game controller layouts; paired PCs, your app library
+  and diagnostics captures are kept.
 
 - The production iPhone and iPad app no longer includes diagnostic recording.
   Beta builds keep local diagnostics on by default, with an option to turn them
