@@ -157,7 +157,12 @@ final class StreamViewController: GCEventViewController {
         while let parent = owner.parent { owner = parent }
         owner.setNeedsUpdateOfSupportedInterfaceOrientations()
         guard traitCollection.userInterfaceIdiom != .pad else { return }
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape)) { error in
+        Self.requestLandscape(in: scene)
+    }
+
+    static func requestLandscape(in scene: UIWindowScene) {
+        // UIKit can deliver geometry failures from a background queue.
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape)) { @Sendable error in
             Logger(subsystem: "io.ugfugl.Glimmer", category: "Display")
                 .error("Display rotation failed: \(error.localizedDescription, privacy: .private)")
         }

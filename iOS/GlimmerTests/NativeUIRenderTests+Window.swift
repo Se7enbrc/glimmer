@@ -87,7 +87,7 @@ extension NativeUIRenderTests {
             try await commitLayout(presenter.view)
             try await observeGeometry(scene, request: {
                 scene.requestGeometryUpdate(.iOS(interfaceOrientations:
-                    UIInterfaceOrientationMask(rawValue: 1 << orientation.rawValue))) { error in
+                    UIInterfaceOrientationMask(rawValue: 1 << orientation.rawValue))) { @Sendable error in
                         Issue.record("The render fixture could not restore scene orientation: \(error)")
                     }
             }, matches: { scene.effectiveGeometry.interfaceOrientation == orientation })

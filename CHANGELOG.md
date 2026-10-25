@@ -119,6 +119,7 @@
 
 ### Bug fixes
 
+- Fixed a crash when an iPhone could not rotate into a stream.
 - Keep your chosen stats thresholds, launcher style, codec and touch opacity
   when defaults change.
 - iPhone and iPad connections check the route to the PC before choosing packet
