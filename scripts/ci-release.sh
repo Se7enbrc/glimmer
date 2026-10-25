@@ -203,6 +203,7 @@ PY
 
 publish_credentials() {
     [ -n "${RELEASE_CONTENTS_TOKEN:-}" ] || die "missing release contents token"
+    export RELEASE_READ_TOKEN="${GH_TOKEN:-}"
     export GH_TOKEN="$RELEASE_CONTENTS_TOKEN"
     cat > "$PRIVATE/git-credential" <<'HELPER'
 #!/bin/bash
@@ -229,8 +230,14 @@ case "${1:-}" in
     checks)
         check_source
         rm -f "$GREEN"
+        check_args=("$EXPECTED_SHA")
+        if [ "$OPERATION" = candidate ]; then check_args+=(--candidate --delivery); fi
         RELEASE_CHECKS_FILE="$RUNNER_TEMP/glimmer-prerequisites.json" \
-            python3 scripts/release-checks.py "$EXPECTED_SHA"
+            python3 scripts/release-checks.py "${check_args[@]}"
+        if [ "$OPERATION" = promote ]; then
+            RELEASE_CHECKS_FILE="$RUNNER_TEMP/glimmer-candidate-prerequisites.json" \
+                python3 scripts/release-checks.py "${CANDIDATE_SHA:-}" --candidate --delivery
+        fi
         printf '%s\n' "$EXPECTED_SHA" > "$GREEN"
         ;;
     verify-checks|verify-tests|verify-asan) verify_part "${1#verify-}" ;;
@@ -276,6 +283,13 @@ case "${1:-}" in
         make codesign-setup setup-notary
         # Compilation and helper embedding already succeeded without credentials.
         make CONFIG=Release preflight notarize-bundle
+        started=$SECONDS
+        make CONFIG=Release dmg
+        make CONFIG=Release notarize-dmg
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            printf 'DMG packaging, signing, notarization and stapling: %ss\n' "$((SECONDS - started))" \
+                >> "$GITHUB_STEP_SUMMARY"
+        fi
         cleanup
         printf '%s\n' "$EXPECTED_SHA" > "$SIGNED"
         ;;
@@ -285,7 +299,7 @@ case "${1:-}" in
         require_phase "$SIGNED"
         [ ! -e "$PRIVATE" ] || die "signing credentials have not been removed"
         [ -n "${GITHUB_OUTPUT:-}" ] || die "workflow output file missing"
-        make CONFIG=Release dmg sparkle-zip
+        make CONFIG=Release sparkle-zip
         [ -s "$DMG" ] && [ -s "$ZIP" ] || die "packaged release asset missing"
         shasum -a 256 "$DMG" "$ZIP" > "$ARTIFACTS"
         printf 'dmg-path=%s\nzip-path=%s\n' "$DMG" "$ZIP" >> "$GITHUB_OUTPUT"

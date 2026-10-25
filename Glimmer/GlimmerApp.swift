@@ -100,6 +100,9 @@ struct GlimmerApp: App {
             "rawHIDPromptAnswered": false,
             "showDiagnostics": diagnosticBuild,
             "telemetryEnabled": diagnosticBuild,
+            // Beta only: diagnostic builds and Macs enrolled in release candidates.
+            AdaptiveBandwidth.defaultsKey: diagnosticBuild
+                || defaults.string(forKey: StreamAwareUpdateAlerts.updateChannelPreferenceKey) == "rc",
             // "Show the stream": full screen unless the user picks Window. The
             // registered value keeps the raw read and AppModel's declared
             // default in agreement (see StreamDisplayMode.defaultMode).
@@ -152,7 +155,11 @@ struct GlimmerApp: App {
             CommandGroup(after: .appSettings) {
                 Button("Install Command Line Tool…") { CommandLineToolInstaller.install() }
             }
-            CommandMenu("Stream") { StreamMenu(model: model) }
+            CommandMenu("Stream") {
+                StreamMenu(model: model)
+                Button("Controller layout…") { MacControllerLayouts.active?.showControls() }
+                    .disabled(!model.isStreaming)
+            }
         }
 
         Settings {
@@ -326,13 +333,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // so the SYSTEM-WIDE pointer-acceleration override would survive process exit.
         // Restore it synchronously (idempotent; no-op when nothing is overridden).
         restorePointer()
-        // A live (or connecting) session must reach the host's /cancel before
-        // the process exits. Returning .terminateNow after kicking off an async
-        // stop let the process die first and left Sunshine holding a phantom
-        // session that blocked the next /launch (issue #84). Defer the quit,
-        // run the stop bounded (a hung host can't pin Cmd-Q past the bound),
-        // then reply. No session object yet (the stream Task hasn't spun up)
-        // means nothing has been asked of the host - quit now.
+        // App termination joins the session's chosen disconnect policy before exiting.
+        // Bound teardown so an unreachable PC cannot hold Cmd-Q indefinitely.
         guard TerminationGate.reply(hasSession: model?.nativeSession != nil) == .terminateLater,
               let session = model?.nativeSession else {
             return .terminateNow
@@ -341,8 +343,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let bound = session.terminationStopBoundSeconds
             let finished = await TerminationGate.runBounded(seconds: bound) { await stop(session) }
             Diag.notice(finished
-                ? "Quit: stream stopped and the host session cancelled"
-                : "Quit: host didn't acknowledge /cancel within \(Int(bound))s - exiting anyway", "Stream")
+                ? "Quit: stream cleanup finished"
+                : "Quit: stream cleanup did not finish within \(Int(bound))s - exiting anyway", "Stream")
             reply()
         }
         return .terminateLater

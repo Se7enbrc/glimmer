@@ -64,7 +64,6 @@ extension AppModel {
         NSApp.activate()
         guard alert.runModal() == .alertSecondButtonReturn else { return }
         Task {
-            if streamingHostID == host.id, await stopOwnStream(source: "a URL") { return }
             do { try await quitRunningApp(on: host) } catch {
                 let failure = NSAlert()
                 failure.messageText = "Couldn't quit \(target.name) on \(host.displayName)."

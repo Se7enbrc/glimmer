@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
+
 //
 //  TelemetryLatency+Composites.swift
 //
@@ -60,3 +62,5 @@ extension FrameTimingTracker {
         glassToGlassMs + max(clientLegsMs, 0) + max(rttMs, 0) / 2 + max(hostFrameIntervalMs, 0) / 2
     }
 }
+
+#endif

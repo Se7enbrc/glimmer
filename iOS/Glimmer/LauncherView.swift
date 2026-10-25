@@ -10,6 +10,7 @@ struct LauncherView: View {
     private let styleOverride: LauncherStyle?
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var controllers = ControllerMonitor()
     @State private var model: LauncherModel
     @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
@@ -18,7 +19,9 @@ struct LauncherView: View {
     @State private var showingSettings = false
     @State private var pendingAddPC = false
     @State private var pendingPC: HostDiscovery.Discovered?
+    @AppStorage("leaveGamesRunning") private var leaveGamesRunning = false
     @AppStorage("streamProfile") private var profile: StreamProfile = .native120
+    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
     @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
     @AppStorage("controllerMouseStick") private var mouseStick: ControllerMouseStick = .right
 
@@ -33,6 +36,7 @@ struct LauncherView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         pcHeader
+                        RunningGameRow(model: model)
                         LauncherGallery(model: model, style: styleOverride ?? launcherStyle,
                                         size: CGSize(width: max(0, geometry.size.width - 48),
                                                      height: geometry.size.height))
@@ -57,7 +61,8 @@ struct LauncherView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Settings", systemImage: "gearshape") { showingSettings = true }
-                        .disabled(model.busy)
+                        .keyboardShortcut(",", modifiers: .command)
+                        .disabled(model.busy || addingPC || model.pairing != nil || model.stream != nil)
                 }
             }
         }
@@ -67,6 +72,8 @@ struct LauncherView: View {
                 addPC: { pendingAddPC = true; showingSettings = false },
                 pairPC: { pendingPC = $0; showingSettings = false })
         }
+        .onChange(of: leaveGamesRunning, initial: true) { _, enabled in model.leaveGamesRunning = enabled }
+        .modifier(RunningGameConfirmation(model: model))
         .onChange(of: touchMouseEnabled, initial: true) { _, enabled in model.touchMouseEnabled = enabled }
         .onChange(of: profile, initial: true) { _, profile in model.streamProfile = profile }
         .onChange(of: mouseStick, initial: true) { _, stick in model.mouseStick = stick }
@@ -100,36 +107,55 @@ struct LauncherView: View {
     }
 
     private var pcHeader: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image(systemName: Self.pcSymbol)
-                .font(.largeTitle)
-                .foregroundStyle(Color("AccentColor"))
-                .accessibilityHidden(true)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 16))
+        return layout {
+            HStack {
+                Image(systemName: Self.pcSymbol)
+                    .font(dynamicTypeSize.isAccessibilitySize ? .system(size: 30) : .largeTitle)
+                    .foregroundStyle(Color("AccentColor"))
+                    .accessibilityHidden(true)
+                if dynamicTypeSize.isAccessibilitySize {
+                    Spacer(minLength: 0)
+                    controllerBadge
+                }
+            }
             VStack(alignment: .leading, spacing: 6) {
                 Menu {
                     ForEach(model.savedPCs) { pc in
                         Button(pc.name, systemImage: Self.pcSymbol) { model.select(pc) }
+                            .accessibilityIdentifier("pc-picker-\(pc.id)")
                     }
                     Button("PC settings", systemImage: "gearshape") { showingSettings = true }
                 } label: {
                     HStack(spacing: 6) {
                         Text(model.selectedName ?? "Choose a PC").font(.title2).bold()
-                        Image(systemName: "chevron.down").font(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Image(systemName: "chevron.down")
+                            .font(dynamicTypeSize.isAccessibilitySize ? .system(size: 13) : .caption)
                     }
+                    .multilineTextAlignment(.leading)
                     .foregroundStyle(Color.primary)
                 }
                 .disabled(model.busy)
                 if model.selectedName != nil {
-                    Text(profile.summary).font(.subheadline).foregroundStyle(.secondary)
+                    Text(profile.summary(adaptive: adaptiveBandwidth)).font(.subheadline).foregroundStyle(.secondary)
                 } else {
                     Text("Pair with a PC running Sunshine in Settings.").foregroundStyle(.secondary)
                 }
             }
-            Spacer(minLength: 0)
-            if controllers.controllers.contains(where: \.hasExtendedGamepad) {
-                Image(systemName: "gamecontroller").foregroundStyle(.secondary)
-                    .accessibilityLabel("Controller connected")
+            if !dynamicTypeSize.isAccessibilitySize {
+                Spacer(minLength: 0)
+                controllerBadge
             }
+        }
+    }
+
+    @ViewBuilder private var controllerBadge: some View {
+        if controllers.controllers.contains(where: \.hasExtendedGamepad) {
+            Image(systemName: "gamecontroller").foregroundStyle(.secondary)
+                .accessibilityLabel("Controller connected")
         }
     }
 

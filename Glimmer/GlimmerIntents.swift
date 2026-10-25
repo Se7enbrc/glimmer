@@ -78,12 +78,15 @@ struct StreamIntent: AppIntent {
         let target = app.flatMap(host.app(named:))
         if let app, target == nil { throw PCIntentError.noApp(app, pc: host.displayName) }
         if model.isStreaming {
-            // Asking for the stream already running just shows it, as activating Glimmer may have.
-            guard AppModel.isLiveStream(target, on: host, live: model.lastLaunchAttempt) else {
-                throw PCIntentError.alreadyStreaming
+            if AppModel.isLiveStream(target, on: host, live: model.lastLaunchAttempt) {
+                model.resumeStreamWindow()
+                return
             }
-            model.resumeStreamWindow()
-            return
+            if let target, model.lastLaunchAttempt?.host.id == host.id {
+                launch(model, target, host)
+                return
+            }
+            throw PCIntentError.alreadyStreaming
         }
         if model.selectedHost?.id != host.id { model.selectHost(host) }
         // The Stream button's app is the PC's running one only while a fresh sample
@@ -145,9 +148,6 @@ struct QuitAppOnPCIntent: AppIntent {
         let model = try await AppModel.forIntent()
         let host = try model.pairedHost(pc)
         Diag.notice("Quit App on PC from Shortcuts: \(host.displayName, privacy: .private)", "Stream")
-        if model.streamingHostID == host.id, await model.stopOwnStream(source: "Shortcuts") {
-            return .result()
-        }
         do {
             try await model.quitRunningApp(on: host)
         } catch {
@@ -160,7 +160,7 @@ struct QuitAppOnPCIntent: AppIntent {
 
 struct StopStreamingIntent: AppIntent {
     static let title: LocalizedStringResource = "Stop Streaming"
-    static let description = IntentDescription("Stops this Mac's stream and quits its app on the PC.")
+    static let description = IntentDescription("Stops this Mac's stream using your disconnect setting.")
 
     @MainActor func perform() async throws -> some IntentResult {
         try await Self.stop(model: AppModel.forIntent())

@@ -120,6 +120,14 @@ final class AppModel {
     }
 
     // Defaults
+    var leaveGamesRunning = false {
+        didSet { settingsDefaults.set(leaveGamesRunning, forKey: "leaveGamesRunning") }
+    }
+    var activeContinuationFormat: ContinuationFormat?
+    var pictureTrial: PictureTrial?
+    var endedContinuation: EndedContinuation?
+    var nativeStreamTask: Task<Void, Never>?
+
     var defaultLaunchApp: String = "Desktop" {
         didSet { settingsDefaults.set(defaultLaunchApp, forKey: "defaultLaunchApp") }
     }
@@ -196,6 +204,8 @@ final class AppModel {
         let host: Host
         /// nil when the PC runs an app it didn't name.
         let occupantApp: String?
+        var occupantID: Int?
+        var useScreenSize = false
     }
 
     // Menu bar (see AppModel+MenuBar): reconnect edge, Stop latch, overlay mirror,
@@ -334,28 +344,8 @@ final class AppModel {
     }
     /// The running stream is showing as the mini player.
     var isMiniPlayer = false
-    /// Controller-side quit chord - fires the same path as `quitHotkey`
-    /// from the keyboard, but driven by a multi-button hold on the
-    /// gamepad. Defaults to L3 + R3 (click both sticks): native on every pad (no
-    /// Create/Share/Mute, which macOS drops on a DualSense), and - unlike a
-    /// shoulder+trigger chord - its partials don't leak a host combo as you press
-    /// in (L1+R1+L2+R2 assembles through LB+RB+LT, which Steam Big Picture reads
-    /// as Show-Keyboard). The 400ms dwell guards a mid-game trip; "None" disables.
-    var controllerQuitChord: ControllerQuitChord = .l3r3 {
-        didSet {
-            settingsDefaults.set(controllerQuitChord.rawValue, forKey: "controllerQuitChord")
-        }
-    }
-
-    /// User-recorded buttons backing the `.custom` quit chord (press the buttons,
-    /// we store them - issue #9). Persisted as JSON.
-    var customControllerChord: Set<ControllerButton> = [] {
-        didSet {
-            if let data = try? JSONEncoder().encode(customControllerChord) {
-                settingsDefaults.set(data, forKey: "customControllerChord")
-            }
-        }
-    }
+    var controllerQuitChord: ControllerQuitChord { .startSelectL1R1 }
+    var customControllerChord: Set<ControllerButton> { [] }
 
     /// Live "is any game controller connected" flag, driven by the
     /// `GCControllerDidConnect` / `GCControllerDidDisconnect` observers in
@@ -459,8 +449,8 @@ final class AppModel {
     /// `notificationTokens` so each is removed from the center that owns it.
     @ObservationIgnored var workspaceTokens: [NSObjectProtocol] = []
 
-    /// Misses in this poll loop. Recent answers or a just-ended stream hold through
-    /// two misses; a third publishes Asleep. Re-arming or a reachable probe resets it.
+    /// Recent answers hold through two misses; a third publishes Asleep. Selection,
+    /// stream teardown and reachable answers reset the streak; activation preserves it.
     @ObservationIgnored var hostUnreachableStreak = 0
 
     /// Consecutive missed probes before the chip shows Asleep while it holds a fresh
@@ -515,6 +505,7 @@ final class AppModel {
         // Observation setters can run during initialization. Restore quality's
         // backing storage so entering Custom cannot overwrite saved dimensions
         // before they are read, or persist defaults the user never chose.
+        leaveGamesRunning = defaults.bool(forKey: "leaveGamesRunning")
         muteMacWhileStreaming = settingsDefaults.bool(forKey: "muteMacWhileStreaming")
         defaultLaunchApp = settingsDefaults.string(forKey: "defaultLaunchApp") ?? defaultLaunchApp
         _qualityPreset = Self.persistedQualityPreset(defaults: defaults) ?? _qualityPreset
@@ -545,10 +536,6 @@ final class AppModel {
         statsThresholds = Self.persistedStatsThresholds(defaults: defaults)
         quitHotkey = Self.persistedDecoded("quitHotkey", HotkeyChord.self, defaults: defaults) ?? quitHotkey
         statsHotkey = Self.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults) ?? statsHotkey
-        controllerQuitChord = Self.persistedRawValue("controllerQuitChord", ControllerQuitChord.self,
-            defaults: defaults) ?? controllerQuitChord
-        customControllerChord = Self.persistedDecoded("customControllerChord", Set<ControllerButton>.self,
-            defaults: defaults) ?? customControllerChord
         hostRoute.onLeftWired = { [weak self] in self?.parkAWDLIfStreaming() }
     }
 

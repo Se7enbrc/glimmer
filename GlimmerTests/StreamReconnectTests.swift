@@ -302,5 +302,10 @@ private extension StreamSession {
         isStreaming = streaming
         stopInProgress = stopping
         isReconnecting = reconnecting
+        // Native callbacks only arrive through a published bridge for the current attempt.
+        let decoder = await MainActor.run { VideoDecoder() }
+        let bridge = StreamBridgeContext(session: self, videoDecoder: decoder, audioDecoder: audioDecoder)
+        bridge.beginAttempt(attemptID)
+        self.bridge = bridge
     }
 }

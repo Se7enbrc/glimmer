@@ -17,6 +17,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from fixture_process import run_fixture
+
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 import github_signed_commit
@@ -217,8 +219,7 @@ class HomebrewCommitPathTests(unittest.TestCase):
                 if implied:
                     env["FIXTURE_STABLE_TAG"] = tag
                 args = ["2026.10.6"] if implied else ["2026.10.6", tag]
-                result = subprocess.run(["bash", str(root / "scripts/homebrew-bump.sh"), *args],
-                                        env=env, capture_output=True, text=True, timeout=10)
+                result = run_fixture(["bash", str(root / "scripts/homebrew-bump.sh"), *args], env=env)
                 self.assertEqual(result.returncode == 0, not prerelease, result.stderr)
                 calls = [json.loads(line) for line in log.read_text().splitlines()]
                 if prerelease:
@@ -284,9 +285,8 @@ class AppcastCommitPathTests(unittest.TestCase):
                        "GITHUB_ACTIONS": "true" if hosted else "false"}
                 if failure:
                     env["FIXTURE_GRAPHQL_FAILURE"] = "1"
-                result = subprocess.run(["bash", str(root / "scripts/publish-release.sh"), "2026.10.6",
-                                         "400", str(root / "Glimmer.app"), str(root / "dist"), "fork/glimmer"],
-                                        env=env, capture_output=True, text=True, timeout=10)
+                result = run_fixture(["bash", str(root / "scripts/publish-release.sh"), "2026.10.6",
+                                      "400", str(root / "Glimmer.app"), str(root / "dist"), "fork/glimmer"], env=env)
                 self.assertEqual(result.returncode == 0, not failure, result.stderr)
                 self.assertNotIn("private GraphQL failure detail", result.stdout + result.stderr)
                 calls = [json.loads(line) for line in log.read_text().splitlines()]

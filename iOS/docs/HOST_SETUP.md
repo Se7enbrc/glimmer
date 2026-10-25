@@ -1,24 +1,28 @@
 # Set up the PC for iPhone and iPad
 
-Choose a display mode on the PC that your game supports. Some games crop,
-stretch, or refuse the wider iPhone aspect ratio. Use **1080p** in Settings →
-Quality and 1920 × 1080 on the PC when a game needs 16:9.
+Install the [iPhone and iPad display modes](../../docs/vdd/iphone-ipad.xml) on
+the PC using the [shared setup guide](../../docs/HOST_SETUP.md). Both devices
+request only sizes and refresh rates from this file, including portrait and
+windowed iPad play. The older mixed-client file omits the new window modes.
 
-Follow the [shared PC setup guide](../../docs/HOST_SETUP.md) to install Sunshine
-and select the right size and refresh rate. For MTT Virtual Display Driver, use
-the [iPhone/iPad sample modes](../../docs/vdd/iphone-ipad.xml). For a mix of
-Mac, iPhone and iPad, use
-[all-glimmer-clients.xml](../../docs/vdd/all-glimmer-clients.xml) instead.
+Choose Native, 1080p 60 or 1080p 120 in Settings → Quality. Native selects the
+closest listed size to the window's pixels. Both 1080p choices request 1920 ×
+1080; use them when a game needs 16:9. Listed refresh rates are capped to the
+profile and display. Window modes generally use 60 fps. There is no
+half-resolution or Custom choice.
 
+The picture fills the window. A different aspect crops edges, and a lower
+resolution loses detail. After a resize settles, the stream moves to the new
+window's listed mode without quitting the game. Disconnecting quits the game on
+the PC unless Leave games running when you disconnect is on.
+
+The PC display and game must use the requested aspect. Otherwise Sunshine or the
+game may put black bars inside the video. Installing modes makes them available;
+it does not guarantee the PC switches successfully or the game supports them.
+For fixed-aspect games, use a matching window shape to keep the whole picture.
 Software with its own virtual display, such as Apollo, does not need the MTT
-sample configuration. Neither does a PC monitor set to a 16:9 mode. A virtual
-display provides the requested size; it cannot make a game support that aspect
-ratio.
-
-In Settings → Quality, **Native · 120 fps** requests this display's landscape
-pixel size rounded down to even dimensions, capped to its maximum frame rate.
-**1080p · 60 fps** and **1080p · 120 fps** request 1920 × 1080, also capped to
-the display. There is no half-resolution or Custom choice.
+configuration, but must still accept the requested modes. See the
+[window targets and budget](../../docs/VIRTUAL_DISPLAY_MODES.md#ipad-window-targets).
 
 ## Audio and controllers
 

@@ -143,7 +143,8 @@ extension AppModel {
         let alert = NSAlert()
         alert.messageText = TakeoverDialogCopy.title(occupantApp: pending.occupantApp, hostName: pending.host.displayName)
         alert.informativeText = TakeoverDialogCopy.message
-        alert.addButton(withTitle: "Quit and Stream").hasDestructiveAction = true
+        alert.addButton(withTitle: "Quit \(pending.occupantApp ?? "the running app") and start \(pending.app.name)")
+            .hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")
         NSApp.activate()
         if alert.runModal() == .alertFirstButtonReturn {

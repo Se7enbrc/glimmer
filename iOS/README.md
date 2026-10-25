@@ -3,13 +3,19 @@
 Your PC games, on your iPhone or iPad. Native controls. No accounts or tracking.
 
 **This is an early development build.** The app finds nearby PCs running
-Sunshine, pairs with a PIN, lists their apps and connects a landscape video and
-stereo audio stream. Physical controllers and simple touch use the shared input
-engine. See the fixed [input mapping](docs/INPUT.md).
+Sunshine, pairs with a PIN, lists their apps and connects a video and stereo
+audio stream. Physical controllers and simple touch use the shared input engine.
+See the fixed [input mapping](docs/INPUT.md).
 
 Use the iPhone launcher, Settings and pairing screens in portrait or landscape.
-Streams stay in landscape; menus can rotate again after disconnecting. The app
-opts into iOS Game Mode; the system controls its activation.
+iPhone streams stay in landscape; menus can rotate again after disconnecting.
+iPad streams start in either orientation and use the whole window, including
+Split View and Stage Manager. After a window resize settles, the stream moves to
+the new window's listed mode without quitting the game. The picture fills the
+window and can crop at the edges. A connected external display can show the
+picture while the device keeps the controls. See
+[external display validation](docs/EXTERNAL_DISPLAYS.md) for hardware checks.
+The app opts into iOS Game Mode; the system controls its activation.
 
 The launcher shows the PC, its requested stream settings and its app buttons.
 The last connected PC loads automatically, including after disconnecting. With
@@ -26,21 +32,29 @@ Add PC by address…. If Sunshine's identity changed because you reset it, use
 this recovery path instead of accepting a changed certificate automatically.
 Disconnect your stream before forgetting a PC.
 
-Native resolution at 120 fps is the default. Settings also offers 1080p at 60 or
-120 fps. The choice is saved and requests are capped to the attached display's
-refresh capability. All three modes use H.264, SDR, stereo and 20 Mbps for the
-initial device tests. Video fills the screen behind cutouts. A 16:9 stream crops
-at the top and bottom on a wider display; native resolution matches the
-display's aspect ratio. If discovery cannot find the PC, choose Settings → PCs →
-Add PC by address… and enter its IP address or hostname. Pairing and certificate
-verification use the same connection flow. Development builds keep the display
-awake throughout the active app. Release builds do so only during a stream.
-Leaving the app restores ordinary auto-lock; manually locking still stops a
-stream. Disconnecting stops the local stream immediately. Brief app switches
-preserve it for up to 15 seconds, with input released; staying away longer
-disconnects. iOS may end this grace period earlier. Screen lock disconnects
-immediately. All of these actions leave the game running on the PC. Real-PC
-playback and physical-device behavior still need validation.
+Native is the default, followed by 1080p 60 and 1080p 120 in Settings. Install
+[the iPhone and iPad display modes](../docs/HOST_SETUP.md#pick-your-file) on the
+PC. Both devices request only modes from that file. Native chooses the closest
+listed size to the window's pixels; 1080p always requests 1920 × 1080. The
+choice is saved. Requests use the listed refresh rate up to the profile and
+display maximum, so window modes generally run at 60 fps. All three choices
+request stereo and 20 Mbps. VideoToolbox capabilities enable AV1 or HEVC with
+H.264 fallback; HDR-capable displays can request 10-bit HDR. Sustained hardware
+and colour acceptance remains pending; see
+[video fidelity checks](docs/VIDEO_FIDELITY.md). Video fills behind cutouts. A
+different aspect crops edges; a lower resolution loses detail. The PC and game
+must use the requested aspect to avoid black bars inside the video. If discovery
+cannot find the PC, choose Settings → PCs → Add PC by address… and enter its IP
+address or hostname. Pairing and certificate verification use the same
+connection flow. Development builds keep the display awake throughout the active
+app. Release builds do so only during a stream. Leaving the app restores
+ordinary auto-lock; manually locking still stops a stream. Disconnecting stops
+the local stream immediately. Brief app switches preserve it for up to 15
+seconds, with input released; staying away longer disconnects. iOS may end this
+grace period earlier. Screen lock disconnects immediately. Each of these
+disconnects quits the game on the PC unless Settings → General → Leave games
+running when you disconnect is on. Real-PC playback and physical-device behavior
+still need validation.
 
 - Requires iOS or iPadOS 26 or later.
 - Built for physical controllers, including Backbone One.

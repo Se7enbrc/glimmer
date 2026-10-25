@@ -81,8 +81,8 @@ struct AppDeclarationTests {
         ])
     }
 
-    @Test func onlyTheWindowContainingTheStreamLocksLandscape() throws {
-        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    @Test func onlyAnIPhoneWindowContainingTheStreamLocksLandscape() async throws {
+        let scene = try await testWindowScene()
         let menu = UIViewController()
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
@@ -99,8 +99,9 @@ struct AppDeclarationTests {
         stream.didMove(toParent: menu)
         stream.beginAppearanceTransition(true, animated: false)
         stream.endAppearanceTransition()
-        #expect(AppDelegate.orientationMask(for: window) == .landscape)
-        #expect(stream.supportedInterfaceOrientations == .landscape)
+        let streaming = AppDelegate.streamOrientations(for: window.traitCollection.userInterfaceIdiom)
+        #expect(AppDelegate.orientationMask(for: window) == streaming)
+        #expect(stream.supportedInterfaceOrientations == streaming)
         let other = UIWindow(windowScene: scene)
         other.frame = window.frame
         other.rootViewController = UIViewController()
@@ -144,6 +145,8 @@ struct AppDeclarationTests {
         #expect(packaged["UIRequiresFullScreen"] == nil)
         #expect(AppDelegate.menuOrientations(for: .phone) == .allButUpsideDown)
         #expect(AppDelegate.menuOrientations(for: .pad) == .all)
+        #expect(AppDelegate.streamOrientations(for: .phone) == .landscape)
+        #expect(AppDelegate.streamOrientations(for: .pad) == .all)
         #expect(AppDelegate().application(.shared, supportedInterfaceOrientationsFor: nil)
             == AppDelegate.menuOrientations(for: UIDevice.current.userInterfaceIdiom))
         #expect(info["LSSupportsGameMode"] as? Bool == true)

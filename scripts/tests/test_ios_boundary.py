@@ -18,9 +18,7 @@ class IOSBoundaryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.project = BOUNDARY.BOUNDARY.load_project(ROOT / "iOS/Glimmer.xcodeproj/project.pbxproj")
-        cls.expected = {name: {str(path.relative_to(ROOT / "iOS"))
-                              for path in (ROOT / "iOS" / name).rglob("*.swift")}
-                        for name in ("Glimmer", "GlimmerTests")}
+        cls.expected = BOUNDARY.expected_sources(ROOT)
 
     def setUp(self):
         self.value = copy.deepcopy(self.project)
@@ -32,6 +30,16 @@ class IOSBoundaryTests(unittest.TestCase):
     def test_canonical_checkout_passes(self):
         BOUNDARY.validate_project(self.value, self.expected)
         self.assertEqual(BOUNDARY.check(ROOT), sum(map(len, self.expected.values())))
+
+    def test_shared_replay_is_required(self):
+        replay = next(key for key, item in self.objects.items()
+                      if item["isa"] == "PBXBuildFile"
+                      and self.objects.get(item.get("fileRef"), {}).get("path", "").endswith("BandwidthPolicyTests.swift"))
+        for item in self.objects.values():
+            if item["isa"] == "PBXSourcesBuildPhase" and replay in item["files"]:
+                item["files"].remove(replay)
+        with self.assertRaisesRegex(ValueError, "source membership mismatch"):
+            BOUNDARY.validate_project(self.value, self.expected)
 
     def test_remote_pin_is_rejected(self):
         package = self.object("XCLocalSwiftPackageReference")
@@ -57,6 +65,19 @@ class IOSBoundaryTests(unittest.TestCase):
         self.object("PBXSourcesBuildPhase")["files"].pop()
         with self.assertRaisesRegex(ValueError, "source membership mismatch"):
             BOUNDARY.validate_project(self.value, self.expected)
+
+    def test_each_shared_soak_source_is_required(self):
+        paths = BOUNDARY.BOUNDARY.file_paths(self.value)
+        for source in BOUNDARY.SHARED_SOAK_SOURCES:
+            with self.subTest(source=source):
+                value = copy.deepcopy(self.value)
+                objects = value["objects"]
+                for phase in objects.values():
+                    if phase["isa"] == "PBXSourcesBuildPhase":
+                        phase["files"] = [entry for entry in phase["files"]
+                                          if paths[objects[entry]["fileRef"]] != source]
+                with self.assertRaisesRegex(ValueError, "source membership mismatch"):
+                    BOUNDARY.validate_project(value, self.expected)
 
     def test_compiling_engine_source_in_shell_is_rejected(self):
         reference = next(item for item in self.objects.values()

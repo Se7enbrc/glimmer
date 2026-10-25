@@ -9,8 +9,7 @@ ios-test:
 	@$(MAKE) -C iOS test
 
 ios-device:
-	@$(MAKE) -C iOS app CONFIG=Release DESTINATION='generic/platform=iOS' \
-		BUILD_FLAGS='SWIFT_ACTIVE_COMPILATION_CONDITIONS='
+	@$(MAKE) -C iOS app CONFIG=Release DESTINATION='generic/platform=iOS'
 
 verify-all: verify
 	@swift test -Xswiftc -warnings-as-errors

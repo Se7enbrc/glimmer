@@ -18,12 +18,14 @@ extension StreamSession {
                        makeSampler: (@Sendable () -> RttSampler)? = nil,
                        prepare: @escaping @MainActor @Sendable (Int) throws -> SessionMedia) async throws
         -> AsyncStream<StreamEvent>? {
-        guard !publicTerminal, !isStreaming, !stopInProgress else {
+        guard !publicTerminal, !isStreaming, !stopInProgress, !isReconnecting, bitrateTask == nil else {
             throw StreamError.sessionFailed(-1)
         }
         teardown = SharedTeardown()
         stopCause = nil
         ownsHostSession = false
+        appliedBitrateKbps = nil
+        preserveGameOnStop = false
         isStreaming = true
         // Capture launch and teardown even when Cancel prevents the backend handshake.
         services.startLog()
@@ -32,7 +34,7 @@ extension StreamSession {
         // in place (see StreamSession+Reconnect.swift): the original server (for
         // a fresh NetworkClient + handshake), the requested mode, and the app id.
         self.reconnectServer = server
-        self.reconnectConfig = config
+        self.reconnectConfig = continuationRecovery?.applying(to: config) ?? config
         self.reconnectAppID = appID
 
         // Keep the Mac (and its display) awake AND opt OUT of App Nap for the
@@ -60,16 +62,7 @@ extension StreamSession {
         let rttSampler = makeSampler?()
         // A throw below must still stop its loop, or it keeps probing the PC.
         defer { _ = rttSampler?.harvest() }
-        let serverInfo: ServerInfo
-        if cachedNetwork != nil {
-            serverInfo = await network.server
-            if serverInfo.isRealGFE { throw StreamError.gameStreamHost }
-            guard serverInfo.pairStatus == .paired, serverInfo.serverCertPEM != nil else {
-                throw NetworkClient.notPaired(server.serverName)
-            }
-        } else {
-            serverInfo = try await fetchAndVerifyServerInfo(network: network, pcName: server.serverName)
-        }
+        let serverInfo = try await fetchAndVerifyServerInfo(network: network, pcName: server.serverName)
         try checkAttempt()
         await rttSampler?.awaitPreLaunchWindow()
         try checkAttempt()
@@ -78,6 +71,7 @@ extension StreamSession {
         let launch = try await launchWithDeadline(network: network, appID: appID, config: config, info: serverInfo)
         try checkAttempt()
         takeoverAuthorized = false
+        approvedOccupant = nil
         await network.setRequestDeadline(nil)
         try checkAttempt()
 
@@ -185,10 +179,14 @@ extension StreamSession {
     /// start()'s power-assertion defer; the caller then awaits stop() for network cleanup.
     package func fetchAndVerifyServerInfo(network: NetworkClient, pcName: String) async throws -> ServerInfo {
         // Telemetry: stamp the /serverinfo leg (launch sub-leg, part of launch_path_ms).
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let serverinfoStart = Date()
+        #endif
         let serverInfo = try await fetchInitialServerInfo { try await network.fetchServerInfo() }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         ConnectTimingTelemetry.shared.recordLaunchLeg(
             serverinfoMs: Date().timeIntervalSince(serverinfoStart) * 1000.0)
+        #endif
         log.info("""
             fetchServerInfo done: pairStatus=\(String(describing: serverInfo.pairStatus), privacy: .public) \
             currentGame=\(serverInfo.currentGameID) httpsPort=\(serverInfo.httpsPort) \
@@ -220,7 +218,9 @@ extension StreamSession {
         prepare: @escaping @MainActor @Sendable (Int) throws -> SessionMedia) async throws -> SessionMedia {
         try checkAttempt()
         audioDecoder.setOutputMuted(config.playAudioOnHost)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let buildStart = Date()
+        #endif
         let pending = Task { @MainActor in
             try Task.checkCancellation()
             return try prepare(bitrate)
@@ -229,7 +229,9 @@ extension StreamSession {
         defer { if mediaPreparation == pending, !stopInProgress { mediaPreparation = nil } }
         let setup = try await pending.value
         guard !isTearingDown else { throw CancellationError() }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         ConnectTimingTelemetry.shared.recordLaunchLeg(buildMs: Date().timeIntervalSince(buildStart) * 1000)
+        #endif
         self.presentation = setup.presentation
         self.input = setup.input
         adoptVideoDecoder(setup.video)
@@ -364,11 +366,12 @@ extension StreamSession {
     }
 
     @MainActor
-    package func wireMediaCallbacks(setup: SessionMedia, bridge: StreamBridgeContext, attempt: UUID) {
+    package func wireMediaCallbacks(setup: SessionMedia, bridge: StreamBridgeContext, attempt: UUID,
+                                    suppressFirstFrame: Bool = false) {
         setup.video.onHDRActiveChanged = { [weak bridge] active in bridge?.emit(.hdrActive(active), attempt: attempt) }
         let firstFrame = setup.presentation.firstFrame
         setup.video.onFirstDecodedFrame = { [weak bridge] in
-            guard bridge?.currentAttempt == attempt else { return }
+            guard bridge?.currentAttempt == attempt, !suppressFirstFrame else { return }
             firstFrame()
             bridge?.emit(.firstFrame, attempt: attempt)
         }

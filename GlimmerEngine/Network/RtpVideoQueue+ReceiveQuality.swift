@@ -22,7 +22,9 @@ extension RtpVideoQueue {
             return
         }
         if hasRecentSequence(seq) || seq == seqHighestSeen {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             windowDuplicate += 1
+            #endif
             return
         }
         // Older frames can fill this epoch's gaps, but a forward alias or a frame
@@ -32,6 +34,7 @@ extension RtpVideoQueue {
             if Self.isBefore32(frameIndex, firstFrame) || !Self.isBefore16(seq, seqHighestSeen) { return }
         }
         if !Self.isBefore16(seq, seqHighestSeen) {
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             let jump = Int(Self.u16(Int(seq) - Int(seqHighestSeen)))
             if jump > 1 {
                 windowLostPreFec += jump - 1
@@ -40,6 +43,7 @@ extension RtpVideoQueue {
                 gapOpenAtUs = receiveTimeUs
                 haveOpenGap = true
             }
+            #endif
             // The preceding frame may own missing packets on either side of zero.
             if seq < seqHighestSeen {
                 seqPreviousEpochFirstFrame = seqEpochFirstFrame
@@ -51,12 +55,14 @@ extension RtpVideoQueue {
             windowOutOfOrder += 1
             // A late filler can straddle a reporting boundary. Bound parked credits
             // so old reorders cannot suppress an arbitrarily large future loss.
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             if windowLostPreFec > 0 {
                 windowLostPreFec -= 1
             } else if pendingReorderCredit < Self.maxPendingReorderCredit {
                 pendingReorderCredit += 1
             }
             recordReorderDisplacement(seq: seq, receiveTimeUs: receiveTimeUs)
+            #endif
         }
         if newerFrame { seqNewestFrame = frameIndex }
         rememberSeq(seq)
@@ -68,8 +74,10 @@ extension RtpVideoQueue {
             if gapUs > 1_000_000 { sequenceBlackoutEligible = true }
             observeGap(Double(gapUs))
             if haveSeqBaseline, gapUs > Self.gapEventThresholdUs {
+                #if os(macOS) || GLIMMER_DIAGNOSTICS
                 TelemetryExporter.recordLiveEvent(Self.gapEventFields(
                     gapUs: gapUs, atUs: receiveTimeUs, lastSeq: seqHighestSeen, nextSeq: seq))
+                #endif
             }
         }
         lastArrivalUs = receiveTimeUs
@@ -83,6 +91,7 @@ extension RtpVideoQueue {
     /// The `video_gap` row: the gap, the arrival that ended it (monotonic ns) and
     /// the RTP sequence numbers either side.
     static func gapEventFields(gapUs: UInt64, atUs: UInt64, lastSeq: UInt16, nextSeq: UInt16) -> [String] {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         [
             "\"event\":\"video_gap\"",
             "\"t_ns\":\(atUs &* 1_000)",
@@ -90,6 +99,9 @@ extension RtpVideoQueue {
             "\"last_seq\":\(lastSeq)",
             "\"next_seq\":\(nextSeq)"
         ]
+        #else
+        return []
+        #endif
     }
 
     /// Apply any parked cross-window reorder credit against this window's pre-FEC
@@ -100,6 +112,7 @@ extension RtpVideoQueue {
     /// stays parked for a future window's loss. Called from maybeLogMetrics under
     /// the same single-receive-thread isolation as the accumulators.
     func applyPendingReorderCredit() -> Int {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard pendingReorderCredit > 0, windowLostPreFec > 0 else {
             return max(0, windowLostPreFec)
         }
@@ -107,6 +120,9 @@ extension RtpVideoQueue {
         windowLostPreFec -= applied
         pendingReorderCredit -= applied
         return max(0, windowLostPreFec)
+        #else
+        return 0
+        #endif
     }
 
     func hasRecentSequence(_ seq: UInt16) -> Bool {
@@ -136,8 +152,10 @@ extension RtpVideoQueue {
         seqEpochFirstFrame = frameIndex
         seqPreviousEpochFirstFrame = frameIndex
         haveSeqBaseline = true
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         haveOpenGap = false
         pendingReorderCredit = 0
+        #endif
         sequenceBlackoutEligible = false
         rememberSeq(seq)
     }
@@ -146,7 +164,9 @@ extension RtpVideoQueue {
     /// running max. Branchless-ish ascending find; integer bumps only.
     func observeGap(_ gapUs: Double) {
         guard gapUs.isFinite, gapUs >= 0 else { return }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if gapUs > gapMaxUs { gapMaxUs = gapUs }
+        #endif
         // GAP-EVENT counters (20/50/100ms, cumulative - a 100ms gap counts in all
         // three). The histogram below is windowed: flushed and DISCARDED every ~2s,
         // and its p95 is structurally blind to a rare blip (one 100ms gap is
@@ -162,6 +182,7 @@ extension RtpVideoQueue {
             if gapUs > 50_000 { counters.videoGapOver50msTotal.increment() }
             if gapUs > 100_000 { counters.videoGapOver100msTotal.increment() }
         }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         var index = 0
         let bounds = Self.gapBoundsUs
         while index < bounds.count {
@@ -170,12 +191,14 @@ extension RtpVideoQueue {
         }
         gapBuckets[index] += 1
         gapCount += 1
+        #endif
     }
 
     /// Estimate a quantile (0...1) from the cumulative gap histogram via linear
     /// interpolation within the matching bucket - the same model the latency rig
     /// uses. Returns 0 when no gaps recorded. Used to publish p50/p95 each window.
     func gapQuantile(_ quantile: Double) -> Double {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard gapCount > 0 else { return 0 }
         let rank = quantile * Double(gapCount)
         var cumulative = 0.0
@@ -192,5 +215,8 @@ extension RtpVideoQueue {
         }
         // In the implicit top bucket: clamp to the running max (no upper edge).
         return gapMaxUs
+        #else
+        return 0
+        #endif
     }
 }

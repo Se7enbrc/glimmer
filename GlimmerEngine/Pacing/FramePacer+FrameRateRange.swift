@@ -223,6 +223,7 @@ extension FramePacer {
     @MainActor private static var lastReplayedLogSinkID: ObjectIdentifier?
     @MainActor
     private func replayLinkInstalledBreadcrumbIfNeeded(link: CADisplayLink, panelMax: Double) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard let sink = SessionLogFileSink.shared else { return }
         let sinkID = ObjectIdentifier(sink)
         guard Self.lastReplayedLogSinkID != sinkID else { return }
@@ -233,6 +234,7 @@ extension FramePacer {
             + "preferred=\(Double(range.preferred ?? 0))Hz max=\(Double(range.maximum))Hz "
             + "(panelMax=\(panelMax)Hz) [replayed at session-log start]",
             "Stream.Pacer")
+        #endif
     }
 
     package static func panelMaxHz(minimumInterval: Double, maximumFramesPerSecond: Int) -> Double {

@@ -43,8 +43,12 @@ final class InputCallbackProbe: @unchecked Sendable {
             lastFinished = now
             return start
         }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let start, now >= start {
             FrameTimingTracker.shared?.inputCallbackLatency.observe(Double(now - start) / 1e6)
         }
+        #else
+        _ = start
+        #endif
     }
 }

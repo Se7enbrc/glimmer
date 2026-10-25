@@ -31,6 +31,7 @@ private struct HostContextMenu: ViewModifier {
     @State private var codecPref: HostCodecPreference
     /// The app the Quit item named when it was chosen; nil when the PC didn't say.
     @State private var quitApp: String?
+    @State private var quitAppID: Int?
     @State private var showQuitConfirm = false
     @State private var quitFailure: String?
     private var quitName: String { quitApp ?? "the running app" }
@@ -160,13 +161,13 @@ private struct HostContextMenu: ViewModifier {
         }
         .disabled(isStreamingThisPC)
         // Only a fresh reading from this PC can offer a quit.
-        if !isStreamingThisPC, let live = model.hostLiveStatus, HostLiveStatus.isFresh(live, for: host.id),
-           let occupant = AppModel.occupant(of: live.state) {
+        if let running = model.runningApp(on: host) {
             Button {
-                quitApp = occupant
+                quitApp = running.name
+                quitAppID = running.id
                 showQuitConfirm = true
             } label: {
-                Label("Quit \(occupant ?? "the Running App") on \(host.displayName)…", systemImage: "xmark.circle")
+                Label("Quit \(running.name) on \(host.displayName)…", systemImage: "xmark.circle")
             }
         }
         Button(role: .destructive) {
@@ -180,7 +181,7 @@ private struct HostContextMenu: ViewModifier {
     private func quitRunningApp() {
         Task {
             do {
-                try await model.quitRunningApp(on: host)
+                try await model.quitRunningApp(on: host, expectedAppID: quitAppID)
             } catch {
                 quitFailure = AppModel.quitFailureMessage(for: error, hostName: host.displayName)
             }

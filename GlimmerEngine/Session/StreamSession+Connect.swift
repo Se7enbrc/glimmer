@@ -13,15 +13,9 @@ extension StreamSession {
     /// Public callers validate key sizes before this boundary; native launch compatibility is preserved.
     package func makeBackendConfig(
         config: StreamRequest, launch: LaunchResponse, server: ServerInfo,
-        rtt: RttStats? = nil, rttPreLaunch: Bool = false
+        rtt: RttStats? = nil, rttPreLaunch: Bool = false, exactBitrate: Bool = false
     ) -> BackendStreamConfig {
-        // Resolve `.auto` from the route we will actually egress on. Without
-        // this, `.auto` (STREAM_CFG_AUTO = 2) never equals STREAM_CFG_REMOTE and
-        // every remote-only SDP behaviour - the 1024 packet-size clamp, the
-        // remote bitrate headroom, the remote qosTrafficType - stays dead, so a
-        // 1392-byte LAN packet gets advertised onto a 1280-MTU tunnel and every
-        // video packet fragments. An explicit .local/.remote from the caller is
-        // honoured as-is; only `.auto` consults the probe.
+        // Explicit remoteness wins. Unknown public paths keep conservative packets until destination evidence arrives.
         let path = config.remoteness == .auto
             ? services.route(server, rtt) : StreamPathProbe()
         let resolvedRemoteness: Remoteness
@@ -29,25 +23,22 @@ extension StreamSession {
         case .local, .remote:
             resolvedRemoteness = config.remoteness
         case .auto:
-            resolvedRemoteness = path.isRemotePath ? .remote : .local
+            let facts = publicMedia == nil ? nil : services.bandwidthInputs?.snapshot().path
+            let conservative = facts.map { path.interfaceName == nil || $0.needsConservativePacketSize } ?? false
+            resolvedRemoteness = path.isRemotePath || conservative ? .remote : .local
         }
-        // CONNECT-TIME QUALITY GATE. The demand-based bitrate from
-        // QualityCalculator answers "what does this resolution need?" - it was
-        // measured on a LAN harness and never asks what the PATH will deliver.
-        // Asking for a LAN-measured 84 Mbps over a 50 ms tunnel is not a
-        // considered choice, it is the absence of one. Since bitrate is fixed at
-        // ANNOUNCE (no client→host rate message exists, and the host never
-        // changes it after), choosing well HERE is the only cheap lever there is.
-        let pathCappedKbps = StreamPathMTU.cappedBitrateKbps(
-            configured: config.bitrateKbps, path: path)
+        // Retain Mac compatibility gates; current-environment shadow decisions do not inherit a latency-based cap.
+        let pathCappedKbps = publicMedia == nil
+            ? StreamPathMTU.cappedBitrateKbps(configured: config.bitrateKbps, path: path) : config.bitrateKbps
         // The wired boost assumed Ethernet at both ends; the measured RTT is
         // the host side's answer, and a Wi-Fi hop there takes the boost off.
-        let cappedBitrateKbps = StreamPathMTU.wiredAskKbps(
+        let routeAskKbps = exactBitrate ? config.bitrateKbps : StreamPathMTU.wiredAskKbps(
             capped: pathCappedKbps, boost: config.bitrateBoost, steadyRttMs: path.rttMs)
-        if cappedBitrateKbps < pathCappedKbps {
+        let cappedBitrateKbps = seedBandwidth(config: config, appliedKbps: routeAskKbps, rtt: rtt, preLaunch: rttPreLaunch)
+        if routeAskKbps < pathCappedKbps {
             Diag.notice("Wired bitrate boost withdrawn: steady RTT "
                 + "\(path.rttMs.map { String(format: "%.1f", $0) } ?? "?") ms says a Wi-Fi hop is on the path - "
-                + "asking for \(cappedBitrateKbps / 1000) Mbps instead of \(pathCappedKbps / 1000).", "Stream")
+                + "asking for \(routeAskKbps / 1000) Mbps instead of \(pathCappedKbps / 1000).", "Stream")
         }
         if config.remoteness == .auto {
             log.info("""
@@ -64,7 +55,7 @@ extension StreamSession {
                 bitrate=\(config.bitrateKbps, privacy: .public)→\(cappedBitrateKbps, privacy: .public)kbps
                 """)
         }
-        if pathCappedKbps < config.bitrateKbps {
+        if !exactBitrate, pathCappedKbps < config.bitrateKbps {
             Diag.notice(
                 "Link quality gate: steady \(path.rttMs.map { String(format: "%.0f", $0) } ?? "?")ms RTT "
                 + "(min \(path.rtt.map { String(format: "%.0f", $0.minMs) } ?? "?")ms, "
@@ -134,10 +125,12 @@ extension StreamSession {
         // success, or in `stop()` on failure. The interval ID was created up
         // front so the close side can address it even if the actor's strong-ref
         // to the state has been cleared.
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         connectFlowState = OSSignposter.network.beginInterval(
             "ConnectFlow",
             id: connectFlowSignpostID,
             "host=\(serverInfo.address, privacy: .private)")
+        #endif
 
         // SESSION-SCOPED telemetry reset + P2 CONNECT-HANDSHAKE anchor HERE -
         // before startConnection runs the handshake whose stage edges fill the
@@ -174,6 +167,7 @@ extension StreamSession {
                 try await connectingBackend.startConnectionAsync(server: backendServer, config: backendConfig)
             }
             try checkAttempt(deadline: deadline)
+            if bitrateChange == nil { appliedBitrateKbps = Int(backendConfig.bitrate) }
         } catch {
             // A failed transport follows the session-wide host disposition.
             let code: Int32
@@ -187,7 +181,9 @@ extension StreamSession {
             // while the driver retries. Initial connect failure runs the full teardown.
             if duringReconnect {
                 try checkAttempt(deadline: deadline)
-                if let cancellation = hostDisposition.cancellation { try? await cancellation.cancel(network) }
+                if bitrateChange == nil, let cancellation = hostDisposition.cancellation {
+                    try? await cancellation.cancel(network)
+                }
                 try checkAttempt(deadline: deadline)
                 throw StreamError.sessionFailed(code)
             }

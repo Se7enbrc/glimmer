@@ -63,10 +63,12 @@ extension VideoDecoder {
     /// (idempotent in P2State); off the per-frame path (the caller fires this
     /// exactly once per session, behind its own first-frame latch).
     nonisolated static func noteFirstDecodedFrameTelemetry() {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         TelemetryCounters.shared.p2.markFirstFrame(TelemetryCounters.monotonicNowNanos())
         // Resolve TRUE click-to-pixels at the SAME first-decoded-frame edge as
         // handshake_total (so the two share an endpoint); no-op without a click.
         ConnectTimingTelemetry.shared.markFirstFrame()
+        #endif
     }
 
     /// The CAUSE of a fresh VT-session create, for the labeled recreate counters.
@@ -86,6 +88,7 @@ extension VideoDecoder {
     nonisolated func noteSessionCreatedTelemetry(
         outputPixelFormat: OSType, cause: SessionCreateCause
     ) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let counters = TelemetryCounters.shared
         counters.decoderRecreateTotal.increment()
         switch cause {
@@ -98,6 +101,7 @@ extension VideoDecoder {
         guard FrameTimingTracker.shared != nil else { return }
         guard let session = decompressionSession else { return }
         publishDecodeStateTelemetry(session: session, outputPixelFormat: outputPixelFormat)
+        #endif
     }
 
     /// Publish the live DECODE state. The HW-decode property is read back from the live session
@@ -106,6 +110,7 @@ extension VideoDecoder {
     private nonisolated func publishDecodeStateTelemetry(
         session: VTDecompressionSession, outputPixelFormat: OSType
     ) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let isTenBit = (streamVideoFormat & StreamProtocol.VIDEO_FORMAT_MASK_10BIT) != 0
         let counters = TelemetryCounters.shared
         counters.setDecodeState(TelemetryCounters.DecodeState(
@@ -114,6 +119,7 @@ extension VideoDecoder {
             pixelFormat: fourCCString(from: outputPixelFormat),
             bitDepth: isTenBit ? 10 : 8,
             colorSpaceKey: counters.decodeState?.colorSpaceKey ?? "pending"))
+        #endif
     }
 
     /// Map a negotiated stream-format bitmask to a codec label for telemetry.
@@ -152,11 +158,13 @@ extension VideoDecoder {
     /// branch stays out of that function. No-op before the first session-create
     /// publish, or when the key is unchanged.
     nonisolated func noteColorSpaceChangeTelemetry(_ key: String) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard FrameTimingTracker.shared != nil else { return }
         guard var state = TelemetryCounters.shared.decodeState, state.colorSpaceKey != key else {
             return
         }
         state.colorSpaceKey = key
         TelemetryCounters.shared.setDecodeState(state)
+        #endif
     }
 }

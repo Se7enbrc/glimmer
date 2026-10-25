@@ -1,44 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  TelemetrySessionEvents.swift
-//
-//  P2 SESSION-LIFECYCLE telemetry plumbing for the opt-in exporter, split out of
-//  TelemetryCounters.swift so that file stays focused on the per-frame/per-event
-//  counters + gauges and both stay under the file-length budget. Four signals
-//  live here, all built on the SAME always-live-counter / 1Hz-read discipline as
-//  the rest of the rig (see TelemetryCounters.swift for the gate/safety contract):
-//
-//    * CONNECT-HANDSHAKE breakdown - per-stage timing of the connect sequence
-//      (RTSP → control setup → ENet connect → first video frame), captured once
-//      per connect from the stage events the engine already fires, emitted to the
-//      Prometheus body + the NDJSON (as an event line) + the session report.
-//    * RECONNECT count + disconnect REASON - a monotonic reconnect counter and
-//      the last terminate reason as an enum ordinal, captured at the
-//      connection-terminated edge (always-live integer/enum store, off any hot
-//      path - a terminate is the rarest event there is).
-//    * IDR/RFI ROUND-TRIP - time from our requestIdrFrame/RFI SEND to the
-//      resulting IDR/recovery frame ARRIVING. Both ends are client-side: we stamp
-//      the send instant (gate-on only) and measure the delta when the IDR lands,
-//      feeding a histogram + the per-frame trace.
-//    * CORRUPTION/ARTIFACT heuristic - a cheap, sampled corruption counter
-//      derived from signals the engine ALREADY computes (VT decode-status error /
-//      FrameDropped bit, depacketizer discontinuity). NO per-pixel scan; the
-//      detector is a hot-path-safe integer add at an already-rare event site.
-//
-//  GATING + HOT-PATH SAFETY (load-bearing): the counters/enum stores are
-//  unconditional sub-µs integer/enum writes at already-rare lifecycle/recovery
-//  sites (a connect stage edge, a terminate, an IDR request) - gating them would
-//  buy nothing. The IDR-RTT SEND stamp is taken only when the latency tracker
-//  exists (gate-on), so the OFF path pays one optional load. The handshake-stage
-//  capture is a small map keyed by stage name, only touched on the (rare) stage
-//  edges. Nothing here is on the per-frame decode/pace path, and nothing takes a
-//  proven hot-path lock.
-//
-//  SECRET-FREE: every value is a millisecond duration, an integer count, an enum
-//  ordinal, or a fixed stage label - nothing that could carry a secret/host id.
-//
+// Lifecycle measurements are compiled only for Mac and diagnostic iOS builds.
+// Disconnect reasons also describe operational session termination.
 
 import Foundation
 import os
@@ -99,6 +63,7 @@ package enum DisconnectReason: Int, Sendable {
 /// is DELIBERATELY kept out of `resetForNewSession`, so it survives the <1ms
 /// exporter teardown that races the 1s scrape - the next session re-serves it.
 /// `@unchecked Sendable`: each `Counter` is self-locked.
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 package final class DisconnectReasonCounters: @unchecked Sendable {
 
     package init() {}
@@ -140,9 +105,6 @@ package final class ConnectTimingTelemetry: @unchecked Sendable {
     // Launch-path SUB-LEGS (ms), stamped at the real call sites in
     // launchWithBusyRecovery so the opaque launch_path_ms is attributable.
     private var serverinfoMsValue: Double = 0
-    private var cancelMsValue: Double = 0
-    private var launchBusyWaitMsValue: Double = 0
-    private var launchBusyPollCountValue: Double = 0
     private var launchMsValue: Double = 0
     private var buildMsValue: Double = 0
     package init() { lock.initialize(to: os_unfair_lock_s()) }
@@ -179,16 +141,10 @@ package final class ConnectTimingTelemetry: @unchecked Sendable {
         os_unfair_lock_unlock(lock)
     }
     /// Record a launch sub-leg duration (ms). First non-zero write wins per leg
-    /// (the launch flow runs each leg once); off any hot path. `busyPollCount` is
-    /// the waitForHostIdle poll count for `launch_busy_wait_ms`.
-    package func recordLaunchLeg(serverinfoMs: Double? = nil, cancelMs: Double? = nil,
-                                 launchBusyWaitMs: Double? = nil, busyPollCount: Int? = nil,
-                                 launchMs: Double? = nil, buildMs: Double? = nil) {
+    /// (the launch flow runs each leg once); off any hot path.
+    package func recordLaunchLeg(serverinfoMs: Double? = nil, launchMs: Double? = nil, buildMs: Double? = nil) {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         if let ms = serverinfoMs, serverinfoMsValue == 0 { serverinfoMsValue = ms }
-        if let ms = cancelMs, cancelMsValue == 0 { cancelMsValue = ms }
-        if let ms = launchBusyWaitMs, launchBusyWaitMsValue == 0 { launchBusyWaitMsValue = ms }
-        if let count = busyPollCount, launchBusyPollCountValue == 0 { launchBusyPollCountValue = Double(count) }
         if let ms = launchMs, launchMsValue == 0 { launchMsValue = ms }
         if let ms = buildMs, buildMsValue == 0 { buildMsValue = ms }
     }
@@ -197,9 +153,6 @@ package final class ConnectTimingTelemetry: @unchecked Sendable {
     package func applyLaunchLegs(to out: inout HandshakeBreakdown) {
         os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }
         out.launchServerinfoMs = serverinfoMsValue != 0 ? serverinfoMsValue : nil
-        out.launchCancelMs = cancelMsValue != 0 ? cancelMsValue : nil
-        out.launchBusyWaitMs = launchBusyWaitMsValue != 0 ? launchBusyWaitMsValue : nil
-        out.launchBusyPollCount = launchBusyPollCountValue != 0 ? launchBusyPollCountValue : nil
         out.launchMs = launchMsValue != 0 ? launchMsValue : nil
         out.buildMs = buildMsValue != 0 ? buildMsValue : nil
     }
@@ -217,8 +170,7 @@ package final class ConnectTimingTelemetry: @unchecked Sendable {
         os_unfair_lock_lock(lock)
         clickReference = 0; connectStartReference = 0
         clickToFirstFrameMsValue = 0; launchPathMsValue = 0
-        serverinfoMsValue = 0; cancelMsValue = 0; launchBusyWaitMsValue = 0
-        launchBusyPollCountValue = 0; launchMsValue = 0; buildMsValue = 0
+        serverinfoMsValue = 0; launchMsValue = 0; buildMsValue = 0
         os_unfair_lock_unlock(lock)
     }
 }
@@ -276,9 +228,6 @@ package struct HandshakeBreakdown: Sendable {
         clickToFirstFrameMs: Double? = nil,
         launchPathMs: Double? = nil,
         launchServerinfoMs: Double? = nil,
-        launchCancelMs: Double? = nil,
-        launchBusyWaitMs: Double? = nil,
-        launchBusyPollCount: Double? = nil,
         launchMs: Double? = nil,
         buildMs: Double? = nil,
         complete: Bool = false
@@ -291,9 +240,6 @@ package struct HandshakeBreakdown: Sendable {
         self.clickToFirstFrameMs = clickToFirstFrameMs
         self.launchPathMs = launchPathMs
         self.launchServerinfoMs = launchServerinfoMs
-        self.launchCancelMs = launchCancelMs
-        self.launchBusyWaitMs = launchBusyWaitMs
-        self.launchBusyPollCount = launchBusyPollCount
         self.launchMs = launchMs
         self.buildMs = buildMs
         self.complete = complete
@@ -312,18 +258,14 @@ package struct HandshakeBreakdown: Sendable {
     /// Total: connect start → first decoded video frame (the whole cold open).
     package var totalMs: Double?
     /// TRUE click-to-pixels: the user's launch click → first decoded frame, which
-    /// includes the serverinfo + launch + busy-poll legs `totalMs` excludes (it
+    /// includes the serverinfo + launch legs `totalMs` excludes (it
     /// anchors at connect-start). From `ConnectTimingTelemetry`.
     package var clickToFirstFrameMs: Double?
     /// Launch path: click → connect-start, isolating the pre-connect launch cost.
     package var launchPathMs: Double?
-    /// Launch-path SUB-LEGS attributing launchPathMs: /serverinfo, /cancel, the
-    /// waitForHostIdle busy-poll (+ its poll count), /launch, and the MainActor
-    /// subsystem/window build. Each nil until its call site stamps it.
+    /// Launch-path SUB-LEGS attributing launchPathMs: /serverinfo, /launch and the
+    /// MainActor subsystem/window build. Each nil until its call site stamps it.
     package var launchServerinfoMs: Double?
-    package var launchCancelMs: Double?
-    package var launchBusyWaitMs: Double?
-    package var launchBusyPollCount: Double?
     package var launchMs: Double?
     package var buildMs: Double?
     /// True once the first decoded frame landed (so the exporter emits the
@@ -378,6 +320,8 @@ package struct IdrRoundTripSnapshot: Sendable {
     package var lastRoundTripMs: Double?
 }
 
+#endif
+
 // MARK: - TelemetryCounters: P2 session-lifecycle state
 
 extension TelemetryCounters {
@@ -397,6 +341,7 @@ extension TelemetryCounters {
     /// All P2 session-lifecycle state behind one lock. `@unchecked Sendable`: the
     /// single `os_unfair_lock` guards every field; last-writer-wins is correct for
     /// 1Hz-sampled gauges, and the rare lifecycle/recovery writers never contend.
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     package final class P2State: @unchecked Sendable {
         private let lock = os_unfair_lock_t.allocate(capacity: 1)
         package init() { lock.initialize(to: os_unfair_lock_s()) }
@@ -572,4 +517,5 @@ extension TelemetryCounters {
             return Double(end &- start) / 1_000_000.0
         }
     }
+    #endif
 }

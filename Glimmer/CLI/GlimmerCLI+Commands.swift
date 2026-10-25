@@ -99,7 +99,8 @@ extension GlimmerCLI {
     static func quit(_ command: Command, model: AppModel) async -> Int32 {
         guard let host = resolveHost(command.arguments[0], model: model) else { return Exit.notPaired }
         let running: String
-        switch await probe(host, model: model)?.state {
+        let live = await probe(host, model: model)
+        switch live?.state {
         case .asleep, nil:
             printError(AppModel.unreachableMessage(host.displayName))
             return Exit.unreachable
@@ -117,13 +118,22 @@ extension GlimmerCLI {
         // A Glimmer stream from this PC has to end through the app: a /cancel
         // from here would look like a host restart and the stream would relaunch.
         let request = [CommandChannel.Key.verb: "quit", CommandChannel.Key.host: host.id]
-        if runningGlimmer() != nil,
-           await ask(request, within: .seconds(2))?[CommandChannel.Key.event] == CommandChannel.Event.stopped {
-            printLine("Quit \(running) on \(host.displayName).")
-            return Exit.ok
+        if runningGlimmer() != nil {
+            guard let response = await ask(request, within: .seconds(12)) else {
+                printError(StreamFailureCopy.quitUnconfirmed(running, pc: host.displayName))
+                return Exit.failed
+            }
+            if response[CommandChannel.Key.event] == CommandChannel.Event.stopped {
+                printLine("Quit \(running) on \(host.displayName).")
+                return Exit.ok
+            }
+            if response[CommandChannel.Key.event] != CommandChannel.Event.notMine {
+                printError(response[CommandChannel.Key.detail] ?? StreamFailureCopy.quitUnconfirmed(running, pc: host.displayName))
+                return Exit.failed
+            }
         }
         do {
-            try await model.quitRunningApp(on: host)
+            try await model.quitRunningApp(on: host, expectedAppID: live?.runningAppID)
             printLine("Quit \(running) on \(host.displayName).")
             return Exit.ok
         } catch {

@@ -167,8 +167,10 @@ final class RtpAudioReceiver: @unchecked Sendable {
     // logic lives in RtpAudioReceiver+Telemetry.swift (extensions can't hold stored
     // state, so the fields stay here `internal` while the method moves out - which
     // keeps this file under the SwiftLint length limit, like the video split). ---
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     var audioMetricsWindowStartNanos: UInt64 = 0
     static let audioMetricsWindowNanos: UInt64 = 1_000_000_000  // 1s
+    #endif
     /// Arrival gap (ns) past which the next datagram is a FLOW-RESUME edge
     /// (host-idle silence ended) rather than link jitter - matches the skew
     /// store's 2s pair-anchor freshness horizon, the sibling that already
@@ -176,6 +178,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     static let flowResumeGapNanos: UInt64 = 2_000_000_000
     /// Last-flushed cumulative RtpAudioQueue stats, so each window publishes the
     /// delta into the monotonic TelemetryCounters audio totals.
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
     var lastFlushedAudioPackets: UInt32 = 0
     var lastFlushedFecRecovered: UInt32 = 0
     /// Unrecovered audio-loss this window, counted as the PLC placeholders the
@@ -183,6 +186,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     /// audible-gap count (one per data packet the user won't hear). Folded into the
     /// loss total each window, then zeroed.
     var audioLostInWindow: Int = 0
+    #endif
     /// Last datagram-arrival instant (uptime ns) for the per-socket GAP-EVENT
     /// counters (the audio leg of the 20/50/100ms family); 0 until the first
     /// datagram. Only recvQueue touches this stamp.
@@ -383,7 +387,9 @@ final class RtpAudioReceiver: @unchecked Sendable {
         guard interrupted.testAndSet() else { return }
         receiveFailure.cancel()
         // Preserve the stream-end instant as the next session's idle anchor.
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         TelemetryCounters.shared.audioTtf.markStreamEnd()
+        #endif
         pingThread = nil // the dedicated ping thread exits on the interrupted flag
         decodeWorker.stop()
         if initialized {

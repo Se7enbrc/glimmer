@@ -111,6 +111,7 @@ jobs:
         if: inputs.operation == 'promote'
         env:
           GH_TOKEN: ${{ steps.tag-app.outputs.token }}
+          RELEASE_READ_TOKEN: ${{ github.token }}
           APP_SLUG: ${{ steps.tag-app.outputs.app-slug }}
         run: |
           gh auth setup-git

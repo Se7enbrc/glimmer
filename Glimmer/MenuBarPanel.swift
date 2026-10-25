@@ -170,6 +170,12 @@ struct MenuBarPanel: View {
                 actionRow("Mini Player", systemImage: "pip.enter") { model.toggleMiniPlayer() }
             }
             stopRow
+            if let host = model.streamingHost, let app = model.runningApp(on: host) {
+                actionRow("Quit \(app.name)…", systemImage: "stop.circle") {
+                    dismiss()
+                    model.requestQuitGame(on: host, app: app)
+                }.disabled(model.menuStopInProgress)
+            }
             HStack(spacing: 8) {
                 Image(systemName: "chart.bar.xaxis")
                     .frame(width: 18)
@@ -240,7 +246,16 @@ struct MenuBarPanel: View {
                     Spacer()
                     if let chip = model.menuBarHost?.chip { readinessPill(chip) }
                 }
-                primaryControl(host: host)
+                if let app = model.runningApp(on: host) {
+                    Text("\(app.name) is running.").foregroundStyle(.secondary)
+                    actionRow(model.continuationTitle(on: host, app: app), systemImage: "play.fill") {
+                        model.requestStream(app: app, on: host)
+                    }
+                    actionRow("Quit \(app.name)…", systemImage: "stop.circle") {
+                        dismiss()
+                        model.requestQuitGame(on: host, app: app)
+                    }
+                } else { primaryControl(host: host) }
                 pcRows(host: host)
             }
         } else {

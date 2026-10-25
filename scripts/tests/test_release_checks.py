@@ -14,6 +14,8 @@ import json
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).parents[1]))
+
 SPEC = importlib.util.spec_from_file_location("release_checks", Path(__file__).parents[1] / "release-checks.py")
 CHECKS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECKS)
@@ -26,23 +28,33 @@ def run(**changes):
     return {"id": 1, "workflow_id": 2, "path": WORKFLOW, "head_sha": SHA,
             "head_repository": {"full_name": CHECKS.REPO}, "event": "pull_request",
             "status": "completed", "conclusion": "success", "run_number": 4, "run_attempt": 1,
+            "updated_at": "2026-10-09T20:02:00Z",
             "run_started_at": "2026-10-09T20:00:00Z", "pull_requests": [{"number": 114}], **changes}
 
 
 def analyses(**changes):
     return [{"id": index, "category": category, "analysis_key": f"{WORKFLOW}:analyze",
              "ref": "refs/pull/114/merge", "commit_sha": MERGE, "error": "", "rules_count": 10,
-             "created_at": "2026-10-09T20:01:00Z", **changes}
+             "created_at": "2026-10-09T20:01:00Z", "sarif_id": f"upload-{index}", **changes}
             for index, category in enumerate(sorted(CHECKS.CATEGORIES), 1)]
 
 
 def language_jobs(**changes):
     return {name: {"name": name, "head_sha": SHA, "status": "completed", "conclusion": "success",
-                   "started_at": "2026-10-09T20:00:00Z", **changes}
-            for name in CHECKS.REQUIRED[WORKFLOW]}
+                   "run_id": 1, "run_attempt": 1, "head_branch": None,
+                   "completed_at": "2026-10-09T20:02:00Z",
+                   "started_at": "2026-10-09T20:00:00Z",
+                   "steps": [{"name": f"CodeQL upload upload-{index}",
+                              "status": "completed", "conclusion": "success"}], **changes}
+            for index, name in enumerate(sorted(CHECKS.REQUIRED[WORKFLOW]), 1)}
 
 
 class RequiredChecksTests(unittest.TestCase):
+    def setUp(self):
+        clock = patch.object(CHECKS, 'time')
+        clock.start().monotonic.return_value = 0
+        self.addCleanup(clock.stop)
+
     def test_latest_run_must_be_green_even_if_older_run_passed(self):
         for conclusion, status in (("failure", "completed"), ("cancelled", "completed"),
                                    (None, "in_progress"), ("skipped", "completed")):
@@ -83,7 +95,8 @@ class RequiredChecksTests(unittest.TestCase):
 
     def test_partial_rerun_accepts_retained_successful_language_analyses(self):
         jobs = language_jobs()
-        jobs["Analyze (swift)"]["started_at"] = "2026-10-09T21:00:00Z"
+        jobs["Analyze (swift)"].update(started_at="2026-10-09T21:00:00Z",
+                                      completed_at="2026-10-09T21:02:00Z")
         data = analyses()
         next(entry for entry in data if entry["category"] == "/language:swift")["created_at"] = "2026-10-09T21:01:00Z"
         CHECKS.validate_analyses(data, jobs, SHA, "refs/pull/114/merge", {MERGE: SHA})
@@ -102,7 +115,8 @@ class RequiredChecksTests(unittest.TestCase):
 
     def test_partial_rerun_passes_complete_gate_unless_alerts_are_open(self):
         jobs = language_jobs()
-        jobs["Analyze (swift)"]["started_at"] = "2026-10-09T21:00:00Z"
+        jobs["Analyze (swift)"].update(started_at="2026-10-09T21:00:00Z",
+                                      completed_at="2026-10-09T21:02:00Z")
         data = analyses()
         next(entry for entry in data if entry["category"] == "/language:swift")["created_at"] = "2026-10-09T21:01:00Z"
         alerts = []
@@ -121,7 +135,8 @@ class RequiredChecksTests(unittest.TestCase):
                                               run_attempt=2, run_started_at="2026-10-09T21:00:00Z")]}]
             if "/jobs?" in path:
                 return [{"jobs": [*jobs.values(), {"name": "macOS", "head_sha": SHA,
-                                                  "status": "completed", "conclusion": "success"}]}]
+                                                  "status": "completed", "conclusion": "success",
+                                                  "run_id": 1, "run_attempt": 2, "head_branch": None}]}]
             if "analyses?" in path:
                 return [data]
             alert_queries.append(path)
@@ -230,36 +245,28 @@ class GitHubReadRetryTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        executable = self.root / 'gh'
-        executable.write_text(f'#!{sys.executable}\n' + '''import json
-from pathlib import Path
-import sys
-root = Path(__file__).parent
-log = root / 'calls.json'
-calls = json.loads(log.read_text()) if log.exists() else []
-calls.append(sys.argv[1:])
-log.write_text(json.dumps(calls))
-responses = json.loads((root / 'responses.json').read_text())
-response = responses[min(len(calls) - 1, len(responses) - 1)]
-sys.stdout.write(response['stdout'])
-sys.stderr.write(response['stderr'])
-sys.exit(response['returncode'])
-''')
-        executable.chmod(0o755)
-        env = patch.dict(CHECKS.os.environ, PATH=str(self.root) + ':' + CHECKS.os.environ['PATH'])
-        env.start()
-        self.addCleanup(env.stop)
-        sleep = patch('time.sleep')
-        self.sleep = sleep.start()
-        self.addCleanup(sleep.stop)
+        # Keep timing mocks out of subprocess.wait's polling loop.
+        execute = patch.object(CHECKS.subprocess, 'run', side_effect=self.execute)
+        execute.start()
+        self.addCleanup(execute.stop)
+        clock = patch.object(CHECKS, 'time')
+        timing = clock.start()
+        timing.monotonic.return_value = 0
+        self.sleep = timing.sleep
+        self.addCleanup(clock.stop)
 
     def responses(self, *responses):
-        (self.root / 'responses.json').write_text(json.dumps(responses))
-        (self.root / 'calls.json').unlink(missing_ok=True)
+        self.results = responses
+        self.requests = []
         self.sleep.reset_mock()
 
+    def execute(self, args, **kwargs):
+        self.requests.append(args[1:])
+        response = self.results[min(len(self.requests) - 1, len(self.results) - 1)]
+        return subprocess.CompletedProcess(args, response['returncode'], response['stdout'], response['stderr'])
+
     def calls(self):
-        return json.loads((self.root / 'calls.json').read_text())
+        return self.requests
 
     def test_fake_gh_recovers_transient_failure_on_the_same_endpoint(self):
         success = {'returncode': 0, 'stdout': '[{"id": 1}]', 'stderr': ''}
@@ -329,7 +336,7 @@ sys.exit(response['returncode'])
 
     def test_total_read_budget_stops_retries_and_bounds_subprocess_timeout(self):
         failure = subprocess.CompletedProcess([], 1, '', 'gh: Bad Gateway (HTTP 502)')
-        with patch('time.monotonic', side_effect=[0, 0, 60]), \
+        with patch.object(CHECKS.time, 'monotonic', side_effect=[0, 0, 60]), \
                 patch.object(CHECKS.subprocess, 'run', return_value=failure) as execute:
             with self.assertRaisesRegex(ValueError, 'lookup failed.*nothing authorized'):
                 CHECKS.api('actions/workflows/1')

@@ -40,9 +40,11 @@ extension RtpAudioReceiver {
         // instrument break). One clock read + an unfair
         // lock at ~200Hz, the same always-live budget as the per-datagram
         // gap counter.
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         AudioVideoSkewStore.shared.noteAudioScheduled(
             rtp: UInt32(packet[4]) << 24 | UInt32(packet[5]) << 16
                 | UInt32(packet[6]) << 8 | UInt32(packet[7]))
+        #endif
         // A slice, not a copy: the sink reads it in place.
         let payload = packet[RtpAudioQueue.fixedRtpHeaderSize...]
 
@@ -88,12 +90,16 @@ extension RtpAudioReceiver {
             noteDecryptFailure()
             return nil
         }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         AudioPipelineTelemetry.shared.decryptOK.wrappingAdd(1, ordering: .relaxed)
+        #endif
         return decryptScratch[..<outMoved]
     }
 
     private func noteDecryptFailure() {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         AudioPipelineTelemetry.shared.decryptFailed.wrappingAdd(1, ordering: .relaxed)
+        #endif
         guard !loggedDecryptFailure else { return }
         loggedDecryptFailure = true
         AudioDiagnostics.warn("NativeAudio AES-CBC decrypt failed; rejected length, key size or padding. "

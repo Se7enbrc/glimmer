@@ -2,12 +2,13 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 // Shared signpost IDs span receive, decode and display threads without hot-path log formatting.
-// The system gates inactive recording, so production keeps these intervals enabled.
+// Production iOS excludes signposts; stream control owns its own clocks.
 // Categories and profiling instructions live in docs/PROFILING.md.
 
 import os
 
 extension OSSignposter {
+    #if os(macOS) || GLIMMER_DIAGNOSTICS
 
     /// System Trace captures this standard category; custom render categories may be absent.
     package static let diagnosticClock = OSSignposter(logHandle: OSLog(
@@ -46,4 +47,5 @@ extension OSSignposter {
     package static let audio = OSSignposter(
         subsystem: "io.ugfugl.Glimmer",
         category: "Stream.Audio")
+    #endif
 }

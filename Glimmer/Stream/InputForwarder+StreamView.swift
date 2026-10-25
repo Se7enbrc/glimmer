@@ -1,14 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  InputForwarder+StreamView.swift
-//
-//  The StreamInputViewDelegate conformance (keyboard/mouse/scroll event
-//  handling that maps NSEvents to LiSend* uplink calls), plus the HotkeyChord
-//  match test and small numeric helpers. Split out of InputForwarder.swift to
-//  keep each unit focused.
-//
+// Stream responders share one chord matcher so local shortcuts agree across entry points.
 
 import GlimmerEngine
 import AppKit
@@ -25,17 +18,20 @@ import os.log
 
 extension InputForwarder: StreamInputViewDelegate {
     func streamView(_ view: StreamInputView, handleKeyDown event: NSEvent) {
-        if consumeStopShortcut(event) { return }
+        if consumeStopShortcut(event, entry: "keyDown") { return }
         if deferKeyboardEvent({ $0.streamView(view, handleKeyDown: event) }) { return }
         forwardKeyDown(event, in: view)
     }
 
     /// Stop is local and must remain available while text or PC modifier releases are pending.
-    func consumeStopShortcut(_ event: NSEvent) -> Bool {
+    func consumeStopShortcut(_ event: NSEvent, entry: String) -> Bool {
+        guard event.type == .keyDown else { return false }
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard event.type == .keyDown, quitHotkeyProvider().matches(event: event, modifiers: mods) else { return false }
+        let chord = quitHotkeyProvider()
+        guard let match = chord.matchKind(event: event, modifiers: mods) else { return false }
         if !event.isARepeat {
-            log.info("Quit hotkey detected - leaving the stream")
+            Diag.info("Quit hotkey matched: entry=\(entry) match=\(match.rawValue) chord=\(chord.displayString) "
+                + "windowMode=\(isWindowMode) generation=\(inputGeneration) miniPlayer=\(isMiniPlayer)", "Stream.Input")
             quitOrCancelConnect()
         }
         return true
@@ -457,24 +453,32 @@ enum MouseMotionDrain {
 }
 
 // MARK: - HotkeyChord matching
-// HotkeyChord is defined in AppModel.swift - reused here so the user's
-// chosen combos (quit, stats, ...) apply in-stream without a separate config
-// path. One match function handles every chord-style hotkey we intercept.
+// One match function handles every chord-style hotkey we intercept.
 
 extension HotkeyChord {
+    enum MatchKind: String {
+        case character
+        case keyPositionFallback = "key-position-fallback"
+    }
+
     func matches(event: NSEvent, modifiers mods: NSEvent.ModifierFlags) -> Bool {
-        if (ctrl && !mods.contains(.control)) || (!ctrl && mods.contains(.control)) { return false }
-        if (alt && !mods.contains(.option))    || (!alt && mods.contains(.option)) { return false }
-        if (shift && !mods.contains(.shift))   || (!shift && mods.contains(.shift)) { return false }
-        if (cmd && !mods.contains(.command))   || (!cmd && mods.contains(.command)) { return false }
+        matchKind(event: event, modifiers: mods) != nil
+    }
+
+    func matchKind(event: NSEvent, modifiers mods: NSEvent.ModifierFlags) -> MatchKind? {
+        if (ctrl && !mods.contains(.control)) || (!ctrl && mods.contains(.control)) { return nil }
+        if (alt && !mods.contains(.option))    || (!alt && mods.contains(.option)) { return nil }
+        if (shift && !mods.contains(.shift))   || (!shift && mods.contains(.shift)) { return nil }
+        if (cmd && !mods.contains(.command))   || (!cmd && mods.contains(.command)) { return nil }
         let typed = event.charactersIgnoringModifiers?.lowercased() ?? ""
-        if typed == keyChar.lowercased() { return true }
+        if typed == keyChar.lowercased() { return .character }
         // A non-Latin layout types a local letter (й for Q), so match the key's
         // US position instead, as moonlight does. Latin layouts keep theirs.
         guard !typed.allSatisfy(\.isASCII),
               let vk = vkScanCode(forCarbonKeyCode: Int(event.keyCode))?.vk,
-              (0x30...0x39).contains(vk) || (0x41...0x5A).contains(vk) else { return false }
-        return String(Character(Unicode.Scalar(UInt8(vk)))).lowercased() == keyChar.lowercased()
+              (0x30...0x39).contains(vk) || (0x41...0x5A).contains(vk),
+              String(Character(Unicode.Scalar(UInt8(vk)))).lowercased() == keyChar.lowercased() else { return nil }
+        return .keyPositionFallback
     }
 }
 

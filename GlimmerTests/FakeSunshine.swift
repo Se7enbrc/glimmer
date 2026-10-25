@@ -55,7 +55,7 @@ final class FakeSunshine: Sendable {
     func client(_ server: ServerInfo, identity: (certPEM: String, keyPEM: String)? = nil) -> NetworkClient {
         let cert = identity?.certPEM ?? "client-cert"
         let key = identity?.keyPEM ?? "client-key"
-        return NetworkClient(server: server, transport: transport,
+        return NetworkClient(server: server, deviceName: { "Test device" }, transport: transport,
                              identity: { (cert, key, FakeSunshine.clientUniqueID) })
     }
 

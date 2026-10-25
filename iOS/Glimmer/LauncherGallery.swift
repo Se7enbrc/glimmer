@@ -25,7 +25,8 @@ struct AppGlyph: View {
 
     var body: some View {
         if name.localizedCaseInsensitiveContains("steam") {
-            Image("steam")
+            // The asset defines the medium scale; its font size still follows Dynamic Type.
+            Image("steam").imageScale(.medium)
         } else {
             Image(systemName: name.lowercased() == "desktop" ? "macwindow" : "gamecontroller.fill")
         }
@@ -37,6 +38,7 @@ struct LauncherGallery: View {
     let model: LauncherModel
     let style: LauncherStyle
     let size: CGSize
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var buttonMinimum: CGFloat = 220
     @ScaledMetric(relativeTo: .body) private var buttonHeight: CGFloat = 44
     @ScaledMetric(relativeTo: .body) private var coverMinimum: CGFloat = 128
@@ -44,7 +46,8 @@ struct LauncherGallery: View {
     var body: some View {
         let coverHeight = LauncherGrid.coverHeight(availableHeight: size.height)
         let minimum: CGFloat = style == .buttons ? buttonMinimum : max(coverMinimum, coverHeight * 0.75)
-        let count = LauncherGrid.columns(width: size.width, minimum: minimum, count: model.apps.count)
+        let count = LauncherGrid.columns(width: size.width, minimum: minimum,
+                                         count: style == .buttons ? Int.max : model.apps.count)
         let width: CGFloat = style == .buttons ? size.width
             : min(size.width, CGFloat(count) * minimum + CGFloat(count - 1) * 12)
         let columns = Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: count)
@@ -53,10 +56,17 @@ struct LauncherGallery: View {
                 if style == .buttons {
                     Button { model.launch(app) } label: {
                         HStack(spacing: 12) {
-                            AppGlyph(name: app.name).accessibilityHidden(true)
-                            Text(app.name).fontWeight(.semibold).lineLimit(2)
+                            if !dynamicTypeSize.isAccessibilitySize {
+                                AppGlyph(name: app.name).font(.system(size: 20)).accessibilityHidden(true)
+                            }
+                            Text(app.name).fontWeight(.semibold)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
                             Spacer(minLength: 0)
-                            Image(systemName: "chevron.right").font(.caption).accessibilityHidden(true)
+                            if !dynamicTypeSize.isAccessibilitySize {
+                                Image(systemName: "chevron.right").font(.caption).accessibilityHidden(true)
+                            }
                         }
                         .frame(maxWidth: .infinity, minHeight: buttonHeight, alignment: .leading)
                         .padding(8)
@@ -64,9 +74,11 @@ struct LauncherGallery: View {
                     .buttonStyle(.glassProminent)
                     .buttonBorderShape(.roundedRectangle)
                     .disabled(model.busy)
+                    .modifier(IOSControllerLayoutAppMenu(model: model, app: app))
                 } else {
                     LauncherCover(model: model, app: app,
                                   height: max(1, (width - CGFloat(count - 1) * 12) / CGFloat(count)) / 0.75)
+                        .modifier(IOSControllerLayoutAppMenu(model: model, app: app))
                 }
             }
         }
@@ -80,6 +92,7 @@ struct LauncherCover: View {
     let model: LauncherModel
     let app: HostApp
     let height: CGFloat
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var image: CGImage?
 
     var body: some View {
@@ -96,7 +109,10 @@ struct LauncherCover: View {
                     .frame(height: height)
                     .clipped()
                     .clipShape(.rect(cornerRadius: 14))
-                Text(app.name).font(.headline).foregroundStyle(.primary).lineLimit(2)
+                Text(app.name).font(.headline).foregroundStyle(.primary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

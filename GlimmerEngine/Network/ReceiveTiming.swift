@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 import Darwin
 import Foundation
 import os
@@ -110,3 +111,13 @@ struct ReceiveTiming {
             """)
     }
 }
+
+#else
+struct ReceiveTiming {
+    enum Source { case video, audio }
+    init(telemetry: Source) {}
+    @inline(__always)
+    mutating func note(_ batch: DatagramBatch, index: Int, count: Int,
+                       socket: Int32, stream: String) {}
+}
+#endif

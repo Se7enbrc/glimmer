@@ -30,15 +30,18 @@ The engine always comes from this same checkout's root package.
   info logs.
 - iOS/iPadOS 26 minimum, iPhone first. Baseline hardware is iPhone 17 Pro with
   Backbone One; identify controller capabilities, never vendor names.
-- The stream uses both landscape orientations, fills the screen behind cutouts,
-  hides status and home indicators with public APIs, and keeps controls safe.
-  Use `AVSampleBufferDisplayLayer`; no Metal renderer or private receive APIs.
+- iPhone streams use both landscape orientations. iPad streams use the whole
+  window in any orientation. Video fills behind cutouts, hides status and home
+  indicators with public APIs, and keeps controls safe. Use
+  `AVSampleBufferDisplayLayer`; no Metal renderer or private receive APIs.
 - ProMotion permission is not a promise of 120 fps. Start real streaming at SDR
   60 fps and stereo; higher modes need sustained hardware measurements.
 - Leaving the foreground releases input immediately. A finite background task
   allows at most 15 seconds to return before local teardown; lock, system
-  expiration or denied execution ends it earlier. Never quit the game on the PC
-  or add an ongoing background streaming, polling or telemetry service.
+  expiration or denied execution ends it earlier. Teardown quits the game by
+  default; “Leave games running when you disconnect” preserves it. Explicit Quit
+  always remains available. Add no ongoing background streaming, polling or
+  telemetry service.
 - Run `make app`, `make test`, `make check`. See CONTRIBUTING.md for Simulator
   and device verification. All Make targets are unsigned and never install the
   app. Do not sign, provision, install, publish or change keychains without

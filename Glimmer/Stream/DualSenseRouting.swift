@@ -3,6 +3,7 @@
 
 import Foundation
 import GameController
+import GlimmerEngine
 
 /// Shared by the forwarder and diagnostics. Feedback threads only read the locked routes.
 final class DualSenseRouting: @unchecked Sendable {
@@ -133,6 +134,16 @@ final class DualSenseRouting: @unchecked Sendable {
         ]
         let held = Set(inputs.filter(\.1).map(\.0))
         let time = ProcessInfo.processInfo.systemUptime
+        gc(controller: id, held: held, at: time)
+    }
+
+    func gc(controller: ObjectIdentifier, buttons: UInt32, at time: TimeInterval) {
+        let masks: [(ControllerMappedButton, DualSenseFaceButton)] = [(.a, .cross), (.b, .circle), (.x, .square), (.y, .triangle)]
+        let held = Set(masks.compactMap { buttons & $0.0.rawValue != 0 ? $0.1 : nil })
+        gc(controller: controller, held: held, at: time)
+    }
+
+    private func gc(controller id: ObjectIdentifier, held: Set<DualSenseFaceButton>, at time: TimeInterval) {
         let changed = lock.withLock {
             let pressed = held.subtracting(faces[id] ?? [])
             faces[id] = held

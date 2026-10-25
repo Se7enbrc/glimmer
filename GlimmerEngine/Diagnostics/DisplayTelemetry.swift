@@ -78,6 +78,7 @@ package struct DisplayProbe: Sendable {
 ///
 /// `@unchecked Sendable`: the accumulator is guarded by one `os_unfair_lock`; the
 /// timer + its main-actor sampler are confined to the main run loop.
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 package final class DisplayTelemetry: @unchecked Sendable {
 
     private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "Stream.Telemetry")
@@ -192,3 +193,5 @@ package struct DisplayTelemetrySnapshot: Sendable {
     /// Latest HDR-engaged / screen / ProMotion state. nil before the first probe.
     package var state: DisplayProbe?
 }
+
+#endif

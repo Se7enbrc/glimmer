@@ -93,7 +93,9 @@ extension FramePacer {
         case let .warmHandoverComplete(ticksPerS, discarded):
             for rtp in discarded {
                 stats.recordPresentationLateDrop()
+                #if os(macOS) || GLIMMER_DIAGNOSTICS
                 FrameTimingTracker.shared?.recordPacerDiscard(rtpTimestamp: rtp, reason: .recovery)
+                #endif
             }
             logWarmHandoverComplete(ticksPerS: ticksPerS)
             return true
@@ -111,9 +113,11 @@ extension FramePacer {
             + "\(String(format: "%.1f", expectedHz))Hz, depth=\(depth); "
             + "releasing off-tick at stream cadence until ticks recover",
             "Stream.Pacer")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.render.emitEvent(
             "PacerTickDeficitEngaged",
             "ticksPerS=\(ticksPerS, privacy: .public) depth=\(depth, privacy: .public)")
+        #endif
     }
 
     private func logDeficitDisengaged(
@@ -130,9 +134,11 @@ extension FramePacer {
             + "\(String(format: "%.0f", duration * 1000))ms - released \(releases) "
             + "frames off-tick, \(repaints) governor repaints",
             "Stream.Pacer")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.render.emitEvent(
             "PacerTickDeficitDisengaged",
             "durationMs=\(duration * 1000, privacy: .public) releases=\(releases, privacy: .public)")
+        #endif
     }
 
     private func logFloorViolation(ticksPerS: Double, floorHz: Double) {
@@ -146,9 +152,11 @@ extension FramePacer {
             + "\(String(format: "%.1f", floorHz))Hz floor for >1s "
             + "(frame-rate governor overriding the advisory floor)",
             "Stream.Pacer")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.render.emitEvent(
             "PacerFloorViolation",
             "ticksPerS=\(ticksPerS, privacy: .public) floorHz=\(floorHz, privacy: .public)")
+        #endif
     }
 
     private func logFloorAssistEngaged(ticksPerS: Double, floorHz: Double, depth: Int) {
@@ -162,9 +170,11 @@ extension FramePacer {
             + "\(String(format: "%.1f", floorHz))Hz floor, depth=\(depth); "
             + "off-tick timer filling missed beats",
             "Stream.Pacer")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.render.emitEvent(
             "PacerFloorAssistEngaged",
             "ticksPerS=\(ticksPerS, privacy: .public) depth=\(depth, privacy: .public)")
+        #endif
     }
 
     private func logFloorAssistDisengaged(
@@ -175,9 +185,11 @@ extension FramePacer {
             + "\(String(format: "%.0f", duration * 1000))ms - \(releases) releases "
             + "during assist, ticks \(String(format: "%.1f", ticksPerS))/s",
             "Stream.Pacer")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.render.emitEvent(
             "PacerFloorAssistDisengaged",
             "durationMs=\(duration * 1000, privacy: .public) releases=\(releases, privacy: .public)")
+        #endif
     }
 
     private func logWarmHandoverComplete(ticksPerS: Double) {
@@ -187,7 +199,9 @@ extension FramePacer {
             "FramePacer warm handover complete - rebuilt link healthy at "
             + "\(String(format: "%.1f", ticksPerS)) ticks/s; paced release engaged",
             "Stream.Pacer")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.render.emitEvent(
             "PacerWarmHandoverComplete", "ticksPerS=\(ticksPerS, privacy: .public)")
+        #endif
     }
 }

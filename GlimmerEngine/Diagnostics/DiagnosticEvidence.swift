@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+#if os(macOS) || GLIMMER_DIAGNOSTICS
 import Foundation
 
 /// Offline evidence export. Completeness describes recorded evidence, never physical display delivery.
@@ -74,6 +75,7 @@ package enum DiagnosticEvidence {
         var attempts: Set<String> = []
         var bookmarks: [Bookmark] = []
         var lastSequence: UInt64 = 0
+        var lastWindowDecodeGatedTotal: UInt64 = 0
 
         init(session: String, source: URL, output: URL) {
             self.session = session; self.source = source; self.output = output
@@ -116,7 +118,12 @@ package enum DiagnosticEvidence {
                      report.complete ? "Capture completeness: complete." : "Capture completeness: INCOMPLETE.", "",
                      "\(report.files.count) copied files; originals preserved. SHA-256 hashes are in manifest.json."]
         if !report.issues.isEmpty { lines += [""] + report.issues.map { "- \($0)" } }
-        lines += ["", "## Observed rows", ""]
+        lines += ["", "## Observed rows", "",
+                  "Pacer discards are split by reason: trim/overflow/backoff describe pacing work;",
+                  "suppressed counts hidden-frame replacements; recovery/stopped/rebind/cleared are lifecycle work.",
+                  "Suppressed replacements and decode-gated work are intentional, not visible pacing loss.",
+                  "decode_gated_work counts pre-decode work from cumulative metrics, not trace rows.",
+                  "Bookmark counts use sampled counter deltas at sample time; boundaries are approximate.", ""]
         lines += report.counts.sorted { $0.key < $1.key }.map { "- \($0.key): \($0.value)" }
         lines += ["", "## Bookmark context", "",
                   "Each window covers 10 seconds before and 2 seconds after the bookmark on the process uptime clock."]
@@ -134,3 +141,5 @@ package enum DiagnosticEvidence {
         return lines.joined(separator: "\n")
     }
 }
+
+#endif

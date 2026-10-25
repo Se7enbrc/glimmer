@@ -76,8 +76,10 @@ extension VideoDecoder {
             Diag.error("Video decode produced nothing for \(String(format: "%.1f", vtDark))s "
                 + "(\(backlog) frames in flight) - rebuilding the decode session in "
                 + "place with the arriving IDR", "Stream")
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             OSSignposter.decode.emitEvent(
                 "DecodeStallRecreate", "backlog=\(backlog, privacy: .public)")
+            #endif
             return .reservedForStallRecreate
         }
 
@@ -104,8 +106,10 @@ extension VideoDecoder {
             inFlightDecodes += 1
             let depth = inFlightDecodes
             inFlightDecodeLock.unlock()
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             OSSignposter.decode.emitEvent(
                 "BacklogBurstAbsorbed", "depth=\(depth, privacy: .public)")
+            #endif
             return .reserved
         }
 
@@ -120,7 +124,9 @@ extension VideoDecoder {
             Decode backlog stall (\(backlog) in flight, overflowStreak=\(streak), vtDraining=\(vtDraining)) - dropping frame, \
             flushing to next IDR
             """)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.decode.emitEvent("IDRRequested", "trigger=decode_backlog_stall")
+        #endif
         return .dropAndFlush
     }
 
@@ -179,6 +185,8 @@ extension VideoDecoder {
         log.error("VideoToolbox decode failed (status \(status)) - resyncing to the next IDR")
         Diag.warn("Video decode failed (VideoToolbox status \(status)) - resyncing to the next keyframe",
                   "Stream")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.decode.emitEvent("IDRRequested", "trigger=vt_decode_failed")
+        #endif
     }
 }

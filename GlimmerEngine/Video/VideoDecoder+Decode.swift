@@ -137,7 +137,7 @@ extension VideoDecoder {
     /// `decodeQueue` so recvfrom never waits on VideoToolbox. Returns DR_OK unless a sustained stall, a
     /// post-gate P-frame or an armed resync latch needs the depacketizer to wait for an IDR.
     nonisolated func decodeAssembledFrame(
-        pictureData: Data, newSps: Data?, newPps: Data?, newVps: Data?,
+        pictureData: @autoclosure () -> Data, newSps: Data?, newPps: Data?, newVps: Data?,
         isIDR: Bool, rtpTimestamp: UInt32, totalLength: Int32
     ) -> Int32 {
         // ---- Hidden-window decode gate (suppression stage 2 - see the
@@ -235,7 +235,7 @@ extension VideoDecoder {
         }
 
         let pending = PendingDecode(
-            pictureData: pictureData, newSps: newSps, newPps: newPps, newVps: newVps,
+            pictureData: pictureData(), newSps: newSps, newPps: newPps, newVps: newVps,
             isIDR: isIDR, rtpTimestamp: rtpTimestamp, totalLength: totalLength, epoch: epoch,
             forceSessionRecreate: forceSessionRecreate)
 
@@ -350,7 +350,9 @@ extension VideoDecoder {
         statsCollector.recordDecoderDiscard()
         guard armResyncAfterDecodeError(epoch: pending.epoch) else { return }
         log.error("\(failure, privacy: .public) - resyncing to the next IDR")
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.decode.emitEvent("IDRRequested", "trigger=\(trigger, privacy: .public)")
+        #endif
     }
 
     /// Apply newly-arrived parameter sets and (re)build the format description +
@@ -421,7 +423,9 @@ extension VideoDecoder {
         let flush = {
             guard let renderer else { return }
             self.flushRenderer(renderer)
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             OSSignposter.render.emitEvent("DiscontinuityFlush", "trigger=param_rebuild")
+            #endif
             TelemetryCounters.shared.discontinuityFlushTotal.increment()
         }
         if let pacer = framePacer {
@@ -453,7 +457,9 @@ extension VideoDecoder {
         session: VTDecompressionSession, sample: CMSampleBuffer, pending: PendingDecode
     ) {
         guard beginSubmittedDecode(epoch: pending.epoch) else { return }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let identity = StatsCollector.DecodeIdentity(epoch: pending.epoch, rtpTimestamp: pending.rtpTimestamp)
+        #endif
         let isIDR = pending.isIDR
         let totalLength = pending.totalLength
         let rtpTimestamp = pending.rtpTimestamp
@@ -480,29 +486,35 @@ extension VideoDecoder {
         var infoFlagsOut = VTDecodeInfoFlags()
         // Pair by IDR epoch and RTP identity: VT callbacks need not arrive in submit order.
         // A synchronous reject abandons this same identity, leaving older asynchronous work intact.
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let decodeSignpostID = OSSignposter.decode.makeSignpostID()
         let decodeIntervalState = OSSignposter.decode.beginInterval(
             "DecodeFrame",
             id: decodeSignpostID,
             "bytes=\(totalLength, privacy: .public) idr=\(isIDR, privacy: .public)")
         statsCollector.recordDecodeSubmit(intervalState: decodeIntervalState, identity: identity)
+        #endif
         // Latency telemetry stage t_submit (opt-in; nil = zero cost): stamp the
         // instant before we hand the frame to VideoToolbox, keyed by the same
         // rtpTimestamp that becomes the sample's PTS (the only identity VT
         // propagates to its output callback).
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let tracker = FrameTimingTracker.shared
         let submitNanos = tracker?.recordSubmit(rtpTimestamp: rtpTimestamp)
         let traceAttempt = tracker?.attemptForFrame(rtpTimestamp: rtpTimestamp)
+        #endif
         let decodeStatus = VTDecompressionSessionDecodeFrame(
             session,
             sampleBuffer: sample,
             flags: flags,
             frameRefcon: UnsafeMutableRawPointer(bitPattern: pending.epoch),
             infoFlagsOut: &infoFlagsOut)
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let tracker, let submitNanos {
             tracker.recordSubmitReturned(rtpTimestamp: rtpTimestamp, beganNanos: submitNanos,
                                          status: decodeStatus, flags: infoFlagsOut.rawValue, attemptID: traceAttempt)
         }
+        #endif
 
         if decodeStatus != noErr {
             log.error("VTDecompressionSessionDecodeFrame failed: \(decodeStatus)")
@@ -515,12 +527,14 @@ extension VideoDecoder {
             // never reaches recordDecodeComplete and would otherwise undercount.
             releaseInFlightDecode(epoch: pending.epoch, submitted: true, vtFailed: true)
             statsCollector.recordDecoderDiscard()
+            #if os(macOS) || GLIMMER_DIAGNOSTICS
             if let abandonedState = statsCollector.recordDecodeAbandoned(identity: identity) {
                 OSSignposter.decode.endInterval(
                     "DecodeFrame",
                     abandonedState,
                     "outcome=abandoned status=\(decodeStatus, privacy: .public)")
             }
+            #endif
             // A dead session rejects every later frame, recovery IDRs included, and the byte-equal
             // param-set shortcut would keep it: drop it so the next IDR builds a fresh one.
             if decodeStatus == kVTInvalidSessionErr { tearDownDecompressionSession() }

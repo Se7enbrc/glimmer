@@ -11,6 +11,18 @@ import Testing
 struct LauncherControllerTests {
     private let settings = IsolatedDefaults()
 
+    @Test func runningGameActionsFormTheirOwnControllerRow() {
+        let cells: [LauncherFocus] = [.runningResume, .runningQuit, .runningSize, .app(1), .app(2), .app(3)]
+        func move(_ from: LauncherFocus, _ command: LauncherCommand) -> LauncherFocus? {
+            LauncherNavigation.destination(from: from, command: command, cells: cells, columns: 2, hasSwitcher: true)
+        }
+        #expect(move(.runningResume, .right) == .runningQuit)
+        #expect(move(.runningQuit, .down) == .app(2))
+        #expect(move(.app(2), .up) == .runningQuit)
+        #expect(move(.app(1), .down) == .app(3))
+        #expect(move(.runningResume, .up) == .pc)
+    }
+
     @Test func pairingSheetReceivesDirectionsAndActivationAfterNeutralInput() {
         let sheet = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
         let window = PairingParentWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)

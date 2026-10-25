@@ -3,13 +3,8 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-//
-//  InputBatcher.swift
-//
-//  Merges high-rate input between sends at least 1 ms apart and passes edge events through
-//  in order, as moonlight-common-c's InputStream.c does: one send per event once overran
-//  Sunshine's ENet peer. Ported from moonlight-common-c (GPLv3); see CREDITS.md.
-//
+// Coalesce high-rate input without starving Sunshine's ENet peer. Edge events stay ordered.
+// Ported from moonlight-common-c InputStream.c (GPLv3); see CREDITS.md.
 
 import Foundation
 import Synchronization
@@ -109,14 +104,14 @@ final class InputBatcher: @unchecked Sendable {
 
     /// Queue-to-wire stamps and the latency tracker, injectable so tests can script both.
     private let now: @Sendable () -> DispatchTime
-    private let tracker: @Sendable () -> FrameTimingTracker?
+    private let tracker: @Sendable () -> FrameInstrumentation?
     private let backpressure: @Sendable (EnetControlChannel) -> Bool
     // The scheduler must deliver callbacks on the owned sender thread.
     private let scheduleFlush: @Sendable (InputSendThread, DispatchTime, @escaping @Sendable () -> Void) -> Void
 
     init(enet: EnetControlChannel, configureThread: @escaping @Sendable () -> Void = {},
          now: @escaping @Sendable () -> DispatchTime = { .now() },
-         tracker: @escaping @Sendable () -> FrameTimingTracker? = { FrameTimingTracker.shared },
+         tracker: @escaping @Sendable () -> FrameInstrumentation? = { FrameInstrumentation.shared },
          backpressure: @escaping @Sendable (EnetControlChannel) -> Bool = { $0.inputBacklogged },
          scheduleFlush: @escaping @Sendable (InputSendThread, DispatchTime, @escaping @Sendable () -> Void) -> Void
             = { $0.schedule(deadline: $1, action: $2) }) {
@@ -149,7 +144,11 @@ final class InputBatcher: @unchecked Sendable {
     private func appendTimings(_ capture: InputTimingContext.Capture?, to samples: inout [InputEventTiming]) {
         guard let capture else { return }
         for sample in capture.samples() {
-            if samples.count < 4096 { samples.append(sample) } else { tracker()?.inputTimingDropped.increment() }
+            if samples.count < 4096 { samples.append(sample) } else {
+                #if os(macOS) || GLIMMER_DIAGNOSTICS
+                tracker()?.inputTimingDropped.increment()
+                #endif
+            }
         }
     }
 
@@ -247,27 +246,8 @@ final class InputBatcher: @unchecked Sendable {
         }
     }
 
-    /// LiSendControllerMotionEvent (InputStream.c): overwrite the
-    /// (slot, sensor) latest sample in place - moonlight's
-    /// currentGamepadSensorState batching. The host-rate sampler
-    /// (ControllerMotion) bounds the CALL rate; this merge plus the
-    /// sendBacklogged skip bound the WIRE rate, so motion can never starve
-    /// the receive/ACK chain (the 1ms-coalescing lesson).
-    ///
-    /// Deliberately does NOT bump the input-activity telemetry the other
-    /// producers feed: motion is host-solicited sensor flow, not user input -
-    /// counting it would make an idle-hands stream look input-active and
-    /// break the idle/active counters' honesty.
-    ///
-    /// RELIABILITY (matches current upstream): motion ships UNRELIABLE
-    /// (enetPacketFlags = 0, InputStream.c:525-534) - a superseded sensor
-    /// sample is worthless, so dropping a lost one is correct and it must
-    /// never HOL-block or back up the reliable stream. The one EXCEPTION is a
-    /// GYRO null (0,0,0), which ships RELIABLE so the "sensors stopped" state
-    /// can't be lost (moonlight's inputSendThreadProc special case). The
-    /// reliable-vs-unreliable choice is made in flushLocked at drain time
-    /// (where the sample's values are known); this merge just keeps the
-    /// latest sample per (slot, sensor).
+    /// Keep only the latest sensor sample without counting it as player activity.
+    /// Samples ship unreliably except a gyro stop, which must reliably reach the PC.
     func updateMotion(num: UInt8, motionType: UInt8, x: Float, y: Float, z: Float) -> Int32 {
         guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         // LI_MOTION_TYPE_* is 1-based (ACCEL=1, GYRO=2); anything else has no
@@ -311,12 +291,8 @@ final class InputBatcher: @unchecked Sendable {
         }
     }
 
-    /// Pass-through for host-facing device REPORTS that are not user input
-    /// (controller battery). Same ordering contract as passThrough - drain the
-    /// pending merged state, then send - but deliberately does NOT bump
-    /// inputEventsTotal/noteInputEvent: a battery report on its ~30s cadence
-    /// would otherwise mark an idle-hands stream input-active and break the
-    /// idle/active counters' honesty (the updateMotion rule).
+    /// Device reports drain merged input first, but never count as player activity.
+    /// Otherwise periodic battery reports would keep an idle stream active.
     func passThroughReport(_ plaintext: [UInt8], channel: UInt8) -> Int32 {
         guard !stopped.load(ordering: .relaxed) else { return InputBatcherResult.notReady }
         return queue.sync {
@@ -401,8 +377,7 @@ final class InputBatcher: @unchecked Sendable {
         // Client queue→wire age: observe the OLDEST unflushed entry per drained
         // slot. Tracker is nil when telemetry is off (gate), so it's one optional
         // load + (when on) two local DispatchTime reads + a subtract - no behavior
-        // change. Both clocks local (host/present-clock independent).
-        let latencyTracker = tracker()
+        let latencyTracker: FrameInstrumentation? = tracker()
         let drainNow = latencyTracker != nil ? now() : nil
 
         // (1)+(2) Mouse: relative and absolute are never dirty together, because a
@@ -418,12 +393,6 @@ final class InputBatcher: @unchecked Sendable {
         // (4) Motion: latest sample per dirty (slot, sensor) - moonlight's
         //     currentGamepadSensorState drain. The integer guard keeps a
         //     motion-less session at zero cost here.
-        //
-        //     Sent UNRELIABLE (current upstream InputStream.c:525-534) - a
-        //     superseded sensor sample is worthless, so losing one is harmless and
-        //     must never HOL-block or back up the reliable stream. EXCEPTION: a
-        //     GYRO null (0,0,0) ships RELIABLE so the "sensors stopped" state can't
-        //     be lost (moonlight's special case).
         if motionDirtyCount > 0 {
             for idx in motionStates.indices where motionStates[idx].dirty {
                 let slot = idx / Self.motionTypeCount
@@ -458,16 +427,19 @@ final class InputBatcher: @unchecked Sendable {
     /// `deliverMs`, deliver + queue also become the latest input's client legs for
     /// the input-to-photon estimate; motion passes nil.
     private func observeInputAge(from stamp: DispatchTime, to drainNow: DispatchTime?,
-                                 tracker: FrameTimingTracker?, deliverMs: Double?) {
+                                 tracker: FrameInstrumentation?, deliverMs: Double?) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard let drainNow, let tracker, drainNow >= stamp else { return }
         let ageMs = Double(drainNow.uptimeNanoseconds &- stamp.uptimeNanoseconds) / 1_000_000.0
         tracker.inputLocalLatency.observe(ageMs)
         if let deliverMs { tracker.noteInputLegs(deliverMs + ageMs) }
+        #endif
     }
 
     /// Trace motion slot `idx` (slot * motionTypeCount + sensor) if it is due; no-op
     /// with telemetry off. MUST be called on `queue`.
-    private func traceMotion(_ idx: Int, isGyroNull: Bool, tracker: FrameTimingTracker?, now: DispatchTime?) {
+    private func traceMotion(_ idx: Int, isGyroNull: Bool, tracker: FrameInstrumentation?, now: DispatchTime?) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard let tracker, let now,
               Self.motionTraceDue(lastNanos: motionStates[idx].lastTraceNanos,
                                   nowNanos: now.uptimeNanoseconds, isGyroNull: isGyroNull) else { return }
@@ -477,6 +449,7 @@ final class InputBatcher: @unchecked Sendable {
             + "\"type\":\(idx % Self.motionTypeCount + 1),\"x\":\(TelemetryRenderer.jsonNumber(Double(sample.x))),"
             + "\"y\":\(TelemetryRenderer.jsonNumber(Double(sample.y)))"
             + ",\"z\":\(TelemetryRenderer.jsonNumber(Double(sample.z)))")
+        #endif
     }
 
     /// Whether this sensor's sample gets an input_motion trace line: at most one
@@ -500,26 +473,32 @@ final class InputBatcher: @unchecked Sendable {
     /// return it, 0 when unmeasured. Always takes the handler stamp so it can't go
     /// stale with telemetry off; off the GameController path the take returns 0.
     private func observeInputDeliverAge(slot: Int, enqueued: DispatchTime) -> Double {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         let entry = InputDeliverStamp.shared.take(slot: slot)
         guard let tracker = self.tracker(),
               entry != 0, enqueued.uptimeNanoseconds >= entry else { return 0 }
         let deliverMs = Double(enqueued.uptimeNanoseconds &- entry) / 1_000_000.0
         tracker.inputDeliverLatency.observe(deliverMs)
         return deliverMs
+        #else
+        return 0
+        #endif
     }
 
     /// One trace line per merged input the wire carried, on the per-frame trace's
     /// clock. `fields` is only built when telemetry is on (the tracker is nil off).
-    private func trace(_ tracker: FrameTimingTracker?, _ fields: @autoclosure () -> String) {
+    private func trace(_ tracker: FrameInstrumentation?, _ fields: @autoclosure () -> String) {
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         guard let tracker else { return }
         let nowMs = Double(now().uptimeNanoseconds) / 1_000_000.0
         tracker.traceWriter.append(
             "{\"session\":\"\(tracker.sessionId)\",\(fields()),\"t_ms\":\(TelemetryRenderer.jsonNumber(nowMs))}")
+        #endif
     }
 
     /// Send the accumulated delta in Int16 chunks (InputStream.c:379-422) and clear it.
     /// MUST run on `queue`: the timer drain and the mode-change drain both land here.
-    private func flushRelativeMouse(tracker: FrameTimingTracker?) {
+    private func flushRelativeMouse(tracker: FrameInstrumentation?) {
         guard let enet else { return }
         var timing = InputTimingBatch(relTimings, tracker: tracker)
         relTimings.removeAll(keepingCapacity: true)
@@ -557,7 +536,7 @@ final class InputBatcher: @unchecked Sendable {
 
     /// Send the latest absolute position and clear it. MUST run on `queue`: the
     /// timer drain and the mode-change drain both land here.
-    private func flushAbsoluteMouse(tracker: FrameTimingTracker?) {
+    private func flushAbsoluteMouse(tracker: FrameInstrumentation?) {
         guard let enet else { return }
         let timing = InputTimingBatch(absTimings, tracker: tracker)
         _ = enet.sendInputPacket(
@@ -575,7 +554,7 @@ final class InputBatcher: @unchecked Sendable {
     /// MUST be called on `queue`: the drain point for both the timer flush and the
     /// button-change flush, so it resolves its own queue→wire age.
     @discardableResult
-    private func flushController(_ slot: Int, tracker: FrameTimingTracker?) -> Bool {
+    private func flushController(_ slot: Int, tracker: FrameInstrumentation?) -> Bool {
         guard let enet else { return false }
         let pending = controllers[slot]
         let analog = pending.analog
