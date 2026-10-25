@@ -19,6 +19,8 @@ let hdrRangeLabel: String = {
 @MainActor @Observable
 private final class Counter {
     var value = 0
+    var alternate = 50
+    var usesAlternate = false
 }
 
 @MainActor
@@ -94,6 +96,157 @@ struct SequoiaFallbacksTests {
         }
         tracking.cancel()
         await tracking.value
+    }
+
+    private func reached(_ event: DispatchSemaphore) async throws {
+        let completed = try await onTestThread { event.wait(timeout: .now() + 10) == .success }
+        try #require(completed, "Observation milestone did not arrive within its independent deadline")
+    }
+
+    @Test func stateReadsRearmAndIgnoreUnrelatedProperties() async throws {
+        let model = Counter()
+        let delivered = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        var values: [Int] = []
+        let observer = Task {
+            await forEachTrackedValue({ model.usesAlternate ? model.alternate : model.value }, perform: {
+                values.append($0)
+                delivered.signal()
+            })
+            finished.signal()
+        }
+        defer { observer.cancel() }
+        try await reached(delivered)
+        #expect(values == [0])
+        for value in 1...3 {
+            model.value = value
+            try await reached(delivered)
+        }
+        model.usesAlternate = true
+        try await reached(delivered)
+        model.value = 99
+        model.alternate = 51
+        try await reached(delivered)
+        observer.cancel()
+        try await reached(finished)
+        await observer.value
+        #expect(values == [0, 1, 2, 3, 50, 51])
+        model.alternate = 52
+        #expect(delivered.takeSignal() == .timedOut)
+    }
+
+    @Test func deliveryMutationAndBurstConvergeOnLatestState() async throws {
+        let model = Counter()
+        let delivered = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        var values: [Int] = []
+        let observer = Task {
+            await forEachTrackedValue({ model.value }, perform: { value in
+                values.append(value)
+                if value == 0 { model.value = 7 }
+                delivered.signal()
+            })
+            finished.signal()
+        }
+        defer { observer.cancel() }
+        try await reached(delivered)
+        try await reached(delivered)
+        #expect(values == [0, 7])
+        for value in 8...10_000 { model.value = value }
+        try await reached(delivered)
+        #expect(values == [0, 7, 10_000])
+        observer.cancel()
+        try await reached(finished)
+        await observer.value
+    }
+
+    @Test func idleCancellationDropsTheLastModelOwner() async throws {
+        var model: Counter? = Counter()
+        weak var released = model
+        let delivered = DispatchSemaphore(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        let observer = Task { [model] in
+            guard let model else { finished.signal(); return }
+            await forEachTrackedValue({ model.value }, perform: { _ in delivered.signal() })
+            finished.signal()
+        }
+        defer { observer.cancel() }
+        model = nil
+        try await reached(delivered)
+        #expect(released != nil)
+        observer.cancel()
+        try await reached(finished)
+        await observer.value
+        #expect(released == nil)
+    }
+
+    @Test func cancellationBeforeSchedulingDoesNoWork() async throws {
+        var reads = 0
+        var deliveries = 0
+        let finished = DispatchSemaphore(value: 0)
+        let observer = Task {
+            await forEachTrackedValue({ reads += 1; return reads }, perform: { _ in deliveries += 1 })
+            finished.signal()
+        }
+        observer.cancel()
+        try await reached(finished)
+        await observer.value
+        #expect(reads == 0 && deliveries == 0)
+    }
+
+    @Test func consumerCancellationStopsBeforeAnotherRead() async throws {
+        let model = Counter()
+        var reads = 0
+        var deliveries = 0
+        let finished = DispatchSemaphore(value: 0)
+        let observer = Task {
+            await forEachTrackedValue({ reads += 1; return model.value }, perform: { _ in
+                deliveries += 1
+                model.value += 1
+                withUnsafeCurrentTask { $0?.cancel() }
+            })
+            finished.signal()
+        }
+        defer { observer.cancel() }
+        try await reached(finished)
+        await observer.value
+        #expect(reads == 1 && deliveries == 1)
+    }
+
+    @Test func independentObserversSurvivePendingAndLateNotifications() async throws {
+        for iteration in 0..<24 {
+            let model = Counter()
+            let firstDelivery = DispatchSemaphore(value: 0)
+            let secondDelivery = DispatchSemaphore(value: 0)
+            let firstDone = DispatchSemaphore(value: 0)
+            let secondDone = DispatchSemaphore(value: 0)
+            var firstValues: [Int] = []
+            var secondValues: [Int] = []
+            let first = Task {
+                await forEachTrackedValue({ model.value }, perform: { firstValues.append($0); firstDelivery.signal() })
+                firstDone.signal()
+            }
+            let second = Task {
+                await forEachTrackedValue({ model.value }, perform: { secondValues.append($0); secondDelivery.signal() })
+                secondDone.signal()
+            }
+            defer { first.cancel(); second.cancel() }
+            try await reached(firstDelivery)
+            try await reached(secondDelivery)
+            if iteration.isMultiple(of: 2) { model.value = 1 }
+            first.cancel()
+            try await reached(firstDone)
+            await first.value
+            let stoppedCount = firstValues.count
+            model.value = 2
+            repeat { try await reached(secondDelivery) } while secondValues.last != 2
+            second.cancel()
+            try await reached(secondDone)
+            await second.value
+            model.value = 3
+            #expect(firstValues.count == stoppedCount)
+            #expect(secondValues.last == 2)
+        }
     }
 
     @Test func displayIDMatchesTheScreenNumber() {

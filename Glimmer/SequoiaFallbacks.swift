@@ -12,11 +12,20 @@ extension NSScreen {
     }
 }
 
-// macOS 15's stand-in for Observations, which callers use directly on 26. Each pass reads
-// and re-arms tracking together, so no change can slip in between.
+// macOS 15 observes current state, coalescing changes until the next main-actor read.
+// Cancellation wakes an idle reader; a synchronous consumer already running may finish.
 @MainActor
 func forEachTrackedValue<Value>(_ read: () -> Value, perform body: (Value) -> Void) async {
-    fatalError("clean-room: replace per spec-5")
+    guard !Task.isCancelled else { return }
+    let (notifications, signal) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    defer { signal.finish() }
+    var pending = notifications.makeAsyncIterator()
+    while !Task.isCancelled {
+        let value = withObservationTracking(read) { signal.yield(()) }
+        guard !Task.isCancelled else { return }
+        body(value)
+        guard !Task.isCancelled, await pending.next() != nil else { return }
+    }
 }
 
 // Liquid Glass on macOS 26. macOS 15 has no glass, so the same shapes get the system
