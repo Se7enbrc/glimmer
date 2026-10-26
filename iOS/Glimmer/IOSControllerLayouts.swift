@@ -48,7 +48,7 @@ final class IOSControllerLayouts {
         let registration = entry.registration
         let mapsGameInput = entry.mapsGameInput
         entry.lease = ControllerLayoutInputLease(controller: controller, reader: reader,
-            queue: queue) { [input] sample, now in
+            queue: queue, observeSystemInput: !mapsGameInput) { [input] sample, now in
             input.submitController(registration, sample: reader.streamSample(sample, mapsGameInput: mapsGameInput),
                                    capturedAt: now)
         }

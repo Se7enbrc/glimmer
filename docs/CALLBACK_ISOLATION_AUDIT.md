@@ -55,6 +55,40 @@ contained no warnings.
 Physical-controller acceptance on macOS 15 and hosted verification remain with
 the release candidate; local checks do not establish either result.
 
+## Controller delivery regression after rc.17
+
+The rc.18 layout lease removed the extended-gamepad callback while its
+unmapped-input callback still read that legacy profile for system mappings. If
+the legacy profile published afterward, its new state had no callback to forward
+it. iOS also returned from layout installation before assigning the controller
+capture queue or disabling system gestures. Mac uses the same lease and
+system-profile reader, so it shares the missing-update defect.
+
+`ControllerLayoutDeliveryTests` scripts both publication orders with a synthetic
+controller while main waits on a semaphore. It follows physical A remapped to B,
+a held button, release, a rightward stick and centre through `InputCore`, the
+send thread, batcher, encoder and encrypted reliable queue. Before the fix, the
+physical-first sequence ended at X = 16384 instead of zero. The controller queue
+also remained main. The test checks ordered encoded states, monotonic callback
+timestamps, queue restoration and rejection of retained callbacks after stop.
+
+System-mapped streams now observe both profiles on the same capture queue;
+physical input still supplies shortcuts and extra controls. Custom layouts and
+recording use only physical callbacks. Both installed callbacks are explicitly
+Sendable and their delivery gate remains locked. Queues are restored before
+prior handlers, and profile timestamps cannot move chord detection backward.
+
+The rc.18 actor-trap class also applies to iOS: `IOSControllerLayouts.install`
+uses the same MainActor lease whose nested lock closure lacked `@Sendable`. The
+existing background-handler regression covers that entry on both platforms.
+Without the owner's crash report, this identifies the reachable crash class, not
+the exact TestFlight 8 crash instance. The rc.19 isolation fixes remain.
+
+Xcode 26.6 and 27.1 each passed 84 selected Simulator controller/input tests and
+85 targeted Mac controller/input tests, with no compiler or strict SwiftLint
+warnings. The full Mac suite was not run. Physical-controller acceptance remains
+unverified.
+
 ## Reviewed callbacks
 
 Locations refer to this change's source. Selector observers and nil/restored

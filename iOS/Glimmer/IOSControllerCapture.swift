@@ -213,13 +213,13 @@ final class IOSControllerCapture {
     #endif
 
     private func install(_ entry: Attached) {
+        for (button, _) in entry.gestures { button.preferredSystemGestureState = .disabled }
         if layouts?.install(entry.controller) == true { return }
         let registration = entry.registration
         let epoch = UUID()
         let submit = calls.submit
         delivery.registrations.withLock { $0[registration] = epoch }
         entry.controller.handlerQueue = captureQueue
-        for (button, _) in entry.gestures { button.preferredSystemGestureState = .disabled }
         entry.controller.extendedGamepad?.valueChangedHandler = { @Sendable [delivery] pad, _ in
             // Hold validity through submission so focus loss and detach finish after any in-flight sample.
             delivery.registrations.withLock { registrations in

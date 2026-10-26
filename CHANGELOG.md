@@ -122,6 +122,8 @@
 
 ### Bug fixes
 
+- Fixed missed and delayed controller input on iPhone and iPad.
+
 - Fixed a crash when using a controller during a stream.
 - Fixed a crash when an iPhone could not rotate into a stream.
 - Keep your chosen stats thresholds, launcher style, codec and touch opacity

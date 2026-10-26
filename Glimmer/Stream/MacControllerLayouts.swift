@@ -98,7 +98,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
             controller.physicalInputProfile.buttons[GCInputButtonHome]?.preferredSystemGestureState = priorHomeGesture
         }
         leases[id] = ControllerLayoutInputLease(controller: controller, reader: reader,
-            queue: forwarder.controllerCaptureQueue) { [core, reader] sample, now in
+            queue: forwarder.controllerCaptureQueue, observeSystemInput: !mapsGameInput) { [core, reader] sample, now in
                 var sample = sample
                 if routesHID {
                     DualSenseRouting.shared.gc(controller: id, buttons: sample.buttons, at: now)
