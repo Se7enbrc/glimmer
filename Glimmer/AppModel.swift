@@ -35,7 +35,7 @@ final class AppModel {
 
     // Stream lifecycle
     var isStreaming = false {
-        didSet { launcherController.streamingChanged(isStreaming) }
+        didSet { launcherController.streamingChanged(isStreaming && !nativeStreamBackgrounded) }
     }
     @ObservationIgnored let launcherController = LauncherController()
     @ObservationIgnored lazy var launcherArtCache = LauncherArtCache(base: supportBase)
@@ -127,11 +127,10 @@ final class AppModel {
     /// transitional state. See `StreamPhase` for the case set.
     var streamPhase: StreamPhase = .idle
 
-    /// True when a stream is running but its window has been orderOut'd
-    /// because the user Cmd-Tabbed away. The launcher UI shows a "Back to
-    /// stream" affordance while this is true. Set by the StreamWindow's
-    /// resign/become-key observers via callbacks on this manager.
-    var nativeStreamBackgrounded: Bool = false
+    /// Window focus callbacks keep the launcher available while a stream is hidden.
+    var nativeStreamBackgrounded: Bool = false {
+        didSet { launcherController.streamingChanged(isStreaming && !nativeStreamBackgrounded) }
+    }
 
     var nativeStreamError: String?
 
@@ -204,6 +203,7 @@ final class AppModel {
     var pairSheetShown = false
     var pairSheetOwner: PairingPresentationOwner?
     @ObservationIgnored weak var pairSheetWindow: NSWindow?
+    var launcherMenuAppID: Int?
     /// True from a controller's first launcher command until focus clears.
     var launcherControllerNavigating = false
     var pairSheetHost: Host?

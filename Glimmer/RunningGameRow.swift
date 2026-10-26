@@ -4,59 +4,44 @@
 import GlimmerEngine
 import SwiftUI
 
-struct RunningGameRow: View {
+struct RunningGameMenu: View {
     let host: Host
     let app: LibraryApp
-    let focus: FocusState<LauncherFocus?>.Binding
+    let requestSize: () -> Void
     @Environment(AppModel.self) private var model
-    @State private var confirmingQuit = false
-    @State private var confirmingSize = false
-    @State private var working = false
-    @State private var failure: String?
-
-    private var restartSize: Bool { model.screenSizeNeedsRestart(app: app, host: host) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("\(app.name) is running on \(host.displayName).")
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            ViewThatFits(in: .horizontal) {
-                HStack { actions }
-                VStack(alignment: .leading) { actions }
-            }
+        if model.launcherAppIsRunning(app, on: host) {
+            Button("Resume") { model.requestStream(app: app, on: host) }
+            Button("Quit \(app.name)…", role: .destructive) { model.requestQuitGame(on: host, app: app) }
+                .disabled(model.menuStopInProgress)
             if model.leaveGamesRunning, !model.isStreaming {
-                Text("Another device may still be connected.").font(.footnote).foregroundStyle(.secondary)
+                Button(model.screenSizeNeedsRestart(app: app, host: host)
+                       ? "Restart at this screen's size…" : "Use this screen's size…", action: requestSize)
             }
-            if let trial = model.pictureTrial, trial.host.id == host.id, !model.isStreaming {
-                Text("Does \(trial.app.name) look right?")
-                HStack {
-                    Button("Keep this size", action: model.keepPictureSize)
-                    Button("Use the previous size", action: model.restorePictureSize)
-                }
+            if let trial = model.pictureTrial, trial.host.id == host.id, trial.app.id == app.id {
+                Text("Does \(app.name) look right?")
+                Button("Keep this size", action: model.keepPictureSize)
+                Button("Use the previous size", action: model.restorePictureSize)
             }
-            if let failure { Text(failure).foregroundStyle(.secondary) }
+            Divider()
         }
-        .preference(key: LauncherFocusCells.self,
-                    value: model.leaveGamesRunning && !model.isStreaming
-                        ? [.runningResume, .runningQuit, .runningSize] : [.runningResume, .runningQuit])
-        .disabled(working || model.menuStopInProgress)
-        .confirmationDialog("Quit \(app.name) on \(host.displayName)?", isPresented: $confirmingQuit,
-                            titleVisibility: .visible) {
-            Button("Quit \(app.name)", role: .destructive) {
-                working = true
-                Task {
-                    defer { working = false }
-                    do { try await model.quitRunningApp(on: host, expectedAppID: app.id) } catch {
-                        failure = AppModel.quitFailureMessage(for: error, hostName: host.displayName)
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: { Text("Unsaved progress may be lost. Other streams from \(host.displayName) will stop.") }
-        .confirmationDialog(restartSize ? "Restart \(app.name) at this screen's size?"
-                            : "Change the size for \(app.name)?", isPresented: $confirmingSize,
-                            titleVisibility: .visible) {
-            if !restartSize {
+    }
+}
+
+struct RunningGameSizeConfirmation: ViewModifier {
+    let host: Host
+    let app: LibraryApp
+    @Binding var presented: Bool
+    @Environment(AppModel.self) private var model
+
+    private var restart: Bool { model.screenSizeNeedsRestart(app: app, host: host) }
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(restart ? "Restart \(app.name) at this screen's size?"
+                                   : "Change the size for \(app.name)?", isPresented: $presented,
+                                   titleVisibility: .visible) {
+            if !restart {
                 Button("Use this screen's size") { model.confirmScreenSize(app: app, host: host, restart: false) }
             }
             Button("Quit \(app.name) and restart", role: .destructive) {
@@ -67,20 +52,29 @@ struct RunningGameRow: View {
             Text("Some games may close or display incorrectly when the PC's screen size changes. Save your progress first.")
         }
     }
+}
 
-    @ViewBuilder private var actions: some View {
-        Button(model.continuationTitle(on: host, app: app)) { model.requestStream(app: app, on: host) }
-            .modifier(LauncherControlFocus(focus: focus, target: .runningResume) {
-                model.requestStream(app: app, on: host)
-            })
-            .accessibilityHint("Continues \(app.name) from \(host.displayName) on this Mac.")
-        Button("Quit \(app.name)…", role: .destructive) { confirmingQuit = true }
-            .modifier(LauncherControlFocus(focus: focus, target: .runningQuit) { confirmingQuit = true })
-        if model.leaveGamesRunning, !model.isStreaming {
-            Button(restartSize ? "Restart at this screen's size…" : "Use this screen's size…") {
-                confirmingSize = true
+struct LauncherTakeoverConfirmation: ViewModifier {
+    @Environment(AppModel.self) private var model
+
+    func body(content: Content) -> some View {
+        content
+        .alert(
+            model.pendingTakeover.map {
+                TakeoverDialogCopy.title(occupantApp: $0.occupantApp, targetApp: $0.app.name)
+            } ?? "",
+            isPresented: Binding(
+                get: { model.pendingTakeover != nil },
+                set: { if !$0 { model.pendingTakeover = nil } }
+            ),
+            presenting: model.pendingTakeover
+        ) { pending in
+            Button("Quit \(pending.occupantApp ?? "the running app") and start \(pending.app.name)", role: .destructive) {
+                model.confirmPendingTakeover()
             }
-            .modifier(LauncherControlFocus(focus: focus, target: .runningSize) { confirmingSize = true })
+            Button("Cancel", role: .cancel) { model.pendingTakeover = nil }
+        } message: { _ in
+            Text(TakeoverDialogCopy.message)
         }
     }
 }

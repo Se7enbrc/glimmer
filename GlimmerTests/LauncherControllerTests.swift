@@ -11,16 +11,37 @@ import Testing
 struct LauncherControllerTests {
     private let settings = IsolatedDefaults()
 
-    @Test func runningGameActionsFormTheirOwnControllerRow() {
-        let cells: [LauncherFocus] = [.runningResume, .runningQuit, .runningSize, .app(1), .app(2), .app(3)]
-        func move(_ from: LauncherFocus, _ command: LauncherCommand) -> LauncherFocus? {
-            LauncherNavigation.destination(from: from, command: command, cells: cells, columns: 2, hasSwitcher: true)
+    @Test func installedLauncherHandlerCanWakeFromABackgroundQueue() async throws {
+        let pad = GCController.withExtendedGamepad()
+        let profile = try #require(pad.extendedGamepad)
+        let queue = DispatchQueue(label: "launcher-controller-test")
+        pad.handlerQueue = queue
+        let controller = LauncherController(navigationEnabled: { true }, availableControllers: { [pad] })
+        defer { controller.detach() }
+        controller.refresh()
+        let handler = try #require(profile.valueChangedHandler)
+        await withCheckedContinuation { continuation in
+            controller.handle = { command in
+                #expect(command == .activate)
+                continuation.resume()
+            }
+            profile.buttonA.setValue(1)
+            queue.async(execute: ControllerCallbackTestDelivery.gamepad(profile, handler: handler, completion: {}))
         }
-        #expect(move(.runningResume, .right) == .runningQuit)
-        #expect(move(.runningQuit, .down) == .app(2))
-        #expect(move(.app(2), .up) == .runningQuit)
-        #expect(move(.app(1), .down) == .app(3))
-        #expect(move(.runningResume, .up) == .pc)
+        #expect(controller.isPolling)
+    }
+
+    @Test func menuButtonOnlyOpensOnceOnTheFocusedTile() {
+        var repeatState = LauncherControllerRepeat()
+        #expect(repeatState.commands(.init(menu: true), at: 0).isEmpty)
+        #expect(repeatState.commands(.init(), at: 1).isEmpty)
+        #expect(repeatState.commands(.init(menu: true), at: 2) == [.menu])
+        #expect(repeatState.commands(.init(menu: true), at: 3).isEmpty)
+        let cells: [LauncherFocus] = [.app(1), .app(2)]
+        #expect(LauncherNavigation.destination(from: .app(1), command: .menu, cells: cells,
+                                               columns: 2, hasSwitcher: true) == .app(1))
+        #expect(LauncherNavigation.destination(from: .app(1), command: .up, cells: cells,
+                                               columns: 2, hasSwitcher: true) == .pc)
     }
 
     @Test func pairingSheetReceivesDirectionsAndActivationAfterNeutralInput() {

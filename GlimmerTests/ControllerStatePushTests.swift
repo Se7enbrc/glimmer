@@ -37,6 +37,19 @@ struct ControllerStatePushTests {
         return Rig(forwarder: forwarder, backend: backend, controller: controller, pad: pad, slot: slot)
     }
 
+    @Test func installedStreamHandlerRunsOnTheCaptureQueue() async throws {
+        let rig = try rig()
+        defer { rig.forwarder.detach() }
+        let controller = rig.controller
+        rig.pad.buttonA.setValue(1)
+        let handler = try #require(rig.pad.valueChangedHandler)
+        await withCheckedContinuation { continuation in
+            controller.handlerQueue.async(execute: ControllerCallbackTestDelivery.gamepad(rig.pad, handler: handler) {
+                continuation.resume()
+            })
+        }
+    }
+
     // MARK: - Full-state push
 
     @Test func fullStateCarriesButtonsSticksAndTriggersExactly() throws {

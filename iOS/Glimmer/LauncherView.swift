@@ -36,10 +36,14 @@ struct LauncherView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         pcHeader
-                        RunningGameRow(model: model)
                         LauncherGallery(model: model, style: styleOverride ?? launcherStyle,
                                         size: CGSize(width: max(0, geometry.size.width - 48),
                                                      height: geometry.size.height))
+                        if let ended = model.endedGame {
+                            Button(model.endedFormat == nil ? "Start \(ended.name)"
+                                   : "Start \(ended.name) at the previous size", action: model.startEndedGame)
+                                .buttonStyle(.bordered).disabled(model.busy)
+                        }
                         if model.busy {
                             HStack {
                                 ProgressView("Connecting…")
@@ -123,6 +127,9 @@ struct LauncherView: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Menu {
+                    if let running = model.runningAppOutsideGallery {
+                        RunningGameMenu(model: model, app: running)
+                    }
                     ForEach(model.savedPCs) { pc in
                         Button(pc.name, systemImage: Self.pcSymbol) { model.select(pc) }
                             .accessibilityIdentifier("pc-picker-\(pc.id)")

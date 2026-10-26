@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GameController
 import GlimmerEngine
 import Testing
 import UIKit
@@ -9,6 +10,66 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct ContinuationTests {
+    @Test func controllerMenuPressUsesTheFocusedActionAndReleasesItsHandler() async throws {
+        let controller = GCController.withExtendedGamepad()
+        let button = try #require(controller.extendedGamepad?.buttonMenu)
+        let menu = LauncherMenuController(controllers: { [controller] })
+        let events = AsyncStream<Void>.makeStream()
+        var calls = 0
+        menu.openMenu = { calls += 1; events.continuation.yield(()) }
+        menu.start()
+        let handler = try #require(button.pressedChangedHandler)
+        handler(button, 0, false)
+        handler(button, 1, true)
+        var iterator = events.stream.makeAsyncIterator()
+        await iterator.next()
+        #expect(calls == 1)
+        menu.stop()
+        #expect(button.pressedChangedHandler == nil)
+        events.continuation.finish()
+    }
+
+    @Test func runningTileResumesDirectlyAndQuitMenuKeepsItsNamedApproval() async throws {
+        let fixture = LauncherFixture()
+        fixture.runningAppID = fixture.app.id
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        model.requestQuit()
+        let quit = try #require(model.pendingGameAction)
+        #expect(quit.running.id == fixture.app.id && quit.target == nil)
+        #expect(fixture.quitIDs.isEmpty)
+        model.pendingGameAction = nil
+        model.activateTile(fixture.app)
+        let stream = try #require(model.stream)
+        #expect(stream.launch.appID == fixture.app.id && stream.launch.continuing)
+        #expect(model.pendingGameAction == nil && fixture.quitIDs.isEmpty)
+        model.activateTile(fixture.app)
+        #expect(model.stream === stream)
+        model.streamClosed()
+        await model.waitUntilStreamClosed()
+    }
+
+    @Test func anotherTileAsksOnceAndDoesNotQuitUntilApproved() async throws {
+        let fixture = LauncherFixture()
+        fixture.runningAppID = fixture.hidden.id
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        model.activateTile(fixture.app)
+        await model.waitUntilOperationFinishes()
+        let approval = try #require(model.pendingGameAction)
+        #expect(approval.running.id == fixture.hidden.id && approval.target?.id == fixture.app.id)
+        #expect(model.stream == nil && fixture.quitIDs.isEmpty)
+        model.confirmGameAction(approval)
+        #expect(model.stream?.launch.approvedOccupant == fixture.hidden.id)
+        #expect(model.pendingGameAction == nil)
+        model.streamClosed()
+        await model.waitUntilStreamClosed()
+    }
+
     @Test(arguments: [false, true])
     func runningHiddenGameRemainsActionableAndUsesDisconnectSetting(leaveRunning: Bool) async throws {
         let fixture = LauncherFixture()
@@ -20,6 +81,7 @@ struct ContinuationTests {
         await model.waitUntilOperationFinishes()
         #expect(model.apps.map(\.id) == [fixture.app.id])
         #expect(model.runningApp?.name == fixture.hidden.name)
+        #expect(model.runningAppOutsideGallery?.id == fixture.hidden.id)
         model.continueGame()
         let stream = try #require(model.stream)
         #expect(stream.launch.appID == fixture.hidden.id)

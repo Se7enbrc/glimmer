@@ -130,7 +130,7 @@ final class LauncherController {
             guard let pad = controller.extendedGamepad, pad.valueChangedHandler == nil else { continue }
             // GameController refreshes values only with a handler; never replace another consumer's slot.
             // The callback wakes repeats; a neutral controller needs no timer.
-            pad.valueChangedHandler = { [weak self] _, _ in
+            pad.valueChangedHandler = { @Sendable [weak self] _, _ in
                 Task { @MainActor [weak self] in self?.inputChanged() }
             }
             controllers.append(controller)
@@ -169,7 +169,8 @@ final class LauncherController {
             let direction = LauncherCommand.direction(x: pad.dpad.xAxis.value, y: pad.dpad.yAxis.value)
                 ?? LauncherCommand.direction(x: pad.leftThumbstick.xAxis.value, y: pad.leftThumbstick.yAxis.value)
             inputs[ObjectIdentifier(controller)] = LauncherControllerInput(
-                direction: direction, activate: pad.buttonA.isPressed, dismiss: pad.buttonB.isPressed)
+                direction: direction, activate: pad.buttonA.isPressed, dismiss: pad.buttonB.isPressed,
+                menu: pad.buttonMenu.isPressed)
         }
         return inputs
     }

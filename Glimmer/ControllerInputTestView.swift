@@ -77,10 +77,12 @@ final class ControllerMonitor {
         for controller in controllers {
             let id = ObjectIdentifier(controller)
             guard engaged[id] == nil else { continue }
-            controller.extendedGamepad?.valueChangedHandler = { [weak self] pad, _ in
-                MainActor.assumeIsolated {
-                    DualSenseRouting.shared.gc(pad: pad)
-                    self?.gcEventCount &+= 1
+            controller.extendedGamepad?.valueChangedHandler = { @Sendable [weak self] pad, _ in
+                DualSenseRouting.shared.gc(pad: pad)
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated { self?.gcEventCount &+= 1 }
+                } else {
+                    DispatchQueue.main.async { self?.gcEventCount &+= 1 }
                 }
             }
             engaged[id] = controller

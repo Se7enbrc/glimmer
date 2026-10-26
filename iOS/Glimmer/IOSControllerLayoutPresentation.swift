@@ -23,6 +23,7 @@ struct IOSControllerLayoutAppMenu: ViewModifier {
 
     func body(content: Content) -> some View {
         content.contextMenu {
+            RunningGameMenu(model: model, app: app)
             Button("Controller layout…", systemImage: "gamecontroller") { presented = true }
                 .disabled(model.controllerLayoutPC == nil)
         }

@@ -5,6 +5,33 @@ import XCTest
 
 @MainActor
 final class IPadNavigationTests: XCTestCase {
+    func testRunningTileScreenshots() {
+        let app = XCUIApplication()
+        app.launchEnvironment["GLIMMER_UI_TESTING"] = "running"
+        app.launch()
+        defer { app.terminate() }
+        XCUIDevice.shared.orientation = .portrait
+        let tile = app.buttons["launcher-app-1"]
+        XCTAssertTrue(tile.waitForExistence(timeout: 10))
+        recordScreen(app, name: "running-launcher")
+        tile.press(forDuration: 1)
+        recordScreen(app, name: "running-context-menu")
+        let point = app.buttons["Quit Desktop…"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).screenPoint
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.95)).tap()
+        let quit = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x, dy: point.y))
+        tile.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1, thenDragTo: quit)
+        XCTAssertTrue(app.alerts["Quit Desktop on Living room gaming PC 1?"].waitForExistence(timeout: 5))
+        recordScreen(app, name: "running-quit-alert")
+        app.alerts.buttons["Cancel"].tap()
+        let other = app.buttons["launcher-app-3"]
+        XCTAssertTrue(other.waitForExistence(timeout: 5))
+        other.tap()
+        XCTAssertTrue(app.alerts["Quit Desktop and start SuperTuxKart?"].waitForExistence(timeout: 5))
+        recordScreen(app, name: "running-switch-alert")
+        app.alerts.buttons["Cancel"].tap()
+    }
+
     func testStreamStartsInPortraitAndResizedWindows() throws {
         let app = XCUIApplication()
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "stream"

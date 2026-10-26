@@ -219,26 +219,34 @@ private final class TouchOrientationController: UIViewController {
     }
 
     func settle(in scene: UIWindowScene, target: UIInterfaceOrientation?) async throws {
-        let deadline = Timer(timeInterval: 5, repeats: false) { [updates] _ in
+        // Room for up to four rotation attempts; each normally settles well under a second.
+        let deadline = Timer(timeInterval: 15, repeats: false) { [updates] _ in
             updates.continuation.finish()
         }
         RunLoop.main.add(deadline, forMode: .common)
         defer { deadline.invalidate() }
         var iterator = updates.stream.makeAsyncIterator()
         while !appeared || transitioning {
-            try #require(await iterator.next() != nil, "UIKit did not settle the scene within five seconds")
+            try #require(await iterator.next() != nil, "UIKit did not settle the scene in time")
         }
         guard let target else { return }
         setNeedsUpdateOfSupportedInterfaceOrientations()
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { @Sendable [weak self] error in
-            Task { @MainActor in
-                self?.geometryError = error
-                self?.updates.continuation.yield(())
+        // The simulator refuses rotations while another transition settles; ask again as a real app would.
+        for attempt in 1...4 {
+            geometryError = nil
+            while transitioning {
+                try #require(await iterator.next() != nil, "UIKit did not settle the scene in time")
             }
-        }
-        while transitioning || scene.effectiveGeometry.interfaceOrientation != target {
-            if let geometryError { throw geometryError }
-            try #require(await iterator.next() != nil, "UIKit did not settle the scene within five seconds")
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { @Sendable [weak self] error in
+                Task { @MainActor in
+                    self?.geometryError = error
+                    self?.updates.continuation.yield(())
+                }
+            }
+            while geometryError == nil, transitioning || scene.effectiveGeometry.interfaceOrientation != target {
+                try #require(await iterator.next() != nil, "UIKit did not settle the scene in time")
+            }
+            if geometryError == nil || attempt == 4 { break }
         }
         try Task.checkCancellation()
         if let geometryError { throw geometryError }

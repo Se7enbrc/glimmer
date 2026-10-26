@@ -6,13 +6,10 @@ import SwiftUI
 
 enum LauncherFocus: Hashable {
     case app(Int), pc, overflow, state, pairing(PairingFocus)
-    case runningResume, runningQuit, runningSize
-
-    var isRunningAction: Bool { [.runningResume, .runningQuit, .runningSize].contains(self) }
 }
 
 enum LauncherCommand: Equatable {
-    case up, down, left, right, activate, dismiss
+    case up, down, left, right, activate, dismiss, menu
 
     static func direction(x: Float, y: Float) -> Self? {
         guard max(abs(x), abs(y)) >= 0.55 else { return nil }
@@ -28,6 +25,7 @@ enum LauncherCommand: Equatable {
         case .right: (124, "\u{F703}")
         case .activate: (49, " ")
         case .dismiss: (53, "\u{1B}")
+        case .menu: (110, "\u{F739}")
         }
     }
 }
@@ -36,8 +34,9 @@ struct LauncherControllerInput {
     var direction: LauncherCommand?
     var activate = false
     var dismiss = false
+    var menu = false
 
-    var isNeutral: Bool { direction == nil && !activate && !dismiss }
+    var isNeutral: Bool { direction == nil && !activate && !dismiss && !menu }
 }
 
 struct LauncherControllerRepeat {
@@ -54,7 +53,8 @@ struct LauncherControllerRepeat {
         }
         var result: [LauncherCommand] = []
         if input.dismiss && !prior.dismiss { result.append(.dismiss) }
-        if input.activate && !prior.activate && !input.dismiss { result.append(.activate) }
+        if input.menu && !prior.menu && !input.dismiss { result.append(.menu) }
+        if input.activate && !prior.activate && !input.dismiss && !input.menu { result.append(.activate) }
         if let direction = input.direction {
             if direction != prior.direction {
                 result.append(direction)
@@ -90,15 +90,11 @@ enum LauncherNavigation {
 
     static func destination(from focus: LauncherFocus?, command: LauncherCommand,
                             cells: [LauncherFocus], columns: Int, hasSwitcher: Bool) -> LauncherFocus? {
-        guard command != .activate, command != .dismiss else { return focus }
+        guard command != .activate, command != .dismiss, command != .menu else { return focus }
         guard !cells.isEmpty else { return hasSwitcher ? .pc : nil }
         if focus == .pc { return command == .down ? cells.first : .pc }
         guard let focus, cells.contains(focus) else { return cells.first }
-        let running = cells.filter(\.isRunningAction)
-        let grid = cells.filter { $0 != .state && !$0.isRunningAction }
-        if let index = running.firstIndex(of: focus) {
-            return runningDestination(command, index: index, running: running, grid: grid, hasSwitcher: hasSwitcher)
-        }
+        let grid = cells.filter { $0 != .state }
         if focus == .state {
             return command == .up ? cells.last(where: { $0 != .state }) ?? (hasSwitcher ? .pc : .state) : .state
         }
@@ -106,7 +102,6 @@ enum LauncherNavigation {
         let columns = max(1, columns)
         switch command {
         case .up:
-            if index < columns, !running.isEmpty { return running[min(index, running.count - 1)] }
             return index < columns ? (hasSwitcher ? .pc : focus) : grid[index - columns]
         case .down:
             guard index / columns < (grid.count - 1) / columns else {
@@ -117,18 +112,7 @@ enum LauncherNavigation {
             return index % columns == 0 ? focus : grid[index - 1]
         case .right:
             return (index + 1) % columns == 0 ? focus : grid[min(index + 1, grid.count - 1)]
-        case .activate, .dismiss: return focus
-        }
-    }
-    private static func runningDestination(_ command: LauncherCommand, index: Int, running: [LauncherFocus],
-                                           grid: [LauncherFocus], hasSwitcher: Bool) -> LauncherFocus {
-        let focus = running[index]
-        switch command {
-        case .left: return running[max(0, index - 1)]
-        case .right: return running[min(index + 1, running.count - 1)]
-        case .up: return hasSwitcher ? .pc : focus
-        case .down: return grid.isEmpty ? focus : grid[min(index, grid.count - 1)]
-        case .activate, .dismiss: return focus
+        case .activate, .dismiss, .menu: return focus
         }
     }
 }

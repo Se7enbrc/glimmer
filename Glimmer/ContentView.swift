@@ -7,16 +7,6 @@ import AppKit
 
 // MARK: - Main Window
 
-/// The takeover question, in the launcher's dialog and the menu bar's alert.
-/// App names show exactly as typed ("iRacing"); nil is an app the PC didn't name.
-enum TakeoverDialogCopy {
-    static func title(occupantApp: String?, hostName: String) -> String {
-        "\(occupantApp ?? "Another app") is running on \(hostName)."
-    }
-
-    static let message = "Unsaved progress may be lost. Other streams from this PC will stop."
-}
-
 struct MainWindow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
@@ -112,27 +102,7 @@ struct MainWindow: View {
             StreamEndedToast()
                 .padding(.top, 16)
         }
-        // Takeover confirmation: launching while an app is already running on
-        // the PC quits it (unsaved progress included), so confirm first. The
-        // title carries the specifics; the message states the consequence.
-        .confirmationDialog(
-            model.pendingTakeover.map {
-                TakeoverDialogCopy.title(occupantApp: $0.occupantApp, hostName: $0.host.displayName)
-            } ?? "",
-            isPresented: Binding(
-                get: { model.pendingTakeover != nil },
-                set: { if !$0 { model.pendingTakeover = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: model.pendingTakeover
-        ) { pending in
-            Button("Quit \(pending.occupantApp ?? "the running app") and start \(pending.app.name)", role: .destructive) {
-                model.confirmPendingTakeover()
-            }
-            Button("Cancel", role: .cancel) { model.pendingTakeover = nil }
-        } message: { _ in
-            Text(TakeoverDialogCopy.message)
-        }
+        .modifier(LauncherTakeoverConfirmation())
         .toolbar {
             // The PC switcher is the header's name; the toolbar keeps only Settings,
             // on the trailing edge (a hidden title bar has no title to push it there).
@@ -158,7 +128,7 @@ struct MainWindow: View {
     }
 
     private func navigateLauncher(_ command: LauncherCommand) {
-        guard !model.isStreaming else { return }
+        guard !model.isStreaming || model.nativeStreamBackgrounded else { return }
         // The controls become focusable a render later, so the first command waits a turn.
         guard model.launcherControllerNavigating else {
             model.launcherControllerNavigating = true
@@ -174,6 +144,10 @@ struct MainWindow: View {
         guard !modal else { return }
         let apps = model.selectedHost?.apps ?? []
         let cells = focusCells
+        if command == .menu {
+            if case .app(let id) = launcherFocus { model.launcherMenuAppID = id }
+            return
+        }
         if command == .activate {
             if launcherFocus != nil {
                 model.launcherController.postKey(.activate)
@@ -289,7 +263,8 @@ struct ConnectSurface: View {
     private var launchIsOnAButton: Bool {
         guard let attempt = model.lastLaunchAttempt, let host = model.selectedHost,
               attempt.host.id == host.id else { return false }
-        let apps = model.launcherStyle == .covers ? host.apps : AppIconsRow.inlineApps(host.apps)
+        let apps = model.launcherStyle == .covers ? host.apps
+            : AppIconsRow.inlineApps(host.apps, runningAppID: model.runningApp(on: host)?.id)
         return apps.contains { $0.id == attempt.app.id }
     }
 
@@ -305,9 +280,6 @@ struct ConnectSurface: View {
                 Text(StreamFailureCopy.gameEnded(ended.app.name, pc: ended.host.displayName))
                 Button(ended.format == nil ? "Start \(ended.app.name)" : "Start \(ended.app.name) at the previous size",
                        action: model.startEndedGame)
-            }
-            if let host = model.selectedHost, let app = model.runningApp(on: host) {
-                RunningGameRow(host: host, app: app, focus: focus)
             }
             if let host = model.selectedHost, !host.apps.isEmpty {
                 AppIconsRow(apps: host.apps, host: host, focus: focus, connectingShown: showsConnectingUI)

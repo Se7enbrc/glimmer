@@ -85,12 +85,9 @@ extension NativeUIRenderTests {
         if scene.traitCollection.userInterfaceIdiom != .pad {
             presenter.setNeedsUpdateOfSupportedInterfaceOrientations()
             try await commitLayout(presenter.view)
-            try await observeGeometry(scene, request: {
-                scene.requestGeometryUpdate(.iOS(interfaceOrientations:
-                    UIInterfaceOrientationMask(rawValue: 1 << orientation.rawValue))) { @Sendable error in
-                        Issue.record("The render fixture could not restore scene orientation: \(error)")
-                    }
-            }, matches: { scene.effectiveGeometry.interfaceOrientation == orientation })
+            try await requestOrientation(scene, UIInterfaceOrientationMask(rawValue: 1 << orientation.rawValue),
+                                         settling: presenter,
+                                         matches: { scene.effectiveGeometry.interfaceOrientation == orientation })
         }
         await finishTransition(presenter)
         try await commitLayout(presenter.view)

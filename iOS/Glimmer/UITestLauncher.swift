@@ -12,6 +12,7 @@ enum UITestLauncher {
         guard environment["GLIMMER_UI_TESTING"] != nil || environment["XCTestConfigurationFilePath"] != nil else {
             return nil
         }
+        let running = environment["GLIMMER_UI_TESTING"] == "running"
         let streaming = environment["GLIMMER_UI_TESTING"] == "stream"
         if streaming {
             for (key, chord) in [("quitHotkey", HotkeyChord.defaultQuit), ("statsHotkey", .defaultStats)] {
@@ -19,25 +20,29 @@ enum UITestLauncher {
             }
             UserDefaults.standard.set(false, forKey: "showStreamStats")
         }
-        let count = environment["GLIMMER_UI_TESTING"] == "one" || streaming ? 1
+        let count = running ? 3 : environment["GLIMMER_UI_TESTING"] == "one" || streaming ? 1
             : environment["GLIMMER_UI_TESTING"] == "many" ? 12 : 0
         let pcs = (0..<count).map { index in
             var server = ServerInfo(address: "pc.invalid", uniqueId: "fixture-\(index)",
                                     serverName: "Living room gaming PC \(index + 1)")
             server.pairStatus = .paired
+            if running { server.currentGameID = 1 }
             return SavedPC(server: server)
         }
         let identity = IdentityManager(defaultsSuite: "io.ugfugl.Glimmer.ui-tests.unused",
                                        supportBase: FileManager.default.temporaryDirectory,
                                        protectedDataAvailable: { false })
-        let titles = ["Desktop", "Steam Big Picture", "A game with a long title that needs room to wrap", "Racing"]
+        let gameTitle = running ? "SuperTuxKart" : "A game with a long title that needs room to wrap"
+        let titles = ["Desktop", "Steam Big Picture", gameTitle, "Racing"]
         let apps = (0..<count).map { index in
-            HostApp(id: index, name: titles[index % titles.count], hdrCapable: false, hidden: false)
+            HostApp(id: index + (running ? 1 : 0), name: titles[index % titles.count], hdrCapable: false, hidden: false)
         }
         // UI automation must never discover or connect to the user's PCs.
         let calls = LauncherModel.Calls(savedPCs: { pcs }, prepare: { server, _ in
-            PreparedPC(network: NetworkClient(server: server, identity: identity, deviceName: "Test device"),
-                       server: server)
+            var current = server
+            if running { current.currentGameID = 1 }
+            return PreparedPC(network: NetworkClient(server: current, identity: identity, deviceName: "Test device"),
+                              server: current)
         }, pair: { pc, _ in pc }, apps: { _ in apps }, remember: { _ in pcs }, protectedDataChanged: { _ in },
            lastConnectedPCID: { pcs.first?.id }, artwork: { _, _ in Data() }, makeSession: { launch in
             StreamSessionModel(launch: launch, makePlayback: { launch, surface, _ in

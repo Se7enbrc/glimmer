@@ -4,6 +4,9 @@
 
 ### Features
 
+- Running games now show their state on the app tile. Click or tap to resume,
+  and use the tile's menu to quit.
+
 - Show or hide stream stats with ⌃Z (Control-Z) by default. Saved custom
   shortcuts stay yours.
 - iPhone and iPad now share the Mac's stream stats and hardware-keyboard
@@ -119,6 +122,7 @@
 
 ### Bug fixes
 
+- Fixed a crash when using a controller during a stream.
 - Fixed a crash when an iPhone could not rotate into a stream.
 - Keep your chosen stats thresholds, launcher style, codec and touch opacity
   when defaults change.

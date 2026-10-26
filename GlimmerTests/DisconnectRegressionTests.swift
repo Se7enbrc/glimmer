@@ -20,7 +20,7 @@ struct DisconnectRegressionTests {
         fixture.model.streamPhase = .streaming
         fixture.model.nativeStreamBackgrounded = backgrounded
         #expect(AppIconsRow.tileState(app, on: host, model: fixture.model, connectingShown: false)
-                == (backgrounded ? .hiddenStream : .ready))
+                == (backgrounded ? .hiddenStream : .running))
     }
 
     @MainActor @Test(arguments: [0, 1, 2, 3, 4, 5, 80])

@@ -60,6 +60,9 @@
 		A10000001 /* GlimmerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000011 /* GlimmerApp.swift */; };
 		A10000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012 /* ContentView.swift */; };
 		DC9A61DEBDDA4825AE9B1220 /* RunningGameRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E166D0400B2847E0AB1167B4 /* RunningGameRow.swift */; };
+		8FFB2AFCED5845F4A77B8965 /* TakeoverDialogCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF6D7AB9B419492B8E81A79C /* TakeoverDialogCopy.swift */; };
+		D6B7B627EE3E41CE9ACE2A28 /* LauncherContextMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D9AF2A6FCDA495EA72DE729 /* LauncherContextMenu.swift */; };
+		FC0156F1960F4D5F881A6F84 /* RunningTileBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BB42DA82844082BF1FE5DB /* RunningTileBadge.swift */; };
 		950271A5578F49C4B8E77618 /* AppModel+Continuation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71FFCA44FBC545A69F7D8EB6 /* AppModel+Continuation.swift */; };
 		A10000003 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000013 /* AppModel.swift */; };
 		A10000004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000014 /* Assets.xcassets */; };
@@ -885,6 +888,9 @@
 		A10000011 /* GlimmerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlimmerApp.swift; sourceTree = "<group>"; };
 		A10000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E166D0400B2847E0AB1167B4 /* RunningGameRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/RunningGameRow.swift"; sourceTree = SOURCE_ROOT; };
+		EF6D7AB9B419492B8E81A79C /* TakeoverDialogCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/TakeoverDialogCopy.swift"; sourceTree = SOURCE_ROOT; };
+		9D9AF2A6FCDA495EA72DE729 /* LauncherContextMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/LauncherContextMenu.swift"; sourceTree = SOURCE_ROOT; };
+		35BB42DA82844082BF1FE5DB /* RunningTileBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/RunningTileBadge.swift"; sourceTree = SOURCE_ROOT; };
 		71FFCA44FBC545A69F7D8EB6 /* AppModel+Continuation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/AppModel+Continuation.swift"; sourceTree = SOURCE_ROOT; };
 		A10000013 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		A10000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -1728,6 +1734,9 @@
 				A1009002 /* UpdaterController.swift */,
 				A10000012 /* ContentView.swift */,
 				E166D0400B2847E0AB1167B4 /* RunningGameRow.swift */,
+				EF6D7AB9B419492B8E81A79C /* TakeoverDialogCopy.swift */,
+				9D9AF2A6FCDA495EA72DE729 /* LauncherContextMenu.swift */,
+				35BB42DA82844082BF1FE5DB /* RunningTileBadge.swift */,
 				71FFCA44FBC545A69F7D8EB6 /* AppModel+Continuation.swift */,
 				A10000017 /* SettingsView.swift */,
 				A1000009B /* PairSheet.swift */,
@@ -2675,6 +2684,9 @@
 				A1009001 /* UpdaterController.swift in Sources */,
 				A10000002 /* ContentView.swift in Sources */,
 				DC9A61DEBDDA4825AE9B1220 /* RunningGameRow.swift in Sources */,
+				8FFB2AFCED5845F4A77B8965 /* TakeoverDialogCopy.swift in Sources */,
+				D6B7B627EE3E41CE9ACE2A28 /* LauncherContextMenu.swift in Sources */,
+				FC0156F1960F4D5F881A6F84 /* RunningTileBadge.swift in Sources */,
 				950271A5578F49C4B8E77618 /* AppModel+Continuation.swift in Sources */,
 				A10000005 /* SettingsView.swift in Sources */,
 				A1000009A /* PairSheet.swift in Sources */,

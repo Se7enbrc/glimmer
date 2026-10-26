@@ -20,11 +20,15 @@ struct ControllerLayoutAppMenu: ViewModifier {
     let app: LibraryApp
     @Environment(AppModel.self) private var model
     @State private var presented = false
+    @State private var confirmingSize = false
 
     func body(content: Content) -> some View {
-        content.contextMenu {
-            Button("Controller layout…", systemImage: "gamecontroller") { presented = true }
+        @Bindable var model = model
+        content.contextMenu { menu }
+        .background {
+            LauncherContextMenu(appID: app.id, requestedAppID: $model.launcherMenuAppID) { menu.environment(model) }
         }
+        .modifier(RunningGameSizeConfirmation(host: host, app: app, presented: $confirmingSize))
         .sheet(isPresented: $presented) {
             NavigationStack {
                 ControllerLayoutsView(initialScope: .game(pcID: host.id, appID: UInt32(clamping: app.id)))
@@ -35,5 +39,10 @@ struct ControllerLayoutAppMenu: ViewModifier {
             .frame(minWidth: 520, idealWidth: 620, minHeight: 560, idealHeight: 680)
             .onAppear { ControllerLayoutsModel.shared.games = model.controllerLayoutGames() }
         }
+    }
+
+    @ViewBuilder private var menu: some View {
+        RunningGameMenu(host: host, app: app) { confirmingSize = true }
+        Button("Controller layout…", systemImage: "gamecontroller") { presented = true }
     }
 }

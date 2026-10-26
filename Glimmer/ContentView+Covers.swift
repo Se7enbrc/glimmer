@@ -29,18 +29,19 @@ extension AppIconsRow {
         }
     }
 
-    func coverLabel(_ app: LibraryApp, revision: String, connecting: Bool, hiddenStream: Bool) -> some View {
+    func coverLabel(_ app: LibraryApp, revision: String, connecting: Bool) -> some View {
         VStack(spacing: 6) {
             LauncherCoverArt(app: app, host: host, revision: revision,
                              height: LauncherLayout.coverHeight(appCount: apps.count))
+                .overlay(alignment: .topTrailing) {
+                    if isRunning(app) { RunningTileBadge().padding(8) }
+                }
             VStack(spacing: 2) {
                 Text(app.name).font(.headline).lineLimit(1)
                 if connecting {
                     ProgressView().controlSize(.mini)
-                } else if hiddenStream {
-                    Text("Back to Stream").font(.caption)
                 } else if isRunning(app) {
-                    Label("Running", systemImage: "play.fill").font(.caption).foregroundStyle(.secondary)
+                    Text("Click to resume").font(.footnote).foregroundStyle(.secondary)
                 }
             }
             .frame(height: 42, alignment: .top)
@@ -95,6 +96,7 @@ extension AppModel {
         }
         guard let status = hostLiveStatus,
               HostLiveStatus.isFresh(status, for: host.id) else { return false }
+        if let id = status.runningAppID { return id == app.id }
         if case .streamingApp(let name) = status.state { return name == app.name }
         if case .streamingUnknownApp(let id) = status.state { return id == app.id }
         return false
