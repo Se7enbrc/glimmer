@@ -60,6 +60,9 @@
 		83B27EBA9F210DF76B77D772 /* LauncherServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087279E7E4417E5B10AADB05 /* LauncherServices.swift */; };
 		AF9547F4F7817E3F82B8F721 /* LauncherModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */; };
 		8B4D6483C510474393BBEAEE /* RunningGameRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17D2D3911834B9DA3DC2F22 /* RunningGameRow.swift */; };
+		E94290EEB35C48DC8E6922DA /* TakeoverDialogCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394F1F37D1084B11B1806BF5 /* TakeoverDialogCopy.swift */; };
+		9BB6957693B54148BC89B654 /* LauncherMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48DC170283CC433DA3AF4472 /* LauncherMenuController.swift */; };
+		090D7EA26D72484B85C8230D /* RunningTileBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = C055CCF2C6FC46D59EBEE1AA /* RunningTileBadge.swift */; };
 		4C9ABCB297864F26B9A5FF83 /* LauncherModel+Continuation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F03E8069FC0B4E0EBDEA4E97 /* LauncherModel+Continuation.swift */; };
 		CF6514282E3FDE69E7FE6EA8 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3225303E73FF1C74315DDB3 /* PairingView.swift */; };
 		F31DA833B1681B778DF140BC /* StreamSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */; };
@@ -250,6 +253,9 @@
 		087279E7E4417E5B10AADB05 /* LauncherServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherServices.swift"; sourceTree = "<group>"; };
 		1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherModel.swift"; sourceTree = "<group>"; };
 		E17D2D3911834B9DA3DC2F22 /* RunningGameRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/RunningGameRow.swift"; sourceTree = SOURCE_ROOT; };
+		394F1F37D1084B11B1806BF5 /* TakeoverDialogCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/TakeoverDialogCopy.swift"; sourceTree = SOURCE_ROOT; };
+		48DC170283CC433DA3AF4472 /* LauncherMenuController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/LauncherMenuController.swift"; sourceTree = SOURCE_ROOT; };
+		C055CCF2C6FC46D59EBEE1AA /* RunningTileBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/RunningTileBadge.swift"; sourceTree = SOURCE_ROOT; };
 		F03E8069FC0B4E0EBDEA4E97 /* LauncherModel+Continuation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/LauncherModel+Continuation.swift"; sourceTree = SOURCE_ROOT; };
 		E3225303E73FF1C74315DDB3 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairingView.swift"; sourceTree = "<group>"; };
 		155A78FC0B8033A917ED92D0 /* StreamSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionTests.swift"; sourceTree = "<group>"; };
@@ -586,6 +592,9 @@
 				E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */,
 				1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */,
 				E17D2D3911834B9DA3DC2F22 /* RunningGameRow.swift */,
+				394F1F37D1084B11B1806BF5 /* TakeoverDialogCopy.swift */,
+				48DC170283CC433DA3AF4472 /* LauncherMenuController.swift */,
+				C055CCF2C6FC46D59EBEE1AA /* RunningTileBadge.swift */,
 				F03E8069FC0B4E0EBDEA4E97 /* LauncherModel+Continuation.swift */,
 				087279E7E4417E5B10AADB05 /* LauncherServices.swift */,
 				5A97E5B4E562286545BA6412 /* StreamView.swift */,
@@ -888,6 +897,9 @@
 				38C80A9D0A874449A43CE593 /* AddPCView.swift in Sources */,
 				AF9547F4F7817E3F82B8F721 /* LauncherModel.swift in Sources */,
 				8B4D6483C510474393BBEAEE /* RunningGameRow.swift in Sources */,
+				E94290EEB35C48DC8E6922DA /* TakeoverDialogCopy.swift in Sources */,
+				9BB6957693B54148BC89B654 /* LauncherMenuController.swift in Sources */,
+				090D7EA26D72484B85C8230D /* RunningTileBadge.swift in Sources */,
 				4C9ABCB297864F26B9A5FF83 /* LauncherModel+Continuation.swift in Sources */,
 				83B27EBA9F210DF76B77D772 /* LauncherServices.swift in Sources */,
 				53442F74573A5960DB86B797 /* StreamView.swift in Sources */,

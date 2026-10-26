@@ -4,6 +4,9 @@
 
 ### Features
 
+- Running games now show their state on the app tile. Click or tap to resume,
+  and use the tile's menu to quit.
+
 - Show or hide stream stats with ⌃Z (Control-Z) by default. Saved custom
   shortcuts stay yours.
 - iPhone and iPad now share the Mac's stream stats and hardware-keyboard

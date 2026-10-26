@@ -9,6 +9,20 @@ import UIKit
 
 @MainActor
 struct LauncherGalleryTests {
+    @Test(arguments: [LauncherStyle.buttons, .covers])
+    func runningStateKeepsTheGallerySize(style: LauncherStyle) {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.apps = [fixture.app]
+        let proposal = CGSize(width: 327, height: 1_000)
+        let idle = UIHostingController(rootView: LauncherGallery(model: model, style: style, size: proposal))
+            .sizeThatFits(in: proposal)
+        model.runningApp = fixture.app
+        let running = UIHostingController(rootView: LauncherGallery(model: model, style: style, size: proposal))
+            .sizeThatFits(in: proposal)
+        #expect(idle == running)
+    }
+
     @Test(arguments: [DynamicTypeSize.large, .accessibility5], [Image.Scale.small, .medium, .large])
     func steamGlyphRetainsLayoutAtEveryTextSize(textSize: DynamicTypeSize, scale: Image.Scale) {
         let view = AppGlyph(name: "Steam Big Picture").dynamicTypeSize(textSize).imageScale(scale)

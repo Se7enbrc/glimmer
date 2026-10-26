@@ -141,7 +141,7 @@ extension AppModel {
     func presentTakeoverAlertIfNeeded() {
         guard let pending = pendingTakeover, !mainWindowVisible else { return }
         let alert = NSAlert()
-        alert.messageText = TakeoverDialogCopy.title(occupantApp: pending.occupantApp, hostName: pending.host.displayName)
+        alert.messageText = TakeoverDialogCopy.title(occupantApp: pending.occupantApp, targetApp: pending.app.name)
         alert.informativeText = TakeoverDialogCopy.message
         alert.addButton(withTitle: "Quit \(pending.occupantApp ?? "the running app") and start \(pending.app.name)")
             .hasDestructiveAction = true

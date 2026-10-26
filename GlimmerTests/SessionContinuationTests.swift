@@ -243,5 +243,8 @@ struct SessionContinuationTests {
 }
 
 extension StreamSession {
-    func installCloseFixture(_ value: SessionPresentation) { presentation = value }
+    func installCloseFixture(_ value: SessionPresentation, streaming: Bool? = nil) {
+        presentation = value
+        if let streaming { isStreaming = streaming }
+    }
 }

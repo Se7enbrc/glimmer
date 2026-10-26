@@ -57,9 +57,9 @@ extension LauncherModel {
         endedFormat = nil
     }
 
-    var continuationTitle: String {
-        guard let selected, let runningApp else { return "Continue here" }
-        return history.previous(pc: selected.server.uniqueId, app: runningApp.id) == nil ? "Continue here" : "Resume"
+    var runningAppOutsideGallery: HostApp? {
+        guard let runningApp, !apps.contains(where: { $0.id == runningApp.id }) else { return nil }
+        return runningApp
     }
 
     func updateRunningApp(_ info: ServerInfo, list: [HostApp]? = nil) {
@@ -70,6 +70,15 @@ extension LauncherModel {
         }
         runningApp = (list ?? allApps).first { $0.id == info.currentGameID }
             ?? HostApp(id: info.currentGameID, name: "the running app", hdrCapable: false, hidden: true)
+    }
+
+    func requestQuitFromMenu() {
+        // Let the native menu dismiss before presenting the confirmation.
+        DispatchQueue.main.async { self.requestQuit() }
+    }
+
+    func activateTile(_ app: HostApp) {
+        if runningApp?.id == app.id { continueGame() } else { launch(app) }
     }
 
     func launch(_ app: HostApp) {

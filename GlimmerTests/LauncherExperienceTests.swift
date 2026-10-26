@@ -310,6 +310,78 @@ struct LauncherExperienceTests {
         #expect(item.isEnabled)
     }
 
+    @Test @MainActor func runningOverflowAppKeepsATileWithoutChangingTheGridSize() {
+        let apps = (1...8).map { LibraryApp(id: $0, name: "Game \($0)", hdr: false, hidden: false) }
+        let visible = AppIconsRow.inlineApps(apps, runningAppID: 7)
+        let overflow = AppIconsRow.overflowApps(apps, runningAppID: 7)
+        #expect(visible.map(\.id) == [1, 2, 7])
+        #expect(overflow.map(\.id) == [3, 4, 5, 6, 8])
+        #expect(visible.count == AppIconsRow.inlineApps(apps).count)
+        #expect(Set((visible + overflow).map(\.id)) == Set(apps.map(\.id)))
+    }
+
+    @Test @MainActor func runningTileAndResumeMenuReturnToTheSameSession() async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let app = LibraryApp(id: 1, name: "Desktop", hdr: false, hidden: false)
+        let host = Host(id: "pc", name: "PC", customName: nil, localAddress: nil, manualAddress: nil,
+                        apps: [app], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+        let sunshine = FakeSunshine.scripted([:])
+        let session = StreamSession(hostDisposition: .disconnectOnly,
+                                    audioDecoder: AudioDecoder(defaults: settings.defaults),
+                                    services: SessionServices(), backend: InputRecordingBackend(),
+                                    makeNetwork: { sunshine.client($0) }, makeBackend: { InputRecordingBackend() })
+        let presentation = SessionPresentation()
+        let events = AsyncStream<Void>.makeStream()
+        presentation.resume = { events.continuation.yield(()) }
+        await session.installCloseFixture(presentation, streaming: true)
+        model.nativeSession = session
+        model.isStreaming = true
+        model.streamPhase = .streaming
+        model.nativeStreamBackgrounded = true
+        model.lastLaunchAttempt = (app, host)
+        var iterator = events.stream.makeAsyncIterator()
+        AppIconsRow.activate(app, on: host, model: model, connectingShown: false)
+        await iterator.next()
+        let menu = NSHostingMenu(rootView: RunningGameMenu(host: host, app: app, requestSize: {}).environment(model))
+        menu.update()
+        menu.performActionForItem(at: try #require(menu.items.firstIndex { $0.title == "Resume" }))
+        await iterator.next()
+        #expect(model.nativeSession === session && model.pendingTakeover == nil)
+        #expect(model.nativeStreamTask == nil)
+        events.continuation.finish()
+    }
+
+    @Test @MainActor func runningTileMenuOffersResumeAndQuitWithoutASecondLaunch() throws {
+        let model = AppModel(defaults: settings.defaults)
+        let app = LibraryApp(id: 1, name: "Desktop", hdr: false, hidden: false)
+        let host = Host(id: "pc", name: "PC", customName: nil, localAddress: nil, manualAddress: nil,
+                        apps: [app], lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+        model.isStreaming = true
+        model.streamPhase = .streaming
+        model.lastLaunchAttempt = (app, host)
+        let menu = NSHostingMenu(rootView: RunningGameMenu(host: host, app: app, requestSize: {}).environment(model))
+        menu.update()
+        let resume = try #require(menu.items.firstIndex { $0.title == "Resume" })
+        #expect(menu.items.contains { $0.title == "Quit Desktop…" && $0.isEnabled })
+        menu.performActionForItem(at: resume)
+        #expect(model.pendingTakeover == nil && model.lastLaunchAttempt?.app.id == app.id)
+        #expect(model.nativeStreamTask == nil)
+    }
+
+    @Test @MainActor func runningTileUsesTheAppIDWhenNamesMatch() {
+        let model = AppModel(defaults: settings.defaults)
+        let app = LibraryApp(id: 7, name: "Desktop", hdr: false, hidden: false)
+        let duplicate = LibraryApp(id: 8, name: "Desktop", hdr: false, hidden: false)
+        let host = Host(id: "pc", name: "PC", customName: nil, localAddress: nil, manualAddress: nil,
+                        apps: [app, duplicate], lastConnected: nil, serverCertPEM: nil,
+                        appVersion: nil, macAddress: nil)
+        model.hostLiveStatus = .init(hostID: host.id, state: .streamingApp(name: app.name),
+                                    capturedAt: .now, runningAppID: app.id)
+        #expect(model.launcherAppIsRunning(app, on: host))
+        #expect(!model.launcherAppIsRunning(duplicate, on: host))
+        #expect(AppIconsRow.tileState(app, on: host, model: model, connectingShown: false).spoken.value == "Running")
+    }
+
     @Test @MainActor func runningCoverFollowsTheLiveSessionOrFreshPCStatus() {
         let model = AppModel(defaults: settings.defaults)
         let app = LibraryApp(id: 7, name: "Game", hdr: false, hidden: false)

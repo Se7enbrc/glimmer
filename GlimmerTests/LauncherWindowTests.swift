@@ -9,6 +9,7 @@
 //
 
 @testable import GlimmerEngine
+import AppKit
 import Foundation
 import SwiftUI
 import Testing
@@ -111,19 +112,19 @@ struct ReadinessChipReadyTests {
 struct TakeoverDialogCopyTests {
 
     @Test func keepsARealAppNameAsTyped() {
-        #expect(TakeoverDialogCopy.title(occupantApp: "Helldivers 2", hostName: "Tower")
-            == "Helldivers 2 is running on Tower.")
-        #expect(TakeoverDialogCopy.title(occupantApp: "iRacing", hostName: "Tower")
-            == "iRacing is running on Tower.")
-        #expect(TakeoverDialogCopy.title(occupantApp: "eFootball", hostName: "Tower")
-            == "eFootball is running on Tower.")
+        #expect(TakeoverDialogCopy.title(occupantApp: "Helldivers 2", targetApp: "Desktop")
+            == "Quit Helldivers 2 and start Desktop?")
+        #expect(TakeoverDialogCopy.title(occupantApp: "iRacing", targetApp: "Desktop")
+            == "Quit iRacing and start Desktop?")
+        #expect(TakeoverDialogCopy.title(occupantApp: "eFootball", targetApp: "Desktop")
+            == "Quit eFootball and start Desktop?")
     }
 
     @Test func anAppThePCDidntNameReadsAsAnotherApp() throws {
         let unnamed = try #require(AppModel.occupant(of: .streamingUnknownApp(id: 9)))
         #expect(unnamed == nil)
-        #expect(TakeoverDialogCopy.title(occupantApp: unnamed, hostName: "Tower")
-            == "Another app is running on Tower.")
+        #expect(TakeoverDialogCopy.title(occupantApp: unnamed, targetApp: "Desktop")
+            == "Quit the running app and start Desktop?")
         #expect(AppModel.occupant(of: .idle) == nil)
     }
 }
@@ -160,4 +161,65 @@ struct PointerShortcutHelpTests {
         #expect(ShortcutsPane.pointerDetail ==
             "Captures or releases the pointer in a window or full screen.")
     }
+}
+
+@Suite(.serialized)
+@MainActor
+struct RunningTileWindowTests {
+    private let settings = IsolatedDefaults()
+
+    @Test func launcherScreenshots() async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let apps = ["Desktop", "Steam Big Picture", "SuperTuxKart"].enumerated().map {
+            LibraryApp(id: $0.offset + 1, name: $0.element, hdr: false, hidden: false)
+        }
+        let host = Host(id: "fixture", name: "Living room PC", customName: nil, localAddress: "192.0.2.1",
+                        manualAddress: nil, apps: apps, lastConnected: nil, serverCertPEM: "pin",
+                        appVersion: nil, macAddress: nil)
+        model.hosts = [host]
+        model.selectedHost = host
+        model.hostLiveStatus = .init(hostID: host.id, state: .streamingApp(name: "Desktop"), capturedAt: .now,
+                                    runningAppID: 1)
+        let window = NSWindow(contentRect: NSRect(x: 150, y: 200, width: 580, height: 300),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.title = "Glimmer"
+        window.identifier = NSUserInterfaceItemIdentifier("main")
+        let previousPolicy = NSApp.activationPolicy()
+        NSApp.setActivationPolicy(.regular)
+        defer { NSApp.setActivationPolicy(previousPolicy) }
+        let view = NSHostingView(rootView: RunningTileWindowFixture().environment(model))
+        window.contentView = view
+        view.layoutSubtreeIfNeeded()
+        let runningSize = view.fittingSize
+        model.hostLiveStatus = .init(hostID: host.id, state: .idle, capturedAt: .now)
+        view.layoutSubtreeIfNeeded()
+        #expect(view.fittingSize == runningSize)
+        model.hostLiveStatus = .init(hostID: host.id, state: .streamingApp(name: "Desktop"),
+                                    capturedAt: .now, runningAppID: 1)
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            window.appearance = NSAppearance(named: appearance)
+            view.layoutSubtreeIfNeeded()
+            window.setContentSize(view.fittingSize)
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            #expect(view.fittingSize.width == 580)
+            if ProcessInfo.processInfo.environment["GLIMMER_UI_HOLD"] != nil {
+                try await Task.sleep(for: .seconds(30))
+            }
+            if let directory = ProcessInfo.processInfo.environment["GLIMMER_SCREENSHOTS"] {
+                try await Task.sleep(for: .milliseconds(500))
+                let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+                view.cacheDisplay(in: view.bounds, to: bitmap)
+                let data = try #require(bitmap.representation(using: .png, properties: [:]))
+                try data.write(to: URL(filePath: "\(directory)/mac-\(name)-view.png"))
+            }
+        }
+    }
+}
+
+private struct RunningTileWindowFixture: View {
+    @FocusState private var focus: LauncherFocus?
+    var body: some View { ConnectSurface(focus: $focus).modifier(LauncherTakeoverConfirmation()) }
 }

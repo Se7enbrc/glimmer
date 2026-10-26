@@ -1,13 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  ContentViewSubviews.swift
-//
-//  Host-hero pieces split out of ContentView.swift: the app-icon and
-//  spec-chip rows, plus the empty-pairing and stream-ended states.
-//
-
 import GlimmerEngine
 import Accessibility
 import AppKit
@@ -20,25 +13,28 @@ struct AppIconsRow: View {
     /// The connect is on screen (past the 400 ms hold), so the app being launched shows it.
     var connectingShown = false
     @Environment(AppModel.self) var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     /// Two columns of large app buttons fill the window's width with two apps or
     /// four; past four the last cell is the overflow menu.
     private static let maxInlineTiles = 4
     private static let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
     /// The apps that get a button of their own; the rest are in the overflow menu.
-    static func inlineApps(_ apps: [LibraryApp]) -> [LibraryApp] {
-        apps.count <= maxInlineTiles ? apps : Array(apps.prefix(maxInlineTiles - 1))
+    static func inlineApps(_ apps: [LibraryApp], runningAppID: Int? = nil) -> [LibraryApp] {
+        guard apps.count > maxInlineTiles else { return apps }
+        let visible = Array(apps.prefix(maxInlineTiles - 1))
+        guard let running = apps.first(where: { $0.id == runningAppID }),
+              !visible.contains(where: { $0.id == running.id }) else { return visible }
+        return Array(visible.dropLast()) + [running]
     }
 
-    private var inlineApps: [LibraryApp] { Self.inlineApps(apps) }
+    private var inlineApps: [LibraryApp] { Self.inlineApps(apps, runningAppID: model.runningApp(on: host)?.id) }
 
-    static func overflowApps(_ apps: [LibraryApp]) -> [LibraryApp] {
-        Array(apps.dropFirst(inlineApps(apps).count))
+    static func overflowApps(_ apps: [LibraryApp], runningAppID: Int? = nil) -> [LibraryApp] {
+        let visible = Set(inlineApps(apps, runningAppID: runningAppID).map(\.id))
+        return apps.filter { !visible.contains($0.id) }
     }
 
-    private var overflowApps: [LibraryApp] { Self.overflowApps(apps) }
+    private var overflowApps: [LibraryApp] { Self.overflowApps(apps, runningAppID: model.runningApp(on: host)?.id) }
 
     var body: some View {
         Group {
@@ -50,8 +46,7 @@ struct AppIconsRow: View {
     private var navigationCells: [LauncherFocus] {
         guard model.readinessReason(for: host) == nil else { return [] }
         let visible = model.launcherStyle == .covers ? apps : inlineApps
-        var cells = visible.filter { !model.isStreaming || tileState($0) != .ready }
-            .map { LauncherFocus.app($0.id) }
+        var cells = visible.map { LauncherFocus.app($0.id) }
         if model.launcherStyle == .buttons, !overflowApps.isEmpty { cells.append(.overflow) }
         return cells
     }
@@ -80,13 +75,14 @@ struct AppIconsRow: View {
     /// What the app that is launching or streaming shows on its own button, so the status
     /// stays on the chip and no second button appears: progress, the way out, the way back.
     enum TileState {
-        case ready, connecting, reconnecting, hiddenStream
+        case ready, connecting, reconnecting, hiddenStream, running
 
         var shortcut: KeyboardShortcut? {
             switch self {
             case .ready: nil
             case .connecting, .reconnecting: .cancelAction   // Return never cancels (users mash it)
             case .hiddenStream: .defaultAction
+            case .running: nil
             }
         }
 
@@ -95,7 +91,7 @@ struct AppIconsRow: View {
             case .ready: nil
             case .connecting: "Cancel the connection"
             case .reconnecting: "End the stream"
-            case .hiddenStream: "Back to the stream"
+            case .hiddenStream, .running: "Resume stream"
             }
         }
 
@@ -104,7 +100,7 @@ struct AppIconsRow: View {
             case .ready: ("", "")
             case .connecting: ("Connecting", "Cancels the connection")
             case .reconnecting: ("Reconnecting", "Ends the stream")
-            case .hiddenStream: ("Streaming", "Returns to the stream")
+            case .hiddenStream, .running: ("Running", "Resume stream")
             }
         }
     }
@@ -116,73 +112,79 @@ struct AppIconsRow: View {
     /// A hidden stream wins, as the Stream button's roles do; a (re)connect shows once past the hold.
     static func tileState(_ app: LibraryApp, on host: Host, model: AppModel,
                           connectingShown: Bool) -> TileState {
+        let idle: TileState = model.launcherAppIsRunning(app, on: host) ? .running : .ready
         guard let attempt = model.lastLaunchAttempt, attempt.app.id == app.id,
-              attempt.host.id == host.id else { return .ready }
+              attempt.host.id == host.id else { return idle }
         if model.isStreaming, model.nativeStreamBackgrounded { return .hiddenStream }
-        guard connectingShown, case .connecting = model.streamPhase else { return .ready }
+        guard connectingShown, case .connecting = model.streamPhase else { return idle }
         return model.isReconnecting ? .reconnecting : .connecting
     }
 
-    /// Icon, name, and a quiet play glyph: a click streams this app at once. A hidden stream's
-    /// tile says where it goes instead, so the way back doesn't look like the way in.
-    private func tileLabel(icon: Image, title: String, trailing: String, trailingText: String? = nil,
+    private func tileLabel(icon: Image, title: String, running: Bool = false,
                            launching: Bool = false) -> some View {
-        HStack(spacing: 12) {
-            icon
-                .font(.system(size: 20, weight: .semibold))
-                .frame(width: 28, height: 28)
-            Text(title)
-                .font(.headline)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            if launching {
-                // Dark so the spinner draws light on the violet in both appearances.
-                ProgressView().controlSize(.small).environment(\.colorScheme, .dark)
-            } else if let trailingText {
-                Text(trailingText)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .fixedSize()
-            } else {
-                Image(systemName: trailing)
-                    .font(.footnote.weight(.bold))
-                    .opacity(0.75)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 12) {
+                icon.font(.system(size: 20, weight: .semibold)).frame(width: 28)
+                Text(title).font(.headline).lineLimit(1)
+                Spacer(minLength: 0)
+                if launching {
+                    ProgressView().controlSize(.small).environment(\.colorScheme, .dark)
+                }
+            }
+            HStack(spacing: 8) {
+                Text("Click to resume").font(.footnote).opacity(running ? 0.85 : 0)
+                    .padding(.leading, 40)
+                Spacer(minLength: 0)
+                RunningTileBadge().opacity(running ? 1 : 0)
             }
         }
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: 60)
-        .contentShape(Rectangle())
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+        .contentShape(.rect(cornerRadius: 14))
     }
 
     func appTile(_ app: LibraryApp, revision: String = "") -> some View {
         let state = tileState(app)
         return Button { activate(app) } label: {
             if model.launcherStyle == .covers {
-                coverLabel(app, revision: revision, connecting: state == .connecting || state == .reconnecting,
-                           hiddenStream: state == .hiddenStream)
+                coverLabel(app, revision: revision, connecting: state == .connecting || state == .reconnecting)
             } else {
-                tileLabel(icon: app.icon, title: app.name, trailing: "play.fill",
-                          trailingText: state == .hiddenStream ? "Back to Stream" : nil,
+                tileLabel(icon: app.icon, title: app.name, running: isRunning(app),
                           launching: state == .connecting || state == .reconnecting)
             }
         }
-        .animation(Motion.layout(reduceMotion: reduceMotion), value: state)
         .buttonStyle(LauncherTileStyle(covers: model.launcherStyle == .covers))
         .modifier(LauncherControlFocus(focus: focus, target: .app(app.id), activate: { activate(app) }))
         .keyboardShortcut(state.shortcut ?? (takesReturn(app) ? .defaultAction : nil))
         // A different app remains selectable so its named replacement can be confirmed.
-        .disabled((model.menuStopInProgress || model.readinessReason(for: host) != nil) && state == .ready)
+        .disabled(model.menuStopInProgress || (model.readinessReason(for: host) != nil && state == .ready))
         .help(model.readinessReason(for: host) ?? state.help ?? "Stream \(app.name)")
         // One name, not glyph + name + play glyph read in turn.
-        .accessibilityLabel(app.name)
-        .accessibilityValue(state.spoken.value.isEmpty && isRunning(app) ? "Running" : state.spoken.value)
-        .accessibilityHint(model.readinessReason(for: host) ?? state.spoken.hint)
+        .accessibilityLabel(isRunning(app) ? "\(app.name), running. Resume stream" : app.name)
+        .accessibilityValue(isRunning(app) ? "" : state.spoken.value)
+        .accessibilityHint(isRunning(app) ? "" : model.readinessReason(for: host) ?? state.spoken.hint)
+        .accessibilityActions {
+            if isRunning(app) {
+                Button("Resume") { model.requestStream(app: app, on: host) }
+                Button("Quit \(app.name)…") { model.requestQuitGame(on: host, app: app) }
+            }
+        }
+        .overlay {
+            if isRunning(app) {
+                RoundedRectangle(cornerRadius: 14).strokeBorder(.primary.opacity(0.25), lineWidth: 1)
+                    .padding(-3).allowsHitTesting(false)
+            }
+        }
         .modifier(ControllerLayoutAppMenu(host: host, app: app))
     }
 
     private func activate(_ app: LibraryApp) {
-        switch tileState(app) {
-        case .ready:
+        Self.activate(app, on: host, model: model, connectingShown: connectingShown)
+    }
+
+    static func activate(_ app: LibraryApp, on host: Host, model: AppModel, connectingShown: Bool) {
+        switch tileState(app, on: host, model: model, connectingShown: connectingShown) {
+        case .ready, .running:
             guard model.readinessReason(for: host) == nil else { return }
             model.requestStream(app: app, on: host)
         case .connecting: model.cancelConnect()

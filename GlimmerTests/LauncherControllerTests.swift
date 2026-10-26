@@ -31,16 +31,17 @@ struct LauncherControllerTests {
         #expect(controller.isPolling)
     }
 
-    @Test func runningGameActionsFormTheirOwnControllerRow() {
-        let cells: [LauncherFocus] = [.runningResume, .runningQuit, .runningSize, .app(1), .app(2), .app(3)]
-        func move(_ from: LauncherFocus, _ command: LauncherCommand) -> LauncherFocus? {
-            LauncherNavigation.destination(from: from, command: command, cells: cells, columns: 2, hasSwitcher: true)
-        }
-        #expect(move(.runningResume, .right) == .runningQuit)
-        #expect(move(.runningQuit, .down) == .app(2))
-        #expect(move(.app(2), .up) == .runningQuit)
-        #expect(move(.app(1), .down) == .app(3))
-        #expect(move(.runningResume, .up) == .pc)
+    @Test func menuButtonOnlyOpensOnceOnTheFocusedTile() {
+        var repeatState = LauncherControllerRepeat()
+        #expect(repeatState.commands(.init(menu: true), at: 0).isEmpty)
+        #expect(repeatState.commands(.init(), at: 1).isEmpty)
+        #expect(repeatState.commands(.init(menu: true), at: 2) == [.menu])
+        #expect(repeatState.commands(.init(menu: true), at: 3).isEmpty)
+        let cells: [LauncherFocus] = [.app(1), .app(2)]
+        #expect(LauncherNavigation.destination(from: .app(1), command: .menu, cells: cells,
+                                               columns: 2, hasSwitcher: true) == .app(1))
+        #expect(LauncherNavigation.destination(from: .app(1), command: .up, cells: cells,
+                                               columns: 2, hasSwitcher: true) == .pc)
     }
 
     @Test func pairingSheetReceivesDirectionsAndActivationAfterNeutralInput() {

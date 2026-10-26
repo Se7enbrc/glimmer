@@ -62,7 +62,6 @@ struct NativeUIRenderTests {
         let name = "continuation-\(Int(size.width))-\(dark ? "dark" : "light")"
         try await record(LauncherView(model: model), name: name, size: size, dark: dark, leaveRunning: true)
         #expect(model.leaveGamesRunning)
-        #expect(model.continuationTitle == "Resume")
         try await record(LauncherView(model: model), name: "quit-choice-\(name)", size: size,
                          dark: dark, leaveRunning: true, captureWindow: true, prepare: { model.requestQuit() })
         model.pendingGameAction = nil
