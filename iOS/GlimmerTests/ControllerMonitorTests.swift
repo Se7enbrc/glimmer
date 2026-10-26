@@ -8,6 +8,22 @@ import Testing
 
 @MainActor
 struct ControllerMonitorTests {
+    @Test func launcherDiscoveryIsDetachedDuringStreaming() {
+        let center = NotificationCenter()
+        var reads = 0
+        let monitor = ControllerMonitor(center: center, readControllers: { reads += 1; return [] },
+                                        logConnection: { _, _ in })
+        monitor.update(active: true, streaming: false)
+        #expect(reads == 1)
+        monitor.update(active: true, streaming: true)
+        monitor.refresh()
+        center.post(name: .GCControllerDidConnect, object: nil)
+        #expect(reads == 1)
+        monitor.update(active: true, streaming: false)
+        #expect(reads == 2)
+        monitor.stop()
+    }
+
     @Test func initialConnectionDuplicateAndRemoval() {
         let fixture = ControllerFixture()
         let monitor = fixture.makeMonitor()

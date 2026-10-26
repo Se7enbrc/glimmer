@@ -70,24 +70,36 @@ a held button, release, a rightward stick and centre through `InputCore`, the
 send thread, batcher, encoder and encrypted reliable queue. Before the fix, the
 physical-first sequence ended at X = 16384 instead of zero. The controller queue
 also remained main. The test checks ordered encoded states, monotonic callback
-timestamps, queue restoration and rejection of retained callbacks after stop.
+timestamps and the installed handler set. Separate ownership tests cover queue
+restoration and rejection of retained callbacks after stop.
 
-System-mapped streams now observe both profiles on the same capture queue;
-physical input still supplies shortcuts and extra controls. Custom layouts and
-recording use only physical callbacks. Both installed callbacks are explicitly
-Sendable and their delivery gate remains locked. Queues are restored before
-prior handlers, and profile timestamps cannot move chord detection backward.
+System-mapped streams now install their own legacy gameplay callback and a
+physical observer restricted to configured chord elements. Custom layouts use
+only the physical gameplay callback. Both run on the stream capture queue with
+explicit Sendable boundaries; the forwarder's registration/epoch owns validity.
+No layout-capture lease or handler restoration chain sits in the stream path.
+The UI-only lease retains the rc.19 isolation fix. Profile timestamps cannot
+move chord detection backward.
 
-The rc.18 actor-trap class also applies to iOS: `IOSControllerLayouts.install`
-uses the same MainActor lease whose nested lock closure lacked `@Sendable`. The
-existing background-handler regression covers that entry on both platforms.
-Without the owner's crash report, this identifies the reachable crash class, not
-the exact TestFlight 8 crash instance. The rc.19 isolation fixes remain.
+The owner's two Organizer reports confirm the exact TestFlight 8 crash class:
+iPhone OS 27.0.1, build 8, 18:27–18:28, EXC_BREAKPOINT in the lease's nested
+closure, called from `_GCDevicePhysicalInput handleGamepadEvent:`. The rc.19
+`@Sendable` correction remains covered by the background-handler regression.
 
-Xcode 26.6 and 27.1 each passed 84 selected Simulator controller/input tests and
-85 targeted Mac controller/input tests, with no compiler or strict SwiftLint
-warnings. The full Mac suite was not run. Physical-controller acceptance remains
-unverified.
+The follow-up ownership tests cover launcher reactivation/hotplug, diagnostic
+retirement, direct raw-HID extra-button delivery and absence of main-queue HID
+UI work without an observer. Xcode 26.6 and 27.1 verification uses only selected
+Simulator and Mac input/controller suites; never the full Mac suite. See
+[the stream work audit](STREAM_WORK_AUDIT.md) for the recurring-work inventory,
+confirmed removals and hardware acceptance limits.
+
+The stream-ownership follow-up adds these audited boundaries:
+
+| Location                                                     | Callback                     | Evidence                                                                                                    |
+| ------------------------------------------------------------ | ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `Glimmer/ControllerLayouts/ControllerLayoutReader.swift:231` | Physical stream input        | Explicit Sendable callback on the serial capture queue; synchronous immutable reader and registration gate. |
+| `Glimmer/ControllerLayouts/ControllerLayoutReader.swift:237` | Legacy stream input          | Explicit Sendable callback; busy-main encoder regression covers both publication orders.                    |
+| `Glimmer/Stream/DualSenseHID.swift:404`                      | Optional diagnostic delivery | MainActor Sendable scheduled closure; generation gate and no dispatch when detached.                        |
 
 ## Reviewed callbacks
 

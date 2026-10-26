@@ -35,7 +35,7 @@ final class AppModel {
 
     // Stream lifecycle
     var isStreaming = false {
-        didSet { launcherController.streamingChanged(isStreaming && !nativeStreamBackgrounded) }
+        didSet { launcherController.streamingChanged(isStreaming) }
     }
     @ObservationIgnored let launcherController = LauncherController()
     @ObservationIgnored lazy var launcherArtCache = LauncherArtCache(base: supportBase)
@@ -128,9 +128,7 @@ final class AppModel {
     var streamPhase: StreamPhase = .idle
 
     /// Window focus callbacks keep the launcher available while a stream is hidden.
-    var nativeStreamBackgrounded: Bool = false {
-        didSet { launcherController.streamingChanged(isStreaming && !nativeStreamBackgrounded) }
-    }
+    var nativeStreamBackgrounded: Bool = false
 
     var nativeStreamError: String?
 

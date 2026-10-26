@@ -106,6 +106,7 @@ final class LauncherController {
     }
 
     private var canNavigate: Bool {
+        guard !streaming else { return false }
         if let navigationEnabled { return navigationEnabled() }
         if let sheetWindow {
             return !streaming && !testing && NSApp.isActive && sheetWindow.isVisible && sheetWindow.isKeyWindow

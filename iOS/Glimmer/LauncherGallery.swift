@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import Combine
 import GameController
 import GlimmerEngine
 import SwiftUI
@@ -78,26 +79,30 @@ struct LauncherGallery: View {
         }
         .frame(width: width, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .handlesGameControllerEvents(matching: .gamepad, withOptions: .receivesEventsInView(true))
+        .handlesGameControllerEvents(matching: .gamepad, withOptions: .receivesEventsInView(!model.hasActiveStream))
         .onAppear {
             menuController.openMenu = {
                 if focusedAppID == model.runningApp?.id { requestedMenuAppID = focusedAppID }
             }
-            menuController.start()
+            menuController.update(active: scenePhase == .active, streaming: model.hasActiveStream)
         }
         .onDisappear { menuController.stop() }
         .onChange(of: model.hasActiveStream) { _, streaming in
-            if streaming { menuController.stop() } else if scenePhase == .active { menuController.start() }
+            menuController.update(active: scenePhase == .active, streaming: streaming)
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { menuController.start() } else { menuController.stop() }
+            menuController.update(active: phase == .active, streaming: model.hasActiveStream)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
-            if scenePhase == .active { menuController.start() }
+        .onReceive(controllerChanges) { _ in
+            menuController.update(active: scenePhase == .active, streaming: model.hasActiveStream)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in
-            if scenePhase == .active { menuController.start() }
-        }
+    }
+
+    private var controllerChanges: AnyPublisher<Notification, Never> {
+        guard scenePhase == .active, !model.hasActiveStream else { return Empty().eraseToAnyPublisher() }
+        let center = NotificationCenter.default
+        return Publishers.Merge(center.publisher(for: .GCControllerDidConnect),
+                                center.publisher(for: .GCControllerDidDisconnect)).eraseToAnyPublisher()
     }
 }
 
