@@ -265,7 +265,8 @@ struct NativeUIRenderTests {
                                           scene: UIWindowScene, window: UIWindow) async throws {
         launcher.setNeedsUpdateOfSupportedInterfaceOrientations()
         if scene.traitCollection.userInterfaceIdiom != .pad {
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            try await requestOrientation(scene, .portrait, settling: launcher,
+                                         matches: { scene.effectiveGeometry.interfaceOrientation == .portrait })
         }
         try await waitForOrientation(scene, portrait: true, controller: launcher)
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
@@ -307,7 +308,8 @@ struct NativeUIRenderTests {
         #expect(AppDelegate.orientationMask(for: window).contains(.portrait))
         // Model a subsequent phone rotation; production must release its lock without a test invalidation.
         if scene.traitCollection.userInterfaceIdiom != .pad {
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            try await requestOrientation(scene, .portrait, settling: launcher,
+                                         matches: { scene.effectiveGeometry.interfaceOrientation == .portrait })
         }
         try await waitForOrientation(scene, portrait: true, controller: launcher)
         #expect(launcher.view.bounds.size == window.bounds.size)
@@ -422,12 +424,10 @@ struct NativeUIRenderTests {
                 root.orientations = requested
                 root.setNeedsUpdateOfSupportedInterfaceOrientations()
                 try await commitLayout(root.view)
-                try await observeGeometry(scene, request: {
-                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: requested)) { @Sendable error in
-                        Issue.record("The render fixture's orientation request failed: \(error)")
-                    }
-                }, matches: { requested.contains(UIInterfaceOrientationMask(
-                    rawValue: 1 << scene.effectiveGeometry.interfaceOrientation.rawValue)) })
+                try await requestOrientation(scene, requested, settling: root, matches: {
+                    requested.contains(UIInterfaceOrientationMask(
+                        rawValue: 1 << scene.effectiveGeometry.interfaceOrientation.rawValue))
+                })
             }
             await finishTransition(root)
             try await commitLayout(root.view)

@@ -98,6 +98,29 @@ extension NativeUIRenderTests {
         throw RenderReadinessFailure.missingSignal("The scene did not reach its requested interface orientation.")
     }
 
+    /// The simulator refuses rotations while another transition settles; real apps simply ask again.
+    func requestOrientation(_ scene: UIWindowScene, _ mask: UIInterfaceOrientationMask,
+                            settling controller: UIViewController,
+                            matches: @escaping @MainActor () -> Bool) async throws {
+        let refusal = OrientationRefusal()
+        for _ in 0..<4 {
+            do {
+                try await observeGeometry(scene, request: {
+                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { @Sendable error in
+                        refusal.reason.withLock { $0 = "\(error)" }
+                    }
+                }, matches: matches)
+                return
+            } catch {
+                await finishTransition(controller)
+                try await commitLayout(controller.view)
+            }
+        }
+        let reason = refusal.reason.withLock { $0 }.map { " (\($0))" } ?? ""
+        throw RenderReadinessFailure.missingSignal(
+            "The scene did not reach its requested interface orientation\(reason).")
+    }
+
     func finishTransition(_ host: UIViewController) async {
         guard let transition = host.transitionCoordinator else { return }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -114,4 +137,8 @@ extension NativeUIRenderTests {
 
 enum RenderReadinessFailure: Error {
     case missingSignal(String)
+}
+
+private final class OrientationRefusal: Sendable {
+    let reason = Mutex<String?>(nil)
 }
