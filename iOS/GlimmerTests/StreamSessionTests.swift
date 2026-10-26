@@ -473,8 +473,10 @@ final class PlaybackFixture {
         .init(sessionID: id, attemptID: UUID(), event: event)
     }
 
-    func model(launch: StreamLaunch = testLaunch()) -> StreamSessionModel {
-        StreamSessionModel(launch: launch, backgroundGrace: StreamBackgroundGrace(calls: backgroundCalls),
+    func model(launch: StreamLaunch = testLaunch(),
+               menuVisibility: StreamMenuVisibility = StreamMenuVisibility()) -> StreamSessionModel {
+        StreamSessionModel(launch: launch, menuVisibility: menuVisibility,
+                           backgroundGrace: StreamBackgroundGrace(calls: backgroundCalls),
                            makePlayback: { [self] _, _, quiesce in
             makes += 1
             self.quiesce = quiesce

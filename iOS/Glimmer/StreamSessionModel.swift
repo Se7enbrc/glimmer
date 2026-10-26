@@ -13,6 +13,7 @@ final class StreamSessionModel {
     }
 
     let shortcuts: StreamShortcuts
+    let menuVisibility: StreamMenuVisibility
     private(set) var statsShown: Bool
 
     private(set) var phase: Phase = .idle
@@ -80,10 +81,12 @@ final class StreamSessionModel {
     private let resizeSleep: @Sendable (Duration) async throws -> Void
 
     init(launch: StreamLaunch, defaults: UserDefaults = PersistentStorage.defaults,
+         menuVisibility: StreamMenuVisibility = StreamMenuVisibility(),
          backgroundGrace: StreamBackgroundGrace = StreamBackgroundGrace(),
          resizeSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          makePlayback: @escaping @MainActor (StreamLaunch, StreamSurface,
             @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback = StreamPlayback.make) {
+        self.menuVisibility = menuVisibility
         shortcuts = StreamShortcuts(defaults: defaults)
         statsShown = defaults.bool(forKey: "showStreamStats")
         self.launch = launch
@@ -284,6 +287,7 @@ final class StreamSessionModel {
     }
 
     private func synchronizeInputFocus() {
+        menuVisibility.setPlaying(inputFocused)
         playback?.showStats?(statsShown && canStart && phase == .streaming)
         playback?.focusInput?(inputFocused)
         inputCaptureChanged?(inputFocused)

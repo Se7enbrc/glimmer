@@ -6,6 +6,7 @@ import SwiftUI
 
 struct TouchOverlay: View {
     let model: StreamSessionModel
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
     var body: some View {
         GeometryReader { geometry in
@@ -23,13 +24,17 @@ struct TouchOverlay: View {
                     pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
                 TouchPlayControls(capture: model.touchGamepad, layout: layout, area: area,
                                   mouseMode: model.touchMouseActive,
-                                  leftStick: model.launch.mouseStick == .left, showControls: model.showControls)
+                                  leftStick: model.launch.mouseStick == .left,
+                                  menuVisible: model.menuVisibility.visible,
+                                  showControls: model.showControls)
             } else if model.inputFocused {
                 let layout = TouchLayoutStore(defaults: PersistentStorage.defaults).load(
                     pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
-                TouchControlsButton(area: area, opacity: layout.opacity, showControls: model.showControls)
+                TouchControlsButton(area: area, opacity: layout.opacity, visible: model.menuVisibility.visible,
+                                    showControls: model.showControls)
             }
         }
+        .onChange(of: voiceOver, initial: true) { _, enabled in model.menuVisibility.voiceOverChanged(enabled) }
     }
 
     static func area(_ geometry: GeometryProxy) -> CGRect {
@@ -52,13 +57,15 @@ struct TouchPlayControls: View {
     let area: CGRect
     var mouseMode = false
     var leftStick = false
+    var menuVisible = true
     var preview = false
     let showControls: () -> Void
 
     var body: some View {
         ZStack {
             TouchGamepadRepresentation(capture: capture, layout: layout, area: area,
-                                       mouseMode: mouseMode, leftStick: leftStick, preview: preview,
+                                       mouseMode: mouseMode, leftStick: leftStick,
+                                       menuVisible: menuVisible, preview: preview,
                                        showControls: showControls)
             if TouchLayout().frames(in: area).isEmpty {
                 Text("Make this window larger to use touch controls.")
@@ -72,6 +79,8 @@ struct TouchPlayControls: View {
 private struct TouchControlsButton: View {
     let area: CGRect
     var opacity = TouchLayout.defaultOpacity
+    let visible: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let showControls: () -> Void
 
     var body: some View {
@@ -79,6 +88,8 @@ private struct TouchControlsButton: View {
             let frame = TouchLayout.menuFrame(in: area)
             Button("Show controls", systemImage: "ellipsis", action: showControls)
                 .labelStyle(.iconOnly).buttonStyle(TouchMenuStyle(opacity: opacity))
+                .opacity(visible ? 1 : 0).allowsHitTesting(visible).accessibilityHidden(!visible)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: visible)
                 .position(x: min(frame.midX, geometry.size.width - 22),
                           y: min(frame.midY, geometry.size.height - 22))
         }
@@ -115,11 +126,13 @@ private struct TouchMenuLabelStyle: LabelStyle {
 }
 
 struct TouchGamepadRepresentation: UIViewRepresentable {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var capture: TouchGamepadCapture?
     let layout: TouchLayout
     let area: CGRect
     var mouseMode = false
     var leftStick = false
+    var menuVisible = true
     var preview = false
 
     var showControls: () -> Void = {}
@@ -130,5 +143,6 @@ struct TouchGamepadRepresentation: UIViewRepresentable {
         view.menuButton.showControls = showControls
         view.configure(capture: capture, layout: layout, area: area, preview: preview)
         view.mouseMode(mouseMode, leftStick: leftStick)
+        view.setMenuVisible(menuVisible, animated: !reduceMotion)
     }
 }

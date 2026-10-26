@@ -54,6 +54,7 @@
 		E53BAE83AE664B16A3908721 /* IOSAudioPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAEE98C2A04C4861AF0185B2 /* IOSAudioPipelineTests.swift */; };
 		902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */; };
 		BFCC9B0DBFB951A6374D2892 /* StreamSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 449C39977453B76D4D682FFF /* StreamSessionModel.swift */; };
+		D6C6847DEC1C4681AA61E750 /* StreamMenuVisibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFBBDBBDF1C54C1F9C6EA483 /* StreamMenuVisibility.swift */; };
 		D2CF67DA276842128B900E3A /* StreamSessionFailureCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */; };
 		9A28A0B31BBB599B016AAED4 /* StreamSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C92E9EC00985D64D0C1CC7 /* StreamSurface.swift */; };
 		53442F74573A5960DB86B797 /* StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A97E5B4E562286545BA6412 /* StreamView.swift */; };
@@ -73,6 +74,8 @@
 		8658F00DB4C641D0AAF1281A /* BitrateActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 874E99130A9D48429E652464 /* BitrateActuatorTests.swift */; };
 		7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69AB6019C55BC9409A7FA80F /* LauncherTests.swift */; };
 		E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */; };
+		30F0299F721C456588C53225 /* StreamMenuRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34AA58BDEC1C405BBCC85115 /* StreamMenuRenderTests.swift */; };
+		7C005521D3EE42B18E901C43 /* StreamMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71F479D3795429BB42819BA /* StreamMenuTests.swift */; };
 		2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = F08434884699435EA80067AB /* StreamTouchCapture.swift */; };
 		BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */; };
 		A037E3519F7846D6958E34F0 /* ControllerMouseMotionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */; };
@@ -173,6 +176,7 @@
 		87C061C7DD2F49A490D2FD64 /* StreamStatsShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 166A546B1C874204A64047B4 /* StreamStatsShortcutTests.swift */; };
 		8BCC2D7346BA4AE5859226AF /* StreamStatsRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CD585C1BA434406A551C188 /* StreamStatsRenderTests.swift */; };
 		68ABC059685942C0934C319D /* StreamShortcutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 861EE67A9ECB492D8E16666F /* StreamShortcutUITests.swift */; };
+		847115D6F13D4491938618C4 /* StreamMenuUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84FEC3F7358147099A13FBBE /* StreamMenuUITests.swift */; };
 		328FE68F03EA2F59C7820A91 /* SettingsResetSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88E5F29C7D58C61CECA51EAD /* SettingsResetSection.swift */; };
 		B6E7744FC3D57253692A1E23 /* SettingsResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39AA07EBFE1478632FD9C82 /* SettingsResetTests.swift */; };
 		E10A281422C6F8AC8794767A /* ControllerShortcutSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01256C02993A397A5EFFE5AD /* ControllerShortcutSection.swift */; };
@@ -247,6 +251,7 @@
 		CAEE98C2A04C4861AF0185B2 /* IOSAudioPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSAudioPipelineTests.swift"; sourceTree = "<group>"; };
 		57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamPlayback.swift"; sourceTree = "<group>"; };
 		449C39977453B76D4D682FFF /* StreamSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionModel.swift"; sourceTree = "<group>"; };
+		BFBBDBBDF1C54C1F9C6EA483 /* StreamMenuVisibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamMenuVisibility.swift"; sourceTree = "<group>"; };
 		E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSessionFailureCopy.swift"; sourceTree = "<group>"; };
 		11C92E9EC00985D64D0C1CC7 /* StreamSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamSurface.swift"; sourceTree = "<group>"; };
 		5A97E5B4E562286545BA6412 /* StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamView.swift"; sourceTree = "<group>"; };
@@ -266,6 +271,8 @@
 		874E99130A9D48429E652464 /* BitrateActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/BitrateActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
 		69AB6019C55BC9409A7FA80F /* LauncherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherTests.swift"; sourceTree = "<group>"; };
 		2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeUIRenderTests.swift"; sourceTree = "<group>"; };
+		34AA58BDEC1C405BBCC85115 /* StreamMenuRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamMenuRenderTests.swift"; sourceTree = "<group>"; };
+		B71F479D3795429BB42819BA /* StreamMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamMenuTests.swift"; sourceTree = "<group>"; };
 		F08434884699435EA80067AB /* StreamTouchCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCapture.swift"; sourceTree = "<group>"; };
 		4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCaptureTests.swift"; sourceTree = "<group>"; };
 		1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerMouseMotionTests.swift"; sourceTree = "<group>"; };
@@ -374,6 +381,7 @@
 		166A546B1C874204A64047B4 /* StreamStatsShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamStatsShortcutTests.swift"; sourceTree = "<group>"; };
 		7CD585C1BA434406A551C188 /* StreamStatsRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamStatsRenderTests.swift"; sourceTree = "<group>"; };
 		861EE67A9ECB492D8E16666F /* StreamShortcutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamShortcutUITests.swift"; sourceTree = "<group>"; };
+		84FEC3F7358147099A13FBBE /* StreamMenuUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamMenuUITests.swift"; sourceTree = "<group>"; };
 		88E5F29C7D58C61CECA51EAD /* SettingsResetSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/SettingsResetSection.swift"; sourceTree = SOURCE_ROOT; };
 		B39AA07EBFE1478632FD9C82 /* SettingsResetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/SettingsResetTests.swift"; sourceTree = SOURCE_ROOT; };
 		01256C02993A397A5EFFE5AD /* ControllerShortcutSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerShortcutSection.swift"; sourceTree = SOURCE_ROOT; };
@@ -484,6 +492,8 @@
 				18190C7F9E5B43BAA4822CCE /* NativeUIRenderTests+Readiness.swift */,
 				92291472BA1C4624BAFE4BCC /* NativeUIRenderTests+Window.swift */,
 				2CFA5FC6DD0728ED7B0DE67F /* NativeUIRenderTests.swift */,
+				34AA58BDEC1C405BBCC85115 /* StreamMenuRenderTests.swift */,
+				B71F479D3795429BB42819BA /* StreamMenuTests.swift */,
 				9D536F6F337545DEB9369D51 /* NativeUIRenderTests+iPad.swift */,
 				B17A7E0C0B1A4C0D9E2F3A42 /* NativeUIRenderTests+Bitrate.swift */,
 				69AB6019C55BC9409A7FA80F /* LauncherTests.swift */,
@@ -606,6 +616,7 @@
 				F08434884699435EA80067AB /* StreamTouchCapture.swift */,
 				5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */,
 				449C39977453B76D4D682FFF /* StreamSessionModel.swift */,
+				BFBBDBBDF1C54C1F9C6EA483 /* StreamMenuVisibility.swift */,
 				E5ACF4275B1942718FE00136 /* StreamSessionFailureCopy.swift */,
 				57D85CE9D5143E7C7782CA72 /* StreamPlayback.swift */,
 				5FBC24EB0EC74BE4922671FF /* StreamProfile.swift */,
@@ -643,6 +654,7 @@
 			isa = PBXGroup;
 			children = (
 				861EE67A9ECB492D8E16666F /* StreamShortcutUITests.swift */,
+				84FEC3F7358147099A13FBBE /* StreamMenuUITests.swift */,
 				87663570874C427BB408C4D9,
 			);
 			path = GlimmerUITests;
@@ -798,6 +810,8 @@
 				684C6F6FCC7B4E529745B9FC /* NativeUIRenderTests+Readiness.swift in Sources */,
 				1E2A4814C2BF4C6CB4625612 /* NativeUIRenderTests+Window.swift in Sources */,
 				E45EB58D0ECBAD104B1C1C31 /* NativeUIRenderTests.swift in Sources */,
+				30F0299F721C456588C53225 /* StreamMenuRenderTests.swift in Sources */,
+				7C005521D3EE42B18E901C43 /* StreamMenuTests.swift in Sources */,
 				BFC410B98DE44455B3A9D872 /* NativeUIRenderTests+iPad.swift in Sources */,
 				B17A7E0C0B1A4C0D9E2F3A41 /* NativeUIRenderTests+Bitrate.swift in Sources */,
 				7CA0E415BC1509EDAD63D7AF /* LauncherTests.swift in Sources */,
@@ -911,6 +925,7 @@
 				2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */,
 				2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */,
 				BFCC9B0DBFB951A6374D2892 /* StreamSessionModel.swift in Sources */,
+				D6C6847DEC1C4681AA61E750 /* StreamMenuVisibility.swift in Sources */,
 				D2CF67DA276842128B900E3A /* StreamSessionFailureCopy.swift in Sources */,
 				902E795AE94A253B9FBAEB80 /* StreamPlayback.swift in Sources */,
 				FB0DE9725CBA492AB2622EDB /* StreamProfile.swift in Sources */,
@@ -942,6 +957,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				68ABC059685942C0934C319D /* StreamShortcutUITests.swift in Sources */,
+				847115D6F13D4491938618C4 /* StreamMenuUITests.swift in Sources */,
 				9A840CDBA4454BB792C44D65,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

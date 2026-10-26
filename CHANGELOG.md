@@ -4,6 +4,10 @@
 
 ### Features
 
+- The iPhone and iPad stream menu fades away while you play. Tap the top of the
+  picture or swipe down to bring it back. The close button returns to the game;
+  Disconnect ends the stream.
+
 - Running games now show their state on the app tile. Click or tap to resume,
   and use the tile's menu to quit.
 

@@ -50,7 +50,7 @@ final class IPadNavigationTests: XCTestCase {
             XCTAssertTrue(menu.waitForExistence(timeout: 10))
             XCTAssertTrue(menu.isHittable)
             menu.tap()
-            XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["Close menu"].waitForExistence(timeout: 10))
             XCTAssertTrue(app.buttons["Disconnect"].isHittable)
             recordScreen(app, name: "whole-window-native-stream-\(orientation.rawValue)")
             app.buttons["Disconnect"].tap()
@@ -108,7 +108,7 @@ final class IPadNavigationTests: XCTestCase {
         }
         recordScreen(app, name: "whole-window-\(mode)-launcher")
         app.buttons["Desktop"].tap()
-        XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Close menu"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Disconnect"].isHittable)
         XCTAssertLessThan(app.windows.firstMatch.frame.width, app.windows.firstMatch.frame.height)
         recordScreen(app, name: "whole-window-\(mode)-stream")

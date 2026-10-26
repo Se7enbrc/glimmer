@@ -131,7 +131,8 @@ final class StreamViewController: GCEventViewController {
             model?.streamInput?.setPointerButton(secondary ? .right : .left, pressed: true, capturedAt: time)
             model?.streamInput?.setPointerButton(secondary ? .right : .left, pressed: false, capturedAt: time)
         }, endScroll: { [weak model] in model?.streamInput?.endScroll() },
-           revealControls: { [weak model] in model?.showControls() }))
+           revealControls: { [weak model] in model?.showControls() },
+           revealMenu: { [weak model] in model?.menuVisibility.reveal() }))
         model.inputCaptureChanged = { [weak self] focused in
             self?.touchCapture?.setEnabled(focused, mouseEnabled: self?.model.launch.touchMouseEnabled ?? true)
             self?.controllerUserInteractionEnabled = !focused
@@ -301,20 +302,14 @@ struct StreamControls: View {
                 model.showControls()
                 model.editingTouchControls = true
             }.buttonStyle(.glass)
-            Button("Resume", systemImage: "play.fill", action: model.resumeInput)
+            Button("Close menu", systemImage: "xmark", action: model.resumeInput)
+                .labelStyle(.iconOnly)
                 .buttonStyle(.glass)
                 .disabled(!model.controllerConnected && !model.touchGeometryUsable)
                 .accessibilityHint("Returns controller and touch input to the PC.")
         }
-        Button {
+        Button(model.phase.isEnded ? "Done" : "Disconnect") {
             if model.phase.isEnded { close() } else { model.disconnect() }
-        } label: {
-            Label {
-                Text(model.phase.isEnded ? "Done" : "Disconnect")
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "xmark")
-            }
         }
         .buttonStyle(.glass)
         .disabled(model.phase == .stopping)
@@ -358,7 +353,8 @@ struct StreamControls: View {
                             Text("Drag to move the pointer. Tap to click.")
                             Text("Use two fingers to scroll or tap for a secondary click.")
                         }
-                        Text("Tap with three fingers to show these controls.")
+                        Text("Tap the top of the picture or swipe down from its top edge to reveal the menu. "
+                             + "Tap with three fingers to open these controls.")
                             .accessibilityHint("VoiceOver users can choose Show controls on the video.")
                         if model.audioUnavailable { Label("Audio is unavailable", systemImage: "speaker.slash") }
                         if model.connectionPoor { Label("Connection is unstable", systemImage: "wifi.exclamationmark") }

@@ -11,6 +11,7 @@ class TouchGamepadView: UIView {
     private var capture: TouchGamepadCapture?
     private var lastFrames: [TouchElement: CGRect] = [:]
     private var preview = false
+    private var menuVisible = true
     private var transparencyObserver: NSObjectProtocol?
 
     override init(frame: CGRect) {
@@ -76,7 +77,22 @@ class TouchGamepadView: UIView {
         updateVisibility()
     }
 
-    // Only the pad follows the capture; the menu button stays the visible, tappable way back to the controls.
+    func setMenuVisible(_ visible: Bool, animated: Bool) {
+        guard menuVisible != visible else { return }
+        menuVisible = visible
+        menuButton.isUserInteractionEnabled = visible
+        menuButton.accessibilityElementsHidden = !visible
+        if animated {
+            UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                self.menuButton.alpha = visible ? 1 : 0
+            }
+        } else {
+            menuButton.layer.removeAllAnimations()
+            menuButton.alpha = visible ? 1 : 0
+        }
+    }
+
+    // Pad visibility follows capture; the menu has its own finite visibility window.
     private func updateVisibility() {
         let active = preview || capture?.enabled == true
         for (element, control) in controls { control.isHidden = !active || lastFrames[element] == nil }
