@@ -65,6 +65,24 @@ struct HIDGamepadTests {
     }
 
     @MainActor
+    @Test func controllerMonitorAcceptsBackgroundInput() async throws {
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        let queue = DispatchQueue(label: "controller-monitor-test")
+        controller.handlerQueue = queue
+        let monitor = ControllerMonitor(isStreaming: { false })
+        defer { monitor.stop() }
+        monitor.streamingChanged(controllers: [controller])
+        let handler = try #require(pad.valueChangedHandler)
+        await withCheckedContinuation { continuation in
+            queue.async(execute: ControllerCallbackTestDelivery.gamepad(pad, handler: handler) {
+                DispatchQueue.main.async { continuation.resume() }
+            })
+        }
+        #expect(monitor.gcEventCount == 1)
+    }
+
+    @MainActor
     @Test func controllerMonitorRestoresBackgroundMonitoring() {
         let prior = GCController.shouldMonitorBackgroundEvents
         defer { GCController.shouldMonitorBackgroundEvents = prior }
