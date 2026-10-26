@@ -11,6 +11,26 @@ import Testing
 struct LauncherControllerTests {
     private let settings = IsolatedDefaults()
 
+    @Test func installedLauncherHandlerCanWakeFromABackgroundQueue() async throws {
+        let pad = GCController.withExtendedGamepad()
+        let profile = try #require(pad.extendedGamepad)
+        let queue = DispatchQueue(label: "launcher-controller-test")
+        pad.handlerQueue = queue
+        let controller = LauncherController(navigationEnabled: { true }, availableControllers: { [pad] })
+        defer { controller.detach() }
+        controller.refresh()
+        let handler = try #require(profile.valueChangedHandler)
+        await withCheckedContinuation { continuation in
+            controller.handle = { command in
+                #expect(command == .activate)
+                continuation.resume()
+            }
+            profile.buttonA.setValue(1)
+            queue.async(execute: ControllerCallbackTestDelivery.gamepad(profile, handler: handler, completion: {}))
+        }
+        #expect(controller.isPolling)
+    }
+
     @Test func runningGameActionsFormTheirOwnControllerRow() {
         let cells: [LauncherFocus] = [.runningResume, .runningQuit, .runningSize, .app(1), .app(2), .app(3)]
         func move(_ from: LauncherFocus, _ command: LauncherCommand) -> LauncherFocus? {

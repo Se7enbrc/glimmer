@@ -3,6 +3,7 @@
 
 import GlimmerEngine
 import Foundation
+import GameController
 import Synchronization
 import Testing
 @testable import Glimmer
@@ -32,6 +33,32 @@ struct ControllerLayoutCaptureTests {
             let receive = state.withLock { state in state.sample = sample; return state.receive }
             receive?(sample, time)
         }
+    }
+
+    @Test(arguments: [false, true])
+    func installedLeaseHandlerRunsOffMainAndRejectsLateInput(stopped: Bool) async throws {
+        let controller = GCController.withExtendedGamepad()
+        let input = controller.input
+        let queue = DispatchQueue(label: "controller-lease-test")
+        let deliveries = Mutex(0)
+        let lease = ControllerLayoutInputLease(controller: controller, input: input, queue: queue,
+            read: { .init(buttons: ControllerMappedButton.a.rawValue) }, receive: { sample, timestamp in
+                #expect(!Thread.isMainThread)
+                #expect(sample.buttons == ControllerMappedButton.a.rawValue)
+                #expect(timestamp.isFinite)
+                deliveries.withLock { $0 += 1 }
+            })
+        defer { lease.stop() }
+        let handler = try #require(input.elementValueDidChangeHandler)
+        if stopped { lease.stop() }
+        await withCheckedContinuation { continuation in
+            queue.async(execute: ControllerCallbackTestDelivery.physical(input, handler: handler) {
+                continuation.resume()
+            })
+        }
+        #expect(deliveries.withLock { $0 } == (stopped ? 0 : 1))
+        lease.stop()
+        #expect(input.elementValueDidChangeHandler == nil)
     }
 
     @Test func heldOnEntryMustReleaseAndCaptureCompletesOnlyAfterFreshPressAndRelease() {
@@ -196,5 +223,33 @@ struct ControllerLayoutCaptureTests {
         #expect(cancelled)
         #expect(capture.source == nil)
         capture.stop()
+    }
+}
+
+// Construct framework invocations outside actor isolation, as GameController does on its input queue.
+enum ControllerCallbackTestDelivery {
+    private final class Element: NSObject, GCPhysicalInputElement {
+        let aliases: Set<String> = ["test"]
+        let localizedName: String? = "Test"
+        let sfSymbolsName: String? = nil
+    }
+
+    static func physical(_ input: GCControllerLiveInput,
+                         handler: @escaping (any GCDevicePhysicalInput, any GCPhysicalInputElement) -> Void,
+                         completion: @escaping @Sendable () -> Void) -> DispatchWorkItem {
+        DispatchWorkItem {
+            #expect(!Thread.isMainThread)
+            handler(input, Element())
+            completion()
+        }
+    }
+
+    static func gamepad(_ pad: GCExtendedGamepad, handler: @escaping GCExtendedGamepadValueChangedHandler,
+                        completion: @escaping @Sendable () -> Void) -> DispatchWorkItem {
+        DispatchWorkItem {
+            #expect(!Thread.isMainThread)
+            handler(pad, pad.buttonA)
+            completion()
+        }
     }
 }

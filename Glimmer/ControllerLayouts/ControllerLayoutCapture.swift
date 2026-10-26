@@ -187,7 +187,7 @@ final class ControllerLayoutInputLease {
     private final class Delivery: Sendable {
         let valid = Mutex(true)
     }
-    private let reader: ControllerLayoutReader
+    private let input: GCControllerLiveInput
     private let controller: GCController
     private let previousQueue: DispatchQueue?
     private let previousHandler: ((any GCDevicePhysicalInput, any GCPhysicalInputElement) -> Void)?
@@ -195,18 +195,25 @@ final class ControllerLayoutInputLease {
     private var active = true
     private let delivery = Delivery()
 
-    init(controller: GCController, reader: ControllerLayoutReader, queue: DispatchQueue,
+    convenience init(controller: GCController, reader: ControllerLayoutReader, queue: DispatchQueue,
+                     receive: @escaping @Sendable (ControllerMappingSample, TimeInterval) -> Void) {
+        self.init(controller: controller, input: reader.input, queue: queue, read: reader.sample, receive: receive)
+    }
+
+    init(controller: GCController, input: GCControllerLiveInput, queue: DispatchQueue,
+         read: @escaping @Sendable () -> ControllerMappingSample,
          receive: @escaping @Sendable (ControllerMappingSample, TimeInterval) -> Void) {
         self.controller = controller
-        self.reader = reader
-        previousQueue = reader.input.queue
-        previousHandler = reader.input.elementValueDidChangeHandler
+        self.input = input
+        previousQueue = input.queue
+        previousHandler = input.elementValueDidChangeHandler
         previousGamepadHandler = controller.extendedGamepad?.valueChangedHandler
         controller.extendedGamepad?.valueChangedHandler = nil
-        reader.input.queue = queue
-        reader.input.elementValueDidChangeHandler = { [reader, delivery] _, _ in
+        input.queue = queue
+        // GameController calls this on the input queue; nested closures must not inherit the main actor.
+        input.elementValueDidChangeHandler = { @Sendable [delivery] input, _ in
             guard delivery.valid.withLock({ $0 }) else { return }
-            receive(reader.sample(), ProcessInfo.processInfo.systemUptime - max(0, reader.input.lastEventLatency))
+            receive(read(), ProcessInfo.processInfo.systemUptime - max(0, input.lastEventLatency))
         }
     }
 
@@ -216,8 +223,8 @@ final class ControllerLayoutInputLease {
         guard active else { return }
         active = false
         delivery.valid.withLock { $0 = false }
-        reader.input.elementValueDidChangeHandler = previousHandler
-        reader.input.queue = previousQueue
+        input.elementValueDidChangeHandler = previousHandler
+        input.queue = previousQueue
         controller.extendedGamepad?.valueChangedHandler = previousGamepadHandler
     }
 }
