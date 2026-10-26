@@ -11,17 +11,18 @@ import Testing
 
 @MainActor
 struct ControllerLayoutDeliveryTests {
-    @Test(arguments: [false, true])
-    func systemProfileChangesReachEncoderWhileMainIsOccupied(physicalFirst: Bool) throws {
+    @Test(arguments: [false, true], [false, true])
+    func systemProfileChangesReachEncoderWhileMainIsOccupied(physicalFirst: Bool, observesChord: Bool) throws {
         let fixture = try ControllerLayoutDeliveryFixture()
         let controller = fixture.controller
         let queue = DispatchQueue(label: "controller-layout-delivery-test")
-        let originalQueue = controller.handlerQueue
-        let lease = ControllerLayoutInputLease(controller: controller, input: controller.input, queue: queue,
+        ControllerStreamHandlers.install(controller: controller, input: controller.input, queue: queue,
+            mapsGameInput: false, shortcutElements: observesChord ? [ObjectIdentifier(fixture.element)] : [],
             read: { fixture.physical.withLock { $0 } }, receive: { sample, time in fixture.submit(sample, at: time) })
-        defer { lease.stop(); fixture.stop() }
-        let physicalHandler = try #require(controller.input.elementValueDidChangeHandler)
-        let gamepadHandler = controller.extendedGamepad?.valueChangedHandler
+        defer { fixture.stop() }
+        let physicalHandler = controller.input.elementValueDidChangeHandler
+        #expect((physicalHandler != nil) == observesChord)
+        let gamepadHandler = try #require(controller.extendedGamepad?.valueChangedHandler)
         #expect(fixture.deliver(queue: queue, physicalHandler: physicalHandler,
                                 gamepadHandler: gamepadHandler, physicalFirst: physicalFirst) == .success)
         let expected = fixture.states.map { state in
@@ -35,12 +36,22 @@ struct ControllerLayoutDeliveryTests {
         let timestamps = fixture.timestamps.withLock { $0 }
         #expect(zip(timestamps, timestamps.dropFirst()).allSatisfy { $0 <= $1 })
         #expect(controller.handlerQueue === queue)
-        lease.stop()
-        #expect(controller.handlerQueue === originalQueue)
-        let before = try fixture.packets()
-        #expect(fixture.deliver(queue: queue, physicalHandler: physicalHandler,
-                                gamepadHandler: gamepadHandler, physicalFirst: physicalFirst) == .success)
-        #expect(try fixture.packets() == before)
+        #expect(controller.input.queue === queue)
+        #expect(controller.extendedGamepad?.buttonMenu.pressedChangedHandler == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func streamOwnsOnlyItsAuthoritativeProfileWithoutChordObservers(mapsGameInput: Bool) throws {
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        let queue = DispatchQueue(label: "stream-handler-ownership-test")
+        ControllerStreamHandlers.install(controller: controller, input: controller.input, queue: queue,
+            mapsGameInput: mapsGameInput, shortcutElements: [], read: { .init() }, receive: { _, _ in })
+        #expect((pad.valueChangedHandler != nil) == !mapsGameInput)
+        #expect((controller.input.elementValueDidChangeHandler != nil) == mapsGameInput)
+        #expect(pad.buttonMenu.pressedChangedHandler == nil)
+        #expect(controller.handlerQueue === queue)
+        #expect(controller.input.queue === queue)
     }
 
     @Test func physicalOnlyCaptureRestoresPriorHandlersAndQueues() throws {
@@ -55,7 +66,7 @@ struct ControllerLayoutDeliveryTests {
         pad.valueChangedHandler = { @Sendable _, _ in calls.withLock { $0 += 1 } }
         input.elementValueDidChangeHandler = { @Sendable _, _ in calls.withLock { $0 += 1 } }
         let lease = ControllerLayoutInputLease(controller: controller, input: input, queue: captureQueue,
-            observeSystemInput: false, read: { .init() }, receive: { _, _ in })
+            read: { .init() }, receive: { _, _ in })
         #expect(pad.valueChangedHandler == nil)
         #expect(controller.handlerQueue === priorQueue)
         #expect(input.queue === captureQueue)
@@ -78,6 +89,7 @@ private final class ControllerLayoutDeliveryFixture: @unchecked Sendable {
         let analog: GamepadAnalog
     }
     let controller = GCController.withExtendedGamepad()
+    let element = Element()
     let physical = Mutex(ControllerMappingSample())
     let timestamps = Mutex<[TimeInterval]>([])
     let core = InputCore()
@@ -126,7 +138,7 @@ private final class ControllerLayoutDeliveryFixture: @unchecked Sendable {
     }
 
     func deliver(queue: DispatchQueue,
-                 physicalHandler: @escaping (any GCDevicePhysicalInput, any GCPhysicalInputElement) -> Void,
+                 physicalHandler: ((any GCDevicePhysicalInput, any GCPhysicalInputElement) -> Void)?,
                  gamepadHandler: GCExtendedGamepadValueChangedHandler?, physicalFirst: Bool) -> DispatchTimeoutResult {
         let done = DispatchSemaphore(value: 0)
         queue.async(execute: DispatchWorkItem { [self] in
@@ -138,7 +150,7 @@ private final class ControllerLayoutDeliveryFixture: @unchecked Sendable {
                         $0 = .init(buttons: state.buttons == 0 ? 0 : ControllerMappedButton.a.rawValue,
                                    analog: SIMD8(0, 0, Int32(state.analog.leftStickX), 0, 0, 0, 0, 0))
                     }
-                    physicalHandler(self.controller.input, Element())
+                    physicalHandler?(self.controller.input, self.element)
                 }
                 if physicalFirst { updatePhysical() }
                 // Invoke the saved handler once, independent of snapshot setter callback behavior.
@@ -168,7 +180,7 @@ private final class ControllerLayoutDeliveryFixture: @unchecked Sendable {
 
     func stop() { batcher.stop(); backend.stopConnection(); channel.close() }
 
-    private final class Element: NSObject, GCPhysicalInputElement {
+    final class Element: NSObject, GCPhysicalInputElement {
         let aliases: Set<String> = ["test"]
         let localizedName: String? = "Test"
         let sfSymbolsName: String? = nil

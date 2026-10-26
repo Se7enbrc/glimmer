@@ -30,6 +30,9 @@ struct IOSControllerCaptureTests {
         capture.start()
         capture.setFocused(true)
         let handler = try #require(pad.valueChangedHandler)
+        #expect(controller.input.elementValueDidChangeHandler == nil)
+        #expect(pad.buttonMenu.pressedChangedHandler == nil)
+        #expect(controller.handlerQueue !== DispatchQueue.main)
         let before = submissions.withLock { $0 }
         #expect(deliverWhileMainIsOccupied(queue: controller.handlerQueue, pad: pad, handler: handler) == .success)
         #expect(submissions.withLock { $0 } == before + 1)

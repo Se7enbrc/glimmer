@@ -19,7 +19,7 @@ struct ControllerLayoutCaptureSource {
         read = { reader.sample() }
         acquire = { receive in
             let lease = ControllerLayoutInputLease(controller: controller, reader: reader, queue: .main,
-                                                    observeSystemInput: false, receive: receive)
+                                                    receive: receive)
             return { lease.stop() }
         }
     }
@@ -186,65 +186,35 @@ final class ControllerLayoutCapture {
 @MainActor
 final class ControllerLayoutInputLease {
     private final class Delivery: Sendable {
-        private struct State {
-            var valid = true
-            var timestamp: TimeInterval = 0
-        }
-        private let state = Mutex(State())
-
-        func timestamp(_ value: TimeInterval) -> TimeInterval? {
-            // The two profiles can describe the same report with slightly different timestamps.
-            state.withLock {
-                guard $0.valid else { return nil }
-                $0.timestamp = max($0.timestamp, value)
-                return $0.timestamp
-            }
-        }
-
-        func invalidate() { state.withLock { $0.valid = false } }
+        let valid = Mutex(true)
     }
     private let input: GCControllerLiveInput
     private let controller: GCController
     private let previousQueue: DispatchQueue?
-    private let previousControllerQueue: DispatchQueue
     private let previousHandler: ((any GCDevicePhysicalInput, any GCPhysicalInputElement) -> Void)?
     private let previousGamepadHandler: GCExtendedGamepadValueChangedHandler?
     private var active = true
     private let delivery = Delivery()
 
     convenience init(controller: GCController, reader: ControllerLayoutReader, queue: DispatchQueue,
-                     observeSystemInput: Bool = true,
                      receive: @escaping @Sendable (ControllerMappingSample, TimeInterval) -> Void) {
-        self.init(controller: controller, input: reader.input, queue: queue, observeSystemInput: observeSystemInput,
-                  read: reader.sample, receive: receive)
+        self.init(controller: controller, input: reader.input, queue: queue, read: reader.sample, receive: receive)
     }
 
     init(controller: GCController, input: GCControllerLiveInput, queue: DispatchQueue,
-         observeSystemInput: Bool = true,
          read: @escaping @Sendable () -> ControllerMappingSample,
          receive: @escaping @Sendable (ControllerMappingSample, TimeInterval) -> Void) {
         self.controller = controller
         self.input = input
         previousQueue = input.queue
-        previousControllerQueue = controller.handlerQueue
         previousHandler = input.elementValueDidChangeHandler
         previousGamepadHandler = controller.extendedGamepad?.valueChangedHandler
-        input.elementValueDidChangeHandler = nil
         controller.extendedGamepad?.valueChangedHandler = nil
-        if observeSystemInput { controller.handlerQueue = queue }
         input.queue = queue
         // GameController calls this on the input queue; nested closures must not inherit the main actor.
         input.elementValueDidChangeHandler = { @Sendable [delivery] input, _ in
-            let now = ProcessInfo.processInfo.systemUptime - max(0, input.lastEventLatency)
-            guard let timestamp = delivery.timestamp(now) else { return }
-            receive(read(), timestamp)
-        }
-        if observeSystemInput {
-            // Legacy system mappings publish independently of unmapped input, including the final neutral state.
-            controller.extendedGamepad?.valueChangedHandler = { @Sendable [delivery] pad, _ in
-                guard let timestamp = delivery.timestamp(pad.lastEventTimestamp) else { return }
-                receive(read(), timestamp)
-            }
+            guard delivery.valid.withLock({ $0 }) else { return }
+            receive(read(), ProcessInfo.processInfo.systemUptime - max(0, input.lastEventLatency))
         }
     }
 
@@ -253,11 +223,9 @@ final class ControllerLayoutInputLease {
     func stop() {
         guard active else { return }
         active = false
-        delivery.invalidate()
+        delivery.valid.withLock { $0 = false }
         input.elementValueDidChangeHandler = nil
-        controller.extendedGamepad?.valueChangedHandler = nil
         input.queue = previousQueue
-        controller.handlerQueue = previousControllerQueue
         input.elementValueDidChangeHandler = previousHandler
         controller.extendedGamepad?.valueChangedHandler = previousGamepadHandler
     }

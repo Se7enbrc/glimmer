@@ -372,6 +372,26 @@ struct InputCoreTests {
         #expect(capture.count == 2)
     }
 
+    @Test func streamHIDHandlerReceivesExtraButtonsWithoutALayoutLease() {
+        let elements = [HIDGamepadElement(cookie: 1, page: 9, usage: 1, kind: .button),
+                        HIDGamepadElement(cookie: 2, page: 9, usage: 2, kind: .button)]
+        let readings = HIDGamepadReadings(descriptors: elements, logical: [
+            1: .init(minimum: 0, maximum: 1), 2: .init(minimum: 0, maximum: 1)])
+        let drains = OSAllocatedUnfairLock(initialState: [@Sendable () -> Void]())
+        let capture = HIDGamepadCapture(readings: readings,
+            mapping: HIDGamepadMapping(name: "Test", bindings: ["a": .button(0)]),
+            scheduleDrain: { drain in drains.withLock { $0.append(drain) } })
+        let samples = OSAllocatedUnfairLock(initialState: [ControllerMappingSample]())
+        capture.setStreamHandler(indexes: [1]) { sample, _ in samples.withLock { $0.append(sample) } }
+        capture.setReading(true)
+        capture.receive(cookie: 2, raw: 1, timestamp: 10, report: 1)
+        capture.receive(cookie: 2, raw: 0, timestamp: 20, report: 1)
+        drains.withLock { $0 }.forEach { $0() }
+        #expect(samples.withLock { $0.map(\.buttons) } == [0, 0])
+        #expect(samples.withLock { $0.map(\.extras) } == [SIMD2(1, 0), .zero])
+        capture.setHandler(nil)
+    }
+
     @Test func lateRawCallbackCannotPressIntoAReusedSlot() {
         let (core, backend) = rig()
         let retired = UUID()

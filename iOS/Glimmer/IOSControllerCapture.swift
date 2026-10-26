@@ -23,6 +23,7 @@ final class IOSControllerCapture {
         let feedback: IOSControllerFeedback
         let motion: IOSControllerMotion
         let priorQueue: DispatchQueue
+        let priorInputQueue: DispatchQueue?
         let priorHandler: GCExtendedGamepadValueChangedHandler?
         let gestures: [(GCControllerButtonInput, GCControllerElement.SystemGestureState)]
     }
@@ -55,7 +56,7 @@ final class IOSControllerCapture {
                               feedback: { input.attachFeedback($1, to: $0) },
                               motion: { input.attachMotion($1, to: $0) },
                               battery: { input.attachBattery($1, to: $0) }))
-        layouts = IOSControllerLayouts(input: input, scope: scope, queue: captureQueue)
+        layouts = IOSControllerLayouts(input: input, scope: scope)
     }
 
     init(calls: Calls, center: NotificationCenter = .default,
@@ -180,7 +181,7 @@ final class IOSControllerCapture {
         let buttons = [pad.buttonOptions, pad.buttonMenu, pad.buttonHome].compactMap { $0 }
         let entry = Attached(controller: controller, registration: registration,
                              feedback: nativeFeedback, motion: nativeMotion, priorQueue: controller.handlerQueue,
-                             priorHandler: pad.valueChangedHandler,
+                             priorInputQueue: controller.input.unmapped?.queue, priorHandler: pad.valueChangedHandler,
                              gestures: buttons.map { ($0, $0.preferredSystemGestureState) })
         attached[ObjectIdentifier(controller)] = entry
         layouts?.configure(controller, registration: registration)
@@ -214,11 +215,24 @@ final class IOSControllerCapture {
 
     private func install(_ entry: Attached) {
         for (button, _) in entry.gestures { button.preferredSystemGestureState = .disabled }
-        if layouts?.install(entry.controller) == true { return }
         let registration = entry.registration
         let epoch = UUID()
         let submit = calls.submit
         delivery.registrations.withLock { $0[registration] = epoch }
+        if let layout = layouts?.entry(entry.controller) {
+            let reader = layout.reader
+            let mapsGameInput = layout.mapsGameInput
+            ControllerStreamHandlers.install(controller: entry.controller, input: reader.input, queue: captureQueue,
+                mapsGameInput: mapsGameInput, shortcutElements: layout.shortcutElements,
+                read: reader.sample) { @Sendable [delivery] sample, now in
+                    delivery.registrations.withLock { registrations in
+                        guard registrations[registration] == epoch else { return }
+                        submit(registration, reader.streamSample(sample, mapsGameInput: mapsGameInput), now)
+                    }
+                }
+            return
+        }
+        entry.controller.extendedGamepad?.valueChangedHandler = nil
         entry.controller.handlerQueue = captureQueue
         entry.controller.extendedGamepad?.valueChangedHandler = { @Sendable [delivery] pad, _ in
             // Hold validity through submission so focus loss and detach finish after any in-flight sample.
@@ -230,10 +244,12 @@ final class IOSControllerCapture {
     }
 
     private func restore(_ entry: Attached) {
-        layouts?.suspend(entry.controller)
         _ = delivery.registrations.withLock { $0.removeValue(forKey: entry.registration) }
-        entry.controller.extendedGamepad?.valueChangedHandler = entry.priorHandler
+        entry.controller.extendedGamepad?.valueChangedHandler = nil
+        entry.controller.input.unmapped?.elementValueDidChangeHandler = nil
+        entry.controller.input.unmapped?.queue = entry.priorInputQueue
         entry.controller.handlerQueue = entry.priorQueue
+        entry.controller.extendedGamepad?.valueChangedHandler = entry.priorHandler
         for (button, state) in entry.gestures { button.preferredSystemGestureState = state }
     }
 
