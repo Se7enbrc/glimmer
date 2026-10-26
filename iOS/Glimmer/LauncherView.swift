@@ -13,17 +13,19 @@ struct LauncherView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var controllers = ControllerMonitor()
     @State private var model: LauncherModel
-    @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
+    @AppStorage("launcherStyle", store: PersistentStorage.defaults)
+    private var launcherStyle: LauncherStyle = .buttons
     @State private var addingPC = false
     @State private var pendingAddress: String?
     @State private var showingSettings = false
     @State private var pendingAddPC = false
     @State private var pendingPC: HostDiscovery.Discovered?
-    @AppStorage("leaveGamesRunning") private var leaveGamesRunning = false
-    @AppStorage("streamProfile") private var profile: StreamProfile = .native120
-    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
-    @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
-    @AppStorage("controllerMouseStick") private var mouseStick: ControllerMouseStick = .right
+    @AppStorage("leaveGamesRunning", store: PersistentStorage.defaults) private var leaveGamesRunning = false
+    @AppStorage("streamProfile", store: PersistentStorage.defaults) private var profile: StreamProfile = .native120
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
+    @AppStorage("touchMouseEnabled", store: PersistentStorage.defaults) private var touchMouseEnabled = true
+    @AppStorage("controllerMouseStick", store: PersistentStorage.defaults)
+    private var mouseStick: ControllerMouseStick = .right
 
     init(model: LauncherModel = .make(), style: LauncherStyle? = nil) {
         _model = State(initialValue: model)

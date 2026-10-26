@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E02000000000000000000002 /* PersistentStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02000000000000000000001 /* PersistentStorage.swift */; };
 		FC1A1D15E9FD497EB88F904A /* SurroundToneData.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */; };
 		EB34C1CBD1FD44719A09B90D /* OpusDecoder+Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */; };
 		5B34A98402AB49D2BE6C0B26 /* OpusDecoder+Packet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D1AB0F71D740F7972C4A1F /* OpusDecoder+Packet.swift */; };
@@ -829,6 +830,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		E02000000000000000000001 /* PersistentStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/PersistentStorage.swift; sourceTree = "<group>"; };
 		C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurroundToneData.swift; sourceTree = "<group>"; };
 		4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/OpusDecoder+Stream.swift"; sourceTree = "<group>"; };
 		30D1AB0F71D740F7972C4A1F /* OpusDecoder+Packet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/OpusDecoder+Packet.swift"; sourceTree = "<group>"; };
@@ -2187,6 +2189,7 @@
 				19F40AFAB664AE0BE671EA39 /* ControllerLayoutIdentity.swift */,
 				B9753D8D63E229EA546F9690 /* ControllerMappingPlan.swift */,
 				669CE07C7771AD963FDD9079 /* ControllerLayout.swift */,
+				E02000000000000000000001 /* PersistentStorage.swift */,
 				AC2026101100000000000001B /* LauncherArtCache.swift */,
 				F8C3CBBB7FBF488C9D4A7BB7 /* StreamInput+ControllerMouse.swift */,
 				1DF214F57A624AA18B39158B /* ControllerMouseMapping.swift */,
@@ -3122,6 +3125,7 @@
 				6CD65AE981620E655423894D /* ControllerLayoutIdentity.swift in Sources */,
 				189785C9DBC0C32FE4B72628 /* ControllerMappingPlan.swift in Sources */,
 				753CC8167F7ACB6C6EA91505 /* ControllerLayout.swift in Sources */,
+				E02000000000000000000002 /* PersistentStorage.swift in Sources */,
 				AC2026101100000000000001A /* LauncherArtCache.swift in Sources */,
 				967AC9F4B747400BA49F0B70 /* StreamInput+ControllerMouse.swift in Sources */,
 				2A48F2F26CA64FB481D74255 /* ControllerMouseMapping.swift in Sources */,

@@ -11,7 +11,7 @@ enum HIDControllerLayouts {
         let repeatedSerial = HIDGamepadManager.shared.devices.values.contains {
             $0.id != pad.id && $0.vendor == pad.vendor && $0.product == pad.product && $0.serialNumber == pad.serialNumber
         }
-        let defaults = UserDefaults.standard
+        let defaults = PersistentStorage.defaults
         let saltKey = "controllerLayoutIdentitySalt"
         let salt = defaults.data(forKey: saltKey) ?? Data(UUID().uuidString.utf8)
         if defaults.data(forKey: saltKey) == nil { defaults.set(salt, forKey: saltKey) }
@@ -56,7 +56,7 @@ enum HIDControllerLayouts {
         return ControllerLayoutDevice(id: "hid:\(pad.id)", name: pad.name, identity: identity,
             owner: identity.hardware.map { .hardware($0) } ?? .type(identity.type), reader: nil, controller: nil,
             controls: controls, nintendoLabels: NintendoControllerType.identify(pad) != nil
-                && UserDefaults.standard.bool(forKey: "nintendoButtonLayout"), hidID: pad.id, captureSource: source,
+                && PersistentStorage.defaults.bool(forKey: "nintendoButtonLayout"), hidID: pad.id, captureSource: source,
             savedCategory: pad.mapping.isHeuristic ? nil : pad.mapping.name)
     }
 }

@@ -149,7 +149,7 @@ public enum PinnedCertStore {
     /// `~/Library/Application Support/Glimmer/PinnedHosts/`. Created at
     /// mode 0700 on first write.
     private static func directoryURL(base: URL) throws -> URL {
-        base.appendingPathComponent("Glimmer/PinnedHosts", isDirectory: true)
+        PersistentStorage.checked(base).appendingPathComponent("Glimmer/PinnedHosts", isDirectory: true)
     }
 
     /// Restrict filenames so an untrusted uniqueid cannot traverse out of the pin directory.

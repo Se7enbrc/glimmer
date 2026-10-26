@@ -105,7 +105,7 @@ public enum DiagnosticsAvailability {
         #endif
     }
 
-    public static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+    public static func isEnabled(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
         #if os(macOS) || GLIMMER_DIAGNOSTICS
         defaults.object(forKey: "telemetryEnabled") as? Bool ?? true
         #else
@@ -117,7 +117,7 @@ public enum DiagnosticsAvailability {
 package enum TelemetryGate {
     package static var isEnabled: Bool {
         #if os(macOS)
-        isEnabled(defaults: .standard, environmentValue: ProcessInfo.processInfo.environment["GLIMMER_TELEMETRY"])
+        isEnabled(defaults: PersistentStorage.defaults, environmentValue: ProcessInfo.processInfo.environment["GLIMMER_TELEMETRY"])
         #else
         DiagnosticsAvailability.isEnabled()
         #endif
@@ -131,7 +131,7 @@ package enum TelemetryGate {
         #endif
     }
 
-    package static func diagnosticsVisible(defaults: UserDefaults = .standard) -> Bool {
+    package static func diagnosticsVisible(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
         #if os(macOS) || GLIMMER_DIAGNOSTICS
         defaults.bool(forKey: "showDiagnostics")
         #else
@@ -139,7 +139,7 @@ package enum TelemetryGate {
         #endif
     }
 
-    package static func listensOnLAN(defaults: UserDefaults = .standard) -> Bool {
+    package static func listensOnLAN(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
         #if os(macOS)
         defaults.bool(forKey: TelemetryExporter.lanBindDefaultsKey)
         #else

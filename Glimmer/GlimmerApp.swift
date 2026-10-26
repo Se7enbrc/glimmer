@@ -54,7 +54,7 @@ struct GlimmerApp: App {
 
     /// Registration supplies defaults without overwriting or materializing saved choices.
     @MainActor
-    static func registerDefaults(defaults: UserDefaults = .standard,
+    static func registerDefaults(defaults: UserDefaults = PersistentStorage.defaults,
                                  diagnosticBuild: Bool = DiagnosticBuild.isEnabled) {
         defaults.register(defaults: [
             "SUEnableAutomaticChecks": true,

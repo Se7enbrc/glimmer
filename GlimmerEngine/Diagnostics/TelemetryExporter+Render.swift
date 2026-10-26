@@ -29,11 +29,11 @@ package enum TelemetryRenderer {
 
     package static let installSalt: SymmetricKey = {
         let key = "telemetryNameSalt"
-        if let stored = UserDefaults.standard.data(forKey: key), stored.count == 32 {
+        if let stored = PersistentStorage.defaults.data(forKey: key), stored.count == 32 {
             return SymmetricKey(data: stored)
         }
         let salt = SymmetricKey(size: .bits256)
-        UserDefaults.standard.set(salt.withUnsafeBytes { Data($0) }, forKey: key)
+        PersistentStorage.defaults.set(salt.withUnsafeBytes { Data($0) }, forKey: key)
         return salt
     }()
 

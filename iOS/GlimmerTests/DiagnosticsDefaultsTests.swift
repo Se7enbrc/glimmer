@@ -85,3 +85,37 @@ struct DiagnosticsDefaultsTests {
         #endif
     }
 }
+
+struct PersistentStorageTests {
+    @Test func existingIdentitySurvivesResetPreferences() async throws {
+        let suite = "identity-preservation-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let first = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
+        let originalID = try await first.uniqueID()
+        let certificate = root.appendingPathComponent("Glimmer/Identity/client-cert.pem")
+        let originalCertificate = try Data(contentsOf: certificate)
+        defaults.removePersistentDomain(forName: suite)
+        let second = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
+        #expect(try await second.uniqueID() == originalID)
+        #expect(try Data(contentsOf: certificate) == originalCertificate)
+    }
+
+    @Test func testProcessCannotResolveInstallationStorage() throws {
+        let root = try #require(PersistentStorage.testRoot)
+        #expect(PersistentStorage.isTesting)
+        let paths = [PersistentStorage.applicationSupport, PersistentStorage.caches,
+                     PersistentStorage.logs, PersistentStorage.home,
+                     PersistentStorage.supportRoot().appendingPathComponent("Glimmer/Identity"),
+                     PersistentStorage.supportRoot().appendingPathComponent("Glimmer/PinnedHosts"),
+                     PersistentStorage.supportRoot().appendingPathComponent("Glimmer/Covers")]
+        for path in paths {
+            #expect(path.path == root.path || path.path.hasPrefix(root.path + "/"))
+        }
+        #expect(PersistentStorage.defaults !== UserDefaults.standard)
+    }
+}

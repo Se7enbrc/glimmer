@@ -10,6 +10,7 @@
 //  the class core under the file-length limit; behavior is unchanged.
 //
 
+import GlimmerEngine
 import Foundation
 import GameController
 
@@ -120,7 +121,7 @@ extension AppModel {
 /// answer skips a pad until relaunch, and Don't Ask Again is kept in defaults.
 struct HIDPermissionOffers {
     static let declinedKey = "hidPermissionDeclinedPads"
-    var defaults = UserDefaults.standard
+    var defaults = PersistentStorage.defaults
     private(set) var answered: Set<String> = []
 
     func shouldOffer(_ hardwareID: String) -> Bool {

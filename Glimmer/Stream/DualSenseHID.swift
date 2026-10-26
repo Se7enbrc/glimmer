@@ -206,7 +206,7 @@ final class DualSenseHID: @unchecked Sendable {
         IOHIDManagerSetDeviceMatchingMultiple(manager, matches as CFArray)
     }
 
-    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: "rawHIDControllerEnabled") }
+    static var isEnabled: Bool { PersistentStorage.defaults.bool(forKey: "rawHIDControllerEnabled") }
 
     // MARK: Input Monitoring permission
 

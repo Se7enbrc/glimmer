@@ -195,7 +195,7 @@ extension AudioDecoder {
     /// Read one persisted record, AGE-LERPed toward base and clamped to its own
     /// link-class cap (the link rides the key). Defensive against hand-edits.
     static func readCushionMemory(
-        key: String, defaults: UserDefaults = .standard
+        key: String, defaults: UserDefaults = PersistentStorage.defaults
     ) -> (targetMs: Double, floorMs: Double)? {
         guard let dict = defaults.dictionary(forKey: key),
               let target = dict["target_ms"] as? Double, target.isFinite else { return nil }
@@ -234,7 +234,7 @@ extension AudioDecoder {
     /// learning. A mid-spike write self-corrects: each later decay step
     /// persists the lower value, and a seeded spike decays normally next run.
     static func persistCushionMemory(
-        key: String, targetMs: Double, floorMs: Double, defaults: UserDefaults = .standard
+        key: String, targetMs: Double, floorMs: Double, defaults: UserDefaults = PersistentStorage.defaults
     ) {
         guard !key.isEmpty else { return }
         // `saved_at` (wall reference seconds) drives the read-side age lerp - a
@@ -250,7 +250,7 @@ extension AudioDecoder {
     /// (deep-by-default fails toward a few ms of extra audio latency that the
     /// trim walks off in ~1s once the link resolves shallow - the alternative,
     /// shallow-by-default, fails toward audible blips).
-    static func loadCushionSeed(environment: AudioEnvironment, defaults: UserDefaults = .standard) -> CushionSeed {
+    static func loadCushionSeed(environment: AudioEnvironment, defaults: UserDefaults = PersistentStorage.defaults) -> CushionSeed {
         let host = environment.host
         let link = environment.link
         let key = cushionMemoryKey(host: host, link: link)

@@ -5,7 +5,7 @@ import Foundation
 
 extension HotkeyChord {
     /// Move only the old default once; a later explicit choice of Control-I belongs to the player.
-    public static func persistedStats(defaults: UserDefaults = .standard) -> Self {
+    public static func persistedStats(defaults: UserDefaults = PersistentStorage.defaults) -> Self {
         guard let data = defaults.data(forKey: "statsHotkey"),
               let saved = try? JSONDecoder().decode(Self.self, from: data) else { return .defaultStats }
         guard !defaults.bool(forKey: "statsControlZDefaultApplied") else { return saved }
@@ -19,7 +19,7 @@ extension HotkeyChord {
     }
 
     /// Mark explicit choices so the legacy-default migration can never replace them.
-    public func persistStats(defaults: UserDefaults = .standard) {
+    public func persistStats(defaults: UserDefaults = PersistentStorage.defaults) {
         guard let data = try? JSONEncoder().encode(self) else { return }
         defaults.set(data, forKey: "statsHotkey")
         defaults.set(true, forKey: "statsControlZDefaultApplied")

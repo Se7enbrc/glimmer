@@ -40,18 +40,18 @@ package enum HostCodecPreference: String, CaseIterable, Identifiable {
         "glimmer.codecPreference.\(hostID)"
     }
 
-    package static func load(for hostID: String, defaults: UserDefaults = .standard) -> HostCodecPreference {
+    package static func load(for hostID: String, defaults: UserDefaults = PersistentStorage.defaults) -> HostCodecPreference {
         guard let raw = defaults.string(forKey: key(for: hostID)),
               let pref = HostCodecPreference(rawValue: raw)
         else { return .auto }
         return pref
     }
 
-    package static func save(_ pref: HostCodecPreference, for hostID: String, defaults: UserDefaults = .standard) {
+    package static func save(_ pref: HostCodecPreference, for hostID: String, defaults: UserDefaults = PersistentStorage.defaults) {
         defaults.set(pref.rawValue, forKey: key(for: hostID))
     }
 
-    package static func forget(hostID: String, defaults: UserDefaults = .standard) {
+    package static func forget(hostID: String, defaults: UserDefaults = PersistentStorage.defaults) {
         defaults.removeObject(forKey: key(for: hostID))
     }
 }

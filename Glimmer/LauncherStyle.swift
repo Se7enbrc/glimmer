@@ -9,15 +9,15 @@ enum LauncherStyle: String, CaseIterable {
 
     private static func key(for pcID: String) -> String { "glimmer.launcherStyle.\(pcID)" }
 
-    static func load(for pcID: String, defaults: UserDefaults = .standard) -> Self {
+    static func load(for pcID: String, defaults: UserDefaults = PersistentStorage.defaults) -> Self {
         persisted(rawValue: defaults.string(forKey: key(for: pcID)))
     }
 
-    static func save(_ style: Self, for pcID: String, defaults: UserDefaults = .standard) {
+    static func save(_ style: Self, for pcID: String, defaults: UserDefaults = PersistentStorage.defaults) {
         defaults.set(style.rawValue, forKey: key(for: pcID))
     }
 
-    static func forget(pcID: String, defaults: UserDefaults = .standard) {
+    static func forget(pcID: String, defaults: UserDefaults = PersistentStorage.defaults) {
         defaults.removeObject(forKey: key(for: pcID))
     }
 

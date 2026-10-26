@@ -82,7 +82,7 @@ extension AppModel {
     /// bitrateBoostWifi -float N` overrides it without a rebuild.
     nonisolated static let wifiBitrateMultiplier = 1.5
     nonisolated static var wifiBitrateBoost: Double {
-        let value = UserDefaults.standard.double(forKey: "bitrateBoostWifi")
+        let value = PersistentStorage.defaults.double(forKey: "bitrateBoostWifi")
         return value > 0 ? value : wifiBitrateMultiplier
     }
 

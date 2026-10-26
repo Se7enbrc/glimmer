@@ -222,7 +222,7 @@ struct AppIconsRow: View {
 
 struct SpecChipsRow: View {
     @Environment(AppModel.self) private var model
-    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptive = false
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptive = false
 
     var body: some View {
         // Facts, not controls: one secondary line, so nothing here looks pressable.

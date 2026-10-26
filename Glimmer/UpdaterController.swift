@@ -47,7 +47,7 @@ final class StreamAwareUpdateAlerts: NSObject, @preconcurrency SPUStandardUserDr
         isStreaming: @escaping @MainActor () -> Bool,
         showUpdate: @escaping @MainActor () -> Void,
         checkInBackground: @escaping @MainActor () -> Void,
-        updateDefaults: UserDefaults = .standard
+        updateDefaults: UserDefaults = PersistentStorage.defaults
     ) {
         self.isStreaming = isStreaming
         self.showUpdate = showUpdate

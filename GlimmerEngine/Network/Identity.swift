@@ -47,7 +47,7 @@ package enum FileIdentityStore {
     /// The shell supplies the base; identities live under `Glimmer/Identity` within it.
     /// Created on first write with mode 0700.
     package static func directoryURL(base: URL) throws -> URL {
-        base.appendingPathComponent("Glimmer/Identity", isDirectory: true)
+        PersistentStorage.checked(base).appendingPathComponent("Glimmer/Identity", isDirectory: true)
     }
 
     package static func fileURL(account: String, base: URL) throws -> URL? {
@@ -60,9 +60,11 @@ package enum FileIdentityStore {
     /// silently fall through to a destructive "regenerate".
     package static func read(account: String, base: URL) throws -> Data? {
         guard let url = try fileURL(account: account, base: base) else { return nil }
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path) else { return nil }
-        return try Data(contentsOf: url)
+        do {
+            return try Data(contentsOf: url)
+        } catch CocoaError.fileReadNoSuchFile {
+            return nil
+        }
     }
 
     /// Atomic mode-0600 writes under a mode-0700 directory. Verify permissions because some
@@ -72,37 +74,24 @@ package enum FileIdentityStore {
             throw StreamError.crypto("FileIdentityStore: unknown account \(account)")
         }
 
+        if let existing = try read(account: account, base: base) {
+            guard existing == data else { throw IdentityStorageError.alreadyExists }
+            return
+        }
         let fm = FileManager.default
         let dir = try directoryURL(base: base)
-
-        // Creation does not tighten an existing directory, so chmod it again as defense in depth.
-        try fm.createDirectory(at: dir,
-                               withIntermediateDirectories: true,
-                               attributes: [.posixPermissions: 0o700])
-        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
-
-        // Atomic file write. `.atomic` writes to a temp file in the same
-        // directory then renames; that means a crash mid-write can't leave
-        // a torn PEM on disk.
-        try data.write(to: url, options: [.atomic])
-
-        // Apply mode 0600 and verify it stuck.
-        try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-
-        let attrs = try fm.attributesOfItem(atPath: url.path)
-        guard let mode = attrs[.posixPermissions] as? NSNumber else {
-            try? fm.removeItem(at: url)
-            throw StreamError.crypto("FileIdentityStore: missing POSIX permissions for \(url.lastPathComponent)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        let temporary = dir.appendingPathComponent("." + UUID().uuidString)
+        defer { try? fm.removeItem(at: temporary) }
+        try data.write(to: temporary, options: .withoutOverwriting)
+        try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+        let attrs = try fm.attributesOfItem(atPath: temporary.path)
+        guard let mode = attrs[.posixPermissions] as? NSNumber, mode.uint16Value & 0o777 == 0o600 else {
+            throw StreamError.crypto("Could not protect client identity permissions")
         }
-        // Mask off the SUID/SGID/sticky bits in the comparison - those are
-        // never set by us but a paranoid umask could in theory surface them.
-        let permBits = mode.uint16Value & 0o777
-        guard permBits == 0o600 else {
-            try? fm.removeItem(at: url)
-            let modeOctal = String(permBits, radix: 8)
-            throw StreamError.crypto(
-                "FileIdentityStore: refused to keep \(url.lastPathComponent) with mode \(modeOctal) (expected 600)")
-        }
+        // A hard link publishes complete, protected bytes and atomically refuses an existing destination.
+        try fm.linkItem(at: temporary, to: url)
     }
 
     /// Idempotent unlink. Used by cleanup / future migrations.
@@ -148,7 +137,7 @@ public actor IdentityManager {
         if let defaultsSuite {
             self.defaults = makeDefaults(defaultsSuite)
         } else {
-            self.defaults = .standard
+            self.defaults = PersistentStorage.defaults
         }
         self.storageRoot = storageRoot
         self.protectedDataAvailable = protectedDataAvailable
@@ -204,4 +193,5 @@ public actor IdentityManager {
 public enum IdentityStorageError: Error, Sendable {
     case unavailable
     case defaultsUnavailable
+    case alreadyExists
 }

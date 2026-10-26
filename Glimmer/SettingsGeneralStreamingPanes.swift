@@ -15,8 +15,8 @@ struct GeneralPane: View {
     var reconcileLoginItem: @MainActor () async -> SMAppService.Status? = { await LoginItemManager.reconcile() }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(AppModel.self) private var model
-    @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
-    @AppStorage("launchMinimized") private var launchMinimized: Bool = false
+    @AppStorage("launchAtLogin", store: PersistentStorage.defaults) private var launchAtLogin: Bool = false
+    @AppStorage("launchMinimized", store: PersistentStorage.defaults) private var launchMinimized: Bool = false
 
     /// Keep failed registration visible beside the saved intent until it succeeds.
     @State private var loginItemIssue: LoginItemManager.RegistrationIssue?
@@ -194,7 +194,7 @@ enum CommonResolution: CaseIterable {
 struct QualityPane: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
 
     /// The privileged AWDL network helper (parks awdl0 during streams). Shared
     /// singleton so this toggle and the stream lifecycle drive one instance.

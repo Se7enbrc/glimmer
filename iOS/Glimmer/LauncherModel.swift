@@ -70,12 +70,12 @@ final class LauncherModel {
     var operation: Task<Void, Never>?
     private var discoveryTask: Task<Void, Never>?
     private var discoveryRun: UInt64?
-    private let artCache = LauncherArtCache(base: URL.cachesDirectory)
+    private let artCache = LauncherArtCache(base: PersistentStorage.caches)
     var active = false
     var needsRefresh = false
 
     init(services: LauncherServices?) {
-        history = ContinuationHistory(defaults: .standard)
+        history = ContinuationHistory(defaults: PersistentStorage.defaults)
         calls = services.map { services in
             Calls(savedPCs: { try services.savedPCs() },
                   prepare: { try await services.prepare(server: $0, saved: $1) },
@@ -91,7 +91,9 @@ final class LauncherModel {
     }
 
     init(calls: Calls, discoveryEnabled: Bool = true) {
-        let defaults = UserDefaults(suiteName: "launcher-test-\(UUID().uuidString)") ?? UserDefaults()
+        guard let defaults = UserDefaults(suiteName: "launcher-test-\(UUID().uuidString)") else {
+            preconditionFailure("Could not isolate launcher preferences")
+        }
         history = ContinuationHistory(defaults: defaults)
         self.calls = calls
         self.discoveryEnabled = discoveryEnabled
@@ -99,8 +101,8 @@ final class LauncherModel {
 
     static func make() -> LauncherModel {
         do {
-            let base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                                   appropriateFor: nil, create: true)
+            let base = PersistentStorage.supportRoot()
+            try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
             return LauncherModel(services: LauncherServices(base: base,
                 protectedData: ProtectedDataState(UIApplication.shared.isProtectedDataAvailable)))
         } catch { return LauncherModel(services: nil) }

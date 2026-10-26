@@ -35,6 +35,7 @@ extension AppModel {
         let flagKey = "glimmer.hostsMigratedFromMoonlightQt"
         guard !defaults.bool(forKey: flagKey) else { return }
 
+        guard !PersistentStorage.isTesting || moonlightSuite != IdentityManager.moonlightQtSuiteName else { return }
         guard let mq = UserDefaults(suiteName: moonlightSuite) else {
             defaults.set(true, forKey: flagKey)
             return

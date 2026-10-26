@@ -55,7 +55,7 @@ final class ControllerLayoutsModel {
     private var observers = 0
     private var saving = false
 
-    init(url: URL = ControllerLayoutsModel.storeURL, defaults: UserDefaults = .standard,
+    init(url: URL = ControllerLayoutsModel.storeURL, defaults: UserDefaults = PersistentStorage.defaults,
          read: (() async throws -> ControllerLayoutLibrary)? = nil) {
         self.defaults = defaults
         let store = ControllerLayoutStore(url: url)
@@ -65,9 +65,9 @@ final class ControllerLayoutsModel {
 
     private static var storeURL: URL {
         #if os(macOS)
-        URL.applicationSupportDirectory.appendingPathComponent("Glimmer/ControllerLayouts.json")
+        PersistentStorage.applicationSupport.appendingPathComponent("Glimmer/ControllerLayouts.json")
         #else
-        URL.applicationSupportDirectory.appendingPathComponent("ControllerLayouts.json")
+        PersistentStorage.applicationSupport.appendingPathComponent("ControllerLayouts.json")
         #endif
     }
 
@@ -199,7 +199,7 @@ final class ControllerLayoutsModel {
             devices.append(ControllerLayoutDevice(id: "connected:\(ObjectIdentifier(controller))",
                 name: controller.vendorName ?? "Controller",
                 identity: identity, owner: owner, reader: reader, controller: controller, controls: reader?.controls ?? [],
-                nintendoLabels: nintendo && UserDefaults.standard.bool(forKey: "nintendoButtonLayout"),
+                nintendoLabels: nintendo && PersistentStorage.defaults.bool(forKey: "nintendoButtonLayout"),
                 captureSource: reader.map { .init(controller: controller, reader: $0) }))
         }
         #if os(macOS)

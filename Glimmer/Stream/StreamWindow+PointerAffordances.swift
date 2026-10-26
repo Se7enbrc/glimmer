@@ -19,6 +19,7 @@
 //  `displayMode == .window` and the fullscreen path never reaches them.
 //
 
+import GlimmerEngine
 import AppKit
 
 // MARK: - Hint budget
@@ -46,7 +47,7 @@ struct HintBudget {
     static func nextCount(after count: Int) -> Int { max(count, 0) + 1 }
 
     /// Spend one show from the persisted count; false once the budget is gone.
-    func claimShow(in defaults: UserDefaults = .standard) -> Bool {
+    func claimShow(in defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
         let count = defaults.integer(forKey: defaultsKey)
         guard Self.shouldShow(count: count) else { return false }
         defaults.set(Self.nextCount(after: count), forKey: defaultsKey)

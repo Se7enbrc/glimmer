@@ -14,17 +14,12 @@ extension IdentityManager {
         if let cached { return cached }
         _ = try storageRoot()
 
-        // -----------------------------------------------------------------
-        // Step 1 - file-store fast path.
-        // -----------------------------------------------------------------
-        if defaults.integer(forKey: Self.fileStorageFlag) >= Self.fileStorageVersion {
-            if let identity = try loadFromFileStore() {
-                cached = identity
-                log.info("Loaded identity from file store")
-                return identity
-            }
-            // A missing file store regenerates as before; an actual read failure must throw.
-            log.error("identityFileStorageVersion flag set but file store is empty - regenerating")
+        // Files are authoritative even when preferences were reset or restored separately.
+        if let identity = try loadFromFileStore() {
+            cached = identity
+            defaults.set(Self.fileStorageVersion, forKey: Self.fileStorageFlag)
+            log.info("Loaded identity from file store")
+            return identity
         }
 
         // The keychain-era flag means the earliest plaintext defaults were already wiped.
@@ -107,15 +102,13 @@ extension IdentityManager {
 
     /// Missing material falls through to the next source. IO failures throw instead of regenerating.
     func loadFromFileStore() throws -> Identity? {
-        guard let certData = try FileIdentityStore.read(account: Self.accountCert, base: storageRoot()),
-              let certPEM = String(data: certData, encoding: .utf8),
-              !certPEM.isEmpty else {
-            return nil
-        }
-        guard let keyData = try FileIdentityStore.read(account: Self.accountKey, base: storageRoot()),
-              let keyPEM = String(data: keyData, encoding: .utf8),
-              !keyPEM.isEmpty else {
-            return nil
+        let certData = try FileIdentityStore.read(account: Self.accountCert, base: storageRoot())
+        let keyData = try FileIdentityStore.read(account: Self.accountKey, base: storageRoot())
+        guard certData != nil || keyData != nil else { return nil }
+        guard let certData, let keyData,
+              let certPEM = String(data: certData, encoding: .utf8), !certPEM.isEmpty,
+              let keyPEM = String(data: keyData, encoding: .utf8), !keyPEM.isEmpty else {
+            throw IdentityStorageError.unavailable
         }
         _ = try PEM.identity(certPEM: certPEM, keyPEM: keyPEM)
         let uid: String

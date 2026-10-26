@@ -472,7 +472,7 @@ final class AppModel {
         for task in hostPolling.readinessTasks.values { task.cancel() }
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = PersistentStorage.defaults) {
         settingsDefaults = defaults
         hostsDefaults = defaults
         _rawHIDControllerEnabled = defaults.bool(forKey: "rawHIDControllerEnabled")

@@ -102,12 +102,13 @@ private struct GlimmerSettingsPage: View {
     let addPC: () -> Void
     let pairPC: (HostDiscovery.Discovered) -> Void
     let page: GlimmerSettings.Page
-    @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
-    @AppStorage("leaveGamesRunning") private var leaveGamesRunning = false
-    @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
+    @AppStorage("launcherStyle", store: PersistentStorage.defaults)
+    private var launcherStyle: LauncherStyle = .buttons
+    @AppStorage("leaveGamesRunning", store: PersistentStorage.defaults) private var leaveGamesRunning = false
+    @AppStorage("touchMouseEnabled", store: PersistentStorage.defaults) private var touchMouseEnabled = true
     #if GLIMMER_DIAGNOSTICS
-    @AppStorage("telemetryEnabled") private var diagnostics = true
-    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
+    @AppStorage("telemetryEnabled", store: PersistentStorage.defaults) private var diagnostics = true
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
     #endif
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -128,7 +129,7 @@ private struct GlimmerSettingsPage: View {
                 }
                 SettingsResetSection(enabled: model.session == nil && !model.busy) { includeGames in
                     try await ControllerLayoutsModel.shared.reset(includeGames: includeGames)
-                    SettingsReset.reset(defaults: .standard)
+                    SettingsReset.reset(defaults: PersistentStorage.defaults)
                 }
             case .quality: StreamQualitySettings(profile: $profile)
             case .pcs: computerSettings
@@ -246,8 +247,9 @@ private struct PairedPCRow: View {
 @MainActor
 private struct StreamQualitySettings: View {
     @Binding var profile: StreamProfile
-    @AppStorage("showStreamStats") private var showStats = false
-    @AppStorage("statsOverlayPreset") private var preset: StatsOverlayPreset = .minimal
+    @AppStorage("showStreamStats", store: PersistentStorage.defaults) private var showStats = false
+    @AppStorage("statsOverlayPreset", store: PersistentStorage.defaults)
+    private var preset: StatsOverlayPreset = .minimal
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {

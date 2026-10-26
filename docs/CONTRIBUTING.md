@@ -108,6 +108,12 @@ guard can be raised with `GLIMMER_TEST_TIMEOUT` (seconds) on loaded runners.
 Tests of production deadlines use fake responses and clocks instead of elapsed
 wall time; production timeout values stay independent of this guard.
 
+Persistent storage resolves through `PersistentStorage`. Test schemes set
+`GLIMMER_TESTING` before launch; XCTest and Simulator UI-test processes also
+detect their runner. Files resolve under one temporary directory per process,
+and preferences use a unique suite. Keep explicit fixture roots in the temporary
+directory. Never use the installation's pairing files or keychain in a test.
+
 The shared scheme runs tests one at a time. Socket deadline tests measure real
 elapsed time; launching every test together can starve their callbacks on hosted
 runners. Each concurrency test still creates its own overlapping tasks or

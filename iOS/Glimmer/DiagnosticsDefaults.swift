@@ -6,7 +6,7 @@ import GlimmerEngine
 
 @MainActor
 enum DiagnosticsDefaults {
-    static func register(defaults: UserDefaults = .standard) {
+    static func register(defaults: UserDefaults = PersistentStorage.defaults) {
         #if GLIMMER_DIAGNOSTICS
         defaults.register(defaults: ["telemetryEnabled": true, AdaptiveBandwidth.defaultsKey: true])
         #endif
@@ -14,7 +14,7 @@ enum DiagnosticsDefaults {
 
     static var directory: URL? {
         #if GLIMMER_DIAGNOSTICS
-        URL.applicationSupportDirectory.appendingPathComponent("Diagnostics", isDirectory: true)
+        PersistentStorage.applicationSupport.appendingPathComponent("Diagnostics", isDirectory: true)
         #else
         nil
         #endif

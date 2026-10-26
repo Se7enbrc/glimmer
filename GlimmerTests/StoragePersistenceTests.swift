@@ -15,7 +15,7 @@ import Testing
 
 struct IdentityPersistenceTests {
 
-    /// A manager whose keychain service matches nothing, so no real item is read or deleted.
+    /// Each manager owns only its fixture files and named preferences.
     private func manager(_ store: IsolatedStore, qt: String? = nil) -> IdentityManager {
         IdentityManager(defaultsSuite: store.domain, supportBase: store.directory,
                         moonlightQtSuite: qt ?? "io.ugfugl.Glimmer.tests.persistence-qt-none")
@@ -28,6 +28,32 @@ struct IdentityPersistenceTests {
     private func mode(_ url: URL) throws -> Int {
         let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
         return try #require(attrs[.posixPermissions] as? Int) & 0o777
+    }
+
+    @Test func filesSurviveMissingMigrationFlagAndConflictingDefaults() async throws {
+        let store = try IsolatedStore("id-missing-flag")
+        defer { store.remove() }
+        let first = manager(store)
+        let cert = try await first.clientCertPEM()
+        let key = try await first.clientKeyPEM()
+        let uid = try await first.uniqueID()
+        store.defaults.removeObject(forKey: IdentityManager.fileStorageFlag)
+        store.defaults.set("stale-id", forKey: IdentityKey.uniqueID)
+        let second = manager(store)
+        #expect(try await second.clientCertPEM() == cert)
+        #expect(try await second.clientKeyPEM() == key)
+        #expect(try await second.uniqueID() == uid)
+    }
+
+    @Test func fileStoreCannotReplaceExistingIdentity() async throws {
+        let store = try IsolatedStore("id-no-replacement")
+        defer { store.remove() }
+        let cert = try await manager(store).clientCertPEM()
+        #expect(throws: (any Error).self) {
+            try FileIdentityStore.write(Data("replacement".utf8), account: IdentityManager.accountCert,
+                                        base: store.directory)
+        }
+        #expect(try await manager(store).clientCertPEM() == cert)
     }
 
     @Test func aFreshInstallGeneratesAndKeepsOneIdentity() async throws {
@@ -103,6 +129,19 @@ struct IdentityPersistenceTests {
         await #expect(throws: (any Error).self) { try await manager(store).uniqueID() }
         let kept = try String(contentsOf: identityFile(store, "client-cert.pem"), encoding: .utf8)
         #expect(kept == "not a pem")
+    }
+
+    @Test(arguments: ["client-cert.pem", "client-key.pem"])
+    func incompleteIdentityNeverReplacesTheRemainingMaterial(missing: String) async throws {
+        let store = try IsolatedStore("id-partial")
+        defer { store.remove() }
+        _ = try await manager(store).uniqueID()
+        let remaining = missing == "client-cert.pem" ? "client-key.pem" : "client-cert.pem"
+        let original = try Data(contentsOf: identityFile(store, remaining))
+        try FileManager.default.removeItem(at: identityFile(store, missing))
+        await #expect(throws: (any Error).self) { try await manager(store).uniqueID() }
+        #expect(try Data(contentsOf: identityFile(store, remaining)) == original)
+        #expect(FileManager.default.fileExists(atPath: identityFile(store, missing).path) == false)
     }
 
     @Test func theFileStoreRefusesUnknownAccountsAndDeletesIdempotently() throws {
@@ -501,5 +540,21 @@ struct FrameTraceFilePersistenceTests {
         writer.append("{}")
         writer.stop()
         #expect(try traceFiles(store.directory) == ["file"])
+    }
+}
+
+struct PersistentStorageTests {
+    @Test func testProcessCannotResolveInstallationStorage() throws {
+        let root = try #require(PersistentStorage.testRoot)
+        #expect(PersistentStorage.isTesting)
+        let paths = [PersistentStorage.applicationSupport, PersistentStorage.caches,
+                     PersistentStorage.logs, PersistentStorage.home,
+                     PersistentStorage.supportRoot().appendingPathComponent("Glimmer/Identity"),
+                     PersistentStorage.supportRoot().appendingPathComponent("Glimmer/PinnedHosts"),
+                     PersistentStorage.supportRoot().appendingPathComponent("Glimmer/Covers")]
+        for path in paths {
+            #expect(path.path == root.path || path.path.hasPrefix(root.path + "/"))
+        }
+        #expect(PersistentStorage.defaults !== UserDefaults.standard)
     }
 }

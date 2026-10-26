@@ -19,7 +19,7 @@ final class StreamShortcuts {
     var stats: HotkeyChord { didSet { stats.persistStats(defaults: defaults) } }
     private var held: Set<String> = []
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = PersistentStorage.defaults) {
         self.defaults = defaults
         quit = defaults.data(forKey: Action.quit.key)
             .flatMap { try? JSONDecoder().decode(HotkeyChord.self, from: $0) } ?? .defaultQuit

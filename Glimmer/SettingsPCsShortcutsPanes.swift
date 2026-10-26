@@ -157,7 +157,7 @@ struct ShortcutsPane: View {
     @State private var dualSenseConnected = false
     // Default-ON: no acceleration curve in game, Tracking Speed kept (macOS linear
     // scaling). Key mirrors MouseAccelerationControl.enabledDefaultsKey.
-    @AppStorage("disableMouseAccelWhileStreaming") private var rawMouseWhileStreaming: Bool = true
+    @AppStorage("disableMouseAccelWhileStreaming", store: PersistentStorage.defaults) private var rawMouseWhileStreaming: Bool = true
 
     /// Some DualSense connections need the raw reader for the fixed stop chord.
     private var chordNeedsExtraButtons: Bool {

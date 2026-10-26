@@ -79,7 +79,7 @@ final class StreamSessionModel {
     private var windowResize: StreamWindowResize?
     private let resizeSleep: @Sendable (Duration) async throws -> Void
 
-    init(launch: StreamLaunch, defaults: UserDefaults = .standard,
+    init(launch: StreamLaunch, defaults: UserDefaults = PersistentStorage.defaults,
          backgroundGrace: StreamBackgroundGrace = StreamBackgroundGrace(),
          resizeSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          makePlayback: @escaping @MainActor (StreamLaunch, StreamSurface,

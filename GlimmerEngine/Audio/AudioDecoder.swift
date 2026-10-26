@@ -366,7 +366,7 @@ public final class AudioDecoder: @unchecked Sendable {
 
     let defaults: UserDefaults
 
-    public init(platform: AudioPlatform, defaults: UserDefaults = .standard) {
+    public init(platform: AudioPlatform, defaults: UserDefaults = PersistentStorage.defaults) {
         self.platform = platform
         self.defaults = defaults
     }

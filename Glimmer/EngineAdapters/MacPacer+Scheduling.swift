@@ -8,9 +8,9 @@ import GlimmerEngine
 extension MacPacer {
     static func prepareTickThread() {
         Diag.notice("pacer tick realtime flag = "
-            + "\(UserDefaults.standard.bool(forKey: realtimeDefaultsKey)) "
+            + "\(PersistentStorage.defaults.bool(forKey: realtimeDefaultsKey)) "
             + "(key=\(realtimeDefaultsKey))", "Stream.Pacer")
-        if UserDefaults.standard.bool(forKey: realtimeDefaultsKey) {
+        if PersistentStorage.defaults.bool(forKey: realtimeDefaultsKey) {
             Self.applyRealtimeScheduling()
         } else {
             // Flag off: the thread stays userInteractive, so the RT gauge is 0.

@@ -23,8 +23,7 @@ public actor LauncherArtCache {
     }
 
     private func cacheDirectory() throws -> URL {
-        let root = try base ?? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                                       appropriateFor: nil, create: true)
+        let root = PersistentStorage.supportRoot(base: base)
         return root.appendingPathComponent("Glimmer/Covers", isDirectory: true)
     }
 

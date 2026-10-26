@@ -203,7 +203,7 @@ final class IOSControllerCapture {
             "touchpad": descriptor.capabilities.contains(.touchpad)
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]) else { return }
-        let directory = URL.applicationSupportDirectory.appendingPathComponent("Diagnostics", isDirectory: true)
+        let directory = PersistentStorage.applicationSupport.appendingPathComponent("Diagnostics", isDirectory: true)
         DispatchQueue.global(qos: .utility).async {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try? data.write(to: directory.appendingPathComponent("controller-capabilities.json"), options: .atomic)

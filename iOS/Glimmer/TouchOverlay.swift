@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import SwiftUI
 
 struct TouchOverlay: View {
@@ -18,13 +19,13 @@ struct TouchOverlay: View {
             if model.editingTouchControls {
                 TouchLayoutEditor(launch: model.launch, area: area) { model.editingTouchControls = false }
             } else if model.touchControlsVisible {
-                let layout = TouchLayoutStore(defaults: .standard).load(
+                let layout = TouchLayoutStore(defaults: PersistentStorage.defaults).load(
                     pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
                 TouchPlayControls(capture: model.touchGamepad, layout: layout, area: area,
                                   mouseMode: model.touchMouseActive,
                                   leftStick: model.launch.mouseStick == .left, showControls: model.showControls)
             } else if model.inputFocused {
-                let layout = TouchLayoutStore(defaults: .standard).load(
+                let layout = TouchLayoutStore(defaults: PersistentStorage.defaults).load(
                     pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
                 TouchControlsButton(area: area, opacity: layout.opacity, showControls: model.showControls)
             }

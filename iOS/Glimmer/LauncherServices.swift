@@ -52,7 +52,7 @@ final class LauncherServices {
     private static let savedKey = "ios.savedPCs"
     private static let lastConnectedKey = "ios.lastConnectedPCID"
 
-    init(defaults: UserDefaults = .standard, base: URL, protectedData: ProtectedDataState,
+    init(defaults: UserDefaults = PersistentStorage.defaults, base: URL, protectedData: ProtectedDataState,
          deviceName: String = UIDevice.current.name) {
         self.defaults = defaults
         self.base = base

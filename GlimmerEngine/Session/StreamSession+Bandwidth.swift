@@ -8,7 +8,7 @@ public enum AdaptiveBandwidth {
     public static let defaultsKey = "adaptiveBandwidthEnabled"
 
     /// Read once per stream so a before/after trial never changes mid-session.
-    public static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+    public static func isEnabled(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
         defaults.bool(forKey: defaultsKey)
     }
 }

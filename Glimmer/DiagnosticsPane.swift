@@ -27,9 +27,9 @@ struct DiagnosticsPane: View {
 
     /// Debug lines reach the in-app log and session file only with this on (a debug
     /// session once ran 30-105k lines an hour). Resolved at session start, like telemetry.
-    @AppStorage("diagFileLogDebug") private var fileLogDebug = false
+    @AppStorage("diagFileLogDebug", store: PersistentStorage.defaults) private var fileLogDebug = false
     /// Beta builds start with adaptive quality on; turning it off gives a before/after trial.
-    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
 
     var body: some View {
         // @Bindable shim - surfaces $model.x bindings from the @Observable
