@@ -430,7 +430,7 @@ Tactile and confident: the things on screen that ask to be pressed.
 
 ## Do's and Don'ts
 
-### Do:
+### Do
 
 - **Do** build every custom look as a style on a real control (a `ButtonStyle`
   on a `Button`, glass on a `Button`), keeping native focus, keyboard and
@@ -449,7 +449,7 @@ Tactile and confident: the things on screen that ask to be pressed.
   is running.
 - **Do** explain in footnote secondary text inside the control's label.
 
-### Don't:
+### Don't
 
 - **Don't** put a slab behind the launcher's content: a grey card reads as a
   blob, a pale violet one as dust and a dark violet one as flashy. The window is

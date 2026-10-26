@@ -449,8 +449,8 @@
   the PC, so Win+Print Screen and Game Bar captures work.
 - As in Moonlight, the F13, F14 and F15 keys on Apple keyboards send Print
   Screen, Scroll Lock and Pause.
-- Japanese keyboards can type ¥, ろ and the keypad comma, and
-  the 英数 and かな keys reach the PC.
+- Japanese keyboards can type ¥, ろ and the keypad comma, and the 英数 and かな
+  keys reach the PC.
 - Glimmer's own shortcuts, including Stop Streaming (⌃⌥Q), work on Russian,
   Greek, Hebrew, Arabic and other non-Latin keyboard layouts.
 - Edit › Paste, ⌘V (whenever ⌘ stays with the Mac) or ⌃⌥⇧V types the Mac

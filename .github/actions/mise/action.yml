@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-FileCopyrightText: 2026 ugfugl.io
+
+name: Pinned development tools
+description: Install the shared lockfile within the repository cache budget
+inputs:
+  tools:
+    description: Optional mise tool names; empty installs the complete toolchain
+    default: ""
+  cache:
+    description: Restore only in credential-free jobs
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Install mise
+      uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+      with:
+        version: 2026.10.19
+        install: false
+        cache: false
+    - name: Restore runtimes
+      if: inputs.cache == 'true'
+      id: runtimes
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.local/share/mise/installs/node
+          ~/.local/share/mise/installs/python
+          ~/.local/share/mise/installs/aqua-apple-pkl
+        key:
+          mise-runtimes-v1-${{ runner.os }}-${{ runner.arch }}-${{
+          hashFiles('mise.toml', 'mise.lock', '.mise/locks/**') }}
+    - name: Restore tools
+      if: inputs.cache == 'true'
+      id: tools
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.local/share/mise/installs/aqua-astral-sh-uv
+          ~/.local/share/mise/installs/aqua-cli-cli
+          ~/.local/share/mise/installs/aqua-jdx-hk
+          ~/.local/share/mise/installs/aqua-koalaman-shellcheck
+          ~/.local/share/mise/installs/aqua-realm-swift-lint
+          ~/.local/share/mise/installs/aqua-rhysd-actionlint
+          ~/.local/share/mise/installs/aqua-trufflesecurity-trufflehog
+          ~/.local/share/mise/installs/aqua-zizmorcore-zizmor
+          ~/.local/share/mise/installs/npm-*
+          ~/.local/share/mise/installs/pipx-*
+        key:
+          mise-tools-v1-${{ runner.os }}-${{ runner.arch }}-${{
+          hashFiles('mise.toml', 'mise.lock', '.mise/locks/**') }}
+    - name: Install locked tools
+      shell: bash
+      env:
+        MISE_TOOLS: ${{ inputs.tools }}
+      run: |
+        read -r -a tools <<< "$MISE_TOOLS"
+        mise install --locked "${tools[@]}"
+    - name: Save admitted runtimes
+      if: inputs.cache == 'true' && steps.runtimes.outputs.cache-hit != 'true'
+      # Same-ref action admits only unsigned tool paths.
+      uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
+      with:
+        path: |
+          ~/.local/share/mise/installs/node
+          ~/.local/share/mise/installs/python
+          ~/.local/share/mise/installs/aqua-apple-pkl
+        key: ${{ steps.runtimes.outputs.cache-primary-key }}
+    - name: Save admitted tools
+      if: inputs.cache == 'true' && steps.tools.outputs.cache-hit != 'true'
+      # Same-ref action admits only unsigned tool paths.
+      uses: ./.github/actions/cache-save # zizmor: ignore[self-repository]
+      with:
+        path: |
+          ~/.local/share/mise/installs/aqua-astral-sh-uv
+          ~/.local/share/mise/installs/aqua-cli-cli
+          ~/.local/share/mise/installs/aqua-jdx-hk
+          ~/.local/share/mise/installs/aqua-koalaman-shellcheck
+          ~/.local/share/mise/installs/aqua-realm-swift-lint
+          ~/.local/share/mise/installs/aqua-rhysd-actionlint
+          ~/.local/share/mise/installs/aqua-trufflesecurity-trufflehog
+          ~/.local/share/mise/installs/aqua-zizmorcore-zizmor
+          ~/.local/share/mise/installs/npm-prettier
+          ~/.local/share/mise/installs/npm-markdownlint-cli
+          ~/.local/share/mise/installs/pipx-pre-commit-hooks
+          ~/.local/share/mise/installs/pipx-yamllint
+          ~/.local/share/mise/installs/pipx-coverage
+        key: ${{ steps.tools.outputs.cache-primary-key }}

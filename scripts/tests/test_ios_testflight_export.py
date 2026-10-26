@@ -13,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -28,7 +30,7 @@ OPTIONS = {'method': 'app-store-connect', 'destination': 'export', 'signingStyle
            'stripSwiftSymbols': True, 'uploadSymbols': True}
 
 
-class ExportPolicyTests(unittest.TestCase):
+class ExportPolicyTests(FixtureTestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

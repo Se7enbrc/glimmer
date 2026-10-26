@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-FileCopyrightText: 2026 ugfugl.io
+
+amends "package://github.com/jdx/hk/releases/download/v2.8.1/hk@2.8.1#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.8.1/hk@2.8.1#/Builtins.pkl"
+
+// Like pre-commit, report every failing step instead of stopping at the first
+fail_fast = false
+
+local linters = new Mapping<String, Step | Group> {
+  ["trailing-whitespace"] = (Builtins.trailing_whitespace) {
+    exclude = Regex("^third_party/")
+  }
+  ["end-of-file-fixer"] = (Builtins.newlines) {
+    exclude = Regex("^third_party/")
+  }
+  ["check-yaml"] {
+    types = List("yaml")
+    check = "check-yaml --allow-multiple-documents {{files}}"
+  }
+  ["check-added-large-files"] = (Builtins.check_added_large_files) {
+    check = "hk util check-added-large-files --maxkb 2048 {{files}}"
+  }
+  ["check-merge-conflict"] = Builtins.check_merge_conflict
+  ["check-executables-have-shebangs"] = Builtins.check_executables_have_shebangs
+  ["check-shebang-scripts-are-executable"] = Builtins.check_shebang_scripts_are_executable
+  ["check-json"] {
+    types = List("json")
+    check = "python3 scripts/check-data.py json {{files}}"
+  }
+  ["check-toml"] {
+    types = List("toml")
+    check = "python3 scripts/check-data.py toml {{files}}"
+  }
+  ["check-case-conflict"] = Builtins.check_case_conflict
+  ["mixed-line-ending"] = Builtins.mixed_line_ending
+  ["fix-byte-order-marker"] = Builtins.byte_order_marker
+  ["yamllint"] {
+    types = List("yaml")
+    // mise hashes generated dependency sidecars; their formatting is not editable.
+    exclude = List("third_party/**", ".mise/locks/**")
+    check = "yamllint --format parsable -d '{extends: default, rules: {line-length: disable, document-start: disable}}' {{files}}"
+  }
+  ["markdownlint"] {
+    types = List("markdown")
+    exclude = "third_party/**"
+    check = "markdownlint --disable MD013 MD029 MD036 MD041 -- {{files}}"
+    fix = "markdownlint --fix --disable MD013 MD029 MD036 MD041 -- {{files}}"
+  }
+  ["prettier"] {
+    types = List("yaml", "markdown", "json")
+    exclude = List("third_party/**", ".mise/locks/**")
+    check = "prettier --check --prose-wrap=always {{files}}"
+    fix = "prettier --write --prose-wrap=always {{files}}"
+  }
+  ["trufflehog"] {
+    check = "bash scripts/check-secrets.sh verified"
+  }
+  ["private-keys"] {
+    check = "bash scripts/check-private-keys.sh"
+  }
+  ["swiftlint"] {
+    types = List("swift")
+    check = new Script { macos = "scripts/lint-swift.sh lint --strict --quiet" }
+    fix = new Script { macos = "scripts/lint-swift.sh --fix --quiet && scripts/lint-swift.sh lint --strict --quiet" }
+    exclusive = true
+  }
+  ["actionlint"] {
+    glob = Regex(#"^\.github/workflows/.*\.ya?ml$"#)
+    check = "actionlint"
+  }
+  ["zizmor"] {
+    glob = Regex(#"^\.github/(workflows/.*\.ya?ml$|actions/.*/action\.ya?ml$)"#)
+    check = "zizmor --offline {{files}}"
+  }
+  ["shellcheck"] {
+    types = List("shell")
+    exclude = Regex("^third_party/")
+    check = "shellcheck {{files}}"
+  }
+  ["python-imports"] {
+    glob = "**/*.py"
+    check = "python3 scripts/check-python-imports.py {{files}}"
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stage = false
+    fail_on_fix = true
+    stash = "git"
+    steps = linters
+  }
+  ["check"] { steps = linters }
+  ["fix"] { fix = true; stage = false; steps = linters }
+  ["pre-push"] {
+    steps {
+      ["preflight"] { check = "make preflight" }
+    }
+  }
+}

@@ -7,6 +7,8 @@ import importlib.util
 from pathlib import Path
 import subprocess
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "verify-changed.py"
@@ -18,7 +20,7 @@ OLD = "// fixture\nMARKETING_VERSION = 2026.10.8\nCURRENT_PROJECT_VERSION = 2026
 NEW = OLD.replace("20261031", "20261032")
 
 
-class VerifyVersionOnlyTests(unittest.TestCase):
+class VerifyVersionOnlyTests(FixtureTestCase):
     def decision(self, old, new, paths=None):
         with patch.object(CHANGED.subprocess, "check_output", side_effect=[old, new]):
             return CHANGED.must_build(paths or ["Glimmer/Version.xcconfig", "CHANGELOG.md"], base=BASE)

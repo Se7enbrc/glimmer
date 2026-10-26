@@ -9,6 +9,8 @@ import sys
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 SPEC = importlib.util.spec_from_file_location("policy_page", SCRIPTS / "build-policy-page.py")
@@ -16,7 +18,7 @@ policy_page = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(policy_page)
 
 
-class PolicyPageTests(unittest.TestCase):
+class PolicyPageTests(FixtureTestCase):
     def test_renders_document_structure_and_resolves_document_links(self):
         source = """---
 description: Not page content

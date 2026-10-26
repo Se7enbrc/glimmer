@@ -7,6 +7,8 @@ import importlib.util
 from pathlib import Path
 import sys
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
@@ -16,7 +18,7 @@ SPEC.loader.exec_module(CUTTER)
 SHA = 'a' * 40
 
 
-class CandidatePrepareTests(unittest.TestCase):
+class CandidatePrepareTests(FixtureTestCase):
     def test_new_reservation_waits_for_new_dispatches_not_old_green_runs(self):
         with patch.object(CUTTER.candidate_reservation, 'reserve', return_value=True), \
                 patch.object(CUTTER, 'candidate_runs', return_value=[{'id': 1}]), \

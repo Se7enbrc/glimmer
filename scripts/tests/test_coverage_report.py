@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("coverage_report", Path(__file__).parents[1] / "coverage-report.py")
@@ -18,7 +20,7 @@ REPORT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REPORT)
 
 
-class CoverageReportTests(unittest.TestCase):
+class CoverageReportTests(FixtureTestCase):
     def test_zero_denominator_is_not_measured(self):
         self.assertEqual(REPORT.pct(0, 0), "not measured (0 counted)")
         self.assertEqual(REPORT.pct(1, 3), "33.33% (1/3)")
@@ -39,7 +41,7 @@ class CoverageReportTests(unittest.TestCase):
         self.assertEqual(REPORT.llvm_row(totals), "50.00% (1/2) | 50.00% (2/4) | not measured (0 counted)")
 
 
-class ReportModeTests(unittest.TestCase):
+class ReportModeTests(FixtureTestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

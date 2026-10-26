@@ -41,6 +41,12 @@ jobs:
 
       # Main, scheduled and dispatched runs scan everything; a pull request skips
       # only the Swift build when it changes nothing that build reads.
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Decide what to scan
         id: changes
         env:
@@ -98,6 +104,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Select analysis scope
         id: changes
         env:
@@ -125,6 +137,8 @@ jobs:
           printf 'GLIMMER_SWIFTC=%s\n' "$(xcrun --find swiftc)" >> "$GITHUB_ENV"
           XCODE_XCCONFIG_FILE="$RUNNER_TEMP/glimmer-codeql.xcconfig"
           cat > "$XCODE_XCCONFIG_FILE" <<'XCCONFIG'
+          ARCHS = arm64
+          ONLY_ACTIVE_ARCH = YES
           CODE_SIGNING_ALLOWED = NO
           CODE_SIGNING_REQUIRED = NO
           SWIFT_USE_INTEGRATED_DRIVER = NO
@@ -196,7 +210,7 @@ jobs:
           # Both builds have separate products; the wrapper traces every production compiler.
           DYLD_INSERT_LIBRARIES: ""
         run: |
-          make app helper-build CONFIG=Debug SWIFTC="$PWD/scripts/codeql-swiftc.sh" &
+          make -j2 app helper-build CONFIG=Debug SWIFTC="$PWD/scripts/codeql-swiftc.sh" &
           mac=$!
           if [ -f iOS/Makefile ]; then make ios-app CONFIG=Debug; fi &
           ios=$!

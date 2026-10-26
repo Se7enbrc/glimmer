@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 import xml.etree.ElementTree as ET
 
 from fixture_process import run_fixture
@@ -27,7 +29,7 @@ def candidate(short="2026.10.6", build="20261010"):
     return feed
 
 
-class CandidateFeedTests(unittest.TestCase):
+class CandidateFeedTests(FixtureTestCase):
     def test_only_explicit_candidates_can_repeat_an_unreleased_marketing_version(self):
         feed = candidate()
         self.assertIsNone(validate_feed(feed, "2026.10.6", "20261011", "rc"))
@@ -95,7 +97,7 @@ class CandidateFeedTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), unchanged)
 
 
-class CandidatePublicationTests(unittest.TestCase):
+class CandidatePublicationTests(FixtureTestCase):
     def setUp(self):
         test_release.ReleasePublicationTests.setUp(self)
 

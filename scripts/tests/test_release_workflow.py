@@ -11,8 +11,10 @@ import tempfile
 import textwrap
 import unittest
 
+from fixture_git import FixtureTestCase
 
-class ReleaseWorkflowTests(unittest.TestCase):
+
+class ReleaseWorkflowTests(FixtureTestCase):
     def test_publication_receives_every_secret_it_reads(self):
         # A called workflow sees an environment secret only if the caller passes it.
         root = Path(__file__).resolve().parents[2] / ".github/workflows"
@@ -136,7 +138,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         sign = makefile.split("\nsign-bundle:", 1)[1].split("\n\n", 1)[0]
         notarize = makefile.split("\nnotarize-bundle:", 1)[1].split("\n\n", 1)[0]
         dmg = makefile.split("\nnotarize-dmg:", 1)[1].split("\n\n", 1)[0]
-        self.assertTrue(sign.startswith(" ensure-signing\n"))
+        self.assertTrue(sign.startswith(" signing-preflight ensure-signing\n"))
         self.assertTrue(notarize.startswith(" sign-bundle appcast-feed\n"))
         for forbidden in ("xcodebuild", "swiftc", "embed-helper", "--validate-distribution"):
             self.assertNotIn(forbidden, sign + notarize + dmg)

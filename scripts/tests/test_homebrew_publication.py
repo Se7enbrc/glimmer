@@ -12,6 +12,8 @@ import sys
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 SCRIPTS = Path(__file__).parents[1]
 DMG = b'accepted signed DMG fixture'
 TOOL = r'''
@@ -47,7 +49,7 @@ elif name == 'github_signed_commit.py':
 '''
 
 
-class TapPublicationTests(unittest.TestCase):
+class TapPublicationTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
