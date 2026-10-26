@@ -126,6 +126,10 @@ private struct GlimmerSettingsPage: View {
                     Text("For games and PCs that handle a change in screen size. "
                          + "Otherwise, disconnecting quits the game.")
                 }
+                SettingsResetSection(enabled: model.session == nil && !model.busy) { includeGames in
+                    try await ControllerLayoutsModel.shared.reset(includeGames: includeGames)
+                    SettingsReset.reset(defaults: .standard)
+                }
             case .quality: StreamQualitySettings(profile: $profile)
             case .pcs: computerSettings
             case .input: controllerSettings
@@ -172,6 +176,7 @@ private struct GlimmerSettingsPage: View {
     }
 
     @ViewBuilder private var controllerSettings: some View {
+        StreamShortcutSettings()
         Section("Controllers") {
             NavigationLink("Controller layouts") {
                 ControllerLayoutsView()
@@ -241,6 +246,8 @@ private struct PairedPCRow: View {
 @MainActor
 private struct StreamQualitySettings: View {
     @Binding var profile: StreamProfile
+    @AppStorage("showStreamStats") private var showStats = false
+    @AppStorage("statsOverlayPreset") private var preset: StatsOverlayPreset = .minimal
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -254,6 +261,14 @@ private struct StreamQualitySettings: View {
             Text("Stream")
         } footer: {
             Text(streamExplanation)
+        }
+        Section {
+            Toggle("Stream stats", isOn: $showStats)
+            Picker("Overlay detail", selection: $preset) {
+                ForEach(StatsOverlayPreset.allCases.filter { $0 != .custom || preset == .custom }, id: \.self) {
+                    Text($0.displayName).tag($0)
+                }
+            }
         }
     }
 

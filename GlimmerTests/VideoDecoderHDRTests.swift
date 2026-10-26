@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  VideoDecoderHDRTests.swift
-//
-//  Which colorspace a decoded frame is tagged with, the HDR10 metadata blobs, and the layer's HDR mode.
-//
+// Exercise colour tags, HDR10 metadata and the display layer's HDR mode.
 
 @testable import GlimmerEngine
 import AVFoundation
@@ -239,8 +235,12 @@ struct VideoDecoderHDRTests {
         let backend = InputRecordingBackend()
         backend.hdr = sampleHostHDR
         decoder.setBackend(backend)
+        let cachedFormat = try Self.formatDescription()
+        // Keep the initial invalidation pending so cache setup must follow the decode queue order.
+        decoder.decodeQueue.suspend()
         decoder.setHDR(enabled: true)
-        decoder.cachedHDRFormatDescription = try Self.formatDescription()
+        decoder.decodeQueue.async { decoder.cachedHDRFormatDescription = cachedFormat }
+        decoder.decodeQueue.resume()
 
         decoder.setHDR(enabled: true)
         await decoder.decodeQueue.drainForTest()

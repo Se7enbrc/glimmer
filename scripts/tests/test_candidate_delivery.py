@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 import unittest
+
+from fixture_git import FixtureTestCase
 import sys
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).parents[1]))
@@ -19,7 +21,7 @@ RUN = {'id': 10, 'run_attempt': 2, 'head_sha': SHA, 'head_branch': 'release-cand
        'head_repository': {'full_name': 'Se7enbrc/glimmer'}, 'status': 'in_progress'}
 
 
-class DeliveryControllerTests(unittest.TestCase):
+class DeliveryControllerTests(FixtureTestCase):
     def setUp(self):
         self.run = copy.deepcopy(RUN)
         self.current = copy.deepcopy(RUN)

@@ -14,6 +14,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
@@ -33,7 +35,7 @@ def channel(short="2026.10.5", build="20261008"):
         </item></channel>''')
 
 
-class ReleaseValidationTests(unittest.TestCase):
+class ReleaseValidationTests(FixtureTestCase):
     def test_sparkle_zip_target_packages_explicit_bundle_without_signing(self):
         with tempfile.TemporaryDirectory(prefix="glimmer zip fixture ") as directory:
             root = Path(directory)
@@ -42,7 +44,7 @@ class ReleaseValidationTests(unittest.TestCase):
                 "MARKETING_VERSION = 2026.10.6\nCURRENT_PROJECT_VERSION = 400\n")
             shutil.copy2(SCRIPTS.parent / "Makefile", root / "Makefile")
             (root / "scripts").mkdir()
-            for name in ("release-bundle.mk", "apple-apps.mk", "ci-checks.mk", "mac-test-products.mk"):
+            for name in ("ci-signing.mk", "release-bundle.mk", "apple-apps.mk", "ci-checks.mk", "mac-test-products.mk"):
                 shutil.copy2(SCRIPTS / name, root / "scripts" / name)
             app = root / "prepared app/Glimmer.app"
             app.mkdir(parents=True)
@@ -58,7 +60,8 @@ class ReleaseValidationTests(unittest.TestCase):
                 (tools / name).write_text("#!/bin/bash\nexit 1\n")
             for tool in tools.iterdir():
                 tool.chmod(0o755)
-            result = run_fixture(["/usr/bin/make", "sparkle-zip", "CONFIG=Release",
+            result = run_fixture(["/usr/bin/make", "-f", "scripts/ci-signing.mk", "sparkle-zip", "CONFIG=Release",
+                                  "CI=true", "GITHUB_ACTIONS=true", f"RUNNER_TEMP={root}",
                                   f"GLIMMER_APP_SRC={app}", f"DIST_DIR={output}"], cwd=root,
                                  env={"PATH": f"{tools}:/usr/bin:/bin", "HOME": str(root),
                                       "FIXTURE_LOG": str(log)})
@@ -85,7 +88,7 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertIn("-enableAddressSanitizer YES", commands[1])
         self.assertIn("-only-testing:GlimmerTests/FuzzTests", commands[1])
         self.assertIn("-only-testing:GlimmerTests/StreamFuzzTests", commands[1])
-        self.assertIn("scripts/lint-swift.sh lint --strict", full)
+        self.assertIn("hk check --all", full)
         self.assertIn("python3 scripts/test-scripts.py all", full)
         self.assertIn("python3 scripts/test-scripts.py all", plan("verify", "TEST_PLATFORM=portable"))
 
@@ -214,7 +217,7 @@ class ReleaseValidationTests(unittest.TestCase):
             self.assertFalse((root / "cache/test/.verified-sha256").exists())
 
 
-class ReleaseVersionGateTests(unittest.TestCase):
+class ReleaseVersionGateTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -286,7 +289,7 @@ class ReleaseVersionGateTests(unittest.TestCase):
             self.assertIn(message, self.gate().stderr)
 
 
-class ReleasePublicationTests(unittest.TestCase):
+class ReleasePublicationTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="glimmer publish fixture ")
         self.addCleanup(self.temp.cleanup)
@@ -396,7 +399,7 @@ exit 1
                     self.assertFalse(Path(self.env[name]).exists())
 
 
-class BuildInfoTests(unittest.TestCase):
+class BuildInfoTests(FixtureTestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

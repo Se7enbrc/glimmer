@@ -3,7 +3,6 @@
 
 // SPDX-FileCopyrightText: Moonlight Game Streaming Project contributors
 
-// H.264/HEVC key-frame detection and parameter-set routing for Sunshine payloads.
 // Transport ported from moonlight-common-c (GPLv3); see CREDITS.md.
 
 import Foundation
@@ -12,47 +11,62 @@ extension VideoDepacketizer {
 
     // MARK: - H.264/HEVC Annex-B helpers
 
-    /// Sunshine can prepend AUD and SEI NALs before an IDR's parameter sets.
-    /// Inspect past those without copying or removing valid metadata.
     static func isIdrFrameStart<Bytes: RandomAccessCollection>(_ payload: Bytes, hevc: Bool) -> Bool
     where Bytes.Element == UInt8, Bytes.Index == Int {
-        var offset = payload.startIndex
-        while offset < payload.endIndex {
-            let startLength = annexBStartCodeLength(payload, at: offset)
-            let headerIndex = offset + startLength
-            guard startLength > 0, headerIndex < payload.endIndex else { return false }
-            let type = hevc ? (payload[headerIndex] >> 1) & 0x3F : payload[headerIndex] & 0x1F
-            if type == (hevc ? 32 : 7) { return true }   // HEVC VPS / H.264 SPS
-            guard type == (hevc ? 35 : 9) || type == (hevc ? 39 : 6) else { return false }
-            offset = headerIndex + 1
-            while offset < payload.endIndex && annexBStartCodeLength(payload, at: offset) == 0 {
-                offset += 1
+        guard var marker = nextNALMarker(payload, from: payload.startIndex),
+              payload[payload.startIndex..<marker.start].allSatisfy({ $0 == 0 }) else { return false }
+        while true {
+            let headerSize = hevc ? 2 : 1
+            guard payload.endIndex - marker.header >= headerSize else { return false }
+            let byte = payload[marker.header]
+            guard byte & 0x80 == 0 else { return false }
+            if hevc, payload[marker.header + 1] & 7 == 0 { return false }
+            let kind = hevc ? (byte >> 1) & 63 : byte & 31
+            if kind == (hevc ? 32 : 7) {
+                return hevc ? payload[marker.header + 1] & 7 == 1 : byte & 0x60 != 0
             }
+            let metadata = hevc ? kind == 35 || kind == 39 : kind == 9 || kind == 6
+            guard metadata, hevc || byte & 0x60 == 0, let following = nextNALMarker(payload, from: marker.header),
+                  following.start - marker.header > headerSize else { return false }
+            marker = following
         }
-        return false
     }
 
-    // internal for testability
-    /// Split an Annex-B access unit into typed DecodeBuffers: VPS/SPS/PPS
-    /// NALs (H.264: 7/8; HEVC: 32/33/34) each become their own buffer -
-    /// start code kept; the decoder strips it - and every other NAL (SEI,
-    /// slices) stays in ONE picData buffer in arrival order. Runs only on
-    /// IDR frames, so the per-byte scan is off the steady-state path.
+    // A zero run is scanned once; emulation prevention breaks the run before a marker can form.
+    private static func nextNALMarker<Bytes: RandomAccessCollection>(
+        _ bytes: Bytes, from start: Int
+    ) -> (start: Int, header: Int)? where Bytes.Element == UInt8, Bytes.Index == Int {
+        var zeros = 0
+        for index in start..<bytes.endIndex {
+            let byte = bytes[index]
+            if byte == 1, zeros >= 2 { return (index - min(zeros, 3), index + 1) }
+            zeros = byte == 0 ? zeros + 1 : 0
+        }
+        return nil
+    }
+
+    // Keep metadata in picture order while exposing parameter sets to format negotiation.
     func splitAnnexBParamSets(_ au: Data) -> [DecodeBuffer] {
         let bytes = [UInt8](au)
         var vps: Data?, sps: Data?, pps: Data?
         var picData = Data()
         picData.reserveCapacity(bytes.count)
 
-        let starts = Self.annexBStartCodeOffsets(bytes)
-        guard !starts.isEmpty else {
+        var markers: [(start: Int, header: Int)] = []
+        var cursor = bytes.startIndex
+        while let marker = Self.nextNALMarker(bytes, from: cursor) {
+            let start = markers.isEmpty && bytes[..<marker.start].allSatisfy({ $0 == 0 }) ? 0 : marker.start
+            markers.append((start, marker.header))
+            cursor = marker.header
+        }
+        guard !markers.isEmpty else {
             return [DecodeBuffer(kind: .picData, data: au)]
         }
 
-        for (idx, start) in starts.enumerated() {
-            let end = idx + 1 < starts.count ? starts[idx + 1] : bytes.count
-            let scLen = bytes[start + 2] == 1 ? 3 : 4
-            let headerIndex = start + scLen
+        for (index, marker) in markers.enumerated() {
+            let start = marker.start
+            let end = index + 1 < markers.count ? markers[index + 1].start : bytes.count
+            let headerIndex = marker.header
             guard headerIndex < end else { continue }
             let nal = au.subdata(in: start..<end)
             switch bufferKind(nalHeaderByte: bytes[headerIndex]) {
@@ -71,30 +85,7 @@ extension VideoDepacketizer {
         return out
     }
 
-    /// Share the three- and four-byte Annex-B boundaries with IDR detection.
-    private static func annexBStartCodeOffsets(_ bytes: [UInt8]) -> [Int] {
-        var starts: [Int] = []
-        var offset = 0
-        while offset < bytes.count {
-            let length = annexBStartCodeLength(bytes, at: offset)
-            if length > 0 { starts.append(offset) }
-            offset += max(1, length)
-        }
-        return starts
-    }
-
-    private static func annexBStartCodeLength<Bytes: RandomAccessCollection>(_ bytes: Bytes, at offset: Int) -> Int
-    where Bytes.Element == UInt8, Bytes.Index == Int {
-        guard bytes.endIndex - offset > 2, bytes[offset] == 0, bytes[offset + 1] == 0 else { return 0 }
-        if bytes[offset + 2] == 1 { return 3 }
-        if bytes.endIndex - offset > 3, bytes[offset + 2] == 0, bytes[offset + 3] == 1 { return 4 }
-        return 0
-    }
-
-    /// Route one NAL to its DecodeBuffer kind off its first post-start-code
-    /// byte (the C slow path's getBufferFlags): HEVC reads nal_unit_type from
-    /// bits 6..1, H.264 from the low 5 bits. Anything that isn't a parameter
-    /// set is picture data.
+    // NAL types come from H.264/H.265; non-parameter units retain their original order.
     private func bufferKind(nalHeaderByte: UInt8) -> DecodeBuffer.Kind {
         if isHEVC {
             switch (nalHeaderByte >> 1) & 0x3F {

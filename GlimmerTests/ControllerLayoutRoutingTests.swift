@@ -60,17 +60,17 @@ struct ControllerLayoutRoutingTests {
         #expect(core.announcedControllers[0]?.caps == 1)
     }
 
-    @Test func disablingEveryOutputKeepsPhysicalEscapeAndDoesNotSynthesizeQuit() throws {
+    @Test func disablingEveryOutputDoesNotTurnTheOldEscapePairIntoAnAction() throws {
         let (core, backend) = rig()
         let configuration = try ControllerLayoutConfiguration(layout: .init(bindings: []), shortcuts: nil,
             available: [.button(.menu), .button(.options)])
         core.configureLayout(configuration, slot: 0, held: .init(), at: 0)
         core.receive(slot: 0, buttons: StreamProtocol.PLAY_FLAG | StreamProtocol.BACK_FLAG,
                      analog: InputCore.neutral, capturedAt: 1)
-        #expect(core.layouts?.states[0]?.escape.isPending == true)
+        #expect(core.layouts?.states[0]?.gesture.deadline == nil)
         #expect(core.chordSlots.isEmpty)
         core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, capturedAt: 2.1)
-        #expect(core.layouts?.states[0]?.escape.isPending == false)
+        #expect(core.layouts?.states[0]?.gesture.latched == nil)
         #expect(backend.calls.last?.buttons == 0)
     }
 

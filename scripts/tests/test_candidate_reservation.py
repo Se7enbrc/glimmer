@@ -5,6 +5,8 @@
 
 import os
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import Mock, patch
 import test_release_candidate_cut as fixture
 import sys
@@ -14,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 import candidate_reservation as reservation
 
 
-class CandidateReservationTests(unittest.TestCase):
+class CandidateReservationTests(FixtureTestCase):
     def setUp(self):
         self.fixture = fixture.ReleaseCandidateCutTests()
         self.fixture.setUp()

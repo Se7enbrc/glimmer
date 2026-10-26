@@ -102,20 +102,11 @@ public final class VideoDecoder {
     /// without polling.
     public var onHDRActiveChanged: ((Bool) -> Void)?
 
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
-    /// Whether the in-stream stats overlay (ping / fps / decode time) should
-    /// be drawn on top of the next rendered frame.
-    ///
-    /// This value is session-scoped on purpose. `StreamSession.start` seeds
-    /// it from `AppModel.showStreamStats` (the user's persisted
-    /// preference) and the configured stats hotkey toggles it from inside
-    /// the stream - but the toggled value never round-trips back into
-    /// UserDefaults. Rationale: a user who flips stats on with the hotkey
-    /// to chase a hitch shouldn't see the overlay still up the next time
-    /// they start a stream a week later.
-    package var statsOverlayEnabled: Bool = false {
+    /// Visibility belongs to this session; the saved initial preference remains unchanged.
+    public var statsOverlayEnabled: Bool = false {
         didSet {
             guard oldValue != statsOverlayEnabled else { return }
+            statsCollector.setOverlayCollection(statsOverlayEnabled)
             log.info("Stats overlay \(self.statsOverlayEnabled ? "ON" : "OFF")")
             backdropBox.withLock { [enabled = statsOverlayEnabled] in
                 $0.overlayEnabled = enabled
@@ -133,7 +124,6 @@ public final class VideoDecoder {
 
     /// HUD backdrop sampling state: set on the main actor, sampled on the present path.
     nonisolated let backdropBox = OSAllocatedUnfairLock(initialState: HUDBackdropState())
-    #endif
 
     // MARK: - Internal state
     //

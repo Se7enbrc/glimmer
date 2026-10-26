@@ -79,6 +79,7 @@ final class StreamViewController: GCEventViewController {
         super.viewDidAppear(animated)
         updateOrientation()
         startWhenReady()
+        becomeFirstResponder()
     }
 
     override func viewDidLayoutSubviews() {
@@ -156,7 +157,12 @@ final class StreamViewController: GCEventViewController {
         while let parent = owner.parent { owner = parent }
         owner.setNeedsUpdateOfSupportedInterfaceOrientations()
         guard traitCollection.userInterfaceIdiom != .pad else { return }
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape)) { error in
+        Self.requestLandscape(in: scene)
+    }
+
+    static func requestLandscape(in scene: UIWindowScene) {
+        // UIKit can deliver geometry failures from a background queue.
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape)) { @Sendable error in
             Logger(subsystem: "io.ugfugl.Glimmer", category: "Display")
                 .error("Display rotation failed: \(error.localizedDescription, privacy: .private)")
         }
@@ -184,7 +190,6 @@ struct StreamControls: View {
         .opacity(model.dismissWhenStopped ? 0 : 1)
         .allowsHitTesting(!model.dismissWhenStopped)
         .accessibilityHidden(model.dismissWhenStopped)
-        .modifier(IOSControllerLayoutStreamControls(model: model))
         .onChange(of: model.phase.isEnded && model.dismissWhenStopped, initial: true) { _, finished in
             if finished { close() }
         }
@@ -288,6 +293,9 @@ struct StreamControls: View {
 
     @ViewBuilder private var controlActions: some View {
         if model.phase == .streaming {
+            Button(model.statsShown ? "Hide Stream Stats" : "Show Stream Stats",
+                   systemImage: "chart.xyaxis.line", action: model.toggleStats)
+                .buttonStyle(.glass)
             IOSControllerLayoutStreamButton(model: model)
             Button("Edit controls…", systemImage: "hand.draw") {
                 model.showControls()
@@ -344,7 +352,8 @@ struct StreamControls: View {
                     VStack(spacing: 12) {
                         Text("Hold Menu for a second and release to switch between gamepad and mouse.")
                         Text(model.launch.mouseStick.controls)
-                        Text("Hold Menu, Options, and both shoulder buttons to disconnect.")
+                        Text("Change Stop streaming and Stats shortcuts in Controller layouts. "
+                             + "Hold a shortcut, then release to use it.")
                         if model.launch.touchMouseEnabled {
                             Text("Drag to move the pointer. Tap to click.")
                             Text("Use two fingers to scroll or tap for a secondary click.")

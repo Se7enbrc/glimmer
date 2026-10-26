@@ -211,6 +211,10 @@ extension VideoDecoder {
                 // white/purple-flash-class tell; see noteCorruptionIfDecodeError).
                 VideoDecoder.noteCorruptionIfDecodeError(status: status)
             }
+            #else
+            _ = decoder.statsCollector.recordDecodeComplete(dropped: dropped,
+                identity: StatsCollector.DecodeIdentity(epoch: epoch,
+                    rtpTimestamp: VideoDecoder.rtpTimestamp(from: presentationTimeStamp)))
             #endif
 
             guard !dropped, let imageBuffer else { return }

@@ -12,6 +12,8 @@ import sys
 import tempfile
 import json
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
@@ -49,7 +51,7 @@ def language_jobs(**changes):
             for index, name in enumerate(sorted(CHECKS.REQUIRED[WORKFLOW]), 1)}
 
 
-class RequiredChecksTests(unittest.TestCase):
+class RequiredChecksTests(FixtureTestCase):
     def setUp(self):
         clock = patch.object(CHECKS, 'time')
         clock.start().monotonic.return_value = 0
@@ -240,7 +242,7 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertIn("passed Verify", out.getvalue())
 
 
-class GitHubReadRetryTests(unittest.TestCase):
+class GitHubReadRetryTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

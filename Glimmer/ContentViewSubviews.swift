@@ -34,9 +34,11 @@ struct AppIconsRow: View {
 
     private var inlineApps: [LibraryApp] { Self.inlineApps(apps) }
 
-    private var overflowApps: [LibraryApp] {
-        apps.count <= Self.maxInlineTiles ? [] : Array(apps.dropFirst(Self.maxInlineTiles - 1))
+    static func overflowApps(_ apps: [LibraryApp]) -> [LibraryApp] {
+        Array(apps.dropFirst(inlineApps(apps).count))
     }
+
+    private var overflowApps: [LibraryApp] { Self.overflowApps(apps) }
 
     var body: some View {
         Group {
@@ -196,25 +198,23 @@ struct AppIconsRow: View {
                 Button {
                     model.requestStream(app: app, on: host)
                 } label: {
-                    // macOS 27 hides a plain menu-item symbol image by default;
-                    // these items name an app, so force the icon back on.
-                    Label { Text("Stream \(app.name)") } icon: { app.icon }
-                        .labelStyle(.titleAndIcon)
+                    Label { Text(app.name) } icon: { app.icon }
                 }
                 .disabled(model.menuStopInProgress || model.readinessReason(for: host) != nil)
-                .accessibilityHint(model.readinessReason(for: host) ?? "")
+                .help(model.readinessReason(for: host) ?? "Stream \(app.name)")
             }
         } label: {
-            tileLabel(icon: Image(systemName: "ellipsis"), title: "\(overflowApps.count) more", trailing: "chevron.down")
+            Label("\(overflowApps.count) more apps", systemImage: "ellipsis")
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 60)
+                .contentShape(.rect(cornerRadius: 14))
         }
-        .modifier(LauncherControlFocus(focus: focus, target: .overflow))
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        // Glass, not violet: it opens a list rather than streaming.
         .glassSurface(in: .rect(cornerRadius: 14), interactive: true)
-        .help("Show \(overflowApps.count) more app\(overflowApps.count == 1 ? "" : "s")")
-        .accessibilityLabel("\(overflowApps.count) more apps")
-        .accessibilityHint("Shows the rest of this PC's apps")
+        .modifier(LauncherControlFocus(focus: focus, target: .overflow))
+        .accessibilityLabel("\(overflowApps.count) more apps on \(host.displayName)")
+        .accessibilityHint("Opens the remaining apps for this PC.")
     }
 }
 

@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 import unittest
 
+from fixture_git import FixtureTestCase
+
 SCRIPT = Path(__file__).resolve().parents[1] / "compare-builds.sh"
 
 
@@ -22,7 +24,7 @@ def bundle(root, payload=b"same bytes", mode=0o755, link="Versions/B/Sparkle"):
     return app
 
 
-class CompareBuildsTests(unittest.TestCase):
+class CompareBuildsTests(FixtureTestCase):
     def compare(self, a, b):
         return subprocess.run([str(SCRIPT), str(a), str(b)], capture_output=True, text=True)
 

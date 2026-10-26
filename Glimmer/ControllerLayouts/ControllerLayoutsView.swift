@@ -176,14 +176,7 @@ struct ControllerLayoutEditor: View {
     }
 
     private var shortcutsSection: some View {
-        Section("Glimmer controls") {
-            let escape = ControllerLayoutShortcuts.escape(available: Set(device.controls.map(\.id)))
-            LabeledContent("Show controls", value: escape.isEmpty ? "Use the keyboard or touch controls" :
-                escape.map(\.layoutName).sorted().joined(separator: " + "))
-            Text("With a custom layout, hold for one second, then release. This shortcut can't be changed.")
-                .font(.footnote).foregroundStyle(.secondary)
-            ControllerLayoutShortcutSummary()
-        }
+        ControllerShortcutSection(model: model, device: device)
     }
 
     private func destination(_ source: ControllerLayoutSource) -> ControllerLayoutDestination {

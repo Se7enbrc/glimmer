@@ -2,7 +2,11 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import GlimmerEngine
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import QuartzCore
 
 /// Forty intervals at the overlay's 4 Hz cadence, with missing readings left as gaps.
@@ -174,7 +178,7 @@ final class StatsTrace {
         criticals.lineWidth = 1.6
     }
 
-    func applyInk(primary: NSColor, caution: NSColor, critical: NSColor, opaque: Bool) {
+    func applyInk(primary: StatsColor, caution: StatsColor, critical: StatsColor, opaque: Bool) {
         baseline.strokeColor = primary.withAlphaComponent(opaque ? 0.4 : 0.18).cgColor
         line.strokeColor = primary.cgColor
         cautions.strokeColor = caution.cgColor
@@ -210,11 +214,15 @@ final class StatsTrace {
     }
 
     func draw() {
+        let bounds = layer.bounds.insetBy(dx: 2, dy: 2)
+        guard !bounds.isEmpty else {
+            for shape in [baseline, line, cautions, criticals, dot] { shape.path = nil }
+            return
+        }
         let normalPath = CGMutablePath()
         let cautionPath = CGMutablePath()
         let criticalPath = CGMutablePath()
         let referencePath = CGMutablePath()
-        let bounds = layer.bounds.insetBy(dx: 2, dy: 2)
         let scale = scale
         func y(_ value: Double) -> CGFloat {
             bounds.minY + CGFloat(min(1, max(0, (value - scale.lower) / (scale.upper - scale.lower)))) * bounds.height

@@ -4,7 +4,6 @@
 // Samples the picture's brightness behind the stats HUD so the overlay can pick light or dark ink.
 // Runs on the present path after the renderer has the frame, at most 4 Hz, luma plane only.
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
 import CoreGraphics
 import CoreMedia
 import CoreVideo
@@ -40,7 +39,7 @@ extension VideoDecoder {
     nonisolated static let backdropGridRows = 8
 
     /// Normalized rect (origin top-left of the picture) to sample; `.zero` turns sampling off.
-    package var hudBackdropRect: CGRect {
+    public var hudBackdropRect: CGRect {
         get { backdropBox.withLock { $0.rect } }
         set {
             backdropBox.withLock {
@@ -53,7 +52,7 @@ extension VideoDecoder {
     }
 
     /// Latest mean relative luminance (0...1) inside `hudBackdropRect`, nil before a sample.
-    package var hudBackdropLuminance: Double? { backdropBox.withLock { $0.luminance } }
+    public var hudBackdropLuminance: Double? { backdropBox.withLock { $0.luminance } }
 
     package var hudBackdropState: HUDBackdropState { backdropBox.withLock { $0 } }
 
@@ -162,5 +161,3 @@ extension VideoDecoder {
         return min(nits / 203, 1)
     }
 }
-
-#endif

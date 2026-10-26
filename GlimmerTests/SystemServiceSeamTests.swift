@@ -140,16 +140,65 @@ struct SystemServiceSeamTests {
     }
 
     @Test(.timeLimit(.minutes(1)))
-    func siriRelearnsPCNamesAfterLaunchAndOnRename() async {
+    func siriTracksRepeatedRenamesAndPairingChangesWithoutUnchangedReloads() async {
         let model = AppModel(defaults: settings.defaults)
         model.hosts = [pc()]
+        var names: [[String]] = []
         let (updates, signal) = AsyncStream<Void>.makeStream()
-        let tracking = GlimmerShortcuts.trackPCs(of: model, bootstrap: { _ in Task {} }, update: { signal.yield() })
-        defer { tracking.cancel() }
+        let tracking = GlimmerShortcuts.trackPCs(of: model, bootstrap: { _ in Task {} }, update: {
+            names.append(model.hosts.map(\.displayName))
+            signal.yield()
+        })
+        defer { tracking.cancel(); signal.finish() }
         var waiter = updates.makeAsyncIterator()
         #expect(await waiter.next() != nil)
-        model.hosts = [pc(customName: "Living Room")]
+        model.hosts = [pc(apps: ["Desktop"])]
+        await DispatchQueue.main.drainForTest()
+        #expect(names == [["Den"]])
+        for name in ["Living Room", "Bedroom"] {
+            model.hosts = [pc(customName: name)]
+            #expect(await waiter.next() != nil)
+            #expect(names.last == [name])
+        }
+        model.hosts.append(pc(id: "pc-2", customName: "Study"))
         #expect(await waiter.next() != nil)
+        model.hosts.append(pc(id: "pc-3", customName: "Office"))
+        #expect(await waiter.next() != nil)
+        model.hosts.reverse()
+        await DispatchQueue.main.drainForTest()
+        #expect(names.count == 5)
+        model.hosts.removeAll { $0.id == "pc-1" }
+        #expect(await waiter.next() != nil)
+        model.hosts.removeAll { $0.id == "pc-3" }
+        #expect(await waiter.next() != nil)
+        model.hosts = []
+        #expect(await waiter.next() != nil)
+        tracking.cancel()
+        await tracking.value
+        #expect(names == [["Den"], ["Living Room"], ["Bedroom"], ["Bedroom", "Study"],
+                         ["Bedroom", "Study", "Office"], ["Office", "Study"], ["Study"], []])
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func cancelledPCTrackingStopsUpdatingShortcuts() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.hosts = [pc()]
+        var names: [[String]] = []
+        let (updates, signal) = AsyncStream<Void>.makeStream()
+        let tracking = GlimmerShortcuts.trackPCs(of: model, bootstrap: { _ in Task {} }, update: {
+            names.append(model.hosts.map(\.displayName))
+            signal.yield()
+        })
+        defer { tracking.cancel(); signal.finish() }
+        var waiter = updates.makeAsyncIterator()
+        #expect(await waiter.next() != nil)
+        tracking.cancel()
+        await tracking.value
+        model.hosts = [pc(customName: "Bedroom")]
+        model.hosts.append(pc(id: "pc-2", customName: "Study"))
+        model.hosts = []
+        await DispatchQueue.main.drainForTest()
+        #expect(names == [["Den"]])
     }
 
     // MARK: Display defaults

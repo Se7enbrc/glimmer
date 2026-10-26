@@ -1,107 +1,83 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-// AudioToolbox decodes one mono/stereo Opus stream; surround uses several of these.
+import AVFoundation
+import Synchronization
 
-import AudioToolbox
-import Foundation
+// Owned by one OpusDecoder under AudioDecoder's state lock, never by the render callback.
+final class NativeOpusLane {
+    let width: Int
+    let output: AVAudioPCMBuffer
+    private let converter: AVAudioConverter
+    private let packetSource: OpusConversionInput
 
-final class OpusStreamDecoder {
-    let channels: Int
-    private let samplesPerFrame: Int
-    private let converter: AudioConverterRef
-    private let input: UnsafeMutableRawPointer
-    private let description: UnsafeMutablePointer<AudioStreamPacketDescription>
-    private var inputBytes = 0
-    private var inputPending = false
-    private var toc: UInt8?
-    /// The last conversion's result (noErr on success), for the session's first-failure log.
-    private(set) var lastStatus: OSStatus = noErr
-    private static let inputSpent: OSStatus = 0x6E65_6564 // 'need'
-
-    init?(sampleRate: Int32, channels: Int, samplesPerFrame: Int) {
-        var inFormat = AudioStreamBasicDescription(
-            mSampleRate: Double(sampleRate), mFormatID: kAudioFormatOpus, mFormatFlags: 0, mBytesPerPacket: 0,
-            mFramesPerPacket: UInt32(samplesPerFrame), mBytesPerFrame: 0, mChannelsPerFrame: UInt32(channels),
-            mBitsPerChannel: 0, mReserved: 0)
-        var outFormat = AudioStreamBasicDescription(
-            mSampleRate: Double(sampleRate), mFormatID: kAudioFormatLinearPCM,
-            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
-            mBytesPerPacket: UInt32(4 * channels), mFramesPerPacket: 1, mBytesPerFrame: UInt32(4 * channels),
-            mChannelsPerFrame: UInt32(channels), mBitsPerChannel: 32, mReserved: 0)
-        var made: AudioConverterRef?
-        guard AudioConverterNew(&inFormat, &outFormat, &made) == noErr, let made else { return nil }
-        // Mapping family 0 describes exactly one stream, with no Sunshine pre-skip or gain.
-        var cookie = Array("OpusHead".utf8) + [1, UInt8(channels), 0, 0]
-        cookie += withUnsafeBytes(of: UInt32(sampleRate).littleEndian, Array.init) + [0, 0, 0]
-        guard AudioConverterSetProperty(made, kAudioConverterDecompressionMagicCookie,
-                                        UInt32(cookie.count), &cookie) == noErr else {
-            AudioConverterDispose(made)
+    init?(rate: Int32, width: Int, capacity: Int) {
+        self.width = width
+        var source = AudioStreamBasicDescription(
+            mSampleRate: Double(rate), mFormatID: kAudioFormatOpus, mFormatFlags: 0,
+            mBytesPerPacket: 0, mFramesPerPacket: UInt32(capacity), mBytesPerFrame: 0,
+            mChannelsPerFrame: UInt32(width), mBitsPerChannel: 0, mReserved: 0)
+        guard let input = AVAudioFormat(streamDescription: &source),
+              let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(rate),
+                                         channels: AVAudioChannelCount(width), interleaved: true),
+              let converter = AVAudioConverter(from: input, to: format),
+              let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(capacity)) else {
             return nil
         }
-        converter = made
-        self.channels = channels
-        self.samplesPerFrame = samplesPerFrame
-        input = .allocate(byteCount: OpusDecoder.maxPacketBytes, alignment: 16)
-        description = .allocate(capacity: 1)
+        self.converter = converter
+        self.output = output
+        packetSource = OpusConversionInput(format: input)
+        converter.primeMethod = .none
     }
 
-    deinit {
-        AudioConverterDispose(converter)
-        input.deallocate()
-        description.deallocate()
-    }
-
-    func decode(_ packet: UnsafeRawBufferPointer?, start: Int, boundary: OpusPacket?,
-                into pcm: UnsafeMutablePointer<Float>) -> Int {
-        if let packet, let boundary, let base = packet.baseAddress {
-            if boundary.lengthField.isEmpty {
-                inputBytes = boundary.end - start
-                input.copyMemory(from: base + start, byteCount: inputBytes)
-            } else {
-                let headerBytes = boundary.lengthField.lowerBound - start
-                let payloadBytes = boundary.end - boundary.lengthField.upperBound
-                input.copyMemory(from: base + start, byteCount: headerBytes)
-                input.advanced(by: headerBytes).copyMemory(
-                    from: base + boundary.lengthField.upperBound, byteCount: payloadBytes)
-                inputBytes = headerBytes + payloadBytes
-            }
-            toc = packet[start] & 0xFC
-        } else {
-            guard let toc else { return 0 }
-            // An empty frame signals packet loss; a zero-byte packet would end the stream.
-            input.storeBytes(of: toc, as: UInt8.self)
-            inputBytes = 1
+    func convert(_ bytes: UnsafeRawBufferPointer?, span: Range<Int>, removing: Range<Int>, frames: Int) -> Int? {
+        guard packetSource.prepare(bytes, span: span, removing: removing, frames: frames) else { return nil }
+        output.frameLength = 0
+        var error: NSError?
+        let status = converter.convert(to: output, error: &error) { [packetSource] _, state in
+            packetSource.take(status: state)
         }
-        inputPending = true
-        var frames = UInt32(samplesPerFrame)
-        var output = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(
-            mNumberChannels: UInt32(channels), mDataByteSize: UInt32(samplesPerFrame * channels * 4), mData: pcm))
-        let status = AudioConverterFillComplexBuffer(converter, { _, count, data, packetDescription, context in
-            guard let context else { return OpusStreamDecoder.inputSpent }
-            let decoder = Unmanaged<OpusStreamDecoder>.fromOpaque(context).takeUnretainedValue()
-            return decoder.supplyInput(count, data: data, packetDescription: packetDescription)
-        }, Unmanaged.passUnretained(self).toOpaque(), &frames, &output, nil)
-        lastStatus = status == Self.inputSpent ? noErr : status
-        guard lastStatus == noErr else { return 0 }
-        return Int(frames)
+        guard status != .error, error == nil else { return nil }
+        return Int(output.frameLength)
     }
 
-    private func supplyInput(_ count: UnsafeMutablePointer<UInt32>, data: UnsafeMutablePointer<AudioBufferList>,
-                             packetDescription: UnsafeMutablePointer<UnsafeMutablePointer<AudioStreamPacketDescription>?>?)
-        -> OSStatus {
-        guard inputPending else {
-            count.pointee = 0
-            return Self.inputSpent
+    func reset() { converter.reset() }
+}
+
+// AudioDecoder's state lock serializes preparation and synchronous conversion.
+// The buffer stays immutable until conversion returns; callbacks only read it.
+// An atomic claim permits exactly one callback to supply each prepared packet.
+private final class OpusConversionInput: @unchecked Sendable {
+    private let compressed: AVAudioCompressedBuffer
+    private let available = Atomic<Bool>(false)
+
+    init(format: AVAudioFormat) {
+        compressed = AVAudioCompressedBuffer(format: format, packetCapacity: 1, maximumPacketSize: 10_208)
+    }
+
+    func prepare(_ bytes: UnsafeRawBufferPointer?, span: Range<Int>, removing: Range<Int>, frames: Int) -> Bool {
+        let size = span.count - removing.count
+        if let bytes {
+            guard let source = bytes.baseAddress else { return false }
+            compressed.data.copyMemory(from: source.advanced(by: span.lowerBound),
+                                       byteCount: removing.lowerBound - span.lowerBound)
+            compressed.data.advanced(by: removing.lowerBound - span.lowerBound).copyMemory(
+                from: source.advanced(by: removing.upperBound), byteCount: span.upperBound - removing.upperBound)
         }
-        inputPending = false
-        data.pointee.mNumberBuffers = 1
-        data.pointee.mBuffers = AudioBuffer(mNumberChannels: UInt32(channels),
-                                           mDataByteSize: UInt32(inputBytes), mData: input)
-        description.pointee = AudioStreamPacketDescription(
-            mStartOffset: 0, mVariableFramesInPacket: 0, mDataByteSize: UInt32(inputBytes))
-        packetDescription?.pointee = description
-        count.pointee = 1
-        return noErr
+        compressed.byteLength = UInt32(size)
+        compressed.packetCount = 1
+        compressed.packetDescriptions?.pointee = AudioStreamPacketDescription(
+            mStartOffset: 0, mVariableFramesInPacket: UInt32(frames), mDataByteSize: UInt32(size))
+        available.store(true, ordering: .releasing)
+        return true
+    }
+
+    func take(status: UnsafeMutablePointer<AVAudioConverterInputStatus>) -> AVAudioBuffer? {
+        guard available.exchange(false, ordering: .acquiring) else {
+            status.pointee = .noDataNow
+            return nil
+        }
+        status.pointee = .haveData
+        return compressed
     }
 }

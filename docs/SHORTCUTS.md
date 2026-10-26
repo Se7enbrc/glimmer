@@ -5,6 +5,11 @@ icon: keyboard
 
 # Control your stream with shortcuts
 
+Stop and Stats work on Mac and with a hardware keyboard on iPhone and iPad. Mini
+Player, pointer capture, paste and Mac system shortcuts below apply to Mac. On
+iPhone and iPad, the stream menu also offers “Show Stream Stats” or “Hide Stream
+Stats”.
+
 | Reference                      | Location                                        |
 | ------------------------------ | ----------------------------------------------- |
 | Saved bindings                 | Settings › Input; defaults below.               |
@@ -13,22 +18,32 @@ icon: keyboard
 
 ## While streaming
 
-| Action in the focused stream | Default   | Result                                                    |
-| ---------------------------- | --------- | --------------------------------------------------------- |
-| Stop                         | Control-Q | Ends stream and quits PC app. Save first.                 |
-| Mini Player                  | Control-M | Toggles presentation.                                     |
-| Stats                        | Control-I | Toggles for this stream; next uses Settings › Quality.    |
-| Pointer                      | Control-P | Toggles captured/free; keeps choice across focus changes. |
+| Action in the focused stream | Default        | Result                                                                                    |
+| ---------------------------- | -------------- | ----------------------------------------------------------------------------------------- |
+| Stop                         | ⌃Q (Control-Q) | Ends the stream; quits the PC app unless “Leave games running when you disconnect” is on. |
+| Mini Player                  | Control-M      | Toggles presentation.                                                                     |
+| Stats                        | Control-Z      | Toggles for this stream; next uses Settings › Quality.                                    |
+| Pointer                      | Control-P      | Toggles captured/free; keeps choice across focus changes.                                 |
 
 | Text and diagnostics | Default   | Result                                        |
 | -------------------- | --------- | --------------------------------------------- |
 | Paste                | Control-V | Types Mac text into PC.                       |
 | Bookmark             | Control-B | With telemetry enabled; otherwise sent to PC. |
 
+⌃Z (Control-Z) is the default for “Show or Hide Stream Stats”; ⌃Q is the default
+for “Stop Streaming”. Change either in Settings › Input. Saved custom bindings
+stay yours. The old stats default moves to ⌃Z once; choosing ⌃I afterward keeps
+it.
+
+Stats changes apply to this stream. Settings › Quality chooses the initial
+visibility and overlay detail for future streams, including on iPhone and iPad.
+
 {% hint style="warning" %}
 
-Closing the stream window or quitting Glimmer also quits the PC app. Command-Q
-quits Glimmer. Save first.
+Closing the stream window or quitting Glimmer follows “Leave games running when
+you disconnect” in Settings › General. It is off by default, so save first.
+Command-Q quits Glimmer. An explicit “Quit” action quits the PC app even when
+the setting is on.
 
 {% endhint %}
 
@@ -60,14 +75,21 @@ quits Glimmer. Save first.
 | Command-Escape                       | Game Overlay in native fullscreen; Settings holds Game Mode.                               |
 | Command forwarding, Settings › Input | Sends Windows key fullscreen or captured in window/Mini Player; stop shortcut still works. |
 
-## Controller stop shortcut
+## Controller shortcuts
 
-Hold **L1 + R1 + Start + Select** together for half a second. This stop chord is
-fixed on Mac, iPhone and iPad. Controller layouts cannot change it.
+Hold the complete shortcut for about half a second, then release every button.
+The defaults on Mac, iPhone and iPad are:
+
+- **Stop:** L1 + R1 + Create/Select + Options/Start.
+- **Stats:** L1 + R1 + L3 + R3, using both stick buttons.
+
+Change either in Settings › Input › Controller layouts. Choose Stop streaming or
+Stats, record at least three buttons, then release. Shortcuts use physical
+buttons independently of the game's mapping. Existing saved choices stay yours.
 
 | Controller        | Button names                |
 | ----------------- | --------------------------- |
-| PlayStation       | L1 + R1 + Options + Create. |
+| PlayStation       | L1 + R1 + Create + Options. |
 | Xbox              | LB + RB + Menu + View.      |
 | Other controllers | L1 + R1 + Start + Select.   |
 

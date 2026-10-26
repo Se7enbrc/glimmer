@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-//
-//  HostsPersistenceTests.swift
-//
-//  The paired-PC store, the per-PC codec choice and the typed settings readers,
-//  all against a scratch UserDefaults suite and a temp directory so nothing
-//  touches the developer's real preferences or Application Support.
-//
+// Isolated stores keep persistence tests away from real preferences and paired PCs.
 
 import GlimmerEngine
 import Foundation
@@ -62,6 +56,46 @@ struct HostsPersistenceTests {
     private func bareHost(_ id: String) -> Glimmer.Host {
         Glimmer.Host(id: id, name: id, customName: nil, localAddress: nil, manualAddress: nil, apps: [],
              lastConnected: nil, serverCertPEM: nil, appVersion: nil, macAddress: nil)
+    }
+
+    @Test(arguments: [nil, "i", "k"] as [String?])
+    func statsDefaultUpdatesWithoutReplacingCustomChords(savedKey: String?) throws {
+        let defaults = settings.defaults
+        if let savedKey {
+            let chord = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: savedKey)
+            defaults.set(try JSONEncoder().encode(chord), forKey: "statsHotkey")
+        }
+        let model = AppModel(defaults: defaults)
+        #expect(model.statsHotkey.serialized == (savedKey == "k" ? "ctrl+k" : "ctrl+z"))
+        let restored = AppModel.persistedDecoded("statsHotkey", HotkeyChord.self, defaults: defaults)
+        #expect(restored == (savedKey == nil ? nil : model.statsHotkey))
+        #expect(AppModel(defaults: defaults).statsHotkey == model.statsHotkey)
+    }
+
+    @Test func statsMigrationPreservesModifiersAndLaterControlIChoice() throws {
+        let defaults = settings.defaults
+        let custom = HotkeyChord(ctrl: true, alt: false, shift: true, cmd: false, keyChar: "i")
+        defaults.set(try JSONEncoder().encode(custom), forKey: "statsHotkey")
+        let model = AppModel(defaults: defaults)
+        #expect(model.statsHotkey == custom)
+        let controlI = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        model.statsHotkey = controlI
+        #expect(AppModel(defaults: defaults).statsHotkey == controlI)
+    }
+
+    @Test func resettingStatsUsesTheCurrentDefaultAndPreservesTheNextExplicitChoice() {
+        let defaults = settings.defaults
+        let model = AppModel(defaults: defaults)
+        let controlI = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        model.statsHotkey = controlI
+        #expect(AppModel(defaults: defaults).statsHotkey == controlI)
+        SettingsReset.reset(defaults: defaults)
+        let reset = AppModel(defaults: defaults)
+        #expect(reset.statsHotkey == .defaultStats)
+        #expect(defaults.data(forKey: "statsHotkey") == nil)
+        #expect(defaults.bool(forKey: "statsControlZDefaultApplied"))
+        reset.statsHotkey = controlI
+        #expect(AppModel(defaults: defaults).statsHotkey == controlI)
     }
 
     @Test func savingAPCWritesItsSlotAndLoadsIt() throws {
@@ -255,7 +289,7 @@ struct HostsPersistenceTests {
 
     // MARK: - Codec preference
 
-    @Test func aCodecChoiceRoundTripsAndAutoClearsTheKey() throws {
+    @Test func aCodecChoiceRoundTripsIncludingAutomatic() throws {
         let store = try IsolatedStore("codec")
         defer { store.remove() }
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .auto)
@@ -263,7 +297,7 @@ struct HostsPersistenceTests {
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .h264)
         #expect(HostCodecPreference.load(for: "BBB", defaults: store.defaults) == .auto)
         HostCodecPreference.save(.auto, for: "AAA", defaults: store.defaults)
-        #expect(store.defaults.string(forKey: "glimmer.codecPreference.AAA") == nil)
+        #expect(store.defaults.string(forKey: "glimmer.codecPreference.AAA") == "auto")
         HostCodecPreference.save(.hevc, for: "AAA", defaults: store.defaults)
         HostCodecPreference.forget(hostID: "AAA", defaults: store.defaults)
         #expect(HostCodecPreference.load(for: "AAA", defaults: store.defaults) == .auto)
@@ -312,5 +346,19 @@ struct HostsPersistenceTests {
         #expect(AppModel.persistedCustomRows(defaults: store.defaults) == [.latency, .jitter])
         store.defaults.set(["bogus"], forKey: "statsOverlayCustomRows")
         #expect(AppModel.persistedCustomRows(defaults: store.defaults) == nil)
+    }
+    @Test func choosingDefaultLauncherStyleKeepsAnExplicitValue() throws {
+        let store = try IsolatedStore("launcher-default")
+        defer { store.remove() }
+        LauncherStyle.save(.buttons, for: "AAA", defaults: store.defaults)
+        store.defaults.register(defaults: ["glimmer.launcherStyle.AAA": "covers"])
+        #expect(LauncherStyle.load(for: "AAA", defaults: store.defaults) == .buttons)
+    }
+
+    @Test func choosingNoCustomStatsRowsKeepsTheEmptySelection() throws {
+        let store = try IsolatedStore("empty-rows")
+        defer { store.remove() }
+        store.defaults.set([String](), forKey: "statsOverlayCustomRows")
+        #expect(AppModel.persistedCustomRows(defaults: store.defaults)?.isEmpty == true)
     }
 }

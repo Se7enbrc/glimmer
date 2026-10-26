@@ -672,3 +672,17 @@ may consider it more useful to permit linking proprietary applications with
 the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <http://www.gnu.org/philosophy/why-not-lgpl.html>.
+
+Additional permission under GNU GPL version 3 section 7
+
+Se7enbrc and the Glimmer authors grant you permission to convey the Program
+and works based on it through Apple's App Store and TestFlight under those
+platforms' terms of service and usage rules, even where those terms impose
+restrictions otherwise prohibited by the GNU GPL version 3. This permission
+applies to material in which we hold copyright.
+
+All other conditions of the GNU GPL version 3 remain in effect, including
+the obligation to provide Corresponding Source.
+
+You may remove this additional permission from your own derived versions,
+as permitted by section 7 of the GNU GPL version 3.

@@ -10,6 +10,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -19,7 +21,7 @@ from tap_cache import paths_alias_or_overlap, validate_cache
 REPO = "fixture/homebrew-tap"
 
 
-class TapCacheTests(unittest.TestCase):
+class TapCacheTests(FixtureTestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

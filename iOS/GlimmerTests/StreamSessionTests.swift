@@ -458,6 +458,7 @@ final class PlaybackFixture {
     var visibility: [Bool] = []
     var visibilityInputs: [VideoDecoder.PresentationVisibility] = []
     var focusHistory: [Bool] = []
+    var statsHistory: [Bool] = []
     var completedStops = 0
     var quiesce: (@MainActor @Sendable () -> Void)?
     var controllerConnected = false
@@ -482,7 +483,8 @@ final class PlaybackFixture {
                                   stop: { [self] in
                 await stop()
                 await MainActor.run { completedStops += 1 }
-            }, screenChanged: {}, focusInput: { [self] in focusHistory.append($0) }, format: format,
+            }, screenChanged: {},
+               focusInput: { [self] in focusHistory.append($0) }, format: format,
                setVisible: { [self] visible, inputs in
                    visibility.append(visible)
                    visibilityInputs.append(inputs)
@@ -490,7 +492,7 @@ final class PlaybackFixture {
                observeControllers: { [self] changed in
                 connectionChanged = changed
                 changed(controllerConnected)
-            })
+            }, showStats: { [self] in statsHistory.append($0) })
         })
     }
 }

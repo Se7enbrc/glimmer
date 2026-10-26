@@ -230,9 +230,11 @@ private final class TouchOrientationController: UIViewController {
         }
         guard let target else { return }
         setNeedsUpdateOfSupportedInterfaceOrientations()
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { [weak self] error in
-            self?.geometryError = error
-            self?.updates.continuation.yield(())
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { @Sendable [weak self] error in
+            Task { @MainActor in
+                self?.geometryError = error
+                self?.updates.continuation.yield(())
+            }
         }
         while transitioning || scene.effectiveGeometry.interfaceOrientation != target {
             if let geometryError { throw geometryError }

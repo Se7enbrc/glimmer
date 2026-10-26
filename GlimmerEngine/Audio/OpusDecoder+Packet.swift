@@ -1,98 +1,86 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-// RFC 6716 Appendix B adds one frame length to each stream except the last.
-// Remove that length before giving a stream to AudioToolbox's ordinary Opus decoder.
+// RFC 6716 section 3 and Appendix B define lengths independently of compressed frame contents.
+struct OpusEnvelope {
+    var consumed: Int
+    var delimiter: Range<Int>
+    var duration48k: Int
 
-import Foundation
-
-struct OpusPacket {
-    let end: Int
-    let lengthField: Range<Int>
-    let samplesAt48kHz: Int
-
-    static func parse(_ data: UnsafeRawBufferPointer, at start: Int, selfDelimited: Bool) -> OpusPacket? {
-        guard data.indices.contains(start) else { return nil }
-        let toc = data[start]
-        var cursor = start + 1
-        guard let header = readHeader(toc, data: data, cursor: &cursor) else { return nil }
-        let (count, cbr, padding) = header
-        let samples = count * samplesPerFrame(toc)
-        guard count > 0, samples <= 5_760 else { return nil }
-        var payload = 0
-        if !cbr {
-            for _ in 0..<(count - 1) {
-                guard let size = readSize(data, cursor: &cursor) else { return nil }
-                payload += size
-            }
-        }
-        let lengthStart = cursor
-        if selfDelimited {
-            guard let size = readSize(data, cursor: &cursor) else { return nil }
-            payload += cbr ? size * count : size
-        } else {
-            let available = data.count - cursor - padding
-            guard available >= payload else { return nil }
-            if cbr {
-                guard available % count == 0, available / count <= 1_275 else { return nil }
-            } else {
-                guard available - payload <= 1_275 else { return nil }
-            }
-            payload = available
-        }
-        let end = cursor + payload + padding
-        guard end <= data.count else { return nil }
-        return OpusPacket(end: end, lengthField: lengthStart..<cursor, samplesAt48kHz: samples)
-    }
-
-    private static func readHeader(_ toc: UInt8, data: UnsafeRawBufferPointer,
-                                   cursor: inout Int) -> (count: Int, cbr: Bool, padding: Int)? {
-        switch toc & 3 {
-        case 0: return (1, true, 0)
-        case 1: return (2, true, 0)
-        case 2: return (2, false, 0)
-        default:
-            guard cursor < data.count else { return nil }
-            let flags = data[cursor]
-            cursor += 1
-            let padding: Int
-            if flags & 0x40 != 0 {
-                guard let bytes = readPadding(data, cursor: &cursor) else { return nil }
-                padding = bytes
-            } else {
-                padding = 0
-            }
-            return (Int(flags & 0x3F), flags & 0x80 == 0, padding)
-        }
-    }
-
-    private static func readSize(_ data: UnsafeRawBufferPointer, cursor: inout Int) -> Int? {
-        guard cursor < data.count else { return nil }
-        let first = Int(data[cursor])
-        cursor += 1
-        if first < 252 { return first }
-        guard cursor < data.count else { return nil }
-        let size = first + 4 * Int(data[cursor])
-        cursor += 1
-        return size
-    }
-
-    private static func readPadding(_ data: UnsafeRawBufferPointer, cursor: inout Int) -> Int? {
+    static func inspect(_ bytes: UnsafeRawBufferPointer, from start: Int, delimited: Bool) -> Self? {
+        guard bytes.count <= 10_208, start >= 0, start < bytes.count else { return nil }
+        var reader = FramingCursor(bytes: bytes, position: start + 1)
+        let toc = bytes[start]
+        let code = toc & 3
+        var count = code == 0 ? 1 : 2
+        var variable = code == 2
         var padding = 0
-        while cursor < data.count {
-            let byte = data[cursor]
-            cursor += 1
-            padding += byte == 255 ? 254 : Int(byte)
-            guard padding <= data.count - cursor else { return nil }
-            if byte != 255 { return padding }
+        if code == 3 {
+            guard let control = reader.byte() else { return nil }
+            count = Int(control & 63)
+            variable = control & 128 != 0
+            guard let amount = control & 64 == 0 ? 0 : reader.padding() else { return nil }
+            padding = amount
+        }
+        let duration = frameDuration(toc) * count
+        guard count > 0, duration <= 5_760 else { return nil }
+        var explicitBytes = 0
+        if variable {
+            for _ in 1..<count {
+                guard let length = reader.length() else { return nil }
+                explicitBytes += length
+            }
+        }
+        let fieldStart = reader.position
+        let lastSize: Int
+        if delimited {
+            guard let length = reader.length() else { return nil }
+            lastSize = length
+        } else {
+            let remaining = bytes.count - reader.position - padding - explicitBytes
+            guard remaining >= 0, variable || remaining % count == 0 else { return nil }
+            lastSize = variable ? remaining : remaining / count
+        }
+        guard lastSize <= 1_275 else { return nil }
+        let payloadSize = variable ? explicitBytes + lastSize : count * lastSize
+        let end = reader.position + payloadSize + padding
+        guard end <= bytes.count else { return nil }
+        return Self(consumed: end, delimiter: fieldStart..<reader.position, duration48k: duration)
+    }
+
+    private static func frameDuration(_ toc: UInt8) -> Int {
+        let configuration = Int(toc >> 3)
+        if configuration >= 16 { return 120 << (configuration & 3) }
+        if configuration >= 12 { return 480 << (configuration & 1) }
+        let mode = configuration & 3
+        return mode == 3 ? 2_880 : 480 << mode
+    }
+}
+
+private struct FramingCursor {
+    let bytes: UnsafeRawBufferPointer
+    var position: Int
+
+    mutating func byte() -> UInt8? {
+        guard position < bytes.count else { return nil }
+        defer { position += 1 }
+        return bytes[position]
+    }
+
+    mutating func padding() -> Int? {
+        var total = 0
+        while let amount = byte() {
+            total += amount == 255 ? 254 : Int(amount)
+            guard total <= bytes.count else { return nil }
+            if amount != 255 { return total }
         }
         return nil
     }
 
-    private static func samplesPerFrame(_ toc: UInt8) -> Int {
-        if toc & 0x80 != 0 { return 120 << Int((toc >> 3) & 3) }
-        if toc & 0x60 == 0x60 { return toc & 8 != 0 ? 960 : 480 }
-        let shift = Int((toc >> 3) & 3)
-        return shift == 3 ? 2_880 : 480 << shift
+    mutating func length() -> Int? {
+        guard let first = byte() else { return nil }
+        if first < 252 { return Int(first) }
+        guard let second = byte() else { return nil }
+        return Int(first) + 4 * Int(second)
     }
 }

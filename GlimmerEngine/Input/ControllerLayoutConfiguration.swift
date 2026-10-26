@@ -5,15 +5,17 @@ import Foundation
 
 public struct ControllerLayoutConfiguration: Sendable {
     public let plan: ControllerMappingPlan?
-    public let escape: ControllerPhysicalChord
-    public let stop: ControllerPhysicalChord?
+    public let stop: ControllerPhysicalChord
+    public let stats: ControllerPhysicalChord
 
     public init(layout: ControllerLayout?, shortcuts: ControllerLayoutShortcuts?,
                 available: Set<ControllerLayoutSource>, extras: [String] = []) throws {
         plan = try layout.map { try ControllerMappingPlan(layout: $0, available: available, extras: extras) }
-        escape = try ControllerPhysicalChord(sources: ControllerLayoutShortcuts.escape(available: available), extras: extras)
-        // Older libraries may contain custom shortcuts; they never override the protected stop chord.
-        stop = try ControllerPhysicalChord(sources: ControllerLayoutShortcuts.fixedStop, extras: [])
+        let shortcuts = shortcuts ?? ControllerLayoutShortcuts()
+        try shortcuts.validate(available: available)
+        stop = try ControllerPhysicalChord(sources: shortcuts.stop, extras: extras)
+        // A legacy recording may overlap the new default; preserve it and leave Stats inactive until edited.
+        stats = try ControllerPhysicalChord(sources: shortcuts.hasConflict ? [] : shortcuts.stats, extras: extras)
     }
 }
 

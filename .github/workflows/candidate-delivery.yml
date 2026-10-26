@@ -42,6 +42,12 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Mint reservation controller token
         id: app
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0

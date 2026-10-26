@@ -2,10 +2,10 @@
 
 ## Introduction
 
-- [Overview](README.md)
+- [Glimmer for Apple devices](README.md)
 - [Requirements](REQUIREMENTS.md)
 - [Getting started](GETTING_STARTED.md)
-  - [Install Glimmer](INSTALL.md)
+  - [Install on Mac, iPhone or iPad](INSTALL.md)
   - [Set up the PC](HOST_SETUP.md)
 - [FAQ](FAQ.md)
 - [Releases and updates](UPDATES.md)
@@ -14,18 +14,18 @@
 
 - [What Glimmer can do](FEATURES.md)
   - [Streaming and display modes](guides/STREAMING.md)
-  - [Controllers](guides/CONTROLLERS.md)
+  - [Controllers and touch controls](guides/CONTROLLERS.md)
   - [Keyboard and mouse](guides/KEYBOARD_MOUSE.md)
   - [Audio and voice chat](AUDIO.md)
-  - [Wi-Fi helper](guides/WIFI.md)
+  - [Wi-Fi and stream quality](guides/WIFI.md)
   - [PCs and Wake on LAN](guides/PCS.md)
   - [Launcher](guides/LAUNCHER.md)
   - [Troubleshooting](guides/TROUBLESHOOTING.md)
 
 ## Automation
 
-- [Links, actions and recipes](AUTOMATION.md)
-  - [Command line reference](COMMAND_LINE.md)
+- [Mac links, actions and recipes](AUTOMATION.md)
+  - [Mac command line reference](COMMAND_LINE.md)
   - [Shortcuts reference](SHORTCUTS.md)
 
 ## Security and privacy

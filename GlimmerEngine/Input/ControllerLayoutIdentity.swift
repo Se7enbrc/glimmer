@@ -154,7 +154,12 @@ public struct ControllerLayoutLibrary: Codable, Equatable, Sendable {
         }
         for record in shortcuts {
             try ControllerLayoutKey(owner: record.owner, scope: .allGames).validate()
-            guard record.available.count <= 256 else { throw ControllerLayoutError.invalidBindings }
+            guard record.available.count <= 256, (record.name?.utf8.count ?? 0) <= 256,
+                  (record.category?.utf8.count ?? 0) <= 256,
+                  (record.controls ?? []).allSatisfy({ $0.name.utf8.count <= 256 && $0.symbol.utf8.count <= 128 }) else {
+                throw ControllerLayoutError.invalidBindings
+            }
+            try ControllerLayout(bindings: (record.controls ?? []).map { .init($0.id, .disabled) }).validate()
             try record.shortcuts.validate(available: record.available)
         }
         guard games.count <= 1024, Set(games.map(\.id)).count == games.count else {
@@ -173,10 +178,17 @@ public struct ControllerShortcutRecord: Codable, Equatable, Sendable {
     public let owner: ControllerLayoutOwner
     public let shortcuts: ControllerLayoutShortcuts
     public let available: Set<ControllerLayoutSource>
+    public let name: String?
+    public let controls: [ControllerLayoutControl]?
+    public let category: String?
 
-    public init(owner: ControllerLayoutOwner, shortcuts: ControllerLayoutShortcuts, available: Set<ControllerLayoutSource>) {
+    public init(owner: ControllerLayoutOwner, shortcuts: ControllerLayoutShortcuts, available: Set<ControllerLayoutSource>,
+                name: String? = nil, controls: [ControllerLayoutControl]? = nil, category: String? = nil) {
         self.owner = owner
         self.shortcuts = shortcuts
         self.available = available
+        self.name = name
+        self.controls = controls
+        self.category = category
     }
 }

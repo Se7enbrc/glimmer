@@ -16,23 +16,15 @@ struct ControllerLayoutBoundaryTests {
         return (core, backend)
     }
 
-    @Test func savedStopOverridesCannotDisableOrReplaceTheFixedPhysicalChord() throws {
-        let required: UInt32 = ControllerMappedButton.menu.rawValue | ControllerMappedButton.options.rawValue
-            | ControllerMappedButton.leftShoulder.rawValue | ControllerMappedButton.rightShoulder.rawValue
+    @Test func savedStopOverridesStayPhysicalAndKeepTheirStoredChoice() throws {
         let available = Set(ControllerMappedButton.allCases.map { ControllerLayoutSource.button($0) })
-        for saved: Set<ControllerLayoutSource> in [[], [.button(.a), .button(.b)]] {
-            let (core, backend) = rig()
-            let config = try ControllerLayoutConfiguration(layout: .init(bindings: []),
-                shortcuts: .init(stop: saved), available: available)
-            core.configureLayout(config, slot: 0, held: .init(), at: 0)
-            core.receive(slot: 0, buttons: Int32(bitPattern: required), analog: InputCore.neutral, capturedAt: 1)
-            #expect(core.chordSlots == [0])
-            #expect(backend.calls.last?.buttons == 0)
-            core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, capturedAt: 2)
-            core.receive(slot: 0, buttons: StreamProtocol.A_FLAG | StreamProtocol.B_FLAG,
-                         analog: InputCore.neutral, capturedAt: 3)
-            #expect(core.chordSlots.isEmpty)
-        }
+        let saved: Set<ControllerLayoutSource> = [.button(.a), .button(.b), .button(.x)]
+        let config = try ControllerLayoutConfiguration(layout: .init(bindings: []),
+            shortcuts: .init(stop: saved), available: available)
+        let physical = ControllerMappingSample(buttons: ControllerMappedButton.a.rawValue
+            | ControllerMappedButton.b.rawValue | ControllerMappedButton.x.rawValue)
+        #expect(config.stop.held(in: physical))
+        #expect(!config.stats.held(in: physical))
     }
 
     @Test func shortcutOnlyCustomizationKeepsSystemMapping() throws {

@@ -8,6 +8,7 @@ import UIKit
 @MainActor
 final class StreamSurface: UIView {
     private(set) var displayLayer = AVSampleBufferDisplayLayer()
+    weak var stats: StreamStats?
     var displayChanged: (() -> Void)?
 
     override init(frame: CGRect) {
@@ -31,6 +32,7 @@ final class StreamSurface: UIView {
         displayLayer.videoGravity = presentationGravity
         displayLayer.frame = bounds
         CATransaction.commit()
+        stats?.layout()
         if window != nil { displayChanged?() }
     }
 

@@ -24,17 +24,12 @@ extension HotkeyChord {
     /// `taken` lists every other shortcut by the name Settings shows.
     func recordingProblem(taken: [(name: String, chord: HotkeyChord)],
                           menu: NSMenu? = NSApp.mainMenu) -> String? {
-        if shift, !ctrl, !alt, !cmd {
-            return "Add ⌃, ⌥ or ⌘. With ⇧ alone, every capital letter would trigger it."
-        }
+        if let problem = recordingConflict(taken: []) { return problem }
         // The main menu answers its key equivalents before the stream sees them.
         if let menu, let title = menuItemTitle(in: menu) {
             return "Already used for \(title.hasSuffix("…") ? String(title.dropLast()) : title)."
         }
-        if let owner = taken.first(where: { $0.chord.displayString == displayString }) {
-            return "Already used for \(owner.name)."
-        }
-        return nil
+        return recordingConflict(taken: taken)
     }
 
     /// The title of the visible menu item this chord triggers, searching submenus.

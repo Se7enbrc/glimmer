@@ -14,11 +14,7 @@ enum LauncherStyle: String, CaseIterable {
     }
 
     static func save(_ style: Self, for pcID: String, defaults: UserDefaults = .standard) {
-        if style == .buttons {
-            defaults.removeObject(forKey: key(for: pcID))
-        } else {
-            defaults.set(style.rawValue, forKey: key(for: pcID))
-        }
+        defaults.set(style.rawValue, forKey: key(for: pcID))
     }
 
     static func forget(pcID: String, defaults: UserDefaults = .standard) {

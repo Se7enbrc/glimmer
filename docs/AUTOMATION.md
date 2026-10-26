@@ -1,9 +1,13 @@
 ---
-description: Use Glimmer links, Shortcuts, Siri, Spotlight and scripts.
+description: Use Glimmer links, Shortcuts, Siri, Spotlight and scripts on Mac.
 icon: bolt
 ---
 
 # Start or wake your PC from another app
+
+On Mac, launch and control the same streams through Glimmer links, Shortcuts,
+Siri, Spotlight or the command line. These actions use your paired PCs and
+Glimmer settings.
 
 ## Open a Glimmer link
 
@@ -25,7 +29,9 @@ accepted parameters.
 
 ## End a stream from anywhere
 
-Stopping works like the menu bar Stop: it also quits the app on the PC.
+Stopping follows “Leave games running when you disconnect” in Settings ›
+General, just like stopping from the menu bar. The setting is off by default, so
+save before stopping.
 
 ```bash
 glimmer stop
@@ -53,12 +59,12 @@ installation steps.
 2. Add an action.
 3. Select your paired PC.
 
-| Action         | Result                                       |
-| -------------- | -------------------------------------------- |
-| Stream from PC | Opens a stream; app name is optional.        |
-| Wake PC        | Wakes and waits for an answer.               |
-| Quit App on PC | Quits without confirmation. Save first.      |
-| Stop Streaming | Ends the stream and quits its app on the PC. |
+| Action         | Result                                              |
+| -------------- | --------------------------------------------------- |
+| Stream from PC | Opens a stream; app name is optional.               |
+| Wake PC        | Wakes and waits for an answer.                      |
+| Quit App on PC | Quits without confirmation. Save first.             |
+| Stop Streaming | Ends the stream, following your disconnect setting. |
 
 {% hint style="info" %}
 

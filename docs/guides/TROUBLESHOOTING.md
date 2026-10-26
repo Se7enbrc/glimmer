@@ -17,13 +17,28 @@ icon: wrench
 
 ## Playback
 
-| Problem                          | Try this                                                        |
-| -------------------------------- | --------------------------------------------------------------- |
-| Wrong size                       | [Match the PC display](../HOST_SETUP.md).                       |
-| Stutters                         | [Enable the Wi-Fi helper](WIFI.md).                             |
-| Quiet or muffled sound           | [Audio fixes](../AUDIO.md).                                     |
-| Trapped pointer or paste trouble | [Keyboard and mouse](KEYBOARD_MOUSE.md#paste-text-into-the-pc). |
-| Missing buttons                  | [Controller setup](CONTROLLERS.md).                             |
+| Problem                          | Try this                                                                                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wrong size                       | [Match the PC display](../HOST_SETUP.md).                                                                                                    |
+| Stutters                         | On Mac, [enable the Wi-Fi helper](WIFI.md). In beta builds, check [Adaptive stream quality](WIFI.md#adaptive-stream-quality-in-beta-builds). |
+| Quiet or muffled sound           | [Audio fixes](../AUDIO.md).                                                                                                                  |
+| Trapped pointer or paste trouble | [Keyboard and mouse](KEYBOARD_MOUSE.md#paste-text-into-the-pc).                                                                              |
+| Missing buttons                  | [Controller setup](CONTROLLERS.md).                                                                                                          |
+
+## iPhone and iPad
+
+| Problem                          | Try this                                                                                                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Touch gamepad disappeared        | Connecting a controller hides it. Open the stream menu with a three-finger tap, choose “Show touch controls”, then “Resume”.                                                         |
+| Touch controls won't fit         | Enlarge the iPad window or connect a controller. Use [Edit controls…](CONTROLLERS.md#edit-the-touch-layout) to adjust Size and Opacity.                                              |
+| Picture cropped or wrong size    | Choose Native for windowed play and install the [mobile display modes](../HOST_SETUP.md#pick-your-file). Some games need “1080p · 60 fps”.                                           |
+| Lower quality in Low Data Mode   | Adaptive quality limits new streams to 9 Mbps, up to 1080p and 60 fps. See [Low Data Mode](WIFI.md#low-data-mode-on-iphone-and-ipad).                                                |
+| Game closed after switching apps | After the background grace period, Glimmer disconnects and quits the game by default. Enable “Leave games running when you disconnect” in Settings › General before the next stream. |
+
+“Adjusting stream quality…” means Glimmer is reconnecting at a different
+quality, keeping the game running. If it keeps appearing, check the network
+connection to the PC. See
+[adaptive quality](WIFI.md#adaptive-stream-quality-in-beta-builds).
 
 ## Record a rough moment
 

@@ -14,6 +14,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
@@ -25,7 +27,7 @@ SHA = 'a' * 40
 TAG = SHORT + '-rc.1'
 
 
-class RetryablePublicationTests(unittest.TestCase):
+class RetryablePublicationTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -317,7 +319,7 @@ def write_helper_floors(app, floor='15.7'):
         path.write_bytes(plistlib.dumps({'LSMinimumSystemVersion': floor}))
 
 
-class PublicationPreparationTests(unittest.TestCase):
+class PublicationPreparationTests(FixtureTestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

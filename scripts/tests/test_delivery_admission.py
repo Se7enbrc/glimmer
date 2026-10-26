@@ -12,6 +12,8 @@ import sys
 import threading
 from types import SimpleNamespace
 import unittest
+
+from fixture_git import FixtureTestCase
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
@@ -24,7 +26,7 @@ IOS = {'run': 20, 'attempt': 1, 'sha': 'b' * 40, 'ref': 'refs/heads/main',
        'workflow': '.github/workflows/ios-testflight.yml'}
 
 
-class DeliveryAdmissionTests(unittest.TestCase):
+class DeliveryAdmissionTests(FixtureTestCase):
     def setUp(self):
         self.lock = threading.Lock()
         self.revision = 1

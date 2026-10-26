@@ -79,6 +79,12 @@ jobs:
             exit 1
           }
           git checkout --detach "$TOOLING_SHA"
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Check source and prerequisites
         env:
           GH_TOKEN: ${{ github.token }}
@@ -206,6 +212,12 @@ jobs:
             exit 1
           }
           git checkout --detach "$TOOLING_SHA"
+      - name: Prepare pinned runtime
+        uses: ./.github/actions/mise # zizmor: ignore[self-repository]
+        with:
+          tools: python aqua:cli/cli
+          cache: "false"
+
       - name: Reverify the published candidate before touching the tap
         env:
           GH_TOKEN: ${{ github.token }}

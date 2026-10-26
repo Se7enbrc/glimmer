@@ -1,147 +1,145 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-// Sunshine surround packets contain separately framed mono/stereo Opus streams.
-// AudioToolbox decodes each stream; the negotiated mapping restores PC channel order.
+import AVFoundation
+import os
 
-import Foundation
-
-/// One session's Opus decoder. AudioDecoder holds its state lock throughout decoding and teardown.
+// AudioDecoder serializes this session's codec and scratch storage under its state lock.
 final class OpusDecoder {
-    private struct Channel {
-        let output: Int
-        let input: Int
-    }
-
     let channels: Int
     let samplesPerFrame: Int
-    private let decoders: [OpusStreamDecoder]
-    private let routes: [[Channel]]
-    private let mutedChannels: [Int]
-    private let sampleRate: Int
-    private let scratch: UnsafeMutablePointer<Float>?
-    private var packets: [OpusPacket?]
-    private var hasReceivedPacket = false
-    private var loggedFailure = false
-
-    static let maxPacketBytes = 8 * 1_276
+    private let rate: Int
+    private let routes: [UInt8]
+    private let lanes: [NativeOpusLane]
+    private var envelopes: [OpusEnvelope]
+    private var previous: [Float]
+    private var previousFrames = 0
+    private var recovering = false
+    private var reportedFailure = false
+    private var acceptedPriming = false
+    private let conversionResult: ((Int, Int?) -> Int?)?
+    private let log = Logger(subsystem: "io.ugfugl.Glimmer", category: "OpusDecoder")
 
     init?(sampleRate: Int32, channels: Int, streams: Int, coupledStreams: Int,
-          mapping: [UInt8], samplesPerFrame: Int) {
-        guard sampleRate > 0, (1...8).contains(channels), mapping.count == channels, (1...8).contains(streams),
-              (0...streams).contains(coupledStreams), samplesPerFrame > 0,
+          mapping: [UInt8], samplesPerFrame: Int, conversionResult: ((Int, Int?) -> Int?)? = nil) {
+        guard [8_000, 12_000, 16_000, 24_000, 48_000].contains(sampleRate),
+              (1...8).contains(channels), (1...8).contains(streams),
+              (0...streams).contains(coupledStreams), mapping.count == channels,
+              samplesPerFrame > 0, samplesPerFrame <= Int(sampleRate) * 120 / 1_000,
               mapping.allSatisfy({ $0 == 255 || Int($0) < streams + coupledStreams }) else { return nil }
-        var decoders: [OpusStreamDecoder] = []
-        decoders.reserveCapacity(streams)
+        var prepared: [NativeOpusLane] = []
         for index in 0..<streams {
-            guard let decoder = OpusStreamDecoder(sampleRate: sampleRate, channels: index < coupledStreams ? 2 : 1,
-                                                  samplesPerFrame: samplesPerFrame) else { return nil }
-            decoders.append(decoder)
+            guard let lane = NativeOpusLane(rate: sampleRate, width: index < coupledStreams ? 2 : 1,
+                                            capacity: samplesPerFrame) else { return nil }
+            prepared.append(lane)
         }
         self.channels = channels
         self.samplesPerFrame = samplesPerFrame
-        self.sampleRate = Int(sampleRate)
-        self.decoders = decoders
-        routes = (0..<streams).map { stream in
-            let first = stream < coupledStreams ? 2 * stream : stream + coupledStreams
-            let count = decoders[stream].channels
-            return mapping.enumerated().compactMap { output, value -> Channel? in
-                let input = Int(value) - first
-                return (0..<count).contains(input) ? Channel(output: output, input: input) : nil
-            }
-        }
-        mutedChannels = mapping.indices.filter { mapping[$0] == 255 }
-        packets = Array(repeating: nil, count: streams)
-        let direct = streams == 1 && channels == streams + coupledStreams
-            && mapping.enumerated().allSatisfy { Int($0.element) == $0.offset }
-        scratch = direct ? nil : .allocate(capacity: samplesPerFrame * 2)
+        self.conversionResult = conversionResult
+        rate = Int(sampleRate)
+        routes = mapping
+        lanes = prepared
+        envelopes = Array(repeating: OpusEnvelope(consumed: 0, delimiter: 0..<0, duration48k: 0), count: streams)
+        previous = Array(repeating: 0, count: samplesPerFrame * channels)
     }
 
-    deinit {
-        scratch?.deallocate()
-    }
-
-    /// Writes interleaved PCM, trimming initial lookahead once. Nil conceals one lost packet;
-    /// loss before the first packet produces no samples.
     func decode(_ packet: UnsafeRawBufferPointer?, into pcm: UnsafeMutablePointer<Float>) -> Int {
-        if let packet {
-            guard !packet.isEmpty, packet.count <= Self.maxPacketBytes, parse(packet) else { return 0 }
-            if !hasReceivedPacket {
-                let toc = packet[0]
-                AudioDiagnostics.info("Opus on AudioToolbox, \(Self.mode(toc)) frames", "Stream.Audio")
-            }
-            hasReceivedPacket = true
-        } else if !hasReceivedPacket {
-            return 0
+        acceptedPriming = false
+        if packet == nil {
+            guard previousFrames > 0 else { return 0 }
+            if recovering { return bridgeLoss(into: pcm) }
         }
-        guard let scratch else {
-            return decoders[0].decode(packet, start: 0, boundary: packets[0], into: pcm)
+        let frames: Int
+        if let packet {
+            guard let duration = validate(packet) else { return 0 }
+            frames = duration
+        } else {
+            frames = samplesPerFrame
         }
         var start = 0
-        var frames: Int?
-        var valid = true
-        for (index, decoder) in decoders.enumerated() {
-            let decoded = decoder.decode(packet, start: start, boundary: packets[index], into: scratch)
-            if let frames { valid = valid && decoded == frames } else { frames = decoded }
-            copyChannels(from: scratch, stream: index, frames: decoded, into: pcm)
-            start = packets[index]?.end ?? 0
+        var common = frames
+        for (index, lane) in lanes.enumerated() {
+            let envelope = envelopes[index]
+            let end = packet == nil ? 0 : envelope.consumed
+            let field = packet == nil ? 0..<0 : envelope.delimiter
+            let native = lane.convert(packet, span: start..<end, removing: field, frames: frames)
+            let result: Int?
+            if let conversionResult { result = conversionResult(index, native) } else { result = native }
+            guard let result, result >= 0, result <= frames,
+                  result <= Int(lane.output.frameLength), lane.output.floatChannelData != nil else {
+                // Apple exposes no codec-history rollback. Reset every lane together after a partial failure.
+                for lane in lanes { lane.reset() }
+                recovering = true
+                return 0
+            }
+            common = min(common, result)
+            start = end
         }
-        guard valid, let frames, frames > 0 else { return 0 }
-        for channel in mutedChannels {
-            for frame in 0..<frames { pcm[frame * channels + channel] = 0 }
-        }
-        return frames
+        if common > 0 { publish(frames: common, into: pcm) }
+        acceptedPriming = common == 0 && packet != nil
+        recovering = false
+        return common
     }
 
-    /// `decode`, except a packet that decodes to nothing is concealed like a lost one, so its 5 ms
-    /// plays instead of opening a hole the meter reads as an under-run.
     func decodeOrConceal(_ packet: UnsafeRawBufferPointer?, into pcm: UnsafeMutablePointer<Float>) -> Int {
-        let frames = decode(packet, into: pcm)
-        guard frames == 0, let packet else { return frames }
+        let result = decode(packet, into: pcm)
+        guard packet != nil, result == 0, !acceptedPriming else { return result }
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         TelemetryCounters.shared.audioDecodeFailedTotal.increment()
-        if !loggedFailure {
-            loggedFailure = true
-            let status = decoders.lazy.map(\.lastStatus).first { $0 != 0 }
-            let size = packet.count
-            AudioDiagnostics.queue.async {
-                let reason = status.map { "AudioConverter OSStatus \($0)" } ?? "malformed packet"
-                Diag.notice("Opus packet of \(size) bytes didn't decode (\(reason)); concealing it. "
-                    + "Later failures count in audio_decode_failed_total", "Stream.Audio")
-            }
+        #endif
+        if !reportedFailure {
+            reportedFailure = true
+            log.notice("An audio packet could not be decoded; concealing the missing interval")
         }
         return decode(nil, into: pcm)
     }
 
-    private func parse(_ packet: UnsafeRawBufferPointer) -> Bool {
+    private func validate(_ packet: UnsafeRawBufferPointer) -> Int? {
         var start = 0
-        var samples: Int?
-        // Validate every stream before advancing any decoder, so a truncated tail cannot desynchronise them.
-        for index in decoders.indices {
-            guard let boundary = OpusPacket.parse(packet, at: start, selfDelimited: index < decoders.count - 1),
-                  boundary.samplesAt48kHz * sampleRate <= samplesPerFrame * 48_000 else { return false }
-            if let samples, samples != boundary.samplesAt48kHz { return false }
-            samples = boundary.samplesAt48kHz
-            packets[index] = boundary
-            start = boundary.end
+        var duration = 0
+        for index in lanes.indices {
+            guard let envelope = OpusEnvelope.inspect(packet, from: start, delimited: index < lanes.count - 1),
+                  index == 0 || duration == envelope.duration48k else { return nil }
+            envelopes[index] = envelope
+            duration = envelope.duration48k
+            start = envelope.consumed
         }
-        return start == packet.count
+        let frames = duration * rate / 48_000
+        guard start == packet.count, frames <= samplesPerFrame else { return nil }
+        return frames
     }
 
-    private func copyChannels(from source: UnsafeMutablePointer<Float>, stream: Int, frames: Int,
-                              into pcm: UnsafeMutablePointer<Float>) {
-        let count = decoders[stream].channels
-        for channel in routes[stream] {
-            for frame in 0..<frames {
-                pcm[frame * channels + channel.output] = source[frame * count + channel.input]
+    private func publish(frames: Int, into pcm: UnsafeMutablePointer<Float>) {
+        var decodedChannel = 0
+        for lane in lanes {
+            guard let source = lane.output.floatChannelData?[0] else { continue }
+            let offset = Int(lane.output.frameLength) - frames
+            for channel in 0..<lane.width {
+                for destination in routes.indices where Int(routes[destination]) == decodedChannel + channel {
+                    for frame in 0..<frames {
+                        pcm[frame * channels + destination] = source[(frame + offset) * lane.width + channel]
+                    }
+                }
+            }
+            decodedChannel += lane.width
+        }
+        for destination in routes.indices where routes[destination] == 255 {
+            for frame in 0..<frames { pcm[frame * channels + destination] = 0 }
+        }
+        previous.withUnsafeMutableBufferPointer { $0.baseAddress?.update(from: pcm, count: frames * channels) }
+        previousFrames = frames
+    }
+
+    // A failed converter has no PLC history. Bridge one negotiated interval with a fading last interval.
+    private func bridgeLoss(into pcm: UnsafeMutablePointer<Float>) -> Int {
+        for frame in 0..<samplesPerFrame {
+            let gain = 1 - Float(frame + 1) / Float(samplesPerFrame)
+            for channel in 0..<channels {
+                pcm[frame * channels + channel] = previous[(frame % previousFrames) * channels + channel] * gain
             }
         }
-    }
-
-    private static func mode(_ toc: UInt8) -> String {
-        switch toc >> 3 {
-        case 0..<12: "SILK"
-        case 12..<16: "hybrid"
-        default: "CELT"
-        }
+        previous.withUnsafeMutableBufferPointer { $0.baseAddress?.update(from: pcm, count: samplesPerFrame * channels) }
+        previousFrames = samplesPerFrame
+        return samplesPerFrame
     }
 }

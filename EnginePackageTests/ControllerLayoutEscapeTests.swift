@@ -41,11 +41,9 @@ struct ControllerLayoutEscapeTests {
         #expect(result10)
     }
 
-    @Test func fixedEscapeCannotBecomeStopButStrictSupersetCan() throws {
+    @Test func recordingRequiresThreeButtonsAndRejectsTheOldEscapePair() throws {
         let escape = ControllerLayoutShortcuts.escape(available: available)
-        #expect(throws: ControllerLayoutError.invalidBindings) {
-            try ControllerLayoutShortcuts(stop: escape).validate(available: available)
-        }
+        #expect(ControllerLayoutShortcuts(stop: escape).recordingProblem(for: .stop, available: available) != nil)
         try ControllerLayoutShortcuts(stop: escape.union([.button(.leftShoulder)])).validate(available: available)
         #expect(ControllerLayoutShortcuts.escape(available: [.button(.leftStick), .button(.rightStick)])
             == [.button(.leftStick), .button(.rightStick)])

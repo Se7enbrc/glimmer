@@ -160,11 +160,9 @@ final class IPadNavigationTests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         let suffix = largeText ? "ax5" : "default"
-        // Connect the simulated keyboard before opening the menu, as the Settings shortcut test does.
-        app.typeKey(.shift, modifierFlags: [])
-        app.activate()
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+        app.connectHardwareKeyboard()
         recordScreen(app, name: "native-window-full-\(suffix)")
         app.buttons.matching(identifier: "Living room gaming PC 1").firstMatch.tap()
         let lastPC = app.buttons["pc-picker-fixture-11"]
@@ -199,9 +197,7 @@ final class IPadNavigationTests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
-        // Establish the simulated hardware keyboard before testing app shortcuts.
-        app.typeKey(.shift, modifierFlags: [])
-        app.activate()
+        app.connectHardwareKeyboard()
         app.typeKey(",", modifierFlags: .command)
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
         recordScreen(app, name: "settings-keyboard-open")

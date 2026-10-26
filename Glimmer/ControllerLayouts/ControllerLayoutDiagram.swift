@@ -9,6 +9,7 @@ struct ControllerLayoutDiagram: View {
     let controls: [ControllerLayoutControl]
     @State var rear = false
     @State var selectedShoulder: ControllerLayoutSource?
+    var highlighted: Set<ControllerLayoutSource> = []
     var select: (ControllerLayoutControl) -> Void
 
     private var positioned: [(ControllerLayoutControl, ControllerDiagramPlacement)] {
@@ -50,7 +51,7 @@ struct ControllerLayoutDiagram: View {
                     #if os(iOS)
                     ForEach([true, false], id: \.self) { left in
                         ControllerShoulderMenu(family: family, controls: controls, rear: rear, left: left,
-                                               scale: scale, selected: selectedShoulder) { control in
+                                               scale: scale, selected: selectedShoulder, highlighted: highlighted) { control in
                             choose(control)
                         }
                     }
@@ -82,7 +83,7 @@ struct ControllerLayoutDiagram: View {
         if ControllerShoulderGeometry.isShoulder(control.id) {
             #if os(macOS)
             ControllerShoulderButton(family: family, control: control, placement: placement,
-                                     scale: scale, selected: selectedShoulder == control.id) {
+                                     scale: scale, selected: selectedShoulder == control.id || highlighted.contains(control.id)) {
                 choose(control)
             }
             #endif
@@ -99,6 +100,7 @@ struct ControllerLayoutDiagram: View {
                                                     source: control.id))
         }
         .buttonStyle(.plain)
+        .foregroundStyle(highlighted.contains(control.id) ? Color.accentColor : Color.primary)
         .accessibilityLabel(control.name)
         .help(control.name)
         .position(x: placement.point.x * scale, y: placement.point.y * scale)
@@ -137,6 +139,7 @@ struct ControllerLayoutDiagram: View {
         }
         .buttonStyle(.plain).menuIndicator(.hidden)
         .disabled(available.isEmpty)
+        .foregroundStyle(highlighted.contains(.button(left ? .leftStick : .rightStick)) ? Color.accentColor : Color.primary)
         .accessibilityLabel(left ? "Left stick" : "Right stick")
         .position(x: point.x * scale, y: point.y * scale)
     }

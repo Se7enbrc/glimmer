@@ -34,9 +34,6 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
             object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.reload() }
             }
-        forwarder.inputCore.onControllerEscape = { [weak self] in
-            Task { @MainActor in self?.showControls() }
-        }
         editingObservation = NotificationCenter.default.addObserver(forName: ControllerLayoutEditing.changed,
             object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.editingChanged() }
@@ -79,11 +76,14 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
     func install(_ state: InputForwarder.AttachedController) {
         guard !ControllerLayoutEditing.active, let forwarder, let controller = state.controller else { return }
         let model = ControllerLayoutsModel.shared
-        guard model.loaded, !model.library.records.isEmpty else { return }
-        guard let reader = ControllerLayoutReader(controller) else { return }
+        guard model.loaded else { return }
+        guard let reader = ControllerLayoutReader(controller) else {
+            installSystemShortcuts(state, model: model)
+            return
+        }
         let record = model.library.resolve(reader.identity, scope: scope)
-        guard record != nil else { return }
-        guard let configuration = try? ControllerLayoutConfiguration(layout: record?.layout, shortcuts: nil,
+        guard let configuration = try? ControllerLayoutConfiguration(
+            layout: record?.layout, shortcuts: model.shortcuts(for: reader.identity),
             available: reader.available, extras: reader.extras) else { return }
         let core = forwarder.inputCore
         let id = ObjectIdentifier(controller)
@@ -124,6 +124,18 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
             }
     }
 
+    private func installSystemShortcuts(_ state: InputForwarder.AttachedController, model: ControllerLayoutsModel) {
+        guard let forwarder, let controller = state.controller, let pad = controller.extendedGamepad else { return }
+        let identity = ControllerLayoutIdentity(category: controller.productCategory, profile: "system", controls: [])
+        let available = Set(ControllerMappedButton.allCases.map { ControllerLayoutSource.button($0) })
+            .union([.trigger(.left), .trigger(.right)])
+        guard let configuration = try? ControllerLayoutConfiguration(layout: nil, shortcuts: model.shortcuts(for: identity),
+            available: available) else { return }
+        forwarder.inputCore.configureLayout(configuration, slot: state.slot,
+            held: .init(buttons: forwarder.pressedButtonFlags(pad: pad), analog: InputForwarder.controllerAnalog(pad)),
+            at: ProcessInfo.processInfo.systemUptime)
+    }
+
     func sample(for controller: GCController, slot: UInt8) -> (physical: ControllerMappingSample, game: ControllerMappingSample)? {
         let id = ObjectIdentifier(controller)
         guard let reader = readers[id] else { return nil }
@@ -149,13 +161,13 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         releaseHID(state.device.id)
         guard !ControllerLayoutEditing.active, let forwarder else { return }
         let model = ControllerLayoutsModel.shared
-        guard model.loaded, !model.library.records.isEmpty else { return }
+        guard model.loaded else { return }
         let pad = state.device
         let identity = HIDControllerLayouts.identity(pad)
         let record = model.library.resolve(identity, scope: scope)
-        guard record != nil else { return }
         let available = Set(HIDControllerLayouts.controls(pad).map(\.id))
-        guard let configuration = try? ControllerLayoutConfiguration(layout: record?.layout, shortcuts: nil,
+        guard let configuration = try? ControllerLayoutConfiguration(
+            layout: record?.layout, shortcuts: model.shortcuts(for: identity),
             available: available, extras: pad.layoutExtras.map(\.name)) else { return }
         let core = forwarder.inputCore
         let slot = state.slot

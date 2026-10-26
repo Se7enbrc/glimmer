@@ -513,31 +513,31 @@ struct FuzzTests {
     }
 
     // ============================================================
-    // 7. Opus packet framing (OpusPacket.parse): splits the PC's surround packets per stream.
+    // 7. Opus packet framing (OpusEnvelope.parse): splits the PC's surround packets per stream.
     // ============================================================
 
-    @Test func fuzzOpusPacketParse() {
+    @Test func fuzzOpusEnvelopeParse() {
         var rng = SplitMix64(seed: 0x0905_5EED_0000_0010)
         // A self-delimited 5 ms CELT frame, and a padded two-frame VBR packet.
         let single: [UInt8] = [0xEC, 0x03, 0xAA, 0xBB, 0xCC]
         let padded: [UInt8] = [0xEB, 0xC2, 0x02, 0x01, 0x10, 0x20, 0x30, 0x40]
-        #expect(Self.opusPacket(single, at: 0, selfDelimited: true)?.end == 5)
-        #expect(Self.opusPacket(padded, at: 0, selfDelimited: false)?.end == 8)
+        #expect(Self.opusPacket(single, at: 0, selfDelimited: true)?.consumed == 5)
+        #expect(Self.opusPacket(padded, at: 0, selfDelimited: false)?.consumed == 8)
         for _ in 0..<kIterations {
             for bytes in [rng.randomData(maxLen: 1_500), rng.mutate(single), rng.mutate(padded)] {
                 let start = rng.int(bytes.count + 1)
                 for delimited in [false, true] {
                     guard let packet = Self.opusPacket(bytes, at: start, selfDelimited: delimited) else { continue }
-                    #expect(packet.end <= bytes.count && packet.lengthField.upperBound <= packet.end,
+                    #expect(packet.consumed <= bytes.count && packet.delimiter.upperBound <= packet.consumed,
                             "parsed past the bytes at \(start): \(hex(bytes))")
-                    #expect((1...5_760).contains(packet.samplesAt48kHz))
+                    #expect((1...5_760).contains(packet.duration48k))
                 }
             }
         }
     }
 
-    private static func opusPacket(_ bytes: [UInt8], at start: Int, selfDelimited: Bool) -> OpusPacket? {
-        bytes.withUnsafeBytes { OpusPacket.parse($0, at: start, selfDelimited: selfDelimited) }
+    private static func opusPacket(_ bytes: [UInt8], at start: Int, selfDelimited: Bool) -> OpusEnvelope? {
+        bytes.withUnsafeBytes { OpusEnvelope.inspect($0, from: start, delimited: selfDelimited) }
     }
 }
 

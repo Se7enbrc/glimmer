@@ -37,6 +37,10 @@ final class ControllerLayoutCapture {
     private(set) var message = "Release the controls to begin."
     private(set) var source: ControllerLayoutSource?
     private(set) var finished = false
+    private(set) var chord: Set<ControllerLayoutSource> = []
+    private let recordingChord: Bool
+    private var chordBegan: TimeInterval?
+    private var chordHeld = false
     private var waitingForNeutral = true
     private var candidate: ControllerLayoutSource?
     private var escape: ControllerEscapeGesture?
@@ -46,8 +50,9 @@ final class ControllerLayoutCapture {
     private var epoch = UUID()
     private let ownership = UUID()
 
-    init(input: ControllerLayoutCaptureSource) {
+    init(input: ControllerLayoutCaptureSource, recordingChord: Bool = false) {
         self.input = input
+        self.recordingChord = recordingChord
         if let chord = try? ControllerPhysicalChord(
             sources: ControllerLayoutShortcuts.escape(available: Set(input.controls.map(\.id))), extras: input.extras) {
             escape = ControllerEscapeGesture(chord: chord)
@@ -83,6 +88,17 @@ final class ControllerLayoutCapture {
         ControllerLayoutEditing.releaseCapture(ownership)
     }
 
+    func restart(cancel: @escaping () -> Void) {
+        stop()
+        finished = false
+        chord = []
+        chordBegan = nil
+        chordHeld = false
+        waitingForNeutral = true
+        message = "Release the controls to begin."
+        start(cancel: cancel)
+    }
+
     private func deliver(_ sample: ControllerMappingSample, at now: TimeInterval, epoch: UUID) {
         guard self.epoch == epoch, release != nil else { return }
         receive(sample, at: now)
@@ -90,6 +106,7 @@ final class ControllerLayoutCapture {
 
     private func receive(_ sample: ControllerMappingSample, at now: TimeInterval) {
         guard !finished else { return }
+        if recordingChord { receiveChord(sample, at: now); return }
         if escape?.update(sample, at: now) == true { onCancel?(); return }
         let active = activeControls(sample, threshold: waitingForNeutral || candidate != nil ? 0.2 : 0.6)
         if waitingForNeutral {
@@ -109,6 +126,34 @@ final class ControllerLayoutCapture {
             candidate = active.first
             message = "Release the control."
         } else if active.count > 1 { rejectMultiple() }
+    }
+
+    private func receiveChord(_ sample: ControllerMappingSample, at now: TimeInterval) {
+        let active = activeControls(sample, threshold: 0.5).filter(\.isChordButton)
+        if waitingForNeutral {
+            if active.isEmpty { waitingForNeutral = false; message = "Hold at least three buttons together, then release." }
+            return
+        }
+        if active.isEmpty {
+            if chord.count >= 3, chordHeld || chordBegan.map({ now - $0 >= ControllerShortcutGesture.holdSeconds }) == true {
+                finished = true
+                message = "Shortcut recorded. Review it before saving."
+            } else {
+                chord = []
+                chordBegan = nil
+                message = "Hold at least three buttons together for a moment, then release."
+            }
+        } else if chord.isSubset(of: active), !chordHeld {
+            if chord != active { chord = active; chordBegan = now }
+        } else if active.isSubset(of: chord), chordBegan.map({ now - $0 >= ControllerShortcutGesture.holdSeconds }) == true {
+            chordHeld = true
+        } else {
+            chord = []
+            chordBegan = nil
+            chordHeld = false
+            waitingForNeutral = true
+            message = "Hold all the buttons together. Release them to try again."
+        }
     }
 
     private func rejectMultiple() {

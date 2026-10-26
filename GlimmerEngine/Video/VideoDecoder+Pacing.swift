@@ -377,9 +377,7 @@ extension VideoDecoder {
         let enqueueNanos = tracker?.now()
         #endif
         let priorRejections = consecutiveBackpressureDrops.exchange(0, ordering: .relaxed)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
         sampleHUDBackdrop(sampleBuffer)
-        #endif
 
         // Capture enqueue before HUD sampling; later diagnostics retain that boundary.
         #if os(macOS) || GLIMMER_DIAGNOSTICS

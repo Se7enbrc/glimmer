@@ -15,6 +15,44 @@ import UIKit
 @MainActor
 @Suite(.serialized)
 struct ControllerLayoutRenderTests {
+    #if os(macOS)
+    @Test(arguments: [false, true])
+    func statsShortcutScreens(dark: Bool) async throws {
+        let settings = IsolatedDefaults()
+        let model = AppModel(defaults: settings.defaults)
+        let style = dark ? "dark" : "light"
+        model.statsHotkey = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        try await record(ShortcutsPane().environment(model), name: "stats-before-\(style)", dark: dark)
+        model.statsHotkey = .defaultStats
+        try await record(ShortcutsPane().environment(model), name: "stats-after-\(style)", dark: dark)
+    }
+    #endif
+
+    @Test(arguments: [false, true])
+    func resetSettingsScreens(dark: Bool) async throws {
+        let style = dark ? "dark" : "light"
+        #if os(macOS)
+        let settings = IsolatedDefaults()
+        let app = AppModel(defaults: settings.defaults)
+        try await record(GeneralPane(reconcileLoginItem: { nil }).environment(app)
+            .defaultAppStorage(settings.defaults), name: "after-general-\(style)", dark: dark)
+        #else
+        let launcher = LauncherFixture().model()
+        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: launcher)
+        try await record(NavigationStack { settings.settingsPage(.general) },
+                         name: "after-general-\(style)", dark: dark)
+        #endif
+        try await record(SettingsResetConfirmation(reset: { _ in }),
+                         name: "after-reset-confirmation-\(style)", dark: dark)
+        let device = fixture(.dualSense)
+        try await record(NavigationStack {
+            Form {
+                Section { ControllerLayoutDiagram(family: device.diagramFamily, controls: device.controls) { _ in } }
+                Section("Glimmer controls") { ControllerLayoutShortcutSummary() }
+            }.formStyle(.grouped).navigationTitle(device.name)
+        }, name: "after-chords-\(style)", dark: dark)
+    }
+
     @Test(arguments: [false, true])
     func nativeLayoutScreens(dark: Bool) async throws {
         let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -150,7 +188,7 @@ struct ControllerLayoutRenderTests {
     }
     #endif
 
-    private func fixture(_ family: ControllerDiagramFamily) -> ControllerLayoutDevice {
+    func fixture(_ family: ControllerDiagramFamily) -> ControllerLayoutDevice {
         let names: [ControllerDiagramFamily: String] = [.xbox: "Xbox Series", .xboxElite: "Xbox Elite Series 2",
             .dualSense: "DualSense", .dualSenseEdge: "DualSense Edge", .dualShock: "DualShock 4",
             .backbone: "Backbone One", .backbonePlayStation: "Backbone One PlayStation Edition", .generic: "MFi controller"]
@@ -199,11 +237,13 @@ struct ControllerLayoutRenderTests {
             owner: .type(identity.type), reader: nil, controller: nil, controls: controls, nintendoLabels: false)
     }
 
-    private func record<Content: View>(_ content: Content, name: String, dark: Bool) async throws {
+    func record<Content: View>(_ content: Content, name: String, dark: Bool) async throws {
         #if os(macOS)
         let host = NSHostingController(rootView: content.environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentViewController: host)
-        window.title = "Controller layouts"
+        window.title = name.contains("general") ? "General" : "Controller layouts"
+        if name.contains("reset-confirmation") { window.title = "Reset to defaults?" }
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.styleMask = [.titled, .closable, .resizable]
         window.setContentSize(CGSize(width: 620, height: 760))
         let view = host.view

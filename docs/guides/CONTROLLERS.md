@@ -1,5 +1,6 @@
 ---
-description: Connect, test and use controllers, including controller mouse.
+description:
+  Use controllers, per-game layouts and iPhone or iPad touch controls.
 icon: gamepad
 ---
 
@@ -8,8 +9,12 @@ icon: gamepad
 ## Connect and test
 
 1. Connect by USB or Bluetooth.
-2. Try Settings › Diagnostics › controller test.
-3. Choose options in Settings › Input.
+2. On Mac, try Settings › Diagnostics › “Controller input test”.
+3. Open Settings › Input for controller options on Mac, iPhone or iPad.
+
+PlayStation controllers, including the PlayStation edition of Backbone One, use
+PlayStation button symbols in their layout diagrams. Glimmer also identifies
+them to the PC so compatible games can show PlayStation button prompts.
 
 ## Change a controller layout
 
@@ -22,9 +27,11 @@ You can also choose a control from the diagram or list. Sticks can swap axes or
 reverse direction; triggers and extra buttons appear when the connection exposes
 them. **No action** disables a control for the PC.
 
-The diagram follows the controller family. Choose **Back** for exposed rear
-buttons and paddles. If a connection doesn't report a button's position, use the
-list or press the button to capture it.
+The diagrams show DualSense, DualSense Edge, DualShock 4, Xbox Series, Xbox
+Elite Series 2 and both Backbone One editions, with a general diagram for other
+MFi controllers. Choose **Back** for exposed rear buttons and paddles. If a
+connection doesn't report a button's position, use the list or press the button
+to capture it.
 
 A game layout starts as a copy of All games. Later changes to All games leave
 that copy alone. **Use All games…** removes the game's override. **Use system
@@ -39,16 +46,35 @@ keeps the system layout active and explains why.
 Layouts stay on this device. Controllers without a stable individual identity
 share a layout with others of the same type; the editor says when this applies.
 
+During a Mac stream, choose Stream › “Controller layout…”. On iPhone or iPad,
+open the stream menu and choose “Controller layouts”.
+
 ## Keep Glimmer's controls available
 
-With a custom layout, hold Menu + Options for one second, then release to show
-controller layouts. Controllers without that pair use Menu + left stick button,
-or both stick buttons. The editor shows the available pair. This shortcut always
-uses physical controls and cannot be remapped.
+Stop streaming and Stats use remappable physical-button shortcuts on Mac, iPhone
+and iPad. Hold the complete shortcut for about half a second, then release.
 
-Hold **L1 + R1 + Start + Select** together to stop streaming. This chord is
-fixed on every device and cannot be remapped. Game layouts never change mouse
-mode or turn a PC button into a Glimmer shortcut.
+| Action             | Default                                  |
+| ------------------ | ---------------------------------------- |
+| Stop streaming     | L1 + R1 + Create/Select + Options/Start. |
+| Show or hide Stats | L1 + R1 + L3 + R3.                       |
+
+1. Open Settings › Input › Controller layouts.
+2. Choose Stop streaming or Stats.
+3. Hold at least three buttons, then release to record the shortcut.
+
+Saved shortcuts remain independent of game button mappings. Ordinary presses
+reach the PC immediately. Use the stream menu to open controller layouts;
+keyboard Stop and the touch menu remain available.
+
+## Reset settings
+
+1. End the current stream.
+2. Open Settings › General and choose “Reset to defaults…”.
+3. Choose whether to include per-game controller layouts, then confirm.
+
+Reset restores settings and controller shortcuts. Paired PCs, your app library
+and diagnostic captures stay on the device.
 
 ## Navigate the launcher
 
@@ -69,6 +95,8 @@ streams/tests. Other pads and Extra DualSense buttons need Input Monitoring.
 1. Hold Menu, Options or Start alone for over 0.75 seconds.
 2. Release to toggle modes.
 
+On Mac:
+
 | Control                          | Mouse action                                                                  |
 | -------------------------------- | ----------------------------------------------------------------------------- |
 | Left stick                       | Move.                                                                         |
@@ -77,14 +105,47 @@ streams/tests. Other pads and Extra DualSense buttons need Input Monitoring.
 | L1 / R1                          | Back / forward.                                                               |
 | DualSense / DualShock 4 touchpad | One finger moves, two scroll; two-contact click right-clicks, otherwise left. |
 
+On iPhone and iPad, Settings › Input › “Mouse stick” chooses Right or Left for
+the next stream. Right is the default: the right stick moves, R2 clicks, R1
+right-clicks and the left stick scrolls. Left swaps those roles to the left
+stick, L2 and L1, with the right stick scrolling.
+
+## Play with touch controls on iPhone and iPad
+
+On-screen controls appear when no controller is connected. Use “Show controls”
+or tap with three fingers to open the stream menu. Choose “Resume” to play
+again. With VoiceOver, choose the video's “Show controls” action.
+
+Connecting a controller hides the touch gamepad. To add a touch player during
+that stream, open the menu, choose “Show touch controls”, then “Resume”. “Hide
+touch controls” hides the gamepad again. This choice lasts for the session.
+Touch can still
+[move and click the mouse](KEYBOARD_MOUSE.md#use-touch-as-a-mouse-on-iphone-and-ipad).
+
+### Edit the touch layout
+
+1. Open the stream menu.
+2. Choose “Edit controls…”.
+3. Select a control.
+4. Drag it, adjust “Size” or choose “Hide”.
+5. Choose “Done” to save the layout for this PC app on this device.
+
+Under “All controls”, adjust “Opacity” for the whole overlay, even with no
+control selected. “Done” saves opacity with the layout.
+
+“Add control…” restores a hidden control. “Reset layout…” restores the default
+layout. “Cancel” leaves your saved layout unchanged. If the window is too small
+for touch controls, enlarge it or connect a controller.
+
 ## Stop playing
 
 {% hint style="warning" %}
 
-Save first. Hold L1 + R1 + Start + Select together for half a second to stop
-streaming.
+Save first. Hold your Stop shortcut, then release, to stop streaming.
+Disconnecting quits the PC app by default. To keep it running, enable “Leave
+games running when you disconnect” in Settings › General before streaming.
 
 {% endhint %}
 
 Next:
-[controller button names and DualSense requirements](../SHORTCUTS.md#controller-stop-shortcut).
+[controller button names and DualSense requirements](../SHORTCUTS.md#controller-shortcuts).

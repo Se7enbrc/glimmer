@@ -65,9 +65,13 @@ Xcode 26.6 or later. Hosted verification, Swift CodeQL and releases use Xcode
 toolchains aligned; the Mac deployment target is 15.7.
 
 ```bash
-brew install python swiftlint actionlint trufflehog pre-commit
-pre-commit install
+brew install mise
+mise install
+make help
 ```
+
+Install the [guarded shared hooks](docs/CONTRIBUTING.md#migrate-shared-hooks)
+before committing. Older worktrees must remain usable during migration.
 
 - `make app`: Debug build, unsigned. A compile check.
 - `make test`: the Mac unit tests. Hostless, no PC needed.
@@ -81,11 +85,14 @@ pre-commit install
   (`make check`, `make test`, `make test-asan`) as parallel jobs under the
   required `macOS` check, alongside engine and iOS app verification, on every
   `main` commit and every pull request that touches more than documentation
-  (those run `make check` alone), and `make dist` runs it, so nothing is done
-  until it passes there. Locally it does not fail on compiler warnings, so read
-  the build log: there must be none.
-- `make dev`: tests, then the Release build installed and relaunched. On a Mac
-  with a Developer ID it signs and notarizes on the way, as every install does.
+  (those run `make check` alone), so nothing is done until it passes there.
+  Locally it does not fail on compiler warnings, so read the build log: there
+  must be none.
+- `make preflight`: the pre-push gate, including `make ci-parity` with Xcode
+  26.6 and release source checks on release branches. hk runs it only before
+  push.
+- `make help`: the default; lists unsigned development and verification
+  commands.
 
 One suite, after a `make test` has run once:
 
@@ -95,15 +102,10 @@ xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug 
   -destination 'platform=macOS' -only-testing:GlimmerTests/DatagramBatchTests
 ```
 
-Build to look, not to check. Every build of `Glimmer.app` that macOS registers
-earns its own privacy record, so use `make verify` for correctness and
-`make dev` only when someone will actually use the build. See "don't mint app
-copies" in CONTRIBUTING.
-
-Never run the publishing or keychain setup targets (`dist`, `release-publish`,
-`brew-bump`, `rc`, `sparkle-keys`, `creds-init`, `setup-notary`,
-`codesign-setup`, `codesign-teardown`) unless the maintainer asks for that exact
-thing. They publish to users or rewrite signing state.
+Use unsigned checks for correctness. Install published CI candidates for manual
+acceptance; local signing, notarization, credential setup and publication
+targets are removed. `make rc` dispatches CI and `make rc DRY_RUN=1` checks
+source. Never dispatch a candidate unless the maintainer asks for it.
 
 Signing material lives outside the repo, in
 `~/Library/Keychains/developer-id.keychain-db` and `~/.config/developer-id/`.
@@ -124,15 +126,8 @@ loads these only for signing and publication. Do not fetch or print cloud secret
 values for debugging. Transferring or replacing signing material requires the
 maintainer's explicit authorization; see RELEASE.md for setup and rotation.
 
-Approved provisioning profiles are separate files under
-`~/.config/glimmer/profiles/`: `Glimmer_Developer_ID.provisionprofile` and
-`Glimmer_Network_Helper_Developer_ID.provisionprofile`. The Makefile uses these
-paths by default and validates and embeds each profile in its own bundle. Normal
-builds may read and embed these profiles; do not print decoded profile contents
-or commit profiles. App capabilities are Head Pose, Spatial Audio Profile and
-Enhanced Security; the helper uses Network Topology Observation. Missing or
-expired profiles stop installation. See RELEASE.md to renew them; do not replace
-certificates or keys to solve a profile problem.
+Provisioning profiles are supplied only to protected CI jobs. Unsigned local
+builds and tests do not need profiles. Never read or change local signing state.
 
 ## Code standards
 
@@ -310,12 +305,12 @@ anyone else:
   name, the logging subsystem and the data folders. Shared IDs make macOS mix
   the fork's permissions, login item and data with Glimmer's.
 - **Give Sparkle your own feed.** Replace `SUFeedURL` and `SUPublicEDKey` in
-  `Glimmer/Info.plist` with your appcast and your key (`make sparkle-keys`).
-  Left as they are, the fork keeps checking Glimmer's feed: it either installs
-  Glimmer over itself or rejects every update.
-- **Sign as yourself.** Installed builds require your Developer ID and explicit
-  app and helper provisioning profiles. Unsigned compile checks and tests need
-  neither. See RELEASE.md for the required capabilities.
+  `Glimmer/Info.plist` with your appcast and your key through your own protected
+  release workflow. Left as they are, the fork keeps checking Glimmer's feed: it
+  either installs Glimmer over itself or rejects every update.
+- **Sign as yourself.** Installed builds require your own CI signing identity
+  and explicit app and helper provisioning profiles. Unsigned compile checks and
+  tests need neither. See RELEASE.md for the required capabilities.
 - **Keep `LICENSE` and `CREDITS.md`**, including the moonlight-common-c credit.
 - **A change offered back starts as an issue** the maintainer agrees to; a pull
   request without one is closed. Then it comes as a pull request from the fork

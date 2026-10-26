@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FC1A1D15E9FD497EB88F904A /* SurroundToneData.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */; };
+		EB34C1CBD1FD44719A09B90D /* OpusDecoder+Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */; };
+		5B34A98402AB49D2BE6C0B26 /* OpusDecoder+Packet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D1AB0F71D740F7972C4A1F /* OpusDecoder+Packet.swift */; };
         D1A620261022000000000001 /* instruments-clock-references.xml in Resources */ = {isa = PBXBuildFile; fileRef = D1A620261022000000000002 /* instruments-clock-references.xml */; };
 		A27101400000000000000002 /* ArtworkAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27101400000000000000001 /* ArtworkAPITests.swift */; };
 		A11020261012000300000001 /* AudioOutput+Silence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11020261012000300000000 /* AudioOutput+Silence.swift */; };
@@ -128,8 +131,6 @@
 		A0D102202610091545000004 /* AudioDecoder+Spatial.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D102202610091545000003 /* AudioDecoder+Spatial.swift */; };
 		A0D102202610091545000002 /* SpatialAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D102202610091545000001 /* SpatialAudio.swift */; };
 		D2C00008 /* OpusDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C00007 /* OpusDecoder.swift */; };
-		EE6572F168D7406289351042 /* OpusDecoder+Packet.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */; };
-		EE6572F168D7406289351044 /* OpusDecoder+Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE6572F168D7406289351043 /* OpusDecoder+Stream.swift */; };
 		AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000005 /* AudioDecoder+Prime.swift */; };
 		AC2026083000000000000008 /* AudioDecoder+Route.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000007 /* AudioDecoder+Route.swift */; };
 		AC202608300000000000000A /* AudioDecoder+Resampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2026083000000000000009 /* AudioDecoder+Resampler.swift */; };
@@ -200,8 +201,6 @@
 		D1000050 /* RtspClient+Handshake.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100004F /* RtspClient+Handshake.swift */; };
 		D1000052 /* Pairing+Crypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000051 /* Pairing+Crypto.swift */; };
 		D1000054 /* Types+Cert.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000053 /* Types+Cert.swift */; };
-		D1000056 /* Types+Stats.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000055 /* Types+Stats.swift */; };
-		D1000058 /* Types+StatsSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000057 /* Types+StatsSnapshot.swift */; };
 		D100005A /* Identity+Loading.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000059 /* Identity+Loading.swift */; };
 		D100005C /* Identity+Crypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005B /* Identity+Crypto.swift */; };
 		D100005E /* AppModel+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100005D /* AppModel+Lifecycle.swift */; };
@@ -753,6 +752,21 @@
 		D533A4260AA14705836FE716 /* StreamSession+Bandwidth.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF02F645DDC741DE839C0B73 /* StreamSession+Bandwidth.swift */; };
 		36F2C4D5722740A9ABAFEAD5 /* BandwidthActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 233DB1B4C6884DFE94410F95 /* BandwidthActuatorTests.swift */; };
 		9A913317D15D48E1B54D8F33 /* BandwidthTrainEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */; };
+		0FECE547C2E44F4AA3A9F583 /* StatsOverlayValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6A7700C5CF4F4C9243B556 /* StatsOverlayValues.swift */; };
+		4BB7125F711C488A987492B4 /* StreamStatsSnapshot+Rows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 792FE09DB5904C8499772234 /* StreamStatsSnapshot+Rows.swift */; };
+		AC0296E69DA245A6B89DDD62 /* StatsOverlayLayer+Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB3E6E14588045D7BC957D35 /* StatsOverlayLayer+Platform.swift */; };
+		19D6F6FE50EC4C22A2E3F0B9 /* HotkeyChord+Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E41E9A75D4B4975944CD474 /* HotkeyChord+Preferences.swift */; };
+		BFEB080D8DA444E99209EFF1 /* VideoDecoder+Overlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3241A15BD5564EFA9E355E5C /* VideoDecoder+Overlay.swift */; };
+		D678220340FD4652A784D2A5 /* StatsOverlayFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1129CE3CCD134F3E8B900134 /* StatsOverlayFormatting.swift */; };
+		8A8E63DBF702E6940E68DE19 /* SettingsReset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE12E33A6D8A713FDB5D30F /* SettingsReset.swift */; };
+		3A20D1A556D1F1B2678B97FA /* SettingsResetSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98502B03A65CBCEA3BFEDD81 /* SettingsResetSection.swift */; };
+		E35AE6DC87012F351661D2E3 /* AppModel+ResetSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFA616643A323C75F719E9F /* AppModel+ResetSettings.swift */; };
+		56A574311FFA79E0A008A3EF /* SettingsResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837D4DB90C33C0B07D279747 /* SettingsResetTests.swift */; };
+		B5A8C42988592CE8A90BE235 /* ControllerShortcutGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12799C4B7B919D281A7E4B84 /* ControllerShortcutGesture.swift */; };
+		E31B347927A1170384BBEB95 /* ControllerShortcutSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD515C08AFF793031FF8AC1D /* ControllerShortcutSection.swift */; };
+		D7F330D765E7A73DE210A28E /* ControllerShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 056C6102A2BD668896A01FCE /* ControllerShortcutTests.swift */; };
+		B6D5ED5AF9A2619C75EAE789 /* ControllerShortcutRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */; };
+		114D0A9130EE107F0ED56FF8 /* ControllerShortcutRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -812,6 +826,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurroundToneData.swift; sourceTree = "<group>"; };
+		4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/OpusDecoder+Stream.swift"; sourceTree = "<group>"; };
+		30D1AB0F71D740F7972C4A1F /* OpusDecoder+Packet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/OpusDecoder+Packet.swift"; sourceTree = "<group>"; };
         D1A620261022000000000002 /* instruments-clock-references.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "GlimmerTests/Fixtures/instruments-clock-references.xml"; sourceTree = SOURCE_ROOT; };
 		A27101400000000000000001 /* ArtworkAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ArtworkAPITests.swift"; sourceTree = SOURCE_ROOT; };
 		A11020261012000300000000 /* AudioOutput+Silence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioOutput+Silence.swift"; sourceTree = SOURCE_ROOT; };
@@ -939,8 +956,6 @@
 		A0D102202610091545000003 /* AudioDecoder+Spatial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/AudioDecoder+Spatial.swift"; sourceTree = SOURCE_ROOT; };
 		A0D102202610091545000001 /* SpatialAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/SpatialAudio.swift"; sourceTree = SOURCE_ROOT; };
 		D2C00007 /* OpusDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/OpusDecoder.swift"; sourceTree = SOURCE_ROOT; };
-		EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/OpusDecoder+Packet.swift"; sourceTree = SOURCE_ROOT; };
-		EE6572F168D7406289351043 /* OpusDecoder+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/OpusDecoder+Stream.swift"; sourceTree = SOURCE_ROOT; };
 		AC2026083000000000000005 /* AudioDecoder+Prime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Prime.swift"; sourceTree = SOURCE_ROOT; };
 		AC2026083000000000000007 /* AudioDecoder+Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Route.swift"; sourceTree = SOURCE_ROOT; };
 		AC2026083000000000000009 /* AudioDecoder+Resampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Audio/AudioDecoder+Resampler.swift"; sourceTree = SOURCE_ROOT; };
@@ -1010,8 +1025,6 @@
 		D100004F /* RtspClient+Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Network/RtspClient+Handshake.swift"; sourceTree = "<group>"; };
 		D1000051 /* Pairing+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Pairing+Crypto.swift"; sourceTree = SOURCE_ROOT; };
 		D1000053 /* Types+Cert.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Types+Cert.swift"; sourceTree = SOURCE_ROOT; };
-		D1000055 /* Types+Stats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+Stats.swift"; sourceTree = "<group>"; };
-		D1000057 /* Types+StatsSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/Types+StatsSnapshot.swift"; sourceTree = "<group>"; };
 		D1000059 /* Identity+Loading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Identity+Loading.swift"; sourceTree = SOURCE_ROOT; };
 		D100005B /* Identity+Crypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/Identity+Crypto.swift"; sourceTree = SOURCE_ROOT; };
 		D100005D /* AppModel+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Lifecycle.swift"; sourceTree = "<group>"; };
@@ -1560,6 +1573,21 @@
 		EF02F645DDC741DE839C0B73 /* StreamSession+Bandwidth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/StreamSession+Bandwidth.swift"; sourceTree = SOURCE_ROOT; };
 		233DB1B4C6884DFE94410F95 /* BandwidthActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/BandwidthActuatorTests.swift"; sourceTree = SOURCE_ROOT; };
 		7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Session/BandwidthTrainEvidence.swift"; sourceTree = SOURCE_ROOT; };
+		FA6A7700C5CF4F4C9243B556 /* StatsOverlayValues.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/StatsOverlayValues.swift"; sourceTree = "<group>"; };
+		792FE09DB5904C8499772234 /* StreamStatsSnapshot+Rows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/StreamStatsSnapshot+Rows.swift"; sourceTree = "<group>"; };
+		DB3E6E14588045D7BC957D35 /* StatsOverlayLayer+Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StatsOverlayLayer+Platform.swift"; sourceTree = "<group>"; };
+		2E41E9A75D4B4975944CD474 /* HotkeyChord+Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/HotkeyChord+Preferences.swift"; sourceTree = "<group>"; };
+		3241A15BD5564EFA9E355E5C /* VideoDecoder+Overlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Video/VideoDecoder+Overlay.swift"; sourceTree = "<group>"; };
+		1129CE3CCD134F3E8B900134 /* StatsOverlayFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models/StatsOverlayFormatting.swift"; sourceTree = "<group>"; };
+		2CE12E33A6D8A713FDB5D30F /* SettingsReset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/SettingsReset.swift"; sourceTree = SOURCE_ROOT; };
+		98502B03A65CBCEA3BFEDD81 /* SettingsResetSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/SettingsResetSection.swift"; sourceTree = SOURCE_ROOT; };
+		3FFA616643A323C75F719E9F /* AppModel+ResetSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/AppModel+ResetSettings.swift"; sourceTree = SOURCE_ROOT; };
+		837D4DB90C33C0B07D279747 /* SettingsResetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/SettingsResetTests.swift"; sourceTree = SOURCE_ROOT; };
+		12799C4B7B919D281A7E4B84 /* ControllerShortcutGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerShortcutGesture.swift"; sourceTree = SOURCE_ROOT; };
+		DD515C08AFF793031FF8AC1D /* ControllerShortcutSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerShortcutSection.swift"; sourceTree = SOURCE_ROOT; };
+		056C6102A2BD668896A01FCE /* ControllerShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ControllerShortcutTests.swift"; sourceTree = SOURCE_ROOT; };
+		A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerShortcutRoutingTests.swift"; sourceTree = SOURCE_ROOT; };
+		0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerShortcutRenderTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1654,6 +1682,7 @@
 		A10000031 /* Glimmer */ = {
 			isa = PBXGroup;
 			children = (
+				DB3E6E14588045D7BC957D35 /* StatsOverlayLayer+Platform.swift */,
 				E92A400B198D99C4E81A5016 /* ControllerLayoutDiagram.swift */,
 				7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */,
 				B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */,
@@ -1664,6 +1693,8 @@
 				E739566E42134718B281E78F /* ControllerBodyShape.swift */,
 				0AB91A16DB2CB59EA97B9943 /* ControllerDiagramGeometry.swift */,
 				25E28540FB349E5444344446 /* ControllerLayoutShortcutSummary.swift */,
+				DD515C08AFF793031FF8AC1D /* ControllerShortcutSection.swift */,
+				98502B03A65CBCEA3BFEDD81 /* SettingsResetSection.swift */,
 				A5ED7BA9A4911DB133DB8082 /* ControllerLayoutEditing.swift */,
 				13E714E28442C4B881DD2A7F /* ControllerLayoutNavigation.swift */,
 				92F1302C35BEDD28CA34E66B /* HIDControllerLayouts.swift */,
@@ -1786,8 +1817,7 @@
 				D1A00003 /* AppModel+SessionReceipt.swift */,
 				D100005D /* AppModel+Lifecycle.swift */,
 				D2000096 /* AppModel+Defaults.swift */,
-				D1000057 /* Types+StatsSnapshot.swift */,
-				D1000055 /* Types+Stats.swift */,
+				3FFA616643A323C75F719E9F /* AppModel+ResetSettings.swift */,
 				D1000B72 /* StreamSession+Start.swift */,
 				D1000B74 /* StreamSession+StartSetup.swift */,
 				D10000C2 /* WiFiTelemetry.swift */,
@@ -1878,8 +1908,12 @@
 				81E3DDA1106D496F9D8D71D3 /* ControllerLayoutRenderTests.swift */,
 				EB8E8DC2D7CDC60EF66275B3 /* ControllerLayoutBoundaryTests.swift */,
 				5C42C1D0E1A5A595F2D9D459 /* ControllerLayoutCaptureTests.swift */,
+				0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */,
+				837D4DB90C33C0B07D279747 /* SettingsResetTests.swift */,
 				C7C0E1B0EA955CEF50500AC9 /* ControllerLayoutRoutingTests.swift */,
+				A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */,
 				524586702307A7A6D49FE698 /* ControllerLayoutEscapeTests.swift */,
+				056C6102A2BD668896A01FCE /* ControllerShortcutTests.swift */,
 				A0025D74D58DC051547B66EC /* ControllerLayoutPersistenceTests.swift */,
 				22786CD127B725B21D9AF285 /* ControllerMappingTests.swift */,
 				7C7F0E3662674785B95956E5 /* StreamInputMouseModeTests.swift */,
@@ -1954,6 +1988,7 @@
 				D2B0000F /* HostResolutionTests.swift */,
 				D2C00001 /* ControlTransportTests.swift */,
 				D2C00009 /* OpusDecoderTests.swift */,
+				C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */,
 				D81200000000000000000008 /* ReceiveTimingTests.swift */,
 				D2C0000F /* DatagramBatchTests.swift */,
 				D2000030 /* StreamCryptoTests.swift */,
@@ -2127,11 +2162,18 @@
 		E26101210000000000000009 /* GlimmerEngine */ = {
 			isa = PBXGroup;
 			children = (
+				1129CE3CCD134F3E8B900134 /* StatsOverlayFormatting.swift */,
+				3241A15BD5564EFA9E355E5C /* VideoDecoder+Overlay.swift */,
+				2E41E9A75D4B4975944CD474 /* HotkeyChord+Preferences.swift */,
+				792FE09DB5904C8499772234 /* StreamStatsSnapshot+Rows.swift */,
+				FA6A7700C5CF4F4C9243B556 /* StatsOverlayValues.swift */,
 				7CD73F38A2F31EA6C135B7C6 /* ControllerLayoutGame.swift */,
 				72D815E46F71CDAFE8C355CC /* StreamInput+Layouts.swift */,
 				450021319D188F639B72AA9B /* InputCore+Layouts.swift */,
 				B02B9AEADC2A444774C84F16 /* ControllerLayoutConfiguration.swift */,
 				8EC98CDA4A78A8C1ED713580 /* ControllerLayoutShortcuts.swift */,
+				12799C4B7B919D281A7E4B84 /* ControllerShortcutGesture.swift */,
+				2CE12E33A6D8A713FDB5D30F /* SettingsReset.swift */,
 				8F68039AC4B6260A8DE2EEE8 /* ControllerLayoutStore.swift */,
 				19F40AFAB664AE0BE671EA39 /* ControllerLayoutIdentity.swift */,
 				B9753D8D63E229EA546F9690 /* ControllerMappingPlan.swift */,
@@ -2253,11 +2295,11 @@
 				AC2026083000000000000001 /* AudioDecoder+Engine.swift */,
 				EA67908CD62144CBACFBBDAA /* AudioDecoder+Reconnect.swift */,
 				D2C00007 /* OpusDecoder.swift */,
+				4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */,
+				30D1AB0F71D740F7972C4A1F /* OpusDecoder+Packet.swift */,
 				A11020261012000300000000 /* AudioOutput+Silence.swift */,
-				EE6572F168D7406289351041 /* OpusDecoder+Packet.swift */,
 				A11020261011000000000000 /* AudioPCMQueue.swift */,
 				AC2026083000000000000005 /* AudioDecoder+Prime.swift */,
-				EE6572F168D7406289351043 /* OpusDecoder+Stream.swift */,
 				AB00000015 /* AudioDecoder.swift */,
 				A0D10A110000000000000007 /* AudioDecoder+Worker.swift */,
 				AC2026083000000000000003 /* AudioDecoder+Decode.swift */,
@@ -2587,6 +2629,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AC0296E69DA245A6B89DDD62 /* StatsOverlayLayer+Platform.swift in Sources */,
 				51DAB01AF73E7404229D81AF /* ControllerLayoutDiagram.swift in Sources */,
 				059E9C4832CB459FB0FB8300 /* ControllerControlArtwork.swift in Sources */,
 				966232EF57614C298EE9BFD6 /* ControllerDpadSurface.swift in Sources */,
@@ -2597,6 +2640,8 @@
 				7E4AFBDE5A4F4F8C9A27299D /* ControllerBodyShape.swift in Sources */,
 				A3DF1B0473E02EBD01FC2C40 /* ControllerDiagramGeometry.swift in Sources */,
 				857BF7C4E7FD8FDEEA84F1A6 /* ControllerLayoutShortcutSummary.swift in Sources */,
+				E31B347927A1170384BBEB95 /* ControllerShortcutSection.swift in Sources */,
+				3A20D1A556D1F1B2678B97FA /* SettingsResetSection.swift in Sources */,
 				388D6B7BE9B0C6DB43F9DD54 /* ControllerLayoutEditing.swift in Sources */,
 				BC68397480843F3DF035D03D /* ControllerLayoutNavigation.swift in Sources */,
 				40D16091D3CC534FEEC8DAC5 /* HIDControllerLayouts.swift in Sources */,
@@ -2717,8 +2762,7 @@
 				D1A00004 /* AppModel+SessionReceipt.swift in Sources */,
 				D100005E /* AppModel+Lifecycle.swift in Sources */,
 				D2000097 /* AppModel+Defaults.swift in Sources */,
-				D1000058 /* Types+StatsSnapshot.swift in Sources */,
-				D1000056 /* Types+Stats.swift in Sources */,
+				E35AE6DC87012F351661D2E3 /* AppModel+ResetSettings.swift in Sources */,
 				D1000B71 /* StreamSession+Start.swift in Sources */,
 				D1000B73 /* StreamSession+StartSetup.swift in Sources */,
 				D10000C3 /* WiFiTelemetry.swift in Sources */,
@@ -2797,8 +2841,12 @@
 				ED42D881756D5526B8FBA435 /* ControllerLayoutRenderTests.swift in Sources */,
 				67208A0EDA4DDDDD610A8176 /* ControllerLayoutBoundaryTests.swift in Sources */,
 				0E71DD174FA02F0B707E9761 /* ControllerLayoutCaptureTests.swift in Sources */,
+				114D0A9130EE107F0ED56FF8 /* ControllerShortcutRenderTests.swift in Sources */,
+				56A574311FFA79E0A008A3EF /* SettingsResetTests.swift in Sources */,
 				C7FF37545FB1A12CC429370A /* ControllerLayoutRoutingTests.swift in Sources */,
+				B6D5ED5AF9A2619C75EAE789 /* ControllerShortcutRoutingTests.swift in Sources */,
 				019739D198D497E6988A315D /* ControllerLayoutEscapeTests.swift in Sources */,
+				D7F330D765E7A73DE210A28E /* ControllerShortcutTests.swift in Sources */,
 				FB9C61E6827CF796431E0A86 /* ControllerLayoutPersistenceTests.swift in Sources */,
 				77DB31637950C41A7C275C4D /* ControllerMappingTests.swift in Sources */,
 				BC8110662971491390555EBE /* StreamInputMouseModeTests.swift in Sources */,
@@ -2874,6 +2922,7 @@
 				D2B00010 /* HostResolutionTests.swift in Sources */,
 				D2C00002 /* ControlTransportTests.swift in Sources */,
 				D2C0000A /* OpusDecoderTests.swift in Sources */,
+				FC1A1D15E9FD497EB88F904A /* SurroundToneData.swift in Sources */,
 				D81200000000000000000009 /* ReceiveTimingTests.swift in Sources */,
 				D2C00010 /* DatagramBatchTests.swift in Sources */,
 				D2000031 /* StreamCryptoTests.swift in Sources */,
@@ -3045,11 +3094,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D678220340FD4652A784D2A5 /* StatsOverlayFormatting.swift in Sources */,
+				BFEB080D8DA444E99209EFF1 /* VideoDecoder+Overlay.swift in Sources */,
+				19D6F6FE50EC4C22A2E3F0B9 /* HotkeyChord+Preferences.swift in Sources */,
+				4BB7125F711C488A987492B4 /* StreamStatsSnapshot+Rows.swift in Sources */,
+				0FECE547C2E44F4AA3A9F583 /* StatsOverlayValues.swift in Sources */,
 				434EF25A3A966CCB0AC006D1 /* ControllerLayoutGame.swift in Sources */,
 				FA80C81BCDA1DFF52B27294C /* StreamInput+Layouts.swift in Sources */,
 				0C088E96F1ADE2E4E70945F2 /* InputCore+Layouts.swift in Sources */,
 				648B9348FFF9920F21D36DA4 /* ControllerLayoutConfiguration.swift in Sources */,
 				0465F14C454E14E6A517D5BD /* ControllerLayoutShortcuts.swift in Sources */,
+				B5A8C42988592CE8A90BE235 /* ControllerShortcutGesture.swift in Sources */,
+				8A8E63DBF702E6940E68DE19 /* SettingsReset.swift in Sources */,
 				A0A04FB587A261D0553D1671 /* ControllerLayoutStore.swift in Sources */,
 				6CD65AE981620E655423894D /* ControllerLayoutIdentity.swift in Sources */,
 				189785C9DBC0C32FE4B72628 /* ControllerMappingPlan.swift in Sources */,
@@ -3171,11 +3227,11 @@
 				AC2026083000000000000002 /* AudioDecoder+Engine.swift in Sources */,
 				851374F386A2419FB8B03DAF /* AudioDecoder+Reconnect.swift in Sources */,
 				D2C00008 /* OpusDecoder.swift in Sources */,
+				EB34C1CBD1FD44719A09B90D /* OpusDecoder+Stream.swift in Sources */,
+				5B34A98402AB49D2BE6C0B26 /* OpusDecoder+Packet.swift in Sources */,
 				A11020261012000300000001 /* AudioOutput+Silence.swift in Sources */,
-				EE6572F168D7406289351042 /* OpusDecoder+Packet.swift in Sources */,
 				A11020261011000100000000 /* AudioPCMQueue.swift in Sources */,
 				AC2026083000000000000006 /* AudioDecoder+Prime.swift in Sources */,
-				EE6572F168D7406289351044 /* OpusDecoder+Stream.swift in Sources */,
 				AB00000016 /* AudioDecoder.swift in Sources */,
 				A0D10A110000000000000008 /* AudioDecoder+Worker.swift in Sources */,
 				AC2026083000000000000004 /* AudioDecoder+Decode.swift in Sources */,

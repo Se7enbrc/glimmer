@@ -16,6 +16,11 @@ import Testing
 struct AppShellTests {
     private let settings = IsolatedDefaults()
 
+    @Test @MainActor func loadingSettingsDoesNotPersistUnchosenDefaults() {
+        _ = AppModel(defaults: settings.defaults)
+        #expect(settings.defaults.persistentDomain(forName: settings.name)?.isEmpty != false)
+    }
+
     @Test @MainActor func customResolutionAndRefreshSurviveRelaunch() {
         for (width, height, fps) in [(1920, 1080, 60), (1280, 720, 90), (2560, 1440, 120)] {
             let model = AppModel(defaults: settings.defaults)
@@ -120,7 +125,7 @@ struct AppShellTests {
         #expect(relaunched.customWidth == 2560 && relaunched.customHeight == 1440)
         #expect(relaunched.customFPS == 120)
         #expect(relaunched.rawHIDPromptAnswered && relaunched.telemetryEnabled)
-        #expect(settings.defaults.bool(forKey: "informationalFpsDefaultsApplied"))
+        #expect(settings.defaults.object(forKey: "informationalFpsDefaultsApplied") == nil)
     }
 
     @Test func dockIconStaysWhileThereIsSomethingToComeBackTo() {

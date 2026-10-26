@@ -493,6 +493,9 @@ extension VideoDecoder {
             id: decodeSignpostID,
             "bytes=\(totalLength, privacy: .public) idr=\(isIDR, privacy: .public)")
         statsCollector.recordDecodeSubmit(intervalState: decodeIntervalState, identity: identity)
+        #else
+        statsCollector.recordDecodeSubmit(intervalState: nil,
+            identity: StatsCollector.DecodeIdentity(epoch: pending.epoch, rtpTimestamp: pending.rtpTimestamp))
         #endif
         // Latency telemetry stage t_submit (opt-in; nil = zero cost): stamp the
         // instant before we hand the frame to VideoToolbox, keyed by the same
@@ -534,6 +537,9 @@ extension VideoDecoder {
                     abandonedState,
                     "outcome=abandoned status=\(decodeStatus, privacy: .public)")
             }
+            #else
+            _ = statsCollector.recordDecodeAbandoned(
+                identity: StatsCollector.DecodeIdentity(epoch: pending.epoch, rtpTimestamp: pending.rtpTimestamp))
             #endif
             // A dead session rejects every later frame, recovery IDRs included, and the byte-equal
             // param-set shortcut would keep it: drop it so the next IDR builds a fresh one.

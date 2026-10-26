@@ -106,9 +106,9 @@ struct ControllerMouseTests {
         let chord = start | StreamProtocol.BACK_FLAG | StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG
         forwarder.pushHID(slot: 0, state: (start, neutral)) { (start, self.neutral) }
         forwarder.pushHID(slot: 0, state: (chord, neutral)) { (chord, self.neutral) }
-        #expect(forwarder.quitChordDwellSlot == 0)
+        #expect(forwarder.inputCore.layouts?.states[0]?.gesture.deadline != nil)
         forwarder.pushHID(slot: 0, state: (start, neutral)) { (start, self.neutral) }
-        #expect(forwarder.quitChordDwellSlot == nil)
+        #expect(forwarder.inputCore.layouts?.states[0]?.gesture.deadline == nil)
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: neutral, chordHeld: false, now: .infinity)
         #expect(forwarder.controllerMouseStates[0]?.isMouse == false)
         #expect(backend.calls.last?.buttons == start)

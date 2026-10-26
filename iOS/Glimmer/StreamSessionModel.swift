@@ -12,6 +12,9 @@ final class StreamSessionModel {
         case idle, connecting, streaming, reconnecting, stopping, ended(String)
     }
 
+    let shortcuts: StreamShortcuts
+    private(set) var statsShown: Bool
+
     private(set) var phase: Phase = .idle
     private(set) var audioUnavailable = false
     var firstVideo: ((StreamFormat) -> Void)?
@@ -76,10 +79,13 @@ final class StreamSessionModel {
     private var windowResize: StreamWindowResize?
     private let resizeSleep: @Sendable (Duration) async throws -> Void
 
-    init(launch: StreamLaunch, backgroundGrace: StreamBackgroundGrace = StreamBackgroundGrace(),
+    init(launch: StreamLaunch, defaults: UserDefaults = .standard,
+         backgroundGrace: StreamBackgroundGrace = StreamBackgroundGrace(),
          resizeSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          makePlayback: @escaping @MainActor (StreamLaunch, StreamSurface,
             @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback = StreamPlayback.make) {
+        shortcuts = StreamShortcuts(defaults: defaults)
+        statsShown = defaults.bool(forKey: "showStreamStats")
         self.launch = launch
         self.backgroundGrace = backgroundGrace
         self.resizeSleep = resizeSleep
@@ -139,6 +145,20 @@ final class StreamSessionModel {
                 }
                 self.complete()
             }
+        }
+    }
+
+    func toggleStats() {
+        guard phase == .streaming else { return }
+        statsShown.toggle()
+        synchronizeInputFocus()
+    }
+
+    func performShortcut(_ action: StreamShortcuts.Action) {
+        guard canStart, !phase.isEnded, phase != .stopping else { return }
+        switch action {
+        case .quit: disconnect()
+        case .stats: toggleStats()
         }
     }
 
@@ -212,6 +232,7 @@ final class StreamSessionModel {
     func availabilityChanged(active: Bool, background: Bool, protectedDataAvailable: Bool) {
         let returnedInTime = active ? backgroundGrace.returned() : true
         canStart = active && protectedDataAvailable && returnedInTime
+        if !canStart { shortcuts.reset() }
         synchronizeInputFocus()
         guard !phase.isEnded, phase != .stopping else { return }
         var visibility = VideoDecoder.PresentationVisibility(reason: .sceneAvailability)
@@ -263,6 +284,7 @@ final class StreamSessionModel {
     }
 
     private func synchronizeInputFocus() {
+        playback?.showStats?(statsShown && canStart && phase == .streaming)
         playback?.focusInput?(inputFocused)
         inputCaptureChanged?(inputFocused)
         windowResize?.setAvailable(canStart && phase == .streaming)
@@ -298,6 +320,7 @@ final class StreamSessionModel {
     private func receiveInput(_ event: StreamInput.Event) {
         switch event {
         case .stopRequested: disconnect()
+        case .statsRequested: toggleStats()
         // Engine activity includes the touch registration; only native discovery reports physical presence.
         case .controllersActive: break
         case .mouseMode(let controller, let enabled):

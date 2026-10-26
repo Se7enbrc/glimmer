@@ -26,22 +26,9 @@ extension VideoDecoder {
         #endif
     }
 
-    /// Read the current accumulator state for the stats overlay. Returns a
-    /// `StreamStatsSnapshot` with everything we can compute locally; the
-    /// caller (StreamSession's overlay timer) augments it with
-    /// `LiGetEstimatedRttInfo` data before handing it to the overlay layer.
-    ///
-    /// Safe to call from the main actor at any time - the underlying
-    /// `StatsCollector` uses atomic counters + an internal lock for the
-    /// decode-time EMA, so it tolerates the cross-thread reads.
-    /// `minWindowSeconds` is forwarded to `StatsCollector.snapshot` so the
-    /// overlay can tick faster than the FPS averaging window without making the
-    /// FPS rows noisy - the collector keeps the FPS/bitrate/cadence fields on a
-    /// `minWindowSeconds`-wide average while the live latency gauges refresh
-    /// every call. Defaults to 0 (reset-every-read) to preserve every existing
-    /// caller's behaviour.
+    /// Cache FPS, bitrate and cadence for the requested window while refreshing live gauges.
+    /// Native clients add RTT before rendering; the collector lock protects callback-owned counters.
     package func statsSnapshot(minWindowSeconds: Double = 0) -> StreamStatsSnapshot {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
         var snap = statsCollector.snapshot(minWindowSeconds: minWindowSeconds)
         snap.videoCodec = Self.codecDisplayName(for: streamVideoFormat)
         if streamFps > 0 {
@@ -67,6 +54,7 @@ extension VideoDecoder {
         // Drop a marker on the OS-signpost timeline so a profile run can
         // correlate the stats overlay text with timeline state. Cheap -
         // the snapshot tick is 2 Hz, well below any signpost-rate concern.
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         OSSignposter.decode.emitEvent(
             "StatsSnapshot",
             """
@@ -74,10 +62,8 @@ extension VideoDecoder {
             renderedFps=\(snap.renderedFps ?? 0, privacy: .public) \
             droppedPct=\(snap.decoderDroppedPercent ?? 0, privacy: .public)
             """)
-        return snap
-        #else
-        return StreamStatsSnapshot()
         #endif
+        return snap
     }
 
     nonisolated static func codecDisplayName(for format: Int32) -> String? {

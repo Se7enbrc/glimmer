@@ -8,7 +8,6 @@ import Foundation
 import QuartzCore
 import os
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
 extension StatsCollector {
 
     /// Sunshine's timed captures exclude its repeats when timing is available.
@@ -68,6 +67,8 @@ extension StatsCollector {
                                                 frameNumber: Int32, hostProcessingLatency: UInt16 = 0) {
         lock.lock()
         defer { lock.unlock() }
+        if bytes > 0 { receivedBytes &+= UInt64(bytes) }
+        guard collecting else { return }
         receivedFrames &+= 1
         totalReceived &+= 1
         hostFrameRate.record(hostProcessingLatency: hostProcessingLatency)
@@ -85,7 +86,6 @@ extension StatsCollector {
         foldHostDeltaLocked(ptsUs: ptsUs, consecutive: consecutive)
         lastReceivedFrameNumber = frameNumber
         if bytes > 0 {
-            receivedBytes &+= UInt64(bytes)
             // Telemetry frame-size + type window accumulators - cheap integer adds
             // under the lock we already hold (no extra hot-path cost).
             windowFrameBytesSum &+= UInt64(bytes)
@@ -148,16 +148,13 @@ extension StatsCollector {
         maxHostProcessingLatency = max(maxHostProcessingLatency, tenthsOfMs)
     }
 
-    /// Stamp a fresh submit. The caller passes the
-    /// `OSSignpostIntervalState` it just got back from
-    /// `OSSignposter.beginInterval("DecodeFrame")`; we stash it so the
-    /// matching `recordDecodeComplete` / `recordDecodeAbandoned` can return
-    /// it for the caller to close the interval - possibly on a different
-    /// thread (the VT output callback fires on VT's own queue).
-    @inlinable package func recordDecodeSubmit(intervalState: OSSignpostIntervalState, identity: DecodeIdentity? = nil) {
+    /// Keep submit identity and timing together so callbacks can finish out of order.
+    /// Diagnostic callers also retain their signpost interval until completion or abandonment.
+    @inlinable package func recordDecodeSubmit(intervalState: OSSignpostIntervalState?, identity: DecodeIdentity? = nil) {
         let now = CACurrentMediaTime()
         var evictedForLeakClose: OSSignpostIntervalState?
         lock.lock()
+        guard collecting else { lock.unlock(); return }
         submitFifo.append((timestamp: now, state: intervalState, identity: identity))
         if submitFifo.count > StatsCollector.submitFifoCapacity {
             // Drop the oldest to keep the FIFO bounded. The submit-side opened
@@ -175,10 +172,12 @@ extension StatsCollector {
             evictedForLeakClose = submitFifo.removeFirst().state
         }
         lock.unlock()
+        #if os(macOS) || GLIMMER_DIAGNOSTICS
         if let state = evictedForLeakClose {
             OSSignposter.decode.endInterval(
                 "DecodeFrame", state, "outcome=evicted_from_fifo")
         }
+        #endif
     }
 
     /// Production callbacks match their submit identity even out of order or after eviction.
@@ -187,6 +186,7 @@ extension StatsCollector {
         let now = CACurrentMediaTime()
         lock.lock()
         defer { lock.unlock() }
+        guard collecting else { return nil }
         var poppedState: OSSignpostIntervalState?
         let index: Int?
         if let identity {
@@ -256,7 +256,6 @@ extension StatsCollector {
     @inlinable package func recordRendererEnqueue() {
         lock.lock()
         defer { lock.unlock() }
-        renderedFrames &+= 1
         // Stamp the mode-agnostic present clock here - the single enqueue site
         // for BOTH paced and direct presents - so the present-path watchdog and
         // fps_rendered both source from the actual screen-update moment and
@@ -264,6 +263,8 @@ extension StatsCollector {
         let now = CACurrentMediaTime()
         if firstPresentTime == 0 { firstPresentTime = now }
         lastPresentTime = now
+        guard collecting else { return }
+        renderedFrames &+= 1
         // Perceived-gap judge: a drought since the last present with frames
         // still ARRIVING in between means the screen held while content flowed
         // (loss storm / decode starvation / pacing wedge) - a felt gap. Sparse
@@ -305,6 +306,7 @@ extension StatsCollector {
     @inlinable package func recordRendererBackpressureDrop() {
         lock.lock()
         defer { lock.unlock() }
+        guard collecting else { return }
         rendererBackpressureDrops &+= 1
         clientSkipSinceLastPresent = true
     }
@@ -341,6 +343,7 @@ extension StatsCollector {
     @inlinable package func recordDecoderDiscard() {
         lock.lock()
         defer { lock.unlock() }
+        guard collecting else { return }
         decoderDroppedFrames &+= 1
         totalDecoderDropped &+= 1
         clientSkipSinceLastPresent = true
@@ -358,6 +361,7 @@ extension StatsCollector {
     @inlinable package func recordPresentationLateDrop() {
         lock.lock()
         defer { lock.unlock() }
+        guard collecting else { return }
         presentationLateDrops &+= 1
         clientSkipSinceLastPresent = true
     }
@@ -378,6 +382,7 @@ extension StatsCollector {
     @inlinable package func recordPresentationGap() {
         lock.lock()
         defer { lock.unlock() }
+        guard collecting else { return }
         presentationGaps &+= 1
     }
 
@@ -393,6 +398,7 @@ extension StatsCollector {
     @inlinable package func recordPacingDepth(_ depth: Int) {
         lock.lock()
         defer { lock.unlock() }
+        guard collecting else { return }
         lastPacingDepth = depth
     }
 
@@ -403,6 +409,7 @@ extension StatsCollector {
                                           streamIntervalMs: Double = 0, refreshMs: Double = 0) {
         lock.lock()
         defer { lock.unlock() }
+        guard collecting else { return }
         let hostDeltaMs = (hostPTSSeconds - lastPresentedPtsSeconds) * 1000.0
         if hostPTSSeconds.isFinite { lastPresentedPtsSeconds = hostPTSSeconds }
         let afterClientSkip = clientSkipSinceLastPresent
@@ -473,4 +480,3 @@ extension StatsCollector {
         lastHostDeltaMs = deltaMs
     }
 }
-#endif
