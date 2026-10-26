@@ -24,6 +24,6 @@ enum IOSAudio {
         }, removeRouteListener: { session.removeRouteListener(id: $0) }, installDeviceListeners: { queue, changed in
             session.installDeviceListeners(queue: queue, changed: changed)
         }, removeDeviceListeners: { session.removeDeviceListeners() }, captureVolume: { session.captureVolume() },
-        environment: environment)
+        environment: environment, prepareForRecovery: { session.prepareForRecovery() })
     }
 }

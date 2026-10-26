@@ -43,6 +43,7 @@ extension AudioDecoder {
             return
         }
         guard !isShutdown, let decoder, let fmt = inputFormat else { return }
+        if packet != nil { receivedAudioPackets &+= 1 }
 
         #if os(macOS) || GLIMMER_DIAGNOSTICS
         // `AudioFrame` interval - decode + schedule, one per 5 ms packet; cheap enough not to gate.
@@ -66,7 +67,7 @@ extension AudioDecoder {
             #if os(macOS) || GLIMMER_DIAGNOSTICS
             AudioPipelineTelemetry.shared.poolExhausted.increment()
             #endif
-            maintenanceSource.add(data: 1)
+            if platform.prepareForRecovery == nil { maintenanceSource.add(data: 1) }
             return false
         }
         let pcm = lease.buffer
@@ -109,7 +110,9 @@ extension AudioDecoder {
                 spliceLease = lease
                 retained = true
             }
-            if audioMeterLock.withLock({ playoutStallPending }) { maintenanceSource.add(data: 1) }
+            if platform.prepareForRecovery == nil, audioMeterLock.withLock({ playoutStallPending }) {
+                maintenanceSource.add(data: 1)
+            }
             return false
         }
         packetSplice.apply(to: pcm)
