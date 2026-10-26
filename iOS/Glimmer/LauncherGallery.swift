@@ -107,27 +107,35 @@ struct LauncherButton: View {
     let minimumHeight: CGFloat
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    @ScaledMetric(relativeTo: .caption2) private var badgeInset: CGFloat = 20
+
     var body: some View {
         Button { model.activateTile(app) } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
+            HStack(spacing: 12) {
+                if !dynamicTypeSize.isAccessibilitySize {
                     AppGlyph(name: app.name).font(.system(size: 20)).accessibilityHidden(true)
-                    Spacer(minLength: 8)
-                    RunningTileBadge().opacity(model.runningApp?.id == app.id ? 1 : 0)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(app.name).fontWeight(.semibold)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("Tap to resume").font(.footnote).opacity(model.runningApp?.id == app.id ? 0.85 : 0)
+                Text(app.name).fontWeight(.semibold)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "chevron.right").font(.caption).accessibilityHidden(true)
                 }
-                .multilineTextAlignment(.leading)
             }
             .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .leading)
             .padding(8)
+            .padding(.top, dynamicTypeSize.isAccessibilitySize ? badgeInset : 0)
         }
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.roundedRectangle)
+        .overlay(alignment: .topTrailing) {
+            if model.runningApp?.id == app.id {
+                RunningTileBadge(compact: true).fixedSize()
+                    .padding(.top, 2).padding(.trailing, 16).allowsHitTesting(false)
+            }
+        }
         .disabled(model.busy)
     }
 }

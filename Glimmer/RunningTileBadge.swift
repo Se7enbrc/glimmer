@@ -4,6 +4,8 @@
 import SwiftUI
 
 struct RunningTileBadge: View {
+    var compact = false
+
     var body: some View {
         HStack(spacing: 4) {
             Circle().fill(.green).frame(width: 6, height: 6)
@@ -11,7 +13,7 @@ struct RunningTileBadge: View {
         }
         .foregroundStyle(Color.primary)
         .padding(.horizontal, 7)
-        .padding(.vertical, 4)
+        .padding(.vertical, compact ? 2 : 4)
         .background(.regularMaterial, in: Capsule())
         .accessibilityHidden(true)
     }

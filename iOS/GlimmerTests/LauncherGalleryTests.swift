@@ -9,16 +9,46 @@ import UIKit
 
 @MainActor
 struct LauncherGalleryTests {
-    @Test(arguments: [LauncherStyle.buttons, .covers])
-    func runningStateKeepsTheGallerySize(style: LauncherStyle) {
+    @Test(arguments: [CGFloat(220), 327, 600], ["Desktop", "Steam Big Picture", "A long game title that wraps"])
+    func buttonsKeepTheirOriginalHeight(width: CGFloat, title: String) {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        let app = HostApp(id: 1, name: title, hdrCapable: false, hidden: false)
+        let proposal = CGSize(width: width, height: 1_000)
+        let original = Button {} label: {
+            HStack(spacing: 12) {
+                AppGlyph(name: title).font(.system(size: 20))
+                Text(title).fontWeight(.semibold).lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.caption)
+            }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .padding(8)
+        }
+        .buttonStyle(.glassProminent).buttonBorderShape(.roundedRectangle)
+        let expected = UIHostingController(rootView: original).sizeThatFits(in: proposal)
+        let idle = UIHostingController(rootView: LauncherButton(model: model, app: app, minimumHeight: 44))
+            .sizeThatFits(in: proposal)
+        model.runningApp = app
+        let running = UIHostingController(rootView: LauncherButton(model: model, app: app, minimumHeight: 44))
+            .sizeThatFits(in: proposal)
+        #expect(idle.height == expected.height)
+        #expect(running.height == expected.height)
+    }
+
+    @Test(arguments: [LauncherStyle.buttons, .covers], [DynamicTypeSize.large, .accessibility5])
+    func runningStateKeepsTheGallerySize(style: LauncherStyle, textSize: DynamicTypeSize) {
         let fixture = LauncherFixture()
         let model = fixture.model()
         model.apps = [fixture.app]
         let proposal = CGSize(width: 327, height: 1_000)
-        let idle = UIHostingController(rootView: LauncherGallery(model: model, style: style, size: proposal))
+        let idle = UIHostingController(rootView:
+            LauncherGallery(model: model, style: style, size: proposal).dynamicTypeSize(textSize))
             .sizeThatFits(in: proposal)
         model.runningApp = fixture.app
-        let running = UIHostingController(rootView: LauncherGallery(model: model, style: style, size: proposal))
+        let running = UIHostingController(rootView:
+            LauncherGallery(model: model, style: style, size: proposal).dynamicTypeSize(textSize))
             .sizeThatFits(in: proposal)
         #expect(idle == running)
     }

@@ -528,3 +528,31 @@ struct NativeUIRenderTests {
         return own + view.subviews.flatMap { launcherViewports(in: $0) }
     }
 }
+
+@Suite(.serialized)
+@MainActor
+struct CompactLauncherRenderTests {
+    @Test(arguments: [false, true], [false, true])
+    func compactLauncherTiles(dark: Bool, running: Bool) async throws {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        let apps = ["Desktop", "Steam Big Picture", "SuperTuxKart"].enumerated().map {
+            HostApp(id: $0.offset + 1, name: $0.element, hdrCapable: false, hidden: false)
+        }
+        model.apps = apps
+        model.runningApp = running ? apps.first : nil
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        let size = tablet ? CGSize(width: 1024, height: 768) : CGSize(width: 390, height: 844)
+        let name = "\(tablet ? "ipad" : "iphone")-\(dark ? "dark" : "light")-\(running ? "running" : "idle")"
+        let content = VStack(alignment: .leading, spacing: 16) {
+            Text("Living room PC").font(.largeTitle.bold())
+            LauncherGallery(model: model, style: .buttons,
+                            size: CGSize(width: size.width - 48, height: size.height - 100))
+            Spacer()
+        }
+        .padding(24)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .background(Color(uiColor: .systemBackground))
+        try await NativeUIRenderTests().record(content, name: name, size: size, dark: dark, textSize: .large)
+    }
+}

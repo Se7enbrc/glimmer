@@ -122,24 +122,28 @@ struct AppIconsRow: View {
 
     private func tileLabel(icon: Image, title: String, running: Bool = false,
                            launching: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 12) {
-                icon.font(.system(size: 20, weight: .semibold)).frame(width: 28)
-                Text(title).font(.headline).lineLimit(1)
-                Spacer(minLength: 0)
-                if launching {
-                    ProgressView().controlSize(.small).environment(\.colorScheme, .dark)
+        HStack(spacing: 12) {
+            icon.font(.system(size: 20, weight: .semibold)).frame(width: 28, height: 28)
+            Text(title).font(.headline).lineLimit(1)
+                .overlay(alignment: .topLeading) {
+                    if running {
+                        Text("Click to resume").font(.footnote).opacity(0.85)
+                            .fixedSize().offset(y: 18).accessibilityHidden(true)
+                    }
                 }
-            }
-            HStack(spacing: 8) {
-                Text("Click to resume").font(.footnote).opacity(running ? 0.85 : 0)
-                    .padding(.leading, 40)
-                Spacer(minLength: 0)
-                RunningTileBadge().opacity(running ? 1 : 0)
+            Spacer(minLength: 0)
+            if launching {
+                ProgressView().controlSize(.small).environment(\.colorScheme, .dark)
+            } else {
+                Image(systemName: "play.fill").font(.footnote.weight(.bold))
+                    .opacity(running ? 0 : 0.75)
             }
         }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 60)
+        .overlay(alignment: .bottomTrailing) {
+            if running { RunningTileBadge().padding(.trailing, 12).padding(.bottom, 2) }
+        }
         .contentShape(.rect(cornerRadius: 14))
     }
 

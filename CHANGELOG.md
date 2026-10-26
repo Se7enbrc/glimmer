@@ -122,6 +122,9 @@
 
 ### Bug fixes
 
+- Restore compact launcher buttons on Mac, iPhone and iPad. Running games keep
+  their badge inside the same-sized button.
+
 - Keep existing PC pairing when preferences are reset or restored. Tests now use
   separate storage so they cannot replace a saved pairing.
 
