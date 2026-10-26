@@ -396,11 +396,11 @@ struct NativeUIRenderTests {
                                captureWindow: Bool = false,
                                prepare: (() async -> Void)? = nil,
                                inspect: ((UIView) throws -> Void)? = nil) async throws {
-        let suite = "render-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = PersistentStorage.defaults
+        let previous = defaults.object(forKey: "leaveGamesRunning")
+        defer { defaults.set(previous, forKey: "leaveGamesRunning") }
         defaults.set(leaveRunning, forKey: "leaveGamesRunning")
-        let host = UIHostingController(rootView: content.defaultAppStorage(defaults).dynamicTypeSize(textSize))
+        let host = UIHostingController(rootView: content.dynamicTypeSize(textSize))
         try await recordController(host, name: name, size: size, dark: dark, portrait: portrait,
                                    captureWindow: captureWindow, prepare: prepare, textSize: textSize,
                                    landscapeRight: landscapeRight, inspect: inspect)

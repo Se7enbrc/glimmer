@@ -278,7 +278,6 @@ struct ControllerLayoutRenderTests {
         }
         #expect(drawn)
         let data = try #require(image.pngData())
-        try data.write(to: URL.documentsDirectory.appendingPathComponent("remapping-\(name).png"))
         #endif
         #expect(data.count > 1000)
         Attachment.record(Array(data), named: "\(name).png")
