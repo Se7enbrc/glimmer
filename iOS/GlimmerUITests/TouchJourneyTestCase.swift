@@ -66,10 +66,15 @@ class TouchJourneyTestCase: XCTestCase {
     }
 
     func openInputSettings(_ app: XCUIApplication) {
-        app.buttons["Settings"].tap()
-        // Settings slides in after a rotation; tapping before it lands misses the row.
+        // A tap that lands mid-rotation can miss Settings; tap again only while it is still reachable.
+        let settings = app.buttons["Settings"]
         let input = app.buttons["Input"]
-        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        for _ in 0..<2 where !input.exists {
+            XCTAssertTrue(settings.waitForExistence(timeout: 5))
+            if settings.isHittable { settings.tap() }
+            _ = input.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(input.exists)
         input.tap()
     }
 
