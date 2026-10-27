@@ -9,6 +9,21 @@ import Testing
 
 @MainActor
 struct StatsOverlayVisibilityTests {
+    @Test func viewportScalingIsBoundedAndRespondsToWindowGeometry() {
+        let phone = StatsOverlayLayer.viewportScale(in: CGSize(width: 667, height: 375))
+        let tablet = StatsOverlayLayer.viewportScale(in: CGSize(width: 1194, height: 834))
+        let desktop = StatsOverlayLayer.viewportScale(in: CGSize(width: 1920, height: 1080))
+        #expect(phone == 1 && tablet > phone && desktop > tablet)
+        #expect(StatsOverlayLayer.viewportScale(in: CGSize(width: 7680, height: 4320)) == 1.6)
+        #expect(StatsOverlayLayer.viewportScale(in: .zero) == 1)
+        let area = CGRect(x: 0, y: 0, width: 320, height: 240)
+        for corner in StatsOverlayCorner.allCases {
+            let frame = StatsOverlayLayer.panelFrame(size: CGSize(width: 500, height: 600),
+                                                     in: area, corner: corner, preferredScale: 1.6)
+            #expect(area.insetBy(dx: 16, dy: 16).contains(frame))
+        }
+    }
+
     @Test func visibleMetricsExposeStableAccessibilityChildrenAndHideWithTheHUD() throws {
         let view = DisplayContainerView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
         view.wantsLayer = true
@@ -255,21 +270,24 @@ struct StatsOverlayVisibilityTests {
             overlay.videoSize = picture
             overlay.update(snapshot: snapshot, enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
             let available = StatsOverlayLayer.availableRect(in: video.bounds, videoSize: picture, safeArea: NSEdgeInsets())
+            let scale = StatsOverlayLayer.viewportScale(in: available.size)
+            let width = 160 * scale
+            let height = 180 * scale
             for corner in StatsOverlayCorner.allCases {
                 overlay.corner = corner
                 let rect = overlay.backdropSampleRect
                 let expectedX: CGFloat
                 switch corner {
                 case .topLeft, .bottomLeft: expectedX = 16 / available.width
-                case .topCenter, .bottomCenter: expectedX = (available.width - 160) / 2 / available.width
-                case .topRight, .bottomRight: expectedX = (available.width - 176) / available.width
+                case .topCenter, .bottomCenter: expectedX = (available.width - width) / 2 / available.width
+                case .topRight, .bottomRight: expectedX = (available.width - width - 16) / available.width
                 }
                 let isTop = [.topLeft, .topCenter, .topRight].contains(corner)
-                let expectedY = (isTop ? 16 : available.height - 196) / available.height
+                let expectedY = (isTop ? 16 : available.height - height - 16) / available.height
                 #expect(abs(rect.minX - expectedX) < 0.0001)
                 #expect(abs(rect.minY - expectedY) < 0.0001)
-                #expect(abs(rect.width - 160 / available.width) < 0.0001)
-                #expect(abs(rect.height - 180 / available.height) < 0.0001)
+                #expect(abs(rect.width - width / available.width) < 0.0001)
+                #expect(abs(rect.height - height / available.height) < 0.0001)
                 #expect(CGRect(x: 0, y: 0, width: 1, height: 1).contains(rect))
             }
         }

@@ -9,6 +9,7 @@ import UIKit
 final class StreamSurface: UIView {
     private(set) var displayLayer = AVSampleBufferDisplayLayer()
     weak var stats: StreamStats?
+    let overlayAppearance = StreamOverlayAppearance()
     var displayChanged: (() -> Void)?
 
     override init(frame: CGRect) {

@@ -67,6 +67,7 @@ struct StreamPlayback {
     /// Moves a running stream to a new listed size through the resume-only seam; the game keeps running.
     var requestFormatChange: StreamWindowResize.Request?
     var showStats: (@MainActor (Bool) -> Void)?
+    var showOverlayChrome: (@MainActor (Bool) -> Void)?
 
     static func configureInput(_ input: StreamInput, defaults: UserDefaults = PersistentStorage.defaults) {
         input.setStopChord(.menuOptionsShoulders)
@@ -102,13 +103,19 @@ struct StreamPlayback {
         video.attach(to: surface.displayLayer)
         let stats = StreamStats(surface: surface, snapshot: { video.overlaySnapshot() },
             collection: { video.statsOverlayEnabled = $0 }, videoSize: { video.overlayVideoSize },
-            backdrop: { video.hudBackdropRect = $0; return video.hudBackdropLuminance })
+            backdrop: { video.hudBackdropRect = $0; return video.hudBackdropLuminance },
+            chromeSampling: { video.overlayChromeEnabled = $0 })
         let nativeInput = NativeInputLifetime()
         let adaptive = AdaptiveBandwidth.isEnabled()
         let bandwidth = BandwidthSignals()
         let media = StreamSession.PreparedMedia(video: video, audio: audio,
             quiesce: { nativeInput.focus(false); quiesce() },
-            finalDispose: { stats.setVisible(false); nativeInput.stop(); bandwidth.stop() })
+            finalDispose: {
+                stats.setChromeVisible(false)
+                stats.setVisible(false)
+                nativeInput.stop()
+                bandwidth.stop()
+            })
         let (session, input) = StreamSession.make(media: media, network: launch.network,
                                                   hostDisposition: launch.hostDisposition,
             bandwidthInputs: bandwidth.inputs, adaptiveBandwidth: adaptive)
@@ -150,6 +157,7 @@ struct StreamPlayback {
                Task { await session.setBitrateChangesAvailable(visible) }
            }, observeControllers: nativeInput.observeControllers, touchGamepad: nativeInput.touch,
            showTouchControls: nativeInput.showTouchControls,
-           requestFormatChange: { await StreamWindowResize.request($0, session: session) }, showStats: stats.setVisible)
+           requestFormatChange: { await StreamWindowResize.request($0, session: session) }, showStats: stats.setVisible,
+           showOverlayChrome: stats.setChromeVisible)
     }
 }

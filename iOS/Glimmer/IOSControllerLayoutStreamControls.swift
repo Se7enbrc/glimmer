@@ -13,7 +13,6 @@ struct IOSControllerLayoutStreamButton: View {
             model.showControls()
             presented = true
         }
-        .buttonStyle(.glass)
         .sheet(isPresented: $presented) {
             NavigationStack {
                 ControllerLayoutsView(initialScope: .game(pcID: model.launch.pcID,

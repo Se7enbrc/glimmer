@@ -112,7 +112,7 @@ public final class StatsOverlayLayer {
 
     private func applyCap() {
         capLayer.string = NSAttributedString(string: capText, attributes: [
-            .font: Self.labelFont, .foregroundColor: secondaryInk
+            .font: resolvedLabelFont, .foregroundColor: secondaryInk
         ])
         applyShadow(to: capLayer)
     }
@@ -135,11 +135,11 @@ public final class StatsOverlayLayer {
     }
 
     /// Fit the whole HUD in a small player instead of cutting off detailed rows.
-    static func panelFrame(size: CGSize, in available: CGRect, corner: StatsOverlayCorner) -> CGRect {
+    static func panelFrame(size: CGSize, in available: CGRect, corner: StatsOverlayCorner, preferredScale: CGFloat = 1) -> CGRect {
         let inset: CGFloat = 16
         let area = available.insetBy(
             dx: min(inset, available.width / 2), dy: min(inset, available.height / 2))
-        let scale = min(1, area.width / max(1, size.width), area.height / max(1, size.height))
+        let scale = min(preferredScale, area.width / max(1, size.width), area.height / max(1, size.height))
         let width = size.width * scale
         let height = size.height * scale
         let x: CGFloat
@@ -183,30 +183,33 @@ public final class StatsOverlayLayer {
         let available = Self.availableRect(in: host.bounds, videoSize: layoutVideoSize,
                                            safeArea: safeAreaInsets(in: host.bounds))
         let rows = orderedKinds.compactMap { rowViews[$0]?.lastRender }
-        let rowsHeight = rows.reduce(CGFloat.zero) { $0 + Self.rowHeight(for: $1.kind) + 3 }
-        let columnCount = Self.columnCount(height: rowsHeight, width: contentWidth, available: available)
+        let rowsHeight = rows.reduce(CGFloat.zero) { $0 + Self.rowBands(for: $1.kind, scale: resolvedTextScale).height + 3 }
+        let preferredScale = Self.viewportScale(in: available.size)
+        let columnArea = CGRect(origin: .zero, size: CGSize(width: available.width / preferredScale,
+                                                          height: available.height / preferredScale))
+        let columnCount = Self.columnCount(height: rowsHeight, width: contentWidth, available: columnArea)
         if columns != columnCount { columns = columnCount; needsRowLayout = true }
         if needsRowLayout {
             let count = max(1, (rows.count + columns - 1) / columns)
             let heights = stride(from: 0, to: rows.count, by: count).map { start in
                 rows[start..<min(start + count, rows.count)].reduce(CGFloat.zero) {
-                    $0 + Self.rowHeight(for: $1.kind) + 3
+                    $0 + Self.rowBands(for: $1.kind, scale: resolvedTextScale).height + 3
                 }
             }
             contentSize = CGSize(width: contentWidth * CGFloat(columns) + CGFloat(columns - 1) * 24,
-                                 height: max(0, (heights.max() ?? 0) - 3) + (capText.isEmpty ? 0 : 12 * Self.textScale))
+                                 height: max(0, (heights.max() ?? 0) - 3) + (capText.isEmpty ? 0 : 12 * resolvedTextScale))
             layer.bounds = CGRect(origin: .zero, size: contentSize)
             layoutRows(rows, in: contentSize)
             needsRowLayout = false
         }
-        let frame = Self.panelFrame(size: contentSize, in: available, corner: corner)
+        let frame = Self.panelFrame(size: contentSize, in: available, corner: corner, preferredScale: preferredScale)
         let scale = frame.width / max(1, contentSize.width)
         let position = hostPosition(frame: frame, bounds: host.bounds)
         if layer.position != position { layer.position = position }
         let transform = CGAffineTransform(scaleX: scale, y: scale)
         if layer.affineTransform() != transform { layer.setAffineTransform(transform) }
         updateAccessibilityFrames()
-        let contentsScale = displayScale ?? host.contentsScale
+        let contentsScale = (displayScale ?? host.contentsScale) * max(1, scale)
         if layer.contentsScale != contentsScale {
             layer.contentsScale = contentsScale
             capLayer.contentsScale = contentsScale
@@ -237,7 +240,7 @@ public final class StatsOverlayLayer {
             }
             orderedKinds = kinds
             enabledRows = enabled
-            contentWidth = 160
+            contentWidth = 160 * resolvedTextScale
             needsRowLayout = true
         }
         let cap = enabled.contains(.bitrate) ? snapshot.negotiatedBitrateMbps : nil
@@ -280,10 +283,14 @@ public final class StatsOverlayLayer {
     private func refreshAccessibility() -> Bool {
         let opaque = Self.reduceTransparencyEnabled
         let differentiate = Self.differentiateWithoutColorEnabled
-        let scale = Self.textScale
+        let scale = resolvedTextScale
         let changed = reduceTransparency != opaque || differentiateWithoutColor != differentiate
             || currentTextScale != scale
-        if currentTextScale != scale { needsRowLayout = true; currentTextScale = scale }
+        if currentTextScale != scale {
+            needsRowLayout = true
+            contentWidth = 160 * scale
+            currentTextScale = scale
+        }
         reduceTransparency = opaque
         differentiateWithoutColor = differentiate
         if changed { refreshInk() }
@@ -334,14 +341,12 @@ public final class StatsOverlayLayer {
 
     /// Row height plus the value and trace bands inside it. Core rows carry the large
     /// value; other traced rows a smaller value over a shorter trace; the rest are text.
-    static func rowBands(for kind: StatsRow.Kind) -> (height: CGFloat, value: CGFloat, trace: CGFloat) {
-        let scale = Self.textScale
+    static func rowBands(for kind: StatsRow.Kind, scale: CGFloat = 1)
+        -> (height: CGFloat, value: CGFloat, trace: CGFloat) {
         if coreKinds.contains(kind) { return (54 * scale, 24 * scale, 17 * scale) }
         return StatsTrace.Metric(kind: kind) == nil
             ? (32 * scale, 19 * scale, 0) : (46 * scale, 19 * scale, 14 * scale)
     }
-
-    private static func rowHeight(for kind: StatsRow.Kind) -> CGFloat { rowBands(for: kind).height }
 
     private func layoutRows(_ rows: [StatsRow], in size: CGSize) {
         var top = size.height
@@ -350,16 +355,16 @@ public final class StatsOverlayLayer {
             if index.isMultiple(of: count) { top = size.height }
             let x = CGFloat(index / count) * (contentWidth + 24)
             guard let sub = rowViews[row.kind] else { continue }
-            let bands = Self.rowBands(for: row.kind)
+            let bands = Self.rowBands(for: row.kind, scale: resolvedTextScale)
             top -= bands.height
             sub.container.frame = CGRect(x: x, y: top, width: contentWidth, height: bands.height)
-            sub.labelLayer.frame = CGRect(x: 0, y: bands.height - 13 * Self.textScale,
-                                           width: contentWidth, height: 13 * Self.textScale)
+            sub.labelLayer.frame = CGRect(x: 0, y: bands.height - 13 * resolvedTextScale,
+                                           width: contentWidth, height: 13 * resolvedTextScale)
             sub.valueLayer.frame = CGRect(x: 0, y: bands.trace, width: contentWidth, height: bands.value)
             sub.trace?.layer.frame = CGRect(x: 0, y: 0, width: contentWidth, height: bands.trace)
             top -= 3
         }
-        capLayer.frame = CGRect(x: 0, y: 0, width: contentWidth, height: 12 * Self.textScale)
+        capLayer.frame = CGRect(x: 0, y: 0, width: contentWidth, height: 12 * resolvedTextScale)
     }
 
     static let disabledActions: [String: CAAction] = [

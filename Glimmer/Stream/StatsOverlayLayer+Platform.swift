@@ -20,6 +20,47 @@ typealias StatsInsets = UIEdgeInsets
 #endif
 
 extension StatsOverlayLayer {
+    /// Point geometry, rather than pixel density, keeps a resized window and an external display consistent.
+    static func viewportScale(in size: CGSize) -> CGFloat {
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return 1 }
+        return min(1.6, max(1, sqrt(min(size.width, size.height) / 440)))
+    }
+
+    var resolvedLabelFont: StatsFont {
+        #if os(macOS)
+        Self.labelFont
+        #else
+        UIFont.preferredFont(forTextStyle: .caption2, compatibleWith: displayView?.traitCollection)
+        #endif
+    }
+
+    var resolvedDetailFont: StatsFont {
+        #if os(macOS)
+        Self.detailFont
+        #else
+        UIFont.monospacedDigitSystemFont(ofSize: UIFont.preferredFont(
+            forTextStyle: .footnote, compatibleWith: displayView?.traitCollection).pointSize, weight: .medium)
+        #endif
+    }
+
+    func resolvedValueFont(bold: Bool) -> StatsFont {
+        #if os(macOS)
+        Self.platformValueFont(bold: bold)
+        #else
+        UIFont.monospacedDigitSystemFont(ofSize: UIFont.preferredFont(
+            forTextStyle: .title3, compatibleWith: displayView?.traitCollection).pointSize,
+            weight: bold ? .bold : .semibold)
+        #endif
+    }
+
+    var resolvedTextScale: CGFloat {
+        #if os(macOS)
+        1
+        #else
+        resolvedLabelFont.pointSize / 11
+        #endif
+    }
+
     static var platformLabelFont: StatsFont {
         #if os(macOS)
         NSFont.preferredFont(forTextStyle: .caption2, options: [:])

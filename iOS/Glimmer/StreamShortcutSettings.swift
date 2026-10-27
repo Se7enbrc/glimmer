@@ -9,10 +9,14 @@ struct StreamShortcutSettings: View {
     @State private var shortcuts = StreamShortcuts()
 
     var body: some View {
-        Section("In-stream shortcuts") {
+        Section {
             ForEach(StreamShortcuts.Action.allCases, id: \.self) { action in
                 StreamShortcutRow(shortcuts: shortcuts, action: action)
             }
+        } header: {
+            Text("In-stream shortcuts")
+        } footer: {
+            Text("Use stream controls for these actions. Connect a keyboard to change its shortcuts.")
         }
     }
 }
@@ -65,7 +69,7 @@ private struct StreamShortcutRow: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Change \(action.title) shortcut")
             .accessibilityValue(capturing ? "Press keys…" : shortcuts.chord(for: action).displayString)
-            if capturing { Text("Press Esc to cancel").font(.caption).foregroundStyle(.secondary) }
+            if capturing { Button("Cancel", role: .cancel) { capturing = false }.frame(minHeight: 44) }
         }
     }
 

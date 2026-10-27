@@ -2,6 +2,13 @@
 
 ## 2026.10.8 - Unreleased
 
+- iPhone and iPad stream controls stay within thumb reach, with touch-first help
+  and an always-visible Disconnect action. Controls adapt to the picture's
+  brightness.
+
+- Stream stats scale with the window on Mac, iPhone and iPad, including larger
+  text on iPhone and iPad.
+
 - Controller sticks no longer send duplicate input while streaming.
 
 - Controllers avoid mouse calculations while mouse mode is off.

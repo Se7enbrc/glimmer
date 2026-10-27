@@ -82,11 +82,12 @@ private struct TouchControlsButton: View {
     var body: some View {
         GeometryReader { geometry in
             if visible {
-                let frame = TouchLayout.menuFrame(in: area)
+                let frame = CGRect(x: area.maxX - 52, y: area.midY - 22, width: 44, height: 44)
                 Button("Show controls", systemImage: "ellipsis", action: showControls)
                     .labelStyle(.iconOnly).buttonStyle(TouchMenuStyle(opacity: opacity))
                     .position(x: min(frame.midX, geometry.size.width - 22),
                               y: min(frame.midY, geometry.size.height - 22))
+                    .hoverEffect(.highlight)
                     .transition(.opacity)
             }
         }
@@ -136,6 +137,7 @@ struct TouchGamepadRepresentation: UIViewRepresentable {
     func makeUIView(context: Context) -> TouchGamepadView { TouchGamepadView() }
 
     func updateUIView(_ view: TouchGamepadView, context: Context) {
+        view.overrideUserInterfaceStyle = context.environment.colorScheme == .dark ? .dark : .light
         view.menuButton.showControls = showControls
         view.configure(capture: capture, layout: layout, area: area, preview: preview)
         view.mouseMode(mouseMode, bindings: ControllerLayoutsModel.shared.mouse)

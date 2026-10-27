@@ -12,6 +12,19 @@ import Testing
 @testable import Glimmer
 
 struct HUDBackdropLuminanceTests {
+    @Test @MainActor func chromeSamplingDoesNotRequireStatsCollection() {
+        let configuration = StreamConnection.Configuration(width: 64, height: 64, fps: 60,
+                                                            bitrateKbps: 20_000, videoFormats: .h264)
+        let decoder = VideoDecoder(configuration: configuration, displayInfo: { nil })
+        defer { decoder.teardown() }
+        decoder.overlayChromeEnabled = true
+        #expect(decoder.hudBackdropState.overlayEnabled && !decoder.statsOverlayEnabled)
+        decoder.statsOverlayEnabled = true
+        decoder.statsOverlayEnabled = false
+        #expect(decoder.hudBackdropState.overlayEnabled)
+        decoder.overlayChromeEnabled = false
+        #expect(!decoder.hudBackdropState.overlayEnabled && decoder.hudBackdropLuminance == nil)
+    }
 
     private static let width = 64
     private static let height = 32
