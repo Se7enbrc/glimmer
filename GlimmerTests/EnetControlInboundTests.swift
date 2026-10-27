@@ -19,9 +19,9 @@ import Testing
 enum EnetFixture {
     static let key: [UInt8] = Array(0..<16).map { UInt8($0) }
 
-    static func channel() throws -> EnetControlChannel {
+    static func channel(collectBandwidthSamples: Bool = false) throws -> EnetControlChannel {
         let channel = EnetControlChannel(host: .ipv4(.loopback), port: 0, controlConnectData: 0,
-                                         crypto: try ControlCrypto(rikey: key))
+                                         crypto: try ControlCrypto(rikey: key), collectBandwidthSamples: collectBandwidthSamples)
         connect(channel)
         return channel
     }
@@ -112,8 +112,9 @@ struct EnetControlInboundTests {
 
     // MARK: - ACK matching and the RTT estimate
 
-    @Test func ackRemovesOnlyTheMatchingChannelAndSeedsTheRtt() throws {
-        let channel = try EnetFixture.channel()
+    @Test(arguments: [false, true])
+    func ackRemovesOnlyTheMatchingChannelAndSeedsTheRtt(collectBandwidthSamples: Bool) throws {
+        let channel = try EnetFixture.channel(collectBandwidthSamples: collectBandwidthSamples)
         channel.sendEnetPing()     // channel 0xFF, relSeq 1, first in line
         channel.sendPeriodicPing() // channel 0, relSeq 1
         channel.withState {
@@ -129,6 +130,7 @@ struct EnetControlInboundTests {
         let rtt = try #require(channel.estimatedRtt())
         #expect(rtt.rttMs >= 4 && rtt.rttMs < 5)
         #expect(rtt.varianceMs == rtt.rttMs / 2)
+        #expect(channel.drainRttSamples().count == (collectBandwidthSamples ? 1 : 0))
     }
 
     @Test func ackWithAnUnknownTokenMatchesButTakesNoRttSample() throws {

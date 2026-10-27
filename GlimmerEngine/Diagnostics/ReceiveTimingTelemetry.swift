@@ -67,9 +67,12 @@ package final class ReceiveTimingTelemetry: Sendable {
         package var gapP99Ms: Double?
     }
 
-    @inlinable package func observe(delayMs: Double?, gapMs: Double?) {
+    @inlinable package func observe(delayMs: Double?, gapMs: Double?, collectPolicy: Bool = false) {
         state.withLock {
-            if let delayMs { $0.delay.observe(delayMs); $0.policyDelay.observe(delayMs) } else { $0.missing &+= 1 }
+            if let delayMs {
+                $0.delay.observe(delayMs)
+                if collectPolicy { $0.policyDelay.observe(delayMs) }
+            } else { $0.missing &+= 1 }
             if let gapMs { $0.gap.observe(gapMs) }
         }
     }

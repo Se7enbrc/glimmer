@@ -54,7 +54,8 @@ extension InputForwarder {
         publishInputSnapshot()
         if let controller = pad.controller, let sample = controllerLayouts?.sample(for: controller, slot: slot) {
             let result = inputCore.receive(slot: slot, buttons: Int32(bitPattern: sample.game.buttons),
-                analog: sample.game.gamepadAnalog, extras: sample.physical.extras, physicalSample: sample.physical)
+                analog: sample.game.gamepadAnalog, extras: sample.physical.extras, physicalSample: sample.physical,
+                rawSupplement: sample.supplement.map { (Int32(bitPattern: $0), Int32(bitPattern: $0)) })
             return result == .forwarded || result == .mouse
         }
         let buttons = pressedButtonFlags(pad: pad)
@@ -155,11 +156,10 @@ extension InputForwarder {
         ControllerStreamHandlers.install(controller: controller, input: reader.input, queue: controllerCaptureQueue,
             mapsGameInput: mapsGameInput, shortcutElements: reader.shortcutElements(configuration),
             read: reader.sample) { @Sendable [core = inputCore] sample, now in
-                var sample = sample
                 if routesHID {
                     DualSenseRouting.shared.gc(controller: id, buttons: sample.buttons, at: now)
-                    sample.buttons |= MacControllerLayouts.centerButtons(for: id)
                 }
+                let supplement = routesHID ? MacControllerLayouts.centerButtons(for: id) : nil
                 InputTimingContext.begin(source: .controller, timestamp: now)
                 defer { InputTimingContext.end() }
                 core.withLock {
@@ -170,7 +170,8 @@ extension InputForwarder {
                         registeredAt: registered.registeredAt, buttons: Int32(bitPattern: game.buttons),
                         analog: game.gamepadAnalog, extras: sample.extras)
                     core.receive(slot: slot, buttons: Int32(bitPattern: game.buttons), analog: game.gamepadAnalog,
-                                 capturedAt: now, extras: sample.extras, physicalSample: sample)
+                                 capturedAt: now, extras: sample.extras, physicalSample: sample,
+                                 rawSupplement: supplement.map { (Int32(bitPattern: $0), Int32(bitPattern: $0)) })
                     if let touch = reader.touchSample(clicked: sample.buttons & ControllerMappedButton.touchpad.rawValue != 0) {
                         core.forwardTouchpad(slot: slot, primary: (touch.primaryX, touch.primaryY),
                             secondary: (touch.secondaryX, touch.secondaryY), clicked: touch.clicked, now: now)

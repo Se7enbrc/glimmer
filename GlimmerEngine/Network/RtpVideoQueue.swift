@@ -32,6 +32,7 @@ import Foundation
 import Synchronization
 
 final class RtpVideoQueue {
+    private let collectBandwidthSamples: Bool
     // NOTE: many type members below are `internal` (no `private`) rather than
     // truly private. The reconstruct + FEC-staging + submit/emit half of this
     // state machine lives in the same-module RtpVideoQueue+Reconstruct.swift
@@ -282,7 +283,8 @@ final class RtpVideoQueue {
         25, 50, 75, 100, 150, 200, 300, 500, 750, 1_000, 1_500, 2_000, 3_000, 5_000, 10_000, 20_000
     ]
 
-    init(depacketizer: VideoDepacketizer, packetSize: Int) {
+    init(depacketizer: VideoDepacketizer, packetSize: Int, collectBandwidthSamples: Bool = false) {
+        self.collectBandwidthSamples = collectBandwidthSamples
         self.depacketizer = depacketizer
         self.packetSize = packetSize
         Self.lastDatagramUs.store(0, ordering: .relaxed)
@@ -396,9 +398,13 @@ final class RtpVideoQueue {
             // jitter += (|D| - jitter) / 16  (RFC 3550 6.4.1).
             jitterUs += (transitDelta - jitterUs) / 16.0
             #if os(macOS)
-            if timestampDelta != 0 { ReceiveTimingTelemetry.video.observeFrameJitter(transitDelta / 1_000) }
+            if collectBandwidthSamples, timestampDelta != 0 {
+                ReceiveTimingTelemetry.video.observeFrameJitter(transitDelta / 1_000)
+            }
             #elseif GLIMMER_DIAGNOSTICS
-            if timestampDelta != 0 { ReceivePolicyMeasurements.video.observeFrameJitter(transitDelta / 1_000) }
+            if collectBandwidthSamples, timestampDelta != 0 {
+                ReceivePolicyMeasurements.video.observeFrameJitter(transitDelta / 1_000)
+            }
             #endif
         }
         lastTimestamp = timestamp

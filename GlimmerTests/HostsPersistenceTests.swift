@@ -72,6 +72,27 @@ struct HostsPersistenceTests {
         #expect(AppModel(defaults: defaults).statsHotkey == model.statsHotkey)
     }
 
+    @Test(arguments: ["quitHotkey", "releasePointerHotkey", "miniPlayerHotkey"], [false, true])
+    func statsMigrationNeverTakesASavedShortcut(owner: String, savedStats: Bool) throws {
+        let defaults = settings.defaults
+        let old = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        let occupied = try JSONEncoder().encode(HotkeyChord.defaultStats)
+        defaults.set(occupied, forKey: owner)
+        if savedStats { defaults.set(try JSONEncoder().encode(old), forKey: "statsHotkey") }
+        #expect(HotkeyChord.persistedStats(defaults: defaults) == old)
+        #expect(defaults.data(forKey: owner) == occupied)
+        defaults.removeObject(forKey: owner)
+        #expect(HotkeyChord.persistedStats(defaults: defaults) == old)
+    }
+
+    @Test func statsMigrationLeavesBothOccupiedChordsAlone() throws {
+        let defaults = settings.defaults
+        defaults.set(try JSONEncoder().encode(HotkeyChord.defaultStats), forKey: "quitHotkey")
+        let old = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        defaults.set(try JSONEncoder().encode(old), forKey: "releasePointerHotkey")
+        #expect(HotkeyChord.persistedStats(defaults: defaults).keyChar.isEmpty)
+    }
+
     @Test func statsMigrationPreservesModifiersAndLaterControlIChoice() throws {
         let defaults = settings.defaults
         let custom = HotkeyChord(ctrl: true, alt: false, shift: true, cmd: false, keyChar: "i")

@@ -80,9 +80,7 @@ struct StreamPlayback {
                      quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {
         guard let screen = surface.window?.windowScene?.screen else { throw StreamProfile.Failure.displayUnavailable }
         let pixels = surface.streamPixels
-        let native = try launch.useScreenSize
-            ? launch.profile.screenSize(windowPixels: pixels, maximumFramesPerSecond: screen.maximumFramesPerSecond)
-            : launch.profile.resolve(windowPixels: pixels, maximumFramesPerSecond: screen.maximumFramesPerSecond)
+        let native = try launch.profile.resolve(surface: surface, useScreenSize: launch.useScreenSize)
         let format = StreamFormat.continuing(launch, native: native,
                                              maximumFPS: screen.maximumFramesPerSecond)
         let formats = try StreamFormats(full: format, windowPixels: pixels,
@@ -108,13 +106,14 @@ struct StreamPlayback {
             collection: { video.statsOverlayEnabled = $0 }, videoSize: { video.overlayVideoSize },
             backdrop: { video.hudBackdropRect = $0; return video.hudBackdropLuminance })
         let nativeInput = NativeInputLifetime()
+        let adaptive = AdaptiveBandwidth.isEnabled()
         let bandwidth = BandwidthSignals()
         let media = StreamSession.PreparedMedia(video: video, audio: audio,
             quiesce: { nativeInput.focus(false); quiesce() },
             finalDispose: { stats.setVisible(false); nativeInput.stop(); bandwidth.stop() })
         let (session, input) = StreamSession.make(media: media, network: launch.network,
                                                   hostDisposition: launch.hostDisposition,
-            bandwidthInputs: bandwidth.inputs)
+            bandwidthInputs: bandwidth.inputs, adaptiveBandwidth: adaptive)
         configureInput(input)
         nativeInput.start(input: input, scope: .game(pcID: launch.pcID, appID: UInt32(clamping: launch.appID)))
         return StreamPlayback(id: session.id, events: session.events, start: {
@@ -126,7 +125,6 @@ struct StreamPlayback {
             try Task.checkCancellation()
             await bandwidth.start(host: address)
             // Low Data Mode starts at the reduced listed mode; the session moves sizes on later edges.
-            let adaptive = AdaptiveBandwidth.isEnabled()
             if adaptive { await bandwidth.waitForPath() }
             // A continued game keeps its known size, so it never trades sizes for Low Data Mode.
             let sized = adaptive && !launch.continuing
@@ -136,6 +134,8 @@ struct StreamPlayback {
                 try await session.start(appID: launch.appID,
                                         configuration: started.configuration(potentialEDRHeadroom: headroom,
                                                                             sizes: sized ? formats.sizes : nil))
+                // Fixed quality needs launch-time route facts, but no path observation during play.
+                if !adaptive { await bandwidth.stop() }
                 return StreamStart(format: started, startKbps: await session.adaptiveStartKbps)
             } catch {
                 await bandwidth.stop()
@@ -148,7 +148,7 @@ struct StreamPlayback {
            }, input: input, focusInput: nativeInput.focus, format: format,
            setVisible: { visible, inputs in
                video.setPresentSuppressed(!visible, visibility: inputs, sessionGeneration: session.id)
-               bandwidth.setForeground(visible)
+               if adaptive || !visible { bandwidth.setForeground(visible) }
                Task { await session.setBitrateChangesAvailable(visible) }
            }, observeControllers: nativeInput.observeControllers, touchGamepad: nativeInput.touch,
            showTouchControls: nativeInput.showTouchControls,

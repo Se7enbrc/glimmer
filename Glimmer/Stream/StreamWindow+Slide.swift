@@ -62,12 +62,12 @@ extension StreamWindow {
         window.backgroundColor = .clear
         let settle: @MainActor () -> Void = { [weak self] in
             guard let self, closing || !self.didClose, self.coverSlideGeneration == generation else { return }
-            if entering { self.resetCoverSlide() }
+            if entering { self.resetCoverSlide() } else { self.coverSlideGeneration &+= 1 }
             completion()
         }
         runSlideAnimation({ layer.add(spring, forKey: Self.coverSlideKey) }, settle)
-        // An occluded layer can lose completion delivery. Never retain its transform and clear window on return.
-        if entering { scheduleCoverSettlement(spring.duration + 0.1, settle) }
+        // Occlusion can lose completion delivery; neither reveal nor teardown may wait for it indefinitely.
+        if entering || closing { scheduleCoverSettlement(spring.duration + 0.1, settle) }
     }
 
     /// Back to rest: identity, opaque, clickable. Cancels any slide in flight.

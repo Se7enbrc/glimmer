@@ -221,7 +221,7 @@ extension NativeBackend {
             aesKey: config.remoteInputAesKey,
             colorSpace: config.colorSpace,
             sink: sink, platform: platform,
-            receiveBatch: platform.receiveBatch,
+            receiveBatch: platform.receiveBatch, collectBandwidthSamples: config.collectBandwidthSamples,
             requestIdr: { [weak enet] in enet?.requestIdrFrame() },
             invalidateReferenceFrames: { [weak enet] from, to in
                 enet?.invalidateReferenceFrames(from: from, to: to)
@@ -433,7 +433,7 @@ extension NativeBackend {
             host: host,
             port: handshake.controlPort,
             controlConnectData: handshake.controlConnectData,
-            crypto: crypto)
+            crypto: crypto, collectBandwidthSamples: config.collectBandwidthSamples)
         // START can carry HDR and feedback; callbacks must be immutable once receiving begins.
         wireVideoControl(enet: enet, events: events)
         installControllerFeedback(enet: enet, events: events)

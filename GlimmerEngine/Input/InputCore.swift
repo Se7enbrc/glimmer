@@ -130,7 +130,8 @@ package final class InputCore: @unchecked Sendable {
     @discardableResult
     package func receive(slot: UInt8, buttons: Int32, analog: GamepadAnalog, chordButtons: Int32? = nil,
                          capturedAt: TimeInterval? = nil, extras: SIMD2<UInt64> = .zero,
-                         physicalSample: ControllerMappingSample? = nil) -> ControllerAcceptance {
+                         physicalSample: ControllerMappingSample? = nil,
+                         rawSupplement: (center: Int32, shoulders: Int32)? = nil) -> ControllerAcceptance {
         withLock {
             guard snapshot.ready, snapshot.focused, snapshot.mask & (1 << slot) != 0 else { return .gated }
             if let capturedAt, capturedAt < snapshot.acceptEventsAfter { return .gated }
@@ -148,8 +149,11 @@ package final class InputCore: @unchecked Sendable {
                 }
             }
             if let state = layouts?.states[Int(slot)] {
+                let physical = physicalSample ?? (rawSupplement == nil
+                    ? ControllerMappingSample(buttons: buttons, analog: analog, extras: extras) : nil)
+                let supplement = rawSupplement ?? chordButtons.map { (center: $0, shoulders: $0) }
                 return receiveLayout(state, slot: slot,
-                    sample: physicalSample ?? .init(buttons: chordButtons ?? buttons, analog: analog, extras: extras),
+                    sample: layoutSample(state, physical: physical, supplement: supplement),
                     systemSample: .init(buttons: buttons, analog: analog, extras: extras),
                     at: capturedAt ?? ProcessInfo.processInfo.systemUptime)
             }

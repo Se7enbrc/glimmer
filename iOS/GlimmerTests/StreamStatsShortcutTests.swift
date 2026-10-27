@@ -40,6 +40,29 @@ struct StreamStatsShortcutTests {
         #expect(defaults.object(forKey: "showStreamStats") == nil)
     }
 
+    @Test(arguments: [false, true])
+    func migrationKeepsTheSavedStopChordAndDispatchesItsOwner(savedStats: Bool) throws {
+        let defaults = try defaults()
+        let old = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        defaults.set(try JSONEncoder().encode(HotkeyChord.defaultStats), forKey: "quitHotkey")
+        if savedStats { defaults.set(try JSONEncoder().encode(old), forKey: "statsHotkey") }
+        let shortcuts = StreamShortcuts(defaults: defaults)
+        #expect(shortcuts.stats == old)
+        #expect(shortcuts.quit == .defaultStats)
+        var actions: [StreamShortcuts.Action] = []
+        #expect(shortcuts.handle(input: "z", modifiers: .control) { actions.append($0) })
+        #expect(shortcuts.handle(input: "i", modifiers: .control) { actions.append($0) })
+        #expect(actions == [.quit, .stats])
+    }
+
+    @Test func anUnassignedShortcutDoesNotCaptureEmptyInputOrAppearInTheKeyboardMenu() throws {
+        let model = StreamSessionModel(launch: testLaunch(), defaults: try defaults())
+        model.shortcuts.stats = HotkeyChord(ctrl: false, alt: false, shift: false, cmd: false, keyChar: "")
+        #expect(model.shortcuts.match(input: "", modifiers: []) == nil)
+        let controller = StreamViewController(model: model, close: {})
+        #expect(controller.keyCommands?.map(\.input) == ["/", model.shortcuts.quit.keyChar])
+    }
+
     @Test func remappedChordConsumesRepeatsAndReleaseBeforeOtherInput() throws {
         let shortcuts = StreamShortcuts(defaults: try defaults())
         shortcuts.stats = HotkeyChord(ctrl: false, alt: false, shift: true, cmd: true, keyChar: "s")
@@ -141,7 +164,7 @@ struct StreamStatsShortcutTests {
     }
 
     @Test func shortcutHUDUsesSavedChordsAndSystemPriority() throws {
-        let model = PlaybackFixture().model()
+        let model = StreamSessionModel(launch: testLaunch(), defaults: try defaults())
         let controller = StreamViewController(model: model, close: {})
         let commands = try #require(controller.keyCommands)
         #expect(commands.map(\.input)

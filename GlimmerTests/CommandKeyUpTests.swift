@@ -404,6 +404,12 @@ struct HotkeyChordLayoutTests {
         return quit.matches(event: try key(.keyDown, keyCode, mods: mods, chars: chars), modifiers: mods)
     }
 
+    @Test func anUnassignedChordCannotMatchAnEmptyKeyEvent() throws {
+        let unassigned = HotkeyChord(ctrl: false, alt: false, shift: false, cmd: false, keyChar: "")
+        let event = try key(.keyDown, kVK_Function, chars: "")
+        #expect(unassigned.matchKind(event: event, modifiers: []) == nil)
+    }
+
     @Test func nonLatinLayoutMatchesByPosition() throws {
         #expect(try matches(kVK_ANSI_Q, typing: "й"))
         #expect(try matches(kVK_ANSI_W, typing: "ц") == false)

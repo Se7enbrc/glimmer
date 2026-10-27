@@ -4,6 +4,7 @@
 import Foundation
 @testable import GlimmerEngine
 import Testing
+@testable import Glimmer
 
 /// A perfect actuator on the replay clock: every submitted request applies at once.
 struct ActuatedReplay {
@@ -138,7 +139,7 @@ struct BandwidthHeadroomTests {
     #if os(macOS)
     @Test func receivePathFeedsQueueDelayAndJitterWithoutTheExporterDrainingThem() {
         let telemetry = ReceiveTimingTelemetry()
-        for delay in [0.2, 0.4, 0.4, 3.0] { telemetry.observe(delayMs: delay, gapMs: nil) }
+        for delay in [0.2, 0.4, 0.4, 3.0] { telemetry.observe(delayMs: delay, gapMs: nil, collectPolicy: true) }
         for jitter in Array(repeating: 0.3, count: 19) + [6] { telemetry.observeFrameJitter(jitter) }
         _ = telemetry.takeSnapshot()
         let window = telemetry.takePolicyWindow()
@@ -182,3 +183,42 @@ struct BandwidthHealthSamplerTests {
         #expect(reset.counterReset && !reset.valid)
     }
 }
+
+#if os(macOS)
+struct BandwidthSchedulingTests {
+    @Test(arguments: [false, true], [false, true]) @MainActor
+    func policyIsScheduledOnlyForAdaptation(adaptive: Bool, telemetry: Bool) async {
+        let settings = IsolatedDefaults()
+        let pc = FakeSunshine.scripted([:])
+        var services = SessionServices.recording(directory: FileManager.default.temporaryDirectory,
+                                                  enabled: telemetry)
+        services.bandwidthInputs = BandwidthInputs(.init(path: BandwidthPath(observedAt: 0),
+                                                        environment: BandwidthEnvironment()))
+        let session = StreamSession(hostDisposition: .disconnectOnly,
+            audioDecoder: AudioDecoder(defaults: settings.defaults), services: services,
+            backend: InputRecordingBackend(), makeNetwork: { pc.client($0) },
+            makeBackend: { InputRecordingBackend() }, adaptiveBandwidth: adaptive)
+        let scheduled = session.scheduleBandwidthObservation()
+        #expect((scheduled != nil) == adaptive)
+        await scheduled?.value
+        let config = StreamRequest(width: 1920, height: 1080, fps: 60, bitrateKbps: 40_000, videoFormats: .h264)
+        #expect(await session.seedBandwidth(config: config, appliedKbps: 40_000, rtt: nil, preLaunch: false) == 40_000)
+        #expect(await (session.bandwidthPolicy != nil) == adaptive)
+        let backend = await session.makeBackendConfig(config: config,
+            launch: LaunchResponse(sessionURL: "", gcmKey: Data(repeating: 0, count: 16),
+                                   gcmKeyId: Data(repeating: 0, count: 16)),
+            server: ServerInfo(address: "192.0.2.1", uniqueId: "test", serverName: "Test PC"))
+        #expect(backend.collectBandwidthSamples == adaptive)
+        #expect(pc.paths.isEmpty)
+    }
+
+    @Test @MainActor func fixedQualityMacSessionDoesNotCreateAPathMonitor() {
+        let pc = FakeSunshine.scripted([:])
+        let (session, signals) = StreamSession.mac(
+            server: ServerInfo(address: "192.0.2.1", uniqueId: "test", serverName: "Test PC"),
+            disposition: .disconnectOnly, makeNetwork: { pc.client($0) }, adaptiveBandwidth: false)
+        #expect(signals == nil && session.scheduleBandwidthObservation() == nil)
+    }
+}
+
+#endif

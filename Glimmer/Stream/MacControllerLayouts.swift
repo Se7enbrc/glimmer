@@ -98,17 +98,17 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
             at: ProcessInfo.processInfo.systemUptime)
     }
 
-    func sample(for controller: GCController, slot: UInt8) -> (physical: ControllerMappingSample, game: ControllerMappingSample)? {
+    func sample(for controller: GCController, slot: UInt8)
+        -> (physical: ControllerMappingSample, game: ControllerMappingSample, supplement: UInt32?)? {
         let id = ObjectIdentifier(controller)
         guard let reader = readers[id] else { return nil }
-        var sample = reader.sample()
-        sample.buttons |= Self.centerButtons(for: id)
+        let sample = reader.sample()
         let maps = forwarder?.inputCore.withLock { forwarder?.inputCore.layouts?.states[Int(slot)]?.plan != nil } == true
-        return (sample, maps ? sample : reader.systemSample())
+        return (sample, maps ? sample : reader.systemSample(), Self.centerButtons(for: id))
     }
 
-    nonisolated static func centerButtons(for id: ObjectIdentifier) -> UInt32 {
-        guard let state = DualSenseHID.shared.state(for: id)?.buttons else { return 0 }
+    nonisolated static func centerButtons(for id: ObjectIdentifier) -> UInt32? {
+        guard let state = DualSenseHID.shared.state(for: id)?.buttons else { return nil }
         return (state.options ? ControllerMappedButton.menu.rawValue : 0)
             | (state.create ? ControllerMappedButton.options.rawValue : 0)
             | (state.ps ? ControllerMappedButton.home.rawValue : 0)

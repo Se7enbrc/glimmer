@@ -12,6 +12,15 @@ struct ReceiveTimingTests {
         UInt64((milliseconds / SocketTimestamp.millisecondsPerTick).rounded())
     }
 
+    @Test(arguments: [false, true])
+    func ordinaryReceiveTimingFillsPolicyHistogramsOnlyWhenRequested(collectPolicy: Bool) {
+        let telemetry = ReceiveTimingTelemetry()
+        var timing = ReceiveTiming(telemetry: telemetry, collectPolicy: collectPolicy)
+        _ = timing.observe(arrival: ticks(100), read: ticks(101))
+        #expect(telemetry.takeSnapshot().samples == 1)
+        #expect((telemetry.takePolicyWindow().queueDelayP50Ms != nil) == collectPolicy)
+    }
+
     @Test func separatesArrivalFromReadAndThrottlesNotices() throws {
         let telemetry = ReceiveTimingTelemetry()
         var timing = ReceiveTiming(telemetry: telemetry)

@@ -77,11 +77,28 @@ extension StreamSession {
         return lastBitrateChange
     }
 
-    public func request(width: Int, height: Int) -> BitrateAdmission {
-        guard StreamSizeBounds.width.contains(width), StreamSizeBounds.height.contains(height),
-              width.isMultiple(of: 2), height.isMultiple(of: 2), let config = reconnectConfig,
-              (width, height) != (config.width, config.height), let rate = appliedBitrateKbps else { return .rejected }
-        return beginTransition(rate: rate, reason: .resize, size: (width, height))
+    public var requestedSize: (width: Int, height: Int)? {
+        guard isStreaming, !stopInProgress, let config = reconnectConfig else { return nil }
+        return (config.width, config.height)
+    }
+
+    public func request(width: Int, height: Int, sizes: DataModeSizes? = nil) -> BitrateAdmission {
+        let geometry = sizes ?? DataModeSizes(fullWidth: width, fullHeight: height,
+                                              lowDataWidth: width, lowDataHeight: height)
+        let candidates = [geometry.size(lowData: false), geometry.size(lowData: true), (width, height)]
+        guard candidates.allSatisfy({
+            StreamSizeBounds.width.contains($0.0) && StreamSizeBounds.height.contains($0.1)
+                && $0.0.isMultiple(of: 2) && $0.1.isMultiple(of: 2)
+        }), var config = reconnectConfig, isStreaming, !stopInProgress,
+            let rate = appliedBitrateKbps else { return .rejected }
+        var target = (width: width, height: height)
+        if config.dataModeSizes != nil {
+            config.dataModeSizes = geometry
+            reconnectConfig = config
+            target = geometry.size(lowData: services.bandwidthInputs?.snapshot().path.constrained == true)
+        }
+        guard target != (config.width, config.height) else { return .rejected }
+        return beginTransition(rate: rate, reason: .resize, size: target)
     }
 
     func beginTransition(rate: Int, reason: BitrateReason, size: (width: Int, height: Int)?) -> BitrateAdmission {
@@ -152,6 +169,7 @@ extension StreamSession {
                 config.height = height
                 reconnectConfig = config
                 bandwidthPolicy?.replaceDemand(Self.bandwidthDemand(config))
+                bridge?.emit(.sizeChanged(width: width, height: height))
             }
             if change.report.audioGapMs == nil, let oldLast = change.oldLastAudio {
                 bitrateAudioTail = (change.report.id, attemptID, oldLast)

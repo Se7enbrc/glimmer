@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- Stop now cancels a queued command-line game launch, including a switch waiting
+  for the previous stream to close.
+
 ### Features
 
 - Play on iPhone and iPad with a hardware keyboard, mouse or trackpad. Opening
@@ -156,6 +159,30 @@
   separate storage so they cannot replace a saved pairing.
 
 - Fixed streams that sometimes started without sound on iPhone and iPad.
+- Turning off adaptive quality now stops its background checks during streams on
+  Mac, iPhone and iPad.
+
+- Resuming a portrait iPad stream keeps its previous size without briefly
+  shrinking the picture and resizing it again.
+
+- Opening Controller layouts during a stream keeps the stream and the PC game
+  running.
+- Disconnecting from fullscreen finishes even if macOS misses the closing
+  animation's completion.
+- Choosing “Use this screen's size” keeps that choice for the session instead of
+  switching back to 1080p.
+
+- Keep saved shortcuts when updating the Stats shortcut. If Control-Z is already
+  in use, Stats keeps Control-I when it is free.
+- Resizing an iPad stream keeps a screen size supported at its current frame
+  rate, including 120 fps.
+- Release controller shoulder buttons reliably when using layouts and controller
+  shortcuts.
+- Keep iPad window sizes and Low Data Mode in sync without undoing the latest
+  resize.
+- Command-line streaming reports a launch conflict or timeout instead of leaving
+  a waiting command stuck.
+
 - Fixed missed and delayed controller input on iPhone and iPad.
 
 - Fixed a crash when using a controller during a stream.

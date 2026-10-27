@@ -19,7 +19,7 @@ struct StreamView: UIViewControllerRepresentable {
     }
 
     static func dismantleUIViewController(_ controller: StreamViewController, coordinator: ()) {
-        controller.model.stop()
+        controller.stopPresentation()
     }
 }
 
@@ -108,11 +108,17 @@ final class StreamViewController: GCEventViewController {
         model.windowChanged(surface: surface)
     }
 
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
+    func stopPresentation() {
         presentationActive = false
         model.stop()
         outputs.end(self)
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        presentationActive = false
+        // A full-screen editor covers this controller without removing the stream.
+        model.showControls()
     }
 
     override func viewDidDisappear(_ animated: Bool) {

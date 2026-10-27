@@ -38,7 +38,7 @@ final class StreamShortcuts {
         }
         return Action.allCases.first {
             let chord = chord(for: $0)
-            return chord.keyChar.lowercased() == input.lowercased()
+            return !chord.keyChar.isEmpty && chord.keyChar.lowercased() == input.lowercased()
                 && chord.modifiers == modifiers.intersection([.control, .alternate, .shift, .command])
         }
     }

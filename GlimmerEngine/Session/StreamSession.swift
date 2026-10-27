@@ -23,7 +23,7 @@ public actor StreamSession {
     package var bandwidthProbeGeneration: UInt64?
     package var bandwidthSampler = BandwidthHealthSampler()
     package var bandwidthTransition: BandwidthRequest?
-    package var adaptiveBandwidth = false
+    package nonisolated let adaptiveBandwidth: Bool
     /// The rate the policy chose for this stream's first ANNOUNCE; nil when adaptive quality is off.
     public internal(set) var adaptiveStartKbps: Int?
     package var bandwidthSizeAttemptAt = -Double.infinity
@@ -365,7 +365,8 @@ public actor StreamSession {
                  backend: any StreamingBackend,
                  makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient,
                  makeBackend: @escaping @Sendable () -> any StreamingBackend,
-                 clock: SessionClock = SessionClock(), publicMedia: PreparedMedia? = nil,
+                 clock: SessionClock = SessionClock(),
+                 adaptiveBandwidth: Bool = AdaptiveBandwidth.isEnabled(), publicMedia: PreparedMedia? = nil,
                  publicInput: StreamInput? = nil, preparedNetwork: NetworkClient? = nil, events: SessionEventSource = SessionEventSource()) {
         self.id = events.id
         self.attemptID = events.currentAttempt
@@ -376,6 +377,7 @@ public actor StreamSession {
         self.hostDisposition = hostDisposition
         self.audioDecoder = audioDecoder
         self.services = services
+        self.adaptiveBandwidth = adaptiveBandwidth && services.bandwidthInputs != nil
         self.backend = backend
         self.makeNetwork = makeNetwork
         self.makeBackend = makeBackend

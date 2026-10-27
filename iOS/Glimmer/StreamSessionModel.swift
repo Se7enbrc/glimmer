@@ -318,7 +318,9 @@ final class StreamSessionModel {
 
     /// A resized window, or a continued game at an earlier size, moves to the window's listed mode.
     func windowChanged(surface: StreamSurface) {
-        guard let current = requestedFormat, let target = try? launch.profile.resolve(surface: surface) else { return }
+        guard let current = requestedFormat,
+              let target = try? launch.profile.resolve(surface: surface, preservingFPS: current.fps,
+                                                       useScreenSize: launch.useScreenSize) else { return }
         // The resume-only seam keeps the running frame rate.
         windowResize?.submit(StreamFormat(width: target.width, height: target.height, fps: current.fps,
                                           changeResolution: current.changeResolution))
@@ -396,21 +398,33 @@ final class StreamSessionModel {
         synchronizeInputFocus()
     }
 
+    private func resumePlayback() {
+        recordFirstVideo()
+        hasReceivedVideo = true
+        endingMessage = nil
+        terminalFailure = false
+        captureSuspended = false
+        adjustingQuality = false
+        phase = .streaming
+        if !controlsRequested { controlsVisible = !controllerConnected && !touchGeometryUsable }
+        synchronizeInputFocus()
+    }
+
+    private func adoptSize(width: Int, height: Int) {
+        guard let current = requestedFormat else { return }
+        let format = StreamFormat(width: width, height: height, fps: current.fps,
+                                  changeResolution: current.changeResolution)
+        requestedFormat = format
+        windowResize?.adopt(format)
+    }
+
     func receive(_ update: StreamSession.Update) {
         guard playback?.id == update.sessionID, !phase.isEnded else { return }
         if case .stopped = update.event { if !quittingGame { complete() }; return }
         guard phase != .stopping else { return }
         switch update.event {
-        case .firstFrame, .reconnected:
-            recordFirstVideo()
-            hasReceivedVideo = true
-            endingMessage = nil
-            terminalFailure = false
-            captureSuspended = false
-            adjustingQuality = false
-            phase = .streaming
-            if !controlsRequested { controlsVisible = !controllerConnected && !touchGeometryUsable }
-            synchronizeInputFocus()
+        case .firstFrame, .reconnected: resumePlayback()
+        case .sizeChanged(let width, let height): adoptSize(width: width, height: height)
         case .reconnecting, .adjustingQuality: holdForRecovery(update.event)
         case .connectionTerminated(let code, let error):
             rejectPictureTrial()

@@ -97,7 +97,7 @@ extension StreamSession {
             colorRange: config.colorRange.cValue,
             encryptionFlags: 0,
             remoteInputAesKey: [UInt8](launch.gcmKey),
-            remoteInputAesIv: [UInt8](launch.gcmKeyId))
+            remoteInputAesIv: [UInt8](launch.gcmKeyId), collectBandwidthSamples: adaptiveBandwidth)
     }
 
     /// Attach the media sinks and start this transport attempt. Failure cleanup follows

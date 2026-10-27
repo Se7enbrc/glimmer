@@ -83,6 +83,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
     private let receiveBatch: TransportPlatform.ReceiveBatch?
 
     let platform: TransportPlatform
+    private let collectBandwidthSamples: Bool
 
     init(host: NWEndpoint.Host,
          videoPort: UInt16,
@@ -96,9 +97,11 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
          sink: VideoSink,
          platform: TransportPlatform = TransportPlatform(),
          receiveBatch: TransportPlatform.ReceiveBatch? = nil,
+         collectBandwidthSamples: Bool = false,
          requestIdr: @escaping () -> Void,
          invalidateReferenceFrames: @escaping (_ from: Int, _ to: Int) -> Void) {
         self.receiveBatch = receiveBatch
+        self.collectBandwidthSamples = collectBandwidthSamples
         self.platform = platform
         self.host = host
         self.videoPort = videoPort
@@ -115,7 +118,8 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             delegate: self,
             negotiatedVideoFormat: negotiatedVideoFormat,
             colorSpace: colorSpace)
-        self.rtpQueue = RtpVideoQueue(depacketizer: depacketizer, packetSize: packetSize)
+        self.rtpQueue = RtpVideoQueue(depacketizer: depacketizer, packetSize: packetSize,
+                                      collectBandwidthSamples: collectBandwidthSamples)
     }
 
     private var encrypted: Bool {
@@ -268,6 +272,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
         let videoKey = encrypted ? aesKey : nil
         let onReceiveFailed = onReceiveFailed
         let receiveBatch = receiveBatch
+        let collectBandwidthSamples = collectBandwidthSamples
         recvQueue.async { [weak self] in
             // Name the thread this loop OWNS for the session: the blocking
             // recv loop occupies one worker until teardown, so this is an
@@ -288,7 +293,7 @@ final class VideoRtpReceiver: VideoDepacketizerDelegate, @unchecked Sendable {
             // copies each out, so the win is the syscall count (~14k/s at 4K240). recvmsg_x is private
             // SPI: ENOSYS drops to one recvmsg per datagram for the session, slower but correct.
             let batch = DatagramBatch(capacity: 32, stride: bufSize, receiveBatch: receiveBatch)
-            var timing = ReceiveTiming(telemetry: .video)
+            var timing = ReceiveTiming(telemetry: .video, collectPolicy: collectBandwidthSamples)
             var batched = true
             var receiveFailed = false
             var foreignPeerNoted = false

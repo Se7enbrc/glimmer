@@ -11,6 +11,9 @@ package final class ControllerLayoutRouting {
         package var systemSuppression: ControllerPhysicalChord?
         package var rearm: ControllerLayoutRearm
         package var gameRearm: ControllerLayoutRearm
+        package var physical = ControllerMappingSample()
+        package var rawCenter: Int32?
+        package var rawShoulders: Int32 = 0
         package var last = ControllerMappingSample()
         package var lastSystem = ControllerMappingSample()
         package let acceptAfter: TimeInterval
@@ -20,6 +23,7 @@ package final class ControllerLayoutRouting {
         package init(_ configuration: ControllerLayoutConfiguration?, held: ControllerMappingSample,
                      systemHeld: ControllerMappingSample,
                      acceptAfter: TimeInterval) {
+            physical = held
             plan = configuration?.plan
             gesture = ControllerShortcutGesture(stop: configuration?.stop ?? .empty, stats: configuration?.stats ?? .empty)
             rearm = ControllerLayoutRearm(held: held)
@@ -36,6 +40,8 @@ package final class ControllerLayoutRouting {
     package func reset() {
         for state in states.compactMap({ $0 }) {
             state.gesture.reset()
+            state.rawCenter = nil
+            state.rawShoulders = 0
             state.timer?.cancel()
             state.timer = nil
             state.systemSuppression = nil
@@ -97,6 +103,23 @@ extension InputCore {
             guard layouts?.states[Int(slot)] != nil else { return nil }
             return chordSlots.contains(slot)
         }
+    }
+
+    package func layoutSample(_ state: ControllerLayoutRouting.State, physical: ControllerMappingSample?,
+                              supplement: (center: Int32, shoulders: Int32)?) -> ControllerMappingSample {
+        if let supplement {
+            state.rawCenter = supplement.center
+            state.rawShoulders = supplement.shoulders
+        }
+        if let physical { state.physical = physical }
+        var merged = state.physical
+        if let center = state.rawCenter {
+            let mask = StreamProtocol.PLAY_FLAG | StreamProtocol.BACK_FLAG
+                | StreamProtocol.SPECIAL_FLAG | StreamProtocol.MISC_FLAG
+            merged.buttons = (merged.buttons & ~UInt32(bitPattern: mask)) | UInt32(bitPattern: center & mask)
+        }
+        merged.buttons |= UInt32(bitPattern: state.rawShoulders & (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG))
+        return merged
     }
 
     package func receiveLayout(_ state: ControllerLayoutRouting.State, slot: UInt8,
