@@ -12,6 +12,10 @@ enum UITestLauncher {
         guard PersistentStorage.isTesting else {
             return nil
         }
+        if let path = environment["GLIMMER_JOURNEY_DIRECTORY"] {
+            return UITestJourneyPC(directory: URL(fileURLWithPath: path),
+                                   firstRun: environment["GLIMMER_UI_TESTING"] == "journey-first").launcher()
+        }
         let running = environment["GLIMMER_UI_TESTING"] == "running"
         let controller = environment["GLIMMER_UI_TESTING"] == "stream-controller"
         let streaming = environment["GLIMMER_UI_TESTING"] == "stream" || controller

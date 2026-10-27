@@ -63,6 +63,9 @@ def expected_sources(root):
     expected["Glimmer"].update(f"../Glimmer/Stream/{name}.swift" for name in (
         "StatsOverlayLayer", "StatsOverlayLayer+Rows", "StatsOverlayLayer+Traces", "StatsOverlayLayer+Platform"
     ))
+    expected["Glimmer"].update("../" + str(path.relative_to(root))
+                               for path in (root / "Glimmer/Journeys/Shared").glob("*.swift"))
+    expected["GlimmerUITests"].add("../JourneySupport/JourneyInputAssertions.swift")
     expected["GlimmerTests"].add("../GlimmerTests/VideoColorPatternTests.swift")
     expected["Glimmer"].update("../Glimmer/" + name for name in (
         "SettingsResetSection.swift", "GlimmerIntents.swift", "RunningTileBadge.swift", "TakeoverDialogCopy.swift"

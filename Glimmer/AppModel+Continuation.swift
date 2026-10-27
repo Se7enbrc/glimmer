@@ -56,7 +56,12 @@ extension AppModel {
 
     func makeNativeSession(server: ServerInfo, disposition: StreamHostDisposition, takeoverAuthorized: Bool,
                            approvedOccupant: Int?, continuing: Bool) async -> (StreamSession, BandwidthSignals?) {
+        #if DEBUG
+        let (session, bandwidth) = JourneyMacPC.active?.session(disposition: disposition)
+            ?? StreamSession.mac(server: server, disposition: disposition, makeNetwork: makeNetwork)
+        #else
         let (session, bandwidth) = StreamSession.mac(server: server, disposition: disposition, makeNetwork: makeNetwork)
+        #endif
         nativeSession = session
         await session.authorizeTakeover(takeoverAuthorized)
         if let approvedOccupant { await session.approveReplacement(of: approvedOccupant) }
