@@ -10,6 +10,60 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct StreamMenuRenderTests {
+    @Test(arguments: [false, true], [false, true])
+    func mobileBoard(dark: Bool, largest: Bool) async throws {
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        let widths: [CGSize?] = tablet ? [CGSize(width: 1194, height: 834), CGSize(width: 507, height: 834)] : [nil]
+        for size in widths {
+            for state in ["stats", "menu", "reconnecting"] {
+                let fixture = PlaybackFixture()
+                fixture.format = StreamFormat(width: 1920, height: 1080, fps: 60)
+                let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
+                let capture = TouchGamepadCapture(input: connection.input)
+                #expect(capture.attach())
+                let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
+                    StreamPlayback(id: fixture.id, events: fixture.events.stream, start: { nil }, stop: {},
+                        screenChanged: {}, focusInput: { capture.setEnabled($0) }, format: fixture.format,
+                        observeControllers: { $0(state == "stats") }, touchGamepad: capture)
+                })
+                let host = StreamViewController(model: model, close: {})
+                host.loadViewIfNeeded()
+                let picture = UIHostingController(rootView: TouchSampleFrame(exposure: dark ? -0.75 : 0.9)
+                    .ignoresSafeArea())
+                host.addChild(picture)
+                host.view.insertSubview(picture.view, aboveSubview: host.surface)
+                picture.didMove(toParent: host)
+                picture.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                picture.view.frame = host.view.bounds
+                let overlay = StatsOverlayLayer()
+                overlay.displayView = host.surface
+                overlay.attach(to: picture.view.layer)
+                var snapshot = StreamStatsSnapshot()
+                snapshot.renderedFps = 59.9
+                snapshot.rttMs = 5.9
+                snapshot.measuredBitrateMbps = 45.2
+                snapshot.videoCodec = "HEVC"
+                let name = "mobile-\(size?.width == 507 ? "split" : "full")-\(state)-"
+                    + "\(dark ? "dark" : "light")-\(largest ? "AX5" : "normal")"
+                try await NativeUIRenderTests().recordController(host, name: name, size: size, dark: dark,
+                    prepare: {
+                        model.receive(fixture.update(.firstFrame))
+                        model.overlayAppearance.update(luminance: dark ? 0.01 : 0.85)
+                        if state == "menu" { model.showControls() }
+                        if state == "reconnecting" { model.receive(fixture.update(.reconnecting)) }
+                        overlay.update(snapshot: snapshot, enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
+                        overlay.updateBackdropLuminance(dark ? 0.01 : 0.85)
+                        overlay.setVisible(state == "stats")
+                        overlay.layer.removeAllAnimations()
+                    }, textSize: largest ? .accessibility5 : .large)
+                model.stop()
+                await model.waitUntilStopped()
+                capture.detach()
+                await connection.stop()
+            }
+        }
+    }
+
     @Test(arguments: [false, true], ["playing", "revealed", "expanded"])
     func menu(dark: Bool, state: String) async throws {
         let fixture = PlaybackFixture()

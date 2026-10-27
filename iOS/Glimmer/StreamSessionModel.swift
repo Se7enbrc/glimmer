@@ -15,6 +15,7 @@ final class StreamSessionModel {
     let shortcuts: StreamShortcuts
     let menuVisibility: StreamMenuVisibility
     private(set) var statsShown: Bool
+    private(set) var overlayAppearance = StreamOverlayAppearance()
 
     private(set) var phase: Phase = .idle
     private(set) var audioUnavailable = false
@@ -32,7 +33,7 @@ final class StreamSessionModel {
     /// The engine only reports a held quality change once its anti-flap gate allows it.
     private(set) var adjustingQuality = false
     var recoveryText: String {
-        adjustingQuality ? StreamSession.adjustingQualityText : "Reconnecting to \(launch.pcName)…"
+        adjustingQuality ? StreamSession.adjustingQualityText : "Reconnecting…"
     }
     var announce: @MainActor (String) -> Void = { UIAccessibility.post(notification: .announcement, argument: $0) }
     private(set) var requestedFormat: StreamFormat?
@@ -60,7 +61,9 @@ final class StreamSessionModel {
     }
     var streamInput: StreamInput? { playback?.input }
     var touchGamepad: TouchGamepadCapture? { playback?.touchGamepad }
-    var editingTouchControls = false
+    var editingTouchControls = false {
+        didSet { playback?.showStats?(statsShown && canStart && phase == .streaming && !editingTouchControls) }
+    }
     private(set) var touchGeometryUsable = true
     private(set) var touchControlsRequested = false
     var touchControlsVisible: Bool {
@@ -74,6 +77,7 @@ final class StreamSessionModel {
     private let makePlayback: @MainActor (StreamLaunch, StreamSurface,
         @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback
     private var playback: StreamPlayback?
+    private var overlayChromeRequested = false
     private var startTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
     private var stopTask: Task<Void, Never>?
@@ -104,6 +108,7 @@ final class StreamSessionModel {
 
     func start(surface: StreamSurface) {
         guard canStart, phase == .idle, stopTask == nil else { return }
+        overlayAppearance = surface.overlayAppearance
         let playback: StreamPlayback
         do {
             playback = try makePlayback(launch, surface) { [weak self] in
@@ -116,6 +121,7 @@ final class StreamSessionModel {
             return
         }
         self.playback = playback
+        playback.showOverlayChrome?(overlayChromeRequested)
         requestedFormat = playback.format
         if let format = playback.format, let request = playback.requestFormatChange {
             windowResize = StreamWindowResize(format: format, request: request, applied: { [weak self] in
@@ -156,6 +162,11 @@ final class StreamSessionModel {
                 self.complete()
             }
         }
+    }
+
+    func showOverlayChrome(_ visible: Bool) {
+        overlayChromeRequested = visible
+        playback?.showOverlayChrome?(visible && canStart && !phase.isEnded && phase != .stopping)
     }
 
     func toggleStats() {
@@ -315,7 +326,8 @@ final class StreamSessionModel {
 
     private func synchronizeInputFocus() {
         menuVisibility.setPlaying(inputFocused)
-        playback?.showStats?(statsShown && canStart && phase == .streaming)
+        playback?.showStats?(statsShown && canStart && phase == .streaming && !editingTouchControls)
+        if !canStart || phase.isEnded || phase == .stopping { playback?.showOverlayChrome?(false) }
         playback?.focusInput?(inputFocused)
         inputCaptureChanged?(inputFocused)
         windowResize?.setAvailable(canStart && phase == .streaming)

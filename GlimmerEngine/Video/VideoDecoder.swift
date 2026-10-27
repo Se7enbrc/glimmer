@@ -108,12 +108,25 @@ public final class VideoDecoder {
             guard oldValue != statsOverlayEnabled else { return }
             statsCollector.setOverlayCollection(statsOverlayEnabled)
             log.info("Stats overlay \(self.statsOverlayEnabled ? "ON" : "OFF")")
-            backdropBox.withLock { [enabled = statsOverlayEnabled] in
-                $0.overlayEnabled = enabled
-                $0.luminance = nil
-                $0.lastSampleNanos = 0
-            }
+            updateBackdropSampling()
             onStatsOverlayEnabledChanged?(statsOverlayEnabled)
+        }
+    }
+
+    /// Chrome shares the HUD sampler without collecting stats when the HUD is hidden.
+    public var overlayChromeEnabled = false {
+        didSet {
+            if oldValue != overlayChromeEnabled { updateBackdropSampling() }
+        }
+    }
+
+    private func updateBackdropSampling() {
+        let enabled = statsOverlayEnabled || overlayChromeEnabled
+        backdropBox.withLock {
+            guard $0.overlayEnabled != enabled else { return }
+            $0.overlayEnabled = enabled
+            $0.luminance = nil
+            $0.lastSampleNanos = 0
         }
     }
 

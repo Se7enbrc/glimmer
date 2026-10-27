@@ -56,6 +56,7 @@ struct TouchDeviceRenderTests {
         for state in ["before", "after", "editor", "physical", "show-menu", "override",
                       "hide-menu", "hidden", "disconnected", "bright", "bright-active", "dim", "dim-active", "mouse"] {
             let exposure = state.hasPrefix("bright") ? 0.9 : state.hasPrefix("dim") ? -0.75 : 0
+            if exposure != 0 { model.overlayAppearance.update(luminance: exposure > 0 ? 0.85 : 0.01) }
             sample.rootView = TouchSampleFrame(exposure: exposure)
                 .ignoresSafeArea()
             transition(state, model: model, capture: capture, presence: presence)

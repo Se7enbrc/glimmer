@@ -94,11 +94,12 @@ final class TouchJourneyUITests: TouchJourneyTestCase {
         let app = try launch()
         try play(app)
         openMenu(app)
-        app.buttons["Show Stream Stats"].tap()
-        XCTAssertTrue(app.buttons["Hide Stream Stats"].exists)
+        let stats = app.buttons["stream-stats-toggle"]
+        stats.tap()
+        XCTAssertEqual(stats.label, "Hide stream stats")
         XCTAssertTrue((app.otherElements["Video from the PC"].value as? String)?.contains("10.0 FPS") == true)
         record("stats-visible")
-        app.buttons["Hide Stream Stats"].tap()
+        stats.tap()
         XCTAssertFalse((app.otherElements["Video from the PC"].value as? String)?.contains("FPS") == true)
         app.buttons["Edit controls…"].tap()
         let opacity = app.sliders["Opacity"]
@@ -107,11 +108,11 @@ final class TouchJourneyUITests: TouchJourneyTestCase {
         let savedOpacity = opacity.value as? String
         record("edit-opacity")
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["Close menu"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["stream-resume"].waitForExistence(timeout: 5))
         app.buttons["Edit controls…"].tap()
         XCTAssertEqual(opacity.value as? String, savedOpacity)
         app.buttons["Done"].tap()
-        app.buttons["Close menu"].tap()
+        app.buttons["stream-resume"].tap()
         XCTAssertTrue(app.buttons["A"].waitForExistence(timeout: 5))
         XCTAssertFalse(receipts().contains { $0["stop"] == 1 }, "X closes only the menu")
         try assertPicture(app)
@@ -200,22 +201,17 @@ final class TouchJourneyUITests: TouchJourneyTestCase {
         XCTAssertEqual(Set(ordered.map(\.label)), Set(names), "Every overlay control belongs to the accessibility tree")
         let traversal = ordered.map(\.label).filter { $0 != "Show controls" }
         openMenu(app)
-        let duplicateTrait = XCTExpectedFailure.Options()
-        duplicateTrait.isEnabled = UIDevice.current.userInterfaceIdiom == .pad
-        duplicateTrait.issueMatcher = { $0.compactDescription.contains("Label duplicates traits") }
-        try XCTExpectFailure("TJ99-02: iPad diagram repeats the touchpad button trait in its label",
-                             options: duplicateTrait) {
-            try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
-        }
-        for name in ["Show Stream Stats", "Controller layouts", "Edit controls…", "Disconnect", "Close menu"] {
-            XCTAssertTrue(app.buttons[name].isHittable)
-            XCTAssertFalse(app.buttons[name].label.isEmpty)
+        try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
+        for id in ["stream-stats-toggle", "stream-controller-layouts", "stream-edit-controls", "stream-disconnect",
+                   "stream-resume"] {
+            XCTAssertTrue(app.buttons[id].isHittable)
+            XCTAssertFalse(app.buttons[id].label.isEmpty)
         }
         app.buttons["Edit controls…"].tap()
         XCTAssertTrue(app.sliders["Opacity"].isHittable)
         try app.performAccessibilityAudit(for: [.sufficientElementDescription, .trait])
         app.buttons["Done"].tap()
-        app.buttons["Close menu"].tap()
+        app.buttons["stream-resume"].tap()
         let restored = app.descendants(matching: .any).allElementsBoundByIndex.map(\.label)
             .filter { names.contains($0) && $0 != "Show controls" }
         XCTAssertEqual(restored, traversal, "Closing overlays must restore the gamepad's accessibility traversal order")
@@ -228,24 +224,34 @@ final class TouchJourneyUITests: TouchJourneyTestCase {
         openMenu(app)
         record("largest-text-menu")
         let window = app.windows.firstMatch.frame
-        let knownOverflow = XCTExpectedFailure.Options()
-        knownOverflow.isEnabled = UIDevice.current.userInterfaceIdiom == .phone
-        continueAfterFailure = true
-        XCTExpectFailure("TJ99-01: accessibility-size menu clips its first actions above the iPhone screen",
-                         options: knownOverflow) {
-            for name in ["Show Stream Stats", "Controller layouts"] {
-                let control = app.buttons[name]
-                XCTAssertTrue(control.isHittable, "Largest text must leave \(name) reachable")
-                XCTAssertTrue(window.contains(control.frame), "\(name) must not clip outside the window")
-            }
+        // Every action is on screen or scrolls into view; Disconnect never scrolls away.
+        for id in ["stream-resume", "stream-stats-toggle", "stream-edit-controls", "stream-controller-layouts",
+                   "stream-help", "stream-quit", "stream-disconnect"] {
+            let control = scrolledIntoView(id, in: app)
+            XCTAssertTrue(control.isHittable, "Largest text must leave \(id) reachable")
+            XCTAssertTrue(window.contains(control.frame), "\(id) must not clip outside the window")
+            XCTAssertTrue(app.buttons["stream-disconnect"].isHittable)
         }
-        continueAfterFailure = false
-        for name in ["Edit controls…", "Close menu", "Disconnect"] {
-            let control = app.buttons[name]
-            XCTAssertTrue(control.isHittable, "Largest text must leave \(name) reachable")
-            XCTAssertTrue(window.contains(control.frame), "\(name) must not clip outside the window")
-        }
-        app.buttons["Close menu"].tap()
+        scrolledIntoView("stream-resume", in: app).tap()
         stop(app)
+    }
+
+    private func scrolledIntoView(_ id: String, in app: XCUIApplication) -> XCUIElement {
+        let control = app.buttons[id]
+        let list = app.descendants(matching: .any).matching(identifier: "stream-controls-actions").firstMatch
+        // Rows scroll under the pinned Disconnect bar, so a visible row ends above it.
+        let pinned = ["stream-disconnect", "stream-quit"].contains(id)
+        let quit = app.buttons["stream-quit"]
+        let floor = min(app.buttons["stream-disconnect"].frame.minY, quit.exists ? quit.frame.minY : .infinity)
+        func visible() -> Bool {
+            pinned || list.frame.contains(control.frame) && control.frame.maxY <= floor + 1
+        }
+        for _ in 0..<12 where !visible() || !control.isHittable {
+            let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let offset = max(-60, min(60, (list.frame.minY + floor) / 2 - control.frame.midY))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: offset)),
+                        withVelocity: .slow, thenHoldForDuration: 0.1)
+        }
+        return control
     }
 }

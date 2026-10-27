@@ -11,6 +11,7 @@ struct StreamNoticeView: View {
     var glass = Self.glassAvailable
     /// A glyph-only badge (empty text) still needs a spoken name.
     var accessibilityName: String?
+    @Environment(\.dynamicTypeSize) private var textSize
 
     static var glassAvailable: Bool {
         if #available(macOS 26, iOS 26, *) { return true }
@@ -26,7 +27,8 @@ struct StreamNoticeView: View {
             } else if let accent {
                 Circle().fill(accent).frame(width: 7, height: 7).accessibilityHidden(true)
             }
-            if !text.isEmpty { Text(text).lineLimit(1).truncationMode(.tail) }
+            // Accessibility text sizes wrap rather than truncate the notice.
+            if !text.isEmpty { Text(text).lineLimit(textSize.isAccessibilitySize ? nil : 1).truncationMode(.tail) }
         }
         .font(.callout.weight(.medium))
         // A badge is a circle of the pill's height; a notice keeps the wider capsule padding.

@@ -106,7 +106,7 @@ extension StatsOverlayLayer {
 
     func apply(row: StatsRow, to sub: RowSublayers) {
         sub.labelLayer.string = NSAttributedString(string: row.label, attributes: [
-            .font: Self.labelFont, .foregroundColor: secondaryInk
+            .font: resolvedLabelFont, .foregroundColor: secondaryInk
         ])
         sub.valueLayer.string = attributedValue(row)
         applyShadow(to: sub.labelLayer)
@@ -119,19 +119,19 @@ extension StatsOverlayLayer {
 
     func attributedValue(_ row: StatsRow) -> NSAttributedString {
         let core = Self.coreKinds.contains(row.kind)
-        let font = Self.valueFont(for: row.health, differentiateWithoutColor:
-                                    Self.differentiateWithoutColorEnabled)
+        let emphasized = Self.differentiateWithoutColorEnabled && (row.health == .warning || row.health == .critical)
+        let font = resolvedValueFont(bold: emphasized)
         let text = NSMutableAttributedString(string: row.value, attributes: [
-            .font: core ? font : Self.detailFont, .foregroundColor: primaryInk
+            .font: core ? font : resolvedDetailFont, .foregroundColor: primaryInk
         ])
         if core, let space = row.value.firstIndex(of: " ") {
             let suffix = NSRange(space..<row.value.endIndex, in: row.value)
-            text.addAttributes([.font: Self.labelFont, .foregroundColor: secondaryInk], range: suffix)
+            text.addAttributes([.font: resolvedLabelFont, .foregroundColor: secondaryInk], range: suffix)
         } else if !core, row.health == .warning || row.health == .critical {
             text.addAttribute(.foregroundColor, value: cautionInk, range: NSRange(location: 0, length: text.length))
             if Self.differentiateWithoutColorEnabled {
                 text.addAttribute(.font, value: StatsFont.monospacedDigitSystemFont(
-                    ofSize: Self.detailFont.pointSize, weight: .bold), range: NSRange(location: 0, length: text.length))
+                    ofSize: resolvedDetailFont.pointSize, weight: .bold), range: NSRange(location: 0, length: text.length))
             }
         }
         return text

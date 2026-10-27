@@ -100,6 +100,11 @@ final class TouchMenuButton: UIButton {
     override init(frame: CGRect) {
         super.init(frame: frame)
         accessibilityLabel = "Show controls"
+        // Not game input, so it can show its name in the Large Content Viewer at accessibility sizes.
+        showsLargeContentViewer = true
+        largeContentTitle = "Show controls"
+        largeContentImage = UIImage(systemName: "ellipsis")
+        addInteraction(UILargeContentViewerInteraction())
         addAction(UIAction { [weak self] _ in self?.showControls() }, for: .primaryActionTriggered)
     }
 

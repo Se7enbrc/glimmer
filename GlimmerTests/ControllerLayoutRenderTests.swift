@@ -18,6 +18,15 @@ typealias NativeControllerRenderView = UIView
 @Suite(.serialized)
 struct ControllerLayoutRenderTests {
     #if os(macOS)
+    @Test func diagramLabelsLeaveTheButtonRoleToTheTrait() {
+        #expect(ControllerLayoutDiagram.spokenName(ControllerMappedButton.touchpad.layoutName) == "Touchpad")
+        #expect(ControllerLayoutDiagram.spokenName(ControllerMappedButton.leftStick.layoutName) == "Left stick click")
+        #expect(ControllerLayoutDiagram.spokenName(ControllerMappedButton.a.layoutName) == "A · Bottom")
+        for button in ControllerMappedButton.allCases {
+            #expect(!ControllerLayoutDiagram.spokenName(button.layoutName).lowercased().hasSuffix("button"))
+        }
+    }
+
     @Test(arguments: [false, true])
     func statsShortcutScreens(dark: Bool) async throws {
         let settings = IsolatedDefaults()

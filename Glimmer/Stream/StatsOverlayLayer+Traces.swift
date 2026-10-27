@@ -53,6 +53,17 @@ struct StatsTraceHistory {
         count = min(count + 1, Self.capacity)
     }
 
+    /// False while every reading is the same, so a perfectly steady metric draws no line.
+    var varies: Bool {
+        var first: Double?
+        for index in 0..<count {
+            guard let value = self[index].value else { continue }
+            if let first, abs(value - first) > 0.0001 { return true }
+            first = first ?? value
+        }
+        return false
+    }
+
     mutating func reset() {
         next = 0
         count = 0
@@ -161,6 +172,7 @@ final class StatsTrace {
     private let criticals = CAShapeLayer()
     private let dot = CAShapeLayer()
     private var target = 60.0
+    static let minimumHistory = 8
 
     init(metric: Metric) {
         self.metric = metric
@@ -215,7 +227,8 @@ final class StatsTrace {
 
     func draw() {
         let bounds = layer.bounds.insetBy(dx: 2, dy: 2)
-        guard !bounds.isEmpty else {
+        // Two seconds of readings that move: a lone reference line, a stub or a flat dash reads as debris.
+        guard !bounds.isEmpty, history.count >= Self.minimumHistory, history.varies else {
             for shape in [baseline, line, cautions, criticals, dot] { shape.path = nil }
             return
         }

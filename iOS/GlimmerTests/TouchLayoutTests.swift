@@ -24,6 +24,21 @@ struct TouchLayoutTests {
         }
     }
 
+    // SE, 17 Pro and iPad share one arrangement: Options and Menu below, the stream menu button above.
+    @Test(arguments: [CGSize(width: 590, height: 600), CGSize(width: 667, height: 375),
+                      CGSize(width: 667, height: 354), CGSize(width: 750, height: 381),
+                      CGSize(width: 1194, height: 790), CGSize(width: 700, height: 900)])
+    func optionsAndMenuStayAtTheBottomAwayFromTheStreamMenuButton(size: CGSize) throws {
+        let area = CGRect(origin: .zero, size: size)
+        let frames = TouchLayout().frames(in: area)
+        let menu = TouchLayout.menuFrame(in: area)
+        for element in [TouchElement.options, .menu] {
+            let frame = try #require(frames[element])
+            #expect(frame.minY > area.midY, "\(element) sits at the bottom")
+            #expect(frame.minY - menu.maxY > 100, "\(element) is clear of the stream menu button")
+        }
+    }
+
     @Test func draftRejectsCollisionAndTemporaryClampingDoesNotOverwriteMemory() {
         let area = CGRect(x: 0, y: 0, width: 844, height: 369)
         var layout = TouchLayout()

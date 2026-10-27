@@ -9,17 +9,20 @@ struct IOSControllerLayoutStreamButton: View {
     @State private var presented = false
 
     var body: some View {
-        Button("Controller layouts", systemImage: "gamecontroller") {
+        Button("Controller layout…", systemImage: "gamecontroller") {
             model.showControls()
             presented = true
         }
-        .buttonStyle(.glass)
+        .accessibilityIdentifier("stream-controller-layouts")
         .sheet(isPresented: $presented) {
             NavigationStack {
                 ControllerLayoutsView(initialScope: .game(pcID: model.launch.pcID,
                     appID: UInt32(clamping: model.launch.appID)))
                     .toolbar {
-                        ToolbarItem(placement: .confirmationAction) { Button("Done") { presented = false } }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { presented = false }
+                                .accessibilityIdentifier("stream-controller-layouts-done")
+                        }
                     }
             }
         }

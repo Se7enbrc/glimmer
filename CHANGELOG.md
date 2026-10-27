@@ -32,6 +32,15 @@
   or gamepad mode there returns straight to the game. Controllers that report
   Menu only on its own button now stop the stream with the Stop shortcut too.
 
+- iPhone and iPad stream controls stay within thumb reach, with Help that
+  explains the touch menu and on-screen controller, and an always-visible
+  Disconnect action. Controls adapt to the picture's brightness. Done and Cancel
+  stay reachable when editing touch controls, and notices leave the touch menu
+  visible.
+
+- Stream stats scale with the window on Mac, iPhone and iPad, including larger
+  text on iPhone and iPad. Stats stay clear of the touch gamepad.
+
 - Controllers avoid mouse calculations while mouse mode is off.
 
 - Controller mouse bindings now check shortcuts used by every controller,

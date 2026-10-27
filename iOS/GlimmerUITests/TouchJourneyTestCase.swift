@@ -52,12 +52,15 @@ class TouchJourneyTestCase: XCTestCase {
     func setWindowMode(windowed: Bool) {
         let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
         settings.activate()
-        let multitasking = settings.buttons["Multitasking & Gestures"]
-        XCTAssertTrue(multitasking.waitForExistence(timeout: 5))
-        multitasking.tap()
         let name = windowed ? "windowedApps" : "fullScreenApps"
         let option = settings.descendants(matching: .any)
             .matching(identifier: "com.apple.settings.multitaskingAndGestures." + name).firstMatch
+        // Settings may still show the Multitasking page from an earlier run.
+        if !option.waitForExistence(timeout: 2) {
+            let multitasking = settings.buttons["Multitasking & Gestures"]
+            XCTAssertTrue(multitasking.waitForExistence(timeout: 5))
+            multitasking.tap()
+        }
         XCTAssertTrue(option.waitForExistence(timeout: 5))
         option.tap()
     }
