@@ -356,7 +356,9 @@ GameController callbacks use a serial user-interactive queue and locked
 `InputCore`. Arrival announces capabilities; reconnect removes stale slots
 before replaying arrivals and current state. Old callbacks cannot reach retired
 slots. Rumble, trigger rumble, motion, battery and light feedback use the shared
-routing.
+routing. System-profile callbacks own stick delivery unless a custom layout uses
+the physical profile exclusively. Shortcut observers do not also observe sticks.
+Settings capture replaces the stream handlers and restores them on exit.
 
 Mini Player retains background controller input, while keyboard/mouse follow
 focus. Background monitoring has shared ownership with diagnostics and shortcut

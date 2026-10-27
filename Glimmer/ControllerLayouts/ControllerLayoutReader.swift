@@ -102,31 +102,30 @@ final class ControllerLayoutReader: @unchecked Sendable {
     }
 
     func shortcutElements(_ configuration: ControllerLayoutConfiguration) -> Set<ObjectIdentifier> {
+        Set(Self.shortcutNames(configuration, extras: extras).compactMap { name in
+            if let button = input.buttons[name] { return ObjectIdentifier(button) }
+            if let dpad = input.dpads[name] { return ObjectIdentifier(dpad) }
+            return nil
+        })
+    }
+
+    static func shortcutNames(_ configuration: ControllerLayoutConfiguration, extras: [String]) -> Set<String> {
         let mouse = configuration.mouse?.observed ?? .empty
         let buttons = configuration.stop.buttons | configuration.stats.buttons | mouse.buttons
         let triggers = configuration.stop.triggers | configuration.stats.triggers | mouse.triggers
-        let extras = configuration.stop.extras | configuration.stats.extras | mouse.extras
-        var elements = Set<ObjectIdentifier>()
-        for (name, button) in Self.standardButtons where buttons & button.rawValue != 0 {
-            if let element = input.buttons[name] { elements.insert(ObjectIdentifier(element)) }
-        }
+        let extraMask = configuration.stop.extras | configuration.stats.extras | mouse.extras
+        var names = Set(standardButtons.filter { buttons & $0.1.rawValue != 0 }.map(\.0))
         for (index, name) in [GCInputLeftTrigger, GCInputRightTrigger].enumerated() where triggers & (1 << index) != 0 {
-            if let element = input.buttons[name] { elements.insert(ObjectIdentifier(element)) }
+            names.insert(name)
         }
-        for (index, name) in self.extras.enumerated() where extras[index / 64] & (1 << (index % 64)) != 0 {
-            if let element = input.buttons[name] { elements.insert(ObjectIdentifier(element)) }
+        for (index, name) in extras.enumerated() where extraMask[index / 64] & (1 << (index % 64)) != 0 {
+            names.insert(name)
         }
         let directions: UInt32 = ControllerMappedButton.up.rawValue | ControllerMappedButton.down.rawValue
             | ControllerMappedButton.left.rawValue | ControllerMappedButton.right.rawValue
-        if buttons & directions != 0, let dpad = input.dpads[GCInputDirectionPad] {
-            elements.insert(ObjectIdentifier(dpad))
-        }
-        if configuration.mouse != nil {
-            for name in [GCInputLeftThumbstick, GCInputRightThumbstick] {
-                if let stick = input.dpads[name] { elements.insert(ObjectIdentifier(stick)) }
-            }
-        }
-        return elements
+        if buttons & directions != 0 { names.insert(GCInputDirectionPad) }
+        // System-profile callbacks already sample physical sticks; custom layouts observe every physical element.
+        return names
     }
 
     private struct Discovery {

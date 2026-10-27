@@ -2,6 +2,8 @@
 
 ## 2026.10.8 - Unreleased
 
+- Controller sticks no longer send duplicate input while streaming.
+
 - Controllers avoid mouse calculations while mouse mode is off.
 
 - Controller mouse bindings now check shortcuts used by every controller,

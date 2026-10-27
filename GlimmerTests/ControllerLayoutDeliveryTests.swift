@@ -61,6 +61,48 @@ struct ControllerLayoutDeliveryTests {
         #expect(controller.input.queue === queue)
     }
 
+    @Test(arguments: [false, true], [false, true])
+    func thumbsticksHaveOneStreamOwnerAndCaptureRestoresIt(mapsGameInput: Bool, physicalFirst: Bool) throws {
+        let controller = GCController.withExtendedGamepad()
+        let pad = try #require(controller.extendedGamepad)
+        let input = controller.input
+        let available = Set(ControllerMouseSettingsView.generic.controls.map(\.id))
+        let configuration = try ControllerLayoutConfiguration(
+            layout: mapsGameInput ? ControllerLayout(bindings: []) : nil, shortcuts: nil,
+            available: available, mouse: .init())
+        let sticks = [GCInputLeftThumbstick, GCInputRightThumbstick].map(StickCallbackDelivery.Element.init)
+        let observed = ControllerLayoutReader.shortcutNames(configuration, extras: [])
+        let elements = Set(sticks.filter { !observed.isDisjoint(with: $0.aliases) }.map(ObjectIdentifier.init))
+        let queue = DispatchQueue(label: "controller-stick-delivery-test")
+        let streams = Mutex(0)
+        let captures = Mutex(0)
+        ControllerStreamHandlers.install(controller: controller, input: input, queue: queue,
+            mapsGameInput: mapsGameInput, shortcutElements: elements,
+            read: { .init(analog: SIMD8(0, 0, 32000, 0, 32000, 0, 0, 0)) }, receive: { _, _ in
+                #expect(!Thread.isMainThread)
+                streams.withLock { $0 += 1 }
+            })
+        for stick in sticks {
+            let before = streams.withLock { $0 }
+            #expect(StickCallbackDelivery.send(input: input, stick: stick, pad: pad,
+                queue: queue, physicalFirst: physicalFirst) == .success)
+            #expect(streams.withLock { $0 } == before + 1)
+            let lease = ControllerLayoutInputLease(controller: controller, input: input, queue: queue,
+                read: { .init() }, receive: { _, _ in captures.withLock { $0 += 1 } })
+            #expect(pad.valueChangedHandler == nil)
+            let captured = captures.withLock { $0 }
+            #expect(StickCallbackDelivery.send(input: input, stick: stick, pad: pad,
+                queue: queue, physicalFirst: physicalFirst) == .success)
+            #expect(captures.withLock { $0 } == captured + 1)
+            #expect(streams.withLock { $0 } == before + 1)
+            lease.stop()
+            #expect(StickCallbackDelivery.send(input: input, stick: stick, pad: pad,
+                queue: queue, physicalFirst: physicalFirst) == .success)
+            #expect(streams.withLock { $0 } == before + 2)
+            #expect(captures.withLock { $0 } == captured + 1)
+        }
+    }
+
     @Test func physicalOnlyCaptureRestoresPriorHandlersAndQueues() throws {
         let controller = GCController.withExtendedGamepad()
         let pad = try #require(controller.extendedGamepad)
@@ -191,5 +233,28 @@ private final class ControllerLayoutDeliveryFixture: @unchecked Sendable {
         let aliases: Set<String> = ["test"]
         let localizedName: String? = "Test"
         let sfSymbolsName: String? = nil
+    }
+}
+
+private enum StickCallbackDelivery {
+    final class Element: NSObject, GCPhysicalInputElement {
+        let aliases: Set<String>
+        let localizedName: String? = nil
+        let sfSymbolsName: String? = nil
+        init(_ name: String) { aliases = [name] }
+    }
+
+    static func send(input: GCControllerLiveInput, stick: any GCPhysicalInputElement,
+                     pad: GCExtendedGamepad, queue: DispatchQueue, physicalFirst: Bool) -> DispatchTimeoutResult {
+        let physical = input.elementValueDidChangeHandler
+        let system = pad.valueChangedHandler
+        let done = DispatchSemaphore(value: 0)
+        queue.async(execute: DispatchWorkItem {
+            if physicalFirst { physical?(input, stick) }
+            system?(pad, pad.leftThumbstick)
+            if !physicalFirst { physical?(input, stick) }
+            done.signal()
+        })
+        return done.wait(timeout: .now() + 2)
     }
 }
