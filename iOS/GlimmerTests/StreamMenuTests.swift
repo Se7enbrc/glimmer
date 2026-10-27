@@ -127,18 +127,16 @@ struct StreamMenuTests {
         #expect(capture.menuTap.isEnabled && capture.menuSwipe.isEnabled && !capture.pointerPan.isEnabled)
     }
 
-    @Test func hiddenGamepadMenuDoesNotInterceptTouchesAndReduceMotionIsImmediate() {
+    @Test func gamepadMenuStaysTappableEvenWhenTheCaptureIsDisabled() {
         let view = TouchGamepadView(frame: CGRect(x: 0, y: 0, width: 900, height: 400))
-        view.configure(capture: nil, layout: TouchLayout(), area: view.bounds, preview: true)
-        let point = view.menuButton.center
-        #expect(view.hitTest(point, with: nil) === view.menuButton)
-        view.setMenuVisible(false, animated: false)
-        #expect(view.hitTest(point, with: nil) == nil)
-        #expect(view.menuButton.alpha == 0 && view.menuButton.accessibilityElementsHidden)
-        #expect(view.menuButton.layer.animationKeys()?.isEmpty ?? true)
-        view.setMenuVisible(true, animated: false)
-        #expect(view.hitTest(point, with: nil) === view.menuButton)
-        #expect(!view.menuButton.accessibilityElementsHidden)
+        var opened = false
+        view.menuButton.showControls = { opened = true }
+        view.configure(capture: nil, layout: TouchLayout(), area: view.bounds)
+        #expect(view.controls.values.allSatisfy { $0.isHidden })
+        #expect(view.hitTest(view.menuButton.center, with: nil) === view.menuButton)
+        #expect(view.menuButton.alpha == 1 && !view.menuButton.accessibilityElementsHidden)
+        view.menuButton.sendActions(for: .primaryActionTriggered)
+        #expect(opened)
     }
 }
 

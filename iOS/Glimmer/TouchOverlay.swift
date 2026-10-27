@@ -24,7 +24,6 @@ struct TouchOverlay: View {
                     pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
                 TouchPlayControls(capture: model.touchGamepad, layout: layout, area: area,
                                   mouseMode: model.touchMouseActive,
-                                  menuVisible: model.menuVisibility.visible,
                                   showControls: model.showControls)
             } else if model.inputFocused {
                 let layout = TouchLayoutStore(defaults: PersistentStorage.defaults).load(
@@ -55,7 +54,6 @@ struct TouchPlayControls: View {
     let layout: TouchLayout
     let area: CGRect
     var mouseMode = false
-    var menuVisible = true
     var preview = false
     let showControls: () -> Void
 
@@ -63,7 +61,7 @@ struct TouchPlayControls: View {
         ZStack {
             TouchGamepadRepresentation(capture: capture, layout: layout, area: area,
                                        mouseMode: mouseMode,
-                                       menuVisible: menuVisible, preview: preview,
+                                       preview: preview,
                                        showControls: showControls)
             if TouchLayout().frames(in: area).isEmpty {
                 Text("Make this window larger to use touch controls.")
@@ -124,12 +122,10 @@ private struct TouchMenuLabelStyle: LabelStyle {
 }
 
 struct TouchGamepadRepresentation: UIViewRepresentable {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var capture: TouchGamepadCapture?
     let layout: TouchLayout
     let area: CGRect
     var mouseMode = false
-    var menuVisible = true
     var preview = false
 
     var showControls: () -> Void = {}
@@ -140,6 +136,5 @@ struct TouchGamepadRepresentation: UIViewRepresentable {
         view.menuButton.showControls = showControls
         view.configure(capture: capture, layout: layout, area: area, preview: preview)
         view.mouseMode(mouseMode, bindings: ControllerLayoutsModel.shared.mouse)
-        view.setMenuVisible(menuVisible, animated: !reduceMotion)
     }
 }

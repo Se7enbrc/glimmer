@@ -18,9 +18,10 @@ struct TouchDeviceRenderTests {
         #expect(capture.attach())
         var presence: ((Bool) -> Void)?
         let id = UUID()
+        // This touch-only fixture owns its gamepad; hardware discovery belongs to the hardware-input tests.
         let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
             StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
-                           input: connection.input, focusInput: { capture.setEnabled($0) },
+                           focusInput: { capture.setEnabled($0) },
                            observeControllers: { presence = $0; $0(false) }, touchGamepad: capture,
                            showTouchControls: { requested in
                                if requested { capture.attach() } else { capture.detach() }
@@ -83,33 +84,51 @@ struct TouchDeviceRenderTests {
         await connection.stop()
     }
 
-    @Test func touchMenuButtonReceivesItsTapAndOpensTheStreamMenu() async throws {
+    @Test(arguments: [false, true])
+    func touchMenuButtonReceivesItsTapAndOpensTheStreamMenu(hardwareConnected: Bool) async throws {
         let scene = try await testWindowScene()
         let previous = scene.keyWindow
         let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
         let capture = TouchGamepadCapture(input: connection.input)
         #expect(capture.attach())
         let id = UUID()
-        let model = StreamSessionModel(launch: testLaunch(), makePlayback: { _, _, _ in
+        let clock = WindowResizeClock()
+        let visibility = StreamMenuVisibility(voiceOver: false, sleep: clock.sleep)
+        let model = StreamSessionModel(launch: testLaunch(), menuVisibility: visibility, makePlayback: { _, _, _ in
             StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
-                           input: connection.input, focusInput: { capture.setEnabled($0) },
+                           focusInput: { capture.setEnabled($0) },
                            observeControllers: { $0(false) }, touchGamepad: capture)
         })
         let window = UIWindow(windowScene: scene)
         let host = StreamViewController(model: model, close: {})
         window.rootViewController = host
         window.makeKeyAndVisible()
-        defer { capture.detach(); window.isHidden = true; previous?.makeKeyAndVisible() }
+        defer { capture.detach(); model.stop(); window.isHidden = true; previous?.makeKeyAndVisible() }
         model.start(surface: host.surface)
         await model.waitUntilStartFinishes()
         model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+        #expect(host.keyboardMouseCapture == nil)
+        model.hardwareConnectionChanged(hardwareConnected)
+        if hardwareConnected {
+            #expect(!model.touchControlsVisible)
+            model.toggleTouchControls()
+        }
         var menu: TouchMenuButton?
         for _ in 0..<100 where menu?.window == nil {
             window.layoutIfNeeded()
             menu = touchView(in: host.view)?.menuButton
             try await Task.sleep(for: .milliseconds(20))
         }
-        let button = try #require(menu)
+        let button = try #require(menu, """
+            \(model.phase), controls: \(model.controlsVisible),
+            hardware: \(model.hardwareInputConnected), geometry: \(model.touchGeometryUsable)
+            """)
+        await clock.waitForSleeps(1)
+        await clock.advance()
+        await visibility.waitForPendingHide()
+        #expect(!visibility.visible && !visibility.hasPendingHide)
+        window.layoutIfNeeded()
+        #expect(button.alpha == 1 && button.isUserInteractionEnabled && !button.accessibilityElementsHidden)
         #expect(model.touchControlsVisible && !model.controlsVisible)
         // A real tap starts at the button's centre and must reach the button, not the video below it.
         let centre = button.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), to: window)
@@ -129,7 +148,10 @@ struct TouchDeviceRenderTests {
     }
 
     private func verifyAppearance(_ host: StreamViewController, dark: Bool) throws -> [TouchElement: CGRect] {
-        let view = try #require(touchView(in: host.view))
+        let view = try #require(touchView(in: host.view), """
+            \(host.model.phase), controls: \(host.model.controlsVisible),
+            hardware: \(host.model.hardwareInputConnected), geometry: \(host.model.touchGeometryUsable)
+            """)
         #expect(view.traitCollection.userInterfaceStyle == (dark ? .dark : .light))
         let button = try #require(view.controls[.a] as? UIButton)
         var red: CGFloat = 0
