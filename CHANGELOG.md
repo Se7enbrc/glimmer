@@ -23,6 +23,10 @@
   mouse or controller symbol, on Mac, iPhone and iPad, and VoiceOver announces
   it.
 
+- On iPhone and iPad, holding Menu opens the stream controls, and choosing mouse
+  or gamepad mode there returns straight to the game. Controllers that report
+  Menu only on its own button now stop the stream with the Stop shortcut too.
+
 - Controllers avoid mouse calculations while mouse mode is off.
 
 - Controller mouse bindings now check shortcuts used by every controller,

@@ -264,6 +264,8 @@ final class StreamSessionModel {
     func toggleControllerMouseMode() {
         guard let menuController else { return }
         streamInput?.setControllerMouseMode(!menuControllerUsesMouse, for: menuController)
+        // Choosing a mode returns to the stream so the controller drives it at once.
+        resumeInput()
     }
 
     func showControls() {
