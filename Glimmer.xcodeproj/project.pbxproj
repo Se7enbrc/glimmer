@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AF2B2AE90E354E35B8A1450A /* ControllerStopChordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F8BE009258D45CF9624C7AC /* ControllerStopChordTests.swift */; };
 		78E416D5EA4243A18D2F5B06 /* ControllerDiagramAnnotations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */; };
 		61BD251C254D4F3D837B8C60 /* ControllerSettingsRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A6D083A7C3C423E8F74E77A /* ControllerSettingsRow.swift */; };
 		0F8D68E993AC460C9B7489CE /* ControllerMouseRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376C60990C2F4043828839C4 /* ControllerMouseRenderTests.swift */; };
@@ -837,6 +838,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		5F8BE009258D45CF9624C7AC /* ControllerStopChordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerStopChordTests.swift"; sourceTree = SOURCE_ROOT; };
 		03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerDiagramAnnotations.swift"; sourceTree = SOURCE_ROOT; };
 		8A6D083A7C3C423E8F74E77A /* ControllerSettingsRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerSettingsRow.swift"; sourceTree = SOURCE_ROOT; };
 		376C60990C2F4043828839C4 /* ControllerMouseRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerMouseRenderTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -2172,6 +2174,7 @@
 				DEC0DE202609233300000002 /* ControllerArrivalTests.swift */,
 				DEC0DE202610101100000002 /* ControllerHapticsActuationTests.swift */,
 				DEC0DE20261009000000CA02 /* InputRecordingBackend.swift */,
+				5F8BE009258D45CF9624C7AC /* ControllerStopChordTests.swift */,
 				DEC0DE20261009000000CA04 /* FramePacerHandoffTests.swift */,
 				DEC0DE20261010F1C0000002 /* FramePacerTickTests.swift */,
 				DEC0DE2026101000000005A2 /* FramePacerReleaseTests.swift */,
@@ -3116,6 +3119,7 @@
 				DEC0DE202609233300000001 /* ControllerArrivalTests.swift in Sources */,
 				DEC0DE202610101100000001 /* ControllerHapticsActuationTests.swift in Sources */,
 				DEC0DE20261009000000CA01 /* InputRecordingBackend.swift in Sources */,
+				AF2B2AE90E354E35B8A1450A /* ControllerStopChordTests.swift in Sources */,
 				DEC0DE20261009000000CA03 /* FramePacerHandoffTests.swift in Sources */,
 				DEC0DE20261010F1C0000001 /* FramePacerTickTests.swift in Sources */,
 				DEC0DE2026101000000005A1 /* FramePacerReleaseTests.swift in Sources */,

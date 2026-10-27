@@ -52,7 +52,8 @@ open the stream menu and choose “Controller layouts”.
 ## Keep Glimmer's controls available
 
 Stop streaming and Stats use remappable physical-button shortcuts on Mac, iPhone
-and iPad. Hold the complete shortcut for about half a second, then release.
+and iPad. Hold the complete shortcut for about half a second. It acts once and
+waits for every button to release before it can act again.
 
 | Action             | Default                                  |
 | ------------------ | ---------------------------------------- |
@@ -93,7 +94,8 @@ streams/tests. Other pads and Extra DualSense buttons need Input Monitoring.
 ## Use the controller as a mouse
 
 Hold the mouse-mode toggle for a second, then release to switch modes. The
-default is Menu (Options or Start on some controllers).
+default is Menu (Options or Start on some controllers). On iPhone and iPad, the
+hold opens stream controls; choose “Use mouse mode” there.
 
 Settings › Input › Controller mouse offers the same presets on Mac, iPhone and
 iPad:
@@ -144,7 +146,7 @@ for touch controls, enlarge it or connect a controller.
 
 {% hint style="warning" %}
 
-Save first. Hold your Stop shortcut, then release, to stop streaming.
+Save first. Hold your Stop shortcut for about half a second to stop streaming.
 Disconnecting quits the PC app by default. To keep it running, enable “Leave
 games running when you disconnect” in Settings › General before streaming.
 

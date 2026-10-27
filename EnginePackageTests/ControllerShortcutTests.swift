@@ -109,7 +109,7 @@ struct ControllerShortcutTests {
         #expect(ControllerLayoutShortcuts.savedGlobal(in: defaults) == nil)
     }
 
-    @Test func holdSuppressesOnlyAfterThresholdAndFiresOnceAfterEveryButtonReleases() throws {
+    @Test func holdFiresAtThresholdAndSuppressesUntilEveryButtonReleases() throws {
         let config = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil, available: available)
         var gesture = ControllerShortcutGesture(stop: config.stop, stats: config.stats)
         let full = ControllerMappingSample(buttons: config.stats.buttons)
@@ -117,13 +117,37 @@ struct ControllerShortcutTests {
         #expect(gesture.suppressing == nil)
         #expect(gesture.update(full, at: 10.39) == nil)
         #expect(gesture.suppressing == nil)
-        #expect(gesture.update(full, at: 10.4) == nil)
+        #expect(gesture.update(full, at: 10.4) == .stats)
         #expect(gesture.suppressing?.removing(from: full).buttons == 0)
         #expect(gesture.update(.init(buttons: ControllerMappedButton.leftStick.rawValue), at: 10.5) == nil)
         #expect(gesture.suppressing != nil)
-        #expect(gesture.update(.init(), at: 10.6) == .stats)
+        #expect(gesture.update(.init(), at: 10.6) == nil)
         #expect(gesture.update(.init(), at: 10.7) == nil)
         #expect(gesture.suppressing == nil)
+    }
+
+    @Test func releaseThatCompletesTheHoldAlsoRearmsTheNextPress() throws {
+        let config = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil, available: available)
+        var gesture = ControllerShortcutGesture(stop: config.stop, stats: config.stats)
+        let full = ControllerMappingSample(buttons: config.stats.buttons)
+        #expect(gesture.update(full, at: 10) == nil)
+        #expect(gesture.update(.init(), at: 10.4) == .stats)
+        #expect(gesture.latched == nil)
+        #expect(gesture.update(full, at: 11) == nil)
+        #expect(gesture.deadline == 11.4)
+    }
+
+    @Test func timerOvertakingACapturedReportCannotRearmAHeldShortcut() throws {
+        let config = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil, available: available)
+        var gesture = ControllerShortcutGesture(stop: config.stop, stats: config.stats)
+        let full = ControllerMappingSample(buttons: config.stats.buttons)
+        #expect(gesture.update(full, at: 10) == nil)
+        #expect(gesture.update(full, at: 10.4) == .stats)
+        #expect(gesture.update(full, at: 10.399) == nil)
+        #expect(gesture.latched == .stats)
+        #expect(gesture.update(full, at: 10.5) == nil)
+        #expect(gesture.update(full, at: 11) == nil)
+        #expect(gesture.update(.init(), at: 11.1) == nil)
     }
 
     @Test func shortHoldsAndCancellationNeverFire() throws {

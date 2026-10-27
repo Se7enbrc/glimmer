@@ -2,6 +2,10 @@
 
 ## 2026.10.8 - Unreleased
 
+- Controller Stop and Stats shortcuts respond after a short hold on Mac, iPhone
+  and iPad, without waiting for release. Holding Menu on iPhone and iPad opens
+  stream controls without interfering with those shortcuts.
+
 - Controller sticks no longer send duplicate input while streaming.
 
 - Controllers avoid mouse calculations while mouse mode is off.

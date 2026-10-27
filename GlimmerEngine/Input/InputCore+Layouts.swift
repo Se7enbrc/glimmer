@@ -147,6 +147,7 @@ extension InputCore {
             // A system remap has no compiled plan; release its held outputs conservatively.
             state.systemSuppression = sameButtons ? suppression : ControllerPhysicalChord(sample: gameSample)
         }
+        if suppression == nil { state.systemSuppression = nil }
         let filtered = suppression?.removing(from: sample) ?? sample
         let system = state.systemSuppression?.removing(from: gameSample) ?? gameSample
         let consumes = suppression != nil || action != nil
@@ -162,10 +163,7 @@ extension InputCore {
             }
         }
         scheduleLayoutHold(state, slot: slot, at: now)
-        if let action {
-            state.systemSuppression = nil
-            if releases.pending.isEmpty { onControllerShortcut?(action) }
-        }
+        if let action, releases.pending.isEmpty { onControllerShortcut?(action) }
         if !activityPublished, needsReconciliation { activityPublished = true; onActivity?() }
         return consumes ? .chord : (isMouse ? .mouse : .forwarded)
     }
