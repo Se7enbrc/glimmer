@@ -16,7 +16,8 @@ final class HIDGamepadCapture: @unchecked Sendable {
     private var flushScheduled = false
     private var handlerEntry: UInt64 = 0
     private var reading = false
-    private var handler: (@Sendable (Int32, GamepadAnalog, TimeInterval) -> Void)?
+    private var handler: (@Sendable (ControllerMappingSample, TimeInterval) -> Void)?
+    private var streamIndexes: [Int] = []
     private var layoutHandler: LayoutHandler?
 
     private struct LayoutHandler: Sendable {
@@ -38,7 +39,14 @@ final class HIDGamepadCapture: @unchecked Sendable {
     var count: UInt64 { lock.withLock { reportCount } }
 
     func setHandler(_ handler: (@Sendable (Int32, GamepadAnalog, TimeInterval) -> Void)?) {
-        lock.withLock { self.handler = handler }
+        guard let handler else { setStreamHandler(indexes: [], nil); return }
+        setStreamHandler(indexes: []) { sample, now in
+            handler(Int32(bitPattern: sample.buttons), sample.gamepadAnalog, now)
+        }
+    }
+
+    func setStreamHandler(indexes: [Int], _ handler: (@Sendable (ControllerMappingSample, TimeInterval) -> Void)?) {
+        lock.withLock { self.streamIndexes = indexes; self.handler = handler }
     }
 
     func layoutSample(indexes: [Int]) -> ControllerMappingSample {
@@ -113,9 +121,8 @@ final class HIDGamepadCapture: @unchecked Sendable {
     private struct Report {
         let timestamp: UInt64
         let entered: UInt64
-        let buttons: Int32
-        let analog: GamepadAnalog
-        let handler: (@Sendable (Int32, GamepadAnalog, TimeInterval) -> Void)?
+        let sample: ControllerMappingSample
+        let handler: (@Sendable (ControllerMappingSample, TimeInterval) -> Void)?
         let layout: (ControllerMappingSample, LayoutHandler)?
     }
 
@@ -126,8 +133,9 @@ final class HIDGamepadCapture: @unchecked Sendable {
             reportCount &+= 1
             let state = mapping.translate(readings.snapshot)
             let layout = layoutHandler.map { (sample(buttons: state.buttons, analog: state.analog, indexes: $0.indexes), $0) }
-            return Report(timestamp: pending.timestamp, entered: handlerEntry, buttons: state.buttons,
-                          analog: state.analog, handler: handler, layout: layout)
+            return Report(timestamp: pending.timestamp, entered: handlerEntry,
+                          sample: sample(buttons: state.buttons, analog: state.analog, indexes: streamIndexes),
+                          handler: handler, layout: layout)
         }
         guard let value else { return }
         InputTimingContext.begin(source: .rawHID, timestamp: HIDInputThread.seconds(ticks: value.timestamp),
@@ -135,7 +143,7 @@ final class HIDGamepadCapture: @unchecked Sendable {
         defer { InputTimingContext.end() }
         let timestamp = HIDInputThread.seconds(ticks: value.timestamp)
         if let (sample, layout) = value.layout { layout.receive(sample, timestamp) } else {
-            value.handler?(value.buttons, value.analog, timestamp)
+            value.handler?(value.sample, timestamp)
         }
     }
 }

@@ -18,7 +18,8 @@ struct ControllerLayoutCaptureSource {
         extras = reader.extras
         read = { reader.sample() }
         acquire = { receive in
-            let lease = ControllerLayoutInputLease(controller: controller, reader: reader, queue: .main, receive: receive)
+            let lease = ControllerLayoutInputLease(controller: controller, reader: reader, queue: .main,
+                                                    receive: receive)
             return { lease.stop() }
         }
     }
@@ -223,8 +224,9 @@ final class ControllerLayoutInputLease {
         guard active else { return }
         active = false
         delivery.valid.withLock { $0 = false }
-        input.elementValueDidChangeHandler = previousHandler
+        input.elementValueDidChangeHandler = nil
         input.queue = previousQueue
+        input.elementValueDidChangeHandler = previousHandler
         controller.extendedGamepad?.valueChangedHandler = previousGamepadHandler
     }
 }

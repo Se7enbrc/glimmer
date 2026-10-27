@@ -143,3 +143,40 @@ extension InputForwarder {
         }
     }
 }
+
+extension InputForwarder {
+    func installMappedController(_ state: AttachedController, token: UUID) {
+        guard let controller = state.controller,
+              let (reader, configuration) = controllerLayouts?.configure(state) else { return }
+        let id = ObjectIdentifier(controller)
+        let slot = state.slot
+        let routesHID = state.retainedHID
+        let mapsGameInput = configuration.plan != nil
+        ControllerStreamHandlers.install(controller: controller, input: reader.input, queue: controllerCaptureQueue,
+            mapsGameInput: mapsGameInput, shortcutElements: reader.shortcutElements(configuration),
+            read: reader.sample) { @Sendable [core = inputCore] sample, now in
+                var sample = sample
+                if routesHID {
+                    DualSenseRouting.shared.gc(controller: id, buttons: sample.buttons, at: now)
+                    sample.buttons |= MacControllerLayouts.centerButtons(for: id)
+                }
+                InputTimingContext.begin(source: .controller, timestamp: now)
+                defer { InputTimingContext.end() }
+                core.withLock {
+                    guard let registered = core.controllers[id], registered.token == token,
+                          now >= registered.registeredAt else { return }
+                    let game = mapsGameInput ? sample : reader.systemSample()
+                    core.controllers[id] = InputCore.ControllerSample(slot: slot, token: token,
+                        registeredAt: registered.registeredAt, buttons: Int32(bitPattern: game.buttons),
+                        analog: game.gamepadAnalog, extras: sample.extras)
+                    core.receive(slot: slot, buttons: Int32(bitPattern: game.buttons), analog: game.gamepadAnalog,
+                                 capturedAt: now, extras: sample.extras, physicalSample: sample)
+                    if let touch = reader.touchSample(clicked: sample.buttons & ControllerMappedButton.touchpad.rawValue != 0) {
+                        core.forwardTouchpad(slot: slot, primary: (touch.primaryX, touch.primaryY),
+                            secondary: (touch.secondaryX, touch.secondaryY), clicked: touch.clicked, now: now)
+                    }
+                    core.retainMouseTiming(slot: slot)
+                }
+            }
+    }
+}

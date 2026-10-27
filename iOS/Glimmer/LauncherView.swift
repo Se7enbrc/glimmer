@@ -102,9 +102,14 @@ struct LauncherView: View {
                 .defersSystemGestures(on: .top)
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
-            if phase == .active { controllers.start() } else { controllers.stop() }
+            controllers.update(active: phase == .active, streaming: model.hasActiveStream)
             updateAvailability()
         }
+        .onChange(of: model.hasActiveStream) { _, streaming in
+            controllers.update(active: scenePhase == .active, streaming: streaming)
+        }
+        .onAppear { controllers.update(active: scenePhase == .active, streaming: model.hasActiveStream) }
+        .onDisappear { controllers.stop() }
         .onReceive(NotificationCenter.default.publisher(
             for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
             model.availabilityChanged(active: false, background: false, protectedDataAvailable: false)

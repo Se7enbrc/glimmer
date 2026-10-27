@@ -29,6 +29,23 @@ struct ContinuationTests {
         events.continuation.finish()
     }
 
+    @Test func launcherCannotReinstallMenuHandlersWhileStreaming() throws {
+        let controller = GCController.withExtendedGamepad()
+        let button = try #require(controller.extendedGamepad?.buttonMenu)
+        let menu = LauncherMenuController(controllers: { [controller] })
+        menu.update(active: true, streaming: false)
+        #expect(button.pressedChangedHandler != nil)
+        menu.update(active: true, streaming: true)
+        #expect(button.pressedChangedHandler == nil)
+        // Foreground and hotplug refreshes must obey the same ownership gate.
+        menu.update(active: false, streaming: true)
+        menu.update(active: true, streaming: true)
+        #expect(button.pressedChangedHandler == nil)
+        menu.update(active: true, streaming: false)
+        #expect(button.pressedChangedHandler != nil)
+        menu.stop()
+    }
+
     @Test func runningTileResumesDirectlyAndQuitMenuKeepsItsNamedApproval() async throws {
         let fixture = LauncherFixture()
         fixture.runningAppID = fixture.app.id

@@ -35,6 +35,10 @@ final class ControllerMonitor {
         for observation in observations { center.removeObserver(observation) }
     }
 
+    func update(active: Bool, streaming: Bool) {
+        if active && !streaming { start() } else { stop() }
+    }
+
     func start() {
         guard observations.isEmpty else { return }
         generation += 1
