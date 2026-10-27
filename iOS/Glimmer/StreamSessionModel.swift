@@ -40,6 +40,8 @@ final class StreamSessionModel {
     private(set) var requestedStartKbps: Int?
     private(set) var mouseControllers: Set<ControllerRegistration> = []
     var controllerMouseActive: Bool { !mouseControllers.isEmpty }
+    /// The corner glyph replaces the mode notice once it has gone, for as long as mouse mode lasts.
+    var showsMouseBadge: Bool { controllerMouseActive && controllerModeMessage == nil && inputFocused }
     private(set) var controllerConnected = false
     private(set) var controllerModeMessage: String?
     private(set) var controllerModeSymbol = ControllerMouseMapping.modeSymbol(enabled: false)

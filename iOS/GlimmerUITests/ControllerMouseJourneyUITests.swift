@@ -76,6 +76,30 @@ extension ControllerJourneyUITests {
         stop(app)
     }
 
+    func testMouseModeBadgeStaysClearWithStatsAndTouchControls() throws {
+        let app = try launch()
+        try play(app)
+        try controller(connect: true, profile: "xbox")
+        for action in ["Show touch controls", "Show Stream Stats", "Use mouse mode"] {
+            try press("menu", duration: 1200)
+            let button = app.buttons[action]
+            XCTAssertTrue(button.waitForExistence(timeout: 5), action)
+            button.tap()
+        }
+        let badge = app.descendants(matching: .any)["Mouse mode on"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 5), "The glyph replaces the notice and stays")
+        record("mouse-mode-badge")
+        let others = app.buttons.allElementsBoundByIndex.filter { $0.label != "Mouse mode on" && $0.isHittable }
+        XCTAssertFalse(others.isEmpty)
+        for other in others { XCTAssertFalse(other.frame.intersects(badge.frame), other.label) }
+        try press("menu", duration: 1200)
+        app.buttons["Use gamepad mode"].tap()
+        XCTAssertTrue(app.staticTexts["Controller is back in the game."].waitForExistence(timeout: 2))
+        XCTAssertFalse(badge.exists, "Leaving mouse mode removes the glyph")
+        try controller(connect: false)
+        stop(app)
+    }
+
     private func checkMouseMotion(leftHanded: Bool) throws {
         var index = receipts().count
         let pointer = leftHanded ? "left" : "right"

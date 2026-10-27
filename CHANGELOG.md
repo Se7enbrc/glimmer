@@ -24,6 +24,10 @@
   it. Every notice over a Mac stream now uses the same glass capsule as iPhone
   and iPad, with a system material on macOS 15.
 
+- While a controller is a mouse, a small mouse badge stays in a clear corner of
+  the stream on Mac, iPhone and iPad, away from the stats, the touch controls
+  and other notices, and leaves when the controller returns to the game.
+
 - On iPhone and iPad, holding Menu opens the stream controls, and choosing mouse
   or gamepad mode there returns straight to the game. Controllers that report
   Menu only on its own button now stop the stream with the Stop shortcut too.

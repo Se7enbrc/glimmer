@@ -50,7 +50,13 @@ public final class StreamWindow {
     /// sole caller is the capture edge in StreamWindow+Windowed.swift, which
     /// full screen never reaches.
     public let captureHintBanner: StreamBanner
+    /// The glyph that stays in a clear corner while a controller is a mouse.
+    public let mouseModeBadge: StreamBanner
     var streamToastGeneration: UInt64 = 0
+    var mouseModeBadgeGeneration: UInt64 = 0
+    var scheduleMouseModeBadge: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, action in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(action) }
+    }
     let displayView: DisplayContainerView
     /// The NSView hosting the AVSampleBufferDisplayLayer. Exposed so the
     /// session can bind the FramePacer's CADisplayLink to this view's screen
@@ -333,7 +339,8 @@ public final class StreamWindow {
         let network = StreamBanner(anchor: .bottomCenter, accent: .systemYellow)
         let leaveHint = StreamBanner(anchor: .bottomCenter, accent: .white, inset: 72)
         let captureHint = StreamBanner(anchor: .bottomCenter, accent: .white, inset: 116)
-        for banner in [reconnect, network, leaveHint, captureHint] { banner.attach(to: window) }
+        let badge = StreamBanner(anchor: .corner, accent: .white)
+        for banner in [reconnect, network, leaveHint, captureHint, badge] { banner.attach(to: window) }
 
         // Install the delegate that overrides fullscreen content size so
         // the window covers the panel's notch reserve zone on notched
@@ -350,12 +357,14 @@ public final class StreamWindow {
         self.networkBanner = network
         self.leaveHintBanner = leaveHint
         self.captureHintBanner = captureHint
+        self.mouseModeBadge = badge
         self.displayView = view
         self.streamDelegate = delegate
         // Window mode: the red button / Cmd-W route through the delegate to
         // the session's stop() (StreamWindow+Windowed.swift). Wired after
         // full initialization because it captures self.
         delegate.onCloseRequested = { [weak self] in self?.handleUserCloseRequest() }
+        configureMouseModeBadge()
         delegate.onMiniPlayerExitRequested = { [weak self] in self?.leaveMiniPlayer() }
         delegate.onFullScreenSettled = { [weak self] in
             guard let self, self.pendingFirstFrameReveal else { return }

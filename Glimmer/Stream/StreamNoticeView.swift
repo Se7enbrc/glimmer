@@ -9,6 +9,8 @@ struct StreamNoticeView: View {
     var symbol: String?
     var accent: Color?
     var glass = Self.glassAvailable
+    /// A glyph-only badge (empty text) still needs a spoken name.
+    var accessibilityName: String?
 
     static var glassAvailable: Bool {
         if #available(macOS 26, iOS 26, *) { return true }
@@ -18,16 +20,20 @@ struct StreamNoticeView: View {
     var body: some View {
         surface(HStack(spacing: 8) {
             if let symbol {
+                // A glyph-only badge gets a square box so its capsule reads as a circle.
                 Image(systemName: symbol).imageScale(.medium).accessibilityHidden(true)
+                    .frame(width: text.isEmpty ? 22 : nil, height: text.isEmpty ? 22 : nil)
             } else if let accent {
                 Circle().fill(accent).frame(width: 7, height: 7).accessibilityHidden(true)
             }
-            Text(text).lineLimit(1).truncationMode(.tail)
+            if !text.isEmpty { Text(text).lineLimit(1).truncationMode(.tail) }
         }
         .font(.callout.weight(.medium))
-        .padding(.vertical, 8).padding(.horizontal, 14))
+        // A badge is a circle of the pill's height; a notice keeps the wider capsule padding.
+        .padding(.vertical, 8).padding(.horizontal, text.isEmpty ? 8 : 14))
         .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityName.map(Text.init) ?? Text(text))
     }
 
     // macOS 15 has no Liquid Glass: the same capsule gets the system material and a hairline.
@@ -39,5 +45,30 @@ struct StreamNoticeView: View {
                 .background(.regularMaterial, in: .capsule)
                 .overlay(Capsule().strokeBorder(.primary.opacity(0.12), lineWidth: 0.5))
         }
+    }
+}
+
+/// Where the persistent mouse-mode badge sits, in top-left-origin coordinates shared by both platforms.
+enum StreamModeBadgeLayout {
+    static let clearance: CGFloat = 12
+
+    /// The clear spot nearest a top corner (trailing first unless `leadingFirst`), sliding along the top and
+    /// then the bottom edge when touch controls hold the corners. Nil when nothing is clear.
+    static func frame(size: CGSize, in area: CGRect, avoiding overlays: [CGRect], inset: CGFloat = 16,
+                      leadingFirst: Bool = false) -> CGRect? {
+        let leading = area.minX + inset
+        let trailing = area.maxX - inset - size.width
+        guard trailing >= leading else { return nil }
+        let steps = stride(from: CGFloat(0), through: (trailing - leading) / 2, by: 4)
+        let xs = steps.flatMap { step in leadingFirst ? [leading + step, trailing - step] : [trailing - step, leading + step] }
+        let ys = [area.minY + inset, area.maxY - inset - size.height]
+        for y in ys {
+            for x in xs {
+                let frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
+                let padded = frame.insetBy(dx: -clearance, dy: -clearance)
+                if area.contains(frame), !overlays.contains(where: { $0.intersects(padded) }) { return frame }
+            }
+        }
+        return nil
     }
 }

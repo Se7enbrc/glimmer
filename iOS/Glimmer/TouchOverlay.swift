@@ -31,8 +31,32 @@ struct TouchOverlay: View {
                 TouchControlsButton(area: area, opacity: layout.opacity, visible: model.menuVisibility.visible,
                                     showControls: model.showControls)
             }
+            if model.showsMouseBadge, let frame = Self.badgeFrame(model: model, area: area) {
+                MouseModeBadge().position(x: frame.midX, y: frame.midY).transition(.opacity)
+            }
         }
         .onChange(of: voiceOver, initial: true) { _, enabled in model.menuVisibility.voiceOverChanged(enabled) }
+    }
+
+    static let badgeSize = CGSize(width: 40, height: 40)
+
+    /// A corner clear of the touch controls, the "…" button, the stats panel and the notices.
+    static func badgeFrame(model: StreamSessionModel, area: CGRect) -> CGRect? {
+        var obstacles = [CGRect(x: area.midX - 220, y: area.maxY - 96, width: 440, height: 96)]
+        if model.touchControlsVisible {
+            let layout = TouchLayoutStore(defaults: PersistentStorage.defaults).load(
+                pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
+            obstacles += Array(layout.frames(in: area).values)
+        }
+        if model.touchControlsVisible || model.menuVisibility.visible {
+            obstacles.append(TouchLayout.menuFrame(in: area))
+        }
+        if model.statsShown {
+            obstacles.append(StatsOverlayLayer.panelFrame(size: CGSize(width: 280, height: 200), in: area,
+                                                          corner: .persisted()).flippedVertically(in: area))
+        }
+        // A 4pt inset centres the badge on the "…" button's row.
+        return StreamModeBadgeLayout.frame(size: badgeSize, in: area, avoiding: obstacles, inset: 4)
     }
 
     static func area(_ geometry: GeometryProxy) -> CGRect {
@@ -139,5 +163,22 @@ struct TouchGamepadRepresentation: UIViewRepresentable {
         view.menuButton.showControls = showControls
         view.configure(capture: capture, layout: layout, area: area, preview: preview)
         view.mouseMode(mouseMode, bindings: ControllerLayoutsModel.shared.mouse)
+    }
+}
+
+/// The glyph that stays while a controller is a mouse; the mode notice has already spoken.
+struct MouseModeBadge: View {
+    var body: some View {
+        StreamNoticeView(text: "", symbol: ControllerMouseMapping.modeSymbol(enabled: true),
+                         accessibilityName: "Mouse mode on")
+            .frame(width: TouchOverlay.badgeSize.width, height: TouchOverlay.badgeSize.height)
+            .allowsHitTesting(false)
+    }
+}
+
+private extension CGRect {
+    // Stats panel frames use layer coordinates, origin bottom-left.
+    func flippedVertically(in area: CGRect) -> CGRect {
+        CGRect(x: minX, y: area.maxY - maxY + area.minY, width: width, height: height)
     }
 }

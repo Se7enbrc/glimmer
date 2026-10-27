@@ -11,6 +11,7 @@
 
 import AppKit
 import QuartzCore
+import SwiftUI
 import Testing
 @testable import GlimmerEngine
 @testable import Glimmer
@@ -316,5 +317,100 @@ extension StreamSession {
         let beforeAdoption = native.isHidden
         adoptVideoDecoder(decoder)
         return (beforeAdoption, native.isHidden)
+    }
+}
+
+@MainActor
+struct MouseModeBadgeTests {
+    @Test func theBadgeFollowsMouseModeAfterTheNotice() throws {
+        let stream = StreamWindow()
+        defer { stream.close() }
+        stream.leaveHintBanner.announce = { _ in }
+        var pending: [@MainActor () -> Void] = []
+        stream.scheduleMouseModeBadge = { delay, action in
+            #expect(delay == 2)
+            pending.append(action)
+        }
+        stream.showControllerMouseMode("Controller is now a mouse.", enabled: true)
+        #expect(!stream.mouseModeBadge.isVisible && stream.leaveHintBanner.isVisible)
+        pending.removeFirst()()
+        #expect(stream.mouseModeBadge.isVisible)
+        #expect(stream.mouseModeBadge.content.accessibilityName == "Mouse mode on")
+        stream.showControllerMouseMode("Controller is back in the game.", enabled: false)
+        #expect(!stream.mouseModeBadge.isVisible && stream.leaveHintBanner.isVisible)
+        // A quick off-on-off never revives a stale badge.
+        stream.showControllerMouseMode("Controller is now a mouse.", enabled: true)
+        stream.showControllerMouseMode("Controller is back in the game.", enabled: false)
+        for action in pending { action() }
+        #expect(!stream.mouseModeBadge.isVisible)
+    }
+
+    @Test(arguments: StatsOverlayCorner.allCases)
+    func theBadgeNeverCoversTheStatsOrANotice(corner: StatsOverlayCorner) throws {
+        let stream = StreamWindow()
+        defer { stream.close() }
+        stream.window.setContentSize(CGSize(width: 1280, height: 720))
+        stream.statsOverlay.corner = corner
+        for banner in [stream.leaveHintBanner, stream.networkBanner, stream.reconnectBanner] {
+            banner.announce = { _ in }
+            banner.setText("A long notice that reaches well toward both edges of the stream window")
+            banner.setVisible(true)
+        }
+        stream.mouseModeBadge.setVisible(true)
+        let height = stream.displayView.bounds.height
+        let badge = try #require(stream.mouseModeBadge.noticeFrame)
+        let flipped = CGRect(x: badge.minX, y: height - badge.maxY, width: badge.width, height: badge.height)
+        #expect(stream.mouseModeBadgeObstacles().allSatisfy { !$0.intersects(flipped) }, "\(corner)")
+    }
+
+    // Renders the real stats panel and badge over bright and dark frames on the forced macOS 15 material.
+    @Test(arguments: [false, true])
+    func badgeCaptureBesideTheStatsPanel(dark: Bool) throws {
+        let stream = StreamWindow()
+        defer { stream.close() }
+        stream.window.setContentSize(CGSize(width: 960, height: 540))
+        var snapshot = StreamStatsSnapshot()
+        snapshot.renderedFps = 119.9
+        snapshot.rttMs = 3.5
+        snapshot.measuredBitrateMbps = 46.2
+        snapshot.videoCodec = "HEVC"
+        stream.statsOverlay.update(snapshot: snapshot, enabled: StatsOverlayDefaults.minimalRows, targetFps: 120)
+        stream.statsOverlay.setVisible(true)
+        stream.statsOverlay.layoutInHost(stream.displayLayer)
+        stream.mouseModeBadge.glassAvailable = false
+        stream.mouseModeBadge.setVisible(true)
+        let badge = try #require(stream.mouseModeBadge.noticeFrame)
+        let size = stream.displayView.bounds.size
+        let context = try #require(CGContext(data: nil, width: Int(size.width) * 2, height: Int(size.height) * 2,
+            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.scaleBy(x: 2, y: 2)
+        let colors = dark
+            ? [CGColor(red: 0.05, green: 0.06, blue: 0.12, alpha: 1), CGColor(red: 0.18, green: 0.12, blue: 0.22, alpha: 1)]
+            : [CGColor(red: 0.62, green: 0.82, blue: 0.98, alpha: 1), CGColor(red: 0.98, green: 0.93, blue: 0.80, alpha: 1)]
+        let gradient = try #require(CGGradient(colorsSpace: nil, colors: colors as CFArray, locations: [0, 1]))
+        context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: size.width, y: size.height), options: [])
+        let stats = stream.statsOverlay.layer
+        context.saveGState()
+        context.translateBy(x: stats.frame.minX, y: stats.frame.minY)
+        stats.render(in: context)
+        context.restoreGState()
+        let host = NSHostingView(rootView: stream.mouseModeBadge.content)
+        let holder = NSWindow(contentRect: CGRect(origin: .zero, size: badge.size), styleMask: .borderless,
+                              backing: .buffered, defer: false)
+        holder.isReleasedWhenClosed = false
+        holder.isOpaque = false
+        holder.backgroundColor = .clear
+        holder.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        holder.contentView = host
+        defer { holder.close() }
+        host.frame = CGRect(origin: .zero, size: badge.size)
+        let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: rep)
+        if let image = rep.cgImage { context.draw(image, in: badge) }
+        let composed = try #require(context.makeImage())
+        let data = try #require(NSBitmapImageRep(cgImage: composed).representation(using: .png, properties: [:]))
+        #expect(!stats.frame.intersects(badge.insetBy(dx: -8, dy: -8)))
+        Attachment.record(data, named: "mac-badge-macos15-\(dark ? "dark" : "light").png")
     }
 }

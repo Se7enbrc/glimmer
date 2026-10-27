@@ -13,6 +13,8 @@ import SwiftUI
 public enum StreamBannerAnchor {
     case topCenter
     case bottomCenter
+    /// A corner chosen by `StreamModeBadgeLayout`, clear of `StreamBanner.avoiding`.
+    case corner
 }
 
 @MainActor
@@ -30,6 +32,7 @@ public final class StreamBanner {
     private weak var parent: NSWindow?
     private var panel: NSPanel?
     private var resizeObservation: NSObjectProtocol?
+    private var cornerPlaced = true
 
     /// Appended after the notice has been up `lingerDelay` seconds, so a stuck stream says how to leave it.
     var lingerHint: (@MainActor () -> String)?
@@ -41,6 +44,11 @@ public final class StreamBanner {
     var announce: @MainActor (String) -> Void = { AccessibilityNotification.Announcement($0).post() }
     /// Liquid Glass on macOS 26; tests and captures force the macOS 15 material path.
     var glassAvailable = StreamNoticeView.glassAvailable
+    /// Overlays a corner badge must clear, in top-left-origin content coordinates.
+    var avoiding: @MainActor () -> [CGRect] = { [] }
+    var accessibilityName: String?
+    /// Runs after this notice appears or finishes leaving, so a corner badge can move clear of it.
+    var presenceChanged: (@MainActor () -> Void)?
 
     public init(anchor: StreamBannerAnchor, accent: NSColor, inset: CGFloat = 28) {
         self.anchor = anchor
@@ -65,7 +73,7 @@ public final class StreamBanner {
     /// The SwiftUI content the notice shows, the same view iPhone and iPad use.
     var content: StreamNoticeView {
         StreamNoticeView(text: displayedText, symbol: symbol, accent: symbol == nil ? accent : nil,
-                         glass: glassAvailable)
+                         glass: glassAvailable, accessibilityName: accessibilityName)
     }
 
     /// No-op if unchanged so a per-tick caller doesn't re-flow every frame.
@@ -110,11 +118,12 @@ public final class StreamBanner {
         (panel.contentView as? NSHostingView<StreamNoticeView>)?.rootView = content
         layout()
         // An offscreen stream window (tests, captures) lays the notice out without putting it on screen.
-        if parent.isVisible, panel.parent == nil { parent.addChildWindow(panel, ordered: .above) }
+        if anchor != .corner, parent.isVisible, panel.parent == nil { parent.addChildWindow(panel, ordered: .above) }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = Motion.short
             panel.animator().alphaValue = 1
         }
+        presenceChanged?()
         resizeObservation = resizeObservation ?? NotificationCenter.default.addObserver(
             forName: NSWindow.didResizeNotification, object: parent, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.layout() }
@@ -136,6 +145,7 @@ public final class StreamBanner {
                 panel.parent?.removeChildWindow(panel)
                 panel.orderOut(nil)
                 self.panel = nil
+                self.presenceChanged?()
             }
         }
     }
@@ -154,12 +164,16 @@ public final class StreamBanner {
         return panel
     }
 
+    /// Moves a visible notice clear of overlays that appeared since it was laid out.
+    func relayout() { if visible { layout() } }
+
     /// Centres the notice on the anchored edge, never wider than the window less 16pt each side.
     private func layout() {
         guard let parent, let panel, let host = panel.contentView as? NSHostingView<StreamNoticeView> else { return }
         let frame = parent.contentLayoutRect.offsetBy(dx: parent.frame.minX, dy: parent.frame.minY)
         let margin = Self.shadowMargin
         let fitting = host.fittingSize
+        if anchor == .corner { return layoutCorner(size: fitting, content: frame) }
         let width = min(fitting.width + margin * 2, max(0, frame.width - 32 + margin * 2))
         let height = fitting.height + margin * 2
         let x = frame.midX - width / 2
@@ -168,11 +182,31 @@ public final class StreamBanner {
         case .topCenter:
             let notch = parent.screen?.safeAreaInsets.top ?? 0
             y = frame.maxY - max(inset, notch + 8) - height + margin
-        case .bottomCenter:
+        case .bottomCenter, .corner:
             y = frame.minY + inset - margin
         }
         host.frame = CGRect(x: 0, y: 0, width: width, height: height)
         panel.setFrame(CGRect(x: x, y: y, width: width, height: height), display: true)
+    }
+
+    // A badge with no clear corner stays hidden rather than cover another overlay.
+    private func layoutCorner(size: CGSize, content: CGRect) {
+        guard let parent, let panel, let host = panel.contentView as? NSHostingView<StreamNoticeView> else { return }
+        let notch = parent.screen.map { content.maxY >= $0.frame.maxY ? $0.safeAreaInsets.top : 0 } ?? 0
+        let area = CGRect(x: 0, y: notch, width: content.width, height: max(0, content.height - notch))
+        guard let badge = StreamModeBadgeLayout.frame(size: size, in: area, avoiding: avoiding()) else {
+            cornerPlaced = false
+            panel.parent?.removeChildWindow(panel)
+            panel.orderOut(nil)
+            return
+        }
+        cornerPlaced = true
+        let margin = Self.shadowMargin
+        let screen = CGRect(x: content.minX + badge.minX, y: content.maxY - badge.maxY, width: badge.width,
+                            height: badge.height).insetBy(dx: -margin, dy: -margin)
+        host.frame = CGRect(origin: .zero, size: screen.size)
+        panel.setFrame(screen, display: true)
+        if parent.isVisible, panel.parent == nil { parent.addChildWindow(panel, ordered: .above) }
     }
 
     /// Room for the notice's shadow inside its transparent window.
@@ -180,7 +214,7 @@ public final class StreamBanner {
 
     /// The capsule's frame in the stream window's content coordinates, while a notice window exists.
     var noticeFrame: CGRect? {
-        guard let panel, let parent else { return nil }
+        guard let panel, let parent, cornerPlaced else { return nil }
         let content = parent.contentLayoutRect.offsetBy(dx: parent.frame.minX, dy: parent.frame.minY)
         return panel.frame.insetBy(dx: Self.shadowMargin, dy: Self.shadowMargin)
             .offsetBy(dx: -content.minX, dy: -content.minY)
