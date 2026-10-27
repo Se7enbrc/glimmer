@@ -62,10 +62,13 @@ window's pixel size as its target and chooses the closest mode listed in
 `docs/vdd/iphone-ipad.xml`. 1080p requests 1920 × 1080. All requests respect the
 display's refresh limit and share the same codec, HDR and quality rules. A
 connected external display can show the picture while the device keeps the
-controls. Both support physical controllers. Disconnecting quits the game on the
-PC by default. “Leave games running when you disconnect” enables continuation
-for games and PCs that handle a screen-size change. Running games offer Resume
-or Continue here and an explicit Quit action on both platforms.
+controls. Both support physical controllers, hardware keyboards, mice and
+trackpads. Controller mouse mode uses the Mac's stick and button mapping. Stream
+from PC, Stop Streaming and Quit App on PC are available in Shortcuts; launch
+and stop links use the same format as the Mac. Disconnecting quits the game on
+the PC by default. “Leave games running when you disconnect” enables
+continuation for games and PCs that handle a screen-size change. Running games
+offer Resume or Continue here and an explicit Quit action on both platforms.
 
 Video fills the window, cropping edges when the aspect changes. Once a window
 resize settles, the stream moves to the new window's listed mode through a

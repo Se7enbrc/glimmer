@@ -322,6 +322,13 @@ through. Physical keys use positional scancodes with `0x8000`. Command stays
 local by default; forwarding applies only fullscreen or captured. Hotkeys
 precede that gate.
 
+On iOS, GameController keyboard and mouse callbacks run on a dedicated serial
+queue. Native focus and device changes retire callbacks before releasing held
+input. Both adapters use the engine's physical key map and release ledger; UIKit
+retains local shortcuts and requests scene pointer lock only during play.
+Opening stream controls releases capture, including when video is on an external
+display.
+
 ### Release ledger and text
 
 Keep failed releases pending before allowing new presses or text.

@@ -43,7 +43,7 @@ extension InputForwarder {
         guard let key = physicalKeys.removeValue(forKey: physical) else { return }
         heldKeys.remove(key)
         missingPhysicalKeys.remove(physical)
-        releases.release(.key(key), modifiers: modifiers)
+        inputCore.releaseKey(key, modifiers: modifiers)
         flushPendingReleases()
     }
 

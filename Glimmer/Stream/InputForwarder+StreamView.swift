@@ -109,15 +109,8 @@ extension InputForwarder: StreamInputViewDelegate {
         }
         if modifiersNeedResync, !syncModifiers(to: event.modifierFlags) { return }
         guard physicalKeys[event.keyCode] == nil else { return }
+        guard inputCore.pressKey(key, modifiers: Int8(bitPattern: modifierByte(from: mods))) else { return }
         physicalKeys[event.keyCode] = key
-        releases.hold(.key(key))
-        let rc = backend?.sendKeyboard(
-            keyCode: key.wireCode,
-            action: Int8(StreamProtocol.KEY_ACTION_DOWN),
-            modifiers: Int8(bitPattern: modifierByte(from: mods)),
-            flags: key.flags
-        ) ?? -2
-        record("LiSendKeyboardEvent2(down)", rc)
         heldKeys.insert(key)
         updateReconciliationTimer()
     }

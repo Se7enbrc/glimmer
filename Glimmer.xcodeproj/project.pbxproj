@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		CEAB7AF24D024627A8D4BB78 /* GlimmerCommandURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */; };
+		8989D451DBCF4948B25421E6 /* StreamKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */; };
+		A3BD7B1A7DF94D61957AC2EB /* StreamInput+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5803B42776646209AB7B6BC /* StreamInput+Keyboard.swift */; };
+		96A8BBD1D3E441BB84A99A39 /* PhysicalKeyboardMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = B44C0173AE6D411580CB5DD4 /* PhysicalKeyboardMap.swift */; };
 		651BC5F366B4467696D49881 /* HostAddressRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21B1572525E486591449527 /* HostAddressRecoveryTests.swift */; };
 		CE6406B783AD4C12A954E343 /* HostAddressRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */; };
 		E02000000000000000000002 /* PersistentStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02000000000000000000001 /* PersistentStorage.swift */; };
@@ -828,6 +831,9 @@
 
 /* Begin PBXFileReference section */
 		19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/GlimmerCommandURL.swift"; sourceTree = SOURCE_ROOT; };
+		B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamKeyboardTests.swift; sourceTree = "<group>"; };
+		A5803B42776646209AB7B6BC /* StreamInput+Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/StreamInput+Keyboard.swift"; sourceTree = SOURCE_ROOT; };
+		B44C0173AE6D411580CB5DD4 /* PhysicalKeyboardMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/PhysicalKeyboardMap.swift"; sourceTree = SOURCE_ROOT; };
 		F21B1572525E486591449527 /* HostAddressRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostAddressRecoveryTests.swift"; sourceTree = "<group>"; };
 		DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/HostAddressRecovery.swift"; sourceTree = SOURCE_ROOT; };
 		E02000000000000000000001 /* PersistentStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/PersistentStorage.swift; sourceTree = "<group>"; };
@@ -2061,6 +2067,7 @@
 				6A0C06102026101000000004 /* EnetControlLoopTests.swift */,
 				6A0C06102026101000000002 /* EnetControlInboundTests.swift */,
 				21C273D96FC84878A5D36D98 /* InputCoreTests.swift */,
+				B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */,
 				495E63BB12264898A2E14C16 /* StreamInputChordEdgeTests.swift */,
 				A94F72CE390A4492A80CBC69 /* SessionHostDispositionTests.swift */,
 				48520FACFC0E4646AEB1A004 /* SessionContinuationTests.swift */,
@@ -2245,6 +2252,7 @@
 				D1B00003 /* BitrateDownshiftController.swift */,
 				F0B52A28D21944389B72F67E /* StreamInput+Values.swift */,
 				0E8506F94D144550AF8AA2E0 /* StreamInput+Pointer.swift */,
+				A5803B42776646209AB7B6BC /* StreamInput+Keyboard.swift */,
 				0CF4EBEEDF0140568600D373 /* StreamInput+Chord.swift */,
 				0FEBC0FFDDD44133A11DA500 /* InputCore+Touchpad.swift */,
 				62AC3EB39E6045B88C0844A4 /* InputCore+Pointer.swift */,
@@ -2381,6 +2389,7 @@
 				19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */,
 				18473C03B5D940B9BC3CA2AA /* StreamRequest.swift */,
 				C2A6490A4BF841A6926E8139 /* VKScanCode.swift */,
+				B44C0173AE6D411580CB5DD4 /* PhysicalKeyboardMap.swift */,
 				88F1DC9482A344A691EB712D /* ProcessThermalState.swift */,
 				6F5EEA2C0DF34DF3BD0B3BA9 /* TelemetryCapture.swift */,
 				5C1616CAD9D742D2AE4A13B1 /* LinkGateDecision.swift */,
@@ -2995,6 +3004,7 @@
 				6A0C06102026101000000003 /* EnetControlLoopTests.swift in Sources */,
 				6A0C06102026101000000001 /* EnetControlInboundTests.swift in Sources */,
 				FC0BF6D54C37471FB74A1E5E /* InputCoreTests.swift in Sources */,
+				8989D451DBCF4948B25421E6 /* StreamKeyboardTests.swift in Sources */,
 				D218BE89D58F4B61A16B6530 /* StreamInputChordEdgeTests.swift in Sources */,
 				21B30BD95DBE473A9BE2CC35 /* SessionHostDispositionTests.swift in Sources */,
 				58E68087D1C647789143820A /* SessionContinuationTests.swift in Sources */,
@@ -3178,6 +3188,7 @@
 				D1B00004 /* BitrateDownshiftController.swift in Sources */,
 				C50A55E3689F4353AD0C302E /* StreamInput+Values.swift in Sources */,
 				79C6D2C343B84364A310913D /* StreamInput+Pointer.swift in Sources */,
+				A3BD7B1A7DF94D61957AC2EB /* StreamInput+Keyboard.swift in Sources */,
 				DC6C4EFE1C0A460CB5C22120 /* StreamInput+Chord.swift in Sources */,
 				5917CF91FE8F4FDE957C6480 /* InputCore+Touchpad.swift in Sources */,
 				3CD0C9433D864ACEABD70FD5 /* InputCore+Pointer.swift in Sources */,
@@ -3314,6 +3325,7 @@
 				CEAB7AF24D024627A8D4BB78 /* GlimmerCommandURL.swift in Sources */,
 				227254F4AB8A45BA94D2F158 /* StreamRequest.swift in Sources */,
 				7A51BDEA113A4AC3BC826DE8 /* VKScanCode.swift in Sources */,
+				96A8BBD1D3E441BB84A99A39 /* PhysicalKeyboardMap.swift in Sources */,
 				3FEEF5AF74D64A53A74FC5B2 /* ProcessThermalState.swift in Sources */,
 				92172A2F8BEF4C5281EC88F1 /* TelemetryCapture.swift in Sources */,
 				FD7E927EF1674C9185E7BE26 /* LinkGateDecision.swift in Sources */,

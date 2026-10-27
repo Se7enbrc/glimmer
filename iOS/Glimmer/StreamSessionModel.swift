@@ -47,18 +47,22 @@ final class StreamSessionModel {
     private(set) var canStart = true
     private(set) var controlsVisible = true
     private(set) var externalDisplayActive = false
+    private(set) var hardwareInputConnected = false
+    var hasGameInput: Bool { controllerConnected || hardwareInputConnected || touchGeometryUsable }
     var inputCaptureChanged: ((Bool) -> Void)?
     var presentationEnded: (() -> Void)?
     var inputFocused: Bool {
         canStart && phase == .streaming && !controlsVisible && !captureSuspended
-            && (controllerConnected || touchGeometryUsable)
+            && hasGameInput
     }
     var streamInput: StreamInput? { playback?.input }
     var touchGamepad: TouchGamepadCapture? { playback?.touchGamepad }
     var editingTouchControls = false
     private(set) var touchGeometryUsable = true
     private(set) var touchControlsRequested = false
-    var touchControlsVisible: Bool { inputFocused && (!controllerConnected || touchControlsRequested) }
+    var touchControlsVisible: Bool {
+        inputFocused && ((!controllerConnected && !hardwareInputConnected) || touchControlsRequested)
+    }
     var touchMouseActive: Bool {
         guard let registration = touchGamepad?.registration else { return false }
         return mouseControllers.contains(registration)
@@ -270,28 +274,37 @@ final class StreamSessionModel {
     func touchGeometryChanged(usable: Bool) {
         guard touchGeometryUsable != usable else { return }
         touchGeometryUsable = usable
-        if phase == .streaming, !controllerConnected, !controlsRequested { controlsVisible = !usable }
+        if phase == .streaming, !controllerConnected, !hardwareInputConnected, !controlsRequested {
+            controlsVisible = !usable
+        }
         synchronizeInputFocus()
     }
 
     func resumeInput() {
-        guard canStart, phase == .streaming, controllerConnected || touchGeometryUsable else { return }
+        guard canStart, phase == .streaming, hasGameInput else { return }
         controlsRequested = false
         controlsVisible = false
         synchronizeInputFocus()
     }
 
     func toggleTouchControls() {
-        guard controllerConnected, phase == .streaming else { return }
+        guard controllerConnected || hardwareInputConnected, phase == .streaming else { return }
         touchControlsRequested.toggle()
         playback?.showTouchControls?(touchControlsRequested)
+    }
+
+    func hardwareConnectionChanged(_ connected: Bool) {
+        guard !phase.isEnded, hardwareInputConnected != connected else { return }
+        hardwareInputConnected = connected
+        if phase == .streaming, !controlsRequested { controlsVisible = !hasGameInput }
+        synchronizeInputFocus()
     }
 
     private func controllerConnectionChanged(_ connected: Bool) {
         guard !phase.isEnded, controllerConnected != connected else { return }
         controllerConnected = connected
         if phase == .streaming, !controlsRequested { controlsVisible = false }
-        if !connected, !touchGeometryUsable { controlsVisible = true }
+        if !connected, !hardwareInputConnected, !touchGeometryUsable { controlsVisible = true }
         synchronizeInputFocus()
     }
 

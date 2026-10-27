@@ -11,13 +11,13 @@ extension StreamViewController {
         let controls = UIKeyCommand(title: "Show controls", action: #selector(showStreamControls),
                                     input: "/", modifierFlags: .control)
         controls.wantsPriorityOverSystemBehavior = true
-        return [controls] + StreamShortcuts.Action.allCases.map { action in
+        return StreamShortcuts.Action.allCases.map { action in
             let chord = model.shortcuts.chord(for: action)
             let command = UIKeyCommand(title: action.title, action: #selector(streamShortcut),
                                        input: chord.keyChar, modifierFlags: chord.modifiers)
             command.wantsPriorityOverSystemBehavior = true
             return command
-        }
+        } + [controls]
     }
 
     @objc func showStreamControls() { model.showControls() }
@@ -34,8 +34,9 @@ extension StreamViewController {
                 model.showControls()
                 return false
             }
-            return !model.shortcuts.handle(input: key.charactersIgnoringModifiers, modifiers: key.modifierFlags,
-                                           perform: model.performShortcut)
+            if model.shortcuts.handle(input: key.charactersIgnoringModifiers, modifiers: key.modifierFlags,
+                                      perform: model.performShortcut) { return false }
+            return !model.inputFocused
         }
         if !remaining.isEmpty { super.pressesBegan(remaining, with: event) }
     }
@@ -44,13 +45,14 @@ extension StreamViewController {
         let remaining = presses.filter { press in
             guard let key = press.key else { return true }
             if key.charactersIgnoringModifiers == "/", key.modifierFlags == .control { return false }
-            return !model.shortcuts.release(input: key.charactersIgnoringModifiers)
+            return !model.shortcuts.release(input: key.charactersIgnoringModifiers) && !model.inputFocused
         }
         if !remaining.isEmpty { super.pressesEnded(remaining, with: event) }
     }
 
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         model.shortcuts.reset()
+        model.streamInput?.releaseKeyboardAndPointer()
         super.pressesCancelled(presses, with: event)
     }
 }

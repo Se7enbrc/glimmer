@@ -31,6 +31,7 @@ final class StreamViewController: GCEventViewController {
     private let overlay: UIHostingController<StreamControls>
     private let outputs: StreamOutputCoordinator
     private(set) var touchCapture: StreamTouchCapture?
+    private var keyboardMouseCapture: IOSKeyboardMouseCapture?
     private weak var presentationWindow: UIWindow?
 
     init(model: StreamSessionModel, close: @escaping () -> Void, outputs: StreamOutputCoordinator = .shared) {
@@ -45,6 +46,9 @@ final class StreamViewController: GCEventViewController {
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         AppDelegate.streamOrientations(for: traitCollection.userInterfaceIdiom)
+    }
+    override var prefersPointerLocked: Bool {
+        model.inputFocused && viewIfLoaded?.window?.isKeyWindow == true
     }
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
@@ -67,6 +71,9 @@ final class StreamViewController: GCEventViewController {
         view.addSubview(overlay.view)
         overlay.didMove(toParent: self)
         installInputCapture()
+        for name in [UIWindow.didBecomeKeyNotification, UIWindow.didResignKeyNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(windowKeyChanged), name: name, object: nil)
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -80,6 +87,7 @@ final class StreamViewController: GCEventViewController {
         updateOrientation()
         startWhenReady()
         becomeFirstResponder()
+        updateHardwareCapture()
     }
 
     override func viewDidLayoutSubviews() {
@@ -136,11 +144,32 @@ final class StreamViewController: GCEventViewController {
         model.inputCaptureChanged = { [weak self] focused in
             self?.touchCapture?.setEnabled(focused, mouseEnabled: self?.model.launch.touchMouseEnabled ?? true)
             self?.controllerUserInteractionEnabled = !focused
+            self?.updateHardwareCapture()
         }
         surface.accessibilityCustomActions = [UIAccessibilityCustomAction(name: "Show controls") { [weak model] _ in
             model?.showControls()
             return true
         }]
+    }
+
+    @objc private func windowKeyChanged(_ notification: Notification) {
+        guard notification.object as? UIWindow === viewIfLoaded?.window else { return }
+        updateHardwareCapture()
+    }
+
+    private func updateHardwareCapture() {
+        if model.phase.isEnded || model.phase == .stopping {
+            keyboardMouseCapture?.stop()
+            keyboardMouseCapture = nil
+        } else if keyboardMouseCapture == nil, let input = model.streamInput {
+            let capture = IOSKeyboardMouseCapture(input: input, quit: model.shortcuts.quit,
+                                                  stats: model.shortcuts.stats)
+            keyboardMouseCapture = capture
+            capture.connected = { [weak model] in model?.hardwareConnectionChanged($0) }
+            capture.start()
+        }
+        keyboardMouseCapture?.setFocused(model.inputFocused && viewIfLoaded?.window?.isKeyWindow == true)
+        setNeedsUpdateOfPrefersPointerLocked()
     }
 
     private func pointerMotion(_ delta: CGPoint) -> CGPoint {
@@ -206,7 +235,7 @@ struct StreamControls: View {
     private var statusPane: some View {
         ZStack {
             if !model.editingTouchControls {
-                if model.phase == .streaming, !model.controllerConnected, !model.touchGeometryUsable {
+                if model.phase == .streaming, !model.hasGameInput {
                     ScrollView {
                         Text("Make this window larger to use touch controls.")
                             .multilineTextAlignment(.center).padding()
@@ -250,7 +279,7 @@ struct StreamControls: View {
         .background {
             if colorScheme == .light, !model.editingTouchControls,
                model.controlsVisible || model.phase != .streaming
-                || (!model.controllerConnected && !model.touchGeometryUsable) {
+                || !model.hasGameInput {
                 Rectangle().fill(.regularMaterial).ignoresSafeArea()
             }
         }
@@ -284,7 +313,7 @@ struct StreamControls: View {
                 HStack { controlActions }.labelStyle(.iconOnly)
                 VStack(alignment: .trailing) { controlActions }
             }
-            if model.phase == .streaming, model.controllerConnected {
+            if model.phase == .streaming, model.controllerConnected || model.hardwareInputConnected {
                 if model.menuController != nil {
                     Button(model.menuControllerUsesMouse ? "Use gamepad mode" : "Use mouse mode",
                            systemImage: "computermouse", action: model.toggleControllerMouseMode)
@@ -310,8 +339,8 @@ struct StreamControls: View {
             Button("Close menu", systemImage: "xmark", action: model.resumeInput)
                 .labelStyle(.iconOnly)
                 .buttonStyle(.glass)
-                .disabled(!model.controllerConnected && !model.touchGeometryUsable)
-                .accessibilityHint("Returns controller and touch input to the PC.")
+                .disabled(!model.hasGameInput)
+                .accessibilityHint("Returns game input to the PC.")
         }
         Button(model.phase.isEnded ? "Done" : "Disconnect") {
             if model.phase.isEnded { close() } else { model.disconnect() }

@@ -4,6 +4,9 @@
 
 ### Features
 
+- Play on iPhone and iPad with a hardware keyboard, mouse or trackpad. Opening
+  stream controls releases the pointer, and Glimmer's shortcuts stay local.
+
 - Controller mouse mode now uses the same controls on Mac, iPhone and iPad: left
   stick to move, right stick to scroll, and A, B and X to click.
 
