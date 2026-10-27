@@ -68,13 +68,14 @@ it from a test like the existing suites.
 Reviewed against 2026.10.7 on 2026-10-27. Each row is recorded as `accepted`
 output in the vectors.
 
-| Cases                                                         | Difference and reason                                                                                                                     |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `video/{h264,hevc}-{scan,idr}-{leading-zeros,long-start}`     | Zero bytes before the first start code are legal Annex B. 2026.10.7 dropped the IDR; now it decodes.                                      |
-| `video/{h264,hevc}-{scan,idr}-forbidden-bit`                  | A NAL header with forbidden_zero_bit set is illegal and no longer counts as IDR evidence.                                                 |
-| `video/h264-{scan,idr}-h264-nonref-sps`                       | H.264 requires nal_ref_idc above 0 on an SPS; nal_ref_idc 0 is rejected.                                                                  |
-| `video/hevc-{scan,idr}-hevc-tid0`                             | HEVC nuh_temporal_id_plus1 of 0 is illegal and rejected.                                                                                  |
-| `audio/pack-stereo-code2-lossy`                               | A loss is concealed for the negotiated packet interval, not the last frame, keeping the stream cadence.                                   |
-| `grid/apps-{5,6,9,30}*`                                       | The overflow control reads “N more apps” instead of “N more”; its tooltip and chevron were dropped.                                       |
-| `video/{h264,hevc}-split-at-{1,3,4}`                          | An IDR whose first payload ends inside its start code or NAL header is judged on the whole access unit and decoded. 2026.10.7 dropped it. |
-| `video/{h264,hevc}-idr-{only-zeros,header-cut,metadata-only}` | A complete access unit with no IDR evidence requests an IDR instead of being dropped silently.                                            |
+| Cases                                                         | Difference and reason                                                                                                                                    |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `video/{h264,hevc}-{scan,idr}-{leading-zeros,long-start}`     | Zero bytes before the first start code are legal Annex B. 2026.10.7 dropped the IDR; now it decodes.                                                     |
+| `video/{h264,hevc}-{scan,idr}-forbidden-bit`                  | A NAL header with forbidden_zero_bit set is illegal and no longer counts as IDR evidence.                                                                |
+| `video/h264-{scan,idr}-h264-nonref-sps`                       | H.264 requires nal_ref_idc above 0 on an SPS; nal_ref_idc 0 is rejected.                                                                                 |
+| `video/hevc-{scan,idr}-hevc-tid0`                             | HEVC nuh_temporal_id_plus1 of 0 is illegal and rejected.                                                                                                 |
+| `audio/pack-stereo-code2-lossy`                               | A loss is concealed for the negotiated packet interval, not the last frame, keeping the stream cadence.                                                  |
+| `grid/apps-{5,6,9,30}*`                                       | The overflow control reads “N more apps” instead of “N more”; its tooltip and chevron were dropped.                                                      |
+| `video/{h264,hevc}-split-at-{1,3,4}`                          | An IDR whose first payload ends inside its start code or NAL header is judged on the whole access unit and decoded. 2026.10.7 dropped it.                |
+| `video/{h264,hevc}-idr-{only-zeros,header-cut,metadata-only}` | A complete access unit with no IDR evidence requests an IDR instead of being dropped silently.                                                           |
+| `audio/rate-{16000,24000}`                                    | Below 48 kHz the first packet drops the decoder's 2.5 ms delay as it does at 48 kHz. 2026.10.7 kept part of the ramp-in. Sunshine always streams 48 kHz. |
