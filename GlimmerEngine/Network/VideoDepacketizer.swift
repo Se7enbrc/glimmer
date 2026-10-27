@@ -59,6 +59,7 @@ final class VideoDepacketizer {
     private var lastPacketInStream: UInt32 = .max
     private var decodingFrame = false
     var waitingForIdrFrame = true
+    private var idrDecisionPending = false
     // RFI recovery state (VideoDepacketizer.c file-scope statics). The client
     // RFI accept-path is always armed (strictIdrFrameWait=false): after the
     // first IDR is processed, a loss is recovered with a host post-invalidation
@@ -204,13 +205,15 @@ final class VideoDepacketizer {
                     return
                 }
             }
-        } else if firstPacket && Self.isIdrFrameStart(payload, hevc: isHEVC) {
+        } else if firstPacket {
             // H.264/HEVC: the NALs decide IDR, not the header's type byte, which
             // moonlight-common-c trusts only for AV1 (c:861-868). No last-packet cut:
             // Annex-B tolerates the FEC zero padding.
-            frameType = Self.FRAME_TYPE_IDR
-            waitingForIdrFrame = false
-            waitingForNextSuccessfulFrame = false
+            switch Self.idrEvidence(payload, hevc: isHEVC) {
+            case true?: acceptIdrFrame()
+            case nil: idrDecisionPending = true
+            case false?: break
+            }
         }
         payload.withUnsafeBytes { nalChain.append(contentsOf: $0) }
         guard nalChain.count <= Self.maxFrameBytes else {
@@ -253,6 +256,7 @@ final class VideoDepacketizer {
 
         decodingFrame = true
         frameType = Self.FRAME_TYPE_PFRAME
+        idrDecisionPending = false
         nalChain.reserveCapacity(lastFrameBytes + lastFrameBytes / 4)
         firstPacketReceiveTimeUs = pkt.receiveTimeUs
 
@@ -273,6 +277,15 @@ final class VideoDepacketizer {
     private func finishFrame(pkt: CompletedPacket, frameIndex: UInt32) {
         decodingFrame = false
         nextFrameNumber = frameIndex &+ 1
+        if idrDecisionPending {
+            // The first payload ended before the IDR evidence; the whole access unit settles it.
+            idrDecisionPending = false
+            switch Self.idrEvidence(nalChain, hevc: isHEVC) {
+            case true?: acceptIdrFrame()
+            case nil where waitingForIdrFrame: waitingForNextSuccessfulFrame = true
+            default: break
+            }
+        }
 
         // Recovery-gate (c:1078-1100). parseFrameHeader already cleared
         // waitingForIdrFrame on a type-2 IDR and waitingForRefInvalFrame on
@@ -442,8 +455,15 @@ final class VideoDepacketizer {
     /// either a fresh IDR (non-RFI / never-seen-IDR / explicit-IDR-wait) or an
     /// RFI recovery frame, and force-requests an IDR after CONSECUTIVE_DROP_LIMIT
     /// sustained drops as a catch-all backstop.
+    private func acceptIdrFrame() {
+        frameType = Self.FRAME_TYPE_IDR
+        waitingForIdrFrame = false
+        waitingForNextSuccessfulFrame = false
+    }
+
     private func dropFrameState() {
         nalChain = Data()
+        idrDecisionPending = false
         frameHostProcessingLatency = 0
         decodingFrame = false
 
