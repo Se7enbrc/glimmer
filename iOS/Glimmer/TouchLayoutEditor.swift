@@ -93,6 +93,7 @@ struct TouchLayoutEditor: View {
                 }
                 // A narrow panel drops the title rather than spend a second row on it.
                 HStack { cancelButton; Spacer(minLength: 8); doneButton }
+                VStack(spacing: 8) { doneButton; cancelButton }
             }
             .padding(12)
             ScrollView {
@@ -101,12 +102,9 @@ struct TouchLayoutEditor: View {
                     if textSize.isAccessibilitySize { actions }
                     if let selected {
                         VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(selected.name).font(.subheadline.weight(.semibold))
-                                    .accessibilityAddTraits(.isHeader)
-                                Spacer()
-                                Button("Hide") { hide(selected) }.buttonStyle(.bordered).controlSize(.large)
-                                    .accessibilityIdentifier("touch-editor-hide")
+                            ViewThatFits(in: .horizontal) {
+                                HStack { selectedName(selected); Spacer(); hideButton(selected) }
+                                VStack(alignment: .leading) { selectedName(selected); hideButton(selected) }
                             }
                             sizeControl
                             if selected.isTrigger {
@@ -121,6 +119,8 @@ struct TouchLayoutEditor: View {
                     }
                     if selected == nil {
                         Text("Select a control to move or resize it.").font(.callout).foregroundStyle(.secondary)
+                    } else if !textSize.isAccessibilitySize {
+                        actions
                     }
                 }.padding(.horizontal, 16).padding(.bottom, 8)
             }
@@ -129,11 +129,23 @@ struct TouchLayoutEditor: View {
             .scrollEdgeEffectStyle(.hard, for: .bottom)
             .accessibilityIdentifier("touch-editor-inspector")
             .safeAreaBar(edge: .bottom, spacing: 0) {
-                if !textSize.isAccessibilitySize { actions.padding(.horizontal, 8).padding(.vertical, 12) }
+                // While a control is selected its settings get the room; the actions follow them.
+                if !textSize.isAccessibilitySize && selected == nil {
+                    actions.padding(.horizontal, 8).padding(.vertical, 12)
+                }
             }
         }
         .background(.regularMaterial, in: .rect(cornerRadius: 24))
         .tint(.primary)
+    }
+
+    private func selectedName(_ element: TouchElement) -> some View {
+        Text(element.name).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
+    }
+
+    private func hideButton(_ element: TouchElement) -> some View {
+        Button("Hide") { hide(element) }.buttonStyle(.bordered).controlSize(.large)
+            .accessibilityIdentifier("touch-editor-hide")
     }
 
     private var actions: some View {
@@ -154,12 +166,12 @@ struct TouchLayoutEditor: View {
     }
 
     private var cancelButton: some View {
-        Button("Cancel", action: close).buttonStyle(.bordered).controlSize(.large)
+        Button("Cancel", action: close).lineLimit(1).fixedSize().buttonStyle(.bordered).controlSize(.large)
             .accessibilityIdentifier("touch-editor-cancel")
     }
 
     private var doneButton: some View {
-        Button("Done", action: save).fontWeight(.semibold).foregroundStyle(.background)
+        Button("Done", action: save).lineLimit(1).fixedSize().fontWeight(.semibold).foregroundStyle(.background)
             .buttonStyle(.borderedProminent).controlSize(.large)
             .accessibilityIdentifier("touch-editor-done")
     }
@@ -195,9 +207,11 @@ struct TouchLayoutEditor: View {
         // Dock between the controls so every one stays tappable while the panel is open.
         let band = TouchLayout.clearArea(in: area, avoiding: Array(frames.values),
                                          target: CGSize(width: 400, height: 200))
-        if !textSize.isAccessibilitySize, band.width >= 260, band.height >= 180 {
-            let width = min(440, band.width - 8)
-            let height = min(selected == nil ? 300.0 : 360.0, band.height - 8)
+        // Accessibility sizes dock only where Cancel and Done fit side by side.
+        if band.width >= (textSize.isAccessibilitySize ? 420 : 260), band.height >= 180 {
+            let width = min(textSize.isAccessibilitySize ? 560 : 440, band.width - 8)
+            let preferred = textSize.isAccessibilitySize ? band.height : selected == nil ? 300.0 : 360.0
+            let height = min(preferred, band.height - 8)
             return CGRect(x: band.midX - width / 2, y: band.minY + 4, width: width, height: height)
         }
         let selectedFrame = selected.flatMap { frames[$0] } ?? CGRect(x: area.midX, y: area.maxY, width: 0, height: 0)

@@ -218,7 +218,7 @@ struct StreamControls: View {
                     .font(.callout).padding(12).modifier(StreamOverlaySurface())
             }
         }
-        .frame(maxWidth: 360).fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: textSize.isAccessibilitySize ? 560 : 360).fixedSize(horizontal: false, vertical: true)
         .allowsHitTesting(false)
     }
 }
