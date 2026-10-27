@@ -9,7 +9,7 @@ struct IOSControllerLayoutStreamButton: View {
     @State private var presented = false
 
     var body: some View {
-        Button("Controller layouts", systemImage: "gamecontroller") {
+        Button("Controller layout…", systemImage: "gamecontroller") {
             model.showControls()
             presented = true
         }

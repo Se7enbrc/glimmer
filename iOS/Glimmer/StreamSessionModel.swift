@@ -33,7 +33,7 @@ final class StreamSessionModel {
     /// The engine only reports a held quality change once its anti-flap gate allows it.
     private(set) var adjustingQuality = false
     var recoveryText: String {
-        adjustingQuality ? StreamSession.adjustingQualityText : "Reconnecting to \(launch.pcName)…"
+        adjustingQuality ? StreamSession.adjustingQualityText : "Reconnecting…"
     }
     var announce: @MainActor (String) -> Void = { UIAccessibility.post(notification: .announcement, argument: $0) }
     private(set) var requestedFormat: StreamFormat?

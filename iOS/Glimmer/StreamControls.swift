@@ -28,8 +28,7 @@ struct StreamControls: View {
                         menu
                             .labelStyle(StreamMenuLabelStyle(titlesOnly: textSize.isAccessibilitySize))
                             .frame(width: min(max(0, geometry.size.width - 24),
-                                              textSize.isAccessibilitySize ? 560 : 360),
-                                   height: min(max(0, geometry.size.height - 24), menuHeight))
+                                              textSize.isAccessibilitySize ? 560 : 360))
                             .padding(12)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                     }
@@ -44,7 +43,7 @@ struct StreamControls: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay { noticeOverlay }
-        .environment(\.colorScheme, model.overlayAppearance.colorScheme ?? colorScheme)
+        .environment(\.colorScheme, model.overlayAppearance.colorScheme ?? .dark)
         .opacity(model.dismissWhenStopped ? 0 : 1)
         .allowsHitTesting(!model.dismissWhenStopped)
         .accessibilityHidden(model.dismissWhenStopped)
@@ -67,7 +66,7 @@ struct StreamControls: View {
         .sheet(isPresented: $showingHelp) {
             NavigationStack {
                 StreamControlsHelp(model: model, keyboardConnected: keyboardConnected)
-                    .navigationTitle("Stream controls")
+                    .navigationTitle("Help")
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
                             Button("Done") { showingHelp = false }.accessibilityIdentifier("stream-help-done")
@@ -77,51 +76,56 @@ struct StreamControls: View {
         }
     }
 
-    private var menuHeight: CGFloat {
-        if textSize.isAccessibilitySize { return 720 }
-        return model.phase == .streaming ? 560 : 280
-    }
-
+    // Sized to its rows when they fit; otherwise the rows scroll under the pinned Disconnect.
     private var menu: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            List {
-                Group {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(model.launch.appName).font(.headline).lineLimit(1)
-                        Text(model.launch.pcName).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityAddTraits(.isHeader)
-                    .padding(.vertical, 8)
-                    status
-                    if model.phase == .streaming { playActions }
-                    if model.pictureNeedsReview {
-                        Text("Does \(model.launch.appName) look right?")
-                        Button("Keep this size") { model.keepSize?() }.accessibilityIdentifier("stream-size-keep")
-                        Button("Use the previous size") { model.restoreSize?() }
-                            .accessibilityIdentifier("stream-size-restore")
-                    }
-                    if let format = model.requestedFormat {
-                        Text("Requested: \(format.summary)"
-                             + (model.requestedStartKbps.map { " · starts at \($0 / 1000) Mbps" } ?? ""))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    if !model.phase.isEnded {
-                        Button("Quit \(model.launch.appName)…", systemImage: "stop", role: .destructive) {
-                            confirmingQuit = true
-                        }.disabled(model.phase == .stopping).accessibilityIdentifier("stream-quit")
-                    }
-                }
-                .listRowBackground(Color.clear).listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-            }
-            .listStyle(.plain).scrollContentBackground(.hidden)
-            .scrollBounceBehavior(.basedOnSize)
-            .accessibilityIdentifier("stream-controls-actions")
-            connectionActions.padding(.horizontal, 16).padding(.bottom, 12)
+        ViewThatFits(in: .vertical) {
+            VStack(spacing: 0) { menuRows; connectionActions }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("stream-controls-actions")
+            ScrollView { menuRows }
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollIndicatorsFlash(onAppear: true)
+                .scrollEdgeEffectStyle(.hard, for: .bottom)
+                .accessibilityIdentifier("stream-controls-actions")
+                .safeAreaBar(edge: .bottom, spacing: 0) { connectionActions }
         }
         .buttonStyle(StreamMenuActionStyle())
         .modifier(StreamOverlaySurface())
+    }
+
+    private var menuRows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.launch.appName).font(.headline).lineLimit(1)
+                // At accessibility sizes the PC name would push play actions out of view.
+                if !textSize.isAccessibilitySize {
+                    Text(model.launch.pcName).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            .padding(.horizontal, 8).padding(.bottom, 4)
+            Group { status }.padding(.horizontal, 8).padding(.vertical, 6)
+            // The size question needs an answer before anything else on the list.
+            if model.pictureNeedsReview {
+                Text("Does \(model.launch.appName) look right?").padding(.horizontal, 8).padding(.vertical, 6)
+                Button("Keep this size") { model.keepSize?() }.accessibilityIdentifier("stream-size-keep")
+                Button("Use the previous size") { model.restoreSize?() }
+                    .accessibilityIdentifier("stream-size-restore")
+            }
+            if model.phase == .streaming { playActions }
+            if !model.phase.isEnded {
+                Button("Quit \(model.launch.appName)…", systemImage: "stop", role: .destructive) {
+                    confirmingQuit = true
+                }.disabled(model.phase == .stopping).accessibilityIdentifier("stream-quit")
+            }
+            if let format = model.requestedFormat {
+                Text("Requested: \(format.summary)"
+                     + (model.requestedStartKbps.map { " · starts at \($0 / 1000) Mbps" } ?? ""))
+                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.vertical, 4)
+            }
+        }
+        .padding(.horizontal, 8).padding(.top, 12).padding(.bottom, 4)
     }
 
     @ViewBuilder private var playActions: some View {
@@ -129,8 +133,9 @@ struct StreamControls: View {
             .disabled(!model.hasGameInput)
             .accessibilityHint("Returns game input to the PC.")
             .accessibilityIdentifier("stream-resume")
-        Button(model.statsShown ? "Hide Stream Stats" : "Show Stream Stats",
+        Button(model.statsShown ? "Hide stream stats" : "Show stream stats",
                systemImage: "chart.xyaxis.line", action: model.toggleStats)
+            .contentTransition(.identity)
             .accessibilityIdentifier("stream-stats-toggle")
         if model.controllerConnected || model.hardwareInputConnected {
             Button(model.touchControlsRequested ? "Hide touch controls" : "Show touch controls",
@@ -142,29 +147,35 @@ struct StreamControls: View {
                    systemImage: "computermouse", action: model.toggleControllerMouseMode)
                 .accessibilityIdentifier("stream-controller-mode")
         }
-        Button("Edit controls…", systemImage: "hand.draw") { model.editingTouchControls = true }
+        Button("Edit controls…", systemImage: "slider.horizontal.3") { model.editingTouchControls = true }
             .accessibilityIdentifier("stream-edit-controls")
         IOSControllerLayoutStreamButton(model: model)
-        Button("How to play", systemImage: "questionmark.circle") { showingHelp = true }
+        Button("Help", systemImage: "questionmark.circle") { showingHelp = true }
             .accessibilityIdentifier("stream-help")
     }
 
-    @ViewBuilder private var connectionActions: some View {
-        Divider()
-        Button(model.phase.isEnded ? "Done" : "Disconnect", systemImage: "xmark") {
-            if model.phase.isEnded { close() } else { model.disconnect() }
+    private var connectionActions: some View {
+        VStack(spacing: 0) {
+            Divider().padding(.horizontal, 8)
+            Button {
+                if model.phase.isEnded { close() } else { model.disconnect() }
+            } label: {
+                if model.phase.isEnded { Text("Done") } else { Label("Disconnect", systemImage: "xmark") }
+            }
+            .disabled(model.phase == .stopping)
+            .accessibilityIdentifier("stream-disconnect")
+            .accessibilityHint(model.phase.isEnded ? "Returns to your apps."
+                : model.launch.leaveGamesRunning ? "Ends this stream and leaves the game running on the PC."
+                : "Ends this stream and quits the game on the PC.")
+            .padding(.top, 4)
         }
-        .disabled(model.phase == .stopping)
-        .accessibilityIdentifier("stream-disconnect")
-        .accessibilityHint(model.phase.isEnded ? "Returns to your apps."
-            : model.launch.leaveGamesRunning ? "Ends this stream and leaves the game running on the PC."
-            : "Ends this stream and quits the game on the PC.")
+        .padding(.horizontal, 8).padding(.bottom, 8)
     }
 
     @ViewBuilder private var status: some View {
         switch model.phase {
         case .idle, .connecting:
-            Label(model.waitingForVideo ? "Waiting for video…" : "Connecting to \(model.launch.pcName)…",
+            Label(model.waitingForVideo ? "Waiting for video…" : "Connecting…",
                   systemImage: "network")
         case .stopping: Label("Disconnecting…", systemImage: "network")
         case .reconnecting: Label(model.recoveryText, systemImage: "wifi.exclamationmark")
