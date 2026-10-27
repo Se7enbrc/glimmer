@@ -30,6 +30,7 @@ package struct GamepadAnalog: Sendable, Equatable {
 /// `remoteInputAesKey`/`remoteInputAesIv` are the 16-byte per-session GCM
 /// key/IV-id from the launch handshake (launch.gcmKey / launch.gcmKeyId).
 package struct BackendStreamConfig: Sendable {
+    package var collectBandwidthSamples: Bool
     package var width: Int32
     package var height: Int32
     package var fps: Int32
@@ -52,8 +53,9 @@ package struct BackendStreamConfig: Sendable {
         packetSize: Int32, streamingRemotely: Int32, audioConfiguration: Int32,
         supportedVideoFormats: Int32, clientRefreshRateX100: Int32,
         colorSpace: Int32, colorRange: Int32, encryptionFlags: Int32,
-        remoteInputAesKey: [UInt8], remoteInputAesIv: [UInt8]
+        remoteInputAesKey: [UInt8], remoteInputAesIv: [UInt8], collectBandwidthSamples: Bool = false
     ) {
+        self.collectBandwidthSamples = collectBandwidthSamples
         self.width = width
         self.height = height
         self.fps = fps

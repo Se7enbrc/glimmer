@@ -123,6 +123,13 @@ or PHY observation establishes downlink capacity by itself.
 
 ## Inputs and recording
 
+Disabling adaptive quality removes policy creation, watchdog scheduling, RTT
+sample collection and policy receive histograms for that session, even with
+telemetry on. Mac also omits the policy path monitor. Mobile retains route facts
+through startup for packet-size selection, then stops observation when
+adaptation is off. Essential watchdog recovery and explicit window resizing
+remain available.
+
 The shared `BandwidthSignals` adapter owns an event-driven `NWPathMonitor`,
 current data-service RAT classification, thermal and Low Power notifications. It
 stops observation in the background and at final disposal. It uses no SSID,

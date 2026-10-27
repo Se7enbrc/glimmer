@@ -117,22 +117,26 @@ final class MacSessionServices: @unchecked Sendable {
 extension StreamSession {
     /// The app's session: route path facts start before launch so the first ask sees the real path.
     @MainActor static func mac(server: ServerInfo, disposition: StreamHostDisposition,
-                               makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient)
-        -> (StreamSession, BandwidthSignals) {
-        let bandwidth = BandwidthSignals()
-        bandwidth.start(host: server.address)
+                               makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient,
+                               adaptiveBandwidth: Bool = AdaptiveBandwidth.isEnabled())
+        -> (StreamSession, BandwidthSignals?) {
+        let bandwidth = adaptiveBandwidth ? BandwidthSignals() : nil
+        bandwidth?.start(host: server.address)
         let session = StreamSession(hostDisposition: disposition, backend: MacTransport.makeBackend(),
-                                    makeNetwork: makeNetwork, bandwidthInputs: bandwidth.inputs)
+                                    makeNetwork: makeNetwork, bandwidthInputs: bandwidth?.inputs,
+                                    adaptiveBandwidth: adaptiveBandwidth)
         return (session, bandwidth)
     }
 
     init(hostDisposition: StreamHostDisposition, backend: any StreamingBackend = MacTransport.makeBackend(),
          makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient = { NetworkClient(server: $0) },
          makeBackend: @escaping @Sendable () -> any StreamingBackend = { MacTransport.makeBackend() },
-         clock: SessionClock = SessionClock(), bandwidthInputs: BandwidthInputs? = nil) {
+         clock: SessionClock = SessionClock(), bandwidthInputs: BandwidthInputs? = nil,
+         adaptiveBandwidth: Bool = AdaptiveBandwidth.isEnabled()) {
         var services = MacSessionServices().services()
         services.bandwidthInputs = bandwidthInputs
         self.init(hostDisposition: hostDisposition, audioDecoder: AudioDecoder(), services: services,
-                  backend: backend, makeNetwork: makeNetwork, makeBackend: makeBackend, clock: clock)
+                  backend: backend, makeNetwork: makeNetwork, makeBackend: makeBackend, clock: clock,
+                  adaptiveBandwidth: adaptiveBandwidth)
     }
 }

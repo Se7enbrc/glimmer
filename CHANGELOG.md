@@ -125,6 +125,9 @@
 
 ### Bug fixes
 
+- Turning off adaptive quality now stops its background checks during streams on
+  Mac, iPhone and iPad.
+
 - Resuming a portrait iPad stream keeps its previous size without briefly
   shrinking the picture and resizing it again.
 

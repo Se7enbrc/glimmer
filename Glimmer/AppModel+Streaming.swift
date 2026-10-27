@@ -150,7 +150,7 @@ extension AppModel {
             let (session, bandwidth) = await makeNativeSession(
                 server: info, disposition: disposition, takeoverAuthorized: takeoverAuthorized,
                 approvedOccupant: approvedOccupant, continuing: continuing)
-            defer { bandwidth.stop() }
+            defer { bandwidth?.stop() }
             if let launch = cfg.bitrateDecision {
                 await session.setRouteAskProvider(routeAskProvider(launch: launch, hostID: host.id))
             }

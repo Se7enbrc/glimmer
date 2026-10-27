@@ -55,7 +55,7 @@ extension AppModel {
     }
 
     func makeNativeSession(server: ServerInfo, disposition: StreamHostDisposition, takeoverAuthorized: Bool,
-                           approvedOccupant: Int?, continuing: Bool) async -> (StreamSession, BandwidthSignals) {
+                           approvedOccupant: Int?, continuing: Bool) async -> (StreamSession, BandwidthSignals?) {
         let (session, bandwidth) = StreamSession.mac(server: server, disposition: disposition, makeNetwork: makeNetwork)
         nativeSession = session
         await session.authorizeTakeover(takeoverAuthorized)

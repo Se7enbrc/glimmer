@@ -110,13 +110,13 @@ struct BitrateActuatorTests {
         replay.distress()
         #expect(replay.policy.pending?.rateKbps == 24_000)
         let inputs = BandwidthInputs(.init(path: replay.policy.path, environment: replay.policy.environment))
-        let fixture = await BitrateFixture(bandwidthInputs: inputs)
-        await fixture.session.armBandwidthForTest(replay.policy, enabled: enabled)
+        let fixture = await BitrateFixture(bandwidthInputs: inputs, adaptiveBandwidth: enabled)
+        await fixture.session.armBandwidthForTest(replay.policy)
         await fixture.session.observeBandwidth(at: replay.now + 1, attempt: fixture.session.attemptID)
         await fixture.session.waitForBitrateTask()
         let expected = enabled ? 24_000 : 40_000
         #expect(await fixture.session.appliedBitrateKbps == expected)
-        #expect(await fixture.session.bandwidthPolicy?.appliedKbps == expected)
+        #expect(await fixture.session.bandwidthPolicy?.appliedKbps == (enabled ? expected : nil))
         #expect(fixture.pc.paths == (enabled ? ["serverinfo", "resume"] : []))
         await fixture.stopLocally()
     }
@@ -125,7 +125,7 @@ struct BitrateActuatorTests {
         let replay = BandwidthReplay(constrained: true)
         let inputs = BandwidthInputs(.init(path: replay.policy.path, environment: replay.policy.environment))
         let fixture = await BitrateFixture(bandwidthInputs: inputs)
-        await fixture.session.armBandwidthForTest(replay.policy, enabled: true, sizes: DataModeSizes(
+        await fixture.session.armBandwidthForTest(replay.policy, sizes: DataModeSizes(
             fullWidth: 1920, fullHeight: 1080, lowDataWidth: 1280, lowDataHeight: 720))
         await fixture.session.observeBandwidth(at: 100, attempt: fixture.session.attemptID)
         await fixture.session.waitForBitrateTask()
@@ -143,7 +143,7 @@ struct BitrateActuatorTests {
         let replay = BandwidthReplay()
         let inputs = BandwidthInputs(.init(path: replay.policy.path, environment: replay.policy.environment))
         let fixture = await BitrateFixture(bandwidthInputs: inputs)
-        await fixture.session.armBandwidthForTest(replay.policy, enabled: true, sizes: DataModeSizes(
+        await fixture.session.armBandwidthForTest(replay.policy, sizes: DataModeSizes(
             fullWidth: 1920, fullHeight: 1080, lowDataWidth: 1280, lowDataHeight: 720))
         #expect(await fixture.session.request(width: 1280, height: 720) == .accepted)
         await fixture.session.waitForBitrateTask()
@@ -158,7 +158,7 @@ struct BitrateActuatorTests {
         let replay = BandwidthReplay(constrained: true)
         let inputs = BandwidthInputs(.init(path: replay.policy.path, environment: replay.policy.environment))
         let fixture = await BitrateFixture(bandwidthInputs: inputs)
-        await fixture.session.armBandwidthForTest(replay.policy, enabled: true, sizes: DataModeSizes(
+        await fixture.session.armBandwidthForTest(replay.policy, sizes: DataModeSizes(
             fullWidth: 1920, fullHeight: 1080, lowDataWidth: 1280, lowDataHeight: 720))
         let sizes = DataModeSizes(fullWidth: 1366, fullHeight: 2064, lowDataWidth: 750, lowDataHeight: 972)
         #expect(await fixture.session.request(width: 1366, height: 2064, sizes: sizes) == .accepted)
@@ -387,6 +387,7 @@ private struct BitrateFixture: Sendable {
     @MainActor
     init(disposition: StreamHostDisposition = .cancelOwnedHostSession, app: Int = 7,
          failing: Bool = false, present: Bool = true, bandwidthInputs: BandwidthInputs? = nil,
+         adaptiveBandwidth: Bool = true,
          beforeConnect: @escaping @Sendable () async throws -> Void = {}) async {
         let pc = FakeSunshine.scripted([
             "serverinfo": [.success(FakeSunshine.xml("<currentgame>\(app)</currentgame><PairStatus>1</PairStatus>"))],
@@ -427,7 +428,8 @@ private struct BitrateFixture: Sendable {
         var services = SessionServices()
         services.bandwidthInputs = bandwidthInputs
         let session = StreamSession(hostDisposition: disposition, audioDecoder: audio, services: services,
-            backend: InputRecordingBackend(), makeNetwork: { pc.client($0) }, makeBackend: { fresh }, clock: clock)
+            backend: InputRecordingBackend(), makeNetwork: { pc.client($0) }, makeBackend: { fresh }, clock: clock,
+            adaptiveBandwidth: adaptiveBandwidth)
         self.session = session
         let banners = banners
         events = await session.prepareBitrateTest(video: video, audio: audio, hooks: hooks,
@@ -476,9 +478,8 @@ private extension StreamSession {
     }
 
     func markRecoveryBusy(_ value: Bool) { isReconnecting = value }
-    func armBandwidthForTest(_ policy: BandwidthPolicy, enabled: Bool, sizes: DataModeSizes? = nil) {
-        bandwidthPolicy = policy
-        adaptiveBandwidth = enabled
+    func armBandwidthForTest(_ policy: BandwidthPolicy, sizes: DataModeSizes? = nil) {
+        bandwidthPolicy = adaptiveBandwidth ? policy : nil
         reconnectConfig?.dataModeSizes = sizes
     }
     func setOwnershipForTest(_ owned: Bool) { ownsHostSession = owned }
