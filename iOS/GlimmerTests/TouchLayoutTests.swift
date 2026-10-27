@@ -24,8 +24,9 @@ struct TouchLayoutTests {
     }
 
     // SE, 17 Pro and iPad share one arrangement: Options and Menu below, the stream menu button above.
-    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 667, height: 354),
-                      CGSize(width: 750, height: 381), CGSize(width: 1194, height: 790)])
+    @Test(arguments: [CGSize(width: 590, height: 600), CGSize(width: 667, height: 375),
+                      CGSize(width: 667, height: 354), CGSize(width: 750, height: 381),
+                      CGSize(width: 1194, height: 790), CGSize(width: 700, height: 900)])
     func optionsAndMenuStayAtTheBottomAwayFromTheStreamMenuButton(size: CGSize) throws {
         let area = CGRect(origin: .zero, size: size)
         let frames = TouchLayout().frames(in: area)

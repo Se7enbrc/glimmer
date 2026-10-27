@@ -49,7 +49,8 @@ struct TouchLayout: Codable, Equatable {
         let lower = expanded ? 118.0 : 80.0
         let upper = expanded ? 266.0 : 188.0
         let face = expanded ? 60.0 : 54.0
-        let menuBottom = area.width < (expanded ? 756 : 636) ? area.height - 30 : 30
+        // Below this width Options and Menu stack at the bottom center; the top belongs to the window controls.
+        let stacked = area.width < (expanded ? 756 : 636)
         return [
             .leftStick: .init(edge: outer, bottom: upper), .rightStick: .init(edge: inner, bottom: lower),
             .dpad: .init(edge: inner, bottom: lower),
@@ -61,8 +62,8 @@ struct TouchLayout: Codable, Equatable {
             .rightShoulder: .init(edge: outer + 80, bottom: upper + 120),
             .leftStickButton: .init(edge: outer, bottom: lower - 28),
             .rightStickButton: .init(edge: outer, bottom: lower - 28),
-            .options: .init(edge: area.width / 2 - 28, bottom: menuBottom),
-            .menu: .init(edge: area.width / 2 - 28, bottom: menuBottom)
+            .options: .init(edge: area.width / 2 - (stacked ? 0 : 28), bottom: stacked ? 82 : 30),
+            .menu: .init(edge: area.width / 2 - (stacked ? 0 : 28), bottom: 30)
         ]
     }
 
