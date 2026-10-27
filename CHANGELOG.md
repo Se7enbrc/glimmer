@@ -21,7 +21,8 @@
 
 - Turning controller mouse mode on or off shows the same short notice, with a
   mouse or controller symbol, on Mac, iPhone and iPad, and VoiceOver announces
-  it.
+  it. Every notice over a Mac stream now uses the same glass capsule as iPhone
+  and iPad, with a system material on macOS 15.
 
 - On iPhone and iPad, holding Menu opens the stream controls, and choosing mouse
   or gamepad mode there returns straight to the game. Controllers that report

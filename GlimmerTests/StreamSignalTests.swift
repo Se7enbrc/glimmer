@@ -23,27 +23,36 @@ struct StreamSignalTests {
         var lines: [String] = []
     }
 
-    private func banner(hostWidth: CGFloat = 1_200) -> (StreamBannerLayer, CALayer, Spoken) {
-        let host = CALayer()
-        host.bounds = CGRect(x: 0, y: 0, width: hostWidth, height: 400)
-        let pill = StreamBannerLayer(anchor: .topCenter, accent: NSColor.systemOrange.cgColor)
+    // The stream window stays offscreen, so notices lay out without appearing on the owner's display.
+    private func banner(hostWidth: CGFloat = 1_200) -> (StreamBanner, NSWindow, Spoken) {
+        let host = NSWindow(contentRect: CGRect(x: 0, y: 0, width: hostWidth, height: 400), styleMask: .borderless,
+                            backing: .buffered, defer: true)
+        host.isReleasedWhenClosed = false
+        let pill = StreamBanner(anchor: .topCenter, accent: .systemOrange)
         let spoken = Spoken()
         pill.announce = { spoken.lines.append($0) }
         pill.attach(to: host)
         return (pill, host, spoken)
     }
 
-    @Test func pillVisibilityUsesTheSharedExplicitFade() throws {
+    @Test func aNoticeExistsOnlyWhileShownAndReshowsDuringItsFade() {
         let (pill, _, _) = banner()
         pill.setText("Reconnecting…")
+        #expect(pill.noticeFrame == nil)
         pill.setVisible(true)
-        let fade = try #require(pill.layer.animation(forKey: "visibility") as? CABasicAnimation)
-        #expect(fade.duration == Motion.short)
-        #expect(fade.toValue as? Int == 1)
+        #expect(pill.isVisible && pill.noticeFrame != nil)
         pill.setVisible(false)
         pill.setVisible(true)
-        #expect(!pill.layer.isHidden)
-        #expect(pill.layer.opacity == 1)
+        #expect(pill.isVisible && pill.noticeFrame != nil)
+    }
+
+    @Test func macOS15UsesTheMaterialFallback() {
+        let (pill, _, _) = banner()
+        pill.glassAvailable = false
+        pill.setText("Reconnecting…")
+        #expect(!pill.content.glass)
+        pill.glassAvailable = true
+        #expect(pill.content.glass)
     }
 
     private let longText = "Weak connection. Lowering quality to 150 Mbps… and then some more words"
@@ -55,16 +64,20 @@ struct StreamSignalTests {
     @Test func aLongPillFitsANarrowHost() {
         let (pill, _, _) = banner(hostWidth: 320)
         pill.setText(longText)
-        #expect(pill.layer.frame.minX >= 16)
-        #expect(pill.layer.frame.maxX <= 304)
+        pill.setVisible(true)
+        let frame = pill.noticeFrame ?? .null
+        #expect(frame.minX >= 16 - 0.5)
+        #expect(frame.maxX <= 304 + 0.5)
     }
 
     /// Short text still sizes to fit and centers.
     @Test func aShortPillSizesToItsText() {
         let (pill, host, _) = banner()
         pill.setText("Reconnecting…")
-        #expect(pill.layer.frame.width < 200)
-        #expect(abs(pill.layer.frame.midX - host.bounds.midX) < 1)
+        pill.setVisible(true)
+        let frame = pill.noticeFrame ?? .null
+        #expect(frame.width < 200)
+        #expect(abs(frame.midX - host.contentLayoutRect.midX) < 1)
     }
 
     /// Text that was laid out full screen re-flows when the same pill is shown
@@ -74,9 +87,9 @@ struct StreamSignalTests {
         pill.setText(longText)
         pill.setVisible(true)
         pill.setVisible(false)
-        host.bounds = CGRect(x: 0, y: 0, width: 320, height: 200)
+        host.setContentSize(CGSize(width: 320, height: 200))
         pill.setVisible(true)
-        #expect(pill.layer.frame.maxX <= 304)
+        #expect((pill.noticeFrame ?? .null).maxX <= 304 + 0.5)
     }
 
     // MARK: Linger hint

@@ -159,6 +159,7 @@
 		A6FCDC72230E30441A033ACA /* ControllerLayoutsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44B50286D22A3C8078096356 /* ControllerLayoutsModel.swift */; };
 		F497A4F8F76F1C87F038BBF9 /* ControllerLayoutsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591FAE9B3D565EAF1AE6D39C /* ControllerLayoutsView.swift */; };
 		109571950D51CA4E9AC2299A /* IOSControllerLayoutPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0FE091D647DB80FC7CBB04F /* IOSControllerLayoutPresentation.swift */; };
+		E5A3F7D4B8295FA0D4E6FC02 /* StreamNoticeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A3F7D4B8295FA0D4E6FC01 /* StreamNoticeView.swift */; };
 		BBDF302987FAF9F7402A6D84 /* ControllerLayoutNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */; };
 		94F7B1607EBE0F53941883A9 /* ControllerLayoutEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */; };
 		8033B9ABE605D5A2C6102F12 /* ControllerLayoutRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D45B4D6D520493193F710F5 /* ControllerLayoutRenderTests.swift */; };
@@ -396,6 +397,7 @@
 		44B50286D22A3C8078096356 /* ControllerLayoutsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutsModel.swift"; sourceTree = SOURCE_ROOT; };
 		591FAE9B3D565EAF1AE6D39C /* ControllerLayoutsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutsView.swift"; sourceTree = SOURCE_ROOT; };
 		A0FE091D647DB80FC7CBB04F /* IOSControllerLayoutPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/IOSControllerLayoutPresentation.swift"; sourceTree = SOURCE_ROOT; };
+		E5A3F7D4B8295FA0D4E6FC01 /* StreamNoticeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/Stream/StreamNoticeView.swift"; sourceTree = SOURCE_ROOT; };
 		E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutNavigation.swift"; sourceTree = SOURCE_ROOT; };
 		E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerLayoutEditing.swift"; sourceTree = SOURCE_ROOT; };
 		8D45B4D6D520493193F710F5 /* ControllerLayoutRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerLayoutRenderTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -670,6 +672,7 @@
 				E6779A619A1749A78C930848 /* ControllerBindingRecorder.swift */,
 				88E5F29C7D58C61CECA51EAD /* SettingsResetSection.swift */,
 				E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */,
+				E5A3F7D4B8295FA0D4E6FC01 /* StreamNoticeView.swift */,
 				E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */,
 				A0FE091D647DB80FC7CBB04F /* IOSControllerLayoutPresentation.swift */,
 				591FAE9B3D565EAF1AE6D39C /* ControllerLayoutsView.swift */,
@@ -1011,6 +1014,7 @@
 				AAE0C04EE9634E38AB4D3EDD /* ControllerBindingRecorder.swift in Sources */,
 				328FE68F03EA2F59C7820A91 /* SettingsResetSection.swift in Sources */,
 				94F7B1607EBE0F53941883A9 /* ControllerLayoutEditing.swift in Sources */,
+				E5A3F7D4B8295FA0D4E6FC02 /* StreamNoticeView.swift in Sources */,
 				BBDF302987FAF9F7402A6D84 /* ControllerLayoutNavigation.swift in Sources */,
 				109571950D51CA4E9AC2299A /* IOSControllerLayoutPresentation.swift in Sources */,
 				F497A4F8F76F1C87F038BBF9 /* ControllerLayoutsView.swift in Sources */,

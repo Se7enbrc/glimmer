@@ -541,7 +541,7 @@ func testWindowScene() async throws -> UIWindowScene {
 
 // Renders the real mode notice in a Simulator window over bright and dark frames, in both appearances.
 @MainActor
-struct ControllerModeNoticeCaptureTests {
+struct StreamNoticeCaptureTests {
     @Test(arguments: [false, true])
     func noticeRendersOverLightAndDarkPictures(dark: Bool) throws {
         let colors: [Color] = dark
@@ -549,8 +549,8 @@ struct ControllerModeNoticeCaptureTests {
             : [Color(red: 0.62, green: 0.82, blue: 0.98), Color(red: 0.98, green: 0.93, blue: 0.80)]
         let root = ZStack {
             LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
-            ControllerModeNotice(message: "Controller is now a mouse.",
-                                 symbol: ControllerMouseMapping.modeSymbol(enabled: true))
+            StreamNoticeView(text: "Controller is now a mouse.",
+                             symbol: ControllerMouseMapping.modeSymbol(enabled: true))
         }
         .environment(\.colorScheme, dark ? .dark : .light)
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)

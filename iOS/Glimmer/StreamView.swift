@@ -295,10 +295,10 @@ struct StreamControls: View {
     private var notices: some View {
         VStack(spacing: 8) {
             if let message = model.controllerModeMessage, model.inputFocused {
-                ControllerModeNotice(message: message, symbol: model.controllerModeSymbol).transition(.opacity)
+                StreamNoticeView(text: message, symbol: model.controllerModeSymbol).transition(.opacity)
             }
             if model.waitingForVideo, model.phase == .streaming {
-                Label("Waiting for video…", systemImage: "clock").font(.callout).padding().glassEffect()
+                StreamNoticeView(text: "Waiting for video…", symbol: "clock")
             }
         }
         .padding(.bottom, 8).allowsHitTesting(false)
@@ -412,15 +412,5 @@ extension StreamSessionModel.Phase {
     var isEnded: Bool {
         if case .ended = self { return true }
         return false
-    }
-}
-
-struct ControllerModeNotice: View {
-    let message: String
-    let symbol: String
-
-    var body: some View {
-        Label(message, systemImage: symbol).font(.callout)
-            .padding(.vertical, 8).padding(.horizontal, 12).glassEffect()
     }
 }

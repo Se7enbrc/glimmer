@@ -4,6 +4,7 @@
 import GlimmerEngine
 import AppKit
 import GameController
+import SwiftUI
 import Testing
 @testable import Glimmer
 
@@ -365,38 +366,39 @@ struct ControllerMouseTests {
         let game = "Controller is back in the game."
         window.showControllerMouseMode(mouse, enabled: true)
         #expect(window.leaveHintBanner.displayedText == mouse)
-        #expect(window.leaveHintBanner.layer.sublayers?.first?.contents != nil)
+        #expect(window.leaveHintBanner.content.symbol == ControllerMouseMapping.modeSymbol(enabled: true))
         #expect(window.streamToastGeneration > generation)
         window.showControllerMouseMode(game, enabled: false)
         #expect(window.leaveHintBanner.displayedText == game)
         #expect(announcements == ["Leave hint", mouse, game])
     }
 
-    // Renders the real stream pill over a bright and a dark frame; the PNGs are kept as test attachments.
-    @Test(arguments: [false, true])
-    func modeIndicatorRendersOverLightAndDarkPictures(dark: Bool) throws {
-        let window = StreamWindow()
+    // Renders the real notice over bright and dark frames, on glass and on the forced macOS 15 material.
+    @Test(arguments: [false, true], [false, true])
+    func modeIndicatorRendersOverLightAndDarkPictures(dark: Bool, glass: Bool) throws {
+        let stream = StreamWindow()
+        defer { stream.close() }
+        stream.leaveHintBanner.announce = { _ in }
+        stream.leaveHintBanner.glassAvailable = glass
+        stream.showControllerMouseMode("Controller is now a mouse.", enabled: true)
+        let colors: [Color] = dark
+            ? [Color(red: 0.05, green: 0.06, blue: 0.12), Color(red: 0.18, green: 0.12, blue: 0.22)]
+            : [Color(red: 0.62, green: 0.82, blue: 0.98), Color(red: 0.98, green: 0.93, blue: 0.80)]
+        let frame = CGRect(x: 0, y: 0, width: 720, height: 240)
+        let host = NSHostingView(rootView: ZStack {
+            LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+            stream.leaveHintBanner.content
+        }.frame(width: frame.width, height: frame.height))
+        let window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.contentView = host
         defer { window.close() }
-        window.showControllerMouseMode("Controller is now a mouse.", enabled: true)
-        let canvas = CALayer()
-        canvas.frame = CGRect(x: 0, y: 0, width: 720, height: 240)
-        window.leaveHintBanner.layoutInHost(canvas)
-        let pill = window.leaveHintBanner.layer
-        let scale = 2
-        let context = try #require(CGContext(data: nil, width: 720 * scale, height: 240 * scale, bitsPerComponent: 8,
-            bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
-        let colors = dark
-            ? [CGColor(red: 0.05, green: 0.06, blue: 0.12, alpha: 1), CGColor(red: 0.18, green: 0.12, blue: 0.22, alpha: 1)]
-            : [CGColor(red: 0.62, green: 0.82, blue: 0.98, alpha: 1), CGColor(red: 0.98, green: 0.93, blue: 0.80, alpha: 1)]
-        let gradient = try #require(CGGradient(colorsSpace: nil, colors: colors as CFArray, locations: [0, 1]))
-        context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 720, y: 240), options: [])
-        context.translateBy(x: pill.frame.minX, y: pill.frame.minY)
-        pill.render(in: context)
-        let image = try #require(context.makeImage())
-        let data = try #require(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
-        #expect(pill.opacity == 1 && !pill.isHidden && pill.frame.width > 100)
-        Attachment.record(data, named: "mac-mode-indicator-\(dark ? "dark" : "light").png")
+        host.layoutSubtreeIfNeeded()
+        let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: rep)
+        let data = try #require(rep.representation(using: .png, properties: [:]))
+        #expect(stream.leaveHintBanner.content.glass == glass && data.count > 1_000)
+        Attachment.record(data, named: "mac-mode-indicator-\(glass ? "glass" : "macos15")-\(dark ? "dark" : "light").png")
     }
 }

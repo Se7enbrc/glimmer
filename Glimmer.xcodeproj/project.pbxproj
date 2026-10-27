@@ -233,7 +233,8 @@
 		D100006C /* InputForwarder+StreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006B /* InputForwarder+StreamView.swift */; };
 		D100006E /* StreamWindow+Show.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006D /* StreamWindow+Show.swift */; };
 		D1000070 /* StatsOverlayLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100006F /* StatsOverlayLayer.swift */; };
-		D1000E51 /* StreamBannerLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000E50 /* StreamBannerLayer.swift */; };
+		D4F2E6C3A7184E9FC3D5EB02 /* StreamNoticeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F2E6C3A7184E9FC3D5EB01 /* StreamNoticeView.swift */; };
+		D1000E51 /* StreamBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000E50 /* StreamBanner.swift */; };
 		D1000072 /* VideoDecoder+AV1.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000071 /* VideoDecoder+AV1.swift */; };
 		D1000074 /* VideoDecoder+API.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000073 /* VideoDecoder+API.swift */; };
 		D1000076 /* VideoDecoder+Decode.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000075 /* VideoDecoder+Decode.swift */; };
@@ -1099,7 +1100,8 @@
 		D100006B /* InputForwarder+StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/InputForwarder+StreamView.swift"; sourceTree = "<group>"; };
 		D100006D /* StreamWindow+Show.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Stream/StreamWindow+Show.swift"; sourceTree = "<group>"; };
 		D100006F /* StatsOverlayLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StatsOverlayLayer.swift; sourceTree = "<group>"; };
-		D1000E50 /* StreamBannerLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamBannerLayer.swift; sourceTree = "<group>"; };
+		D4F2E6C3A7184E9FC3D5EB01 /* StreamNoticeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamNoticeView.swift; sourceTree = "<group>"; };
+		D1000E50 /* StreamBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stream/StreamBanner.swift; sourceTree = "<group>"; };
 		D1000071 /* VideoDecoder+AV1.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+AV1.swift"; sourceTree = SOURCE_ROOT; };
 		D1000073 /* VideoDecoder+API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+API.swift"; sourceTree = SOURCE_ROOT; };
 		D1000075 /* VideoDecoder+Decode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Decode.swift"; sourceTree = SOURCE_ROOT; };
@@ -1845,7 +1847,8 @@
 				D6D80A720000000000000016 /* StatsOverlayLayer+Rows.swift */,
 				D7D80A720000000000000016 /* StatsOverlayLayer+Traces.swift */,
 				D100006F /* StatsOverlayLayer.swift */,
-				D1000E50 /* StreamBannerLayer.swift */,
+				D4F2E6C3A7184E9FC3D5EB01 /* StreamNoticeView.swift */,
+				D1000E50 /* StreamBanner.swift */,
 				D100006D /* StreamWindow+Show.swift */,
 				D1000C02 /* StreamWindow+Cursor.swift */,
 				DEC0DE840000000000000004 /* StreamWindowGeometry.swift */,
@@ -2818,7 +2821,8 @@
 				D6D80A720000000000000015 /* StatsOverlayLayer+Rows.swift in Sources */,
 				D7D80A720000000000000015 /* StatsOverlayLayer+Traces.swift in Sources */,
 				D1000070 /* StatsOverlayLayer.swift in Sources */,
-				D1000E51 /* StreamBannerLayer.swift in Sources */,
+				D4F2E6C3A7184E9FC3D5EB02 /* StreamNoticeView.swift in Sources */,
+				D1000E51 /* StreamBanner.swift in Sources */,
 				D100006E /* StreamWindow+Show.swift in Sources */,
 				D1000C01 /* StreamWindow+Cursor.swift in Sources */,
 				DEC0DE840000000000000001 /* StreamDisplayMode.swift in Sources */,
