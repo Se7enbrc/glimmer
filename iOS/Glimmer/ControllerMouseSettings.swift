@@ -174,12 +174,7 @@ private struct GlimmerSettingsPage: View {
             Text("Turn off to avoid accidental touches while playing. Three-finger tap still shows controls. "
                  + "Changes apply to the next stream.")
         }
-        Section("Controller") {
-            Text(StreamLaunch.mouseControls)
-                .font(.footnote).foregroundStyle(.secondary)
-            Text("Hold Menu for a second and release to open controls, then choose a mode.")
-                .font(.footnote).foregroundStyle(.secondary)
-        }
+        ControllerMouseSettingsSection()
     }
 
     private var connectionSettings: some View {

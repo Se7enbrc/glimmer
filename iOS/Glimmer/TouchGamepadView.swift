@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import UIKit
 
 @MainActor
@@ -121,21 +122,20 @@ class TouchGamepadView: UIView {
         updateVisibility()
     }
 
-    func mouseMode(_ enabled: Bool) {
+    func mouseMode(_ enabled: Bool, bindings: ControllerMouseBindings = ControllerLayoutsModel.shared.mouse) {
         for (element, control) in controls {
             control.accessibilityLabel = element.name
             (control as? TouchAxisControl)?.showMode(nil)
             (control as? TouchTrigger)?.showMode(nil)
         }
         guard enabled else { return }
-        (controls[.leftStick] as? TouchAxisControl)?.showMode("Pointer")
-        (controls[.rightStick] as? TouchAxisControl)?.showMode("Scroll")
-        let clicks: [(TouchElement, String)] = [
-            (.a, "Primary click"), (.b, "Secondary click"), (.x, "Middle click"),
-            (.leftShoulder, "Back"), (.rightShoulder, "Forward")
-        ]
-        for (element, label) in clicks { controls[element]?.accessibilityLabel = label }
-        controls[.dpad]?.accessibilityLabel = "Scroll"
+        for action in ControllerMouseAction.allCases {
+            for element in TouchElement.allCases where !element.mouseSources.isDisjoint(with: bindings[action]) {
+                controls[element]?.accessibilityLabel = "\(element.name), \(action.title)"
+                (controls[element] as? TouchAxisControl)?.showMode(action == .pointer ? "Pointer" : "Scroll")
+                (controls[element] as? TouchTrigger)?.showMode(action.title)
+            }
+        }
     }
 
     private func inputTracking(_ control: UIControl) -> TouchTracking? {

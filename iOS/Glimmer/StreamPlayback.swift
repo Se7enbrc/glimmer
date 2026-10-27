@@ -6,8 +6,6 @@ import GlimmerEngine
 import UIKit
 
 struct StreamLaunch: Identifiable, Sendable {
-    static let mouseControls = "Left stick moves. Right stick scrolls. A clicks. B right-clicks. "
-        + "X middle-clicks. L1 goes back. R1 goes forward."
     let id = UUID()
     let network: NetworkClient
     let pcID: String
@@ -70,10 +68,10 @@ struct StreamPlayback {
     var requestFormatChange: StreamWindowResize.Request?
     var showStats: (@MainActor (Bool) -> Void)?
 
-    static func configureInput(_ input: StreamInput) {
+    static func configureInput(_ input: StreamInput, defaults: UserDefaults = PersistentStorage.defaults) {
         input.setStopChord(.menuOptionsShoulders)
-        input.setControllerMenuOpensControls(true)
-        input.setControllerMouseMapping(.standard)
+        input.setControllerMenuOpensControls(false)
+        input.setControllerMouseBindings(.load(from: defaults))
     }
 
     static func make(launch: StreamLaunch, surface: StreamSurface,

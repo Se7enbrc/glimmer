@@ -139,7 +139,7 @@ struct TouchGamepadRepresentation: UIViewRepresentable {
     func updateUIView(_ view: TouchGamepadView, context: Context) {
         view.menuButton.showControls = showControls
         view.configure(capture: capture, layout: layout, area: area, preview: preview)
-        view.mouseMode(mouseMode)
+        view.mouseMode(mouseMode, bindings: ControllerLayoutsModel.shared.mouse)
         view.setMenuVisible(menuVisible, animated: !reduceMotion)
     }
 }

@@ -212,6 +212,17 @@ struct ControllerLayoutCaptureTests {
         #expect(reloaded.shortcuts(device).stats == ControllerLayoutShortcuts.defaultStats)
     }
 
+    @Test func mouseRecorderAcceptsASingleButtonAfterTheSameHoldAndRelease() {
+        let harness = Harness()
+        let capture = ControllerLayoutCapture(input: harness.source(), recordingChord: true, minimumButtons: 1)
+        capture.start(cancel: {})
+        harness.send(.init(buttons: ControllerMappedButton.leftShoulder.rawValue), at: 1)
+        harness.send(.init(), at: 1.5)
+        #expect(capture.finished)
+        #expect(capture.chord == [.button(.leftShoulder)])
+        capture.stop()
+    }
+
     @Test func protectedEscapeCancelsControlCapture() throws {
         let harness = Harness()
         let capture = ControllerLayoutCapture(input: harness.source())

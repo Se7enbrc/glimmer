@@ -92,27 +92,26 @@ streams/tests. Other pads and Extra DualSense buttons need Input Monitoring.
 
 ## Use the controller as a mouse
 
-On Mac:
+Hold the mouse-mode toggle for a second, then release to switch modes. The
+default is Menu (Options or Start on some controllers).
 
-1. Hold Menu, Options or Start alone for over 0.75 seconds.
-2. Release to toggle modes.
+Settings › Input › Controller mouse offers the same presets on Mac, iPhone and
+iPad:
 
-On Mac:
+| Function                  | Right-handed (default) | Left-handed        |
+| ------------------------- | ---------------------- | ------------------ |
+| Move / scroll             | Right / left stick     | Left / right stick |
+| Primary / secondary click | R2 / R1                | L2 / L1            |
+| Middle click              | Right stick press      | Left stick press   |
+| Back / forward            | L2 / L1                | R2 / R1            |
 
-| Control                          | Mouse action                                                                  |
-| -------------------------------- | ----------------------------------------------------------------------------- |
-| Left stick                       | Move.                                                                         |
-| Right stick / d-pad              | Scroll.                                                                       |
-| Bottom / right / left button     | Left / right / middle click.                                                  |
-| L1 / R1                          | Back / forward.                                                               |
-| DualSense / DualShock 4 touchpad | One finger moves, two scroll; two-contact click right-clicks, otherwise left. |
+Select any function to change its binding. Choose controls in the diagram or
+record buttons on your controller. A binding already in use must be changed
+first. Your custom bindings stay when you choose another preset; choose “Reset
+to preset” to replace them. Reset to defaults in General restores Right-handed.
 
-On iPhone and iPad, hold Menu for a second and release to open controls, then
-choose Use mouse mode or Use gamepad mode. Close the menu to return to play.
-Settings › Input › “Mouse stick” chooses Right or Left for the next stream.
-Right is the default: the right stick moves, R2 clicks, R1 right-clicks and the
-left stick scrolls. Left swaps those roles to the left stick, L2 and L1, with
-the right stick scrolling.
+A DualSense or DualShock 4 touchpad also moves the pointer with one finger and
+scrolls with two. A two-finger click right-clicks; a one-finger click clicks.
 
 ## Play with touch controls on iPhone and iPad
 

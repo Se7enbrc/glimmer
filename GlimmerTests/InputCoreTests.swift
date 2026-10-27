@@ -152,8 +152,9 @@ struct InputCoreTests {
                             analog: InputCore.neutral, capturedAt: start + 1)
             core.receiveHID(slot: 0, token: token, buttons: 0,
                             analog: InputCore.neutral, capturedAt: start + 2)
-            core.receiveHID(slot: 0, token: token, buttons: StreamProtocol.A_FLAG,
-                            analog: InputCore.neutral, capturedAt: start + 3)
+            var primary = InputCore.neutral
+            primary.rightTrigger = 255
+            core.receiveHID(slot: 0, token: token, buttons: 0, analog: primary, capturedAt: start + 3)
         }
         #expect(backend.calls.first?.buttons == StreamProtocol.B_FLAG)
         #expect(core.withLock { core.controllerMouseStates[0]?.isMouse } == true)
@@ -202,7 +203,9 @@ struct InputCoreTests {
         forwarder.setMiniPlayer(true)
         defer { forwarder.detach() }
         forwarder.controllerMouseStates[0] = ControllerMouseState(isMouse: true)
-        forwarder.inputCore.receive(slot: 0, buttons: StreamProtocol.A_FLAG, analog: InputCore.neutral)
+        var primary = InputCore.neutral
+        primary.rightTrigger = 255
+        forwarder.inputCore.receive(slot: 0, buttons: 0, analog: primary)
         forwarder.inputOwnershipLost(reason: "test focus loss", includingControllers: false)
         #expect(backend.pointer.count == 1)
         forwarder.inputCore.receive(slot: 0, buttons: 0, analog: InputCore.neutral)

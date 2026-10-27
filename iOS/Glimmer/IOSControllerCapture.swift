@@ -97,6 +97,7 @@ final class IOSControllerCapture {
         guard !stopped else { return }
         let resume = focused
         if resume { setFocused(false) }
+        layouts?.refreshMouseBindings()
         for entry in attached.values { layouts?.configure(entry.controller, registration: entry.registration) }
         if resume { setFocused(true) }
     }

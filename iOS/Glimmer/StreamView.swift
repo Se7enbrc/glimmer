@@ -385,8 +385,8 @@ struct StreamControls: View {
             if model.controlsVisible {
                 ScrollView {
                     VStack(spacing: 12) {
-                        Text("Hold Menu for a second and release to open controls.")
-                        Text(StreamLaunch.mouseControls)
+                        ControllerMouseDiagram(bindings: ControllerLayoutsModel.shared.mouse)
+                        Text("Hold the mouse-mode toggle for a second and release to switch modes.")
                         Text("Change Stop streaming and Stats shortcuts in Controller layouts. "
                              + "Hold a shortcut, then release to use it.")
                         if model.launch.touchMouseEnabled {

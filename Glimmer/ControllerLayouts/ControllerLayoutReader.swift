@@ -102,9 +102,10 @@ final class ControllerLayoutReader: @unchecked Sendable {
     }
 
     func shortcutElements(_ configuration: ControllerLayoutConfiguration) -> Set<ObjectIdentifier> {
-        let buttons = configuration.stop.buttons | configuration.stats.buttons
-        let triggers = configuration.stop.triggers | configuration.stats.triggers
-        let extras = configuration.stop.extras | configuration.stats.extras
+        let mouse = configuration.mouse?.observed ?? .empty
+        let buttons = configuration.stop.buttons | configuration.stats.buttons | mouse.buttons
+        let triggers = configuration.stop.triggers | configuration.stats.triggers | mouse.triggers
+        let extras = configuration.stop.extras | configuration.stats.extras | mouse.extras
         var elements = Set<ObjectIdentifier>()
         for (name, button) in Self.standardButtons where buttons & button.rawValue != 0 {
             if let element = input.buttons[name] { elements.insert(ObjectIdentifier(element)) }
@@ -119,6 +120,11 @@ final class ControllerLayoutReader: @unchecked Sendable {
             | ControllerMappedButton.left.rawValue | ControllerMappedButton.right.rawValue
         if buttons & directions != 0, let dpad = input.dpads[GCInputDirectionPad] {
             elements.insert(ObjectIdentifier(dpad))
+        }
+        if configuration.mouse != nil {
+            for name in [GCInputLeftThumbstick, GCInputRightThumbstick] {
+                if let stick = input.dpads[name] { elements.insert(ObjectIdentifier(stick)) }
+            }
         }
         return elements
     }

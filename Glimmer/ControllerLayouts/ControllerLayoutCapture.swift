@@ -40,6 +40,7 @@ final class ControllerLayoutCapture {
     private(set) var finished = false
     private(set) var chord: Set<ControllerLayoutSource> = []
     private let recordingChord: Bool
+    private let minimumButtons: Int
     private var chordBegan: TimeInterval?
     private var chordHeld = false
     private var waitingForNeutral = true
@@ -51,9 +52,10 @@ final class ControllerLayoutCapture {
     private var epoch = UUID()
     private let ownership = UUID()
 
-    init(input: ControllerLayoutCaptureSource, recordingChord: Bool = false) {
+    init(input: ControllerLayoutCaptureSource, recordingChord: Bool = false, minimumButtons: Int = 3) {
         self.input = input
         self.recordingChord = recordingChord
+        self.minimumButtons = minimumButtons
         if let chord = try? ControllerPhysicalChord(
             sources: ControllerLayoutShortcuts.escape(available: Set(input.controls.map(\.id))), extras: input.extras) {
             escape = ControllerEscapeGesture(chord: chord)
@@ -132,17 +134,20 @@ final class ControllerLayoutCapture {
     private func receiveChord(_ sample: ControllerMappingSample, at now: TimeInterval) {
         let active = activeControls(sample, threshold: 0.5).filter(\.isChordButton)
         if waitingForNeutral {
-            if active.isEmpty { waitingForNeutral = false; message = "Hold at least three buttons together, then release." }
+            if active.isEmpty {
+                waitingForNeutral = false
+                message = "Hold \(minimumButtons == 1 ? "one or more buttons" : "at least three buttons") together, then release."
+            }
             return
         }
         if active.isEmpty {
-            if chord.count >= 3, chordHeld || chordBegan.map({ now - $0 >= ControllerShortcutGesture.holdSeconds }) == true {
+            if chord.count >= minimumButtons, chordHeld || chordBegan.map({ now - $0 >= ControllerShortcutGesture.holdSeconds }) == true {
                 finished = true
                 message = "Shortcut recorded. Review it before saving."
             } else {
                 chord = []
                 chordBegan = nil
-                message = "Hold at least three buttons together for a moment, then release."
+                message = "Hold \(minimumButtons == 1 ? "one or more buttons" : "at least three buttons") for a moment, then release."
             }
         } else if chord.isSubset(of: active), !chordHeld {
             if chord != active { chord = active; chordBegan = now }

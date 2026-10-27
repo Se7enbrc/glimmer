@@ -102,6 +102,7 @@ struct ControllerLayoutEditor: View {
             } header: { Text("Send to PC") }
             .disabled(!canEdit)
             shortcutsSection
+            ControllerMouseSettingsSection(model: model)
             Section {
                 Button("Reset to standard…") { standardReset = true }.disabled(!canEdit)
                 Button(scope == .allGames ? "Use system layout…" : "Use All games…", role: .destructive) { resetting = true }

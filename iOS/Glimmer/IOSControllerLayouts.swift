@@ -23,6 +23,8 @@ final class IOSControllerLayouts {
         self.scope = scope
     }
 
+    func refreshMouseBindings() { input.setControllerMouseBindings(ControllerLayoutsModel.shared.mouse) }
+
     func configure(_ controller: GCController, registration: ControllerRegistration) {
         remove(controller)
         let model = ControllerLayoutsModel.shared
@@ -31,7 +33,7 @@ final class IOSControllerLayouts {
         let record = model.library.resolve(reader.identity, scope: scope)
         let shortcuts = model.shortcuts(for: reader.identity)
         guard let configuration = try? ControllerLayoutConfiguration(layout: record?.layout, shortcuts: shortcuts,
-                available: reader.available, extras: reader.extras) else { return }
+                available: reader.available, extras: reader.extras, mouse: model.mouse) else { return }
         input.setControllerLayout(configuration, for: registration,
                                   held: reader.sample(), systemHeld: reader.systemSample())
         entries[ObjectIdentifier(controller)] = Entry(controller: controller, registration: registration,

@@ -11,6 +11,13 @@ import Testing
 
 @MainActor
 struct ControllerLayoutDeliveryTests {
+    @Test func controllerMouseStartsRightHandedWithoutFaceButtonClicks() {
+        let core = InputCore()
+        #expect(core.controllerMouseMapping == .rightStick)
+        #expect(core.controllerMousePlan.clickMask(.init(buttons: StreamProtocol.A_FLAG | StreamProtocol.B_FLAG
+            | StreamProtocol.X_FLAG, analog: InputCore.neutral)) == 0)
+    }
+
     @Test(arguments: [false, true], [false, true])
     func systemProfileChangesReachEncoderWhileMainIsOccupied(physicalFirst: Bool, observesChord: Bool) throws {
         let fixture = try ControllerLayoutDeliveryFixture()

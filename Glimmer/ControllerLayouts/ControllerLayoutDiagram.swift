@@ -139,7 +139,7 @@ struct ControllerLayoutDiagram: View {
         }
         .buttonStyle(.plain).menuIndicator(.hidden)
         .disabled(available.isEmpty)
-        .foregroundStyle(highlighted.contains(.button(left ? .leftStick : .rightStick)) ? Color.accentColor : Color.primary)
+        .foregroundStyle(available.contains { highlighted.contains($0.id) } ? Color.accentColor : Color.primary)
         .accessibilityLabel(left ? "Left stick" : "Right stick")
         .position(x: point.x * scale, y: point.y * scale)
     }

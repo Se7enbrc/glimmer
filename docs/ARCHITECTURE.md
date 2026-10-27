@@ -90,9 +90,11 @@ app ID.
 Native display code calls `VideoDecoder.setPresentSuppressed(_:)` while hidden.
 It reuses newest-frame retention, decode gating and watchdog suppression.
 `PacerHeadroom` keeps policy reads inside the engine; frame releases do not call
-the app. Controller mouse mode uses the Mac's standard stick and button mapping
-on both platforms; native scheduling retains each platform's existing motion
-cadence.
+the app. Controller mouse mode compiles shared Right-handed or Left-handed
+bindings into a `ControllerMousePlan`. Both platforms use the same cubic curve,
+50 ms movement-only polling and click release ledger. Settings keep explicit
+overrides when a preset changes; the shared controller recorder rejects
+overlapping bindings.
 
 `LauncherArtCache` and `NetworkClient.appAsset(appID:)` share bounded artwork
 storage and pinned TLS. Shells decide when to fetch visible covers. An optional
@@ -358,11 +360,11 @@ Mini Player retains background controller input, while keyboard/mouse follow
 focus. Background monitoring has shared ownership with diagnostics and shortcut
 recording and restores its original value after the last owner leaves.
 
-Start held over 750 ms then released toggles per-slot controller mouse. Stop
-chords cancel toggles. Mouse buttons share the release ledger; stick polling
-runs only while moving/scrolling. Touchpad coordinates come from GameController.
-Nintendo layout swaps only outgoing A/B and X/Y after positional mouse/chord
-handling.
+The configured mouse toggle held over 750 ms then released toggles per-slot
+controller mouse. Stop chords cancel toggles. Mouse buttons share the release
+ledger; stick polling runs only while moving/scrolling. Touchpad coordinates
+come from GameController. Nintendo layout swaps only outgoing A/B and X/Y after
+positional mouse/chord handling.
 
 ### Raw HID and gestures
 

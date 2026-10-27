@@ -64,7 +64,10 @@ package final class InputCore: @unchecked Sendable {
     package var controllers: [ObjectIdentifier: ControllerSample] = [:]
     package var pendingTouchReleases: [(slot: UInt8, finger: ControllerTouchpadFinger)] = []
     package var touchpadStates: [UInt8: ControllerTouchpadState] = [:]
-    package var controllerMouseMapping = ControllerMouseMapping.standard
+    package var controllerMouseMapping = ControllerMouseMapping.rightStick {
+        didSet { controllerMousePlan = ControllerMousePlan(.init(preset: controllerMouseMapping)) }
+    }
+    package var controllerMousePlan = ControllerMousePlan()
     package var controllerMouseStates: [UInt8: ControllerMouseState] = [:]
     package var heldMouseButtons: Set<Int32> = []
     package var mousePollingGeneration: UInt64 = 0
@@ -164,7 +167,7 @@ package final class InputCore: @unchecked Sendable {
             updateChord(slot: slot, held: chord)
             let isMouse = routeControllerMouse(slot: slot, buttons: buttons, analog: analog,
                                                chordHeld: chord,
-                                               now: capturedAt ?? ProcessInfo.processInfo.systemUptime)
+                                               now: capturedAt ?? ProcessInfo.processInfo.systemUptime, extras: extras)
             let mapped = ControllerButtonLayout.apply(buttons, useNintendoLabels: snapshot.nintendoSlots.contains(slot))
             if chord {
                 guard needsRelease(slot: slot, buttons: mapped, leftDown: analog.leftTrigger > 0,

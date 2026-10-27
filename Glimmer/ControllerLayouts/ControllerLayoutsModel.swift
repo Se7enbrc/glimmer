@@ -43,6 +43,7 @@ final class ControllerLayoutsModel {
     static let shared = ControllerLayoutsModel()
     static let didChange = Notification.Name("ControllerLayoutsDidChange")
     private(set) var library = ControllerLayoutLibrary()
+    private(set) var mouse: ControllerMouseBindings
     private(set) var loaded = false
     private(set) var loadError: String?
     private(set) var devices: [ControllerLayoutDevice] = []
@@ -58,6 +59,7 @@ final class ControllerLayoutsModel {
     init(url: URL = ControllerLayoutsModel.storeURL, defaults: UserDefaults = PersistentStorage.defaults,
          read: (() async throws -> ControllerLayoutLibrary)? = nil) {
         self.defaults = defaults
+        mouse = ControllerMouseBindings.load(from: defaults)
         let store = ControllerLayoutStore(url: url)
         self.store = store
         readLibrary = read ?? { try await store.load() }
@@ -127,6 +129,9 @@ final class ControllerLayoutsModel {
         guard value.recordingProblem(for: action, available: available) == nil else {
             throw ControllerLayoutError.invalidBindings
         }
+        guard !mouse.overrides.values.contains(where: { ControllerMouseBindings.overlaps($0, buttons) }) else {
+            throw ControllerLayoutError.invalidBindings
+        }
         saving = true
         defer { saving = false }
         var next = library
@@ -142,6 +147,42 @@ final class ControllerLayoutsModel {
         defer { saving = false }
         let kept = includeGames ? [] : library.records.filter { $0.key.scope != .allGames }
         try await commit(ControllerLayoutLibrary(records: kept))
+        try setMouse(.init())
+    }
+
+    func selectMousePreset(_ preset: ControllerMouseMapping) throws {
+        var next = mouse
+        next.preset = preset
+        try setMouse(next)
+    }
+
+    func resetMouseToPreset() throws { try setMouse(.init(preset: mouse.preset)) }
+
+    func mouseProblem(_ sources: Set<ControllerLayoutSource>, action: ControllerMouseAction,
+                      device: ControllerLayoutDevice) -> String? {
+        let explicit = library.shortcuts.map(\.shortcuts) + [ControllerLayoutShortcuts.savedGlobal(in: defaults)].compactMap { $0 }
+        if sources == mouse[action], !explicit.contains(where: {
+            ControllerMouseBindings.overlaps(sources, $0.stop) || ControllerMouseBindings.overlaps(sources, $0.stats)
+        }) { return nil }
+        return mouse.recordingProblem(sources, for: action, available: Set(device.controls.map(\.id)),
+            shortcuts: library.shortcuts.map(\.shortcuts) + [shortcuts(device)])
+    }
+
+    func saveMouse(_ sources: Set<ControllerLayoutSource>, action: ControllerMouseAction,
+                   device: ControllerLayoutDevice) throws {
+        guard mouseProblem(sources, action: action, device: device) == nil else {
+            throw ControllerLayoutError.invalidBindings
+        }
+        var next = mouse
+        next.assign(sources, to: action)
+        try setMouse(next)
+    }
+
+    private func setMouse(_ next: ControllerMouseBindings) throws {
+        guard loaded else { throw ControllerLayoutError.invalidDocument }
+        try next.save(to: defaults)
+        mouse = next
+        NotificationCenter.default.post(name: Self.didChange, object: self)
     }
 
     private func commit(_ next: ControllerLayoutLibrary) async throws {

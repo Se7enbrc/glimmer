@@ -64,9 +64,9 @@ struct TouchRenderTests {
             for child in control.subviews { #expect(!StreamTouchCapture.acceptsTouch(startingIn: child)) }
         }
         view.mouseMode(true)
-        #expect(view.controls[.leftStick]?.accessibilityLabel == "Pointer")
-        #expect(view.controls[.a]?.accessibilityLabel == "Primary click")
-        #expect(view.controls[.b]?.accessibilityLabel == "Secondary click")
+        #expect(view.controls[.rightStick]?.accessibilityLabel == "Pointer")
+        #expect(view.controls[.rightTrigger]?.accessibilityLabel == "Right trigger, Primary click")
+        #expect(view.controls[.rightShoulder]?.accessibilityLabel == "Right shoulder, Secondary click")
         view.mouseMode(false)
         #expect(view.controls[.a]?.accessibilityLabel == "A")
     }

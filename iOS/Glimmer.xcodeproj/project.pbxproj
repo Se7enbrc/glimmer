@@ -9,6 +9,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BE96F5B75BF44AFDB115C7C5 /* ControllerMouseRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401A7BF4B42246CDB950AC5A /* ControllerMouseRenderTests.swift */; };
+		0730CBD469AA4F238DCF2870 /* StreamInputMouseModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC13F94EED443929E0801C6 /* StreamInputMouseModeTests.swift */; };
+		179D11C0F19244A79F391AD8 /* ControllerMouseParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB3A9A16C04C4CCFA4075316 /* ControllerMouseParityTests.swift */; };
+		93C8BF248CDB4B57951A8772 /* ControllerMouseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65D2F269D24435CA2210905 /* ControllerMouseSettingsView.swift */; };
+		AAE0C04EE9634E38AB4D3EDD /* ControllerBindingRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6779A619A1749A78C930848 /* ControllerBindingRecorder.swift */; };
 		2BF877D495524893934065B9 /* IOSCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160644308A9E43FCA623B084 /* IOSCommandTests.swift */; };
 		87087747D4634603B3D50A5D /* LauncherModel+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = C963F274D6E74EA08022C248 /* LauncherModel+Commands.swift */; };
 		A6E129727F9D4211BB71C571 /* GlimmerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B057B317A014971AA58DB55 /* GlimmerIntents.swift */; };
@@ -87,7 +92,6 @@
 		7C005521D3EE42B18E901C43 /* StreamMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B71F479D3795429BB42819BA /* StreamMenuTests.swift */; };
 		2DF42FA9AEE3457ABE9C2019 /* StreamTouchCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = F08434884699435EA80067AB /* StreamTouchCapture.swift */; };
 		BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */; };
-		A037E3519F7846D6958E34F0 /* ControllerMouseMotionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */; };
 		2991D4ACED164DA0885B3536 /* StreamTouchRecognizers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */; };
 		BF51A1858C9E4892B1CD845D /* IOSControllerCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */; };
 		7C852A7B0A774B1287D2B023 /* IOSControllerCapture+Samples.swift in Sources */ = {isa = PBXBuildFile; fileRef = 390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */; };
@@ -212,6 +216,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		401A7BF4B42246CDB950AC5A /* ControllerMouseRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerMouseRenderTests.swift"; sourceTree = SOURCE_ROOT; };
+		0CC13F94EED443929E0801C6 /* StreamInputMouseModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/StreamInputMouseModeTests.swift"; sourceTree = SOURCE_ROOT; };
+		DB3A9A16C04C4CCFA4075316 /* ControllerMouseParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerMouseParityTests.swift"; sourceTree = SOURCE_ROOT; };
+		E65D2F269D24435CA2210905 /* ControllerMouseSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerMouseSettingsView.swift"; sourceTree = SOURCE_ROOT; };
+		E6779A619A1749A78C930848 /* ControllerBindingRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerBindingRecorder.swift"; sourceTree = SOURCE_ROOT; };
 		160644308A9E43FCA623B084 /* IOSCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSCommandTests.swift"; sourceTree = "<group>"; };
 		C963F274D6E74EA08022C248 /* LauncherModel+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherModel+Commands.swift"; sourceTree = "<group>"; };
 		3B057B317A014971AA58DB55 /* GlimmerIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "../Glimmer/GlimmerIntents.swift"; sourceTree = SOURCE_ROOT; };
@@ -293,7 +302,6 @@
 		B71F479D3795429BB42819BA /* StreamMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamMenuTests.swift"; sourceTree = "<group>"; };
 		F08434884699435EA80067AB /* StreamTouchCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCapture.swift"; sourceTree = "<group>"; };
 		4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchCaptureTests.swift"; sourceTree = "<group>"; };
-		1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControllerMouseMotionTests.swift"; sourceTree = "<group>"; };
 		5FD93EDB30C94D9B9A51B834 /* StreamTouchRecognizers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StreamTouchRecognizers.swift"; sourceTree = "<group>"; };
 		1B7769C5D6E4429FA02F6B72 /* IOSControllerCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerCapture.swift"; sourceTree = "<group>"; };
 		390F1BE93E40480D9DBD3380 /* IOSControllerCapture+Samples.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSControllerCapture+Samples.swift"; sourceTree = "<group>"; };
@@ -504,6 +512,9 @@
 				7746C436977D71BFC46F6315 /* ControllerMappingTests.swift */,
 				BFF7552AB0051D0CF5CDA66C /* ControllerLayoutCaptureTests.swift */,
 				D2EABAC005FF46729FD7ABA4 /* ControllerLayoutDeliveryTests.swift */,
+				401A7BF4B42246CDB950AC5A /* ControllerMouseRenderTests.swift */,
+				0CC13F94EED443929E0801C6 /* StreamInputMouseModeTests.swift */,
+				DB3A9A16C04C4CCFA4075316 /* ControllerMouseParityTests.swift */,
 				7EFFF25C9C89A1D45849BEBD /* ControllerShortcutRenderTests.swift */,
 				B39AA07EBFE1478632FD9C82 /* SettingsResetTests.swift */,
 				8D45B4D6D520493193F710F5 /* ControllerLayoutRenderTests.swift */,
@@ -540,7 +551,6 @@
 				0FF51FDBF4F84B7D9A4F5F5A /* BandwidthPolicyTests.swift */,
 				E1E85873A2E24EE986A20ED1 /* LauncherGalleryTests.swift */,
 				4AB7291F22BA4BC19F6D536F /* StreamTouchCaptureTests.swift */,
-				1DC276A6374B4198A623617F /* ControllerMouseMotionTests.swift */,
 				9F5102EDB7AD2531AE0663B1 /* ControllerMonitorTests.swift */,
 				198F3AC99E774F7CB79C6798 /* IOSControllerCaptureTests.swift */,
 				7ED64074DB934BDE82B3290A /* IOSControllerSensorsTests.swift */,
@@ -613,6 +623,8 @@
 				1CEFB04D7C50BCA3212857BA /* IOSControllerLayouts.swift */,
 				2B4B2F8017E0FB2092F9C0E4 /* ControllerLayoutShortcutSummary.swift */,
 				01256C02993A397A5EFFE5AD /* ControllerShortcutSection.swift */,
+				E65D2F269D24435CA2210905 /* ControllerMouseSettingsView.swift */,
+				E6779A619A1749A78C930848 /* ControllerBindingRecorder.swift */,
 				88E5F29C7D58C61CECA51EAD /* SettingsResetSection.swift */,
 				E0757E12009BBC43929C9AB7 /* ControllerLayoutEditing.swift */,
 				E5DF1CC2B032ADD29D6F29F9 /* ControllerLayoutNavigation.swift */,
@@ -831,6 +843,9 @@
 				165AA6E728C1A6FC28DC8ACE /* ControllerMappingTests.swift in Sources */,
 				A05516581C0597B57F9B76F9 /* ControllerLayoutCaptureTests.swift in Sources */,
 				5DC159247CD748A78DBED722 /* ControllerLayoutDeliveryTests.swift in Sources */,
+				BE96F5B75BF44AFDB115C7C5 /* ControllerMouseRenderTests.swift in Sources */,
+				0730CBD469AA4F238DCF2870 /* StreamInputMouseModeTests.swift in Sources */,
+				179D11C0F19244A79F391AD8 /* ControllerMouseParityTests.swift in Sources */,
 				EF06D7BF42362F48C7DD2F4E /* ControllerShortcutRenderTests.swift in Sources */,
 				B6E7744FC3D57253692A1E23 /* SettingsResetTests.swift in Sources */,
 				8033B9ABE605D5A2C6102F12 /* ControllerLayoutRenderTests.swift in Sources */,
@@ -867,7 +882,6 @@
 				CFB1AD00C82D4222AF70ABDE /* BandwidthPolicyTests.swift in Sources */,
 				9C37B4E1A3AA4BC6AB4C77BE /* LauncherGalleryTests.swift in Sources */,
 				BBD3415D97634D2F8786DEFA /* StreamTouchCaptureTests.swift in Sources */,
-				A037E3519F7846D6958E34F0 /* ControllerMouseMotionTests.swift in Sources */,
 				99827218F70ECA345A8EED25 /* ControllerMonitorTests.swift in Sources */,
 				0A34A869941C483784D1C76F /* IOSControllerCaptureTests.swift in Sources */,
 				610DFE85BF994F3ABF7A541A /* IOSControllerSensorsTests.swift in Sources */,
@@ -931,6 +945,8 @@
 				D162E918753F1A7DF4908674 /* IOSControllerLayouts.swift in Sources */,
 				A1C2C5E3D10A1AC79DB000E4 /* ControllerLayoutShortcutSummary.swift in Sources */,
 				E10A281422C6F8AC8794767A /* ControllerShortcutSection.swift in Sources */,
+				93C8BF248CDB4B57951A8772 /* ControllerMouseSettingsView.swift in Sources */,
+				AAE0C04EE9634E38AB4D3EDD /* ControllerBindingRecorder.swift in Sources */,
 				328FE68F03EA2F59C7820A91 /* SettingsResetSection.swift in Sources */,
 				94F7B1607EBE0F53941883A9 /* ControllerLayoutEditing.swift in Sources */,
 				BBDF302987FAF9F7402A6D84 /* ControllerLayoutNavigation.swift in Sources */,

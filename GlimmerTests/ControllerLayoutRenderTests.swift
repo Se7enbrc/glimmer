@@ -242,6 +242,7 @@ struct ControllerLayoutRenderTests {
         let host = NSHostingController(rootView: content.environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentViewController: host)
         window.title = name.contains("general") ? "General" : "Controller layouts"
+        if name.hasPrefix("mouse-") { window.title = "Controller mouse" }
         if name.contains("reset-confirmation") { window.title = "Reset to defaults?" }
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.styleMask = [.titled, .closable, .resizable]

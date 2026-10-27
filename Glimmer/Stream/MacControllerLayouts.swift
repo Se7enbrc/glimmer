@@ -77,7 +77,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         let record = model.library.resolve(reader.identity, scope: scope)
         guard let configuration = try? ControllerLayoutConfiguration(
             layout: record?.layout, shortcuts: model.shortcuts(for: reader.identity),
-            available: reader.available, extras: reader.extras) else { return nil }
+            available: reader.available, extras: reader.extras, mouse: model.mouse) else { return nil }
         let core = forwarder.inputCore
         let id = ObjectIdentifier(controller)
         core.configureLayout(configuration, slot: state.slot, held: reader.sample(),
@@ -92,7 +92,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         let available = Set(ControllerMappedButton.allCases.map { ControllerLayoutSource.button($0) })
             .union([.trigger(.left), .trigger(.right)])
         guard let configuration = try? ControllerLayoutConfiguration(layout: nil, shortcuts: model.shortcuts(for: identity),
-            available: available) else { return }
+            available: available, mouse: model.mouse) else { return }
         forwarder.inputCore.configureLayout(configuration, slot: state.slot,
             held: .init(buttons: forwarder.pressedButtonFlags(pad: pad), analog: InputForwarder.controllerAnalog(pad)),
             at: ProcessInfo.processInfo.systemUptime)
@@ -127,7 +127,7 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         let available = Set(HIDControllerLayouts.controls(pad).map(\.id))
         guard let configuration = try? ControllerLayoutConfiguration(
             layout: record?.layout, shortcuts: model.shortcuts(for: identity),
-            available: available, extras: pad.layoutExtras.map(\.name)) else { return }
+            available: available, extras: pad.layoutExtras.map(\.name), mouse: model.mouse) else { return }
         let core = forwarder.inputCore
         core.configureLayout(configuration, slot: state.slot,
                              held: pad.capture.layoutSample(indexes: pad.layoutExtras.map(\.index)),

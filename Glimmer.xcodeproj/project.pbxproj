@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0F8D68E993AC460C9B7489CE /* ControllerMouseRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376C60990C2F4043828839C4 /* ControllerMouseRenderTests.swift */; };
+		34BA9722E4094FD9A99EA3B4 /* ControllerMouseParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C08B8B621C243F4B15E46AF /* ControllerMouseParityTests.swift */; };
+		60607C6E677F4C51B4F13301 /* ControllerMouseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */; };
+		CAF9EA985F46440091EE1715 /* ControllerBindingRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A25B0561ABC542C0B5DF91C7 /* ControllerBindingRecorder.swift */; };
+		CBE056E47FDE4F7A89BE875E /* ControllerMousePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB730F819CA459E8B6D5181 /* ControllerMousePlan.swift */; };
 		CEAB7AF24D024627A8D4BB78 /* GlimmerCommandURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */; };
 		8989D451DBCF4948B25421E6 /* StreamKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */; };
 		A3BD7B1A7DF94D61957AC2EB /* StreamInput+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5803B42776646209AB7B6BC /* StreamInput+Keyboard.swift */; };
@@ -626,7 +631,6 @@
 		47C0329BABB04AAD8D17E031 /* ControllerRearmState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B232171E04CF4216A7177073 /* ControllerRearmState.swift */; };
 		8AB91C65993C4DF88404AA2B /* InputCore+Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC7A40F932F46A0AE5AAAFF /* InputCore+Controller.swift */; };
 		D02BB946E28B4033B2719286 /* InputCore+Mouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A04597DCD0F4F34A14438C9 /* InputCore+Mouse.swift */; };
-		E5E54ED35009425384B7E4B9 /* ControllerMouseMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC63CE59E65744B581B3689F /* ControllerMouseMotion.swift */; };
 		3CD0C9433D864ACEABD70FD5 /* InputCore+Pointer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62AC3EB39E6045B88C0844A4 /* InputCore+Pointer.swift */; };
 		5917CF91FE8F4FDE957C6480 /* InputCore+Touchpad.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FEBC0FFDDD44133A11DA500 /* InputCore+Touchpad.swift */; };
 		DC6C4EFE1C0A460CB5C22120 /* StreamInput+Chord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF4EBEEDF0140568600D373 /* StreamInput+Chord.swift */; };
@@ -830,6 +834,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		376C60990C2F4043828839C4 /* ControllerMouseRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerMouseRenderTests.swift"; sourceTree = SOURCE_ROOT; };
+		0C08B8B621C243F4B15E46AF /* ControllerMouseParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerMouseParityTests.swift"; sourceTree = SOURCE_ROOT; };
+		74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerMouseSettingsView.swift"; sourceTree = SOURCE_ROOT; };
+		A25B0561ABC542C0B5DF91C7 /* ControllerBindingRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerBindingRecorder.swift"; sourceTree = SOURCE_ROOT; };
+		5FB730F819CA459E8B6D5181 /* ControllerMousePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerMousePlan.swift"; sourceTree = SOURCE_ROOT; };
 		19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/GlimmerCommandURL.swift"; sourceTree = SOURCE_ROOT; };
 		B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamKeyboardTests.swift; sourceTree = "<group>"; };
 		A5803B42776646209AB7B6BC /* StreamInput+Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/StreamInput+Keyboard.swift"; sourceTree = SOURCE_ROOT; };
@@ -1451,7 +1460,6 @@
 		B232171E04CF4216A7177073 /* ControllerRearmState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerRearmState.swift"; sourceTree = SOURCE_ROOT; };
 		3CC7A40F932F46A0AE5AAAFF /* InputCore+Controller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Controller.swift"; sourceTree = SOURCE_ROOT; };
 		7A04597DCD0F4F34A14438C9 /* InputCore+Mouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Mouse.swift"; sourceTree = SOURCE_ROOT; };
-		FC63CE59E65744B581B3689F /* ControllerMouseMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerMouseMotion.swift"; sourceTree = SOURCE_ROOT; };
 		62AC3EB39E6045B88C0844A4 /* InputCore+Pointer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Pointer.swift"; sourceTree = SOURCE_ROOT; };
 		0FEBC0FFDDD44133A11DA500 /* InputCore+Touchpad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Touchpad.swift"; sourceTree = SOURCE_ROOT; };
 		0CF4EBEEDF0140568600D373 /* StreamInput+Chord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/StreamInput+Chord.swift"; sourceTree = SOURCE_ROOT; };
@@ -1702,6 +1710,8 @@
 				0AB91A16DB2CB59EA97B9943 /* ControllerDiagramGeometry.swift */,
 				25E28540FB349E5444344446 /* ControllerLayoutShortcutSummary.swift */,
 				DD515C08AFF793031FF8AC1D /* ControllerShortcutSection.swift */,
+				74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */,
+				A25B0561ABC542C0B5DF91C7 /* ControllerBindingRecorder.swift */,
 				98502B03A65CBCEA3BFEDD81 /* SettingsResetSection.swift */,
 				A5ED7BA9A4911DB133DB8082 /* ControllerLayoutEditing.swift */,
 				13E714E28442C4B881DD2A7F /* ControllerLayoutNavigation.swift */,
@@ -1920,6 +1930,8 @@
 				EB8E8DC2D7CDC60EF66275B3 /* ControllerLayoutBoundaryTests.swift */,
 				5C42C1D0E1A5A595F2D9D459 /* ControllerLayoutCaptureTests.swift */,
 				327B6FA79D4D4A5584956925 /* ControllerLayoutDeliveryTests.swift */,
+				376C60990C2F4043828839C4 /* ControllerMouseRenderTests.swift */,
+				0C08B8B621C243F4B15E46AF /* ControllerMouseParityTests.swift */,
 				0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */,
 				837D4DB90C33C0B07D279747 /* SettingsResetTests.swift */,
 				C7C0E1B0EA955CEF50500AC9 /* ControllerLayoutRoutingTests.swift */,
@@ -2194,6 +2206,7 @@
 				AC2026101100000000000001B /* LauncherArtCache.swift */,
 				F8C3CBBB7FBF488C9D4A7BB7 /* StreamInput+ControllerMouse.swift */,
 				1DF214F57A624AA18B39158B /* ControllerMouseMapping.swift */,
+				5FB730F819CA459E8B6D5181 /* ControllerMousePlan.swift */,
 				2BF97748AD5149368A9FDE11 /* RouteBitratePolicy.swift */,
 				7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */,
 				EF02F645DDC741DE839C0B73 /* StreamSession+Bandwidth.swift */,
@@ -2257,7 +2270,6 @@
 				0FEBC0FFDDD44133A11DA500 /* InputCore+Touchpad.swift */,
 				62AC3EB39E6045B88C0844A4 /* InputCore+Pointer.swift */,
 				7A04597DCD0F4F34A14438C9 /* InputCore+Mouse.swift */,
-				FC63CE59E65744B581B3689F /* ControllerMouseMotion.swift */,
 				3CC7A40F932F46A0AE5AAAFF /* InputCore+Controller.swift */,
 				B232171E04CF4216A7177073 /* ControllerRearmState.swift */,
 				ACC55B08FAF443E0A701E5F3 /* ControllerChord.swift */,
@@ -2653,6 +2665,8 @@
 				A3DF1B0473E02EBD01FC2C40 /* ControllerDiagramGeometry.swift in Sources */,
 				857BF7C4E7FD8FDEEA84F1A6 /* ControllerLayoutShortcutSummary.swift in Sources */,
 				E31B347927A1170384BBEB95 /* ControllerShortcutSection.swift in Sources */,
+				60607C6E677F4C51B4F13301 /* ControllerMouseSettingsView.swift in Sources */,
+				CAF9EA985F46440091EE1715 /* ControllerBindingRecorder.swift in Sources */,
 				3A20D1A556D1F1B2678B97FA /* SettingsResetSection.swift in Sources */,
 				388D6B7BE9B0C6DB43F9DD54 /* ControllerLayoutEditing.swift in Sources */,
 				BC68397480843F3DF035D03D /* ControllerLayoutNavigation.swift in Sources */,
@@ -2857,6 +2871,8 @@
 				67208A0EDA4DDDDD610A8176 /* ControllerLayoutBoundaryTests.swift in Sources */,
 				0E71DD174FA02F0B707E9761 /* ControllerLayoutCaptureTests.swift in Sources */,
 				3907115182434F9A8F0FB75F /* ControllerLayoutDeliveryTests.swift in Sources */,
+				0F8D68E993AC460C9B7489CE /* ControllerMouseRenderTests.swift in Sources */,
+				34BA9722E4094FD9A99EA3B4 /* ControllerMouseParityTests.swift in Sources */,
 				114D0A9130EE107F0ED56FF8 /* ControllerShortcutRenderTests.swift in Sources */,
 				56A574311FFA79E0A008A3EF /* SettingsResetTests.swift in Sources */,
 				C7FF37545FB1A12CC429370A /* ControllerLayoutRoutingTests.swift in Sources */,
@@ -3130,6 +3146,7 @@
 				AC2026101100000000000001A /* LauncherArtCache.swift in Sources */,
 				967AC9F4B747400BA49F0B70 /* StreamInput+ControllerMouse.swift in Sources */,
 				2A48F2F26CA64FB481D74255 /* ControllerMouseMapping.swift in Sources */,
+				CBE056E47FDE4F7A89BE875E /* ControllerMousePlan.swift in Sources */,
 				1FBCB82CDB6644B6B684DC53 /* RouteBitratePolicy.swift in Sources */,
 				9A913317D15D48E1B54D8F33 /* BandwidthTrainEvidence.swift in Sources */,
 				D533A4260AA14705836FE716 /* StreamSession+Bandwidth.swift in Sources */,
@@ -3193,7 +3210,6 @@
 				5917CF91FE8F4FDE957C6480 /* InputCore+Touchpad.swift in Sources */,
 				3CD0C9433D864ACEABD70FD5 /* InputCore+Pointer.swift in Sources */,
 				D02BB946E28B4033B2719286 /* InputCore+Mouse.swift in Sources */,
-				E5E54ED35009425384B7E4B9 /* ControllerMouseMotion.swift in Sources */,
 				8AB91C65993C4DF88404AA2B /* InputCore+Controller.swift in Sources */,
 				47C0329BABB04AAD8D17E031 /* ControllerRearmState.swift in Sources */,
 				CC6CE5CEDA3E4735B16C44A7 /* ControllerChord.swift in Sources */,

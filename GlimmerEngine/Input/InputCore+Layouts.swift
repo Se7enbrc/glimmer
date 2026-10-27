@@ -6,6 +6,7 @@ import Foundation
 package final class ControllerLayoutRouting {
     package final class State {
         package var plan: ControllerMappingPlan?
+        package var mouse: ControllerMousePlan?
         package var gesture: ControllerShortcutGesture
         package var timer: DispatchWorkItem?
         package var systemSuppression: ControllerPhysicalChord?
@@ -25,6 +26,7 @@ package final class ControllerLayoutRouting {
                      acceptAfter: TimeInterval) {
             physical = held
             plan = configuration?.plan
+            mouse = configuration?.mouse
             gesture = ControllerShortcutGesture(stop: configuration?.stop ?? .empty, stats: configuration?.stats ?? .empty)
             rearm = ControllerLayoutRearm(held: held)
             gameRearm = ControllerLayoutRearm(held: systemHeld)
@@ -71,7 +73,9 @@ extension InputCore {
             releases.hold(.controller(slot))
             releases.release(.controller(slot))
             releaseControllerTouches(slot: slot)
+            let wasMouse = controllerMouseStates[slot]?.isMouse == true
             resetControllerMouse(slot: slot)
+            if wasMouse { controllerMouseStates[slot] = ControllerMouseState(isMouse: true) }
             updateChord(slot: slot, held: false, invalidate: true)
             let arrival = previous?.originalArrival ?? announcedControllers[slot] ?? pendingArrivals[slot]
             if let configuration {
@@ -147,7 +151,7 @@ extension InputCore {
         let system = state.systemSuppression?.removing(from: gameSample) ?? gameSample
         let consumes = suppression != nil || action != nil
         let isMouse = routeControllerMouse(slot: slot, buttons: Int32(bitPattern: filtered.buttons),
-            analog: filtered.gamepadAnalog, chordHeld: consumes || state.gesture.deadline != nil, now: now)
+            analog: filtered.gamepadAnalog, chordHeld: consumes || state.gesture.deadline != nil, now: now, extras: filtered.extras)
         if !isMouse {
             if let output = state.plan?.apply(filtered) {
                 sendController(slot: slot, buttons: Int32(bitPattern: output.buttons), analog: output.gamepadAnalog)

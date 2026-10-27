@@ -19,12 +19,24 @@ extension StreamInput {
         }
     }
 
-    /// Applies to current and future registrations; the default preserves the legacy Mac mapping.
+    /// Applies to current and future registrations.
     /// A live change releases mouse input and rearms held controls before using the new mapping.
     public func setControllerMouseMapping(_ mapping: ControllerMouseMapping) {
         core.withLock {
             guard !terminal, core.controllerMouseMapping != mapping else { return }
             core.controllerMouseMapping = mapping
+            for slot in registrations.keys where core.controllerMouseStates[slot]?.isMouse == true {
+                prepareControllerMouseMappingChange(slot: slot)
+            }
+            scheduleReconciliation()
+        }
+    }
+
+    public func setControllerMouseBindings(_ bindings: ControllerMouseBindings) {
+        core.withLock {
+            guard !terminal else { return }
+            core.controllerMouseMapping = bindings.preset
+            core.controllerMousePlan = ControllerMousePlan(bindings)
             for slot in registrations.keys where core.controllerMouseStates[slot]?.isMouse == true {
                 prepareControllerMouseMappingChange(slot: slot)
             }

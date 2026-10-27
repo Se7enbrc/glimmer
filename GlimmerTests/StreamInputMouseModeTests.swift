@@ -104,8 +104,7 @@ struct StreamInputMouseModeTests {
         submit(rig.input, registration, sample(127 / 255, shoulder: true))
         #expect(rig.backend.pointer == [.button(action: 7, button: 1), .button(action: 8, button: 1),
                                         .button(action: 7, button: 3)])
-        submit(rig.input, registration, .init(buttons: [.a, .b],
-            leftTrigger: mapping == .rightStick ? 1 : 0, rightTrigger: mapping == .leftStick ? 1 : 0))
+        submit(rig.input, registration, .init(buttons: [.a, .b]))
         #expect(rig.backend.pointer.last == .button(action: 8, button: 3))
         #expect(rig.backend.pointer.count == 4)
     }
@@ -119,15 +118,15 @@ struct StreamInputMouseModeTests {
         let held = ControllerInputSample(buttons: [.leftShoulder, .rightShoulder], leftTrigger: 1,
                                          rightTrigger: 1, leftStickX: 1, rightStickX: 1)
         submit(rig.input, registration, held)
-        #expect(rig.backend.pointer == [.button(action: 7, button: 1), .button(action: 7, button: 3)])
+        #expect(rig.backend.pointer == [1, 3, 4, 5].map { .button(action: 7, button: $0) })
         rig.input.setControllerMouseMapping(.leftStick)
-        #expect(rig.backend.pointer.suffix(2) == [.button(action: 8, button: 1), .button(action: 8, button: 3)])
+        #expect(rig.backend.pointer.suffix(4) == [1, 3, 4, 5].map { .button(action: 8, button: $0) })
         submit(rig.input, registration, held)
         rig.input.core.pollControllerMouse()
-        #expect(rig.backend.pointer.count == 4 && rig.backend.mouseMoves.isEmpty)
+        #expect(rig.backend.pointer.count == 8 && rig.backend.mouseMoves.isEmpty)
         submit(rig.input, registration, .init(rightTrigger: 1, rightStickX: 1))
         submit(rig.input, registration, held)
-        #expect(rig.backend.pointer.suffix(2) == [.button(action: 7, button: 1), .button(action: 7, button: 3)])
+        #expect(rig.backend.pointer.suffix(3) == [1, 3, 5].map { .button(action: 7, button: $0) })
         #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[registration.slot]?.analog.rightStickX } == 0)
     }
 

@@ -19,6 +19,18 @@ enum TouchElement: String, CaseIterable, Codable, Sendable, Identifiable {
         [.leftStick, .dpad, .leftShoulder, .leftTrigger, .leftStickButton, .options].contains(self)
     }
 
+    var mouseSources: Set<ControllerLayoutSource> {
+        switch self {
+        case .leftStick: return ControllerMouseMapping.stick(right: false)
+        case .rightStick: return ControllerMouseMapping.stick(right: true)
+        case .leftTrigger: return [.trigger(.left)]
+        case .rightTrigger: return [.trigger(.right)]
+        default:
+            return Set(ControllerMappedButton.allCases.filter { UInt32(bitPattern: button.rawValue) & $0.rawValue != 0 }
+                .map { ControllerLayoutSource.button($0) })
+        }
+    }
+
     private static let names: [Self: String] = [
         .leftStick: "Left stick", .rightStick: "Right stick", .dpad: "Directional pad",
         .a: "A", .b: "B", .x: "X", .y: "Y", .leftShoulder: "Left shoulder", .rightShoulder: "Right shoulder",

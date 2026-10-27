@@ -222,6 +222,8 @@ struct ShortcutsPane: View {
                 }
             }
 
+            ControllerMouseSettingsSection()
+
             // Raw-HID DualSense reader. Shown when a pad is connected or the
             // feature is on (its off-switch must not vanish with the pad), but
             // not while the chord warning above already offers Turn On.

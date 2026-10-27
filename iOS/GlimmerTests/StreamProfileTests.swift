@@ -158,8 +158,8 @@ struct StreamProfileTests {
         let input = StreamInput(emit: { _ in })
         input.setControllerMouseMapping(.rightStick)
         StreamPlayback.configureInput(input)
-        #expect(input.core.controllerMouseMapping == .standard)
-        #expect(StreamLaunch.mouseControls.contains("A clicks. B right-clicks."))
+        #expect(input.core.controllerMouseMapping == .rightStick)
+        #expect(!input.core.controllerMenuOpensControls)
     }
 
     @Test(arguments: ["", " ", "https://pc.local", "pc.local:47989", "pc.local/path", "pc.local?x=1",
