@@ -26,7 +26,7 @@ def check_simulator(identifier):
                                    "com.apple.Accessibility", key], capture_output=True, text=True, check=False, timeout=30)
             if live.returncode == 0:
                 enabled = enabled or live.stdout.strip().lower() in {"1", "true", "yes"}
-            elif "does not exist" not in live.stderr:
+            elif "does not exist" not in live.stderr and "Could not find key" not in live.stderr:
                 raise RuntimeError("Could not verify the Simulator's speech setting")
         if enabled:
             raise RuntimeError(f"Refusing to run: {key} is enabled in the target Simulator. Turn it off first.")

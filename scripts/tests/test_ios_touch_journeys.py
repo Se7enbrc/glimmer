@@ -25,9 +25,12 @@ with open(os.environ["JOURNEY_TEST_LOG"], "a", encoding="utf-8") as stream:
 if name == "xcrun" and args[:2] == ["simctl", "create"]:
     print("created-phone" if "iPhone" in args[2] else "created-pad")
 if name == "xcrun" and args == ["simctl", "list", "devices", "--json"]:
-    devices = [{"udid": identifier, "dataPath": os.environ["JOURNEY_TEST_DATA"], "state": "Shutdown"}
+    state = "Booted" if os.environ.get("JOURNEY_TEST_BOOTED") else "Shutdown"
+    devices = [{"udid": identifier, "dataPath": os.environ["JOURNEY_TEST_DATA"], "state": state}
                for identifier in ["created-phone", "created-pad", "supplied-phone", "supplied-pad"]]
     print(json.dumps({"devices": {"runtime": devices}}))
+if name == "xcrun" and args[:2] == ["simctl", "spawn"]:
+    sys.exit(f"Error: Could not find key '{args[-1]}' in domain '{args[-2]}'.")
 if name == "make" and "test-run" in args and os.environ.get("JOURNEY_TEST_FAIL"):
     if "-dark-" in " ".join(args):
         sys.exit(1)
@@ -35,7 +38,8 @@ if name == "make" and "test-run" in args and os.environ.get("JOURNEY_TEST_FAIL")
 
 
 class IOSTouchJourneyTests(unittest.TestCase):
-    def run_journeys(self, *, supplied=False, fail=False, speech=False, device="all", appearance="all"):
+    def run_journeys(self, *, supplied=False, fail=False, speech=False, booted=False, device="all",
+                     appearance="all"):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             binaries = directory / "bin"
@@ -46,7 +50,7 @@ class IOSTouchJourneyTests(unittest.TestCase):
                 tool.chmod(0o755)
             log = directory / "calls.jsonl"
             environment = dict(os.environ)
-            for key in ["JOURNEY_PHONE_ID", "JOURNEY_IPAD_ID", "JOURNEY_TEST_FAIL"]:
+            for key in ["JOURNEY_PHONE_ID", "JOURNEY_IPAD_ID", "JOURNEY_TEST_FAIL", "JOURNEY_TEST_BOOTED"]:
                 environment.pop(key, None)
             environment.update({
                 "PATH": str(binaries) + os.pathsep + environment["PATH"],
@@ -65,6 +69,8 @@ class IOSTouchJourneyTests(unittest.TestCase):
                 environment.update(JOURNEY_PHONE_ID="supplied-phone", JOURNEY_IPAD_ID="supplied-pad")
             if fail:
                 environment["JOURNEY_TEST_FAIL"] = "1"
+            if booted:
+                environment["JOURNEY_TEST_BOOTED"] = "1"
             result = subprocess.run(["/bin/bash", str(ROOT / "scripts/ios-touch-journeys.sh")],
                                     env=environment, text=True, capture_output=True, check=False)
             calls = [json.loads(line) for line in log.read_text().splitlines()]
@@ -102,6 +108,11 @@ class IOSTouchJourneyTests(unittest.TestCase):
         self.assertEqual(len(runs), 1)
         self.assertIn("id=created-pad", " ".join(runs[0]))
         self.assertIn("-dark-", " ".join(runs[0]))
+
+    def test_booted_simulator_without_speech_keys_runs_every_appearance(self):
+        result, calls = self.run_journeys(booted=True, device="phone")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sum(call[0] == "make" and "test-run" in call for call in calls), 2)
 
     def test_voiceover_refuses_to_build_or_boot(self):
         result, calls = self.run_journeys(speech=True)
