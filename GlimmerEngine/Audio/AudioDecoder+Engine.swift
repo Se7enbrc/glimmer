@@ -69,7 +69,7 @@ extension AudioDecoder {
         announceCushionSeed(seed)
         // A/V-skew session edge: the skew store's pair-anchor + accumulator
         // reset here (one audio init per session IS the pair's session edge).
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         AudioVideoSkewStore.shared.resetForNewSession()
         #endif
         return route
@@ -175,7 +175,7 @@ extension AudioDecoder {
                     observedRingUnderruns = 0
                     outputGraphNeedsReconnect = false
                     installDeviceListeners()
-                    #if os(macOS) || GLIMMER_DIAGNOSTICS
+                    #if os(macOS)
                     AudioPipelineTelemetry.shared.noteOutput(latencyMs: output.latencyMs)
                     #endif
                     Diag.notice("audio HAL ready: \(Int(output.sampleRate)) Hz, \(output.channels) channels, "

@@ -14,7 +14,7 @@ COMPONENTS = (
     b'TelemetryExporter', b'FrameTraceWriter', b'SessionLogFileSink',
     b'FrameTimingTracker', b'AudioPipelineTelemetry', b'AudioVideoSkewStore',
     b'DisplayTelemetry', b'RendererTelemetry', b'ReceiveTimingTelemetry',
-    b'AudioOutputProbe', b'ColorProbe', b'HUDBackdropState',
+    b'AudioOutputProbe', b'ColorProbe',
 )
 SURFACES = (b'Record diagnostics', b'Beta builds turn this on by default.',
             b'controller-capabilities.json', b'glimmer.telemetry')
@@ -30,11 +30,8 @@ def inspect_bytes(payload, flavour):
         raise ValueError('flavour must be beta or production')
     found = [name.decode() for name in COMPONENTS if contains_component(payload, name)]
     found += [name.decode() for name in SURFACES if name in payload]
-    if flavour == 'production' and found:
-        raise ValueError('production contains diagnostic components: ' + ', '.join(found))
-    missing = [name.decode() for name in COMPONENTS if not contains_component(payload, name)]
-    if flavour == 'beta' and missing:
-        raise ValueError('beta is missing diagnostic components: ' + ', '.join(missing))
+    if found:
+        raise ValueError(flavour + ' contains diagnostic components: ' + ', '.join(found))
     return found
 
 

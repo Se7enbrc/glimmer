@@ -137,7 +137,7 @@ extension StreamSession {
             decision = policy.decision(decision.reason, health: health)
         }
         bandwidthPolicy = policy
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         TelemetryExporter.recordLiveEvent(bandwidthFields(decision))
         #endif
     }

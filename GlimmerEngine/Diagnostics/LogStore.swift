@@ -34,7 +34,7 @@ package enum LogLevel: Int, Comparable, Sendable, CaseIterable {
     }
 }
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 /// One entry in the troubleshooting log.
 package struct LogEntry: Identifiable, Sendable {
 
@@ -177,7 +177,7 @@ package enum Diag {
         _ message: DiagMessage,
         _ category: String
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         LogStore.shared.log(.debug, message, category: category)
         #else
         Logger(subsystem: "io.ugfugl.Glimmer", category: category).debug("\(message.systemLogText, privacy: .public)")
@@ -187,7 +187,7 @@ package enum Diag {
         _ message: DiagMessage,
         _ category: String
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         LogStore.shared.log(.info, message, category: category)
         #else
         Logger(subsystem: "io.ugfugl.Glimmer", category: category).info("\(message.systemLogText, privacy: .public)")
@@ -197,7 +197,7 @@ package enum Diag {
         _ message: DiagMessage,
         _ category: String
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         LogStore.shared.log(.notice, message, category: category)
         #else
         Logger(subsystem: "io.ugfugl.Glimmer", category: category).notice("\(message.systemLogText, privacy: .public)")
@@ -207,7 +207,7 @@ package enum Diag {
         _ message: DiagMessage,
         _ category: String
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         LogStore.shared.log(.warning, message, category: category)
         #else
         Logger(subsystem: "io.ugfugl.Glimmer", category: category).warning("\(message.systemLogText, privacy: .public)")
@@ -217,7 +217,7 @@ package enum Diag {
         _ message: DiagMessage,
         _ category: String
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         LogStore.shared.log(.error, message, category: category)
         #else
         Logger(subsystem: "io.ugfugl.Glimmer", category: category).error("\(message.systemLogText, privacy: .public)")
@@ -295,7 +295,7 @@ package struct DiagMessage: ExpressibleByStringInterpolation, Sendable {
     }
 }
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 // MARK: - Per-session file sink (gate-checked, buffered, off the hot path)
 
 /// While a telemetry session runs, mirrors Diag's redacted text (INFO+, DEBUG with

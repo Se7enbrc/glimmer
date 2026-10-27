@@ -108,7 +108,7 @@ struct StreamPlayback {
             finalDispose: { stats.setVisible(false); nativeInput.stop(); bandwidth.stop() })
         let (session, input) = StreamSession.make(media: media, network: launch.network,
                                                   hostDisposition: launch.hostDisposition,
-            diagnosticsDirectory: DiagnosticsDefaults.directory, bandwidthInputs: bandwidth.inputs)
+            bandwidthInputs: bandwidth.inputs)
         input.setStopChord(.menuOptionsShoulders)
         input.setControllerMouseMapping(launch.mouseStick.mapping)
         nativeInput.start(input: input, scope: .game(pcID: launch.pcID, appID: UInt32(clamping: launch.appID)))

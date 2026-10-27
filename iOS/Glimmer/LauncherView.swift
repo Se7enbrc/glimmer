@@ -99,6 +99,7 @@ struct LauncherView: View {
                 .ignoresSafeArea()
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)
+                .defersSystemGestures(on: .top)
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             if phase == .active { controllers.start() } else { controllers.stop() }

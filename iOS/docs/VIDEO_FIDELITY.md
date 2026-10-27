@@ -98,24 +98,24 @@ Run each candidate mode for at least 30 uninterrupted minutes after warm-up.
 Compare against H.264 SDR and HEVC SDR at identical dimensions, frame rate,
 bitrate, scene and audio route. Alternate run order and repeat each pair. Hold
 brightness, ambient temperature, case, charge state, Wi-Fi route, peripherals,
-HUD and diagnostics constant. Use an optimized build with exact app and engine
-revision recorded. Test 60 fps first, then existing 120 fps/native modes; do not
-change defaults from a Simulator result.
+HUD and Apple profiling tools constant. Use an optimized build with exact app
+and engine revision recorded. Test 60 fps first, then existing 120 fps/native
+modes; do not change defaults from a Simulator result.
 
 | Evidence                                                         | Review requirement                                                                                             |
 | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `decoder_configuration`                                          | Hardware decode readback, requested hints and failed/unsupported properties recorded                           |
+| Decoder configuration in system logs                             | Hardware decode readback, requested hints and failed/unsupported properties recorded                           |
 | Decode/present latency, cadence, drops, backlog and pacing depth | Compare early and final five-minute windows; no progressive collapse, unbounded growth or new recurring stalls |
-| `thermal_state`, Low Power Mode and EDR headroom                 | No sustained serious/critical thermal state; explain any brightness/headroom reduction                         |
-| `gpu_power_w`, `package_power_w` where available                 | Compare watts and variance, never GPU residency as a substitute                                                |
+| Apple thermal evidence, Low Power Mode and display observations  | No sustained serious/critical thermal state; explain any brightness/headroom reduction                         |
+| Apple energy reports or external whole-device measurements       | Compare watts and variance, never GPU residency as a substitute                                                |
 | Battery/charging state and external energy measurement           | Record unavailable probes explicitly; battery percentage is not a wattmeter                                    |
 
 The current iOS adapter does not provide Mac IOReport package/GPU watt probes.
 Those fields remain unavailable. Use a calibrated external meter with controlled
 charging state for whole-device watts, or supported device energy tooling, and
 label its scope separately from package/GPU power. Do not fill absent telemetry
-with zeroes or introduce private iOS probes. Keep diagnostic capture in the beta
-flavour after the production-diagnostics work is integrated.
+with zeroes or introduce private iOS probes. Both flavours use Apple logs and
+reports; Glimmer records no diagnostic files or frame traces on iOS.
 
 Risks to measure are 10-bit memory bandwidth, codec-specific decoder load,
 compositor tone mapping and the HDR panel's brightness power. Native resolution

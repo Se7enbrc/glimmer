@@ -105,7 +105,7 @@ final class RtpVideoQueue {
     var bufferFirstRecvTimeUs: UInt64 = 0
 
     var loggedBadFecGeometry = false
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     var loggedFirstFecRecovery = false
     /// The open run of FEC-recovered frames; summarized from maybeLogMetrics once idle.
     var fecEpisode = FecRecoveryEpisode()
@@ -168,7 +168,7 @@ final class RtpVideoQueue {
     private var haveLastTransit = false
     /// Frames seen vs. frames that needed Reed-Solomon recovery in the window.
     /// `internal`: tallied by submitCompletedFrame in the reconstruct extension.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     var framesInWindow = 0
     var fecRecoveredFramesInWindow = 0
     /// Whether the CURRENT frame needed FEC recovery (latched in reconstructFrame,
@@ -206,7 +206,7 @@ final class RtpVideoQueue {
     /// lost / (lost + received) (received = the videoPacketsTotal delta), i.e.
     /// lost / expected, without a separate expected counter.
     var windowOutOfOrder = 0
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     var windowLostPreFec = 0
     var windowDuplicate = 0
     /// FEC observability (read-only): the smallest parity headroom seen on a
@@ -269,7 +269,7 @@ final class RtpVideoQueue {
     // find + an integer bump - no per-packet allocation or sort on the hot path. ---
     var lastArrivalUs: UInt64 = 0
     var haveLastArrival = false
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     var gapBuckets = [Int](repeating: 0, count: RtpVideoQueue.gapBoundsUs.count + 1)
     var gapCount = 0
     var gapMaxUs: Double = 0
@@ -395,8 +395,10 @@ final class RtpVideoQueue {
             let transitDelta = abs(receiveDelta - timestampDelta)
             // jitter += (|D| - jitter) / 16  (RFC 3550 6.4.1).
             jitterUs += (transitDelta - jitterUs) / 16.0
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             if timestampDelta != 0 { ReceiveTimingTelemetry.video.observeFrameJitter(transitDelta / 1_000) }
+            #elseif GLIMMER_DIAGNOSTICS
+            if timestampDelta != 0 { ReceivePolicyMeasurements.video.observeFrameJitter(transitDelta / 1_000) }
             #endif
         }
         lastTimestamp = timestamp
@@ -416,7 +418,7 @@ final class RtpVideoQueue {
     /// FEC-recovery rate (fraction of frames that needed Reed-Solomon recovery),
     /// and the packet rate. Resets the window afterward.
     private func maybeLogMetrics(nowUs: UInt64) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard nowUs &- metricsWindowStartUs >= Self.metricsWindowUs else { return }
         let windowSec = Double(nowUs &- metricsWindowStartUs) / 1_000_000.0
         let pps = windowSec > 0 ? Double(packetsInWindow) / windowSec : 0

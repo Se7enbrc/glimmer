@@ -100,7 +100,7 @@ package struct RendererPerformanceSource: @unchecked Sendable {
 
 /// All mutable state is confined to the exporter's queue. Completions hop there;
 /// no timer or per-frame hook exists, and stop invalidates any outstanding reply.
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 package final class RendererTelemetry: @unchecked Sendable {
     private struct Request {
         let token: UInt64

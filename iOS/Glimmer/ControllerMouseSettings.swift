@@ -26,10 +26,8 @@ struct GlimmerSettings: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     enum Page: String, CaseIterable, Identifiable {
-        case general, quality, pcs, input
-        #if GLIMMER_DIAGNOSTICS
-        case diagnostics
-        #endif
+        case general, quality, pcs, input, connection
+
         var id: Self { self }
         var title: String {
             switch self {
@@ -37,9 +35,7 @@ struct GlimmerSettings: View {
             case .quality: "Quality"
             case .pcs: "PCs"
             case .input: "Input"
-            #if GLIMMER_DIAGNOSTICS
-            case .diagnostics: "Diagnostics"
-            #endif
+            case .connection: "Connection"
             }
         }
         var symbol: String {
@@ -48,9 +44,7 @@ struct GlimmerSettings: View {
             case .quality: "gauge.with.dots.needle.67percent"
             case .pcs: "display"
             case .input: "gamecontroller"
-            #if GLIMMER_DIAGNOSTICS
-            case .diagnostics: "stethoscope"
-            #endif
+            case .connection: "network"
             }
         }
     }
@@ -106,10 +100,9 @@ private struct GlimmerSettingsPage: View {
     private var launcherStyle: LauncherStyle = .buttons
     @AppStorage("leaveGamesRunning", store: PersistentStorage.defaults) private var leaveGamesRunning = false
     @AppStorage("touchMouseEnabled", store: PersistentStorage.defaults) private var touchMouseEnabled = true
-    #if GLIMMER_DIAGNOSTICS
-    @AppStorage("telemetryEnabled", store: PersistentStorage.defaults) private var diagnostics = true
+
     @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
-    #endif
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -134,9 +127,8 @@ private struct GlimmerSettingsPage: View {
             case .quality: StreamQualitySettings(profile: $profile)
             case .pcs: computerSettings
             case .input: controllerSettings
-            #if GLIMMER_DIAGNOSTICS
-            case .diagnostics: diagnosticSettings
-            #endif
+
+            case .connection: connectionSettings
             }
         }
         .navigationTitle(page.title)
@@ -208,18 +200,14 @@ private struct GlimmerSettingsPage: View {
         }
     }
 
-    #if GLIMMER_DIAGNOSTICS
-    private var diagnosticSettings: some View {
+    private var connectionSettings: some View {
         Section {
-            Toggle("Record diagnostics", isOn: $diagnostics)
             Toggle("Adaptive stream quality", isOn: $adaptiveBandwidth)
         } footer: {
-            Text("Saves performance and troubleshooting files on this device for the next stream. "
-                 + "Nothing is uploaded. Adaptive stream quality lowers the bitrate when the connection "
-                 + "struggles and raises it again once it recovers. Beta builds turn both on by default.")
+            Text("Adaptive stream quality lowers the bitrate when the connection struggles "
+                 + "and raises it again once it recovers.")
         }
     }
-    #endif
 }
 
 @MainActor

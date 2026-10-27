@@ -11,10 +11,11 @@ exact files. For installing updates or joining the candidate channel, use
 
 ## iPhone and iPad artifacts
 
-Choose the compiled flavour before archiving: `beta` includes local diagnostics;
-`production` excludes them, even when installed through TestFlight. Only a
-production archive may be used as App Store submission source. A beta build
-cannot be promoted unchanged to production.
+Choose the compiled flavour before archiving: `beta` enables adaptive stream
+quality by default; `production` leaves it off. Saved choices take precedence.
+Neither flavour records custom diagnostics. Only a production archive may be
+used as App Store submission source. A beta build cannot be promoted unchanged
+to production.
 
 Follow the [iOS TestFlight process](../iOS/docs/TESTFLIGHT.md). Keep flavour in
 the sealed archive identity and attested receipt, and inspect the executable and

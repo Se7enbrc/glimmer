@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 // Opt-in, per-session telemetry: one 1 Hz snapshot feeds loopback HTTP and NDJSON.
 // LAN access needs a second opt-in; telemetry contains performance data, never credentials.
 // The disabled path constructs no exporter, timers, listener or files.

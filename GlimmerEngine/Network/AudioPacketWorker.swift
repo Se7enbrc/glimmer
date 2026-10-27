@@ -56,7 +56,7 @@ final class AudioPacketWorker: @unchecked Sendable {
         guard running, !stopping, size >= 0, size <= bytes.count,
               size <= RtpAudioReceiver.maxPacketSize else { return false }
         guard queuedCount < slots.count else {
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             AudioPipelineTelemetry.shared.queueOverflow.increment()
             #endif
             return false
@@ -98,13 +98,13 @@ final class AudioPacketWorker: @unchecked Sendable {
         while let arrival = take(into: &packet) {
             let now = DispatchTime.now().uptimeNanoseconds
             if !packet.isEmpty {
-                #if os(macOS) || GLIMMER_DIAGNOSTICS
+                #if os(macOS)
                 AudioPipelineTelemetry.shared.queueWait.observe(Double(now &- arrival) / 1_000_000)
                 #endif
             }
             autoreleasepool { consume(packet, arrival) }
         }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         AudioPipelineTelemetry.shared.setRealtime(false)
         #endif
         condition.lock()

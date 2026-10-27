@@ -223,7 +223,7 @@ extension FramePacer {
     @MainActor private static var lastReplayedLogSinkID: ObjectIdentifier?
     @MainActor
     private func replayLinkInstalledBreadcrumbIfNeeded(link: CADisplayLink, panelMax: Double) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard let sink = SessionLogFileSink.shared else { return }
         let sinkID = ObjectIdentifier(sink)
         guard Self.lastReplayedLogSinkID != sinkID else { return }

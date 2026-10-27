@@ -43,7 +43,7 @@ import Foundation
 extension SessionServices {
     /// Uses existing gated recorders; public consumers supply a local directory, never a LAN listener.
     package static func recording(directory: URL?, enabled: Bool = TelemetryGate.isEnabled) -> SessionServices {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         var services = SessionServices()
         guard enabled, let directory, directory.isFileURL else { return services }
         services.startLog = { SessionLogFileSink.startIfEnabled(enabled: true, directory: directory) }
@@ -87,7 +87,7 @@ package struct SessionServices: Sendable {
     package var makeEnvironment: @Sendable () -> EnvObservationSource? = { nil }
     package var feedback = SessionFeedback()
     package var defaultDisplayMode = ""
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     package var makeCapture: @Sendable () -> TelemetryCapture = { TelemetryCapture() }
     package var makeExporter: @Sendable (TelemetrySource, String) -> TelemetryExporter? = { _, _ in nil }
     #endif
@@ -98,7 +98,7 @@ package struct SessionServices: Sendable {
 /// Distribution is a compiler decision; preferences cannot grant a missing capability.
 public enum DiagnosticsAvailability {
     public static var compiledIn: Bool {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         true
         #else
         false
@@ -106,7 +106,7 @@ public enum DiagnosticsAvailability {
     }
 
     public static func isEnabled(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         defaults.object(forKey: "telemetryEnabled") as? Bool ?? true
         #else
         false
@@ -132,7 +132,7 @@ package enum TelemetryGate {
     }
 
     package static func diagnosticsVisible(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         defaults.bool(forKey: "showDiagnostics")
         #else
         false

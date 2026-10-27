@@ -21,7 +21,7 @@ import os
 extension VideoDecoder {
 
     package func toggleStatsOverlay() {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         statsOverlayEnabled.toggle()
         #endif
     }
@@ -54,7 +54,7 @@ extension VideoDecoder {
         // Drop a marker on the OS-signpost timeline so a profile run can
         // correlate the stats overlay text with timeline state. Cheap -
         // the snapshot tick is 2 Hz, well below any signpost-rate concern.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.decode.emitEvent(
             "StatsSnapshot",
             """
@@ -244,7 +244,7 @@ extension VideoDecoder {
         displayInfo = { nil }
         onFirstDecodedFrame = nil
         onHDRActiveChanged = nil
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         colorDisplayProbeTask?.cancel()
         colorDisplayProbeTask = nil
         #endif
@@ -275,7 +275,7 @@ extension VideoDecoder {
             self.colorAttachmentCache.withLock { $0 = nil }
             self.resolvedColor.withLock { $0 = nil }
             self.hdrEnabled = false
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             self.colorProbeState.withLock { $0 = nil }
             #endif
             self.didFireFirstDecodedFrame = false

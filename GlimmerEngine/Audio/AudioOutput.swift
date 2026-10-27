@@ -15,7 +15,7 @@ public final class AudioRenderStorage {
         queue.initialize(to: AudioPCMQueue(capacity: capacity, channels: channels))
     }
 
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     package func resetProbe() { queue.pointee.outputProbe.reset() }
     #endif
     package func disable() { queue.pointee.enabled.store(false, ordering: .releasing) }
@@ -24,7 +24,7 @@ public final class AudioRenderStorage {
         AURenderCallbackStruct(inputProc: renderAudioPCM, inputProcRefCon: queue)
     }
 
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     public var renderObserver: AURenderCallback { observeAudioOutput }
     #endif
     public var context: UnsafeMutableRawPointer { UnsafeMutableRawPointer(queue) }
@@ -68,7 +68,7 @@ public final class AudioOutput {
     private let running: () -> Bool
     private let rate: (Float) -> OSStatus
     let lastRenderError: () -> OSStatus
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     var outputSilence = AudioOutputSilence()
     #endif
 

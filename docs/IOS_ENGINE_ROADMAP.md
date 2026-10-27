@@ -128,8 +128,8 @@ The public boundary must support:
   configuration and session state.
 - Canonical input submission, controller arrival/removal, and feedback. Keep raw
   OS events and device objects in the input adapters.
-- Low-frequency stats snapshots and opt-in diagnostics with the same field
-  meanings across platforms.
+- Low-frequency operational stats with the same field meanings across platforms.
+  Custom diagnostic recording is Mac-only; iOS uses Apple logs and reports.
 
 Reuse `StreamingBackend`, `StreamConfig`, `StreamEvent`, and existing test seams
 before inventing equivalents. Introduce small interfaces only at demonstrated
@@ -270,8 +270,9 @@ patched-host dependency is outside this roadmap.
 
 Resource usage is a delivery gate alongside fidelity. Measure optimized builds
 on physical devices, with the same PC scene, codec, dimensions, fps, bitrate,
-network conditions, brightness, audio route, controller, and diagnostic setting.
-Simulator timing and a short successful stream are not performance evidence. Use
+network conditions, brightness, audio route and controller. Use Apple tools for
+iOS measurements; Glimmer records no diagnostics of its own. Simulator timing
+and a short successful stream are not performance evidence. Use
 [PROFILING.md](PROFILING.md) and extend its existing measurement vocabulary.
 
 The engine must:
@@ -317,7 +318,7 @@ absolute budgets per supported device tier before adding higher modes.
 | Memory and teardown       | Ten start/stop or reconnect cycles after warmup, plus the sustained run. No live per-session object/resource accumulation or monotonic retained-memory growth; explain allocator/framework cache plateaus using allocation evidence. No active session workers, links, or timers after stop.                             |
 | Input and media quality   | No stuck input, no client-caused audio underruns, and no sustained missed cadence on the clean-network baseline. Report p50/p95/p99 input enqueue-to-send and media-stage latency. Do not label these measurements end-to-end input-to-photon latency.                                                                   |
 | Battery and heat          | Record ambient conditions, brightness, charging state, controller power draw context, Low Power Mode, and starting thermal state. Default quality must sustain the baseline without serious/critical thermal state attributable to the workload. Prefer energy instruments; battery percentage alone is coarse evidence. |
-| Diagnostic overhead       | Compare diagnostics off, counters/HUD, and full capture under the same conditions. Report the incremental cost. Heavy capture is opt-in and cannot be required for normal operation.                                                                                                                                     |
+| Diagnostic overhead       | Compare the stats HUD off and on under the same conditions using Apple tools. Report the incremental cost. The iOS app has no custom capture.                                                                                                                                                                            |
 
 The device-budget table must name exact devices/OS builds and numerical CPU,
 memory, wakeup, and energy ceilings with measurement method and run variance. Do

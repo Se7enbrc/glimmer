@@ -139,11 +139,11 @@ struct SurroundDecodeTests {
         let session = try decoder(layout)
         var pcm = [Float](repeating: 0, count: 1_440)
         _ = decode(session, packet(layout, number: 0), &pcm)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let before = TelemetryCounters.shared.audioDecodeFailedTotal.value
         #endif
         for _ in 0..<3 { #expect(decode(session, Data(), &pcm, conceal: true) == 240) }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         #expect(TelemetryCounters.shared.audioDecodeFailedTotal.value == before + 3)
         #endif
         #expect(decode(session, packet(layout, number: 1), &pcm) == 240)

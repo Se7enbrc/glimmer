@@ -20,10 +20,10 @@ The app opts into iOS Game Mode; the system controls its activation.
 The launcher shows the PC, its requested stream settings and its app buttons.
 The last connected PC loads automatically, including after disconnecting. With
 no previous connection, a single paired PC is selected. Use the PC name to
-switch PCs; pairing, quality, controller preferences and diagnostics live in
-Settings. Settings → General offers Buttons or Covers. Both layouts adapt to the
-screen and text size; Covers uses artwork supplied by the PC, with a glyph
-fallback.
+switch PCs; pairing, quality, controller preferences and connection settings
+live in Settings. Settings → General offers Buttons or Covers. Both layouts
+adapt to the screen and text size; Covers uses artwork supplied by the PC, with
+a glyph fallback.
 
 To remove a saved pairing, open Settings → PCs, choose Forget… next to the PC,
 and confirm Forget PC. This removes the local pairing and its remembered
@@ -65,4 +65,5 @@ Want to build or help? Start with [CONTRIBUTING.md](CONTRIBUTING.md). See the
 software under [GPLv3](LICENSE).
 
 See [PC setup](docs/HOST_SETUP.md) for Sunshine and native display modes, and
-[diagnostics](docs/DIAGNOSTICS.md) for recording a physical iPhone test.
+[diagnostics](docs/DIAGNOSTICS.md) for investigating problems with Apple logs
+and reports.

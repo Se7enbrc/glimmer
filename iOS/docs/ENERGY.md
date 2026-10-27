@@ -30,40 +30,27 @@ device. Record results separately for each device and OS build.
 
 ## Record 30 uninterrupted minutes
 
-1. For an evidence trial, enable **Record diagnostics** before connecting using
-   [the existing recorder](DIAGNOSTICS.md). Keep verbose logging off. Record the
-   interval's start wall time and monotonic `t_ms` from the shared telemetry.
+1. Note the interval's start time. Use Apple energy and profiling tools for a
+   separate instrumented trial, and record their overhead and tethering effects.
+   Glimmer records no diagnostics of its own in either flavour.
 2. Run the fixed scene for 30 minutes. Keep controls/HUD visibility and input
    activity identical. Note visible stutter, audible gaps, unexpected reconnects
-   and any system thermal warning, with elapsed times.
-3. Retain the per-second `thermal_state` (0 nominal, 1 fair, 2 serious, 3
-   critical), `low_power_mode`, actual frame/decode/pacer rates, stage latency,
-   discard causes, audio underruns, loss and bitrate. Compare minutes 0–5, 10–15
-   and 25–30 for progressive degradation as well as the whole interval.
-4. Record battery percentage and charging state at the start and end. **This
-   revision does not export iOS battery percentage or a native resource/power
-   probe.** Preserve these readings in the trial notes and mark telemetry
-   battery/CPU/wakeups/watts unavailable. `on_battery=false` alone is not proof
-   of charging here. Do not infer watts from percentage or GPU residency.
-5. Disconnect, then retrieve only the diagnostic directory as described in
-   [Record an iPhone test](DIAGNOSTICS.md). Preserve raw files, session
-   identity, build identity, start/end readings and deviations together before
-   another session can prune evidence.
+   and system thermal warnings, with elapsed times.
+3. Compare the first and last five minutes for progressive degradation. Use
+   available Apple reports and instruments for CPU, memory, energy and disk
+   writes. Do not invent missing per-frame or per-second measurements.
+4. Record battery percentage and charging state at the start and end in trial
+   notes. Do not infer watts from battery percentage or GPU residency.
+5. Preserve the Apple reports, build identity, start/end readings and
+   deviations. Console and sysdiagnose provide logs; no Glimmer directory needs
+   retrieving.
 
-Full battery telemetry acceptance needs the native diagnostic adapter to supply
-battery readings through the shared recorder. Keep that follow-up with
-diagnostic ownership; do not create a second telemetry writer. Verify the actual
-field names and availability in the tested build before recording the run as
-complete.
+## Separate measurement overhead from normal cost
 
-## Separate diagnostics from normal cost
-
-Repeat the scored interval with diagnostics off using the same executable.
-Alternate off/on/on/off, then repeat the baseline/candidate pairs at least three
-times with equivalent starting conditions. Production and beta must be
-identified separately when diagnostics are compiled out. Never enable beta
-recording by modifying production settings or treating a missing measurement as
-zero.
+Repeat the scored interval without attached instruments. Alternate baseline and
+candidate at least three times with equivalent starting conditions. Keep the
+stats HUD and adaptive-quality setting matched; beta and production have
+separate defaults for adaptive quality, but neither includes custom recording.
 
 For a watts claim, use an independently measured device-energy source with known
 sampling units and boundaries. Report joules, average watts (`joules / 1800`),
@@ -76,7 +63,7 @@ percentage is a coarse corroborating trend, not a power measurement.
 
 1. Hold the empty launcher for five minutes, then a populated launcher for five
    minutes with artwork already cached. Check for recurring redraws, discovery
-   churn and diagnostic writes without opening a connection to a PC.
+   churn and unexpected disk writes without opening a connection to a PC.
 2. During an authorized stream, switch away and return after five seconds.
    Verify immediate input release, decode gating after the existing two-second
    delay, and clean recovery without stuck input. Repeat with the full 15-second
@@ -84,8 +71,8 @@ percentage is a coarse corroborating trend, not a power measurement.
    game.
 3. Complete ten start/stop or reconnect cycles after warmup. After final
    teardown, check that media workers, display links, watchdogs, audio
-   maintenance and diagnostic timers stop. Explain retained framework cache
-   plateaus rather than diagnosing a leak from footprint alone.
+   maintenance timers stop. Explain retained framework cache plateaus rather
+   than diagnosing a leak from footprint alone.
 
 Report each build's battery change, thermal-state durations and transitions,
 energy, CPU seconds per streamed minute, wakeups, footprint and media quality
@@ -96,4 +83,4 @@ acceptance. No numerical energy budget or battery advantage is established by
 this audit.
 
 Use the [energy audit](../../docs/IOS_ENERGY_AUDIT.md) for current findings and
-[profiling guide](../../docs/PROFILING.md) for shared field meanings.
+[Apple diagnostics guide](DIAGNOSTICS.md) for logs and reports.

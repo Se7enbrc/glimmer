@@ -276,7 +276,7 @@ extension StreamSession {
     private func bindReplacement(_ fresh: StreamingBackend, setup: SessionMedia, config: StreamRequest) async {
         attemptID = UUID()
         reconnectTermination = nil
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if let tracker = FrameTimingTracker.shared {
             if let pacer = setup.video.framePacer {
                 _ = pacer.clearQueue(reason: "telemetry attempt boundary") { tracker.beginAttempt(attemptID) }
@@ -393,7 +393,7 @@ extension StreamSession {
         }
         if let net = network { await net.shutdown() }
         network = nil
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if let state = connectFlowState {
             OSSignposter.network.endInterval("ConnectFlow", state, "outcome=reconnect")
             connectFlowState = nil

@@ -145,7 +145,7 @@ final class InputBatcher: @unchecked Sendable {
         guard let capture else { return }
         for sample in capture.samples() {
             if samples.count < 4096 { samples.append(sample) } else {
-                #if os(macOS) || GLIMMER_DIAGNOSTICS
+                #if os(macOS)
                 tracker()?.inputTimingDropped.increment()
                 #endif
             }
@@ -428,7 +428,7 @@ final class InputBatcher: @unchecked Sendable {
     /// the input-to-photon estimate; motion passes nil.
     private func observeInputAge(from stamp: DispatchTime, to drainNow: DispatchTime?,
                                  tracker: FrameInstrumentation?, deliverMs: Double?) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard let drainNow, let tracker, drainNow >= stamp else { return }
         let ageMs = Double(drainNow.uptimeNanoseconds &- stamp.uptimeNanoseconds) / 1_000_000.0
         tracker.inputLocalLatency.observe(ageMs)
@@ -439,7 +439,7 @@ final class InputBatcher: @unchecked Sendable {
     /// Trace motion slot `idx` (slot * motionTypeCount + sensor) if it is due; no-op
     /// with telemetry off. MUST be called on `queue`.
     private func traceMotion(_ idx: Int, isGyroNull: Bool, tracker: FrameInstrumentation?, now: DispatchTime?) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard let tracker, let now,
               Self.motionTraceDue(lastNanos: motionStates[idx].lastTraceNanos,
                                   nowNanos: now.uptimeNanoseconds, isGyroNull: isGyroNull) else { return }
@@ -473,7 +473,7 @@ final class InputBatcher: @unchecked Sendable {
     /// return it, 0 when unmeasured. Always takes the handler stamp so it can't go
     /// stale with telemetry off; off the GameController path the take returns 0.
     private func observeInputDeliverAge(slot: Int, enqueued: DispatchTime) -> Double {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let entry = InputDeliverStamp.shared.take(slot: slot)
         guard let tracker = self.tracker(),
               entry != 0, enqueued.uptimeNanoseconds >= entry else { return 0 }
@@ -488,7 +488,7 @@ final class InputBatcher: @unchecked Sendable {
     /// One trace line per merged input the wire carried, on the per-frame trace's
     /// clock. `fields` is only built when telemetry is on (the tracker is nil off).
     private func trace(_ tracker: FrameInstrumentation?, _ fields: @autoclosure () -> String) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard let tracker else { return }
         let nowMs = Double(now().uptimeNanoseconds) / 1_000_000.0
         tracker.traceWriter.append(

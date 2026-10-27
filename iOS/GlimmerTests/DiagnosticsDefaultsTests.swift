@@ -14,26 +14,21 @@ struct DiagnosticsDefaultsTests {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         if let saved { defaults.set(saved, forKey: "telemetryEnabled") }
-        DiagnosticsDefaults.register(defaults: defaults)
-        #if GLIMMER_DIAGNOSTICS
-        #expect(DiagnosticsAvailability.compiledIn)
-        #expect(DiagnosticsAvailability.isEnabled(defaults: defaults) == (saved ?? true))
-        #expect(DiagnosticsDefaults.directory != nil)
-        #expect(defaults.bool(forKey: AdaptiveBandwidth.defaultsKey))
-        #else
+        StreamDefaults.register(defaults: defaults)
         #expect(DiagnosticsAvailability.compiledIn == false)
         #expect(DiagnosticsAvailability.isEnabled(defaults: defaults) == false)
-        #expect(DiagnosticsDefaults.directory == nil)
+        #if GLIMMER_DIAGNOSTICS
+        #expect(defaults.bool(forKey: AdaptiveBandwidth.defaultsKey))
+        #else
         #expect(defaults.bool(forKey: AdaptiveBandwidth.defaultsKey) == false)
+        #endif
         for override in [nil, "1", "unknown"] as [String?] {
             #expect(TelemetryGate.isEnabled(defaults: defaults, environmentValue: override) == false)
         }
-        #endif
         #expect(defaults.persistentDomain(forName: suite)?["telemetryEnabled"] as? Bool == saved)
     }
 
-    #if !GLIMMER_DIAGNOSTICS
-    @Test func productionLeavesPreviousFilesUntouchedEvenWithForcedEnable() throws {
+    @Test func bothFlavoursLeavePreviousFilesUntouchedEvenWithForcedEnable() throws {
         let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -46,7 +41,6 @@ struct DiagnosticsDefaultsTests {
         #expect(try Data(contentsOf: previous) == contents)
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == [previous.lastPathComponent])
     }
-    #endif
 
     @Test func controlMeasurementsSurviveBothFlavours() {
         let operational = TelemetryCounters.Counter(operational: true)
@@ -54,11 +48,7 @@ struct DiagnosticsDefaultsTests {
         operational.increment(by: 7)
         diagnostic.increment(by: 7)
         #expect(operational.value == 7)
-        #if GLIMMER_DIAGNOSTICS
-        #expect(diagnostic.value == 7)
-        #else
         #expect(diagnostic.value == 0)
-        #endif
         let stats = StatsCollector()
         #expect(stats.secondsSinceLastDecodedFrame().isInfinite)
         #expect(stats.secondsSinceLastPresent().isInfinite)
@@ -77,12 +67,18 @@ struct DiagnosticsDefaultsTests {
         #expect(stats.secondsSinceLastPresent().isInfinite)
     }
 
-    @Test func settingsMatchCompiledFlavour() {
-        #if GLIMMER_DIAGNOSTICS
-        #expect(GlimmerSettings.Page.allCases.map(\.rawValue).contains("diagnostics"))
-        #else
+    @Test func adaptiveMeasurementsRemainInMemoryWithoutARecorder() {
+        let measurements = ReceivePolicyMeasurements()
+        for delay in [0.2, 0.4, 0.4, 3.0] { measurements.observeDelay(delay) }
+        for jitter in Array(repeating: 0.3, count: 19) + [6] { measurements.observeFrameJitter(jitter) }
+        let window = measurements.takeWindow()
+        #expect(window.queueDelayP50Ms == 0.5 && window.jitterP95Ms == 0.5)
+        #expect(measurements.takeWindow() == ReceivePolicyWindow())
+    }
+
+    @Test func settingsKeepAdaptiveQualityWithoutRecording() {
         #expect(GlimmerSettings.Page.allCases.map(\.rawValue).contains("diagnostics") == false)
-        #endif
+        #expect(GlimmerSettings.Page.allCases.map(\.rawValue).contains("connection"))
     }
 }
 

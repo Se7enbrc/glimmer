@@ -26,9 +26,9 @@
   whether to include per-game controller layouts; paired PCs, your app library
   and diagnostics captures are kept.
 
-- The production iPhone and iPad app no longer includes diagnostic recording.
-  Beta builds keep local diagnostics on by default, with an option to turn them
-  off.
+- iPhone and iPad use Apple logs and reports in every build. Glimmer no longer
+  saves its own diagnostic files. Adaptive stream quality stays in Settings,
+  under Connection.
 
 - Open Support and the Privacy Policy from Settings on iPhone and iPad, or
   Settings → About on Mac.

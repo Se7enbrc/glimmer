@@ -31,7 +31,7 @@
 		2A92743BD5092A0C3268A626 /* EngineLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */; };
 		348684B76496EAF753290EF6 /* EngineLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC8777C55611710BADD7484 /* EngineLink.swift */; };
 		352C1011524E806B983A697E /* GlimmerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB5FA496B339386824307D80 /* GlimmerApp.swift */; };
-		B426095DE40544C9800A59D3 /* DiagnosticsDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB04CBAA442A417DB7141C7D /* DiagnosticsDefaults.swift */; };
+		B426095DE40544C9800A59D3 /* StreamDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB04CBAA442A417DB7141C7D /* StreamDefaults.swift */; };
 		448039B562D4A381F641CF03 /* AppDeclarationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9BB54585E6899D7FA846EC /* AppDeclarationTests.swift */; };
 		80AAC985744D4D0CA0D130C1 /* DiagnosticsDefaultsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39B8F39A9BC8494A8BBC0149 /* DiagnosticsDefaultsTests.swift */; };
 		4F9A1E395BAE1D05802CA568 /* CREDITS.md in Resources */ = {isa = PBXBuildFile; fileRef = 405AF81E78D41E1E222D5991 /* CREDITS.md */; };
@@ -131,7 +131,6 @@
 		548C531EFF2940A894E74BE3 /* TouchGamepadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */; };
 		1AFD56F03E7B48E790FB679C /* TouchLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF8C717822E54668881721CD /* TouchLayoutTests.swift */; };
 		DFD1E8AB957B4248801A929E /* TouchRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564C2513232040DDA240E15E /* TouchRenderTests.swift */; };
-		EC0C3550ABCC46ABA0E937F7 /* TouchInputEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C84049618503434691CEAC5B /* TouchInputEvidenceTests.swift */; };
 		CF8FB8B4432F487FB40E8472 /* TouchIdleEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B67E7156E5409AA9F9708C /* TouchIdleEvidenceTests.swift */; };
 		20A5B2E0106945C889D94DD5 /* TouchDeviceRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265BEE350AD240AE9718A4D2 /* TouchDeviceRenderTests.swift */; };
 		54B75E820761434DAFC10CD7 /* TouchEvidenceVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A53E4B24FC641FA9C4B7BE8 /* TouchEvidenceVideo.swift */; };
@@ -236,7 +235,7 @@
 		C000388D6C3B514B68A513F9 /* EngineLinkTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineLinkTests.swift; sourceTree = "<group>"; };
 		C27E8A6F7449606A4E16DB8B /* LauncherView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LauncherView.swift; sourceTree = "<group>"; };
 		CB5FA496B339386824307D80 /* GlimmerApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlimmerApp.swift; sourceTree = "<group>"; };
-		BB04CBAA442A417DB7141C7D /* DiagnosticsDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsDefaults.swift; sourceTree = "<group>"; };
+		BB04CBAA442A417DB7141C7D /* StreamDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamDefaults.swift; sourceTree = "<group>"; };
 		DBDB247C151A5B0F3BCE13B6 /* App.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
 		EDC8777C55611710BADD7484 /* EngineLink.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngineLink.swift; sourceTree = "<group>"; };
 		FAD2215B8AB2557B667379E3 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -336,7 +335,6 @@
 		F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchGamepadTests.swift"; sourceTree = "<group>"; };
 		FF8C717822E54668881721CD /* TouchLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchLayoutTests.swift"; sourceTree = "<group>"; };
 		564C2513232040DDA240E15E /* TouchRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchRenderTests.swift"; sourceTree = "<group>"; };
-		C84049618503434691CEAC5B /* TouchInputEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchInputEvidenceTests.swift"; sourceTree = "<group>"; };
 		00B67E7156E5409AA9F9708C /* TouchIdleEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchIdleEvidenceTests.swift"; sourceTree = "<group>"; };
 		265BEE350AD240AE9718A4D2 /* TouchDeviceRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchDeviceRenderTests.swift"; sourceTree = "<group>"; };
 		6A53E4B24FC641FA9C4B7BE8 /* TouchEvidenceVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TouchEvidenceVideo.swift"; sourceTree = "<group>"; };
@@ -474,7 +472,6 @@
 				6A53E4B24FC641FA9C4B7BE8 /* TouchEvidenceVideo.swift */,
 				265BEE350AD240AE9718A4D2 /* TouchDeviceRenderTests.swift */,
 				00B67E7156E5409AA9F9708C /* TouchIdleEvidenceTests.swift */,
-				C84049618503434691CEAC5B /* TouchInputEvidenceTests.swift */,
 				564C2513232040DDA240E15E /* TouchRenderTests.swift */,
 				FF8C717822E54668881721CD /* TouchLayoutTests.swift */,
 				F39CA6CE41294C56AC994654 /* TouchGamepadTests.swift */,
@@ -638,7 +635,7 @@
 				D46ADEF81D9B207FD34CBB22 /* IOSAudio.swift */,
 				EDC8777C55611710BADD7484 /* EngineLink.swift */,
 				CB5FA496B339386824307D80 /* GlimmerApp.swift */,
-				BB04CBAA442A417DB7141C7D /* DiagnosticsDefaults.swift */,
+				BB04CBAA442A417DB7141C7D /* StreamDefaults.swift */,
 				C27E8A6F7449606A4E16DB8B /* LauncherView.swift */,
 				4083AB719BDD4036984B93B7 /* UITestLauncher.swift */,
 				34C1CD2D3621B447D33B3F8C /* Info.plist */,
@@ -792,7 +789,6 @@
 				54B75E820761434DAFC10CD7 /* TouchEvidenceVideo.swift in Sources */,
 				20A5B2E0106945C889D94DD5 /* TouchDeviceRenderTests.swift in Sources */,
 				CF8FB8B4432F487FB40E8472 /* TouchIdleEvidenceTests.swift in Sources */,
-				EC0C3550ABCC46ABA0E937F7 /* TouchInputEvidenceTests.swift in Sources */,
 				DFD1E8AB957B4248801A929E /* TouchRenderTests.swift in Sources */,
 				1AFD56F03E7B48E790FB679C /* TouchLayoutTests.swift in Sources */,
 				548C531EFF2940A894E74BE3 /* TouchGamepadTests.swift in Sources */,
@@ -946,7 +942,7 @@
 				670FF5C58DCCB38D0C0F55D6 /* IOSAudio.swift in Sources */,
 				348684B76496EAF753290EF6 /* EngineLink.swift in Sources */,
 				352C1011524E806B983A697E /* GlimmerApp.swift in Sources */,
-				B426095DE40544C9800A59D3 /* DiagnosticsDefaults.swift in Sources */,
+				B426095DE40544C9800A59D3 /* StreamDefaults.swift in Sources */,
 				10896918E526BAFB88FC984F /* LauncherView.swift in Sources */,
 				F01EE836436E483F863DF4F4 /* UITestLauncher.swift in Sources */,
 			);

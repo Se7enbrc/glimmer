@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 
 // Per-frame stage timestamps share one bounded identity map. Singleton access is locked
 // even when disabled; enabled producers update counters and append bounded typed records.
@@ -491,7 +491,7 @@ package final class FrameTimingTracker: @unchecked Sendable {
 
 #endif
 
-#if !os(macOS) && !GLIMMER_DIAGNOSTICS
+#if !os(macOS)
 // An uninhabited seam keeps shared input signatures stable without a recorder or storage.
 package enum FrameInstrumentation: Sendable {
     @inlinable package static var shared: FrameInstrumentation? { nil }

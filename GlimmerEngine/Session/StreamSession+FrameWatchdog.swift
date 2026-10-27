@@ -290,7 +290,7 @@ extension StreamSession {
 
     private func decoderStateSummary() -> String {
         guard let dec = videoDecoder else { return "decoder gone" }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let stats = dec.telemetryStatsSnapshot()
         return "decoder: \(dec.inFlightDecodeBacklog()) in flight, \(Int(stats.receivedFps ?? 0)) fps assembled, "
             + "\(Int(stats.decodedFps ?? 0)) fps decoded, \(dec.telemetryDecoderDrops()) dropped"

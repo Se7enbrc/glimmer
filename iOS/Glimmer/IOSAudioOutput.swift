@@ -26,7 +26,6 @@ final class IOSAudioOutput {
                   UnsafeMutableRawPointer, UnsafeMutablePointer<UInt32>) -> OSStatus = AudioUnitGetProperty
         var parameter: (AudioUnit, AudioUnitParameterID, AudioUnitScope, AudioUnitElement,
                         AudioUnitParameterValue, UInt32) -> OSStatus = AudioUnitSetParameter
-        var observe: (AudioUnit, AURenderCallback, UnsafeMutableRawPointer?) -> OSStatus = AudioUnitAddRenderNotify
         var initialize: (AudioUnit) -> OSStatus = AudioUnitInitialize
         var start: (AudioUnit) -> OSStatus = AudioOutputUnitStart
         var stop: (AudioUnit) -> OSStatus = AudioOutputUnitStop
@@ -95,9 +94,6 @@ final class IOSAudioOutput {
         try connect(resampler, to: mix)
         try check(calls.parameter(mix, kMultiChannelMixerParam_Volume, kAudioUnitScope_Input, 0, 1, 0))
         try check(calls.parameter(mix, kMultiChannelMixerParam_Volume, kAudioUnitScope_Output, 0, 1, 0))
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
-        try check(calls.observe(mix, storage.renderObserver, storage.context))
-        #endif
         try setFormat(remote, scope: kAudioUnitScope_Input, rate: sampleRate, channels: channels)
         try connect(mix, to: remote)
         for unit in [resampler, mix, remote] { try check(calls.initialize(unit)) }

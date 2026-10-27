@@ -14,7 +14,7 @@ extension InputCore {
         guard let samples = InputTimingContext.take()?.samples() else { return }
         let remaining = max(0, 4096 - (mouseTimings[slot]?.count ?? 0))
         mouseTimings[slot, default: []].append(contentsOf: samples.prefix(remaining))
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if samples.count > remaining { FrameTimingTracker.shared?.inputTimingDropped.increment() }
         #endif
     }
@@ -53,7 +53,7 @@ extension InputCore {
             guard let sample = controllers[id], sample.token == token,
                   snapshot.ready, snapshot.focused, capturedAt >= snapshot.acceptEventsAfter,
                   capturedAt >= sample.registeredAt else { return }
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             InputDeliverStamp.shared.stamp(slot: Int(sample.slot), nanos: DispatchTime.now().uptimeNanoseconds)
             defer { _ = InputDeliverStamp.shared.take(slot: Int(sample.slot)) }
             #endif

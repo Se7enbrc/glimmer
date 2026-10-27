@@ -17,7 +17,7 @@ struct GlimmerApp: App {
         #else
         _launcher = State(initialValue: .make())
         #endif
-        DiagnosticsDefaults.register()
+        StreamDefaults.register()
     }
 
     var body: some Scene {

@@ -29,14 +29,14 @@ struct StreamMenuRenderTests {
         let size = tablet ? CGSize(width: 1024, height: 768) : CGSize(width: 956, height: 440)
         let name = "\(tablet ? "ipad" : "iphone")-\(dark ? "dark" : "light")-\(state)"
         try await NativeUIRenderTests().record(
-            ZStack { Color.black.ignoresSafeArea(); StreamControls(model: model, close: {}) },
+            ZStack { Color.black.ignoresSafeArea(); StreamControls(model: model, close: {}) }
+                .frame(width: size.width, height: size.height),
             name: name, size: size, dark: dark, textSize: .large)
         model.stop()
         await model.waitUntilStopped()
         await clock.advance()
     }
 
-    #if GLIMMER_DIAGNOSTICS
     @Test(arguments: [false, true])
     func settings(dark: Bool) async throws {
         let fixture = LauncherFixture()
@@ -44,8 +44,7 @@ struct StreamMenuRenderTests {
         let tablet = UIDevice.current.userInterfaceIdiom == .pad
         let size = tablet ? CGSize(width: 768, height: 1024) : CGSize(width: 390, height: 844)
         let name = "\(tablet ? "ipad" : "iphone")-\(dark ? "dark" : "light")-settings"
-        try await NativeUIRenderTests().record(NavigationStack { settings.settingsPage(.diagnostics) },
+        try await NativeUIRenderTests().record(NavigationStack { settings.settingsPage(.connection) },
             name: name, size: size, dark: dark, textSize: .large, portrait: true)
     }
-    #endif
 }

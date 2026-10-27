@@ -64,7 +64,6 @@ final class AudioUnitFixture: @unchecked Sendable {
         var stopped: [AudioUnit] = []
         var formats: [AudioStreamBasicDescription] = []
         var callbackContexts: [UnsafeMutableRawPointer?] = []
-        var observerContexts: [UnsafeMutableRawPointer?] = []
         var failInitialization = false
         var failDisposal = false
         var hardwareRate: Double = 44_100
@@ -113,7 +112,6 @@ final class AudioUnitFixture: @unchecked Sendable {
             return noErr
         }
         calls.parameter = { _, _, _, _, _, _ in noErr }
-        calls.observe = { _, _, context in self.read { $0.observerContexts.append(context) }; return noErr }
         calls.initialize = { unit in
             self.read { $0.initialized.append(unit); return $0.failInitialization ? -50 : noErr }
         }

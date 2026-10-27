@@ -297,7 +297,7 @@ extension AudioDecoder {
     /// it for the `audio_ttf` event + the 1Hz floor gauge. Secret-free: the
     /// LINK rides the line, the host half of the key never leaves UserDefaults.
     func announceCushionSeed(_ seed: CushionSeed) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         AudioCushionTelemetry.shared.latchSeed(AudioCushionTelemetry.Seed(
             link: seed.link, targetMs: seed.targetMs, floorMs: seed.floorMs,
             fromMemory: seed.fromMemory))
@@ -402,7 +402,7 @@ extension AudioDecoder {
                                           defaults: self.defaults)
             }
         }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         AudioCushionTelemetry.shared.setFloorMs(write.floorMs)
         #endif
     }
@@ -541,7 +541,7 @@ extension AudioDecoder {
 
     private func recordResolvedCushion(link: String, hasMemory: Bool, target: Double,
                                        floor: Double, cap: Double, coldSeedApplied: Bool) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         AudioCushionTelemetry.shared.setFloorMs(floor)
         Diag.notice(
             "audio cushion link resolved: \(link) - target \(Int(target.rounded()))ms "

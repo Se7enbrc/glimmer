@@ -25,7 +25,7 @@ extension TelemetryCounters {
     /// the InputBatcher producers (same sites as `inputEventsTotal.increment()`).
     @inlinable package func noteInputEvent(now: UInt64 = DispatchTime.now().uptimeNanoseconds) {
         os_unfair_lock_lock(inputLock)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let prev = lastInputNanosValue
         #endif
         lastInputNanosValue = now
@@ -33,7 +33,7 @@ extension TelemetryCounters {
         // Edge detection outside the lock: a stale `prev` read is harmless (the
         // worst case is mis-attributing one edge by a frame), and keeping the
         // counter increment off the inputLock avoids nesting two locks.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if prev != 0 {
             let gapSeconds = Double(now &- prev) / 1_000_000_000.0
             if gapSeconds >= Self.idleGapSeconds {
@@ -77,7 +77,7 @@ extension TelemetryCounters {
 /// auto-sleep (age ~minutes) - observed Bluetooth drops needed a manual
 /// three-file join to recover it. Always-live like the counters; self-locked
 /// (the `P2State` idiom) so the control path never touches another gauge's lock.
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 package final class RumbleActivity: @unchecked Sendable {
     private let lock = os_unfair_lock_t.allocate(capacity: 1)
     private var lastRumbleNanos: UInt64 = 0

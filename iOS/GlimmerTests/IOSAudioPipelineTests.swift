@@ -55,9 +55,6 @@ extension IOSAudioOutputTests {
         let receiver = RtpAudioReceiver(host: .ipv4(.loopback), audioPort: 0, pingPayload: [],
             audioPacketDuration: 5, opusConfig: opus, audioConfig: 0x000302CA,
             audioEncryption: true, aesKey: Self.key, aesIvId: [0, 0, 0, 1], sink: decoder)
-        #if GLIMMER_DIAGNOSTICS
-        let before = AudioPipelineTelemetry.shared.takeSnapshot()
-        #endif
         // Swap a pair within each FEC block to exercise the queue's ordered drain as well as its fast path.
         let sequences: [UInt16] = [0, 1, 3, 2, 4, 5, 7, 6, 8, 9, 11, 10, 12, 13, 15, 14]
         for (index, sequence) in sequences.enumerated() {
@@ -76,23 +73,10 @@ extension IOSAudioOutputTests {
         pcm.frameLength = 512
         var timestamp = AudioTimeStamp()
         timestamp.mFlags = .sampleTimeValid
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
-        output.queue.pointee.outputProbe.requested.store(true, ordering: .releasing)
-        #endif
         var flags = AudioUnitRenderActionFlags()
         #expect(AudioUnitRender(try #require(mixer), &flags, &timestamp, 0, 512, pcm.mutableAudioBufferList) == noErr)
         #expect(output.queue.pointee.consumed.load(ordering: .acquiring) > 0)
         decoder.stateLock.withLock { _ = decoder.observeRenderClock() }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
-        output.observeOutputSilence(now: output.outputSilence.lastObservation + 1_000_000_000)
-        let after = AudioPipelineTelemetry.shared.takeSnapshot()
-        #expect(after.window.outputProbeResult == 1)
-        #expect(after.window.outputProbeInputAudible == true)
-        #expect(after.processedDatagrams - before.processedDatagrams == 16)
-        #expect(after.decryptOK > before.decryptOK)
-        #expect(after.decodedFrames > before.decodedFrames)
-        #expect(after.renderedFrames > before.renderedFrames)
-        #endif
         let channels = try #require(pcm.floatChannelData)
         for channel in 0..<Int(format.channelCount) {
             #expect((0..<512).contains { abs(channels[channel][$0]) > 0.00001 })
@@ -119,55 +103,10 @@ extension IOSAudioOutputTests {
             // Flip the final padding byte via the preceding CBC block without changing packet length.
             packet[packet.count - kCCBlockSizeAES128 - 1] ^= 0xFF
         }
-        #if GLIMMER_DIAGNOSTICS
-        let before = AudioPipelineTelemetry.shared.takeSnapshot()
-        #endif
         receiver.handleDatagram(packet, count: packet.count)
         #expect(receiver.loggedDecryptFailure)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
-        let after = AudioPipelineTelemetry.shared.takeSnapshot()
-        #expect(after.receivedDatagrams == before.receivedDatagrams + 1)
-        #expect(after.processedDatagrams == before.processedDatagrams + 1)
-        #expect(after.decryptFailed == before.decryptFailed + 1)
-        #expect(after.decryptOK == before.decryptOK)
-        #expect(after.decodedFrames == before.decodedFrames)
-        #endif
         #expect(receiver.queue.hasSequenceBaseline == false)
     }
-
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
-    @Test func audioStageCountersExportAndResetWithoutStaleProbeEvidence() {
-        let telemetry = AudioPipelineTelemetry()
-        telemetry.receivedDatagrams.wrappingAdd(5, ordering: .relaxed)
-        telemetry.processedDatagrams.wrappingAdd(4, ordering: .relaxed)
-        telemetry.decryptOK.wrappingAdd(3, ordering: .relaxed)
-        telemetry.decryptFailed.wrappingAdd(1, ordering: .relaxed)
-        telemetry.decodedFrames.wrappingAdd(720, ordering: .relaxed)
-        telemetry.renderedFrames.wrappingAdd(512, ordering: .relaxed)
-        telemetry.noteOutputProbe(result: 2, inputAudible: true)
-        let counts = ["received_datagrams": 5, "processed_datagrams": 4, "decrypt_ok": 3,
-                      "decrypt_failed": 1, "decoded_frames": 720, "rendered_frames": 512]
-        var json = TelemetryRenderer.NDJSONBuilder()
-        var prom = TelemetryRenderer.PromBuilder(session: "test", host: "pc")
-        let snapshot = telemetry.takeSnapshot()
-        TelemetryRenderer.ndjsonAudioPipeline(&json, snapshot)
-        TelemetryRenderer.promAudioPipeline(&prom, snapshot)
-        #expect(telemetry.takeSnapshot().window.outputProbeResult == nil)
-        for (name, count) in counts {
-            #expect(json.line().contains("\"audio_\(name)_total\":\(count)"))
-            #expect(prom.out.contains("glimmer_audio_\(name)_total"))
-        }
-        #expect(json.line().contains("\"audio_output_probe_result\":2"))
-        #expect(json.line().contains("\"audio_output_probe_input_audible\":true"))
-        telemetry.noteOutputProbe(result: 0, inputAudible: nil)
-        #expect(telemetry.takeSnapshot().window.outputProbeInputAudible == nil)
-        telemetry.reset()
-        var reset = TelemetryRenderer.NDJSONBuilder()
-        TelemetryRenderer.ndjsonAudioPipeline(&reset, telemetry.takeSnapshot())
-        for name in counts.keys { #expect(reset.line().contains("\"audio_\(name)_total\":0")) }
-        #expect(reset.line().contains("audio_output_probe") == false)
-    }
-    #endif
 
     private static func encryptedPacket(_ sequence: UInt16) throws -> [UInt8] {
         let plain = try #require(Data(hex: tone))

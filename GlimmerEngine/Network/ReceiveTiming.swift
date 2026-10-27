@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 import Darwin
 import Foundation
 import os
@@ -115,9 +115,16 @@ struct ReceiveTiming {
 #else
 struct ReceiveTiming {
     enum Source { case video, audio }
-    init(telemetry: Source) {}
+    private let source: Source
+    init(telemetry: Source) { source = telemetry }
     @inline(__always)
     mutating func note(_ batch: DatagramBatch, index: Int, count: Int,
-                       socket: Int32, stream: String) {}
+                       socket: Int32, stream: String) {
+        #if GLIMMER_DIAGNOSTICS
+        guard source == .video, let arrival = batch.arrivalTicks(at: index), arrival <= batch.readTicks else { return }
+        let delay = Double(batch.readTicks - arrival) * SocketTimestamp.millisecondsPerTick
+        ReceivePolicyMeasurements.video.observeDelay(delay)
+        #endif
+    }
 }
 #endif

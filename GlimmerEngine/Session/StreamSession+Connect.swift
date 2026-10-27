@@ -125,7 +125,7 @@ extension StreamSession {
         // success, or in `stop()` on failure. The interval ID was created up
         // front so the close side can address it even if the actor's strong-ref
         // to the state has been cleared.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         connectFlowState = OSSignposter.network.beginInterval(
             "ConnectFlow",
             id: connectFlowSignpostID,

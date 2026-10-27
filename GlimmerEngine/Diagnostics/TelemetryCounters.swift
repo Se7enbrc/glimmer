@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-// Field notes describe Mac and beta diagnostics. Production iOS retains control measurements;
+// Field notes describe Mac diagnostics. iOS retains control measurements;
 // diagnostic event totals have no storage, and diagnostic-only collectors are excluded.
 
 import Foundation
@@ -411,7 +411,7 @@ package final class TelemetryCounters: @unchecked Sendable {
     /// rather than guessing). The lock is on the telemetry path only - when the
     /// gate is off the tracker that reads it doesn't exist, so the present hot
     /// path never touches it.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     let rttLock = os_unfair_lock_t.allocate(capacity: 1)
     var rttMsValue: Double = 0
 

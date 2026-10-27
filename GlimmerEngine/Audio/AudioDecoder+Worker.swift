@@ -74,7 +74,7 @@ extension AudioDecoder {
             guard let self, self.stateLock.try() else { return }
             defer { self.stateLock.unlock() }
             guard !self.graphChanging, !self.isShutdown else { return }
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             self.halOutput?.observeOutputSilence()
             #endif
             let frames = self.observeRenderClock()
@@ -95,7 +95,7 @@ extension AudioDecoder {
         let silent = observation.silence
         let underruns = observation.underruns
         let frames = consumed &- observedRingFrames
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if frames > 0 { telemetry?.renderedFrames.wrappingAdd(frames, ordering: .relaxed) }
         #endif
         let silenceFrames = silent &- observedRingSilence
@@ -109,19 +109,19 @@ extension AudioDecoder {
             meterCompleteOnePlayout(frames: frames, confirmedUnderrun: edges > 0,
                                     minimumFillFrames: minimum == Int.max ? nil : minimum, counters: counters)
         }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if minimum != Int.max {
             let fill = Double(minimum) / meterSampleRate * 1000
             telemetry?.noteRender(cushionMs: fill, underrun: false)
         }
         #endif
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         for _ in 0..<edges { telemetry?.noteRender(cushionMs: 0, underrun: true) }
         #endif
         if deviceRecoveryStarted != 0, frames > 0 {
             let elapsed = Double(DispatchTime.now().uptimeNanoseconds &- deviceRecoveryStarted) / 1_000_000
             deviceRecoveryStarted = 0
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             telemetry?.noteOutput(latencyMs: output.latencyMs, recoveryMs: elapsed)
             #endif
             AudioDiagnostics.notice("audio device recovery: \(elapsed)ms to rendered PCM", "Stream.Audio")

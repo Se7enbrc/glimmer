@@ -12,20 +12,19 @@ changing engine defaults. For a user bug report, start with
 See [current performance validation](PERFORMANCE_VALIDATION.md) for GPU power,
 kernel receive timing, audio silence, refocus and display-rate investigations.
 
-## One diagnostic contract across clients
+## Mac recordings and Apple reports on iOS
 
-`GlimmerEngine/Diagnostics` owns event meanings, units, clocks, session
-identity, serialization and bounded retention. Mac and iOS adapters supply
-platform facts; they must not redefine engine counters or maintain another
-telemetry writer. Test shared record changes in the engine boundary, including
-absent probes.
+`GlimmerEngine/Diagnostics` owns the Mac recorder's event meanings, units,
+clocks, session identity, serialization and bounded retention. Mac adapters
+supply platform facts. Test shared record changes at the engine boundary,
+including absent probes. Missing measurements remain unavailable, not healthy
+zeroes.
 
-Both clients use the shared recorder today. External clients still lack public
-bookmark and build-identity inputs; the default configuration leaves identity
-empty. Before claiming cross-client parity, expose these through the shared
-session API and include app revision, resolved engine revision and record schema
-in exported evidence. Do not substitute the app revision for an unknown engine
-revision. Missing platform measurements remain unavailable, not healthy zeroes.
+The iPhone and iPad app records no diagnostics of its own in either flavour. Use
+Apple's Console, sysdiagnose and Xcode Organizer reports; see the
+[iOS guide](../iOS/docs/DIAGNOSTICS.md). Operational stats and adaptive
+bandwidth measurements remain in memory, without session, frame or input capture
+files.
 
 ## Choose a measurement
 

@@ -154,7 +154,7 @@ extension FramePacer {
         guard isRunning, let display = boundDisplay else { return }
         log.warning("FramePacer self-heal: rebuilding display link (\(reason, privacy: .public))")
         Diag.notice("FramePacer self-heal: rebuilding display link (\(reason))", "Stream.Pacer")
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.render.emitEvent("PacerLinkRebuild", "reason=\(reason, privacy: .public)")
         #endif
         displayLink?.invalidate()
@@ -244,7 +244,7 @@ extension FramePacer {
         Diag.notice(
             "FramePacer self-heal: force-release-next-tick (\(reason)) depth=\(depth)",
             "Stream.Pacer")
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.render.emitEvent("PacerForceReleaseNextTick", "depth=\(depth, privacy: .public)")
         #endif
         return depth
@@ -288,7 +288,7 @@ extension FramePacer {
         Diag.notice(
             "FramePacer self-heal: direct-drain freshest frame (\(reason)) discarded=\(stale.count)",
             "Stream.Pacer")
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.render.emitEvent("PacerDirectDrain", "discarded=\(stale.count, privacy: .public)")
         #endif
         guard let entry = freshest, let willPresent else { return }
@@ -331,7 +331,7 @@ extension FramePacer {
 
         recordPresentationDiscards(discardedFrames, reason: discardReason)
         log.info("FramePacer drop-to-newest (\(reason, privacy: .public)) discarded=\(discarded, privacy: .public)")
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.render.emitEvent("PacerDropToNewest", "discarded=\(discarded, privacy: .public)")
         #endif
         return discarded
@@ -365,7 +365,7 @@ extension FramePacer {
 
         recordPresentationDiscards(discardedFrames, reason: .cleared)
         log.info("FramePacer clear-queue (\(reason, privacy: .public)) discarded=\(discarded, privacy: .public)")
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.render.emitEvent("PacerClearQueue", "discarded=\(discarded, privacy: .public)")
         #endif
         return discarded
@@ -411,7 +411,7 @@ extension FramePacer {
                 targetTimestamp=\(snap.targetTimestamp, privacy: .public) \
                 lastPresentMediaTime=\(snap.lastPresent, privacy: .public) streamInterval=\(snap.intervalMs, privacy: .public)ms
                 """)
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             OSSignposter.render.emitEvent(
                 "PacerStarved",
                 "depth=\(snap.depth, privacy: .public) sinceLastMs=\(snap.sinceLastMs, privacy: .public)")
@@ -419,7 +419,7 @@ extension FramePacer {
         }
         if forcedSelfHeal {
             log.warning("FramePacer self-heal: forcing release after starvation (re-seeded cadence base)")
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             OSSignposter.render.emitEvent("PacerForceRelease", "depth=\(snap.depth, privacy: .public)")
             #endif
         }

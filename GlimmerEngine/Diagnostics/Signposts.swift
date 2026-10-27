@@ -8,7 +8,7 @@
 import os
 
 extension OSSignposter {
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
 
     /// System Trace captures this standard category; custom render categories may be absent.
     package static let diagnosticClock = OSSignposter(logHandle: OSLog(

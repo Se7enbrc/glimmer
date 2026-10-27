@@ -49,7 +49,7 @@ public final class VideoDecoder {
     nonisolated let requestedColorRange: ColorRange
     nonisolated let resolvedColor = OSAllocatedUnfairLock<VideoColorDescription?>(initialState: nil)
     nonisolated let pixelFormatRanges = OSAllocatedUnfairLock(initialState: [OSType: String]())
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     var colorDisplayProbeTask: Task<Void, Never>?
     var colorProbeSleep: @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     var colorProbeLog: @MainActor (DiagMessage, Bool) -> Void = { message, warning in

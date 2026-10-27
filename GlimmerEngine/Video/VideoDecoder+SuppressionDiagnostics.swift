@@ -38,7 +38,7 @@ extension VideoDecoder {
     }
 
     func recordSuppressionEdge(_ suppressed: Bool, visibility: PresentationVisibility, sessionGeneration: UUID?) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let fields = Self.suppressionFields(suppressed, visibility: visibility,
             sessionGeneration: sessionGeneration ?? suppressionSessionGeneration,
             presentationGeneration: rendererPresentationState.generation, uptimeNanos: now())
@@ -47,7 +47,7 @@ extension VideoDecoder {
         #endif
     }
 
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     nonisolated static func suppressionFields(_ suppressed: Bool, visibility: PresentationVisibility,
                                               sessionGeneration: UUID, presentationGeneration: UInt64,
                                               uptimeNanos: UInt64) -> [String] {

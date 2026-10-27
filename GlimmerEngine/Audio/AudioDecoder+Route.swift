@@ -12,14 +12,14 @@ extension AudioDecoder {
 
     /// Caller holds stateLock. One queued capture coalesces transitions and bookmark ranges.
     func queueOutputDiagnosticLocked(bookmark: UInt64? = nil) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard TelemetryGate.isEnabled, !isShutdown, inputFormat != nil,
               outputDiagnosticRequests.request(bookmark: bookmark) else { return }
         enqueueOutputDiagnostic(generation: engineRestartGeneration)
         #endif
     }
 
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     private func enqueueOutputDiagnostic(generation: UInt64) {
         routeListenerQueue.async { [weak self] in self?.captureOutputDiagnostic(generation: generation) }
     }
@@ -110,7 +110,7 @@ struct AudioOutputDiagnostic {
     var routeChanged = false
 
     func fields(bookmarks: AudioOutputDiagnosticRequests.Bookmarks) -> [String] {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         var fields = ["\"event\":\"audio_output_state\"",
                       "\"reason\":\"\(bookmarks.last == nil ? "configuration" : "bookmark")\"",
                       "\"output_channels\":\(channels)", "\"stream_muted\":\(muted)",

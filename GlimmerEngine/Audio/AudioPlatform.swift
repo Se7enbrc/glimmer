@@ -34,7 +34,7 @@ public struct AudioPlatform {
     /// Native session events join the recording. Pass only scalar state and system route types,
     /// never device names, identifiers, error text or audio contents.
     public static func recordSessionDiagnostic(_ message: String) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         Diag.notice("\(message)", "Stream.Audio")
         #endif
     }

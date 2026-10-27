@@ -27,7 +27,7 @@ extension TelemetryCounters {
         private let storage: OSAllocatedUnfairLock<UInt64>?
 
         package init(operational: Bool = false) {
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             storage = OSAllocatedUnfairLock(initialState: 0)
             #else
             storage = operational ? OSAllocatedUnfairLock(initialState: 0) : nil

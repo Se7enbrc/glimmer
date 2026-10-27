@@ -172,7 +172,7 @@ extension StatsCollector {
             evictedForLeakClose = submitFifo.removeFirst().state
         }
         lock.unlock()
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if let state = evictedForLeakClose {
             OSSignposter.decode.endInterval(
                 "DecodeFrame", state, "outcome=evicted_from_fifo")

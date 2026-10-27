@@ -8,7 +8,7 @@ extension StreamSession {
     /// Build + start the telemetry exporter iff enabled. No-op (and no
     /// allocation) when the gate is off. Called from `start()` once the
     /// connection is up and the decoder/backend are live. Tests pass `enabled` and `make`.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     package func startTelemetryExporter(
         decoder: VideoDecoder, serverName: String, enabled: Bool = TelemetryGate.isEnabled,
         readPresentation: @MainActor @Sendable (SessionPresentation?, String)
@@ -82,13 +82,13 @@ extension StreamSession {
             now: TelemetryCounters.monotonicNowNanos(), reconnecting: isReconnecting)
         if !isReconnecting {
             // Isolates the launch-path leg (click → connect-start); no-op without a click.
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             ConnectTimingTelemetry.shared.markConnectStart()
             #endif
         }
         // Pre-start EVENT pen: anything still buffered belongs to a dead
         // session - forget it so this session's exporter can't flush it.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         TelemetryExporter.resetPreStartEventBuffer()
         #endif
         // Latch the host for the stream-route probe (stream_link/stream_if):
@@ -101,7 +101,7 @@ extension StreamSession {
     /// Latches the per-session reason ordinal (first concrete wins) and bumps the
     /// process-global tally once. Always-live; no-op-safe.
     package func noteTelemetryDisconnect(_ reason: DisconnectReason) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         // Bump the global once, keyed by the latched reason (a host terminate may
         // have latched it first). The per-terminate latch deliberately does NOT
         // count, so a recovered silent-reconnect blip never inflates the tally.
@@ -115,7 +115,7 @@ extension StreamSession {
 
     /// Preserve the input-time bookmark across the session actor hop; telemetry-off is a no-op.
     package func recordTelemetryBookmark(at time: DispatchTime = .now(), date: Date = Date()) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard let exporter = telemetryExporter else { return }
         let marker = exporter.recordBookmark(at: time, date: date)
         audioDecoder.requestOutputDiagnostic(bookmark: marker)
@@ -126,7 +126,7 @@ extension StreamSession {
     /// from `stop()` teardown.
     package func stopTelemetryExporter() {
         telemetryGeneration &+= 1
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         telemetryExporter?.stop()
         telemetryExporter = nil
         #endif

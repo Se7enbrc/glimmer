@@ -271,7 +271,7 @@ public actor StreamSession {
     package nonisolated(unsafe) var presentMetricTimer: Timer?
     /// Opt-in telemetry exporter (all-interfaces /metrics + NDJSON); nil unless
     /// enabled. See StreamSession+Telemetry.swift for gating + safety.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     package var telemetryExporter: TelemetryExporter?
     #endif
 
@@ -318,7 +318,7 @@ public actor StreamSession {
     // `stop()` closes an aborted connection-flow interval when connection
     // setup fails before `nativeConnectionEstablished()`, keeping the
     // Instruments timeline from showing it as still open.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     package var connectFlowState: OSSignpostIntervalState?
     package let connectFlowSignpostID = OSSignposter.network.makeSignpostID()
     #endif
