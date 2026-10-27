@@ -26,9 +26,10 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// A native-size trial asks for the window's listed size at this profile's refresh cap.
-    func screenSize(windowPixels: CGSize, maximumFramesPerSecond: Int) throws -> StreamFormat {
+    func screenSize(windowPixels: CGSize, maximumFramesPerSecond: Int, requiredFPS: Int? = nil) throws -> StreamFormat {
         try Self.native120.resolve(windowPixels: windowPixels,
-                                   maximumFramesPerSecond: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond))
+                                   maximumFramesPerSecond: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond),
+                                   requiredFPS: requiredFPS)
     }
 
     enum Failure: Error { case displayUnavailable, modesUnavailable }
@@ -51,11 +52,16 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
     }
 
     @MainActor
-    func resolve(surface: StreamSurface, preservingFPS: Int? = nil) throws -> StreamFormat {
+    func resolve(surface: StreamSurface, preservingFPS: Int? = nil,
+                 useScreenSize: Bool = false) throws -> StreamFormat {
         guard let screen = surface.window?.windowScene?.screen else { throw Failure.displayUnavailable }
+        let maximumFPS = preservingFPS ?? screen.maximumFramesPerSecond
+        if useScreenSize {
+            return try screenSize(windowPixels: surface.streamPixels,
+                                  maximumFramesPerSecond: maximumFPS, requiredFPS: preservingFPS)
+        }
         return try resolve(windowPixels: surface.streamPixels,
-                           maximumFramesPerSecond: preservingFPS ?? screen.maximumFramesPerSecond,
-                           requiredFPS: preservingFPS)
+                           maximumFramesPerSecond: maximumFPS, requiredFPS: preservingFPS)
     }
 }
 

@@ -74,9 +74,7 @@ struct StreamPlayback {
                      quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {
         guard let screen = surface.window?.windowScene?.screen else { throw StreamProfile.Failure.displayUnavailable }
         let pixels = surface.streamPixels
-        let native = try launch.useScreenSize
-            ? launch.profile.screenSize(windowPixels: pixels, maximumFramesPerSecond: screen.maximumFramesPerSecond)
-            : launch.profile.resolve(windowPixels: pixels, maximumFramesPerSecond: screen.maximumFramesPerSecond)
+        let native = try launch.profile.resolve(surface: surface, useScreenSize: launch.useScreenSize)
         let format = StreamFormat.continuing(launch, native: native,
                                              maximumFPS: screen.maximumFramesPerSecond)
         let formats = try StreamFormats(full: format, windowPixels: pixels,

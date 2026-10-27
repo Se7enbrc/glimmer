@@ -126,6 +126,8 @@
   running.
 - Disconnecting from fullscreen finishes even if macOS misses the closing
   animation's completion.
+- Choosing “Use this screen's size” keeps that choice for the session instead of
+  switching back to 1080p.
 
 - Keep saved shortcuts when updating the Stats shortcut. If Control-Z is already
   in use, Stats keeps Control-I when it is free.

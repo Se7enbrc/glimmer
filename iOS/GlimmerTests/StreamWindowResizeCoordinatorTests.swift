@@ -47,6 +47,54 @@ struct StreamWindowResizeCoordinatorTests {
         await model.waitUntilStopped()
     }
 
+    @Test(arguments: [false, true], [false, true])
+    func screenSizeChoiceSurvivesInitialLayoutAndReview(continuing: Bool, useScreenSize: Bool) async throws {
+        let scene = try await testWindowScene()
+        let window = UIWindow(windowScene: scene)
+        let surface = StreamSurface()
+        window.addSubview(surface)
+        defer { surface.removeFromSuperview() }
+        let panel = scene.screen.nativeBounds.size
+        let width = max(panel.width, panel.height) / scene.screen.scale
+        let height = min(panel.width, panel.height) / scene.screen.scale
+        surface.frame.size = CGSize(width: width, height: height)
+        let base = testLaunch()
+        let launch = StreamLaunch(network: base.network, pcID: base.pcID, pcName: base.pcName,
+            appID: base.appID, appName: base.appName, profile: .fullHD60, leaveGamesRunning: true,
+            continuing: continuing, useScreenSize: useScreenSize)
+        let format = try useScreenSize
+            ? launch.profile.screenSize(windowPixels: surface.streamPixels, maximumFramesPerSecond: 60)
+            : launch.profile.resolve(windowPixels: surface.streamPixels, maximumFramesPerSecond: 60)
+        let id = UUID()
+        var requests: [StreamFormat] = []
+        let model = StreamSessionModel(launch: launch, resizeSleep: { _ in }, makePlayback: { _, _, _ in
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
+                format: format, requestFormatChange: { requests.append($0); return .applied })
+        })
+        model.pictureNeedsReview = useScreenSize
+        model.start(surface: surface)
+        model.windowChanged(surface: surface)
+        await model.waitUntilStartFinishes()
+        model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+        await model.waitForWindowResize()
+        #expect(requests.isEmpty && model.requestedFormat == format)
+        model.windowChanged(surface: surface)
+        await model.waitForWindowResize()
+        #expect(requests.isEmpty)
+        model.pictureNeedsReview = false
+        surface.frame.size = CGSize(width: height, height: width)
+        model.windowChanged(surface: surface)
+        await model.waitForWindowResize()
+        if useScreenSize {
+            #expect(requests.count == 1)
+            #expect(requests.last?.width != 1920 && requests.last?.fps == 60)
+        } else {
+            #expect(requests.isEmpty && model.requestedFormat?.width == 1920)
+        }
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
     @Test func a120FPSStreamResizesOnlyToAListed120FPSMode() async throws {
         let scene = try await testWindowScene()
         let window = UIWindow(windowScene: scene)
