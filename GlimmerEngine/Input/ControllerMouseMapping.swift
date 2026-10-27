@@ -26,6 +26,11 @@ public enum ControllerMouseMapping: String, CaseIterable, Codable, Sendable {
         enabled ? "\(controller) is now a mouse." : "\(controller) is back in the game."
     }
 
+    /// The symbol every platform shows beside `modeMessage`.
+    public static func modeSymbol(enabled: Bool) -> String {
+        enabled ? "computermouse.fill" : "gamecontroller.fill"
+    }
+
     public static func stick(right: Bool) -> Set<ControllerLayoutSource> {
         right ? [.axis(.rightX), .axis(.rightY)] : [.axis(.leftX), .axis(.leftY)]
     }

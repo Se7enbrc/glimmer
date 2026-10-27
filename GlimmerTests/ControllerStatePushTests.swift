@@ -50,6 +50,27 @@ struct ControllerStatePushTests {
         }
     }
 
+    // Every sampled frame of a stick sweep must carry exactly the held buttons and no pointer or keys.
+    @Test(arguments: [Int32(0), StreamProtocol.Y_FLAG])
+    func stickSweepNeverChangesButtonsKeysOrPointer(held: Int32) throws {
+        let rig = try rig(chord: .startSelectL1R1)
+        defer { rig.forwarder.detach() }
+        rig.pad.buttonY.setValue(held == 0 ? 0 : 1)
+        let ramp = (0...40).map { Float($0) / 40 }
+        let sweep = ramp + ramp.reversed() + ramp.map { -$0 } + ramp.reversed().map { -$0 }
+        for stick in [rig.pad.leftThumbstick, rig.pad.rightThumbstick] {
+            for value in sweep {
+                stick.setValueForXAxis(value, yAxis: 0)
+                rig.forwarder.sendGamepadUpdate(pad: rig.pad, slot: rig.slot)
+                stick.setValueForXAxis(0, yAxis: value)
+                rig.forwarder.sendGamepadUpdate(pad: rig.pad, slot: rig.slot)
+            }
+        }
+        #expect(rig.backend.calls.count > 300)
+        #expect(rig.backend.calls.allSatisfy { $0.buttons == held })
+        #expect(rig.backend.keyboard.isEmpty && rig.backend.pointer.isEmpty && rig.backend.mouseMoves.isEmpty)
+    }
+
     // MARK: - Full-state push
 
     @Test func fullStateCarriesButtonsSticksAndTriggersExactly() throws {

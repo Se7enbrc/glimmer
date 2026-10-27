@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import Foundation
+import GlimmerEngine
 import Testing
 @testable import Glimmer
 
@@ -134,5 +135,28 @@ struct TouchLayoutTests {
             defaults.set(Data("broken".utf8), forKey: key)
         }
         #expect(store.load(pcID: "second", appID: 1, family: .expanded).changes.isEmpty)
+    }
+
+    // The mouse-mode badge never lands on a touch control, the "…" button, the stats panel or the notices.
+    @MainActor
+    @Test(arguments: [CGSize(width: 667, height: 354), CGSize(width: 844, height: 369), CGSize(width: 956, height: 419),
+                      CGSize(width: 1133, height: 724), CGSize(width: 1376, height: 1011)])
+    func mouseModeBadgeClearsEveryOverlay(size: CGSize) throws {
+        let area = CGRect(origin: CGPoint(x: 24, y: 8), size: size)
+        for corner in StatsOverlayCorner.allCases {
+            let stats = StatsOverlayLayer.panelFrame(size: CGSize(width: 280, height: 200), in: area, corner: corner)
+            let flipped = CGRect(x: stats.minX, y: area.maxY - stats.maxY + area.minY, width: stats.width,
+                                 height: stats.height)
+            let obstacles = Array(TouchLayout().frames(in: area).values) + [TouchLayout.menuFrame(in: area), flipped]
+            guard let badge = StreamModeBadgeLayout.frame(size: CGSize(width: 40, height: 40), in: area,
+                                                          avoiding: obstacles, inset: 4) else { continue }
+            #expect(area.contains(badge))
+            #expect(obstacles.allSatisfy { !$0.intersects(badge) }, "\(corner) \(size)")
+        }
+    }
+
+    @Test func aBadgeWithNoClearCornerStaysHidden() {
+        let area = CGRect(x: 0, y: 0, width: 400, height: 300)
+        #expect(StreamModeBadgeLayout.frame(size: CGSize(width: 40, height: 40), in: area, avoiding: [area]) == nil)
     }
 }

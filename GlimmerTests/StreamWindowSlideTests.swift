@@ -160,11 +160,10 @@ struct StreamWindowSlideTests {
         #expect(layer.backgroundFilters?.isEmpty ?? true)
         #expect(layer.compositingFilter == nil)
         #expect(!layer.shouldRasterize)
-        let overlays = [stream.statsOverlay.layer, stream.reconnectBanner.layer, stream.networkBanner.layer,
-                        stream.leaveHintBanner.layer, stream.captureHintBanner.layer]
-        for (index, overlay) in overlays.enumerated() {
-            #expect(overlay.isHidden, "Overlay \(index), opacity \(overlay.opacity)")
-            expectNoAnimations(in: overlay)
+        #expect(stream.statsOverlay.layer.isHidden)
+        expectNoAnimations(in: stream.statsOverlay.layer)
+        for banner in [stream.reconnectBanner, stream.networkBanner, stream.leaveHintBanner, stream.captureHintBanner] {
+            #expect(!banner.isVisible && banner.noticeFrame == nil)
         }
     }
 

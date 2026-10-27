@@ -29,6 +29,20 @@ struct StreamTextRoutingTests {
             isARepeat: repeating, keyCode: UInt16(code)))
     }
 
+    @Test func controlQAndControlZDispatchLocalStopAndStats() throws {
+        let (forwarder, backend, view) = ready()
+        defer { forwarder.detach() }
+        forwarder.quitHotkeyProvider = { .defaultQuit }
+        forwarder.statsHotkeyProvider = { .defaultStats }
+        var actions: [String] = []
+        forwarder.onQuitHotkey = { actions.append("stop") }
+        forwarder.onStatsHotkey = { actions.append("stats") }
+        view.keyDown(with: try key(kVK_ANSI_Q, mods: .control, chars: "q"))
+        view.keyDown(with: try key(kVK_ANSI_Z, mods: .control, chars: "z"))
+        #expect(actions == ["stop", "stats"])
+        #expect(backend.keyboard.isEmpty)
+    }
+
     private func mark(_ view: StreamInputView) {
         view.setMarkedText("ni", selectedRange: NSRange(location: 2, length: 0),
                            replacementRange: NSRange(location: NSNotFound, length: 0))

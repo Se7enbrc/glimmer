@@ -40,8 +40,11 @@ final class StreamSessionModel {
     private(set) var requestedStartKbps: Int?
     private(set) var mouseControllers: Set<ControllerRegistration> = []
     var controllerMouseActive: Bool { !mouseControllers.isEmpty }
+    /// The corner glyph replaces the mode notice once it has gone, for as long as mouse mode lasts.
+    var showsMouseBadge: Bool { controllerMouseActive && controllerModeMessage == nil && inputFocused }
     private(set) var controllerConnected = false
     private(set) var controllerModeMessage: String?
+    private(set) var controllerModeSymbol = ControllerMouseMapping.modeSymbol(enabled: false)
     private(set) var dismissWhenStopped = false
     private let backgroundGrace: StreamBackgroundGrace
     private(set) var canStart = true
@@ -263,6 +266,8 @@ final class StreamSessionModel {
     func toggleControllerMouseMode() {
         guard let menuController else { return }
         streamInput?.setControllerMouseMode(!menuControllerUsesMouse, for: menuController)
+        // Choosing a mode returns to the stream so the controller drives it at once.
+        resumeInput()
     }
 
     func showControls() {
@@ -362,7 +367,11 @@ final class StreamSessionModel {
 
     private func showControllerMode(_ enabled: Bool) {
         modeNoticeTask?.cancel()
-        controllerModeMessage = ControllerMouseMapping.modeMessage(enabled: enabled)
+        let message = ControllerMouseMapping.modeMessage(enabled: enabled)
+        controllerModeMessage = message
+        controllerModeSymbol = ControllerMouseMapping.modeSymbol(enabled: enabled)
+        // The notice ignores touches, so VoiceOver hears the change rather than finding it.
+        UIAccessibility.post(notification: .announcement, argument: message)
         modeNoticeTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(2)) } catch { return }
             self?.controllerModeMessage = nil

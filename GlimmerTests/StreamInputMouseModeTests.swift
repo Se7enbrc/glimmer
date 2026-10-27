@@ -48,7 +48,7 @@ struct StreamInputMouseModeTests {
         var calls = 0
         func motion() -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>) {
             calls += 1
-            return ControllerMousePlan().motion(.init(leftTrigger: 0, rightTrigger: 0,
+            return ControllerMousePlan().sticks(.init(leftTrigger: 0, rightTrigger: 0,
                 leftStickX: 32767, leftStickY: 32767, rightStickX: 32767, rightStickY: 32767))
         }
         let gamepad = ControllerMouseState()
@@ -95,11 +95,11 @@ struct StreamInputMouseModeTests {
         submit(rig.input, registration, .init(leftStickX: 1, rightStickY: 1))
         rig.input.core.pollControllerMouse()
         if mapping == .rightStick {
-            #expect(rig.backend.mouseMoves == [.init(dx: 0, dy: -62)])
-            #expect(rig.backend.pointer == [.hScroll(62)])
+            #expect(rig.backend.mouseMoves == [.init(dx: 0, dy: -10)])
+            #expect(rig.backend.pointer.isEmpty)
         } else {
-            #expect(rig.backend.mouseMoves == [.init(dx: 62, dy: 0)])
-            #expect(rig.backend.pointer == [.scroll(62)])
+            #expect(rig.backend.mouseMoves == [.init(dx: 10, dy: 0)])
+            #expect(rig.backend.pointer.isEmpty)
         }
     }
 
@@ -172,7 +172,7 @@ struct StreamInputMouseModeTests {
         submit(rig.input, registration, .init(leftTrigger: 1, leftStickX: 1))
         rig.input.core.pollControllerMouse()
         #expect(rig.backend.pointer.last == .button(action: 7, button: 1))
-        #expect(rig.backend.mouseMoves == [.init(dx: 62, dy: 0)])
+        #expect(rig.backend.mouseMoves == [.init(dx: 10, dy: 0)])
     }
 
     @Test func mappingBeforeActivationSendsNothingAndUnregisterClearsOnlyTheRetiredMode() throws {
@@ -319,7 +319,7 @@ struct StreamInputMouseModeTests {
         #expect(rig.events.withLock { $0.last } == .mouseMode(registration, enabled: true))
         submit(rig.input, registration, .init(rightStickX: 1), capturedAt: start + 0.8)
         rig.input.core.pollControllerMouse()
-        #expect(rig.backend.mouseMoves == [.init(dx: 62, dy: 0)])
+        #expect(rig.backend.mouseMoves == [.init(dx: 10, dy: 0)])
         #expect(rig.backend.pointer.isEmpty)
     }
 }

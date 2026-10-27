@@ -70,7 +70,7 @@ struct StreamPlayback {
 
     static func configureInput(_ input: StreamInput, defaults: UserDefaults = PersistentStorage.defaults) {
         input.setStopChord(.menuOptionsShoulders)
-        input.setControllerMenuOpensControls(false)
+        input.setControllerMenuOpensControls(true)
         input.setControllerMouseBindings(.load(from: defaults))
     }
 

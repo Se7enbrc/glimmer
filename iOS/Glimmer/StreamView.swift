@@ -295,10 +295,10 @@ struct StreamControls: View {
     private var notices: some View {
         VStack(spacing: 8) {
             if let message = model.controllerModeMessage, model.inputFocused {
-                Text(message).font(.callout).padding(8).glassEffect().transition(.opacity)
+                StreamNoticeView(text: message, symbol: model.controllerModeSymbol).transition(.opacity)
             }
             if model.waitingForVideo, model.phase == .streaming {
-                Label("Waiting for video…", systemImage: "clock").font(.callout).padding().glassEffect()
+                StreamNoticeView(text: "Waiting for video…", symbol: "clock")
             }
         }
         .padding(.bottom, 8).allowsHitTesting(false)

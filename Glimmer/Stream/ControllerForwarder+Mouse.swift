@@ -21,7 +21,7 @@ extension InputForwarder {
 
     func controllerMouseModeChanged(slot: UInt8, enabled: Bool) {
         guard isReady, controllerMouseStates[slot]?.isMouse == enabled else { return }
-        onControllerMouseChanged?(controllerMouseMessage(enabled: enabled, slot: slot))
+        onControllerMouseChanged?(controllerMouseMessage(enabled: enabled, slot: slot), enabled)
     }
 
     func controllerMouseMessage(enabled: Bool, slot: UInt8) -> String {
@@ -43,7 +43,6 @@ extension InputForwarder {
         inputCore.withLock { inputCore.updatePhysicalMouseButton(button, pressed: pressed) }
     }
 
-    static func controllerMouseDelta(_ axis: Int16) -> Int16 { InputCore.controllerMouseDelta(axis) }
     func pollControllerMouse() { inputCore.pollControllerMouse() }
     func suspendControllerMouse() { inputCore.suspendControllerMouse() }
     func resetControllerMouse(slot: UInt8? = nil) { inputCore.resetControllerMouse(slot: slot) }

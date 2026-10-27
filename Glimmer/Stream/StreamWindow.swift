@@ -38,19 +38,25 @@ public final class StreamWindow {
     /// Top-center "Reconnecting..." banner shown over the frozen frame during a
     /// silent reconnect episode or a watchdog video-hold (the launcher's phase
     /// chip is occluded by this fullscreen window).
-    public let reconnectBanner: StreamBannerLayer
+    public let reconnectBanner: StreamBanner
     /// Bottom-center "Network unstable" pill, auto-shown when the link enters
     /// caution/distress - independent of the full stats HUD toggle.
-    public let networkBanner: StreamBannerLayer
+    public let networkBanner: StreamBanner
     /// Bottom-center one-time "press <chord> to leave" toast shown on the first
     /// stream so the quit chord is discoverable (Esc is a game input).
-    public let leaveHintBanner: StreamBannerLayer
+    public let leaveHintBanner: StreamBanner
     /// Bottom-center "Hold Esc to free the pointer" hint, shown over the
     /// picture for the first few window-mode captures. Window mode only - the
     /// sole caller is the capture edge in StreamWindow+Windowed.swift, which
     /// full screen never reaches.
-    public let captureHintBanner: StreamBannerLayer
+    public let captureHintBanner: StreamBanner
+    /// The glyph that stays in a clear corner while a controller is a mouse.
+    public let mouseModeBadge: StreamBanner
     var streamToastGeneration: UInt64 = 0
+    var mouseModeBadgeGeneration: UInt64 = 0
+    var scheduleMouseModeBadge: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, action in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(action) }
+    }
     let displayView: DisplayContainerView
     /// The NSView hosting the AVSampleBufferDisplayLayer. Exposed so the
     /// session can bind the FramePacer's CADisplayLink to this view's screen
@@ -327,24 +333,14 @@ public final class StreamWindow {
         overlay.displayView = view
         overlay.attach(to: layer)
 
-        // Transient signal pills (sibling sublayers of the display layer, above
-        // the stats panel). Created hidden; the session drives them on edges.
-        let reconnect = StreamBannerLayer(
-            anchor: .topCenter, accent: NSColor.systemOrange.cgColor)
-        reconnect.attach(to: layer)
-        let network = StreamBannerLayer(
-            anchor: .bottomCenter, accent: NSColor.systemYellow.cgColor)
-        network.attach(to: layer)
-        // Stacked above the network pill (both bottomCenter) so the two can't
-        // render on top of each other: 28 inset + 34 height + 10 gap = 72.
-        let leaveHint = StreamBannerLayer(
-            anchor: .bottomCenter, accent: NSColor.white.cgColor, inset: 72)
-        leaveHint.attach(to: layer)
-        // One rung higher again (72 + 34 + 10 = 116) so the pointer hint can
-        // share the corner with both of the pills below it.
-        let captureHint = StreamBannerLayer(
-            anchor: .bottomCenter, accent: NSColor.white.cgColor, inset: 116)
-        captureHint.attach(to: layer)
+        // Transient notices float in child windows above the picture, created only while shown.
+        // Co-anchored notices stack one rung apart: 28 inset + 34 height + 10 gap = 72, then 116.
+        let reconnect = StreamBanner(anchor: .topCenter, accent: .systemOrange)
+        let network = StreamBanner(anchor: .bottomCenter, accent: .systemYellow)
+        let leaveHint = StreamBanner(anchor: .bottomCenter, accent: .white, inset: 72)
+        let captureHint = StreamBanner(anchor: .bottomCenter, accent: .white, inset: 116)
+        let badge = StreamBanner(anchor: .corner, accent: .white)
+        for banner in [reconnect, network, leaveHint, captureHint, badge] { banner.attach(to: window) }
 
         // Install the delegate that overrides fullscreen content size so
         // the window covers the panel's notch reserve zone on notched
@@ -361,12 +357,14 @@ public final class StreamWindow {
         self.networkBanner = network
         self.leaveHintBanner = leaveHint
         self.captureHintBanner = captureHint
+        self.mouseModeBadge = badge
         self.displayView = view
         self.streamDelegate = delegate
         // Window mode: the red button / Cmd-W route through the delegate to
         // the session's stop() (StreamWindow+Windowed.swift). Wired after
         // full initialization because it captures self.
         delegate.onCloseRequested = { [weak self] in self?.handleUserCloseRequest() }
+        configureMouseModeBadge()
         delegate.onMiniPlayerExitRequested = { [weak self] in self?.leaveMiniPlayer() }
         delegate.onFullScreenSettled = { [weak self] in
             guard let self, self.pendingFirstFrameReveal else { return }
@@ -410,14 +408,9 @@ public final class StreamWindow {
     public func rebuildDisplayLayer() -> AVSampleBufferDisplayLayer {
         let view = displayView
         let fresh = StreamWindow.makeDisplayLayer(frame: view.bounds)
-        // Re-attach the stats overlay + signal pills as sublayers of the NEW
-        // root layer before the swap, so they keep compositing above the video.
-        // attach() re-parents (addSublayer removes from any prior superlayer).
+        // Re-attach the stats overlay to the NEW root layer before the swap, so it keeps compositing above the
+        // video; attach() re-parents. Notices live in their own child windows and need nothing here.
         statsOverlay.attach(to: fresh)
-        reconnectBanner.attach(to: fresh)
-        networkBanner.attach(to: fresh)
-        leaveHintBanner.attach(to: fresh)
-        captureHintBanner.attach(to: fresh)
         // Swap as the view's root layer - same construction as init so the
         // EDR-direct path is preserved (root layer, not a sublayer of a backing
         // layer). wantsLayer stays true.

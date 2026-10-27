@@ -33,8 +33,8 @@ struct InputLatencyTests {
                 InputTimingContext.end()
             }
         }
-        core.pollControllerMouse()
-        core.pollControllerMouse()
+        core.pollControllerMouse(now: 2)
+        core.pollControllerMouse(now: 2 + 1.0 / 120)
         #expect(backend.mouseMoves.count == 2)
         #expect(samples.withLock { $0.map(\.capture) } == [1_000_000_000, 1_010_000_000])
         #expect(samples.withLock { $0.allSatisfy { $0.source == .rawHID } })

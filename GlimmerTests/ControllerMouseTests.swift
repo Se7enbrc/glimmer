@@ -4,6 +4,7 @@
 import GlimmerEngine
 import AppKit
 import GameController
+import SwiftUI
 import Testing
 @testable import Glimmer
 
@@ -31,6 +32,14 @@ struct ControllerMouseTests {
         forwarder.routeControllerMouse(slot: slot, buttons: 0, analog: neutral, chordHeld: false, now: now + 0.751)
     }
 
+    // Explicit-time polls must not race the live display-rate timer.
+    private func stopPollingTimer(_ forwarder: InputForwarder) {
+        forwarder.inputCore.withLock {
+            forwarder.inputCore.controllerMouseTimer?.cancel()
+            forwarder.inputCore.controllerMouseTimer = nil
+        }
+    }
+
     @Test func idleMouseModeSleepsAndMovementRearmsPolling() {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
@@ -48,6 +57,24 @@ struct ControllerMouseTests {
         analog.rightStickY = 30_000
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false)
         #expect(forwarder.controllerMouseTask != nil)
+    }
+
+    // rc.20 stepped the pointer every 50 ms; known-good iOS moved it every display tick.
+    @Test func pointerMovesEveryTickAtMoonlightSpeedAndStickScrollsInWholeNotches() {
+        let (forwarder, backend) = rig()
+        defer { forwarder.detach() }
+        toggle(forwarder)
+        var analog = neutral
+        analog.rightStickX = 32767
+        analog.leftStickX = 32767
+        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false, now: 11)
+        stopPollingTimer(forwarder)
+        for tick in 0..<60 { forwarder.inputCore.pollControllerMouse(now: 11 + Double(tick) / 120) }
+        #expect(backend.mouseMoves.count == 60)
+        #expect(abs(backend.mouseMoves.map { Int($0.dx) }.reduce(0, +) - 620) <= 1)
+        let scrolls = backend.pointer.compactMap { if case .hScroll(let units) = $0 { units } else { nil } }
+        #expect(scrolls.count == 5 && scrolls.allSatisfy { $0 == 120 })
+        #expect(backend.pointer.allSatisfy { if case .hScroll = $0 { true } else { false } })
     }
 
     @Test func togglesOnlyOnReleaseAfterMoonlightsThreshold() {
@@ -180,7 +207,7 @@ struct ControllerMouseTests {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
         var notifications: [String] = []
-        forwarder.onControllerMouseChanged = { notifications.append($0) }
+        forwarder.onControllerMouseChanged = { message, _ in notifications.append(message) }
         toggle(forwarder)
         #expect(backend.calls.last?.buttons == 0)
         #expect(backend.calls.last?.analog.leftStickX == 0)
@@ -250,15 +277,15 @@ struct ControllerMouseTests {
         let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 32767, leftStickY: 32767,
                                    rightStickX: -32767, rightStickY: 32767)
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false)
-        forwarder.pollControllerMouse()
-        forwarder.pollControllerMouse()
-        #expect(backend.mouseMoves == [.init(dx: -62, dy: -62), .init(dx: -62, dy: -62)])
-        #expect(backend.pointer == [.scroll(62), .hScroll(62), .scroll(62), .hScroll(62)])
+        stopPollingTimer(forwarder)
+        forwarder.inputCore.pollControllerMouse(now: 1)
+        forwarder.inputCore.pollControllerMouse(now: 1 + 1.0 / 120)
+        #expect(backend.mouseMoves == [.init(dx: -7, dy: -7), .init(dx: -7, dy: -7)])
+        #expect(backend.pointer.isEmpty)
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: neutral, chordHeld: false)
-        forwarder.pollControllerMouse()
+        forwarder.inputCore.pollControllerMouse(now: 1 + 2.0 / 120)
         #expect(backend.mouseMoves.count == 2)
-        #expect(InputForwarder.controllerMouseDelta(1000) == 0)
-        #expect(InputForwarder.controllerMouseDelta(-32768) == -62)
+        #expect(ControllerMouseMotion.velocity(SIMD2(3000, 3000)) == .zero)
     }
 
     @Test func unboundFaceAndDirectionalButtonsNeverClickOrScroll() {
@@ -337,11 +364,41 @@ struct ControllerMouseTests {
         let generation = window.streamToastGeneration
         let mouse = "Controller is now a mouse."
         let game = "Controller is back in the game."
-        window.showControllerMouseMode(mouse)
+        window.showControllerMouseMode(mouse, enabled: true)
         #expect(window.leaveHintBanner.displayedText == mouse)
+        #expect(window.leaveHintBanner.content.symbol == ControllerMouseMapping.modeSymbol(enabled: true))
         #expect(window.streamToastGeneration > generation)
-        window.showControllerMouseMode(game)
+        window.showControllerMouseMode(game, enabled: false)
         #expect(window.leaveHintBanner.displayedText == game)
         #expect(announcements == ["Leave hint", mouse, game])
+    }
+
+    // Renders the real notice over bright and dark frames, on glass and on the forced macOS 15 material.
+    @Test(arguments: [false, true], [false, true])
+    func modeIndicatorRendersOverLightAndDarkPictures(dark: Bool, glass: Bool) throws {
+        let stream = StreamWindow()
+        defer { stream.close() }
+        stream.leaveHintBanner.announce = { _ in }
+        stream.leaveHintBanner.glassAvailable = glass
+        stream.showControllerMouseMode("Controller is now a mouse.", enabled: true)
+        let colors: [Color] = dark
+            ? [Color(red: 0.05, green: 0.06, blue: 0.12), Color(red: 0.18, green: 0.12, blue: 0.22)]
+            : [Color(red: 0.62, green: 0.82, blue: 0.98), Color(red: 0.98, green: 0.93, blue: 0.80)]
+        let frame = CGRect(x: 0, y: 0, width: 720, height: 240)
+        let host = NSHostingView(rootView: ZStack {
+            LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+            stream.leaveHintBanner.content
+        }.frame(width: frame.width, height: frame.height))
+        let window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.contentView = host
+        defer { window.close() }
+        host.layoutSubtreeIfNeeded()
+        let rep = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: rep)
+        let data = try #require(rep.representation(using: .png, properties: [:]))
+        #expect(stream.leaveHintBanner.content.glass == glass && data.count > 1_000)
+        Attachment.record(data, named: "mac-mode-indicator-\(glass ? "glass" : "macos15")-\(dark ? "dark" : "light").png")
     }
 }

@@ -2,7 +2,35 @@
 
 ## 2026.10.8 - Unreleased
 
-- Controller sticks no longer send duplicate input while streaming.
+- Controller Stop and Stats shortcuts respond after a short hold on Mac, iPhone
+  and iPad, without waiting for release. Holding Menu on iPhone and iPad opens
+  stream controls without interfering with those shortcuts.
+
+- Controller sticks no longer send duplicate input while streaming, including on
+  controllers whose stick press shares the stick's element.
+
+- The controller mouse pointer moves smoothly at display rate on Mac, iPhone and
+  iPad, at the same top speed as before.
+
+- Scrolling with a stick in controller mouse mode sends whole wheel notches, so
+  games no longer switch weapons on every small stick movement.
+
+- Holding a controller shortcut no longer switches the controller into mouse
+  mode. Once a shortcut's buttons are pressed together, Menu's hold action waits
+  until every button is released; a lone Menu hold still works.
+
+- Turning controller mouse mode on or off shows the same short notice, with a
+  mouse or controller symbol, on Mac, iPhone and iPad, and VoiceOver announces
+  it. Every notice over a Mac stream now uses the same glass capsule as iPhone
+  and iPad, with a system material on macOS 15.
+
+- While a controller is a mouse, a small mouse badge stays in a clear corner of
+  the stream on Mac, iPhone and iPad, away from the stats, the touch controls
+  and other notices, and leaves when the controller returns to the game.
+
+- On iPhone and iPad, holding Menu opens the stream controls, and choosing mouse
+  or gamepad mode there returns straight to the game. Controllers that report
+  Menu only on its own button now stop the stream with the Stop shortcut too.
 
 - Controllers avoid mouse calculations while mouse mode is off.
 

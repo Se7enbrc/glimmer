@@ -154,12 +154,12 @@ struct StreamProfileTests {
         Attachment.record(Array(geometry.utf8), named: "physical-panel-request.txt")
     }
 
-    @MainActor @Test func controllerMouseMatchesMac() {
+    @MainActor @Test func controllerMouseMatchesMacAndMenuRemainsReachable() {
         let input = StreamInput(emit: { _ in })
         input.setControllerMouseMapping(.rightStick)
         StreamPlayback.configureInput(input)
         #expect(input.core.controllerMouseMapping == .rightStick)
-        #expect(!input.core.controllerMenuOpensControls)
+        #expect(input.core.controllerMenuOpensControls)
     }
 
     @Test(arguments: ["", " ", "https://pc.local", "pc.local:47989", "pc.local/path", "pc.local?x=1",

@@ -32,7 +32,7 @@ struct ControllerShortcutRoutingTests {
         let state = try #require(core.layouts?.states[0])
         core.advanceLayoutHold(state, slot: 0, at: 10.51)
         #expect(backend.calls.last?.buttons == 0)
-        #expect(actions.withLock { $0.isEmpty })
+        #expect(actions.withLock { $0 } == [.stats])
         core.receive(slot: 0, buttons: partial, analog: InputCore.neutral, capturedAt: 10.6)
         #expect(backend.calls.last?.buttons == 0)
         core.receive(slot: 0, buttons: full, analog: InputCore.neutral, capturedAt: 10.7)
@@ -56,9 +56,12 @@ struct ControllerShortcutRoutingTests {
         #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG | StreamProtocol.B_FLAG | StreamProtocol.X_FLAG)
         core.receive(slot: 0, buttons: full, analog: InputCore.neutral, capturedAt: 10.5)
         #expect(backend.calls.last?.buttons == 0)
-        core.clearChords()
+        #expect(actions.withLock { $0 } == 1)
         core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, capturedAt: 11)
-        #expect(actions.withLock { $0 } == 0)
+        core.receive(slot: 0, buttons: full, analog: InputCore.neutral, capturedAt: 12)
+        core.clearChords()
+        core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, capturedAt: 13)
+        #expect(actions.withLock { $0 } == 1)
     }
 
     @Test func aShortcutLeavesUnrelatedButtonsAndAnalogInputRunning() throws {

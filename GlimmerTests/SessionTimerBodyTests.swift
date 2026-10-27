@@ -33,7 +33,7 @@ struct StatsOverlayRefreshTests {
         _ refresh: StatsOverlayRefresh, _ dec: VideoDecoder, _ overlay: StatsOverlayLayer,
         reads: Reads, rows: Set<StatsRow.Kind>
     ) {
-        let banner = StreamBannerLayer(anchor: .bottomCenter, accent: NSColor.systemOrange.cgColor)
+        let banner = StreamBanner(anchor: .bottomCenter, accent: .systemOrange)
         refresh.tick(
             dec: dec, overlay: overlay, banner: banner, input: nil,
             rows: { reads.rows += 1; return rows },
@@ -44,7 +44,7 @@ struct StatsOverlayRefreshTests {
         let dec = VideoDecoder()
         dec.statsOverlayEnabled = true
         let overlay = attachedOverlay()
-        let banner = StreamBannerLayer(anchor: .bottomCenter, accent: NSColor.systemOrange.cgColor)
+        let banner = StreamBanner(anchor: .bottomCenter, accent: .systemOrange)
         let refresh = StatsOverlayRefresh()
         var reads = 0
         refresh.tick(dec: dec, overlay: overlay, banner: banner, input: nil,
@@ -76,7 +76,7 @@ struct StatsOverlayRefreshTests {
         let video = CALayer()
         video.bounds = CGRect(x: 0, y: 0, width: 1_280, height: 800)
         overlay.attach(to: video)
-        let banner = StreamBannerLayer(anchor: .bottomCenter, accent: NSColor.systemOrange.cgColor)
+        let banner = StreamBanner(anchor: .bottomCenter, accent: .systemOrange)
         let refresh = StatsOverlayRefresh()
         for visible in [true, false, true] {
             refresh.tick(dec: dec, overlay: overlay, banner: banner, input: nil,
@@ -141,12 +141,12 @@ struct StatsOverlayRefreshTests {
     }
 
     @Test func thePillLatchesOnlyOnSustainedHitching() {
-        let banner = StreamBannerLayer(anchor: .bottomCenter, accent: NSColor.systemOrange.cgColor)
+        let banner = StreamBanner(anchor: .bottomCenter, accent: .systemOrange)
         banner.announce = { _ in }
         for _ in 0..<9 { banner.setSustained(true, text: "Stream stuttering") }
-        #expect(banner.layer.isHidden)
+        #expect(!banner.isVisible)
         banner.setSustained(true, text: "Stream stuttering")
-        #expect(!banner.layer.isHidden && banner.displayedText == "Stream stuttering")
+        #expect(banner.isVisible && banner.displayedText == "Stream stuttering")
     }
 }
 

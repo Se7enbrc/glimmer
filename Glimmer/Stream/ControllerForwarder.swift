@@ -51,6 +51,7 @@ extension InputForwarder {
             guard let controller else { return }
             controller.playerIndex = priorPlayerIndex
             controller.input.unmapped?.elementValueDidChangeHandler = nil
+            ControllerButtonRoutes.set(controller, nil)
             controller.input.unmapped?.queue = priorInputQueue
             controller.handlerQueue = priorHandlerQueue
             if let priorOptionsGesture {
@@ -482,6 +483,7 @@ extension InputForwarder {
     func installInputHandlers(for state: AttachedController) {
         guard !ControllerLayoutEditing.active, let gamepad = state.controller else { return }
         gamepad.input.unmapped?.elementValueDidChangeHandler = nil
+        ControllerButtonRoutes.set(gamepad, nil)
         controllerLayouts?.release(gamepad)
         let slot = state.slot
         let routesHID = state.retainedHID
