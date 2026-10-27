@@ -54,7 +54,8 @@ extension InputForwarder {
         publishInputSnapshot()
         if let controller = pad.controller, let sample = controllerLayouts?.sample(for: controller, slot: slot) {
             let result = inputCore.receive(slot: slot, buttons: Int32(bitPattern: sample.game.buttons),
-                analog: sample.game.gamepadAnalog, extras: sample.physical.extras, physicalSample: sample.physical)
+                analog: sample.game.gamepadAnalog, extras: sample.physical.extras, physicalSample: sample.physical,
+                rawSupplement: sample.supplement.map { (Int32(bitPattern: $0), Int32(bitPattern: $0)) })
             return result == .forwarded || result == .mouse
         }
         let buttons = pressedButtonFlags(pad: pad)

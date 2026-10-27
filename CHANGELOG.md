@@ -126,6 +126,8 @@
   in use, Stats keeps Control-I when it is free.
 - Resizing an iPad stream keeps a screen size supported at its current frame
   rate, including 120 fps.
+- Release controller shoulder buttons reliably when using layouts and controller
+  shortcuts.
 
 - Fixed missed and delayed controller input on iPhone and iPad.
 

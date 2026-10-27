@@ -99,11 +99,8 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
         }
         leases[id] = ControllerLayoutInputLease(controller: controller, reader: reader,
             queue: forwarder.controllerCaptureQueue, observeSystemInput: !mapsGameInput) { [core, reader] sample, now in
-                var sample = sample
-                if routesHID {
-                    DualSenseRouting.shared.gc(controller: id, buttons: sample.buttons, at: now)
-                    sample.buttons |= Self.centerButtons(for: id)
-                }
+                if routesHID { DualSenseRouting.shared.gc(controller: id, buttons: sample.buttons, at: now) }
+                let supplement = routesHID ? Self.centerButtons(for: id) : nil
                 InputTimingContext.begin(source: .controller, timestamp: now)
                 defer { InputTimingContext.end() }
                 core.withLock {
@@ -114,7 +111,8 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
                         registeredAt: registered.registeredAt, buttons: Int32(bitPattern: game.buttons),
                         analog: game.gamepadAnalog, extras: sample.extras)
                     core.receive(slot: slot, buttons: Int32(bitPattern: game.buttons), analog: game.gamepadAnalog,
-                                 capturedAt: now, extras: sample.extras, physicalSample: sample)
+                                 capturedAt: now, extras: sample.extras, physicalSample: sample,
+                                 rawSupplement: supplement.map { (Int32(bitPattern: $0), Int32(bitPattern: $0)) })
                     if let touch = reader.touchSample(clicked: sample.buttons & ControllerMappedButton.touchpad.rawValue != 0) {
                         core.forwardTouchpad(slot: slot, primary: (touch.primaryX, touch.primaryY),
                             secondary: (touch.secondaryX, touch.secondaryY), clicked: touch.clicked, now: now)
@@ -136,17 +134,17 @@ final class MacControllerLayouts: NSObject, NSWindowDelegate {
             at: ProcessInfo.processInfo.systemUptime)
     }
 
-    func sample(for controller: GCController, slot: UInt8) -> (physical: ControllerMappingSample, game: ControllerMappingSample)? {
+    func sample(for controller: GCController, slot: UInt8)
+        -> (physical: ControllerMappingSample, game: ControllerMappingSample, supplement: UInt32?)? {
         let id = ObjectIdentifier(controller)
         guard let reader = readers[id] else { return nil }
-        var sample = reader.sample()
-        sample.buttons |= Self.centerButtons(for: id)
+        let sample = reader.sample()
         let maps = forwarder?.inputCore.withLock { forwarder?.inputCore.layouts?.states[Int(slot)]?.plan != nil } == true
-        return (sample, maps ? sample : reader.systemSample())
+        return (sample, maps ? sample : reader.systemSample(), Self.centerButtons(for: id))
     }
 
-    nonisolated private static func centerButtons(for id: ObjectIdentifier) -> UInt32 {
-        guard let state = DualSenseHID.shared.state(for: id)?.buttons else { return 0 }
+    nonisolated private static func centerButtons(for id: ObjectIdentifier) -> UInt32? {
+        guard let state = DualSenseHID.shared.state(for: id)?.buttons else { return nil }
         return (state.options ? ControllerMappedButton.menu.rawValue : 0)
             | (state.create ? ControllerMappedButton.options.rawValue : 0)
             | (state.ps ? ControllerMappedButton.home.rawValue : 0)
