@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- Keyboard shortcuts on iPhone and iPad follow the active keyboard layout,
+  keeping their keys out of the game on non-US keyboards too.
+
 - Stop requests for a specific PC now cancel its pending launch on iPhone and
   iPad, even while Glimmer is waiting to reconnect or return to the foreground.
 

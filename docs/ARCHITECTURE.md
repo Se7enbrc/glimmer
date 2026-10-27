@@ -327,7 +327,9 @@ queue. Native focus and device changes retire callbacks before releasing held
 input. Both adapters use the engine's physical key map and release ledger; UIKit
 retains local shortcuts and requests scene pointer lock only during play.
 Opening stream controls releases capture, including when video is on an external
-display.
+display. Possible keyboard shortcuts wait for UIKit's layout-aware character
+event before forwarding. Both callback paths share physical press ownership;
+ordinary gameplay keys remain synchronous on the capture queue.
 
 ### Release ledger and text
 

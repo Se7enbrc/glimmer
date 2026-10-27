@@ -3,6 +3,7 @@
 
 import GameController
 import GlimmerEngine
+import UIKit
 
 @MainActor
 final class IOSKeyboardMouseCapture {
@@ -13,8 +14,10 @@ final class IOSKeyboardMouseCapture {
     private var keyboard: GCKeyboard?
     private var mice: [GCMouse] = []
     private var focused = false
+    private var generation: UInt64 = 0
     private var restore: [() -> Void] = []
     var connected: (Bool) -> Void = { _ in }
+    var resetShortcuts: () -> Void = {}
 
     init(input: StreamInput, quit: HotkeyChord, stats: HotkeyChord, center: NotificationCenter = .default) {
         forwarder = IOSHardwareInput(input: input, quit: quit, stats: stats)
@@ -45,11 +48,19 @@ final class IOSKeyboardMouseCapture {
         keyboard = GCKeyboard.coalesced
         mice = GCMouse.mice()
         if focused {
-            let generation = forwarder.focus(true)
+            generation = forwarder.focus(true)
             if let keyboard { attach(keyboard, generation: generation) }
             for mouse in mice { attach(mouse, generation: generation) }
         }
         connected(keyboard != nil || !mice.isEmpty)
+    }
+
+    func key(_ key: UIKey, pressed: Bool, local: Bool) -> Bool {
+        let flags = key.modifierFlags
+        let modifiers: UInt8 = (flags.contains(.shift) ? 1 : 0) | (flags.contains(.control) ? 2 : 0)
+            | (flags.contains(.alternate) ? 4 : 0) | (flags.contains(.command) ? 8 : 0)
+        return forwarder.key(UInt16(clamping: key.keyCode.rawValue), pressed: pressed, modifiers: modifiers,
+                             at: ProcessInfo.processInfo.systemUptime, generation: generation, local: local)
     }
 
     private func attach(_ keyboard: GCKeyboard, generation: UInt64) {
@@ -117,6 +128,7 @@ final class IOSKeyboardMouseCapture {
 
     private func detach() {
         forwarder.focus(false)
+        resetShortcuts()
         for action in restore { action() }
         restore.removeAll(keepingCapacity: true)
         keyboard = nil

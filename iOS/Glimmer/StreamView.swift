@@ -31,7 +31,7 @@ final class StreamViewController: GCEventViewController {
     private let overlay: UIHostingController<StreamControls>
     private let outputs: StreamOutputCoordinator
     private(set) var touchCapture: StreamTouchCapture?
-    private var keyboardMouseCapture: IOSKeyboardMouseCapture?
+    private(set) var keyboardMouseCapture: IOSKeyboardMouseCapture?
     private weak var presentationWindow: UIWindow?
 
     init(model: StreamSessionModel, close: @escaping () -> Void, outputs: StreamOutputCoordinator = .shared) {
@@ -172,6 +172,7 @@ final class StreamViewController: GCEventViewController {
                                                   stats: model.shortcuts.stats)
             keyboardMouseCapture = capture
             capture.connected = { [weak model] in model?.hardwareConnectionChanged($0) }
+            capture.resetShortcuts = { [weak model] in model?.shortcuts.reset() }
             capture.start()
         }
         keyboardMouseCapture?.setFocused(model.inputFocused && viewIfLoaded?.window?.isKeyWindow == true)
