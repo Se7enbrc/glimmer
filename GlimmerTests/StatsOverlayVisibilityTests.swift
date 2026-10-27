@@ -320,6 +320,10 @@ struct StatsOverlayVisibilityTests {
             trace.append(snapshot: snapshot, targetFps: 60, thresholds: .default)
         }
         trace.draw()
+        #expect(shapes.allSatisfy { $0.path == nil }, "a perfectly steady reading draws no flat dash")
+        snapshot.renderedFps = 58
+        trace.append(snapshot: snapshot, targetFps: 60, thresholds: .default)
+        trace.draw()
         #expect(shapes.contains { $0.path?.isEmpty == false })
         trace.layer.bounds = .zero
         trace.draw()
