@@ -11,6 +11,7 @@
 import GlimmerEngine
 import AppKit
 import Testing
+import Synchronization
 @testable import Glimmer
 
 struct AppShellTests {
@@ -297,6 +298,62 @@ struct AppShellTests {
         #expect(model.isReconnecting)
     }
 
+    @Test @MainActor func aDifferentGameDuringRouteWaitRejectsTheStaleCommand() async throws {
+        let window = CommandTestWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: false)
+        window.identifier = NSUserInterfaceItemIdentifier("main")
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let model = AppModel(defaults: settings.defaults)
+        let route = CommandRouteWait()
+        var replies: [[String: String]] = []
+        model.postCommandReply = { replies.append($0) }
+        try #require(model.mainWindowVisible)
+        let (_, task) = try await pendingStream(model, route: route)
+        let other = LibraryApp(id: 99, name: "Other", hdr: false, hidden: false)
+        model.lastLaunchAttempt = (app: other, host: tower)
+        model.isStreaming = true
+        route.settle()
+        await task.value
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.rejected])
+        #expect(model.pendingTakeover == nil)
+        #expect(model.lastLaunchAttempt?.app.id == other.id)
+    }
+
+    @Test @MainActor func aCommandWithoutAStartedSessionIsAlreadyComplete() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.nativeStreamError = "The stream could not start."
+        let end = CommandStreamEnd(model: model)
+        #expect(end.ended)
+        if end.ended { #expect(await end.wait() == model.nativeStreamError) }
+    }
+
+    @Test @MainActor func acceptedCommandTimesOutWithoutAFirstFrame() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.isStreaming = true
+        var replies: [[String: String]] = []
+        model.postCommandReply = { replies.append($0) }
+        let time = Mutex<UInt64>(0)
+        let clock = SessionClock(uptimeNanos: { time.withLock { $0 } }, sleep: { _ in
+            time.withLock { $0 += 60_000_000_000 }
+        })
+        await model.reportCommandSession("timeout", clock: clock, firstFrame: { false }).value
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.ended])
+        #expect(replies.first?[CommandChannel.Key.detail] != nil)
+    }
+
+    @Test @MainActor func acceptedCommandReportsLiveAndItsOwnTerminalResult() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.isStreaming = true
+        var replies: [[String: String]] = []
+        model.postCommandReply = {
+            replies.append($0)
+            if $0[CommandChannel.Key.event] == CommandChannel.Event.live { model.isStreaming = false }
+        }
+        await model.reportCommandSession("live", firstFrame: { true }).value
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.live, CommandChannel.Event.ended])
+        #expect(replies.last?[CommandChannel.Key.detail] == nil)
+    }
+
     @Test @MainActor func routePollingStopsWhenCancelledEvenIfTheRouteBecomesReady() async throws {
         var checks = 0
         let task = Task { @MainActor in
@@ -347,4 +404,9 @@ private final class CommandRouteWait {
         continuation?.resume()
         continuation = nil
     }
+}
+
+@MainActor
+private final class CommandTestWindow: NSWindow {
+    override var isVisible: Bool { true }
 }

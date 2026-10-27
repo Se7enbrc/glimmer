@@ -27,6 +27,11 @@ final class CommandStreamEnd {
     private var continuation: CheckedContinuation<String?, Never>?
 
     init(model: AppModel) {
+        if !model.isStreaming {
+            ended = true
+            detail = model.commandSessionDetail() ?? "Glimmer couldn't start the stream. Try again."
+            return
+        }
         withObservationTracking { _ = model.isStreaming } onChange: { [weak self, weak model] in
             MainActor.assumeIsolated {
                 guard let self, let model else { return }
@@ -164,7 +169,7 @@ extension AppModel {
             pendingTakeover = nil
             selectHost(host)
             beginCommandStream(id, app: app, on: host, takeover: !fromURL && takeover,
-                approvedOccupant: fromURL ? nil : info[CommandChannel.Key.occupant].flatMap(Int.init))
+                approvedOccupant: fromURL ? nil : info[CommandChannel.Key.occupant].flatMap(Int.init), fromURL: fromURL)
         case .rejected(let why):
             replyToCommand(id, CommandChannel.Event.rejected, why)
         case .ready:
@@ -200,7 +205,7 @@ extension AppModel {
 
     /// Retain the route wait so quit can invalidate it before any session exists.
     func beginCommandStream(_ id: String, app: LibraryApp, on host: Host, takeover: Bool, approvedOccupant: Int? = nil,
-                            waitForRoute: (@MainActor () async -> Void)? = nil) {
+                            fromURL: Bool = false, waitForRoute: (@MainActor () async -> Void)? = nil) {
         cancelPendingCommandStream()
         let request = PendingCommandStream(id: id, hostID: host.id)
         pendingCommandStream = request
@@ -223,8 +228,10 @@ extension AppModel {
                     return
                 }
                 if !takeover {
-                    requestStream(app: app, on: host)
-                    replyToCommand(id, CommandChannel.Event.accepted)
+                    if fromURL { requestStream(app: app, on: host); return }
+                    replyToCommand(id, CommandChannel.Event.rejected,
+                        "\(host.displayName) is now running \(active.app.name). "
+                            + "Run the command again to choose whether to quit it.")
                     return
                 }
                 let ending = nativeStreamTask
@@ -304,17 +311,31 @@ extension AppModel {
 
     /// "live" at the first decoded frame (with the connect timings), then
     /// "ended" with the failure text, if any, once the session is gone.
-    func reportCommandSession(_ id: String) {
+    @discardableResult
+    func reportCommandSession(_ id: String, clock: SessionClock = SessionClock(),
+                              firstFrame: @escaping @MainActor () -> Bool = {
+                                  ConnectTimingTelemetry.shared.clickToFirstFrameMs != nil
+                              }) -> Task<Void, Never> {
         let end = CommandStreamEnd(model: self)
-        Task { @MainActor in
+        let deadline = clock.uptimeNanos() + 60_000_000_000
+        return Task { @MainActor in
             while !end.ended {
-                if ConnectTimingTelemetry.shared.clickToFirstFrameMs != nil {
+                if firstFrame() {
                     replyToCommand(id, CommandChannel.Event.live, extra: Self.connectTimings())
                     let detail = await end.wait()
                     replyToCommand(id, CommandChannel.Event.ended, detail)
                     return
                 }
-                try? await Task.sleep(for: .milliseconds(100))
+                if clock.uptimeNanos() >= deadline {
+                    let pc = lastLaunchAttempt?.host.displayName ?? "The PC"
+                    replyToCommand(id, CommandChannel.Event.ended,
+                                   Self.connectFailure(for: StreamError.hostTimedOut, hostName: pc).message)
+                    return
+                }
+                do { try await clock.sleep(.milliseconds(100)) } catch {
+                    replyToCommand(id, CommandChannel.Event.ended, "Stream request cancelled.")
+                    return
+                }
             }
             replyToCommand(id, CommandChannel.Event.ended, await end.wait())
         }

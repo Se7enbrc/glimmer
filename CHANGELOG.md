@@ -130,6 +130,8 @@
   shortcuts.
 - Keep iPad window sizes and Low Data Mode in sync without undoing the latest
   resize.
+- Command-line streaming reports a launch conflict or timeout instead of leaving
+  a waiting command stuck.
 
 - Fixed missed and delayed controller input on iPhone and iPad.
 
