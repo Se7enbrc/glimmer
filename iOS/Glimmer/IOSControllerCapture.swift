@@ -50,12 +50,13 @@ final class IOSControllerCapture {
     var beforeAttach: (() -> Void)?
     var refreshed: ((Bool) -> Void)?
 
-    convenience init(input: StreamInput, scope: ControllerLayoutScope = .allGames) {
+    convenience init(input: StreamInput, scope: ControllerLayoutScope = .allGames,
+                     readControllers: @escaping () -> [GCController] = { GCController.controllers() }) {
         self.init(calls: Calls(register: input.registerController, unregister: input.unregisterController,
                               submit: input.submitController, focus: { input.setFocused($0) },
                               feedback: { input.attachFeedback($1, to: $0) },
                               motion: { input.attachMotion($1, to: $0) },
-                              battery: { input.attachBattery($1, to: $0) }))
+                              battery: { input.attachBattery($1, to: $0) }), readControllers: readControllers)
         layouts = IOSControllerLayouts(input: input, scope: scope)
     }
 

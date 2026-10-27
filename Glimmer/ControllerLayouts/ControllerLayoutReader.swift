@@ -23,9 +23,15 @@ final class ControllerLayoutReader: @unchecked Sendable {
 
     init?(_ controller: GCController) {
         guard let input = controller.input.unmapped else { return nil }
+        #if DEBUG
+        let snapshot = controller as? JourneySnapshotController
+        guard snapshot != nil || !input.buttons.isEmpty || !input.dpads.isEmpty else { return nil }
+        let discovery = snapshot.map(Self.journeyDiscovery) ?? Self.discover(input)
+        #else
         guard !input.buttons.isEmpty || !input.dpads.isEmpty else { return nil }
-        self.input = input
         let discovery = Self.discover(input)
+        #endif
+        self.input = input
         buttons = discovery.buttons
         extraButtons = discovery.extraButtons
         triggers = discovery.triggers
@@ -128,7 +134,7 @@ final class ControllerLayoutReader: @unchecked Sendable {
         return names
     }
 
-    private struct Discovery {
+    struct Discovery {
         var buttons: [(any GCPressedStateInput, UInt32)] = []
         var extraButtons: [any GCPressedStateInput] = []
         var triggers: [(any GCLinearInput, Int)] = []
