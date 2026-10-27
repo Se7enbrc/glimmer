@@ -13,8 +13,8 @@ struct JourneyMacApp: App {
     init() {
         precondition(PersistentStorage.isTesting && !NSWorkspace.shared.isVoiceOverEnabled)
         precondition(Bundle.main.bundleIdentifier == "io.ugfugl.Glimmer.JourneyHost")
-        NSApp.appearance = NSAppearance(named: ProcessInfo.processInfo.environment["JOURNEY_APPEARANCE"] == "dark"
-                                       ? .darkAqua : .aqua)
+        NSApplication.shared.appearance = NSAppearance(named: ProcessInfo.processInfo.environment["JOURNEY_APPEARANCE"] == "dark"
+                                                    ? .darkAqua : .aqua)
         let defaults = PersistentStorage.defaults
         GlimmerApp.registerDefaults(defaults: defaults)
         for key in ["telemetryEnabled", "showDiagnostics", "rawHIDControllerEnabled",
