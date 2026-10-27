@@ -141,8 +141,8 @@ struct AppIconsRow: View {
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: 60)
-        .overlay(alignment: .bottomTrailing) {
-            if running { RunningTileBadge().padding(.trailing, 12).padding(.bottom, 2) }
+        .overlay(alignment: .topTrailing) {
+            if running { RunningTileBadge().padding(RunningTileBadge.cornerInset) }
         }
         .contentShape(.rect(cornerRadius: 14))
     }

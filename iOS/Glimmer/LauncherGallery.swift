@@ -129,11 +129,11 @@ struct LauncherButton: View {
             .padding(.top, dynamicTypeSize.isAccessibilitySize ? badgeInset : 0)
         }
         .buttonStyle(.glassProminent)
-        .buttonBorderShape(.roundedRectangle)
+        .buttonBorderShape(.roundedRectangle(radius: RunningTileBadge.tileCornerRadius))
         .overlay(alignment: .topTrailing) {
             if model.runningApp?.id == app.id {
                 RunningTileBadge(compact: true).fixedSize()
-                    .padding(.top, 2).padding(.trailing, 16).allowsHitTesting(false)
+                    .padding(RunningTileBadge.cornerInset).allowsHitTesting(false)
             }
         }
         .disabled(model.busy)
@@ -161,9 +161,9 @@ struct LauncherCover: View {
                     }
                     .frame(height: height)
                     .clipped()
-                    .clipShape(.rect(cornerRadius: 14))
+                    .clipShape(.rect(cornerRadius: RunningTileBadge.tileCornerRadius))
                     .overlay(alignment: .topTrailing) {
-                        if model.runningApp?.id == app.id { RunningTileBadge().padding(8) }
+                        if model.runningApp?.id == app.id { RunningTileBadge().padding(RunningTileBadge.cornerInset) }
                     }
                 Text(app.name).font(.headline).foregroundStyle(.primary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
@@ -196,7 +196,8 @@ struct RunningTilePresentation: ViewModifier {
         content
             .overlay {
                 if running {
-                    RoundedRectangle(cornerRadius: 14).strokeBorder(.primary.opacity(0.25), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: RunningTileBadge.tileCornerRadius)
+                        .strokeBorder(.primary.opacity(0.25), lineWidth: 1)
                         .padding(-3).allowsHitTesting(false)
                 }
             }

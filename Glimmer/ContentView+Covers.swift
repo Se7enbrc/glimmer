@@ -34,7 +34,7 @@ extension AppIconsRow {
             LauncherCoverArt(app: app, host: host, revision: revision,
                              height: LauncherLayout.coverHeight(appCount: apps.count))
                 .overlay(alignment: .topTrailing) {
-                    if isRunning(app) { RunningTileBadge().padding(8) }
+                    if isRunning(app) { RunningTileBadge().padding(RunningTileBadge.cornerInset) }
                 }
             VStack(spacing: 2) {
                 Text(app.name).font(.headline).lineLimit(1)
@@ -70,13 +70,13 @@ struct LauncherCoverArt: View {
             if let image {
                 Image(decorative: image, scale: 1).resizable().scaledToFill()
             } else {
-                RoundedRectangle(cornerRadius: 14, style: .continuous).accentSurface()
+                RoundedRectangle(cornerRadius: RunningTileBadge.tileCornerRadius, style: .continuous).accentSurface()
                 app.icon.font(.system(size: 36, weight: .semibold)).foregroundStyle(.white)
             }
         }
         .frame(width: height * 3 / 4, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .contentShape(.focusEffect, RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: RunningTileBadge.tileCornerRadius, style: .continuous))
+        .contentShape(.focusEffect, RoundedRectangle(cornerRadius: RunningTileBadge.tileCornerRadius, style: .continuous))
         .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 4)
         .task(id: "\(key)-\(model.isStreaming)-\(reachable)") {
             if shownKey != key { image = nil; shownKey = key }

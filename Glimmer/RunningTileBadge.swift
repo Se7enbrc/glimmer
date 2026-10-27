@@ -4,6 +4,9 @@
 import SwiftUI
 
 struct RunningTileBadge: View {
+    static let tileCornerRadius: CGFloat = 14
+    static let cornerInset = tileCornerRadius / 2
+
     var compact = false
 
     var body: some View {

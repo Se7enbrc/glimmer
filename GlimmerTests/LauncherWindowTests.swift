@@ -12,6 +12,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import ScreenCaptureKit
 import Testing
 @testable import Glimmer
 
@@ -219,4 +220,42 @@ struct RunningTileWindowTests {
 private struct RunningTileWindowFixture: View {
     @FocusState private var focus: LauncherFocus?
     var body: some View { ConnectSurface(focus: $focus).modifier(LauncherTakeoverConfirmation()) }
+}
+
+@Suite(.serialized)
+@MainActor
+struct ShortcutContrastWindowTests {
+    @Test(arguments: [false, true])
+    func compositedShortcutBadges(dark: Bool) async throws {
+        let settings = IsolatedDefaults()
+        let model = AppModel(defaults: settings.defaults)
+        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        let previous = NSApp.appearance
+        NSApp.appearance = appearance
+        defer { NSApp.appearance = previous }
+        let host = NSHostingController(rootView: ShortcutsPane().environment(model)
+            .environment(\.colorScheme, dark ? .dark : .light))
+        let window = NSWindow(contentViewController: host)
+        window.isReleasedWhenClosed = false
+        window.title = "Shortcut contrast verification"
+        window.appearance = appearance
+        window.setContentSize(CGSize(width: 620, height: 760))
+        window.orderFront(nil)
+        defer { window.contentViewController = nil; window.close() }
+        host.view.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        // This API exposes only this test host's windows and requires no screen-recording permission.
+        let content = try await SCShareableContent.currentProcess
+        let target = try #require(content.windows.first { $0.windowID == CGWindowID(window.windowNumber) })
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(window.frame.width * 2)
+        configuration.height = Int(window.frame.height * 2)
+        configuration.showsCursor = false
+        configuration.ignoreShadowsSingleWindow = true
+        let image = try await SCScreenshotManager.captureImage(
+            contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: configuration)
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        let data = try #require(bitmap.representation(using: .png, properties: [:]))
+        Attachment.record(Array(data), named: "shortcut-composited-\(dark ? "dark" : "light").png")
+    }
 }
