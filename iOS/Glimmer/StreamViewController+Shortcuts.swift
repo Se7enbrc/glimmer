@@ -11,13 +11,13 @@ extension StreamViewController {
         let controls = UIKeyCommand(title: "Show controls", action: #selector(showStreamControls),
                                     input: "/", modifierFlags: .control)
         controls.wantsPriorityOverSystemBehavior = true
-        return StreamShortcuts.Action.allCases.map { action in
+        return [controls] + StreamShortcuts.Action.allCases.map { action in
             let chord = model.shortcuts.chord(for: action)
             let command = UIKeyCommand(title: action.title, action: #selector(streamShortcut),
                                        input: chord.keyChar, modifierFlags: chord.modifiers)
             command.wantsPriorityOverSystemBehavior = true
             return command
-        } + [controls]
+        }
     }
 
     @objc func showStreamControls() { model.showControls() }
