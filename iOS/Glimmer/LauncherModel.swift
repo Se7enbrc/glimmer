@@ -32,6 +32,7 @@ final class LauncherModel {
     var endedGame: HostApp?
     var endedFormat: ContinuationFormat?
     var pendingGameAction: GameAction?
+    var pendingURLCommand: URLCommandRequest?
     var leaveGamesRunning = false
     var history: ContinuationHistory
     var pictureTrial: PictureTrial?

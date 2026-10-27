@@ -10,6 +10,31 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NativeUIRenderTests {
+    @Test(arguments: ["stream", "stop"], [false, true])
+    func externalCommandConfirmation(action: String, dark: Bool) async throws {
+        let fixture = LauncherFixture()
+        let playback = PlaybackFixture()
+        fixture.makeSession = { playback.model(launch: $0) }
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        if action == "stop" {
+            try await model.streamFromCommand(pc: fixture.pcID, app: fixture.app.name)
+            model.stream = nil
+        }
+        let name = "external-\(action)-\(dark ? "dark" : "light")"
+        let size = CGSize(width: 390, height: 844)
+        try await record(LauncherView(model: model), name: "\(name)-before", size: size, dark: dark, portrait: true)
+        let url = try #require(URL(string: "glimmer://\(action)?pc=\(fixture.pcID)"))
+        try await record(LauncherView(model: model), name: "\(name)-after", size: size,
+                         dark: dark, portrait: true, captureWindow: true, prepare: {
+            await model.handleCommandURL(url)?.value
+        })
+        model.pendingURLCommand = nil
+        _ = await model.stopFromCommand()
+    }
+
     @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440),
                       CGSize(width: 390, height: 844), CGSize(width: 1024, height: 768)], [false, true])
     func launcherAndPairing(size: CGSize, dark: Bool) async throws {

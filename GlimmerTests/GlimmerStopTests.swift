@@ -132,7 +132,7 @@ struct GlimmerStopTests {
         switch route {
         case "menu": await model.stopStreamFromMenu()?.value
         case "url":
-            model.handleCommandURL(try #require(URL(string: "glimmer://stop?pc=den%20pc")))
+            model.handleCommandURL(try #require(URL(string: "glimmer://stop?pc=den%20pc")), confirm: { _ in true })
             #expect(await AppModel.poll(slices: 200, every: .milliseconds(10)) { reply != nil })
             #expect(reply?[CommandChannel.Key.event] == "stopped")
         case "cli":
@@ -154,6 +154,45 @@ struct GlimmerStopTests {
         #expect(sunshine.paths == ["cancel"])
         #expect(await model.stopActiveStream(source: "a repeated request") == .noActiveStream)
         #expect(sunshine.paths == ["cancel"])
+    }
+
+    @MainActor @Test func externalStopCannotEndTheSessionWithoutConfirmation() async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let session = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
+        model.nativeSession = session
+        model.lastLaunchAttempt = (app, pc())
+        var confirmations = 0
+        model.handleCommand([CommandChannel.Key.id: UUID().uuidString, CommandChannel.Key.verb: "stop"],
+                            fromURL: true, confirmExternal: { _ in confirmations += 1; return false })
+        #expect(confirmations == 1)
+        #expect(!model.menuStopInProgress)
+        model.nativeSession = nil
+    }
+
+    @MainActor @Test func externalStopApprovalCannotFollowAReplacementSession() throws {
+        let model = AppModel(defaults: settings.defaults)
+        model.nativeSession = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
+        model.lastLaunchAttempt = (app, pc())
+        let replacement = StreamSession(hostDisposition: .cancelOwnedHostSession, backend: InputRecordingBackend())
+        model.handleCommandURL(try #require(URL(string: "glimmer://stop")), confirm: { _ in
+            model.nativeSession = replacement
+            return true
+        })
+        #expect(model.nativeSession === replacement)
+        #expect(!model.menuStopInProgress)
+    }
+
+    @MainActor @Test func externalLaunchRequiresConfirmation() throws {
+        let model = AppModel(defaults: settings.defaults)
+        model.hosts = [pc()]
+        var confirmations = 0
+        model.handleCommandURL(try #require(URL(string: "glimmer://stream?pc=pc-id&app=Steam")), confirm: { prompt in
+            confirmations += 1
+            #expect(prompt.action == .stream)
+            return false
+        })
+        #expect(confirmations == 1)
+        #expect(model.pendingCommandStream == nil && model.nativeSession == nil)
     }
 
     @MainActor @Test func matchingUsesTheActivePCsNamesIDsAndAddresses() async {

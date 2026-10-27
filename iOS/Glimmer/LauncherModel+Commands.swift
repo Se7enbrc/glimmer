@@ -147,14 +147,68 @@ extension LauncherModel {
         }
     }
 
-    func handleCommandURL(_ url: URL) {
-        guard let command = GlimmerCommandURL.parse(url), command.action != .wake else { return }
+    struct URLCommandRequest: Identifiable {
+        let id = UUID()
+        let command: GlimmerCommandURL
+        let prompt: CommandURLPrompt
+        let session: StreamSessionModel?
+        let epoch: UInt64
+        let generation: UInt64
+    }
+
+    @discardableResult
+    func handleCommandURL(_ url: URL) -> Task<Void, Never>? {
+        guard let command = GlimmerCommandURL.parse(url), command.action != .wake else { return nil }
+        // Quit already presents the running game's explicit confirmation after authenticated preparation.
+        guard CommandURLPrompt.requiresConfirmation(command.action), command.action != .quit else {
+            return dispatchURLCommand(command)
+        }
+        do {
+            let pc = try command.pc.map(commandPC)
+            if command.action == .stop {
+                if let pc, pc.id != session?.launch.pcID, pc.id != selected?.server.uniqueId, !pendingCommand {
+                    message = CommandStopResult.pcMismatch.message
+                    return nil
+                }
+                guard session != nil || pendingCommand || busy || commandTask != nil else {
+                    message = CommandStopResult.noActiveStream.message
+                    return nil
+                }
+            }
+            let prompt = CommandURLPrompt(action: command.action,
+                pc: pc?.name ?? session?.launch.pcName ?? selectedName ?? "the PC",
+                app: command.app ?? session?.launch.appName ?? "the app")
+            pendingGameAction = nil
+            pendingURLCommand = URLCommandRequest(command: command, prompt: prompt, session: session,
+                                                   epoch: commandEpoch, generation: generation)
+            session?.showControls()
+        } catch { message = LauncherFailureCopy.message(error, pcName: selectedName ?? "the PC") }
+        return nil
+    }
+
+    @discardableResult
+    func confirmURLCommand(_ request: URLCommandRequest) -> Task<Void, Never>? {
+        guard pendingURLCommand?.id == request.id else { return nil }
+        pendingURLCommand = nil
+        guard active, session === request.session, commandEpoch == request.epoch,
+              generation == request.generation else { return nil }
+        return dispatchURLCommand(request.command, expected: request)
+    }
+
+    private func dispatchURLCommand(_ command: GlimmerCommandURL,
+                                    expected: URLCommandRequest? = nil) -> Task<Void, Never> {
         Task {
+            if let expected {
+                guard session === expected.session, commandEpoch == expected.epoch,
+                      generation == expected.generation else { return }
+            }
             do {
                 switch command.action {
                 case .stream:
                     if let pc = command.pc { try await streamFromCommand(pc: pc, app: command.app) }
-                case .stop: _ = await stopFromCommand(matching: command.pc)
+                case .stop:
+                    let result = await stopFromCommand(matching: command.pc)
+                    if result != .stopped { message = result.message }
                 case .quit:
                     if let pc = command.pc { try await quitFromCommand(pc: pc, confirmation: true) }
                 case .wake: break

@@ -31,7 +31,8 @@ struct RunningGameConfirmation: ViewModifier {
     var duringStream = false
 
     func body(content: Content) -> some View {
-        content.alert(title, isPresented: Binding(
+        content.modifier(URLCommandConfirmation(model: model, duringStream: duringStream))
+            .alert(title, isPresented: Binding(
             get: { model.pendingGameAction != nil && (model.stream != nil) == duringStream },
             set: { if !$0 { model.pendingGameAction = nil } }),
             presenting: model.pendingGameAction) { action in
@@ -74,5 +75,24 @@ struct RunningGameConfirmation: ViewModifier {
         if action.restart { return "Quit \(action.running.name) and restart" }
         if let target = action.target { return "Quit \(action.running.name) and start \(target.name)" }
         return "Quit \(action.running.name)"
+    }
+}
+
+private struct URLCommandConfirmation: ViewModifier {
+    @Bindable var model: LauncherModel
+    let duringStream: Bool
+
+    func body(content: Content) -> some View {
+        content.alert(model.pendingURLCommand?.prompt.title ?? "", isPresented: Binding(
+            get: { model.pendingURLCommand != nil && (model.stream != nil) == duringStream },
+            set: { if !$0 { model.pendingURLCommand = nil } }),
+            presenting: model.pendingURLCommand) { request in
+            Button(request.prompt.button, role: request.command.action == .stop ? .destructive : nil) {
+                model.confirmURLCommand(request)
+            }
+            Button("Cancel", role: .cancel) { model.pendingURLCommand = nil }
+        } message: { request in
+            Text(request.prompt.message)
+        }
     }
 }

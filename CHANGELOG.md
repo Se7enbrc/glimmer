@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- Links from other apps now ask before starting or stopping a stream on Mac,
+  iPhone and iPad. An old confirmation cannot stop a newer stream.
+
 - Releasing a game key on iPhone or iPad no longer leaves it held when you press
   a shortcut modifier before letting go.
 

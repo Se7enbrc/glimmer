@@ -9,7 +9,8 @@ extension AppModel {
     func handleCommandURL(
         _ url: URL,
         dispatch: (([String: String]) -> Void)? = nil,
-        resume: (() -> Void)? = nil
+        resume: (() -> Void)? = nil,
+        confirm: ((CommandURLPrompt) -> Bool)? = nil
     ) {
         guard let command = GlimmerCLI.parseURL(url) else {
             Diag.notice("Ignored an unknown or malformed command URL", "Commands")
@@ -18,7 +19,7 @@ extension AppModel {
         if command.verb == .stop {
             var request = [CommandChannel.Key.id: UUID().uuidString, CommandChannel.Key.verb: "stop"]
             request[CommandChannel.Key.pc] = command.arguments.first
-            if let dispatch { dispatch(request) } else { handleCommand(request, fromURL: true) }
+            if let dispatch { dispatch(request) } else { handleCommand(request, fromURL: true, confirmExternal: confirm) }
             return
         }
         guard let query = command.arguments.first,
@@ -41,7 +42,44 @@ extension AppModel {
             }
             request[CommandChannel.Key.app] = String(app.id)
         }
-        if let dispatch { dispatch(request) } else { handleCommand(request, fromURL: true) }
+        if let dispatch { dispatch(request) } else { handleCommand(request, fromURL: true, confirmExternal: confirm) }
+    }
+
+    struct URLCommandScope: Equatable {
+        let session: UUID?
+        let pending: String?
+        let streaming: Bool
+        let pc: String?
+        let app: Int?
+    }
+
+    var urlCommandScope: URLCommandScope {
+        URLCommandScope(session: nativeSession?.id, pending: pendingCommandStream?.id, streaming: isStreaming,
+                        pc: lastLaunchAttempt?.host.id, app: lastLaunchAttempt?.app.id)
+    }
+
+    func confirmURLAction(_ prompt: CommandURLPrompt, confirm: ((CommandURLPrompt) -> Bool)?) -> Bool {
+        guard CommandURLPrompt.requiresConfirmation(prompt.action) else { return true }
+        let scope = urlCommandScope
+        let approved: Bool
+        if let confirm { approved = confirm(prompt) } else {
+            let alert = NSAlert()
+            alert.messageText = prompt.title
+            alert.informativeText = prompt.message
+            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: prompt.button).hasDestructiveAction = prompt.action != .stream
+            NSApp.activate()
+            approved = alert.runModal() == .alertSecondButtonReturn
+        }
+        return approved && scope == urlCommandScope
+    }
+
+    func confirmURLStop(matching query: String?, confirm: ((CommandURLPrompt) -> Bool)?) -> Bool {
+        guard nativeSession != nil || nativeStreamTask != nil || pendingCommandStream != nil,
+              let host = pendingCommandStream?.host ?? lastLaunchAttempt?.host else { return true }
+        if let query, GlimmerCLI.matchHost(query, in: [host]) == nil { return true }
+        return confirmURLAction(CommandURLPrompt(action: .stop, pc: host.displayName,
+                                                app: lastLaunchAttempt?.app.name ?? "the app"), confirm: confirm)
     }
 
     /// Web links must ask before discarding the PC's game.
