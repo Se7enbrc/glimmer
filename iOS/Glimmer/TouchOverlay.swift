@@ -91,6 +91,7 @@ private struct TouchControlsButton: View {
                 Button("Show controls", systemImage: "ellipsis", action: showControls)
                     .labelStyle(.iconOnly).buttonStyle(TouchMenuStyle(opacity: opacity))
                     .accessibilityIdentifier("stream-controls-show")
+                    .accessibilityShowsLargeContentViewer()
                     .position(x: min(frame.midX, geometry.size.width - 22),
                               y: min(frame.midY, geometry.size.height - 22))
                     .hoverEffect(.highlight)

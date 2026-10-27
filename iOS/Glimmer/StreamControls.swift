@@ -25,10 +25,13 @@ struct StreamControls: View {
             if !model.editingTouchControls {
                 if model.controlsVisible || model.phase != .streaming {
                     GeometryReader { geometry in
-                        menu
+                        // A short landscape window lays actions out in two columns so every row fits.
+                        let wide = !textSize.isAccessibilitySize && geometry.size.height < 500
+                            && geometry.size.width >= 600
+                        menu(columns: wide ? 2 : 1)
                             .labelStyle(StreamMenuLabelStyle(titlesOnly: textSize.isAccessibilitySize))
                             .frame(width: min(max(0, geometry.size.width - 24),
-                                              textSize.isAccessibilitySize ? 560 : 360))
+                                              textSize.isAccessibilitySize ? 560 : wide ? 520 : 360))
                             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
                                 model.overlayAppearance.menuFrame = frame.isEmpty ? nil : frame
                             }
@@ -83,29 +86,33 @@ struct StreamControls: View {
     }
 
     // Sized to its rows when they fit; otherwise the rows scroll under the pinned Disconnect.
-    private var menu: some View {
+    private func menu(columns: Int) -> some View {
         ViewThatFits(in: .vertical) {
-            VStack(spacing: 0) { menuRows; connectionActions }
+            VStack(spacing: 0) { menuRows(columns: columns); connectionActions }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("stream-controls-actions")
-            ScrollView { menuRows }
+            ScrollView { menuRows(columns: columns) }
                 .scrollBounceBehavior(.basedOnSize)
                 .scrollIndicatorsFlash(onAppear: true)
                 .scrollEdgeEffectStyle(.hard, for: .bottom)
                 .accessibilityIdentifier("stream-controls-actions")
-                .safeAreaBar(edge: .bottom, spacing: 0) { connectionActions }
+                .safeAreaBar(edge: .bottom, spacing: 0) {
+                    // Opaque enough that rows scrolling beneath never read through at large text.
+                    connectionActions.background(.thickMaterial)
+                }
         }
         .buttonStyle(StreamMenuActionStyle())
+        .clipShape(.rect(cornerRadius: 24))
         .modifier(StreamOverlaySurface())
     }
 
-    private var menuRows: some View {
+    private func menuRows(columns: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.launch.appName).font(.headline).lineLimit(1)
-                // At accessibility sizes the PC name would push play actions out of view.
+                // At accessibility sizes the PC name and format would push play actions out of view.
                 if !textSize.isAccessibilitySize {
-                    Text(model.launch.pcName).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                 }
             }
             .accessibilityElement(children: .combine)
@@ -114,21 +121,20 @@ struct StreamControls: View {
             Group { status }.padding(.horizontal, 8).padding(.vertical, 6)
             // The size question needs an answer before anything else on the list.
             if model.pictureNeedsReview {
-                Text("Does \(model.launch.appName) look right?").padding(.horizontal, 8).padding(.vertical, 6)
-                Button("Keep this size") { model.keepSize?() }.accessibilityIdentifier("stream-size-keep")
-                Button("Use the previous size") { model.restoreSize?() }
+                Text("Does \(model.launch.appName) look right?").font(.headline)
+                    .accessibilityAddTraits(.isHeader).padding(.horizontal, 8).padding(.vertical, 6)
+                Button("Keep this size", systemImage: "checkmark") { model.keepSize?() }
+                    .accessibilityIdentifier("stream-size-keep")
+                Button("Use the previous size", systemImage: "arrow.uturn.backward") { model.restoreSize?() }
                     .accessibilityIdentifier("stream-size-restore")
             }
-            if model.phase == .streaming { playActions }
-            if !model.phase.isEnded {
-                Button("Quit \(model.launch.appName)…", systemImage: "stop", role: .destructive) {
-                    confirmingQuit = true
-                }.disabled(model.phase == .stopping).accessibilityIdentifier("stream-quit")
-            }
-            if let format = model.requestedFormat {
-                Text("Requested: \(format.summary)"
-                     + (model.requestedStartKbps.map { " · starts at \($0 / 1000) Mbps" } ?? ""))
-                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.vertical, 4)
+            if model.phase == .streaming {
+                if columns > 1 {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 4), GridItem(.flexible())],
+                              alignment: .leading, spacing: 0) { playActions }
+                } else {
+                    playActions
+                }
             }
         }
         .padding(.horizontal, 8).padding(.top, 12).padding(.bottom, 4)
@@ -160,22 +166,44 @@ struct StreamControls: View {
             .accessibilityIdentifier("stream-help")
     }
 
+    private var subtitle: String {
+        guard let format = model.requestedFormat else { return model.launch.pcName }
+        return "\(model.launch.pcName) · \(format.summary)"
+            + (model.requestedStartKbps.map { " · starts at \($0 / 1000) Mbps" } ?? "")
+    }
+
+    // Quit and Disconnect share the pinned bar, side by side when the app's name allows.
     private var connectionActions: some View {
         VStack(spacing: 0) {
             Divider().padding(.horizontal, 8)
-            Button {
-                if model.phase.isEnded { close() } else { model.disconnect() }
-            } label: {
-                if model.phase.isEnded { Text("Done") } else { Label("Disconnect", systemImage: "xmark") }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 4) { quitButton; disconnectButton }
+                VStack(spacing: 0) { quitButton; disconnectButton }
             }
-            .disabled(model.phase == .stopping)
-            .accessibilityIdentifier("stream-disconnect")
-            .accessibilityHint(model.phase.isEnded ? "Returns to your apps."
-                : model.launch.leaveGamesRunning ? "Ends this stream and leaves the game running on the PC."
-                : "Ends this stream and quits the game on the PC.")
             .padding(.top, 4)
         }
         .padding(.horizontal, 8).padding(.bottom, 8)
+    }
+
+    @ViewBuilder private var quitButton: some View {
+        if !model.phase.isEnded {
+            Button("Quit \(model.launch.appName)…", systemImage: "stop", role: .destructive) {
+                confirmingQuit = true
+            }.disabled(model.phase == .stopping).accessibilityIdentifier("stream-quit")
+        }
+    }
+
+    private var disconnectButton: some View {
+        Button {
+            if model.phase.isEnded { close() } else { model.disconnect() }
+        } label: {
+            if model.phase.isEnded { Text("Done") } else { Label("Disconnect", systemImage: "xmark") }
+        }
+        .disabled(model.phase == .stopping)
+        .accessibilityIdentifier("stream-disconnect")
+        .accessibilityHint(model.phase.isEnded ? "Returns to your apps."
+            : model.launch.leaveGamesRunning ? "Ends this stream and leaves the game running on the PC."
+            : "Ends this stream and quits the game on the PC.")
     }
 
     @ViewBuilder private var status: some View {
