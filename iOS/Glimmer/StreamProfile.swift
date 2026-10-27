@@ -33,7 +33,7 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
 
     enum Failure: Error { case displayUnavailable, modesUnavailable }
 
-    func resolve(windowPixels: CGSize, maximumFramesPerSecond: Int) throws -> StreamFormat {
+    func resolve(windowPixels: CGSize, maximumFramesPerSecond: Int, requiredFPS: Int? = nil) throws -> StreamFormat {
         let width = windowPixels.width
         let height = windowPixels.height
         guard width.isFinite, height.isFinite, width >= 1, height >= 1,
@@ -44,16 +44,18 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
             ? CGSize(width: max(2, target.width), height: max(2, target.height))
             : CGSize(width: 1920, height: 1080)
         guard let mode = StreamDisplayModes.closest(to: size,
-            maximumFPS: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond)) else {
+            maximumFPS: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond), requiredFPS: requiredFPS) else {
             throw Failure.modesUnavailable
         }
         return mode
     }
 
     @MainActor
-    func resolve(surface: StreamSurface) throws -> StreamFormat {
+    func resolve(surface: StreamSurface, preservingFPS: Int? = nil) throws -> StreamFormat {
         guard let screen = surface.window?.windowScene?.screen else { throw Failure.displayUnavailable }
-        return try resolve(windowPixels: surface.streamPixels, maximumFramesPerSecond: screen.maximumFramesPerSecond)
+        return try resolve(windowPixels: surface.streamPixels,
+                           maximumFramesPerSecond: preservingFPS ?? screen.maximumFramesPerSecond,
+                           requiredFPS: preservingFPS)
     }
 }
 

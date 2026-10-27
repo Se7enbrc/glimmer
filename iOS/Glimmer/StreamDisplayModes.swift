@@ -21,9 +21,10 @@ enum StreamDisplayModes {
         return reader.modes
     }
 
-    static func closest(to size: CGSize, maximumFPS: Int) -> StreamFormat? {
+    static func closest(to size: CGSize, maximumFPS: Int, requiredFPS: Int? = nil) -> StreamFormat? {
         let aspect = size.width / size.height
-        return bundled.filter { $0.fps <= maximumFPS }.min { left, right in
+        let eligible = bundled.filter { $0.fps <= maximumFPS && (requiredFPS == nil || $0.fps == requiredFPS) }
+        return eligible.min { left, right in
             func rank(_ mode: StreamFormat) -> (Double, Double, Int) {
                 let ratio = (Double(mode.width) / Double(mode.height)) / aspect
                 let cropped = 1 - min(ratio, 1 / ratio)

@@ -292,7 +292,8 @@ final class StreamSessionModel {
 
     /// A resized window, or a continued game at an earlier size, moves to the window's listed mode.
     func windowChanged(surface: StreamSurface) {
-        guard let current = requestedFormat, let target = try? launch.profile.resolve(surface: surface) else { return }
+        guard let current = requestedFormat,
+              let target = try? launch.profile.resolve(surface: surface, preservingFPS: current.fps) else { return }
         // The resume-only seam keeps the running frame rate.
         windowResize?.submit(StreamFormat(width: target.width, height: target.height, fps: current.fps,
                                           changeResolution: current.changeResolution))

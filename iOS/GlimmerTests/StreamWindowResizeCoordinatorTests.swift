@@ -47,6 +47,34 @@ struct StreamWindowResizeCoordinatorTests {
         await model.waitUntilStopped()
     }
 
+    @Test func a120FPSStreamResizesOnlyToAListed120FPSMode() async throws {
+        let scene = try await testWindowScene()
+        let window = UIWindow(windowScene: scene)
+        let surface = StreamSurface()
+        window.addSubview(surface)
+        defer { surface.removeFromSuperview() }
+        surface.frame.size = CGSize(width: 1184 / scene.screen.scale, height: 1668 / scene.screen.scale)
+        let initial = StreamFormat(width: 2388, height: 1668, fps: 120)
+        let id = UUID()
+        var requests: [StreamFormat] = []
+        let model = StreamSessionModel(launch: testLaunch(), resizeSleep: { _ in }, makePlayback: { _, _, _ in
+            StreamPlayback(id: id, events: AsyncStream { _ in }, start: { nil }, stop: {}, screenChanged: {},
+                format: initial, requestFormatChange: { requests.append($0); return .applied })
+        })
+        model.start(surface: surface)
+        await model.waitUntilStartFinishes()
+        model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+        model.windowChanged(surface: surface)
+        await model.waitForWindowResize()
+        for target in requests {
+            #expect(target.fps == initial.fps)
+            #expect(StreamDisplayModes.bundled.contains(target))
+        }
+        #expect(requests.count == 1)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
     @Test func resizeDebouncesLatestSizeAndDoesNotResetForDuplicateLayout() async {
         let clock = WindowResizeClock()
         var requests: [StreamFormat] = []

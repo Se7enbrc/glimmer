@@ -42,6 +42,17 @@ struct StreamProfileTests {
         }
     }
 
+    @Test(arguments: [60, 120])
+    func everyWindowTargetKeepsTheRunningRateListed(fps: Int) throws {
+        for target in StreamDisplayModes.bundled {
+            let resized = try StreamProfile.native120.resolve(
+                windowPixels: CGSize(width: target.width, height: target.height),
+                maximumFramesPerSecond: fps, requiredFPS: fps)
+            #expect(resized.fps == fps)
+            #expect(StreamDisplayModes.bundled.contains(resized))
+        }
+    }
+
     @Test(arguments: [CGSize.zero, CGSize(width: CGFloat.infinity, height: 1000),
                       CGSize(width: 1000, height: CGFloat.nan), CGSize(width: -1, height: 10000)])
     func invalidWindowCannotRequestAnInvalidMode(pixels: CGSize) {
