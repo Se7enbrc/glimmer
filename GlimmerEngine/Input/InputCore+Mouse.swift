@@ -18,6 +18,13 @@ package struct ControllerMouseState {
 
     package init(isMouse: Bool = false) { self.isMouse = isMouse }
 
+    @inline(__always)
+    package func isMoving(_ motion: @autoclosure () -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>)) -> Bool {
+        guard isMouse else { return false }
+        let motion = motion()
+        return motion.pointer != .zero || motion.scroll != .zero
+    }
+
     // A hold changes modes only on release; another button or a system chord spends the hold.
     package mutating func update(buttons: Int32, analog: GamepadAnalog, chordHeld: Bool,
                                  now: TimeInterval, toggleOnHold: Bool = true,
@@ -146,8 +153,7 @@ extension InputCore {
 
     package func updateControllerMousePolling() {
         let moving = controllerMouseStates.contains { slot, state in
-            let motion = mousePlan(slot: slot).motion(state.analog)
-            return state.isMouse && (motion.pointer != .zero || motion.scroll != .zero)
+            state.isMoving(mousePlan(slot: slot).motion(state.analog))
         }
         guard snapshot.ready, snapshot.focused, moving else {
             mousePollingGeneration &+= 1

@@ -2,6 +2,8 @@
 
 ## 2026.10.8 - Unreleased
 
+- Controllers avoid mouse calculations while mouse mode is off.
+
 - Controller mouse bindings now check shortcuts used by every controller,
   including inherited shortcuts, so entering mouse mode cannot accidentally stop
   a stream.

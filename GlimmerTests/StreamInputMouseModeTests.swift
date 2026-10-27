@@ -44,6 +44,26 @@ struct StreamInputMouseModeTests {
         submit(input, registration, .init(), capturedAt: start + 0.751)
     }
 
+    @Test func gamepadModeNeverEvaluatesMouseMotion() {
+        var calls = 0
+        func motion() -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>) {
+            calls += 1
+            return ControllerMousePlan().motion(.init(leftTrigger: 0, rightTrigger: 0,
+                leftStickX: 32767, leftStickY: 32767, rightStickX: 32767, rightStickY: 32767))
+        }
+        let gamepad = ControllerMouseState()
+        for _ in 0..<1024 {
+            let moving = gamepad.isMoving(motion())
+            #expect(!moving)
+        }
+        #expect(calls == 0)
+        let mouse = ControllerMouseState(isMouse: true)
+        let moving = mouse.isMoving(motion())
+        #expect(moving)
+        #expect(calls == 1)
+        #expect(!mouse.isMoving((.zero, .zero)))
+    }
+
     @Test func nativeMenuHoldKeepsMouseModeAndExplicitSwitchRejectsStaleControllers() throws {
         let rig = rig()
         defer { rig.input.stop() }
