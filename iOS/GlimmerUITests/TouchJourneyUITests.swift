@@ -239,9 +239,12 @@ final class TouchJourneyUITests: TouchJourneyTestCase {
     private func scrolledIntoView(_ id: String, in app: XCUIApplication) -> XCUIElement {
         let control = app.buttons[id]
         let list = app.descendants(matching: .any).matching(identifier: "stream-controls-actions").firstMatch
-        for _ in 0..<12 where !list.frame.contains(control.frame) || !control.isHittable {
+        // Rows scroll under the pinned Disconnect bar, so a visible row ends above it.
+        let floor = id == "stream-disconnect" ? list.frame.maxY : app.buttons["stream-disconnect"].frame.minY
+        func visible() -> Bool { list.frame.contains(control.frame) && control.frame.maxY <= floor + 1 }
+        for _ in 0..<12 where !visible() || !control.isHittable {
             let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            let offset = max(-60, min(60, list.frame.midY - control.frame.midY))
+            let offset = max(-60, min(60, (list.frame.minY + floor) / 2 - control.frame.midY))
             start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: offset)),
                         withVelocity: .slow, thenHoldForDuration: 0.1)
         }
