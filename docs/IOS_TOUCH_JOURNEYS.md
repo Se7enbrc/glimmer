@@ -105,14 +105,13 @@ than compressed RTP, and PIN progression does not prove TLS pairing or Bonjour
 discovery. Public XCUITest has no arbitrary simultaneous distant
 stick-plus-button gesture; multi-touch acceptance remains open.
 
-Strict expected failures identify `TJ99-01` (largest-text iPhone menu clips),
-`TJ99-02` (iPad diagram label duplicates its button trait), `CJ99-01`
-(button-only Menu delivery misses Stop) and `CJ99-02` (Menu hold does not open
-iOS controls) and `CJ99-03` (editing Stop dismisses Settings). An unexpected
-pass fails the test so fixed defects cannot silently retain obsolete markers.
-Unclassified harness/integration failures remain ordinary failures. Full
-controller-only Settings navigation and Running tile resume still need coverage;
-source presence or a compile is not a pass.
+Strict expected failures identify `CJ99-01` (button-only Menu delivery misses
+Stop), `CJ99-02` (Menu hold does not open iOS controls) and `CJ99-03` (editing
+Stop dismisses Settings). An unexpected pass fails the test so fixed defects
+cannot silently retain obsolete markers. Unclassified harness/integration
+failures remain ordinary failures. Full controller-only Settings navigation and
+Running tile resume still need coverage; source presence or a compile is not a
+pass.
 
 Use the [iOS engine roadmap](IOS_ENGINE_ROADMAP.md) for protocol, physical input
 and device acceptance beyond these journeys.

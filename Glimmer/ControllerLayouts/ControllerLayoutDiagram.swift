@@ -99,6 +99,13 @@ struct ControllerLayoutDiagram: View {
             .frame(maxWidth: 560)
     }
 
+    /// Diagram controls already carry the button trait, so the spoken name drops the role word.
+    static func spokenName(_ name: String) -> String {
+        guard name.hasSuffix(" button") else { return name }
+        let base = String(name.dropLast(" button".count))
+        return base.hasSuffix(" stick") ? base + " click" : base
+    }
+
     private func ordinaryButton(_ control: ControllerLayoutControl, placement: ControllerDiagramPlacement,
                                 scale: CGFloat) -> some View {
         Button { choose(control) } label: {
@@ -108,7 +115,7 @@ struct ControllerLayoutDiagram: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(highlighted.contains(control.id) ? Color.accentColor : Color.primary)
-        .accessibilityLabel(control.name)
+        .accessibilityLabel(Self.spokenName(control.name))
         .help(control.name)
         .position(x: placement.point.x * scale, y: placement.point.y * scale)
     }
