@@ -13,6 +13,9 @@ final class MacControllerJourneyUITests: XCTestCase {
     private func launch() throws {
         continueAfterFailure = false
         XCTAssertFalse(NSWorkspace.shared.isVoiceOverEnabled, "Journeys must remain silent")
+        // A signed runner is sandboxed, so the host's storage tripwire rejects its receipt folder.
+        try XCTSkipIf(FileManager.default.temporaryDirectory.path.contains("/Library/Containers/"),
+                      "Mac journeys need a runner that shares the host's temporary folder; harness follow-up")
         directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "journey"
