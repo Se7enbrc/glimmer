@@ -141,10 +141,16 @@ struct ControllerStatsTests {
                           height: size.height - 24)
         surface.overlayAppearance.menuFrame = menu
         stats.setVisible(true)
-        #expect(surface.bounds.contains(stats.overlay.layer.frame))
-        #expect(!stats.overlay.layer.frame.intersects(menu))
+        let frame = stats.overlay.layer.frame
+        if stats.overlay.isVisible {
+            #expect(surface.bounds.contains(frame) && !frame.intersects(menu))
+            #expect(stats.overlay.resolvedLabelFont.pointSize * frame.width / stats.overlay.layer.bounds.width >= 9)
+        } else {
+            // Only a menu too wide to leave legible room may hide the stats.
+            #expect(largest && size.width < 900)
+        }
         surface.overlayAppearance.menuFrame = nil
-        #expect(stats.overlay.placementBounds == nil)
+        #expect(stats.overlay.isVisible && stats.overlay.placementBounds == nil)
         stats.setVisible(false)
     }
 

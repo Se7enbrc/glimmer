@@ -178,7 +178,8 @@ public final class StatsOverlayLayer {
             top: max(0, bounds.maxY - safe.maxY), left: max(0, safe.minX - bounds.minX),
             bottom: max(0, safe.minY - bounds.minY), right: max(0, bounds.maxX - safe.maxX))
         #else
-        return displayView?.safeAreaInsets ?? .zero
+        // A windowed iPad app keeps its window controls in the top corner; the HUD clears them.
+        return displayView?.edgeInsets(for: .safeArea(cornerAdaptation: .vertical)) ?? .zero
         #endif
     }
 

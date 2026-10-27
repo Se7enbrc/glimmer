@@ -20,6 +20,8 @@ final class StreamStats {
     private var lastTouchArea: CGRect?
     private var lastTouchObstacles: [CGRect] = []
     private var lastContent = CGSize.zero
+    private var requested = false
+    private var crowdedByMenu = false
     var isRefreshing: Bool { timer != nil }
 
     init(surface: StreamSurface, defaults: UserDefaults = PersistentStorage.defaults,
@@ -41,6 +43,13 @@ final class StreamStats {
     }
 
     func setVisible(_ visible: Bool) {
+        requested = visible
+        applyVisibility()
+    }
+
+    // The open menu wins when the space beside it cannot hold the HUD legibly; stats return when it closes.
+    private func applyVisibility() {
+        let visible = requested && !crowdedByMenu
         guard visible != overlay.isVisible else { return }
         collection(visible)
         overlay.setVisible(visible)
@@ -77,7 +86,7 @@ final class StreamStats {
         let touchControls = surface.overlayAppearance.touchObstacles
         let obstacles = touchControls + [surface.overlayAppearance.noticeFrame, surface.overlayAppearance.menuFrame]
             .compactMap { $0 }
-        let area = surface.bounds.inset(by: surface.safeAreaInsets)
+        let area = surface.bounds.inset(by: surface.edgeInsets(for: .safeArea(cornerAdaptation: .vertical)))
         let content = overlay.layer.bounds.size
         if lastTouchArea != area || lastTouchObstacles != obstacles || lastContent != content {
             lastTouchArea = area
@@ -92,8 +101,12 @@ final class StreamStats {
             let clear = Self.clearStatsArea(in: area, avoiding: obstacles, corner: overlay.corner, target: target)
             overlay.placementBounds = obstacles.isEmpty ? nil
                 : CGRect(x: clear.minX, y: surface.bounds.maxY - clear.maxY, width: clear.width, height: clear.height)
+            let needed = target ?? CGSize(width: 220, height: 90)
+            crowdedByMenu = surface.overlayAppearance.menuFrame != nil
+                && min(clear.width / needed.width, clear.height / needed.height) < 0.8
         }
         overlay.layoutInHost(surface.displayLayer)
+        applyVisibility()
     }
 
     func tick() {
