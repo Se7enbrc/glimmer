@@ -174,8 +174,19 @@ struct ControllerButtonLayoutTests {
                                        analog: analog, chordHeld: false, now: 1)
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false, now: 2)
         forwarder.pushHID(slot: 0, state: (StreamProtocol.A_FLAG, analog)) { (0, analog) }
+        #expect(backend.pointer.isEmpty)
+        var primary = analog
+        primary.rightTrigger = 255
+        forwarder.pushHID(slot: 0, state: (0, primary)) { (0, primary) }
+        forwarder.pushHID(slot: 0, state: (StreamProtocol.RB_FLAG, analog)) {
+            (StreamProtocol.RB_FLAG, analog)
+        }
+        forwarder.pushHID(slot: 0, state: (0, analog)) { (0, analog) }
         #expect(backend.pointer == [
-            .button(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: StreamProtocol.BUTTON_LEFT)
+            .button(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: StreamProtocol.BUTTON_LEFT),
+            .button(action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: StreamProtocol.BUTTON_LEFT),
+            .button(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: StreamProtocol.BUTTON_RIGHT),
+            .button(action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE), button: StreamProtocol.BUTTON_RIGHT)
         ])
     }
 

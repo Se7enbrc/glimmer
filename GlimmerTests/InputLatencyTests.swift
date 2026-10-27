@@ -24,8 +24,8 @@ struct InputLatencyTests {
         core.publish(.init(ready: true, focused: true, mask: 1), backend: backend)
         core.withLock {
             var state = ControllerMouseState(isMouse: true)
-            state.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 32767,
-                                         leftStickY: 0, rightStickX: 0, rightStickY: 0)
+            state.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0,
+                                         leftStickY: 0, rightStickX: 32767, rightStickY: 0)
             core.controllerMouseStates[0] = state
             for timestamp in [1.0, 1.01] {
                 InputTimingContext.begin(source: .rawHID, timestamp: timestamp)
@@ -49,8 +49,8 @@ struct InputLatencyTests {
         let token = UUID()
         core.publish(.init(ready: true, focused: true, mask: 1), backend: InputRecordingBackend())
         var state = ControllerMouseState(isMouse: true)
-        state.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 32767,
-                                     leftStickY: 0, rightStickX: 0, rightStickY: 0)
+        state.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0,
+                                     leftStickY: 0, rightStickX: 32767, rightStickY: 0)
         core.withLock { core.hidRegistrations[0] = token; core.controllerMouseStates[0] = state }
         InputTimingContext.begin(source: .rawHID, timestamp: 1)
         core.receiveHID(slot: 0, token: token, buttons: 0, analog: state.analog, capturedAt: 1)
