@@ -15,6 +15,10 @@
 - Scrolling with a stick in controller mouse mode sends whole wheel notches, so
   games no longer switch weapons on every small stick movement.
 
+- Holding a controller shortcut no longer switches the controller into mouse
+  mode. Once a shortcut's buttons are pressed together, Menu's hold action waits
+  until every button is released; a lone Menu hold still works.
+
 - Controllers avoid mouse calculations while mouse mode is off.
 
 - Controller mouse bindings now check shortcuts used by every controller,

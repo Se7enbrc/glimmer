@@ -9,6 +9,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C3E1D5B2F6074D8EB2C4DAF2 /* ControllerChordHoldConflictTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3E1D5B2F6074D8EB2C4DAF1 /* ControllerChordHoldConflictTests.swift */; };
 		AFB26733DF7B43B1BB91B1BF /* ControllerStopChordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 286EFE660EAF4EFF942D8931 /* ControllerStopChordTests.swift */; };
 		3648795000A1400DBA7C5E51 /* ControllerDiagramAnnotations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4147DFEAEE39499582B6B470 /* ControllerDiagramAnnotations.swift */; };
 		F152D365B71443239D3FAB91 /* ControllerSettingsRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0984E010F34ABA80177F78 /* ControllerSettingsRow.swift */; };
@@ -220,6 +221,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C3E1D5B2F6074D8EB2C4DAF1 /* ControllerChordHoldConflictTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerChordHoldConflictTests.swift"; sourceTree = SOURCE_ROOT; };
 		286EFE660EAF4EFF942D8931 /* ControllerStopChordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerStopChordTests.swift"; sourceTree = SOURCE_ROOT; };
 		4147DFEAEE39499582B6B470 /* ControllerDiagramAnnotations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerDiagramAnnotations.swift"; sourceTree = SOURCE_ROOT; };
 		9D0984E010F34ABA80177F78 /* ControllerSettingsRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerSettingsRow.swift"; sourceTree = SOURCE_ROOT; };
@@ -544,6 +546,7 @@
 				C21AF75350764B66B907C5FE /* ExternalStreamOutputTests.swift */,
 				947296C064544F1C93F274F7 /* ContinuationTests.swift */,
 				4842A686711140868F26ABAA /* InputRecordingBackend.swift */,
+				C3E1D5B2F6074D8EB2C4DAF1 /* ControllerChordHoldConflictTests.swift */,
 				286EFE660EAF4EFF942D8931 /* ControllerStopChordTests.swift */,
 				8555DB5EA75B418E897CCF7A /* FakeSunshine.swift */,
 				874E99130A9D48429E652464 /* BitrateActuatorTests.swift */,
@@ -879,6 +882,7 @@
 				B5BF87137D7941F0B279F257 /* ExternalStreamOutputTests.swift in Sources */,
 				3673DD4793174262BBFC6B1A /* ContinuationTests.swift in Sources */,
 				E3425F1AD9C14B03B79FCBBE /* InputRecordingBackend.swift in Sources */,
+				C3E1D5B2F6074D8EB2C4DAF2 /* ControllerChordHoldConflictTests.swift in Sources */,
 				AFB26733DF7B43B1BB91B1BF /* ControllerStopChordTests.swift in Sources */,
 				6888DE0E431441AEA6A34799 /* FakeSunshine.swift in Sources */,
 				8658F00DB4C641D0AAF1281A /* BitrateActuatorTests.swift in Sources */,

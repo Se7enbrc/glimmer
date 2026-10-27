@@ -19,6 +19,7 @@ package struct ControllerMouseState {
     private var startDownAt: TimeInterval?
     private var blocked = false
     private var holdComplete = false
+    private var idle = true
 
     package init(isMouse: Bool = false) { self.isMouse = isMouse }
 
@@ -49,7 +50,8 @@ package struct ControllerMouseState {
         return (pointerMotion.step(sticks.pointer, seconds: seconds), notches)
     }
 
-    // A hold changes modes only on release; another button or a system chord spends the hold.
+    // A hold changes modes only on release. Another button or a chord spends it until every control is released,
+    // so a chord's buttons can never become a lone hold when suppression or a reset hides the others.
     package mutating func update(buttons: Int32, analog: GamepadAnalog, chordHeld: Bool,
                                  now: TimeInterval, toggleOnHold: Bool = true,
                                  toggleChord: ControllerPhysicalChord = ControllerMousePlan().toggle,
@@ -57,7 +59,7 @@ package struct ControllerMouseState {
         let sample = ControllerMappingSample(buttons: buttons, analog: analog, extras: extras)
         let wasDown = startDownAt != nil
         let isDown = toggleChord.held(in: sample)
-        if isDown && !wasDown { startDownAt = now; blocked = false; holdComplete = false }
+        if isDown && !wasDown { startDownAt = now; blocked = !idle; holdComplete = false }
         let otherButtons = sample.buttons & ~toggleChord.buttons != 0 || sample.extras & ~toggleChord.extras != .zero
         let otherTriggers = (sample.analog[0] >= 128 && toggleChord.triggers & 1 == 0)
             || (sample.analog[1] >= 128 && toggleChord.triggers & 2 == 0)
@@ -68,6 +70,8 @@ package struct ControllerMouseState {
         let toggle = wasDown && released && !blocked
             && holdComplete
         if released { startDownAt = nil }
+        idle = !chordHeld && sample.buttons == 0 && sample.extras == .zero
+            && sample.analog[0] < 128 && sample.analog[1] < 128
         self.buttons = buttons
         self.extras = extras
         self.analog = chordHeld ? InputCore.neutral : analog
