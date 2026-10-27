@@ -138,6 +138,7 @@ struct StreamControls: View {
             }
         }
         .padding(.horizontal, 8).padding(.top, 12).padding(.bottom, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private var playActions: some View {

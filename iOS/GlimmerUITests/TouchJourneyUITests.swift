@@ -240,8 +240,11 @@ final class TouchJourneyUITests: TouchJourneyTestCase {
         let control = app.buttons[id]
         let list = app.descendants(matching: .any).matching(identifier: "stream-controls-actions").firstMatch
         // Rows scroll under the pinned Disconnect bar, so a visible row ends above it.
-        let floor = id == "stream-disconnect" ? list.frame.maxY : app.buttons["stream-disconnect"].frame.minY
-        func visible() -> Bool { list.frame.contains(control.frame) && control.frame.maxY <= floor + 1 }
+        let pinned = ["stream-disconnect", "stream-quit"].contains(id)
+        let floor = app.buttons["stream-disconnect"].frame.minY
+        func visible() -> Bool {
+            pinned || list.frame.contains(control.frame) && control.frame.maxY <= floor + 1
+        }
         for _ in 0..<12 where !visible() || !control.isHittable {
             let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             let offset = max(-60, min(60, (list.frame.minY + floor) / 2 - control.frame.midY))
