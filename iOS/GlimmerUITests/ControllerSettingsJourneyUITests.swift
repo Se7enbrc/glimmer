@@ -14,7 +14,7 @@ extension ControllerJourneyUITests {
         XCTAssertTrue(receipts().dropFirst(index).contains { $0["pcButtons"] == 0x10 })
         XCTAssertTrue(app.buttons["Disconnect"].waitForExistence(timeout: 5))
         XCTAssertFalse(receipts().contains { $0["mouse"] != nil }, "Menu hold opens controls, never mouse mode")
-        app.buttons["Close menu"].tap()
+        app.buttons["stream-resume"].tap()
         try controller(connect: false)
         XCTAssertTrue(app.buttons["A"].waitForExistence(timeout: 5))
         stop(app)

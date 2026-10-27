@@ -79,7 +79,7 @@ extension ControllerJourneyUITests {
         let app = try launch()
         try play(app)
         try controller(connect: true, profile: "xbox")
-        for action in ["Show touch controls", "Show Stream Stats", "Use mouse mode"] {
+        for action in ["stream-touch-toggle", "stream-stats-toggle", "stream-controller-mode"] {
             try press("menu", duration: 1200)
             let button = app.buttons[action]
             XCTAssertTrue(button.waitForExistence(timeout: 5), action)
