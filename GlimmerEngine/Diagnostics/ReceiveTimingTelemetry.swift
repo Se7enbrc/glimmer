@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
-
 import os
+
+#if os(macOS)
 
 package final class ReceiveTimingTelemetry: Sendable {
 
@@ -13,55 +13,7 @@ package final class ReceiveTimingTelemetry: Sendable {
     package static let audio = ReceiveTimingTelemetry()
     private let state = OSAllocatedUnfairLock(initialState: Window())
 
-    package struct Distribution: Sendable {
-
-        package init(
-            sampleCount: UInt64 = 0,
-            maximum: Double = 0
-        ) {
-            self.sampleCount = sampleCount
-            self.maximum = maximum
-        }
-
-        package var buckets = SIMD64<UInt32>(repeating: 0)
-        package var sampleCount: UInt64 = 0
-        package var maximum: Double = 0
-
-        @inlinable package mutating func observe(_ milliseconds: Double) {
-            let index: Int
-            switch milliseconds {
-            case ...4: index = max(0, Int((milliseconds * 4).rounded(.up)) - 1)
-            case ...20: index = 16 + Int((milliseconds - 4).rounded(.up)) - 1
-            case ...100: index = 32 + Int(((milliseconds - 20) / 5).rounded(.up)) - 1
-            default: index = min(63, 48 + Int(min(16, ((milliseconds - 100) / 25).rounded(.up))) - 1)
-            }
-            buckets[index] &+= 1
-            sampleCount &+= 1
-            maximum = max(maximum, milliseconds)
-        }
-
-        package var p99: Double? { quantile(0.99) }
-
-        /// Upper bucket bound at `fraction`; 0.25 ms resolution below 4 ms.
-        package func quantile(_ fraction: Double) -> Double? {
-            guard sampleCount > 0 else { return nil }
-            let target = max(1, UInt64((Double(sampleCount) * fraction).rounded(.up)))
-            var cumulative: UInt64 = 0
-            for index in 0..<64 {
-                cumulative += UInt64(buckets[index])
-                guard cumulative >= target else { continue }
-                let bound: Double
-                switch index {
-                case 0..<16: bound = Double(index + 1) / 4
-                case 16..<32: bound = 4 + Double(index - 15)
-                case 32..<48: bound = 20 + Double(index - 31) * 5
-                default: bound = index == 63 ? maximum : 100 + Double(index - 47) * 25
-                }
-                return min(maximum, bound)
-            }
-            return maximum
-        }
-    }
+    package typealias Distribution = ReceivePolicyMeasurements.Distribution
 
     package struct Window: Sendable {
 
@@ -115,9 +67,12 @@ package final class ReceiveTimingTelemetry: Sendable {
         package var gapP99Ms: Double?
     }
 
-    @inlinable package func observe(delayMs: Double?, gapMs: Double?) {
+    @inlinable package func observe(delayMs: Double?, gapMs: Double?, collectPolicy: Bool = false) {
         state.withLock {
-            if let delayMs { $0.delay.observe(delayMs); $0.policyDelay.observe(delayMs) } else { $0.missing &+= 1 }
+            if let delayMs {
+                $0.delay.observe(delayMs)
+                if collectPolicy { $0.policyDelay.observe(delayMs) }
+            } else { $0.missing &+= 1 }
             if let gapMs { $0.gap.observe(gapMs) }
         }
     }
@@ -165,10 +120,91 @@ package struct ReceivePolicyWindow: Sendable, Equatable {
 
     /// Production iOS does not time datagrams, so its policy sees no queue or jitter evidence.
     static func takeVideo() -> ReceivePolicyWindow {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         ReceiveTimingTelemetry.video.takePolicyWindow()
+        #elseif GLIMMER_DIAGNOSTICS
+        ReceivePolicyMeasurements.video.takeWindow()
         #else
         ReceivePolicyWindow()
         #endif
+    }
+}
+
+/// In-memory control measurements, independent of diagnostic recording and its drain cadence.
+package final class ReceivePolicyMeasurements: Sendable {
+    package static let video = ReceivePolicyMeasurements()
+    package init() {}
+    private struct Window {
+        var delay = Distribution()
+        var jitter = Distribution()
+    }
+    private let state = OSAllocatedUnfairLock(initialState: Window())
+
+    package func observeDelay(_ milliseconds: Double?) {
+        guard let milliseconds, milliseconds.isFinite, milliseconds >= 0 else { return }
+        state.withLock { $0.delay.observe(milliseconds) }
+    }
+
+    package func observeFrameJitter(_ milliseconds: Double) {
+        guard milliseconds.isFinite, milliseconds >= 0 else { return }
+        state.withLock { $0.jitter.observe(milliseconds) }
+    }
+
+    package func takeWindow() -> ReceivePolicyWindow {
+        state.withLock { window in
+            defer { window = Window() }
+            return ReceivePolicyWindow(queueDelayP50Ms: window.delay.quantile(0.5),
+                                       jitterP95Ms: window.jitter.quantile(0.95))
+        }
+    }
+
+    package struct Distribution: Sendable {
+
+        package init(
+            sampleCount: UInt64 = 0,
+            maximum: Double = 0
+        ) {
+            self.sampleCount = sampleCount
+            self.maximum = maximum
+        }
+
+        package var buckets = SIMD64<UInt32>(repeating: 0)
+        package var sampleCount: UInt64 = 0
+        package var maximum: Double = 0
+
+        @inlinable package mutating func observe(_ milliseconds: Double) {
+            let index: Int
+            switch milliseconds {
+            case ...4: index = max(0, Int((milliseconds * 4).rounded(.up)) - 1)
+            case ...20: index = 16 + Int((milliseconds - 4).rounded(.up)) - 1
+            case ...100: index = 32 + Int(((milliseconds - 20) / 5).rounded(.up)) - 1
+            default: index = min(63, 48 + Int(min(16, ((milliseconds - 100) / 25).rounded(.up))) - 1)
+            }
+            buckets[index] &+= 1
+            sampleCount &+= 1
+            maximum = max(maximum, milliseconds)
+        }
+
+        package var p99: Double? { quantile(0.99) }
+
+        /// Upper bucket bound at `fraction`; 0.25 ms resolution below 4 ms.
+        package func quantile(_ fraction: Double) -> Double? {
+            guard sampleCount > 0 else { return nil }
+            let target = max(1, UInt64((Double(sampleCount) * fraction).rounded(.up)))
+            var cumulative: UInt64 = 0
+            for index in 0..<64 {
+                cumulative += UInt64(buckets[index])
+                guard cumulative >= target else { continue }
+                let bound: Double
+                switch index {
+                case 0..<16: bound = Double(index + 1) / 4
+                case 16..<32: bound = 4 + Double(index - 15)
+                case 32..<48: bound = 20 + Double(index - 31) * 5
+                default: bound = index == 63 ? maximum : 100 + Double(index - 47) * 25
+                }
+                return min(maximum, bound)
+            }
+            return maximum
+        }
     }
 }

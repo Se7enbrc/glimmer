@@ -179,11 +179,11 @@ extension StreamSession {
     /// start()'s power-assertion defer; the caller then awaits stop() for network cleanup.
     package func fetchAndVerifyServerInfo(network: NetworkClient, pcName: String) async throws -> ServerInfo {
         // Telemetry: stamp the /serverinfo leg (launch sub-leg, part of launch_path_ms).
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let serverinfoStart = Date()
         #endif
         let serverInfo = try await fetchInitialServerInfo { try await network.fetchServerInfo() }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         ConnectTimingTelemetry.shared.recordLaunchLeg(
             serverinfoMs: Date().timeIntervalSince(serverinfoStart) * 1000.0)
         #endif
@@ -218,7 +218,7 @@ extension StreamSession {
         prepare: @escaping @MainActor @Sendable (Int) throws -> SessionMedia) async throws -> SessionMedia {
         try checkAttempt()
         audioDecoder.setOutputMuted(config.playAudioOnHost)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let buildStart = Date()
         #endif
         let pending = Task { @MainActor in
@@ -229,7 +229,7 @@ extension StreamSession {
         defer { if mediaPreparation == pending, !stopInProgress { mediaPreparation = nil } }
         let setup = try await pending.value
         guard !isTearingDown else { throw CancellationError() }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         ConnectTimingTelemetry.shared.recordLaunchLeg(buildMs: Date().timeIntervalSince(buildStart) * 1000)
         #endif
         self.presentation = setup.presentation

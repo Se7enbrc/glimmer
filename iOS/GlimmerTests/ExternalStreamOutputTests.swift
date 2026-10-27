@@ -82,6 +82,31 @@ struct ExternalStreamOutputTests {
         await model.waitUntilStopped()
     }
 
+    @Test func removingTheStreamReleasesItsOutputBeforePlaybackStopCompletes() async throws {
+        var restores = 0
+        let outputs = StreamOutputCoordinator(prepareDisplay: { _ in { restores += 1 } },
+                                              screenIdentity: { ObjectIdentifier($0) })
+        let fixture = PlaybackFixture()
+        let stopping = StreamTestGate()
+        fixture.stop = { await stopping.wait() }
+        let model = fixture.model()
+        let controller = StreamViewController(model: model, close: {}, outputs: outputs)
+        let local = try window(root: controller)
+        let external = try window(root: UIViewController())
+        defer { local.rootViewController = nil; external.rootViewController = nil }
+        outputs.connect(id: "display", role: .windowExternalDisplayNonInteractive, window: external)
+        controller.startWhenReady()
+        await model.waitUntilStartFinishes()
+        #expect(model.externalDisplayActive)
+        StreamView.dismantleUIViewController(controller, coordinator: ())
+        #expect(restores == 1 && external.isHidden && !model.externalDisplayActive)
+        #expect(controller.surface.superview === controller.view)
+        await stopping.waitUntilEntered()
+        await stopping.release()
+        await model.waitUntilStopped()
+        #expect(restores == 1 && fixture.completedStops == 1)
+    }
+
     @Test func stoppingRestoresDisplayEvenBeforeControlsAreDismissed() async throws {
         var restores = 0
         let outputs = StreamOutputCoordinator(prepareDisplay: { _ in { restores += 1 } },

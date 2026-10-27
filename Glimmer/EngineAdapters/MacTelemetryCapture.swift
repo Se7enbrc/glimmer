@@ -17,8 +17,7 @@ enum DiagnosticBuild {
 
 // Constructed only after the existing opt-in gate; probes retain their original cadence and ownership.
 enum MacTelemetryCapture {
-    static let logsDirectory = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Logs/Glimmer", isDirectory: true)
+    static let logsDirectory = PersistentStorage.logs
 
     static func make() -> TelemetryCapture {
         let wifi = WiFiTelemetry()

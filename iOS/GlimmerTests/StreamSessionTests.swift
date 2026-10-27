@@ -73,11 +73,11 @@ struct StreamSessionTests {
             ControllerDescriptor(kind: .unknown, supportedButtons: [], capabilities: [])))
         model.receive(fixture.update(.input(.mouseMode(registration, enabled: true))))
         #expect(model.controllerMouseActive && model.inputFocused && !model.controlsVisible)
-        #expect(model.controllerModeMessage == "Mouse mode · Right stick")
+        #expect(model.controllerModeMessage == "Controller is now a mouse.")
         model.receive(fixture.update(.input(.controllersActive(false))))
         #expect(model.controllerMouseActive)
         model.receive(fixture.update(.input(.mouseMode(registration, enabled: false))))
-        #expect(!model.controllerMouseActive && model.controllerModeMessage == "Gamepad mode")
+        #expect(!model.controllerMouseActive && model.controllerModeMessage == "Controller is back in the game.")
         model.stop()
         await model.waitUntilStopped()
         model.receive(fixture.update(.input(.mouseMode(registration, enabled: true))))
@@ -473,8 +473,10 @@ final class PlaybackFixture {
         .init(sessionID: id, attemptID: UUID(), event: event)
     }
 
-    func model(launch: StreamLaunch = testLaunch()) -> StreamSessionModel {
-        StreamSessionModel(launch: launch, backgroundGrace: StreamBackgroundGrace(calls: backgroundCalls),
+    func model(launch: StreamLaunch = testLaunch(),
+               menuVisibility: StreamMenuVisibility = StreamMenuVisibility()) -> StreamSessionModel {
+        StreamSessionModel(launch: launch, menuVisibility: menuVisibility,
+                           backgroundGrace: StreamBackgroundGrace(calls: backgroundCalls),
                            makePlayback: { [self] _, _, quiesce in
             makes += 1
             self.quiesce = quiesce

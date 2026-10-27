@@ -84,7 +84,7 @@ extension StreamSession {
         // that as a stale link too (reconnect is recoverable) rather than silently
         // giving up the probe.
         guard let health = backend.enetHealth() else {
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             TelemetryCounters.shared.p2.setDisconnectReason(.systemSleep)
             #endif
             await handleHostTerminate(code: Self.deadPeerTerminationCode)
@@ -93,7 +93,7 @@ extension StreamSession {
         if UInt64(health.sinceLastAckMs) >= budgetMs {
             Diag.notice("Wake probe: no ACK in \(health.sinceLastAckMs)ms (budget "
                 + "\(budgetMs)ms) - link is stale, reconnecting in place.", "Stream")
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             TelemetryCounters.shared.p2.setDisconnectReason(.systemSleep)
             #endif
             await handleHostTerminate(code: Self.deadPeerTerminationCode)

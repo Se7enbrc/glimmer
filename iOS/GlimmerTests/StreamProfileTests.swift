@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Testing
 import UIKit
 @testable import Glimmer
@@ -39,6 +39,26 @@ struct StreamProfileTests {
             #expect(StreamDisplayModes.bundled.contains(mode))
             #expect(mode.fps <= min(cap, profile == .fullHD60 ? 60 : 120))
             if profile != .native120 { #expect(mode.width == 1920 && mode.height == 1080) }
+        }
+    }
+
+    @Test(arguments: [60, 120])
+    func everyWindowTargetKeepsTheRunningRateListed(fps: Int) throws {
+        for target in StreamDisplayModes.bundled {
+            let resized = try StreamProfile.native120.resolve(
+                windowPixels: CGSize(width: target.width, height: target.height),
+                maximumFramesPerSecond: fps, requiredFPS: fps)
+            #expect(resized.fps == fps)
+            #expect(StreamDisplayModes.bundled.contains(resized))
+        }
+    }
+
+    @Test func resizedDataModePairsSupportTheRunningFPS() {
+        for mode in StreamDisplayModes.bundled {
+            let formats = StreamFormats(resizing: mode)
+            #expect(formats.full == mode)
+            #expect(formats.lowData.fps == mode.fps)
+            #expect(StreamDisplayModes.bundled.contains(formats.lowData))
         }
     }
 
@@ -134,11 +154,12 @@ struct StreamProfileTests {
         Attachment.record(Array(geometry.utf8), named: "physical-panel-request.txt")
     }
 
-    @Test func mouseHandUsesTheMatchingSharedEngineMapping() {
-        #expect(ControllerMouseStick.right.mapping == .rightStick)
-        #expect(ControllerMouseStick.left.mapping == .leftStick)
-        #expect(ControllerMouseStick.right.controls.contains("R2 clicks. R1 right-clicks."))
-        #expect(ControllerMouseStick.left.controls.contains("L2 clicks. L1 right-clicks."))
+    @MainActor @Test func controllerMouseMatchesMac() {
+        let input = StreamInput(emit: { _ in })
+        input.setControllerMouseMapping(.rightStick)
+        StreamPlayback.configureInput(input)
+        #expect(input.core.controllerMouseMapping == .rightStick)
+        #expect(!input.core.controllerMenuOpensControls)
     }
 
     @Test(arguments: ["", " ", "https://pc.local", "pc.local:47989", "pc.local/path", "pc.local?x=1",

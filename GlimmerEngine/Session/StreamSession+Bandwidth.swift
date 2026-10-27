@@ -8,7 +8,7 @@ public enum AdaptiveBandwidth {
     public static let defaultsKey = "adaptiveBandwidthEnabled"
 
     /// Read once per stream so a before/after trial never changes mid-session.
-    public static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+    public static func isEnabled(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
         defaults.bool(forKey: defaultsKey)
     }
 }
@@ -83,12 +83,23 @@ package struct BandwidthHealthSampler {
 }
 
 extension StreamSession {
+    @discardableResult
+    package nonisolated func scheduleBandwidthObservation() -> Task<Void, Never>? {
+        guard adaptiveBandwidth, services.bandwidthInputs != nil else { return nil }
+        let time = uptimeSeconds
+        return Task { [weak self] in
+            guard let self else { return }
+            let attempt = await self.attemptID
+            await self.observeBandwidth(at: time, attempt: attempt)
+        }
+    }
+
     /// The first connect seeds the policy; later builds keep it, so dwell and backoff survive reconnects.
     /// Returns the ANNOUNCE rate: public clients start from the policy's current-path rate when enabled.
     package func seedBandwidth(config: StreamRequest, appliedKbps: Int, rtt: RttStats?, preLaunch: Bool) -> Int {
-        guard bandwidthPolicy == nil, let snapshot = services.bandwidthInputs?.snapshot() else { return appliedKbps }
+        guard adaptiveBandwidth, bandwidthPolicy == nil,
+              let snapshot = services.bandwidthInputs?.snapshot() else { return appliedKbps }
         let demand = Self.bandwidthDemand(config)
-        adaptiveBandwidth = AdaptiveBandwidth.isEnabled()
         var ask = appliedKbps
         if adaptiveBandwidth, publicMedia != nil {
             ask = BandwidthPolicy.startRate(demand: demand, path: snapshot.path)
@@ -115,7 +126,7 @@ extension StreamSession {
 
     /// One 1 Hz watchdog tick. Transitions own the link while they run, so no window spans one.
     package func observeBandwidth(at time: Double, attempt: UUID) {
-        guard attemptID == attempt, !publicTerminal, !isTearingDown, isStreaming,
+        guard adaptiveBandwidth, attemptID == attempt, !publicTerminal, !isTearingDown, isStreaming,
               var policy = bandwidthPolicy, let snapshot = services.bandwidthInputs?.snapshot() else { return }
         guard !isReconnecting, let decoder = videoDecoder else {
             bandwidthLastObservation = nil
@@ -137,7 +148,7 @@ extension StreamSession {
             decision = policy.decision(decision.reason, health: health)
         }
         bandwidthPolicy = policy
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         TelemetryExporter.recordLiveEvent(bandwidthFields(decision))
         #endif
     }

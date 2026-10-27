@@ -41,7 +41,7 @@ final class StreamShortcutUITests: XCTestCase {
         app.typeKey("s", modifierFlags: [.control, .shift])
         XCTAssertTrue(waitForStats(video, shown: true))
         record(app, name: "native-remapped-stats-after")
-        app.buttons["Show controls"].firstMatch.tap()
+        app.openStreamControls()
         record(app, name: "native-stats-with-controls-after")
         XCTAssertTrue(app.buttons["Hide Stream Stats"].waitForExistence(timeout: 5))
         app.buttons["Hide Stream Stats"].tap()

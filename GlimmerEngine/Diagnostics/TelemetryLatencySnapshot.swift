@@ -15,10 +15,7 @@
 
 import Foundation
 
-/// One tick's snapshot of all per-stage latency histograms. Plain value type
-/// built on the exporter queue from `LatencyHistograms`; rendered to both wire
-/// forms (Prometheus `_bucket/_sum/_count`, NDJSON p50/p95/p99) and the session
-/// report. Each stage is its cumulative bucket counts + sum(ms) + count.
+/// One capture tick's cumulative buckets, sum and count for NDJSON and the session report.
 package struct LatencyHistogramSnapshot: Sendable {
 
     package init(
@@ -60,18 +57,10 @@ package struct LatencyHistogramSnapshot: Sendable {
         }
 
         package var buckets: [UInt64]
-        /// The bucket upper bounds (ms) THIS stage was recorded against - carried
-        /// on the snapshot so the Prometheus render + NDJSON quantile estimator
-        /// use the matching bounds (fine for sub-stages, coarse for the composite
-        /// glass-to-glass / input-to-photon / idr-round-trip stages) without a
-        /// second lookup.
+        /// Carry each stage's bounds with its counts so the estimator cannot use the wrong scale.
         package var boundsMs: [Double]
         package var sumMs: Double
-        /// Total observations (rendered as Prometheus `_count`). Named
-        /// `observationCount` rather than `count` so a "no data this tick" check
-        /// doesn't trip SwiftLint's `empty_count` rule, which flags any property
-        /// literally named `count` compared to zero - a false positive here since
-        /// this is a numeric total, not a collection size.
+        /// Total observations, distinct from the number of buckets.
         package var observationCount: UInt64
         /// True iff this stage observed at least one frame this session.
         package var hasObservations: Bool { observationCount != 0 }

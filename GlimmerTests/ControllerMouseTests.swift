@@ -11,6 +11,11 @@ import Testing
 struct ControllerMouseTests {
     private let start = StreamProtocol.PLAY_FLAG
     private let neutral = InputForwarder.neutralControllerAnalog
+    private var primary: GamepadAnalog {
+        var value = neutral
+        value.rightTrigger = 255
+        return value
+    }
 
     private func rig() -> (InputForwarder, InputRecordingBackend) {
         let forwarder = InputForwarder()
@@ -33,7 +38,7 @@ struct ControllerMouseTests {
         #expect(forwarder.controllerMouseStates[0]?.isMouse == true)
         #expect(forwarder.controllerMouseTask == nil)
         var analog = neutral
-        analog.leftStickX = 30_000
+        analog.rightStickX = 30_000
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false)
         #expect(forwarder.controllerMouseTask != nil)
         forwarder.pollControllerMouse()
@@ -163,7 +168,7 @@ struct ControllerMouseTests {
         #expect(backend.calls.count == count)
         let controller = GCController.withExtendedGamepad()
         let pad = try #require(controller.extendedGamepad)
-        pad.buttonB.setValue(1)
+        pad.rightShoulder.setValue(1)
         forwarder.sendGamepadUpdate(pad: pad, slot: 0)
         #expect(backend.calls.count == count)
         let rightClick = PointerSend.button(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS),
@@ -180,11 +185,9 @@ struct ControllerMouseTests {
         #expect(backend.calls.last?.buttons == 0)
         #expect(backend.calls.last?.analog.leftStickX == 0)
         let clicks: [(Int32, Int32)] = [
-            (StreamProtocol.A_FLAG, StreamProtocol.BUTTON_LEFT),
-            (StreamProtocol.B_FLAG, StreamProtocol.BUTTON_RIGHT),
-            (StreamProtocol.X_FLAG, StreamProtocol.BUTTON_MIDDLE),
-            (StreamProtocol.LB_FLAG, StreamProtocol.BUTTON_X1),
-            (StreamProtocol.RB_FLAG, StreamProtocol.BUTTON_X2)
+            (StreamProtocol.RS_CLK_FLAG, StreamProtocol.BUTTON_MIDDLE),
+            (StreamProtocol.LB_FLAG, StreamProtocol.BUTTON_X2),
+            (StreamProtocol.RB_FLAG, StreamProtocol.BUTTON_RIGHT)
         ]
         for (flag, button) in clicks {
             let count = backend.pointer.count
@@ -199,7 +202,7 @@ struct ControllerMouseTests {
         #expect(backend.calls.last?.num == 1)
         #expect(backend.calls.last?.buttons == StreamProtocol.Y_FLAG)
         toggle(forwarder, now: 20)
-        #expect(notifications == ["Controller 1 is now a mouse. Hold Menu to go back.",
+        #expect(notifications == ["Controller 1 is now a mouse.",
                                   "Controller 1 is back in the game."])
     }
 
@@ -207,8 +210,8 @@ struct ControllerMouseTests {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
         #expect(!forwarder.updateControllerMouseClicks(slot: 0, clicks: []))
-        forwarder.routeControllerMouse(slot: 0, buttons: StreamProtocol.A_FLAG,
-                                       analog: neutral, chordHeld: false)
+        forwarder.routeControllerMouse(slot: 0, buttons: 0,
+                                       analog: primary, chordHeld: false)
         #expect(forwarder.controllerMouseStates[0]?.clicks.isEmpty == true)
         #expect(backend.pointer.isEmpty)
         toggle(forwarder)
@@ -230,27 +233,27 @@ struct ControllerMouseTests {
         let attached = try #require(forwarder.attachedControllers[ObjectIdentifier(controller)])
         let name = controller.vendorName ?? controller.productCategory
         #expect(forwarder.controllerMouseMessage(enabled: true, slot: attached.slot)
-            == "\(name) is now a mouse. Hold Menu to go back.")
+            == "\(name) is now a mouse.")
         #expect(forwarder.controllerMouseMessage(enabled: false, slot: attached.slot)
             == "\(name) is back in the game.")
         forwarder.gamepadMask = 1 << attached.slot
         #expect(forwarder.controllerMouseMessage(enabled: true, slot: attached.slot)
-            == "Controller is now a mouse. Hold Menu to go back.")
+            == "Controller is now a mouse.")
         #expect(forwarder.controllerMouseMessage(enabled: false, slot: attached.slot)
             == "Controller is back in the game.")
     }
 
-    @Test func stickPollingMovesLeftStickAndScrollsRightStickUntilNeutral() {
+    @Test func stickPollingMovesRightStickAndScrollsLeftStickUntilNeutral() {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
         toggle(forwarder)
-        let analog = GamepadAnalog(leftTrigger: 255, rightTrigger: 255, leftStickX: 32767, leftStickY: 32767,
+        let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 32767, leftStickY: 32767,
                                    rightStickX: -32767, rightStickY: 32767)
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false)
         forwarder.pollControllerMouse()
         forwarder.pollControllerMouse()
-        #expect(backend.mouseMoves == [.init(dx: 62, dy: -62), .init(dx: 62, dy: -62)])
-        #expect(backend.pointer == [.scroll(62), .hScroll(-62), .scroll(62), .hScroll(-62)])
+        #expect(backend.mouseMoves == [.init(dx: -62, dy: -62), .init(dx: -62, dy: -62)])
+        #expect(backend.pointer == [.scroll(62), .hScroll(62), .scroll(62), .hScroll(62)])
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: neutral, chordHeld: false)
         forwarder.pollControllerMouse()
         #expect(backend.mouseMoves.count == 2)
@@ -258,22 +261,15 @@ struct ControllerMouseTests {
         #expect(InputForwarder.controllerMouseDelta(-32768) == -62)
     }
 
-    @Test func dpadScrollsOnlyOnPressAndHomeDoesNotClick() {
+    @Test func unboundFaceAndDirectionalButtonsNeverClickOrScroll() {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
         toggle(forwarder)
-        let ignored = StreamProtocol.Y_FLAG | StreamProtocol.LS_CLK_FLAG | StreamProtocol.RS_CLK_FLAG
+        let ignored = StreamProtocol.A_FLAG | StreamProtocol.B_FLAG | StreamProtocol.X_FLAG | StreamProtocol.Y_FLAG
+            | StreamProtocol.UP_FLAG | StreamProtocol.DOWN_FLAG | StreamProtocol.LEFT_FLAG | StreamProtocol.RIGHT_FLAG
             | StreamProtocol.BACK_FLAG | StreamProtocol.SPECIAL_FLAG | StreamProtocol.MISC_FLAG
         forwarder.routeControllerMouse(slot: 0, buttons: ignored, analog: neutral, chordHeld: false)
         #expect(backend.pointer.isEmpty)
-        let buttons = StreamProtocol.UP_FLAG | StreamProtocol.RIGHT_FLAG | StreamProtocol.SPECIAL_FLAG
-        forwarder.routeControllerMouse(slot: 0, buttons: buttons, analog: neutral, chordHeld: false)
-        forwarder.routeControllerMouse(slot: 0, buttons: buttons, analog: neutral, chordHeld: false)
-        #expect(backend.pointer == [.scroll(120), .hScroll(120)])
-        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: neutral, chordHeld: false)
-        let opposite = StreamProtocol.DOWN_FLAG | StreamProtocol.LEFT_FLAG
-        forwarder.routeControllerMouse(slot: 0, buttons: opposite, analog: neutral, chordHeld: false)
-        #expect(Array(backend.pointer.suffix(2)) == [.scroll(-120), .hScroll(-120)])
     }
 
     @Test func physicalMouseAndTwoPadsShareClickOwnershipAndDetachReleases() {
@@ -281,8 +277,8 @@ struct ControllerMouseTests {
         defer { forwarder.detach() }
         toggle(forwarder)
         toggle(forwarder, slot: 1)
-        forwarder.routeControllerMouse(slot: 0, buttons: StreamProtocol.A_FLAG, analog: neutral, chordHeld: false)
-        forwarder.routeControllerMouse(slot: 1, buttons: StreamProtocol.A_FLAG, analog: neutral, chordHeld: false)
+        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: primary, chordHeld: false)
+        forwarder.routeControllerMouse(slot: 1, buttons: 0, analog: primary, chordHeld: false)
         forwarder.updatePhysicalMouseButton(StreamProtocol.BUTTON_LEFT, pressed: true)
         forwarder.resetControllerMouse(slot: 0)
         forwarder.resetControllerMouse(slot: 1)
@@ -299,7 +295,7 @@ struct ControllerMouseTests {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
         toggle(forwarder)
-        forwarder.routeControllerMouse(slot: 0, buttons: StreamProtocol.A_FLAG, analog: neutral, chordHeld: false)
+        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: primary, chordHeld: false)
         forwarder.neutralizeControllers()
         let release = PointerSend.button(action: Int8(StreamProtocol.BUTTON_ACTION_RELEASE),
                                          button: StreamProtocol.BUTTON_LEFT)
@@ -323,8 +319,8 @@ struct ControllerMouseTests {
         defer { forwarder.detach() }
         let state = try #require(forwarder.attachedControllers[ObjectIdentifier(controller)])
         toggle(forwarder, slot: state.slot)
-        forwarder.routeControllerMouse(slot: state.slot, buttons: StreamProtocol.A_FLAG,
-                                       analog: neutral, chordHeld: false)
+        forwarder.routeControllerMouse(slot: state.slot, buttons: 0,
+                                       analog: primary, chordHeld: false)
         forwarder.reconcileControllerButtons()
         #expect(backend.pointer.suffix(2) == [
             .button(action: Int8(StreamProtocol.BUTTON_ACTION_PRESS), button: StreamProtocol.BUTTON_LEFT),
@@ -339,7 +335,7 @@ struct ControllerMouseTests {
         window.leaveHintBanner.announce = { announcements.append($0) }
         window.showStreamToast("Leave hint", for: 5)
         let generation = window.streamToastGeneration
-        let mouse = "Controller is now a mouse. Hold Menu to go back."
+        let mouse = "Controller is now a mouse."
         let game = "Controller is back in the game."
         window.showControllerMouseMode(mouse)
         #expect(window.leaveHintBanner.displayedText == mouse)

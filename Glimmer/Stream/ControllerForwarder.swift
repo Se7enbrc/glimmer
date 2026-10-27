@@ -38,6 +38,7 @@ extension InputForwarder {
         let arrival: ControllerArrival
         weak var controller: GCController?
         let priorPlayerIndex: GCControllerPlayerIndex
+        let priorInputQueue: DispatchQueue?
         let priorHandlerQueue: DispatchQueue
         let priorOptionsGesture: GCControllerElement.SystemGestureState?
         let priorMenuGesture: GCControllerElement.SystemGestureState?
@@ -49,6 +50,8 @@ extension InputForwarder {
         func restoreSystemState() {
             guard let controller else { return }
             controller.playerIndex = priorPlayerIndex
+            controller.input.unmapped?.elementValueDidChangeHandler = nil
+            controller.input.unmapped?.queue = priorInputQueue
             controller.handlerQueue = priorHandlerQueue
             if let priorOptionsGesture {
                 controller.extendedGamepad?.buttonOptions?.preferredSystemGestureState = priorOptionsGesture
@@ -238,7 +241,8 @@ extension InputForwarder {
 
         let state = AttachedController(
             slot: slot, arrival: ControllerArrival(type: kind, supportedButtons: buttons, caps: caps),
-            controller: gamepad, priorPlayerIndex: priorPlayerIndex, priorHandlerQueue: gamepad.handlerQueue,
+            controller: gamepad, priorPlayerIndex: priorPlayerIndex,
+            priorInputQueue: gamepad.input.unmapped?.queue, priorHandlerQueue: gamepad.handlerQueue,
             priorOptionsGesture: priorOptionsGesture, priorMenuGesture: priorMenuGesture,
             priorHomeGesture: priorHomeGesture, retainedHID: useHID
         )
@@ -474,9 +478,10 @@ extension InputForwarder {
     // MARK: - Input handler install / heal
 
     /// Reassert ownership of GameController state and raw-HID centre-button updates.
-    /// The chord recorder polls independently and leaves these handlers alone.
+    /// Layout recording runs only while stream input ownership is suspended.
     func installInputHandlers(for state: AttachedController) {
         guard !ControllerLayoutEditing.active, let gamepad = state.controller else { return }
+        gamepad.input.unmapped?.elementValueDidChangeHandler = nil
         controllerLayouts?.release(gamepad)
         let slot = state.slot
         let routesHID = state.retainedHID
@@ -520,7 +525,7 @@ extension InputForwarder {
                 inputCore.receiveCenterButtons(device: device, capturedAt: capturedAt)
             }
         }
-        controllerLayouts?.install(state)
+        installMappedController(state, token: token)
     }
 
     // MARK: - Focus resync

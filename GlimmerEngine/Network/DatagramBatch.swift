@@ -29,6 +29,8 @@ final class DatagramBatch {
     #if os(macOS) || GLIMMER_DIAGNOSTICS
     private let controls: UnsafeMutableRawPointer
     private(set) var readTicks: UInt64 = 0
+    #endif
+    #if os(macOS)
     private(set) var readStartedTicks: UInt64 = 0
     private(set) var previousReadTicks: UInt64 = 0
     #endif
@@ -76,7 +78,7 @@ final class DatagramBatch {
                                     control: controlBuffer(at: index),
                                     controlLength: Self.controlSize)
         }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         previousReadTicks = readTicks
         readStartedTicks = mach_absolute_time()
         #endif
@@ -92,7 +94,7 @@ final class DatagramBatch {
                              msg_namelen: socklen_t(MemoryLayout<sockaddr_storage>.size),
                              msg_iov: iovecs, msg_iovlen: 1, msg_control: controlBuffer(at: 0),
                              msg_controllen: Self.controlSize, msg_flags: 0)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         previousReadTicks = readTicks
         readStartedTicks = mach_absolute_time()
         #endif

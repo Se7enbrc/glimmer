@@ -8,9 +8,10 @@
 //  entry, and how it answers `glimmer stream` and `glimmer quit`.
 //
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import AppKit
 import Testing
+import Synchronization
 @testable import Glimmer
 
 struct AppShellTests {
@@ -232,6 +233,71 @@ struct AppShellTests {
         #expect(reply?[CommandChannel.Key.detail] == "Stream request cancelled.")
     }
 
+    @Test @MainActor func stopCancelsALaunchBeforeItsRouteSettles() async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let route = CommandRouteWait()
+        let (request, task) = try await pendingStream(model, route: route)
+        #expect(await model.stopActiveStream(matching: "another-pc", source: "test") == .pcMismatch)
+        #expect(model.pendingCommandStream === request && !task.isCancelled)
+        #expect(await model.stopActiveStream(matching: tower.id, source: "test") == .stopped)
+        #expect(model.pendingCommandStream == nil && task.isCancelled)
+        model.cancelPendingCommandStream()
+        route.settle()
+        await task.value
+        #expect(!model.isStreaming && model.nativeSession == nil)
+    }
+
+    @Test @MainActor func stopCancelsAnArmedLaunchBeforeTheSessionExists() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.lastLaunchAttempt = (desktop, tower)
+        model.isStreaming = true
+        var launched = false
+        let task = Task {
+            launched = !Task.isCancelled && !model.menuStopInProgress
+            model.isStreaming = false
+        }
+        model.nativeStreamTask = task
+        #expect(await model.stopActiveStream(matching: tower.id, source: "test") == .stopped)
+        await task.value
+        #expect(task.isCancelled && !launched)
+    }
+
+    @Test @MainActor func stopInvalidatesReplacementThroughoutOldSessionTeardown() async throws {
+        let model = AppModel(defaults: settings.defaults)
+        let sunshine = FakeSunshine.scripted([:])
+        let session = StreamSession(hostDisposition: .disconnectOnly,
+            audioDecoder: AudioDecoder(defaults: settings.defaults), services: SessionServices(),
+            backend: InputRecordingBackend(), makeNetwork: { sunshine.client($0) },
+            makeBackend: { InputRecordingBackend() })
+        let closing = CommandRouteWait()
+        let presentation = SessionPresentation()
+        presentation.waitForVisualClose = { await closing.wait() }
+        await session.installCloseFixture(presentation, streaming: true)
+        model.nativeSession = session
+        model.isStreaming = true
+        model.lastLaunchAttempt = (LibraryApp(id: 99, name: "Other", hdr: false, hidden: false), tower)
+        var replies: [[String: String]] = []
+        model.postCommandReply = { replies.append($0) }
+        model.beginCommandStream("replacement", app: desktop, on: tower, takeover: true, waitForRoute: {})
+        let request = try #require(model.pendingCommandStream)
+        let task = try #require(request.task)
+        try #require(await AppModel.poll(slices: 2_000, every: .milliseconds(1)) { closing.started })
+        #expect(model.pendingCommandStream === request)
+        #expect(await model.stopActiveStream(matching: "another-pc", source: "test") == .pcMismatch)
+        let stop = Task { await model.stopActiveStream(matching: tower.id, source: "test") }
+        try #require(await AppModel.poll(slices: 2_000, every: .milliseconds(1)) { model.menuStopInProgress })
+        #expect(task.isCancelled)
+        // A stale launch must only resume this inert fixture, never create real media or storage.
+        model.lastLaunchAttempt = (desktop, tower)
+        closing.settle()
+        #expect(await stop.value == .stopped)
+        await task.value
+        model.isStreaming = false
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.rejected])
+        #expect(model.pendingCommandStream == nil && model.pendingTakeover == nil)
+        #expect(sunshine.paths.isEmpty)
+    }
+
     @Test @MainActor func aCommandWaitsForReadinessAndQuitStillCancelsIt() async throws {
         let model = AppModel(defaults: settings.defaults)
         let readiness = CommandRouteWait()
@@ -297,6 +363,62 @@ struct AppShellTests {
         #expect(model.isReconnecting)
     }
 
+    @Test @MainActor func aDifferentGameDuringRouteWaitRejectsTheStaleCommand() async throws {
+        let window = CommandTestWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: false)
+        window.identifier = NSUserInterfaceItemIdentifier("main")
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let model = AppModel(defaults: settings.defaults)
+        let route = CommandRouteWait()
+        var replies: [[String: String]] = []
+        model.postCommandReply = { replies.append($0) }
+        try #require(model.mainWindowVisible)
+        let (_, task) = try await pendingStream(model, route: route)
+        let other = LibraryApp(id: 99, name: "Other", hdr: false, hidden: false)
+        model.lastLaunchAttempt = (app: other, host: tower)
+        model.isStreaming = true
+        route.settle()
+        await task.value
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.rejected])
+        #expect(model.pendingTakeover == nil)
+        #expect(model.lastLaunchAttempt?.app.id == other.id)
+    }
+
+    @Test @MainActor func aCommandWithoutAStartedSessionIsAlreadyComplete() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.nativeStreamError = "The stream could not start."
+        let end = CommandStreamEnd(model: model)
+        #expect(end.ended)
+        if end.ended { #expect(await end.wait() == model.nativeStreamError) }
+    }
+
+    @Test @MainActor func acceptedCommandTimesOutWithoutAFirstFrame() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.isStreaming = true
+        var replies: [[String: String]] = []
+        model.postCommandReply = { replies.append($0) }
+        let time = Mutex<UInt64>(0)
+        let clock = SessionClock(uptimeNanos: { time.withLock { $0 } }, sleep: { _ in
+            time.withLock { $0 += 60_000_000_000 }
+        })
+        await model.reportCommandSession("timeout", clock: clock, firstFrame: { false }).value
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.ended])
+        #expect(replies.first?[CommandChannel.Key.detail] != nil)
+    }
+
+    @Test @MainActor func acceptedCommandReportsLiveAndItsOwnTerminalResult() async {
+        let model = AppModel(defaults: settings.defaults)
+        model.isStreaming = true
+        var replies: [[String: String]] = []
+        model.postCommandReply = {
+            replies.append($0)
+            if $0[CommandChannel.Key.event] == CommandChannel.Event.live { model.isStreaming = false }
+        }
+        await model.reportCommandSession("live", firstFrame: { true }).value
+        #expect(replies.map { $0[CommandChannel.Key.event] } == [CommandChannel.Event.live, CommandChannel.Event.ended])
+        #expect(replies.last?[CommandChannel.Key.detail] == nil)
+    }
+
     @Test @MainActor func routePollingStopsWhenCancelledEvenIfTheRouteBecomesReady() async throws {
         var checks = 0
         let task = Task { @MainActor in
@@ -347,4 +469,9 @@ private final class CommandRouteWait {
         continuation?.resume()
         continuation = nil
     }
+}
+
+@MainActor
+private final class CommandTestWindow: NSWindow {
+    override var isVisible: Bool { true }
 }

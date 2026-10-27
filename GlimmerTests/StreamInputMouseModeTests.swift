@@ -44,6 +44,47 @@ struct StreamInputMouseModeTests {
         submit(input, registration, .init(), capturedAt: start + 0.751)
     }
 
+    @Test func gamepadModeNeverEvaluatesMouseMotion() {
+        var calls = 0
+        func motion() -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>) {
+            calls += 1
+            return ControllerMousePlan().motion(.init(leftTrigger: 0, rightTrigger: 0,
+                leftStickX: 32767, leftStickY: 32767, rightStickX: 32767, rightStickY: 32767))
+        }
+        let gamepad = ControllerMouseState()
+        for _ in 0..<1024 {
+            let moving = gamepad.isMoving(motion())
+            #expect(!moving)
+        }
+        #expect(calls == 0)
+        let mouse = ControllerMouseState(isMouse: true)
+        let moving = mouse.isMoving(motion())
+        #expect(moving)
+        #expect(calls == 1)
+        #expect(!mouse.isMoving((.zero, .zero)))
+    }
+
+    @Test func nativeMenuHoldKeepsMouseModeAndExplicitSwitchRejectsStaleControllers() throws {
+        let rig = rig()
+        defer { rig.input.stop() }
+        rig.input.setControllerMenuOpensControls(true)
+        let controller = try #require(rig.input.registerController(descriptor))
+        toggle(rig.input, controller)
+        #expect(rig.events.withLock { $0.contains(.controlsRequested(controller)) })
+        #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[controller.slot]?.isMouse } == false)
+        rig.input.setControllerMouseMode(true, for: controller)
+        #expect(rig.events.withLock { $0.last } == .mouseMode(controller, enabled: true))
+        toggle(rig.input, controller)
+        #expect(rig.events.withLock { $0.last } == .controlsRequested(controller))
+        #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[controller.slot]?.isMouse } == true)
+        rig.input.setControllerMouseMode(false, for: controller)
+        #expect(rig.events.withLock { $0.last } == .mouseMode(controller, enabled: false))
+        rig.input.unregisterController(controller)
+        let replacement = try #require(rig.input.registerController(descriptor))
+        rig.input.setControllerMouseMode(true, for: controller)
+        #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[replacement.slot]?.isMouse } != true)
+    }
+
     @Test(arguments: [ControllerMouseMapping.leftStick, .rightStick])
     func selectedHandMovesPointerAndOppositeHandScrolls(mapping: ControllerMouseMapping) throws {
         let rig = rig()
@@ -83,8 +124,7 @@ struct StreamInputMouseModeTests {
         submit(rig.input, registration, sample(127 / 255, shoulder: true))
         #expect(rig.backend.pointer == [.button(action: 7, button: 1), .button(action: 8, button: 1),
                                         .button(action: 7, button: 3)])
-        submit(rig.input, registration, .init(buttons: [.a, .b],
-            leftTrigger: mapping == .rightStick ? 1 : 0, rightTrigger: mapping == .leftStick ? 1 : 0))
+        submit(rig.input, registration, .init(buttons: [.a, .b]))
         #expect(rig.backend.pointer.last == .button(action: 8, button: 3))
         #expect(rig.backend.pointer.count == 4)
     }
@@ -98,15 +138,15 @@ struct StreamInputMouseModeTests {
         let held = ControllerInputSample(buttons: [.leftShoulder, .rightShoulder], leftTrigger: 1,
                                          rightTrigger: 1, leftStickX: 1, rightStickX: 1)
         submit(rig.input, registration, held)
-        #expect(rig.backend.pointer == [.button(action: 7, button: 1), .button(action: 7, button: 3)])
+        #expect(rig.backend.pointer == [1, 3, 4, 5].map { .button(action: 7, button: $0) })
         rig.input.setControllerMouseMapping(.leftStick)
-        #expect(rig.backend.pointer.suffix(2) == [.button(action: 8, button: 1), .button(action: 8, button: 3)])
+        #expect(rig.backend.pointer.suffix(4) == [1, 3, 4, 5].map { .button(action: 8, button: $0) })
         submit(rig.input, registration, held)
         rig.input.core.pollControllerMouse()
-        #expect(rig.backend.pointer.count == 4 && rig.backend.mouseMoves.isEmpty)
+        #expect(rig.backend.pointer.count == 8 && rig.backend.mouseMoves.isEmpty)
         submit(rig.input, registration, .init(rightTrigger: 1, rightStickX: 1))
         submit(rig.input, registration, held)
-        #expect(rig.backend.pointer.suffix(2) == [.button(action: 7, button: 1), .button(action: 7, button: 3)])
+        #expect(rig.backend.pointer.suffix(3) == [1, 3, 5].map { .button(action: 7, button: $0) })
         #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[registration.slot]?.analog.rightStickX } == 0)
     }
 

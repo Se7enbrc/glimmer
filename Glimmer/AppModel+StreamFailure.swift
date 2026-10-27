@@ -62,8 +62,6 @@ extension AppModel {
         for error: Error, hostName: String
     ) -> (message: String, kind: StreamErrorKind) {
         let unreachable = (message: unreachableMessage(hostName), kind: StreamErrorKind.unreachable)
-        // The control layer always throws StreamError; anything else is most likely a reach failure.
-        guard error is StreamError else { return unreachable }
         switch StreamFailure.connection(error) {
         case .unreachable:
             return unreachable
@@ -94,6 +92,8 @@ extension AppModel {
             return ("Couldn't start the video decoder for \(hostName). Try another codec from the PC's ⋯ menu.", .other)
         case .audioFailed:
             return ("Couldn't start audio for \(hostName). Check this Mac's sound output, then try again.", .other)
+        case .identityNeedsRestore:
+            return (StreamFailureCopy.identityNeedsRestore(hostName), .other)
         case .security:
             return ("A security error stopped the connection to \(hostName). "
                 + "Try again, and pair again if it keeps happening.", .other)

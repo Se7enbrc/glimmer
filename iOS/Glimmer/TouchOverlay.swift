@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import SwiftUI
 
 struct TouchOverlay: View {
     let model: StreamSessionModel
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
     var body: some View {
         GeometryReader { geometry in
@@ -18,17 +20,19 @@ struct TouchOverlay: View {
             if model.editingTouchControls {
                 TouchLayoutEditor(launch: model.launch, area: area) { model.editingTouchControls = false }
             } else if model.touchControlsVisible {
-                let layout = TouchLayoutStore(defaults: .standard).load(
+                let layout = TouchLayoutStore(defaults: PersistentStorage.defaults).load(
                     pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
                 TouchPlayControls(capture: model.touchGamepad, layout: layout, area: area,
                                   mouseMode: model.touchMouseActive,
-                                  leftStick: model.launch.mouseStick == .left, showControls: model.showControls)
+                                  showControls: model.showControls)
             } else if model.inputFocused {
-                let layout = TouchLayoutStore(defaults: .standard).load(
+                let layout = TouchLayoutStore(defaults: PersistentStorage.defaults).load(
                     pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
-                TouchControlsButton(area: area, opacity: layout.opacity, showControls: model.showControls)
+                TouchControlsButton(area: area, opacity: layout.opacity, visible: model.menuVisibility.visible,
+                                    showControls: model.showControls)
             }
         }
+        .onChange(of: voiceOver, initial: true) { _, enabled in model.menuVisibility.voiceOverChanged(enabled) }
     }
 
     static func area(_ geometry: GeometryProxy) -> CGRect {
@@ -50,14 +54,14 @@ struct TouchPlayControls: View {
     let layout: TouchLayout
     let area: CGRect
     var mouseMode = false
-    var leftStick = false
     var preview = false
     let showControls: () -> Void
 
     var body: some View {
         ZStack {
             TouchGamepadRepresentation(capture: capture, layout: layout, area: area,
-                                       mouseMode: mouseMode, leftStick: leftStick, preview: preview,
+                                       mouseMode: mouseMode,
+                                       preview: preview,
                                        showControls: showControls)
             if TouchLayout().frames(in: area).isEmpty {
                 Text("Make this window larger to use touch controls.")
@@ -71,16 +75,23 @@ struct TouchPlayControls: View {
 private struct TouchControlsButton: View {
     let area: CGRect
     var opacity = TouchLayout.defaultOpacity
+    let visible: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let showControls: () -> Void
 
     var body: some View {
         GeometryReader { geometry in
-            let frame = TouchLayout.menuFrame(in: area)
-            Button("Show controls", systemImage: "ellipsis", action: showControls)
-                .labelStyle(.iconOnly).buttonStyle(TouchMenuStyle(opacity: opacity))
-                .position(x: min(frame.midX, geometry.size.width - 22),
-                          y: min(frame.midY, geometry.size.height - 22))
+            if visible {
+                let frame = TouchLayout.menuFrame(in: area)
+                Button("Show controls", systemImage: "ellipsis", action: showControls)
+                    .labelStyle(.iconOnly).buttonStyle(TouchMenuStyle(opacity: opacity))
+                    .position(x: min(frame.midX, geometry.size.width - 22),
+                              y: min(frame.midY, geometry.size.height - 22))
+                    .transition(.opacity)
+            }
         }
+        .allowsHitTesting(visible).accessibilityHidden(!visible)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: visible)
     }
 }
 
@@ -118,7 +129,6 @@ struct TouchGamepadRepresentation: UIViewRepresentable {
     let layout: TouchLayout
     let area: CGRect
     var mouseMode = false
-    var leftStick = false
     var preview = false
 
     var showControls: () -> Void = {}
@@ -128,6 +138,6 @@ struct TouchGamepadRepresentation: UIViewRepresentable {
     func updateUIView(_ view: TouchGamepadView, context: Context) {
         view.menuButton.showControls = showControls
         view.configure(capture: capture, layout: layout, area: area, preview: preview)
-        view.mouseMode(mouseMode, leftStick: leftStick)
+        view.mouseMode(mouseMode, bindings: ControllerLayoutsModel.shared.mouse)
     }
 }

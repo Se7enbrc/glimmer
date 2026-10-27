@@ -78,7 +78,7 @@ extension AudioDecoder {
     /// clamp to `cushionReleaseSkewPpm` keeps a seed inside the converged
     /// envelope (stored values already are; this guards edited plists), so a
     /// seeded session never starts in the "railing" shallow-release lockout.
-    static func loadResamplerSkewSeed(key: String, defaults: UserDefaults = .standard) -> Double {
+    static func loadResamplerSkewSeed(key: String, defaults: UserDefaults = PersistentStorage.defaults) -> Double {
         guard !key.isEmpty,
               let dict = defaults.dictionary(forKey: key),
               let ppm = dict["ppm"] as? Double, ppm.isFinite,
@@ -91,7 +91,7 @@ extension AudioDecoder {
 
     /// Persist a converged skew under its host+device key. Callers gate on the
     /// converged envelope + the save window (driveResampler).
-    static func persistResamplerSkew(key: String, ppm: Double, defaults: UserDefaults = .standard) {
+    static func persistResamplerSkew(key: String, ppm: Double, defaults: UserDefaults = PersistentStorage.defaults) {
         guard !key.isEmpty, ppm.isFinite else { return }
         defaults.set(
             ["ppm": ppm, "saved_at": Date().timeIntervalSinceReferenceDate],

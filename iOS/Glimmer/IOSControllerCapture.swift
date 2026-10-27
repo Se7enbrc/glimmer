@@ -23,6 +23,7 @@ final class IOSControllerCapture {
         let feedback: IOSControllerFeedback
         let motion: IOSControllerMotion
         let priorQueue: DispatchQueue
+        let priorInputQueue: DispatchQueue?
         let priorHandler: GCExtendedGamepadValueChangedHandler?
         let gestures: [(GCControllerButtonInput, GCControllerElement.SystemGestureState)]
     }
@@ -55,7 +56,7 @@ final class IOSControllerCapture {
                               feedback: { input.attachFeedback($1, to: $0) },
                               motion: { input.attachMotion($1, to: $0) },
                               battery: { input.attachBattery($1, to: $0) }))
-        layouts = IOSControllerLayouts(input: input, scope: scope, queue: captureQueue)
+        layouts = IOSControllerLayouts(input: input, scope: scope)
     }
 
     init(calls: Calls, center: NotificationCenter = .default,
@@ -96,6 +97,7 @@ final class IOSControllerCapture {
         guard !stopped else { return }
         let resume = focused
         if resume { setFocused(false) }
+        layouts?.refreshMouseBindings()
         for entry in attached.values { layouts?.configure(entry.controller, registration: entry.registration) }
         if resume { setFocused(true) }
     }
@@ -171,16 +173,13 @@ final class IOSControllerCapture {
         if calls.motion != nil { descriptor.capabilities.formUnion(motion.capabilities) }
         if calls.battery != nil, let battery { descriptor.capabilities.formUnion(battery.capabilities) }
         guard let registration = calls.register(descriptor) else { return }
-        #if GLIMMER_DIAGNOSTICS
-        recordCapabilities(pad: pad, descriptor: descriptor)
-        #endif
         calls.feedback?(registration, feedback)
         calls.motion?(registration, motion)
         if let battery { calls.battery?(registration, battery) }
         let buttons = [pad.buttonOptions, pad.buttonMenu, pad.buttonHome].compactMap { $0 }
         let entry = Attached(controller: controller, registration: registration,
                              feedback: nativeFeedback, motion: nativeMotion, priorQueue: controller.handlerQueue,
-                             priorHandler: pad.valueChangedHandler,
+                             priorInputQueue: controller.input.unmapped?.queue, priorHandler: pad.valueChangedHandler,
                              gestures: buttons.map { ($0, $0.preferredSystemGestureState) })
         attached[ObjectIdentifier(controller)] = entry
         layouts?.configure(controller, registration: registration)
@@ -191,35 +190,27 @@ final class IOSControllerCapture {
         }
     }
 
-    #if GLIMMER_DIAGNOSTICS
-    private func recordCapabilities(pad: GCExtendedGamepad, descriptor: ControllerDescriptor) {
-        guard DiagnosticsAvailability.isEnabled() else { return }
-        let values: [String: Any] = [
-            "kind": String(describing: descriptor.kind),
-            "face_symbols": [pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY].map {
-                $0.unmappedSfSymbolsName ?? "unknown"
-            },
-            "rumble": descriptor.capabilities.contains(.rumble),
-            "touchpad": descriptor.capabilities.contains(.touchpad)
-        ]
-        guard let data = try? JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]) else { return }
-        let directory = URL.applicationSupportDirectory.appendingPathComponent("Diagnostics", isDirectory: true)
-        DispatchQueue.global(qos: .utility).async {
-            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try? data.write(to: directory.appendingPathComponent("controller-capabilities.json"), options: .atomic)
-        }
-    }
-
-    #endif
-
     private func install(_ entry: Attached) {
-        if layouts?.install(entry.controller) == true { return }
+        for (button, _) in entry.gestures { button.preferredSystemGestureState = .disabled }
         let registration = entry.registration
         let epoch = UUID()
         let submit = calls.submit
         delivery.registrations.withLock { $0[registration] = epoch }
+        if let layout = layouts?.entry(entry.controller) {
+            let reader = layout.reader
+            let mapsGameInput = layout.mapsGameInput
+            ControllerStreamHandlers.install(controller: entry.controller, input: reader.input, queue: captureQueue,
+                mapsGameInput: mapsGameInput, shortcutElements: layout.shortcutElements,
+                read: reader.sample) { @Sendable [delivery] sample, now in
+                    delivery.registrations.withLock { registrations in
+                        guard registrations[registration] == epoch else { return }
+                        submit(registration, reader.streamSample(sample, mapsGameInput: mapsGameInput), now)
+                    }
+                }
+            return
+        }
+        entry.controller.extendedGamepad?.valueChangedHandler = nil
         entry.controller.handlerQueue = captureQueue
-        for (button, _) in entry.gestures { button.preferredSystemGestureState = .disabled }
         entry.controller.extendedGamepad?.valueChangedHandler = { @Sendable [delivery] pad, _ in
             // Hold validity through submission so focus loss and detach finish after any in-flight sample.
             delivery.registrations.withLock { registrations in
@@ -230,10 +221,12 @@ final class IOSControllerCapture {
     }
 
     private func restore(_ entry: Attached) {
-        layouts?.suspend(entry.controller)
         _ = delivery.registrations.withLock { $0.removeValue(forKey: entry.registration) }
-        entry.controller.extendedGamepad?.valueChangedHandler = entry.priorHandler
+        entry.controller.extendedGamepad?.valueChangedHandler = nil
+        entry.controller.input.unmapped?.elementValueDidChangeHandler = nil
+        entry.controller.input.unmapped?.queue = entry.priorInputQueue
         entry.controller.handlerQueue = entry.priorQueue
+        entry.controller.extendedGamepad?.valueChangedHandler = entry.priorHandler
         for (button, state) in entry.gestures { button.preferredSystemGestureState = state }
     }
 

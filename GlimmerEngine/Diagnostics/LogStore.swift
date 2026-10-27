@@ -34,7 +34,7 @@ package enum LogLevel: Int, Comparable, Sendable, CaseIterable {
     }
 }
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 /// One entry in the troubleshooting log.
 package struct LogEntry: Identifiable, Sendable {
 
@@ -99,7 +99,7 @@ package final class LogStore: Sendable {
 
     package init(
         capacity: Int = 2000, pinnedCapacity: Int = 200,
-        captureDebug: Bool = UserDefaults.standard.bool(forKey: "diagFileLogDebug")
+        captureDebug: Bool = PersistentStorage.defaults.bool(forKey: "diagFileLogDebug")
     ) {
         self.capacity = capacity
         self.pinnedCapacity = pinnedCapacity
@@ -142,7 +142,7 @@ package final class LogStore: Sendable {
 
     /// A stream is starting: pin its opening lines in place of the last session's, and
     /// resolve verbose capture once, the way the session file does.
-    package func beginSession(captureDebug debug: Bool = UserDefaults.standard.bool(forKey: "diagFileLogDebug")) {
+    package func beginSession(captureDebug debug: Bool = PersistentStorage.defaults.bool(forKey: "diagFileLogDebug")) {
         captureDebug.store(debug, ordering: .relaxed)
         state.withLock { $0.pinned.removeAll(keepingCapacity: true) }
     }
@@ -177,7 +177,7 @@ package enum Diag {
         _ message: DiagMessage,
         _ category: String
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         LogStore.shared.log(.debug, message, category: category)
         #else
         Logger(subsystem: "io.ugfugl.Glimmer", category: category).debug("\(message.systemLogText, privacy: .public)")
@@ -187,7 +187,7 @@ package enum Diag {
         _ message: DiagMessage,
         _ category: String
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         LogStore.shared.log(.info, message, category: category)
         #else
         Logger(subsystem: "io.ugfugl.Glimmer", category: category).info("\(message.systemLogText, privacy: .public)")
@@ -197,7 +197,7 @@ package enum Diag {
         _ message: DiagMessage,
         _ category: String
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         LogStore.shared.log(.notice, message, category: category)
         #else
         Logger(subsystem: "io.ugfugl.Glimmer", category: category).notice("\(message.systemLogText, privacy: .public)")
@@ -207,7 +207,7 @@ package enum Diag {
         _ message: DiagMessage,
         _ category: String
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         LogStore.shared.log(.warning, message, category: category)
         #else
         Logger(subsystem: "io.ugfugl.Glimmer", category: category).warning("\(message.systemLogText, privacy: .public)")
@@ -217,7 +217,7 @@ package enum Diag {
         _ message: DiagMessage,
         _ category: String
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         LogStore.shared.log(.error, message, category: category)
         #else
         Logger(subsystem: "io.ugfugl.Glimmer", category: category).error("\(message.systemLogText, privacy: .public)")
@@ -295,7 +295,7 @@ package struct DiagMessage: ExpressibleByStringInterpolation, Sendable {
     }
 }
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 // MARK: - Per-session file sink (gate-checked, buffered, off the hot path)
 
 /// While a telemetry session runs, mirrors Diag's redacted text (INFO+, DEBUG with
@@ -370,7 +370,7 @@ package final class SessionLogFileSink: @unchecked Sendable {
         bufferLock.initialize(to: os_unfair_lock_s())
         // Resolved once per sink (== per session): debug opt-in for deep-dive
         // sessions, INFO+ otherwise. Same defaults domain as `telemetryEnabled`.
-        minimumLevel = UserDefaults.standard.bool(forKey: "diagFileLogDebug") ? .debug : .info
+        minimumLevel = PersistentStorage.defaults.bool(forKey: "diagFileLogDebug") ? .debug : .info
     }
     deinit { bufferLock.deallocate() }
 

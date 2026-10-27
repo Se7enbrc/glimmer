@@ -1,21 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
-//
-//  TelemetryExporter+RenderNDJSON.swift
-//
-//  The NDJSON half of the telemetry renderer (the Prometheus half + the shared
-//  histogram-quantile estimator live in TelemetryExporter+Render.swift), plus the
-//  process-level CPU/thread sampler. Split out to keep each unit focused and under
-//  the file-length budget; see TelemetryExporter.swift for the exporter, gate,
-//  counters, and the snapshot type.
-//
-//  Hand-built (no Codable) so the field order is stable + readable in a tail and
-//  nil fields are simply omitted. Every value is a number, a bool, the opaque
-//  session id, or a label (wifi ssid/band, build SHA/date) - nothing that could
-//  be a secret.
-//
+#if os(macOS)
+// NDJSON rendering shares pseudonyms and histogram interpolation with the session report.
 
 import Foundation
 import Darwin
@@ -64,7 +51,7 @@ extension TelemetryRenderer {
         var builder = NDJSONBuilder()
         builder.fields.append("\"ts\":\"\(snap.wallClockISO8601)\"")
         builder.fields.append("\"session\":\"\(snap.sessionId)\"")
-        // Which Mac streamed from which PC, as the same pseudonyms Prometheus labels carry.
+        // Per-install pseudonyms identify the PC and Mac without naming them.
         builder.addString("client", snap.clientLabel)
         builder.addString("host", snap.serverName)
         // Build attribution (signal 5a) as an NDJSON header field on every line,
@@ -405,16 +392,16 @@ extension TelemetryRenderer {
             builder.addInt("memory_probe_kr", resource.memoryProbeResult)
             builder.add("resource_sample_t_ms", resource.sampleUptimeMs)
             builder.add("resource_sample_duration_ms", resource.sampleDurationMs)
-            builder.addBool("on_battery", resource.onBattery)
             builder.addBool("battery_charging", resource.batteryCharging)
         }
+        builder.addBool("on_battery", snap.resource?.onBattery ?? snap.onBattery)
         if let cluster = snap.clusterResidency {
             builder.add("soc_ecluster_active", cluster.eClusterActive)
             builder.add("soc_pcluster_active", cluster.pClusterActive)
             builder.addInt("soc_ecluster_channels", cluster.eClusterCount)
             builder.addInt("soc_pcluster_channels", cluster.pClusterCount)
-            // Reuse the same once-per-tick delta as Prometheus; resampling would corrupt the baseline.
-            // Missing gauges are omitted, never reported as zero. GPU residency is time awake, not cost.
+            // Reuse the once-per-tick delta; resampling would corrupt the baseline.
+            // Missing gauges stay absent. GPU residency measures time awake, not cost.
             builder.add("package_power_w", cluster.packagePowerW)
             builder.add("gpu_residency_percent", cluster.gpuResidencyPercent)
             builder.add("gpu_power_w", cluster.gpuPowerW)
@@ -434,12 +421,8 @@ extension TelemetryRenderer {
 
     // The LINK section (`ndjsonLink`) lives in TelemetryExporter+RenderNDJSONLink.swift.
 
-    /// Per-stage latency NDJSON fields: p50/p95/p99 derived from the histogram
-    /// buckets for a quick tail (the Prometheus side ships raw _bucket/_sum/_count
-    /// so Grafana can compute its own quantiles over any window). Includes the
-    /// headline glass-to-glass (signal 1) + the input-to-photon estimate (signal
-    /// 2). Returns the rendered `"key":value` fields (empty when no histogram
-    /// data this tick).
+    /// Per-stage p50/p95/p99 values interpolate the matching histogram buckets.
+    /// Stages without observations are omitted.
     package static func ndjsonLatencyFields(_ snap: TelemetrySnapshot) -> [String] {
         guard let histograms = snap.latencyHistograms else { return [] }
         var fields: [String] = []
@@ -471,23 +454,8 @@ extension TelemetryRenderer {
         return fields
     }
 
-    /// ROLLING 60s latency NDJSON fields: the same p50/p95/p99 derivation as
-    /// `ndjsonLatencyFields`, but over the 60s windowed difference the exporter
-    /// folds per tick - so the offline forensics can tell "is bad" from "was
-    /// bad" without Grafana's `rate()` windows. Cumulative fields stay; only
-    /// the five `lat_*` pipeline stages and the headline glass-to-glass get the
-    /// `_60s` variant to bound row bloat. A stage with zero observations in the
-    /// window emits nothing (absent, not a stale number - a suppressed/gated
-    /// minute stays honest). Empty when the rig has no data this tick.
-    ///
-    /// READ SEMANTICS: (1) after presents stop,
-    /// the windowed values hold near their last numbers for up to ~60s (the
-    /// window still covers an AGING population) before the keys go absent -
-    /// `frames_in_window_60s` makes that staleness machine-detectable: a
-    /// shrinking count means the percentiles describe ever-older frames; (2)
-    /// presented-frame percentiles are SURVIVOR-BIASED - dropped frames never
-    /// enter the histograms, so a stall barely moves them. Alert on tick
-    /// deficit / late-drop deltas, never on percentile flatness.
+    /// Rolling 60-second percentiles distinguish recent stalls from old ones.
+    /// Only pipeline and glass-to-glass stages carry these fields; empty windows are omitted.
     package static func ndjsonRollingLatencyFields(_ extras: TelemetrySnapshot.Extras) -> [String] {
         guard let rolling = extras.latencyRolling60s else { return [] }
         var fields: [String] = []
@@ -537,8 +505,7 @@ extension TelemetryRenderer {
         return out
     }
 
-    /// JSON number with the same integer/decimal discipline as the Prometheus
-    /// formatter - avoids exponent notation that some NDJSON readers choke on.
+    /// Avoid exponent notation for ordinary values so offline NDJSON readers agree.
     package static func jsonNumber(_ value: Double) -> String {
         if value == value.rounded() && abs(value) < 1e15 {
             return String(Int64(value))

@@ -85,7 +85,7 @@ extension FramePacer {
             recordDiscardedFrame(droppedStale, reason: .overflow)
             // Overflow leaves the decode reference chain intact, so no keyframe is needed.
             stats.recordPresentationLateDrop()
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             OSSignposter.render.emitEvent(
                 "PacerOverflowDrop",
                 "depth=\(FramePacer.maxQueuedFrames, privacy: .public)")
@@ -272,7 +272,7 @@ extension FramePacer {
 
     /// Record the actual discard after unlocking; expiry is reserved for unresolved frames.
     func recordDiscardedFrame(_ sampleBuffer: CMSampleBuffer, reason: FrameInstrumentation.PacerDiscardReason) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         assertLockNotHeld()
         guard let tracker = FrameInstrumentation.shared else { return }
         let rtp = VideoDecoder.rtpTimestamp(from: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))

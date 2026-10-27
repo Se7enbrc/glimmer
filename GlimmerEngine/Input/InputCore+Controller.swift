@@ -14,7 +14,7 @@ extension InputCore {
         guard let samples = InputTimingContext.take()?.samples() else { return }
         let remaining = max(0, 4096 - (mouseTimings[slot]?.count ?? 0))
         mouseTimings[slot, default: []].append(contentsOf: samples.prefix(remaining))
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if samples.count > remaining { FrameTimingTracker.shared?.inputTimingDropped.increment() }
         #endif
     }
@@ -53,7 +53,7 @@ extension InputCore {
             guard let sample = controllers[id], sample.token == token,
                   snapshot.ready, snapshot.focused, capturedAt >= snapshot.acceptEventsAfter,
                   capturedAt >= sample.registeredAt else { return }
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             InputDeliverStamp.shared.stamp(slot: Int(sample.slot), nanos: DispatchTime.now().uptimeNanoseconds)
             defer { _ = InputDeliverStamp.shared.take(slot: Int(sample.slot)) }
             #endif
@@ -80,14 +80,9 @@ extension InputCore {
                 | StreamProtocol.SPECIAL_FLAG | StreamProtocol.MISC_FLAG
             let merged = (sample.buttons & ~centerMask) | (buttons & centerMask)
             let chord = merged | (shoulders & (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG))
-            var physical = layouts?.states[Int(sample.slot)]?.last
-            if let physicalButtons = physical?.buttons {
-                physical?.buttons = (physicalButtons & ~UInt32(bitPattern: centerMask))
-                    | UInt32(bitPattern: buttons & centerMask)
-                    | UInt32(bitPattern: shoulders & (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG))
-            }
             receive(slot: sample.slot, buttons: merged, analog: sample.analog,
-                    chordButtons: chord, capturedAt: capturedAt, extras: sample.extras, physicalSample: physical)
+                    chordButtons: chord, capturedAt: capturedAt, extras: sample.extras,
+                    rawSupplement: (buttons, shoulders))
             retainMouseTiming(slot: sample.slot)
             if !chordSlots.contains(sample.slot), controllerMouseStates[sample.slot]?.isMouse != true,
                buttons & (StreamProtocol.PLAY_FLAG | StreamProtocol.BACK_FLAG) != 0 {

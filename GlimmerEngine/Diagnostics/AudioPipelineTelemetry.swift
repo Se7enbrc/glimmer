@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 
 import Foundation
 import os
@@ -164,7 +164,7 @@ package final class AudioPipelineTelemetry: Sendable {
 
 #endif
 
-#if !os(macOS) && !GLIMMER_DIAGNOSTICS
+#if !os(macOS)
 package enum AudioPipelineInstrumentation: Sendable {
     package static var shared: AudioPipelineInstrumentation? { nil }
 }

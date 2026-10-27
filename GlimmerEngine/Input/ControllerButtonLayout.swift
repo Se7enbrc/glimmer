@@ -6,7 +6,7 @@ import Foundation
 package enum ControllerButtonLayout {
     package static let defaultsKey = "nintendoButtonLayout"
 
-    package static func usesLabels(in defaults: UserDefaults = .standard) -> Bool { defaults.bool(forKey: defaultsKey) }
+    package static func usesLabels(in defaults: UserDefaults = PersistentStorage.defaults) -> Bool { defaults.bool(forKey: defaultsKey) }
 
     // GameController and SDL's macOS DB both expose position; swap only the outgoing PC buttons.
     package static func apply(_ buttons: Int32, useNintendoLabels: Bool) -> Int32 {

@@ -97,7 +97,7 @@ extension StreamSession {
             colorRange: config.colorRange.cValue,
             encryptionFlags: 0,
             remoteInputAesKey: [UInt8](launch.gcmKey),
-            remoteInputAesIv: [UInt8](launch.gcmKeyId))
+            remoteInputAesIv: [UInt8](launch.gcmKeyId), collectBandwidthSamples: adaptiveBandwidth)
     }
 
     /// Attach the media sinks and start this transport attempt. Failure cleanup follows
@@ -125,7 +125,7 @@ extension StreamSession {
         // success, or in `stop()` on failure. The interval ID was created up
         // front so the close side can address it even if the actor's strong-ref
         // to the state has been cleared.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         connectFlowState = OSSignposter.network.beginInterval(
             "ConnectFlow",
             id: connectFlowSignpostID,

@@ -54,10 +54,17 @@ extension AppModel {
     /// Ends the stream at once; the row reads "Stopping…" until cleanup lands.
     @discardableResult
     func stopStreamFromMenu(source: String = "the menu bar") -> Task<Void, Never>? {
-        guard let session = nativeSession, !menuStopInProgress else { return nil }
+        cancelPendingCommandStream()
+        guard !menuStopInProgress, nativeSession != nil || nativeStreamTask != nil else { return nil }
+        let session = nativeSession
+        let ending = nativeStreamTask
         menuStopInProgress = true
+        ending?.cancel()
         Diag.notice("Stop Streaming from \(source)", "Stream")
-        return Task { await session.stop() }
+        return Task {
+            await session?.stop()
+            if session == nil { await ending?.value }
+        }
     }
 
     func toggleStatsOverlayFromMenu() {

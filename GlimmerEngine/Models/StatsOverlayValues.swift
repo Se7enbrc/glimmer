@@ -159,7 +159,7 @@ public enum StatsOverlayCorner: String, CaseIterable, Sendable {
     // rawValues are the case names, so adding cases mid-list is persistence-safe.
     case topLeft, topCenter, topRight, bottomLeft, bottomCenter, bottomRight
 
-    public static func persisted(defaults: UserDefaults = .standard) -> Self {
+    public static func persisted(defaults: UserDefaults = PersistentStorage.defaults) -> Self {
         defaults.string(forKey: "streamStatsCorner").flatMap(Self.init(rawValue:)) ?? .topLeft
     }
 

@@ -3,8 +3,9 @@
 
 import GameController
 import GlimmerEngine
+import Synchronization
 
-// References are immutable; GameController synchronizes live values and the lease serializes callback ownership.
+// References are immutable; GameController synchronizes live values and stream callbacks use one serial queue.
 final class ControllerLayoutReader: @unchecked Sendable {
     let input: GCControllerLiveInput
     let identity: ControllerLayoutIdentity
@@ -100,6 +101,33 @@ final class ControllerLayoutReader: @unchecked Sendable {
             extraButtons: sample.extras, physicalSample: physical)
     }
 
+    func shortcutElements(_ configuration: ControllerLayoutConfiguration) -> Set<ObjectIdentifier> {
+        Set(Self.shortcutNames(configuration, extras: extras).compactMap { name in
+            if let button = input.buttons[name] { return ObjectIdentifier(button) }
+            if let dpad = input.dpads[name] { return ObjectIdentifier(dpad) }
+            return nil
+        })
+    }
+
+    static func shortcutNames(_ configuration: ControllerLayoutConfiguration, extras: [String]) -> Set<String> {
+        let mouse = configuration.mouse?.observed ?? .empty
+        let buttons = configuration.stop.buttons | configuration.stats.buttons | mouse.buttons
+        let triggers = configuration.stop.triggers | configuration.stats.triggers | mouse.triggers
+        let extraMask = configuration.stop.extras | configuration.stats.extras | mouse.extras
+        var names = Set(standardButtons.filter { buttons & $0.1.rawValue != 0 }.map(\.0))
+        for (index, name) in [GCInputLeftTrigger, GCInputRightTrigger].enumerated() where triggers & (1 << index) != 0 {
+            names.insert(name)
+        }
+        for (index, name) in extras.enumerated() where extraMask[index / 64] & (1 << (index % 64)) != 0 {
+            names.insert(name)
+        }
+        let directions: UInt32 = ControllerMappedButton.up.rawValue | ControllerMappedButton.down.rawValue
+            | ControllerMappedButton.left.rawValue | ControllerMappedButton.right.rawValue
+        if buttons & directions != 0 { names.insert(GCInputDirectionPad) }
+        // System-profile callbacks already sample physical sticks; custom layouts observe every physical element.
+        return names
+    }
+
     private struct Discovery {
         var buttons: [(any GCPressedStateInput, UInt32)] = []
         var extraButtons: [any GCPressedStateInput] = []
@@ -183,4 +211,35 @@ final class ControllerLayoutReader: @unchecked Sendable {
         (GCInputXboxPaddleOne, .paddle1), (GCInputXboxPaddleTwo, .paddle2),
         (GCInputXboxPaddleThree, .paddle3), (GCInputXboxPaddleFour, .paddle4)
     ]
+}
+
+// Installs the stream's callbacks directly; registration validity belongs to the owning forwarder.
+@MainActor
+enum ControllerStreamHandlers {
+    static func install(controller: GCController, input: GCControllerLiveInput, queue: DispatchQueue,
+                        mapsGameInput: Bool, shortcutElements: Set<ObjectIdentifier>,
+                        read: @escaping @Sendable () -> ControllerMappingSample,
+                        receive: @escaping @Sendable (ControllerMappingSample, TimeInterval) -> Void) {
+        controller.extendedGamepad?.valueChangedHandler = nil
+        input.elementValueDidChangeHandler = nil
+        controller.handlerQueue = queue
+        input.queue = queue
+        let timestamp = Mutex<TimeInterval>(0)
+        let deliver: @Sendable (TimeInterval) -> Void = { value in
+            let now = timestamp.withLock { last in
+                last = max(last, value)
+                return last
+            }
+            receive(read(), now)
+        }
+        if mapsGameInput || !shortcutElements.isEmpty {
+            input.elementValueDidChangeHandler = { @Sendable input, element in
+                guard mapsGameInput || shortcutElements.contains(ObjectIdentifier(element)) else { return }
+                deliver(ProcessInfo.processInfo.systemUptime - max(0, input.lastEventLatency))
+            }
+        }
+        if !mapsGameInput {
+            controller.extendedGamepad?.valueChangedHandler = { @Sendable pad, _ in deliver(pad.lastEventTimestamp) }
+        }
+    }
 }

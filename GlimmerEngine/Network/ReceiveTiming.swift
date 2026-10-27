@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 import Darwin
 import Foundation
 import os
@@ -35,12 +35,14 @@ struct ReceiveTiming {
     }
 
     let telemetry: ReceiveTimingTelemetry
+    let collectPolicy: Bool
     private var previousRead: UInt64?
     private var previousArrival: UInt64?
     private var lastNotice: UInt64?
     private var suppressedNotices: UInt64 = 0
 
-    init(telemetry: ReceiveTimingTelemetry) {
+    init(telemetry: ReceiveTimingTelemetry, collectPolicy: Bool = false) {
+        self.collectPolicy = collectPolicy
         self.telemetry = telemetry
     }
 
@@ -55,7 +57,7 @@ struct ReceiveTiming {
         let readGap = previousRead.flatMap { read >= $0 ? Double(read - $0) * scale : nil }
         previousRead = read
         previousArrival = valid
-        telemetry.observe(delayMs: delay, gapMs: gap)
+        telemetry.observe(delayMs: delay, gapMs: gap, collectPolicy: collectPolicy)
         guard let readGap, readGap > 50 else { return nil }
         guard lastNotice.map({ read >= $0 && Double(read - $0) * scale >= 5_000 }) ?? true else {
             suppressedNotices &+= 1
@@ -115,9 +117,20 @@ struct ReceiveTiming {
 #else
 struct ReceiveTiming {
     enum Source { case video, audio }
-    init(telemetry: Source) {}
+    private let source: Source
+    private let collectPolicy: Bool
+    init(telemetry: Source, collectPolicy: Bool = false) {
+        source = telemetry
+        self.collectPolicy = collectPolicy
+    }
     @inline(__always)
     mutating func note(_ batch: DatagramBatch, index: Int, count: Int,
-                       socket: Int32, stream: String) {}
+                       socket: Int32, stream: String) {
+        #if GLIMMER_DIAGNOSTICS
+        guard collectPolicy, source == .video, let arrival = batch.arrivalTicks(at: index), arrival <= batch.readTicks else { return }
+        let delay = Double(batch.readTicks - arrival) * SocketTimestamp.millisecondsPerTick
+        ReceivePolicyMeasurements.video.observeDelay(delay)
+        #endif
+    }
 }
 #endif

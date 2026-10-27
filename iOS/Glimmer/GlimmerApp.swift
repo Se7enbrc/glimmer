@@ -13,16 +13,22 @@ struct GlimmerApp: App {
 
     init() {
         #if DEBUG
-        _launcher = State(initialValue: UITestLauncher.make() ?? .make())
+        let model = UITestLauncher.make() ?? LauncherModel.make()
         #else
-        _launcher = State(initialValue: .make())
+        let model = LauncherModel.make()
         #endif
-        DiagnosticsDefaults.register()
+        _launcher = State(initialValue: model)
+        LauncherModel.intentModel = model
+        StreamDefaults.register()
     }
 
     var body: some Scene {
         WindowGroup {
             LauncherView(model: launcher)
+                .onOpenURL { launcher.handleCommandURL($0) }
+                .onChange(of: launcher.savedPCs.map { PCEntity(id: $0.id, name: $0.name) }) { _, _ in
+                    GlimmerShortcuts.updateAppShortcutParameters()
+                }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             displayActivity.update(phase, streamActive: launcher.hasActiveStream)

@@ -261,7 +261,7 @@ extension EnvSignalController {
         stateChangesTotal.increment()
         Diag.notice("ENV \(previous.label) → \(next.label) (\(reason)) - gates keepalive "
             + "cadence + reconciler headroom", Self.cat)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         var fields = [
             "\"event\":\"env_state\"",
             "\"from\":\"\(previous.label)\"",

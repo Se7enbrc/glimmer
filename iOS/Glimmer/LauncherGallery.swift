@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import Combine
 import GameController
 import GlimmerEngine
 import SwiftUI
@@ -78,26 +79,30 @@ struct LauncherGallery: View {
         }
         .frame(width: width, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .handlesGameControllerEvents(matching: .gamepad, withOptions: .receivesEventsInView(true))
+        .handlesGameControllerEvents(matching: .gamepad, withOptions: .receivesEventsInView(!model.hasActiveStream))
         .onAppear {
             menuController.openMenu = {
                 if focusedAppID == model.runningApp?.id { requestedMenuAppID = focusedAppID }
             }
-            menuController.start()
+            menuController.update(active: scenePhase == .active, streaming: model.hasActiveStream)
         }
         .onDisappear { menuController.stop() }
         .onChange(of: model.hasActiveStream) { _, streaming in
-            if streaming { menuController.stop() } else if scenePhase == .active { menuController.start() }
+            menuController.update(active: scenePhase == .active, streaming: streaming)
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { menuController.start() } else { menuController.stop() }
+            menuController.update(active: phase == .active, streaming: model.hasActiveStream)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
-            if scenePhase == .active { menuController.start() }
+        .onReceive(controllerChanges) { _ in
+            menuController.update(active: scenePhase == .active, streaming: model.hasActiveStream)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in
-            if scenePhase == .active { menuController.start() }
-        }
+    }
+
+    private var controllerChanges: AnyPublisher<Notification, Never> {
+        guard scenePhase == .active, !model.hasActiveStream else { return Empty().eraseToAnyPublisher() }
+        let center = NotificationCenter.default
+        return Publishers.Merge(center.publisher(for: .GCControllerDidConnect),
+                                center.publisher(for: .GCControllerDidDisconnect)).eraseToAnyPublisher()
     }
 }
 
@@ -107,27 +112,35 @@ struct LauncherButton: View {
     let minimumHeight: CGFloat
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    @ScaledMetric(relativeTo: .caption2) private var badgeInset: CGFloat = 20
+
     var body: some View {
         Button { model.activateTile(app) } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
+            HStack(spacing: 12) {
+                if !dynamicTypeSize.isAccessibilitySize {
                     AppGlyph(name: app.name).font(.system(size: 20)).accessibilityHidden(true)
-                    Spacer(minLength: 8)
-                    RunningTileBadge().opacity(model.runningApp?.id == app.id ? 1 : 0)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(app.name).fontWeight(.semibold)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("Tap to resume").font(.footnote).opacity(model.runningApp?.id == app.id ? 0.85 : 0)
+                Text(app.name).fontWeight(.semibold)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "chevron.right").font(.caption).accessibilityHidden(true)
                 }
-                .multilineTextAlignment(.leading)
             }
             .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .leading)
             .padding(8)
+            .padding(.top, dynamicTypeSize.isAccessibilitySize ? badgeInset : 0)
         }
         .buttonStyle(.glassProminent)
-        .buttonBorderShape(.roundedRectangle)
+        .buttonBorderShape(.roundedRectangle(radius: RunningTileBadge.tileCornerRadius))
+        .overlay(alignment: .topTrailing) {
+            if model.runningApp?.id == app.id {
+                RunningTileBadge(compact: true).fixedSize()
+                    .padding(RunningTileBadge.cornerInset).allowsHitTesting(false)
+            }
+        }
         .disabled(model.busy)
     }
 }
@@ -153,9 +166,9 @@ struct LauncherCover: View {
                     }
                     .frame(height: height)
                     .clipped()
-                    .clipShape(.rect(cornerRadius: 14))
+                    .clipShape(.rect(cornerRadius: RunningTileBadge.tileCornerRadius))
                     .overlay(alignment: .topTrailing) {
-                        if model.runningApp?.id == app.id { RunningTileBadge().padding(8) }
+                        if model.runningApp?.id == app.id { RunningTileBadge().padding(RunningTileBadge.cornerInset) }
                     }
                 Text(app.name).font(.headline).foregroundStyle(.primary)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
@@ -188,7 +201,8 @@ struct RunningTilePresentation: ViewModifier {
         content
             .overlay {
                 if running {
-                    RoundedRectangle(cornerRadius: 14).strokeBorder(.primary.opacity(0.25), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: RunningTileBadge.tileCornerRadius)
+                        .strokeBorder(.primary.opacity(0.25), lineWidth: 1)
                         .padding(-3).allowsHitTesting(false)
                 }
             }

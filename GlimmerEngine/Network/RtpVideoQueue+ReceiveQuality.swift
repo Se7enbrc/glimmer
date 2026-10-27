@@ -22,7 +22,7 @@ extension RtpVideoQueue {
             return
         }
         if hasRecentSequence(seq) || seq == seqHighestSeen {
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             windowDuplicate += 1
             #endif
             return
@@ -34,7 +34,7 @@ extension RtpVideoQueue {
             if Self.isBefore32(frameIndex, firstFrame) || !Self.isBefore16(seq, seqHighestSeen) { return }
         }
         if !Self.isBefore16(seq, seqHighestSeen) {
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             let jump = Int(Self.u16(Int(seq) - Int(seqHighestSeen)))
             if jump > 1 {
                 windowLostPreFec += jump - 1
@@ -55,7 +55,7 @@ extension RtpVideoQueue {
             windowOutOfOrder += 1
             // A late filler can straddle a reporting boundary. Bound parked credits
             // so old reorders cannot suppress an arbitrarily large future loss.
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             if windowLostPreFec > 0 {
                 windowLostPreFec -= 1
             } else if pendingReorderCredit < Self.maxPendingReorderCredit {
@@ -74,7 +74,7 @@ extension RtpVideoQueue {
             if gapUs > 1_000_000 { sequenceBlackoutEligible = true }
             observeGap(Double(gapUs))
             if haveSeqBaseline, gapUs > Self.gapEventThresholdUs {
-                #if os(macOS) || GLIMMER_DIAGNOSTICS
+                #if os(macOS)
                 TelemetryExporter.recordLiveEvent(Self.gapEventFields(
                     gapUs: gapUs, atUs: receiveTimeUs, lastSeq: seqHighestSeen, nextSeq: seq))
                 #endif
@@ -91,7 +91,7 @@ extension RtpVideoQueue {
     /// The `video_gap` row: the gap, the arrival that ended it (monotonic ns) and
     /// the RTP sequence numbers either side.
     static func gapEventFields(gapUs: UInt64, atUs: UInt64, lastSeq: UInt16, nextSeq: UInt16) -> [String] {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         [
             "\"event\":\"video_gap\"",
             "\"t_ns\":\(atUs &* 1_000)",
@@ -112,7 +112,7 @@ extension RtpVideoQueue {
     /// stays parked for a future window's loss. Called from maybeLogMetrics under
     /// the same single-receive-thread isolation as the accumulators.
     func applyPendingReorderCredit() -> Int {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard pendingReorderCredit > 0, windowLostPreFec > 0 else {
             return max(0, windowLostPreFec)
         }
@@ -152,7 +152,7 @@ extension RtpVideoQueue {
         seqEpochFirstFrame = frameIndex
         seqPreviousEpochFirstFrame = frameIndex
         haveSeqBaseline = true
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         haveOpenGap = false
         pendingReorderCredit = 0
         #endif
@@ -164,7 +164,7 @@ extension RtpVideoQueue {
     /// running max. Branchless-ish ascending find; integer bumps only.
     func observeGap(_ gapUs: Double) {
         guard gapUs.isFinite, gapUs >= 0 else { return }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if gapUs > gapMaxUs { gapMaxUs = gapUs }
         #endif
         // GAP-EVENT counters (20/50/100ms, cumulative - a 100ms gap counts in all
@@ -182,7 +182,7 @@ extension RtpVideoQueue {
             if gapUs > 50_000 { counters.videoGapOver50msTotal.increment() }
             if gapUs > 100_000 { counters.videoGapOver100msTotal.increment() }
         }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         var index = 0
         let bounds = Self.gapBoundsUs
         while index < bounds.count {
@@ -198,7 +198,7 @@ extension RtpVideoQueue {
     /// interpolation within the matching bucket - the same model the latency rig
     /// uses. Returns 0 when no gaps recorded. Used to publish p50/p95 each window.
     func gapQuantile(_ quantile: Double) -> Double {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard gapCount > 0 else { return 0 }
         let rank = quantile * Double(gapCount)
         var cumulative = 0.0

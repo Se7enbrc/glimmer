@@ -17,7 +17,7 @@ final class StreamStats {
     private let defaults: UserDefaults
     var isRefreshing: Bool { timer != nil }
 
-    init(surface: StreamSurface, defaults: UserDefaults = .standard,
+    init(surface: StreamSurface, defaults: UserDefaults = PersistentStorage.defaults,
          snapshot: @escaping () -> StreamStatsSnapshot, collection: @escaping (Bool) -> Void,
          videoSize: @escaping () -> CGSize, backdrop: @escaping (CGRect) -> Double?) {
         self.surface = surface

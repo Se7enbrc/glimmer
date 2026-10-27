@@ -44,7 +44,7 @@ extension VideoDecoder {
     nonisolated func recordRendererDecision(
         _ decision: FrameInstrumentation.RendererDecision, sampleBuffer: CMSampleBuffer
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard let tracker = FrameInstrumentation.shared else { return }
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         tracker.recordRendererDecision(decision, rtpTimestamp: Self.rtpTimestamp(from: pts))
@@ -56,7 +56,7 @@ extension VideoDecoder {
         renderer: AVSampleBufferVideoRenderer, sampleBuffer: CMSampleBuffer,
         rejectedFrames: Int, recovered: Bool
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard let tracker = FrameInstrumentation.shared else { return }
         let attachments = CMSampleBufferGetSampleAttachmentsArray(
             sampleBuffer, createIfNecessary: false) as? [[String: Any]]
@@ -74,7 +74,7 @@ extension VideoDecoder {
     nonisolated func recordRendererRecoveryState(
         renderer: AVSampleBufferVideoRenderer, phase: FrameInstrumentation.RendererStatePhase
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard let tracker = FrameInstrumentation.shared else { return }
         tracker.recordRendererState(.init(
             phase: phase, status: renderer.status.rawValue, ready: renderer.isReadyForMoreMediaData,

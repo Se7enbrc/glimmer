@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import Foundation
 import GlimmerEngine
 import Testing
 @testable import Glimmer
@@ -18,6 +19,59 @@ struct ControllerLayoutRoutingTests {
     private func configuration(_ target: ControllerMappedButton) throws -> ControllerLayoutConfiguration {
         try .init(layout: .init(bindings: [.init(.button(.a), .button(target))]), shortcuts: nil,
                   available: [.button(.a), .button(.menu), .button(.options)])
+    }
+
+    @Test(arguments: [false, true])
+    func rawShoulderReleaseKeepsOnlyThePhysicalSourcesContribution(physicalHeld: Bool) throws {
+        let (core, backend) = rig()
+        core.mouseQueue.suspend()
+        defer { core.mouseQueue.resume() }
+        let id = ObjectIdentifier(backend)
+        let token = core.registerController(id: id, slot: 0, buttons: 0, analog: InputCore.neutral)
+        let configuration = try ControllerLayoutConfiguration(
+            layout: .init(bindings: [.init(.button(.leftShoulder), .button(.a))]), shortcuts: nil,
+            available: Set(ControllerMappedButton.allCases.map { .button($0) }))
+        core.configureLayout(configuration, slot: 0, held: .init(), at: 0)
+        let time = ProcessInfo.processInfo.systemUptime
+        let buttons = physicalHeld ? StreamProtocol.LB_FLAG : 0
+        core.receive(slot: 0, buttons: buttons, analog: InputCore.neutral, capturedAt: time,
+                     physicalSample: .init(buttons: buttons, analog: InputCore.neutral))
+        core.receiveCenterButtons(id: id, token: token, buttons: 0,
+                                  shoulders: StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG, capturedAt: time + 0.1)
+        #expect(backend.calls.last?.buttons == StreamProtocol.A_FLAG)
+        core.receive(slot: 0, buttons: buttons, analog: InputCore.neutral, capturedAt: time + 0.15,
+                     physicalSample: .init(buttons: buttons, analog: InputCore.neutral),
+                     rawSupplement: (0, StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG))
+        core.receiveCenterButtons(id: id, token: token, buttons: 0, shoulders: 0, capturedAt: time + 0.2)
+        #expect(core.layouts?.states[0]?.last.buttons == UInt32(bitPattern: buttons))
+        #expect(backend.calls.last?.buttons == (physicalHeld ? StreamProtocol.A_FLAG : 0))
+        let state = try #require(core.layouts?.states[0])
+        core.advanceLayoutHold(state, slot: 0, at: time + 0.6)
+        #expect(state.gesture.latched == nil)
+        core.receive(slot: 0, buttons: 0, analog: InputCore.neutral, capturedAt: time + 0.7,
+                     physicalSample: .init())
+        #expect(backend.calls.last?.buttons == 0)
+    }
+
+    @Test func rawShoulderReleaseCancelsTheShortcutHold() throws {
+        let (core, backend) = rig()
+        core.mouseQueue.suspend()
+        defer { core.mouseQueue.resume() }
+        let id = ObjectIdentifier(backend)
+        let token = core.registerController(id: id, slot: 0, buttons: 0, analog: InputCore.neutral)
+        let configuration = try ControllerLayoutConfiguration(layout: nil, shortcuts: nil,
+            available: Set(ControllerMappedButton.allCases.map { .button($0) }))
+        core.configureLayout(configuration, slot: 0, held: .init(), at: 0)
+        let time = ProcessInfo.processInfo.systemUptime
+        let sticks = StreamProtocol.LS_CLK_FLAG | StreamProtocol.RS_CLK_FLAG
+        core.receive(slot: 0, buttons: sticks, analog: InputCore.neutral, capturedAt: time)
+        core.receiveCenterButtons(id: id, token: token, buttons: 0,
+                                  shoulders: StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG, capturedAt: time + 0.1)
+        let state = try #require(core.layouts?.states[0])
+        #expect(state.gesture.deadline != nil)
+        core.receiveCenterButtons(id: id, token: token, buttons: 0, shoulders: 0, capturedAt: time + 0.2)
+        core.advanceLayoutHold(state, slot: 0, at: time + 0.6)
+        #expect(state.gesture.deadline == nil && state.gesture.latched == nil)
     }
 
     @Test func unusedLayoutsAllocateNoRouterAndStartNoTimer() {

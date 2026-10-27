@@ -29,7 +29,7 @@ extension InputForwarder {
         let hid = attachedHIDControllers.values.first { $0.slot == slot }?.device
         let name = gamepadMask.nonzeroBitCount > 1
             ? native?.vendorName ?? native?.productCategory ?? hid?.name ?? "Controller \(slot + 1)" : "Controller"
-        return enabled ? "\(name) is now a mouse. Hold Menu to go back." : "\(name) is back in the game."
+        return ControllerMouseMapping.modeMessage(enabled: enabled, controller: name)
     }
 
     @discardableResult

@@ -63,7 +63,7 @@ package enum DisconnectReason: Int, Sendable {
 /// is DELIBERATELY kept out of `resetForNewSession`, so it survives the <1ms
 /// exporter teardown that races the 1s scrape - the next session re-serves it.
 /// `@unchecked Sendable`: each `Counter` is self-locked.
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 package final class DisconnectReasonCounters: @unchecked Sendable {
 
     package init() {}
@@ -341,7 +341,7 @@ extension TelemetryCounters {
     /// All P2 session-lifecycle state behind one lock. `@unchecked Sendable`: the
     /// single `os_unfair_lock` guards every field; last-writer-wins is correct for
     /// 1Hz-sampled gauges, and the rare lifecycle/recovery writers never contend.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     package final class P2State: @unchecked Sendable {
         private let lock = os_unfair_lock_t.allocate(capacity: 1)
         package init() { lock.initialize(to: os_unfair_lock_s()) }

@@ -36,7 +36,7 @@ final class NintendoControllerPresence {
 
 struct NintendoLayoutSettings: View {
     let isConnected: Bool
-    @AppStorage(ControllerButtonLayout.defaultsKey) private var useLabels = false
+    @AppStorage(ControllerButtonLayout.defaultsKey, store: PersistentStorage.defaults) private var useLabels = false
 
     var body: some View {
         Group {

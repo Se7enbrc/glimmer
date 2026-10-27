@@ -153,6 +153,24 @@ struct LauncherControllerTests {
         #expect(!controller.isPolling)
     }
 
+    @Test func streamingRetiresLauncherHandlersAndRepeatsAcrossRefreshes() throws {
+        let pad = GCController.withExtendedGamepad()
+        let profile = try #require(pad.extendedGamepad)
+        let controller = LauncherController(navigationEnabled: { true }, availableControllers: { [pad] })
+        defer { controller.detach() }
+        controller.refresh()
+        profile.leftThumbstick.setValueForXAxis(1, yAxis: 0)
+        controller.inputChanged()
+        #expect(controller.isPolling)
+        controller.streamingChanged(true)
+        controller.refresh()
+        controller.inputChanged()
+        #expect(profile.valueChangedHandler == nil)
+        #expect(!controller.isPolling)
+        controller.streamingChanged(false)
+        #expect(profile.valueChangedHandler != nil)
+    }
+
     @Test func valueChangedWakesPollingAndNeutralTimerTickGoesBackToSleep() async throws {
         let pad = GCController.withExtendedGamepad()
         let profile = try #require(pad.extendedGamepad)

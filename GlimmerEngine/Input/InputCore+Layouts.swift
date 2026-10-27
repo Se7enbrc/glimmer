@@ -6,11 +6,15 @@ import Foundation
 package final class ControllerLayoutRouting {
     package final class State {
         package var plan: ControllerMappingPlan?
+        package var mouse: ControllerMousePlan?
         package var gesture: ControllerShortcutGesture
         package var timer: DispatchWorkItem?
         package var systemSuppression: ControllerPhysicalChord?
         package var rearm: ControllerLayoutRearm
         package var gameRearm: ControllerLayoutRearm
+        package var physical = ControllerMappingSample()
+        package var rawCenter: Int32?
+        package var rawShoulders: Int32 = 0
         package var last = ControllerMappingSample()
         package var lastSystem = ControllerMappingSample()
         package let acceptAfter: TimeInterval
@@ -20,7 +24,9 @@ package final class ControllerLayoutRouting {
         package init(_ configuration: ControllerLayoutConfiguration?, held: ControllerMappingSample,
                      systemHeld: ControllerMappingSample,
                      acceptAfter: TimeInterval) {
+            physical = held
             plan = configuration?.plan
+            mouse = configuration?.mouse
             gesture = ControllerShortcutGesture(stop: configuration?.stop ?? .empty, stats: configuration?.stats ?? .empty)
             rearm = ControllerLayoutRearm(held: held)
             gameRearm = ControllerLayoutRearm(held: systemHeld)
@@ -36,6 +42,8 @@ package final class ControllerLayoutRouting {
     package func reset() {
         for state in states.compactMap({ $0 }) {
             state.gesture.reset()
+            state.rawCenter = nil
+            state.rawShoulders = 0
             state.timer?.cancel()
             state.timer = nil
             state.systemSuppression = nil
@@ -65,7 +73,9 @@ extension InputCore {
             releases.hold(.controller(slot))
             releases.release(.controller(slot))
             releaseControllerTouches(slot: slot)
+            let wasMouse = controllerMouseStates[slot]?.isMouse == true
             resetControllerMouse(slot: slot)
+            if wasMouse { controllerMouseStates[slot] = ControllerMouseState(isMouse: true) }
             updateChord(slot: slot, held: false, invalidate: true)
             let arrival = previous?.originalArrival ?? announcedControllers[slot] ?? pendingArrivals[slot]
             if let configuration {
@@ -99,6 +109,23 @@ extension InputCore {
         }
     }
 
+    package func layoutSample(_ state: ControllerLayoutRouting.State, physical: ControllerMappingSample?,
+                              supplement: (center: Int32, shoulders: Int32)?) -> ControllerMappingSample {
+        if let supplement {
+            state.rawCenter = supplement.center
+            state.rawShoulders = supplement.shoulders
+        }
+        if let physical { state.physical = physical }
+        var merged = state.physical
+        if let center = state.rawCenter {
+            let mask = StreamProtocol.PLAY_FLAG | StreamProtocol.BACK_FLAG
+                | StreamProtocol.SPECIAL_FLAG | StreamProtocol.MISC_FLAG
+            merged.buttons = (merged.buttons & ~UInt32(bitPattern: mask)) | UInt32(bitPattern: center & mask)
+        }
+        merged.buttons |= UInt32(bitPattern: state.rawShoulders & (StreamProtocol.LB_FLAG | StreamProtocol.RB_FLAG))
+        return merged
+    }
+
     package func receiveLayout(_ state: ControllerLayoutRouting.State, slot: UInt8,
                                sample: ControllerMappingSample, systemSample: ControllerMappingSample,
                                at now: TimeInterval) -> ControllerAcceptance {
@@ -124,7 +151,7 @@ extension InputCore {
         let system = state.systemSuppression?.removing(from: gameSample) ?? gameSample
         let consumes = suppression != nil || action != nil
         let isMouse = routeControllerMouse(slot: slot, buttons: Int32(bitPattern: filtered.buttons),
-            analog: filtered.gamepadAnalog, chordHeld: consumes || state.gesture.deadline != nil, now: now)
+            analog: filtered.gamepadAnalog, chordHeld: consumes || state.gesture.deadline != nil, now: now, extras: filtered.extras)
         if !isMouse {
             if let output = state.plan?.apply(filtered) {
                 sendController(slot: slot, buttons: Int32(bitPattern: output.buttons), analog: output.gamepadAnalog)

@@ -65,12 +65,16 @@ def expected_sources(root):
     ))
     expected["GlimmerTests"].add("../GlimmerTests/VideoColorPatternTests.swift")
     expected["Glimmer"].update("../Glimmer/" + name for name in (
-        "SettingsResetSection.swift", "RunningTileBadge.swift", "TakeoverDialogCopy.swift"
+        "SettingsResetSection.swift", "GlimmerIntents.swift", "RunningTileBadge.swift", "TakeoverDialogCopy.swift"
     ))
     expected["Glimmer"].update("../" + str(path.relative_to(root))
                                for path in (root / "Glimmer/ControllerLayouts").glob("*.swift"))
     expected["GlimmerTests"].update("../GlimmerTests/" + name for name in
                                   ["ControllerLayoutRenderTests.swift", "ControllerLayoutCaptureTests.swift",
+                                   "ControllerLayoutDeliveryTests.swift", "HostAddressRecoveryTests.swift",
+                                   "StreamKeyboardTests.swift", "IdentityPublicationTests.swift",
+                                   "ControllerMouseParityTests.swift",
+                                   "StreamInputMouseModeTests.swift", "ControllerMouseRenderTests.swift",
                                    "ControllerDiagramTests.swift", "SettingsResetTests.swift",
                                    "ControllerShortcutRenderTests.swift"])
     expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in

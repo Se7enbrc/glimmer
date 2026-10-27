@@ -167,7 +167,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     // logic lives in RtpAudioReceiver+Telemetry.swift (extensions can't hold stored
     // state, so the fields stay here `internal` while the method moves out - which
     // keeps this file under the SwiftLint length limit, like the video split). ---
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     var audioMetricsWindowStartNanos: UInt64 = 0
     static let audioMetricsWindowNanos: UInt64 = 1_000_000_000  // 1s
     #endif
@@ -178,7 +178,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
     static let flowResumeGapNanos: UInt64 = 2_000_000_000
     /// Last-flushed cumulative RtpAudioQueue stats, so each window publishes the
     /// delta into the monotonic TelemetryCounters audio totals.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     var lastFlushedAudioPackets: UInt32 = 0
     var lastFlushedFecRecovered: UInt32 = 0
     /// Unrecovered audio-loss this window, counted as the PLC placeholders the
@@ -387,7 +387,7 @@ final class RtpAudioReceiver: @unchecked Sendable {
         guard interrupted.testAndSet() else { return }
         receiveFailure.cancel()
         // Preserve the stream-end instant as the next session's idle anchor.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         TelemetryCounters.shared.audioTtf.markStreamEnd()
         #endif
         pingThread = nil // the dedicated ping thread exits on the interrupted flag

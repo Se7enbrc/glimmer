@@ -7,6 +7,21 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		78E416D5EA4243A18D2F5B06 /* ControllerDiagramAnnotations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */; };
+		61BD251C254D4F3D837B8C60 /* ControllerSettingsRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A6D083A7C3C423E8F74E77A /* ControllerSettingsRow.swift */; };
+		0F8D68E993AC460C9B7489CE /* ControllerMouseRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376C60990C2F4043828839C4 /* ControllerMouseRenderTests.swift */; };
+		34BA9722E4094FD9A99EA3B4 /* ControllerMouseParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C08B8B621C243F4B15E46AF /* ControllerMouseParityTests.swift */; };
+		60607C6E677F4C51B4F13301 /* ControllerMouseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */; };
+		CAF9EA985F46440091EE1715 /* ControllerBindingRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A25B0561ABC542C0B5DF91C7 /* ControllerBindingRecorder.swift */; };
+		CBE056E47FDE4F7A89BE875E /* ControllerMousePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB730F819CA459E8B6D5181 /* ControllerMousePlan.swift */; };
+		9DDB441923404B7D8F333E15 /* IdentityPublicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E83044D4D1B64CACA2E2F8A7 /* IdentityPublicationTests.swift */; };
+		CEAB7AF24D024627A8D4BB78 /* GlimmerCommandURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */; };
+		8989D451DBCF4948B25421E6 /* StreamKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */; };
+		A3BD7B1A7DF94D61957AC2EB /* StreamInput+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5803B42776646209AB7B6BC /* StreamInput+Keyboard.swift */; };
+		96A8BBD1D3E441BB84A99A39 /* PhysicalKeyboardMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = B44C0173AE6D411580CB5DD4 /* PhysicalKeyboardMap.swift */; };
+		651BC5F366B4467696D49881 /* HostAddressRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21B1572525E486591449527 /* HostAddressRecoveryTests.swift */; };
+		CE6406B783AD4C12A954E343 /* HostAddressRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */; };
+		E02000000000000000000002 /* PersistentStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02000000000000000000001 /* PersistentStorage.swift */; };
 		FC1A1D15E9FD497EB88F904A /* SurroundToneData.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */; };
 		EB34C1CBD1FD44719A09B90D /* OpusDecoder+Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */; };
 		5B34A98402AB49D2BE6C0B26 /* OpusDecoder+Packet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D1AB0F71D740F7972C4A1F /* OpusDecoder+Packet.swift */; };
@@ -143,11 +158,7 @@
 		ABCD20260609000000000802 /* TelemetryCounters+Gauges.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */; };
 		ABCD20260609000000000902 /* TelemetryCounters+AudioGauges.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */; };
 		ABCD20260609000000001002 /* TelemetryCounters+InputActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */; };
-		ABCD20260609000000001102 /* TelemetryExporter+RenderVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001101 /* TelemetryExporter+RenderVideo.swift */; };
 		DA2026100900000000000013 /* TelemetryExporter+RenderRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000014 /* TelemetryExporter+RenderRenderer.swift */; };
-		ABCD20260609000000001202 /* TelemetryExporter+RenderNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001201 /* TelemetryExporter+RenderNetwork.swift */; };
-		ABCD20260609000000001302 /* TelemetryExporter+RenderAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001301 /* TelemetryExporter+RenderAudio.swift */; };
-		ABCD20260609000000001402 /* TelemetryExporter+RenderSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001401 /* TelemetryExporter+RenderSystem.swift */; };
 		ABCD20260609000000001502 /* TelemetryExporter+CaptureSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001501 /* TelemetryExporter+CaptureSections.swift */; };
 		ABCD20260609000000001602 /* TelemetryExporter+CaptureExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001601 /* TelemetryExporter+CaptureExtras.swift */; };
 		ABCD20260609000000001702 /* ControllerMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001701 /* ControllerMotion.swift */; };
@@ -257,7 +268,6 @@
 		D10000E3 /* VideoDecoder+DecodeTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000E2 /* VideoDecoder+DecodeTelemetry.swift */; };
 		D10000F1 /* TelemetrySessionEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F0 /* TelemetrySessionEvents.swift */; };
 		D10000F3 /* TelemetryLatencySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F2 /* TelemetryLatencySnapshot.swift */; };
-		D10000F5 /* TelemetryExporter+RenderP2.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F4 /* TelemetryExporter+RenderP2.swift */; };
 		D1000201 /* ResourceTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000200 /* ResourceTelemetry.swift */; };
 		DA2026100900000000000011 /* RendererTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000012 /* RendererTelemetry.swift */; };
 		DA2026101200000000000021 /* VideoDecoder+Compositing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026101200000000000022 /* VideoDecoder+Compositing.swift */; };
@@ -406,7 +416,6 @@
 		DEC0DE202609221800000004 /* TelemetryRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221800000003 /* TelemetryRowTests.swift */; };
 		DEC0DE26101013000000000A /* TelemetrySessionReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000009 /* TelemetrySessionReportTests.swift */; };
 		DEC0DE261010130000000008 /* TelemetrySessionAggregateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000007 /* TelemetrySessionAggregateTests.swift */; };
-		DEC0DE261010130000000006 /* TelemetryPrometheusRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000005 /* TelemetryPrometheusRenderTests.swift */; };
 		DEC0DE261010130000000004 /* TelemetryNDJSONRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000003 /* TelemetryNDJSONRenderTests.swift */; };
 		DEC0DE261010130000000002 /* TelemetryRenderFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000001 /* TelemetryRenderFixtures.swift */; };
 		DEC0DE202610105100000002 /* DecodeTimeSplitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */; };
@@ -416,7 +425,6 @@
 		C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000103 /* TelemetryCounterStateTests.swift */; };
 		C4A4000000000000000003F2 /* TelemetryCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */; };
 		C4A40000000000000000E2A4 /* TelemetrySinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A40000000000000000E2A3 /* TelemetrySinkTests.swift */; };
-		C4A40000000000000000E2A2 /* TelemetryListenerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A40000000000000000E2A1 /* TelemetryListenerTests.swift */; };
 		C4A400000000000000000106 /* StatsCollectorWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000105 /* StatsCollectorWindowTests.swift */; };
 		C4A400000000000000000108 /* StatsSnapshotRowsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */; };
 		C4A400000000000000000110 /* StatsSupportTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000109 /* StatsSupportTypesTests.swift */; };
@@ -626,7 +634,6 @@
 		47C0329BABB04AAD8D17E031 /* ControllerRearmState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B232171E04CF4216A7177073 /* ControllerRearmState.swift */; };
 		8AB91C65993C4DF88404AA2B /* InputCore+Controller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC7A40F932F46A0AE5AAAFF /* InputCore+Controller.swift */; };
 		D02BB946E28B4033B2719286 /* InputCore+Mouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A04597DCD0F4F34A14438C9 /* InputCore+Mouse.swift */; };
-		E5E54ED35009425384B7E4B9 /* ControllerMouseMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC63CE59E65744B581B3689F /* ControllerMouseMotion.swift */; };
 		3CD0C9433D864ACEABD70FD5 /* InputCore+Pointer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62AC3EB39E6045B88C0844A4 /* InputCore+Pointer.swift */; };
 		5917CF91FE8F4FDE957C6480 /* InputCore+Touchpad.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FEBC0FFDDD44133A11DA500 /* InputCore+Touchpad.swift */; };
 		DC6C4EFE1C0A460CB5C22120 /* StreamInput+Chord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF4EBEEDF0140568600D373 /* StreamInput+Chord.swift */; };
@@ -727,6 +734,7 @@
 		40D16091D3CC534FEEC8DAC5 /* HIDControllerLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92F1302C35BEDD28CA34E66B /* HIDControllerLayouts.swift */; };
 		C7FF37545FB1A12CC429370A /* ControllerLayoutRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C0E1B0EA955CEF50500AC9 /* ControllerLayoutRoutingTests.swift */; };
 		0E71DD174FA02F0B707E9761 /* ControllerLayoutCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C42C1D0E1A5A595F2D9D459 /* ControllerLayoutCaptureTests.swift */; };
+		3907115182434F9A8F0FB75F /* ControllerLayoutDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 327B6FA79D4D4A5584956925 /* ControllerLayoutDeliveryTests.swift */; };
 		BC68397480843F3DF035D03D /* ControllerLayoutNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E714E28442C4B881DD2A7F /* ControllerLayoutNavigation.swift */; };
 		388D6B7BE9B0C6DB43F9DD54 /* ControllerLayoutEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5ED7BA9A4911DB133DB8082 /* ControllerLayoutEditing.swift */; };
 		67208A0EDA4DDDDD610A8176 /* ControllerLayoutBoundaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB8E8DC2D7CDC60EF66275B3 /* ControllerLayoutBoundaryTests.swift */; };
@@ -829,6 +837,21 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerDiagramAnnotations.swift"; sourceTree = SOURCE_ROOT; };
+		8A6D083A7C3C423E8F74E77A /* ControllerSettingsRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerSettingsRow.swift"; sourceTree = SOURCE_ROOT; };
+		376C60990C2F4043828839C4 /* ControllerMouseRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerMouseRenderTests.swift"; sourceTree = SOURCE_ROOT; };
+		0C08B8B621C243F4B15E46AF /* ControllerMouseParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerMouseParityTests.swift"; sourceTree = SOURCE_ROOT; };
+		74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerMouseSettingsView.swift"; sourceTree = SOURCE_ROOT; };
+		A25B0561ABC542C0B5DF91C7 /* ControllerBindingRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerBindingRecorder.swift"; sourceTree = SOURCE_ROOT; };
+		5FB730F819CA459E8B6D5181 /* ControllerMousePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerMousePlan.swift"; sourceTree = SOURCE_ROOT; };
+		E83044D4D1B64CACA2E2F8A7 /* IdentityPublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/IdentityPublicationTests.swift"; sourceTree = SOURCE_ROOT; };
+		19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/GlimmerCommandURL.swift"; sourceTree = SOURCE_ROOT; };
+		B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamKeyboardTests.swift; sourceTree = "<group>"; };
+		A5803B42776646209AB7B6BC /* StreamInput+Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/StreamInput+Keyboard.swift"; sourceTree = SOURCE_ROOT; };
+		B44C0173AE6D411580CB5DD4 /* PhysicalKeyboardMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/PhysicalKeyboardMap.swift"; sourceTree = SOURCE_ROOT; };
+		F21B1572525E486591449527 /* HostAddressRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostAddressRecoveryTests.swift"; sourceTree = "<group>"; };
+		DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/HostAddressRecovery.swift"; sourceTree = SOURCE_ROOT; };
+		E02000000000000000000001 /* PersistentStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/PersistentStorage.swift; sourceTree = "<group>"; };
 		C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurroundToneData.swift; sourceTree = "<group>"; };
 		4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/OpusDecoder+Stream.swift"; sourceTree = "<group>"; };
 		30D1AB0F71D740F7972C4A1F /* OpusDecoder+Packet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/OpusDecoder+Packet.swift"; sourceTree = "<group>"; };
@@ -971,11 +994,7 @@
 		ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryCounters+Gauges.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryCounters+AudioGauges.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryCounters+InputActivity.swift"; sourceTree = SOURCE_ROOT; };
-		ABCD20260609000000001101 /* TelemetryExporter+RenderVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderVideo.swift"; sourceTree = SOURCE_ROOT; };
 		DA2026100900000000000014 /* TelemetryExporter+RenderRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderRenderer.swift"; sourceTree = SOURCE_ROOT; };
-		ABCD20260609000000001201 /* TelemetryExporter+RenderNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderNetwork.swift"; sourceTree = SOURCE_ROOT; };
-		ABCD20260609000000001301 /* TelemetryExporter+RenderAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderAudio.swift"; sourceTree = SOURCE_ROOT; };
-		ABCD20260609000000001401 /* TelemetryExporter+RenderSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderSystem.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000001501 /* TelemetryExporter+CaptureSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+CaptureSections.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000001601 /* TelemetryExporter+CaptureExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+CaptureExtras.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000001701 /* ControllerMotion.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControllerMotion.swift; path = Stream/ControllerMotion.swift; sourceTree = "<group>"; };
@@ -1101,7 +1120,6 @@
 		D10000E2 /* VideoDecoder+DecodeTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+DecodeTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		D10000F0 /* TelemetrySessionEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetrySessionEvents.swift"; sourceTree = SOURCE_ROOT; };
 		D10000F2 /* TelemetryLatencySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryLatencySnapshot.swift"; sourceTree = SOURCE_ROOT; };
-		D10000F4 /* TelemetryExporter+RenderP2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderP2.swift"; sourceTree = SOURCE_ROOT; };
 		D1000200 /* ResourceTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/ResourceTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		DA2026100900000000000012 /* RendererTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/RendererTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		DA2026101200000000000022 /* VideoDecoder+Compositing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Compositing.swift"; sourceTree = SOURCE_ROOT; };
@@ -1251,7 +1269,6 @@
 		DEC0DE202609221800000003 /* TelemetryRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryRowTests.swift"; sourceTree = "<group>"; };
 		DEC0DE261010130000000009 /* TelemetrySessionReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetrySessionReportTests.swift"; sourceTree = "<group>"; };
 		DEC0DE261010130000000007 /* TelemetrySessionAggregateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetrySessionAggregateTests.swift"; sourceTree = "<group>"; };
-		DEC0DE261010130000000005 /* TelemetryPrometheusRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryPrometheusRenderTests.swift"; sourceTree = "<group>"; };
 		DEC0DE261010130000000003 /* TelemetryNDJSONRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryNDJSONRenderTests.swift"; sourceTree = "<group>"; };
 		DEC0DE261010130000000001 /* TelemetryRenderFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryRenderFixtures.swift"; sourceTree = "<group>"; };
 		DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DecodeTimeSplitTests.swift"; sourceTree = "<group>"; };
@@ -1261,7 +1278,6 @@
 		C4A400000000000000000103 /* TelemetryCounterStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryCounterStateTests.swift"; sourceTree = "<group>"; };
 		C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryCaptureTests.swift"; sourceTree = "<group>"; };
 		C4A40000000000000000E2A3 /* TelemetrySinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetrySinkTests.swift"; sourceTree = "<group>"; };
-		C4A40000000000000000E2A1 /* TelemetryListenerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryListenerTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000105 /* StatsCollectorWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsCollectorWindowTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsSnapshotRowsTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000109 /* StatsSupportTypesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsSupportTypesTests.swift"; sourceTree = "<group>"; };
@@ -1450,7 +1466,6 @@
 		B232171E04CF4216A7177073 /* ControllerRearmState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerRearmState.swift"; sourceTree = SOURCE_ROOT; };
 		3CC7A40F932F46A0AE5AAAFF /* InputCore+Controller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Controller.swift"; sourceTree = SOURCE_ROOT; };
 		7A04597DCD0F4F34A14438C9 /* InputCore+Mouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Mouse.swift"; sourceTree = SOURCE_ROOT; };
-		FC63CE59E65744B581B3689F /* ControllerMouseMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerMouseMotion.swift"; sourceTree = SOURCE_ROOT; };
 		62AC3EB39E6045B88C0844A4 /* InputCore+Pointer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Pointer.swift"; sourceTree = SOURCE_ROOT; };
 		0FEBC0FFDDD44133A11DA500 /* InputCore+Touchpad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/InputCore+Touchpad.swift"; sourceTree = SOURCE_ROOT; };
 		0CF4EBEEDF0140568600D373 /* StreamInput+Chord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/StreamInput+Chord.swift"; sourceTree = SOURCE_ROOT; };
@@ -1551,6 +1566,7 @@
 		92F1302C35BEDD28CA34E66B /* HIDControllerLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Stream/HIDControllerLayouts.swift"; sourceTree = SOURCE_ROOT; };
 		C7C0E1B0EA955CEF50500AC9 /* ControllerLayoutRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutRoutingTests.swift"; sourceTree = SOURCE_ROOT; };
 		5C42C1D0E1A5A595F2D9D459 /* ControllerLayoutCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutCaptureTests.swift"; sourceTree = SOURCE_ROOT; };
+		327B6FA79D4D4A5584956925 /* ControllerLayoutDeliveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutDeliveryTests.swift"; sourceTree = SOURCE_ROOT; };
 		13E714E28442C4B881DD2A7F /* ControllerLayoutNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerLayoutNavigation.swift"; sourceTree = SOURCE_ROOT; };
 		A5ED7BA9A4911DB133DB8082 /* ControllerLayoutEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerLayoutEditing.swift"; sourceTree = SOURCE_ROOT; };
 		EB8E8DC2D7CDC60EF66275B3 /* ControllerLayoutBoundaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerLayoutBoundaryTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -1690,6 +1706,8 @@
 			children = (
 				DB3E6E14588045D7BC957D35 /* StatsOverlayLayer+Platform.swift */,
 				E92A400B198D99C4E81A5016 /* ControllerLayoutDiagram.swift */,
+				03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */,
+				8A6D083A7C3C423E8F74E77A /* ControllerSettingsRow.swift */,
 				7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */,
 				B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */,
 				AE6EA36684EE48E5B46CE965 /* ControllerShoulderControls.swift */,
@@ -1700,6 +1718,8 @@
 				0AB91A16DB2CB59EA97B9943 /* ControllerDiagramGeometry.swift */,
 				25E28540FB349E5444344446 /* ControllerLayoutShortcutSummary.swift */,
 				DD515C08AFF793031FF8AC1D /* ControllerShortcutSection.swift */,
+				74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */,
+				A25B0561ABC542C0B5DF91C7 /* ControllerBindingRecorder.swift */,
 				98502B03A65CBCEA3BFEDD81 /* SettingsResetSection.swift */,
 				A5ED7BA9A4911DB133DB8082 /* ControllerLayoutEditing.swift */,
 				13E714E28442C4B881DD2A7F /* ControllerLayoutNavigation.swift */,
@@ -1917,6 +1937,9 @@
 				81E3DDA1106D496F9D8D71D3 /* ControllerLayoutRenderTests.swift */,
 				EB8E8DC2D7CDC60EF66275B3 /* ControllerLayoutBoundaryTests.swift */,
 				5C42C1D0E1A5A595F2D9D459 /* ControllerLayoutCaptureTests.swift */,
+				327B6FA79D4D4A5584956925 /* ControllerLayoutDeliveryTests.swift */,
+				376C60990C2F4043828839C4 /* ControllerMouseRenderTests.swift */,
+				0C08B8B621C243F4B15E46AF /* ControllerMouseParityTests.swift */,
 				0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */,
 				837D4DB90C33C0B07D279747 /* SettingsResetTests.swift */,
 				C7C0E1B0EA955CEF50500AC9 /* ControllerLayoutRoutingTests.swift */,
@@ -2033,7 +2056,6 @@
 				DEC0DE202609221800000003 /* TelemetryRowTests.swift */,
 				DEC0DE261010130000000009 /* TelemetrySessionReportTests.swift */,
 				DEC0DE261010130000000007 /* TelemetrySessionAggregateTests.swift */,
-				DEC0DE261010130000000005 /* TelemetryPrometheusRenderTests.swift */,
 				DEC0DE261010130000000003 /* TelemetryNDJSONRenderTests.swift */,
 				DEC0DE261010130000000001 /* TelemetryRenderFixtures.swift */,
 				DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */,
@@ -2048,7 +2070,6 @@
 				C4A400000000000000000103 /* TelemetryCounterStateTests.swift */,
 				C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */,
 				C4A40000000000000000E2A3 /* TelemetrySinkTests.swift */,
-				C4A40000000000000000E2A1 /* TelemetryListenerTests.swift */,
 				C4A400000000000000000105 /* StatsCollectorWindowTests.swift */,
 				C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */,
 				C4A400000000000000000109 /* StatsSupportTypesTests.swift */,
@@ -2057,6 +2078,7 @@
 				DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */,
 				DEC0DE202609221900000009 /* VideoRecoveryEventTests.swift */,
 				DEC0DE202609230200000002 /* HostsStoreTests.swift */,
+				F21B1572525E486591449527 /* HostAddressRecoveryTests.swift */,
 				DEC0DE202609221000000002 /* EnetControlChannelTests.swift */,
 				F00400000000000000000002 /* EnetSocketReadinessTests.swift */,
 				6A0C06102026101000000008 /* VideoRtpReceiverDelegateTests.swift */,
@@ -2065,6 +2087,8 @@
 				6A0C06102026101000000004 /* EnetControlLoopTests.swift */,
 				6A0C06102026101000000002 /* EnetControlInboundTests.swift */,
 				21C273D96FC84878A5D36D98 /* InputCoreTests.swift */,
+				B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */,
+				E83044D4D1B64CACA2E2F8A7 /* IdentityPublicationTests.swift */,
 				495E63BB12264898A2E14C16 /* StreamInputChordEdgeTests.swift */,
 				A94F72CE390A4492A80CBC69 /* SessionHostDispositionTests.swift */,
 				48520FACFC0E4646AEB1A004 /* SessionContinuationTests.swift */,
@@ -2187,9 +2211,11 @@
 				19F40AFAB664AE0BE671EA39 /* ControllerLayoutIdentity.swift */,
 				B9753D8D63E229EA546F9690 /* ControllerMappingPlan.swift */,
 				669CE07C7771AD963FDD9079 /* ControllerLayout.swift */,
+				E02000000000000000000001 /* PersistentStorage.swift */,
 				AC2026101100000000000001B /* LauncherArtCache.swift */,
 				F8C3CBBB7FBF488C9D4A7BB7 /* StreamInput+ControllerMouse.swift */,
 				1DF214F57A624AA18B39158B /* ControllerMouseMapping.swift */,
+				5FB730F819CA459E8B6D5181 /* ControllerMousePlan.swift */,
 				2BF97748AD5149368A9FDE11 /* RouteBitratePolicy.swift */,
 				7EAD7761639740678216E345 /* BandwidthTrainEvidence.swift */,
 				EF02F645DDC741DE839C0B73 /* StreamSession+Bandwidth.swift */,
@@ -2248,11 +2274,11 @@
 				D1B00003 /* BitrateDownshiftController.swift */,
 				F0B52A28D21944389B72F67E /* StreamInput+Values.swift */,
 				0E8506F94D144550AF8AA2E0 /* StreamInput+Pointer.swift */,
+				A5803B42776646209AB7B6BC /* StreamInput+Keyboard.swift */,
 				0CF4EBEEDF0140568600D373 /* StreamInput+Chord.swift */,
 				0FEBC0FFDDD44133A11DA500 /* InputCore+Touchpad.swift */,
 				62AC3EB39E6045B88C0844A4 /* InputCore+Pointer.swift */,
 				7A04597DCD0F4F34A14438C9 /* InputCore+Mouse.swift */,
-				FC63CE59E65744B581B3689F /* ControllerMouseMotion.swift */,
 				3CC7A40F932F46A0AE5AAAFF /* InputCore+Controller.swift */,
 				B232171E04CF4216A7177073 /* ControllerRearmState.swift */,
 				ACC55B08FAF443E0A701E5F3 /* ControllerChord.swift */,
@@ -2378,10 +2404,13 @@
 				D100005B /* Identity+Crypto.swift */,
 				AB00000005 /* Identity.swift */,
 				AB00000011 /* Discovery.swift */,
+				DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */,
 				48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */,
 				F5C645FD3D094A728226497C /* HostRecord.swift */,
+				19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */,
 				18473C03B5D940B9BC3CA2AA /* StreamRequest.swift */,
 				C2A6490A4BF841A6926E8139 /* VKScanCode.swift */,
+				B44C0173AE6D411580CB5DD4 /* PhysicalKeyboardMap.swift */,
 				88F1DC9482A344A691EB712D /* ProcessThermalState.swift */,
 				6F5EEA2C0DF34DF3BD0B3BA9 /* TelemetryCapture.swift */,
 				5C1616CAD9D742D2AE4A13B1 /* LinkGateDecision.swift */,
@@ -2433,7 +2462,6 @@
 				D6D80A720000000000000032 /* TelemetrySessionAggregate.swift */,
 				A0D10A110000000000000003 /* TelemetryExporter+AudioPipeline.swift */,
 				D6D80A720000000000000028 /* TelemetryExporter+Sinks.swift */,
-				D10000F4 /* TelemetryExporter+RenderP2.swift */,
 				D10000C0 /* TelemetryCounters.swift */,
 				ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */,
 				D6D80A720000000000000026 /* TelemetryCounters+Lifecycle.swift */,
@@ -2446,16 +2474,12 @@
 				D1A6202610180000000005F /* DiagnosticEvidence+Analysis.swift */,
 				D1A6202610180000000004F /* DiagnosticEvidence+Files.swift */,
 				D1A6202610180000000003F /* DiagnosticEvidence.swift */,
-				ABCD20260609000000001101 /* TelemetryExporter+RenderVideo.swift */,
-				ABCD20260609000000001301 /* TelemetryExporter+RenderAudio.swift */,
 				D10000F0 /* TelemetrySessionEvents.swift */,
 				D1000086 /* TelemetryLatency.swift */,
 				D1000080 /* TelemetryExporter.swift */,
-				ABCD20260609000000001201 /* TelemetryExporter+RenderNetwork.swift */,
 				4E5DA9A384944F01B901C609 /* TelemetryExporter+RenderInput.swift */,
 				ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */,
 				D10000CC /* TelemetryFrameTrace.swift */,
-				ABCD20260609000000001401 /* TelemetryExporter+RenderSystem.swift */,
 				E2610121000000000000000A /* Protocol */,
 			);
 			path = GlimmerEngine;
@@ -2640,6 +2664,8 @@
 			files = (
 				AC0296E69DA245A6B89DDD62 /* StatsOverlayLayer+Platform.swift in Sources */,
 				51DAB01AF73E7404229D81AF /* ControllerLayoutDiagram.swift in Sources */,
+				78E416D5EA4243A18D2F5B06 /* ControllerDiagramAnnotations.swift in Sources */,
+				61BD251C254D4F3D837B8C60 /* ControllerSettingsRow.swift in Sources */,
 				059E9C4832CB459FB0FB8300 /* ControllerControlArtwork.swift in Sources */,
 				966232EF57614C298EE9BFD6 /* ControllerDpadSurface.swift in Sources */,
 				10668594F8644C5E802B0541 /* ControllerShoulderControls.swift in Sources */,
@@ -2650,6 +2676,8 @@
 				A3DF1B0473E02EBD01FC2C40 /* ControllerDiagramGeometry.swift in Sources */,
 				857BF7C4E7FD8FDEEA84F1A6 /* ControllerLayoutShortcutSummary.swift in Sources */,
 				E31B347927A1170384BBEB95 /* ControllerShortcutSection.swift in Sources */,
+				60607C6E677F4C51B4F13301 /* ControllerMouseSettingsView.swift in Sources */,
+				CAF9EA985F46440091EE1715 /* ControllerBindingRecorder.swift in Sources */,
 				3A20D1A556D1F1B2678B97FA /* SettingsResetSection.swift in Sources */,
 				388D6B7BE9B0C6DB43F9DD54 /* ControllerLayoutEditing.swift in Sources */,
 				BC68397480843F3DF035D03D /* ControllerLayoutNavigation.swift in Sources */,
@@ -2853,6 +2881,9 @@
 				ED42D881756D5526B8FBA435 /* ControllerLayoutRenderTests.swift in Sources */,
 				67208A0EDA4DDDDD610A8176 /* ControllerLayoutBoundaryTests.swift in Sources */,
 				0E71DD174FA02F0B707E9761 /* ControllerLayoutCaptureTests.swift in Sources */,
+				3907115182434F9A8F0FB75F /* ControllerLayoutDeliveryTests.swift in Sources */,
+				0F8D68E993AC460C9B7489CE /* ControllerMouseRenderTests.swift in Sources */,
+				34BA9722E4094FD9A99EA3B4 /* ControllerMouseParityTests.swift in Sources */,
 				114D0A9130EE107F0ED56FF8 /* ControllerShortcutRenderTests.swift in Sources */,
 				56A574311FFA79E0A008A3EF /* SettingsResetTests.swift in Sources */,
 				C7FF37545FB1A12CC429370A /* ControllerLayoutRoutingTests.swift in Sources */,
@@ -2970,7 +3001,6 @@
 				DEC0DE202609221800000004 /* TelemetryRowTests.swift in Sources */,
 				DEC0DE26101013000000000A /* TelemetrySessionReportTests.swift in Sources */,
 				DEC0DE261010130000000008 /* TelemetrySessionAggregateTests.swift in Sources */,
-				DEC0DE261010130000000006 /* TelemetryPrometheusRenderTests.swift in Sources */,
 				DEC0DE261010130000000004 /* TelemetryNDJSONRenderTests.swift in Sources */,
 				DEC0DE261010130000000002 /* TelemetryRenderFixtures.swift in Sources */,
 				DEC0DE202610105100000002 /* DecodeTimeSplitTests.swift in Sources */,
@@ -2984,7 +3014,6 @@
 				C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */,
 				C4A4000000000000000003F2 /* TelemetryCaptureTests.swift in Sources */,
 				C4A40000000000000000E2A4 /* TelemetrySinkTests.swift in Sources */,
-				C4A40000000000000000E2A2 /* TelemetryListenerTests.swift in Sources */,
 				C4A400000000000000000106 /* StatsCollectorWindowTests.swift in Sources */,
 				C4A400000000000000000108 /* StatsSnapshotRowsTests.swift in Sources */,
 				C4A400000000000000000110 /* StatsSupportTypesTests.swift in Sources */,
@@ -2993,6 +3022,7 @@
 				DEC0DE202609221900000006 /* TelemetryConfigRowTests.swift in Sources */,
 				DEC0DE202609221900000010 /* VideoRecoveryEventTests.swift in Sources */,
 				DEC0DE202609230200000001 /* HostsStoreTests.swift in Sources */,
+				651BC5F366B4467696D49881 /* HostAddressRecoveryTests.swift in Sources */,
 				DEC0DE202609221000000001 /* EnetControlChannelTests.swift in Sources */,
 				F00400000000000000000001 /* EnetSocketReadinessTests.swift in Sources */,
 				6A0C06102026101000000007 /* VideoRtpReceiverDelegateTests.swift in Sources */,
@@ -3001,6 +3031,8 @@
 				6A0C06102026101000000003 /* EnetControlLoopTests.swift in Sources */,
 				6A0C06102026101000000001 /* EnetControlInboundTests.swift in Sources */,
 				FC0BF6D54C37471FB74A1E5E /* InputCoreTests.swift in Sources */,
+				8989D451DBCF4948B25421E6 /* StreamKeyboardTests.swift in Sources */,
+				9DDB441923404B7D8F333E15 /* IdentityPublicationTests.swift in Sources */,
 				D218BE89D58F4B61A16B6530 /* StreamInputChordEdgeTests.swift in Sources */,
 				21B30BD95DBE473A9BE2CC35 /* SessionHostDispositionTests.swift in Sources */,
 				58E68087D1C647789143820A /* SessionContinuationTests.swift in Sources */,
@@ -3122,9 +3154,11 @@
 				6CD65AE981620E655423894D /* ControllerLayoutIdentity.swift in Sources */,
 				189785C9DBC0C32FE4B72628 /* ControllerMappingPlan.swift in Sources */,
 				753CC8167F7ACB6C6EA91505 /* ControllerLayout.swift in Sources */,
+				E02000000000000000000002 /* PersistentStorage.swift in Sources */,
 				AC2026101100000000000001A /* LauncherArtCache.swift in Sources */,
 				967AC9F4B747400BA49F0B70 /* StreamInput+ControllerMouse.swift in Sources */,
 				2A48F2F26CA64FB481D74255 /* ControllerMouseMapping.swift in Sources */,
+				CBE056E47FDE4F7A89BE875E /* ControllerMousePlan.swift in Sources */,
 				1FBCB82CDB6644B6B684DC53 /* RouteBitratePolicy.swift in Sources */,
 				9A913317D15D48E1B54D8F33 /* BandwidthTrainEvidence.swift in Sources */,
 				D533A4260AA14705836FE716 /* StreamSession+Bandwidth.swift in Sources */,
@@ -3183,11 +3217,11 @@
 				D1B00004 /* BitrateDownshiftController.swift in Sources */,
 				C50A55E3689F4353AD0C302E /* StreamInput+Values.swift in Sources */,
 				79C6D2C343B84364A310913D /* StreamInput+Pointer.swift in Sources */,
+				A3BD7B1A7DF94D61957AC2EB /* StreamInput+Keyboard.swift in Sources */,
 				DC6C4EFE1C0A460CB5C22120 /* StreamInput+Chord.swift in Sources */,
 				5917CF91FE8F4FDE957C6480 /* InputCore+Touchpad.swift in Sources */,
 				3CD0C9433D864ACEABD70FD5 /* InputCore+Pointer.swift in Sources */,
 				D02BB946E28B4033B2719286 /* InputCore+Mouse.swift in Sources */,
-				E5E54ED35009425384B7E4B9 /* ControllerMouseMotion.swift in Sources */,
 				8AB91C65993C4DF88404AA2B /* InputCore+Controller.swift in Sources */,
 				47C0329BABB04AAD8D17E031 /* ControllerRearmState.swift in Sources */,
 				CC6CE5CEDA3E4735B16C44A7 /* ControllerChord.swift in Sources */,
@@ -3313,10 +3347,13 @@
 				D100005C /* Identity+Crypto.swift in Sources */,
 				AB00000006 /* Identity.swift in Sources */,
 				AB00000012 /* Discovery.swift in Sources */,
+				CE6406B783AD4C12A954E343 /* HostAddressRecovery.swift in Sources */,
 				C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */,
 				7502C8910A0C4B688E5F7444 /* HostRecord.swift in Sources */,
+				CEAB7AF24D024627A8D4BB78 /* GlimmerCommandURL.swift in Sources */,
 				227254F4AB8A45BA94D2F158 /* StreamRequest.swift in Sources */,
 				7A51BDEA113A4AC3BC826DE8 /* VKScanCode.swift in Sources */,
+				96A8BBD1D3E441BB84A99A39 /* PhysicalKeyboardMap.swift in Sources */,
 				3FEEF5AF74D64A53A74FC5B2 /* ProcessThermalState.swift in Sources */,
 				92172A2F8BEF4C5281EC88F1 /* TelemetryCapture.swift in Sources */,
 				FD7E927EF1674C9185E7BE26 /* LinkGateDecision.swift in Sources */,
@@ -3368,7 +3405,6 @@
 				D6D80A720000000000000031 /* TelemetrySessionAggregate.swift in Sources */,
 				A0D10A110000000000000004 /* TelemetryExporter+AudioPipeline.swift in Sources */,
 				D6D80A720000000000000027 /* TelemetryExporter+Sinks.swift in Sources */,
-				D10000F5 /* TelemetryExporter+RenderP2.swift in Sources */,
 				D10000C1 /* TelemetryCounters.swift in Sources */,
 				ABCD20260609000000000802 /* TelemetryCounters+Gauges.swift in Sources */,
 				D6D80A720000000000000025 /* TelemetryCounters+Lifecycle.swift in Sources */,
@@ -3381,16 +3417,12 @@
 				D1A6202610180000000005B /* DiagnosticEvidence+Analysis.swift in Sources */,
 				D1A6202610180000000004B /* DiagnosticEvidence+Files.swift in Sources */,
 				D1A6202610180000000003B /* DiagnosticEvidence.swift in Sources */,
-				ABCD20260609000000001102 /* TelemetryExporter+RenderVideo.swift in Sources */,
-				ABCD20260609000000001302 /* TelemetryExporter+RenderAudio.swift in Sources */,
 				D10000F1 /* TelemetrySessionEvents.swift in Sources */,
 				D1000087 /* TelemetryLatency.swift in Sources */,
 				D1000081 /* TelemetryExporter.swift in Sources */,
-				ABCD20260609000000001202 /* TelemetryExporter+RenderNetwork.swift in Sources */,
 				3B48EA62232E4E4CAFEECF3D /* TelemetryExporter+RenderInput.swift in Sources */,
 				ABCD20260609000000000902 /* TelemetryCounters+AudioGauges.swift in Sources */,
 				D10000CD /* TelemetryFrameTrace.swift in Sources */,
-				ABCD20260609000000001402 /* TelemetryExporter+RenderSystem.swift in Sources */,
 				D1000018 /* EnetWire.swift in Sources */,
 				D1000020 /* ReedSolomon.swift in Sources */,
 				D1000032 /* AudioFecDecoder.swift in Sources */,

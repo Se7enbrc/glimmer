@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
-// Field notes describe Mac and beta diagnostics. Production iOS retains control measurements;
+// Field notes describe Mac diagnostics. iOS retains control measurements;
 // diagnostic event totals have no storage, and diagnostic-only collectors are excluded.
 
 import Foundation
@@ -151,10 +151,7 @@ package final class TelemetryCounters: @unchecked Sendable {
     /// Per session like `reconnectTotal`; a climb before a reconnect/disconnect marks
     /// the wake-on-different-AP stale-link case.
     package let wakeTotal = Counter()
-    /// ROUTE-CHANGE count (signal: lifecycle): incremented each time the stream's
-    /// egress route/link-class flips (the WiFiTelemetry route-change edge that
-    /// already fires an NDJSON event). Run-global (NOT reset per session) so a
-    /// wake-on-a-different-AP is visible in Prometheus, not just the NDJSON/Loki.
+    /// Count waking onto a different access point as well as recording its event.
     package let routeChangeTotal = Counter()
     /// EXPLICIT REQUEST_IDR sends that started a round-trip measurement
     /// (signal: IDR-RTT). RE-BASELINE NOTE: RFI sends no longer arm round-trips
@@ -411,7 +408,7 @@ package final class TelemetryCounters: @unchecked Sendable {
     /// rather than guessing). The lock is on the telemetry path only - when the
     /// gate is off the tracker that reads it doesn't exist, so the present hot
     /// path never touches it.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     let rttLock = os_unfair_lock_t.allocate(capacity: 1)
     var rttMsValue: Double = 0
 

@@ -153,7 +153,7 @@ extension FramePacer {
     func presentBackoffAndYield(_ beat: BackoffBeat) {
         recordPresentationDiscards(beat.dropped, reason: .backoff)
         stats.recordPacingDepth(0)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.render.emitEvent(
             "PacerBackoffDropToNewest",
             "discarded=\(beat.droppedCount, privacy: .public)")
@@ -480,7 +480,7 @@ extension FramePacer {
             return
         }
         noteFramePresented(entry.sampleBuffer)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let cadence = lastPresentInterPresentDelta()
         stats.recordPresent(cadenceErrorMs: cadence.error * 1000.0, hostPTSSeconds: entry.hostPTSSeconds,
                             streamIntervalMs: cadence.streamInterval * 1000.0, refreshMs: vsyncInterval * 1000.0)
@@ -521,7 +521,7 @@ extension FramePacer {
     /// Kept off `releaseDueFrame` so its branch doesn't grow that already-large
     /// function's complexity/body. Called OFF the gate's lock (caller unlocked).
     func recordOverTargetReleaseIfNeeded(_ gate: DueGateResult, depth: Int) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let forced = gate.forcedOverTarget
         let released = gate.toPresent != nil
         var streakSnapshot = 0
@@ -542,7 +542,7 @@ extension FramePacer {
         guard forced else { return }
         TelemetryCounters.shared.pacerOverTargetReleaseTotal.increment()
         if shouldSignpost {
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             OSSignposter.render.emitEvent(
                 "PacerOverTargetRelease",
                 "streak=\(streakSnapshot, privacy: .public) depth=\(depth, privacy: .public)")
@@ -552,7 +552,7 @@ extension FramePacer {
     }
 
     private func recordTrim(count: Int, depth: Int) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if count > 0 {
             OSSignposter.render.emitEvent("PacerTrim", "count=\(count, privacy: .public) depthAfter=\(depth, privacy: .public)")
         }

@@ -26,14 +26,15 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// A native-size trial asks for the window's listed size at this profile's refresh cap.
-    func screenSize(windowPixels: CGSize, maximumFramesPerSecond: Int) throws -> StreamFormat {
+    func screenSize(windowPixels: CGSize, maximumFramesPerSecond: Int, requiredFPS: Int? = nil) throws -> StreamFormat {
         try Self.native120.resolve(windowPixels: windowPixels,
-                                   maximumFramesPerSecond: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond))
+                                   maximumFramesPerSecond: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond),
+                                   requiredFPS: requiredFPS)
     }
 
     enum Failure: Error { case displayUnavailable, modesUnavailable }
 
-    func resolve(windowPixels: CGSize, maximumFramesPerSecond: Int) throws -> StreamFormat {
+    func resolve(windowPixels: CGSize, maximumFramesPerSecond: Int, requiredFPS: Int? = nil) throws -> StreamFormat {
         let width = windowPixels.width
         let height = windowPixels.height
         guard width.isFinite, height.isFinite, width >= 1, height >= 1,
@@ -44,16 +45,23 @@ enum StreamProfile: String, CaseIterable, Identifiable, Sendable {
             ? CGSize(width: max(2, target.width), height: max(2, target.height))
             : CGSize(width: 1920, height: 1080)
         guard let mode = StreamDisplayModes.closest(to: size,
-            maximumFPS: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond)) else {
+            maximumFPS: min(self == .fullHD60 ? 60 : 120, maximumFramesPerSecond), requiredFPS: requiredFPS) else {
             throw Failure.modesUnavailable
         }
         return mode
     }
 
     @MainActor
-    func resolve(surface: StreamSurface) throws -> StreamFormat {
+    func resolve(surface: StreamSurface, preservingFPS: Int? = nil,
+                 useScreenSize: Bool = false) throws -> StreamFormat {
         guard let screen = surface.window?.windowScene?.screen else { throw Failure.displayUnavailable }
-        return try resolve(windowPixels: surface.streamPixels, maximumFramesPerSecond: screen.maximumFramesPerSecond)
+        let maximumFPS = preservingFPS ?? screen.maximumFramesPerSecond
+        if useScreenSize {
+            return try screenSize(windowPixels: surface.streamPixels,
+                                  maximumFramesPerSecond: maximumFPS, requiredFPS: preservingFPS)
+        }
+        return try resolve(windowPixels: surface.streamPixels,
+                           maximumFramesPerSecond: maximumFPS, requiredFPS: preservingFPS)
     }
 }
 
@@ -69,6 +77,13 @@ struct StreamFormats: Equatable, Sendable {
         let smaller = reduced.width * reduced.height < full.width * full.height ? reduced : full
         lowData = StreamFormat(width: smaller.width, height: smaller.height, fps: min(full.fps, reduced.fps),
                                changeResolution: full.changeResolution)
+    }
+
+    init(resizing full: StreamFormat) {
+        self.full = full
+        let reduced = StreamDisplayModes.closest(to: CGSize(width: 1920, height: 1080),
+                                                 maximumFPS: full.fps, requiredFPS: full.fps) ?? full
+        lowData = reduced.width * reduced.height < full.width * full.height ? reduced : full
     }
 
     /// Start under Low Data Mode at the reduced mode; either way both sizes ride along for later edges.
@@ -94,8 +109,10 @@ struct StreamFormat: Hashable, Sendable {
     static func continuing(_ launch: StreamLaunch, native: StreamFormat, maximumFPS: Int) -> StreamFormat {
         guard !launch.useScreenSize else { return native }
         let previous = launch.continuing ? launch.previousFormat : launch.startFormat
-        if let old = previous?.supported(maximumWidth: 3840, maximumHeight: 2160,
-                                                       maximumFPS: maximumFPS, supportsHDR: false) {
+        let portrait = previous.map { $0.height > $0.width } ?? false
+        if let old = previous?.supported(maximumWidth: portrait ? 2160 : 3840,
+                                        maximumHeight: portrait ? 3840 : 2160,
+                                        maximumFPS: maximumFPS, supportsHDR: false) {
             return StreamFormat(width: old.width, height: old.height, fps: old.fps,
                                 changeResolution: old.changeResolution)
         }

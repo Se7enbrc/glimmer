@@ -51,7 +51,7 @@ HELPER_TARGET := arm64-apple-macos15.7
 HELPER_BUNDLE := $(GLIMMER_APP_SRC)/Contents/Library/LaunchServices/Glimmer Network Helper.app
 
 .PHONY: help all app test test-asan test-build test-run helper-build embed-helper clean verify preflight rc \
-        guard-clean-tree guard-release-version appcast-feed profile profile-signposts enable-telem disable-telem
+        guard-clean-tree guard-release-version appcast-feed profile profile-signposts
 
 all: help
 
@@ -77,8 +77,6 @@ help:
 	@printf '%s\n' 'Profile'
 	@printf '%s\n' '  profile              Profile the installed CI build for CPU use'
 	@printf '%s\n' '  profile-signposts    Record signposts from the installed CI build'
-	@printf '%s\n' '  enable-telem         Enable local telemetry'
-	@printf '%s\n' '  disable-telem        Disable local telemetry'
 	@printf '%s\n' 'Release'
 	@printf '%s\n' '  rc                   Dispatch a reviewed candidate through CI'
 	@printf '%s\n' '  rc DRY_RUN=1         Check candidate source without publishing'
@@ -188,16 +186,6 @@ profile-signposts:
 	    --launch "$(GLIMMER_APP_DST)" \
 	    --output "$(INSTRUMENTS_DIR)/$(shell date +%Y%m%d-%H%M%S)-Glimmer-signposts.trace" \
 	    --time-limit 120s
-
-enable-telem:
-	@[ -x scripts/telem-client.sh ] && scripts/telem-client.sh enable || echo "  • no scripts/telem-client.sh (optional local rig setup) - skipping"
-	@defaults write io.ugfugl.Glimmer telemetryEnabled -bool YES
-	@echo "  ✓ app telemetry exporter ON - relaunch Glimmer to pick it up"
-
-disable-telem:
-	@[ -x scripts/telem-client.sh ] && scripts/telem-client.sh disable || true
-	@defaults write io.ugfugl.Glimmer telemetryEnabled -bool NO
-	@echo "  ✓ app telemetry exporter OFF - relaunch Glimmer to pick it up"
 
 include scripts/ci-checks.mk
 include scripts/apple-apps.mk

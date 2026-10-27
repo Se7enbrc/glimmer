@@ -2,26 +2,14 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import Foundation
+import GlimmerEngine
 
 extension GlimmerCLI {
     /// URLs carry names, never command-line flags. Quit keeps its separate confirmation.
     nonisolated static func parseURL(_ url: URL) -> Command? {
-        guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              parts.scheme?.lowercased() == "glimmer", parts.user == nil, parts.password == nil,
-              parts.port == nil, parts.path.isEmpty, parts.fragment == nil,
-              let action = parts.host, let verb = Verb(rawValue: action),
-              [.stream, .stop, .wake, .quit].contains(verb) else { return nil }
-        var values: [String: String] = [:]
-        for item in parts.queryItems ?? [] {
-            guard item.name == "pc" || (verb == .stream && item.name == "app"),
-                  values[item.name] == nil, let value = item.value,
-                  !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  !value.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
-            else { return nil }
-            values[item.name] = value
+        guard let parsed = GlimmerCommandURL.parse(url), let verb = Verb(rawValue: parsed.action.rawValue) else {
+            return nil
         }
-        if verb == .stop { return Command(verb: verb, arguments: values["pc"].map { [$0] } ?? []) }
-        guard let pc = values["pc"] else { return nil }
-        return Command(verb: verb, arguments: [pc] + (values["app"].map { [$0] } ?? []))
+        return Command(verb: verb, arguments: [parsed.pc, parsed.app].compactMap { $0 })
     }
 }

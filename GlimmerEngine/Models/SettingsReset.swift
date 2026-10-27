@@ -11,11 +11,11 @@ public enum SettingsReset {
         "captureSysKeys", "disableMouseAccelWhileStreaming", "nintendoButtonLayout",
         "rawHIDControllerEnabled", "hidGamepadClaimAll", "pacerTickOffMain", "pacerTickRealtime",
         "quitHotkey", "statsHotkey", "releasePointerHotkey", "miniPlayerHotkey",
-        "controllerQuitChord", "customControllerChord", "controllerMouseStick", "touchMouseEnabled",
+        "controllerQuitChord", "customControllerChord", "controllerMouseStick", "controllerMouseBindings", "touchMouseEnabled",
         "cruiseTraversalEnabled", "cruiseVKnee", "cruiseVFull", "cruiseDragDeltaScale",
         "streamCoversNotch", "streamUsesFullScreenSpace", "launcherStyle", "launchAtLogin", "launchMinimized",
         "showStreamStats", "streamStatsCorner", "statsOverlayPreset", "statsOverlayCustomRows", "statsThresholds",
-        "showDiagnostics", "telemetryEnabled", "diagFileLogDebug", "telemetryListenLAN"
+        "showDiagnostics", "telemetryEnabled", "diagFileLogDebug"
     ]
     public static let prefixes = ["glimmer.codecPreference.", "glimmer.launcherStyle.", "ios.touchLayout."]
 

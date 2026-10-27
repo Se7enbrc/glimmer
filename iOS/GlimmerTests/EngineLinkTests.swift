@@ -34,6 +34,25 @@ struct EngineLinkTests {
             ControllerDescriptor(kind: .unknown, supportedButtons: [], capabilities: [])) == nil)
     }
 
+    @Test(arguments: [false, true]) @MainActor
+    func mobileSessionDoesNotScheduleDisabledAdaptation(adaptive: Bool) async {
+        let video = VideoDecoder(configuration: configuration(), displayInfo: { nil })
+        let audio = AudioDecoder(platform: IOSAudio.platform(environment: {
+            StreamSession.audioEnvironment(host: "bandwidth-test")
+        }))
+        let media = StreamSession.PreparedMedia(video: video, audio: audio, quiesce: {}, finalDispose: {})
+        let inputs = BandwidthInputs(.init(path: BandwidthPath(observedAt: 0), environment: BandwidthEnvironment()))
+        let (session, _) = StreamSession.make(media: media, network: unavailableNetwork(),
+            hostDisposition: .disconnectOnly, bandwidthInputs: inputs, adaptiveBandwidth: adaptive)
+        let scheduled = session.scheduleBandwidthObservation()
+        #expect((scheduled != nil) == adaptive)
+        await scheduled?.value
+        _ = await session.seedBandwidth(config: configuration().request, appliedKbps: 10_000,
+                                        rtt: nil, preLaunch: false)
+        #expect(await (session.bandwidthPolicy != nil) == adaptive)
+        await session.stop()
+    }
+
     @Test func buildsRealEngineRequestWithoutNetworking() {
         let engine = EngineLink()
         #expect(engine.protocolVersion == 14)

@@ -2,7 +2,61 @@
 
 ## 2026.10.8 - Unreleased
 
+- Controller sticks no longer send duplicate input while streaming.
+
+- Controllers avoid mouse calculations while mouse mode is off.
+
+- Controller mouse bindings now check shortcuts used by every controller,
+  including inherited shortcuts, so entering mouse mode cannot accidentally stop
+  a stream.
+
+- First pairing can recover from an empty identity folder. Failed attempts now
+  remove their temporary identity files immediately and preserve saved pairing
+  files.
+
+- Keyboard shortcuts on iPhone and iPad follow the active keyboard layout,
+  keeping their keys out of the game on non-US keyboards too.
+
+- Stop requests for a specific PC now cancel its pending launch on iPhone and
+  iPad, even while Glimmer is waiting to reconnect or return to the foreground.
+
+- Links from other apps now ask before starting or stopping a stream on Mac,
+  iPhone and iPad. An old confirmation cannot stop a newer stream.
+
+- Releasing a game key on iPhone or iPad no longer leaves it held when you press
+  a shortcut modifier before letting go.
+
+- Glimmer preserves saved pairing identity files after an incomplete restore and
+  explains when they need to be restored from a backup.
+
+- Stop now cancels a queued command-line game launch, including a switch waiting
+  for the previous stream to close.
+
 ### Features
+
+- Play on iPhone and iPad with a hardware keyboard, mouse or trackpad. Opening
+  stream controls releases the pointer, and Glimmer's shortcuts stay local.
+
+- Controller layouts and mouse controls now use matching rows and labeled
+  controller diagrams on Mac, iPhone and iPad.
+
+- Controller mouse buttons have changed on Mac: the right stick moves the
+  pointer, R2 clicks and R1 right-clicks. Choose Left-handed or remap any mouse
+  control in Settings on Mac, iPhone and iPad.
+
+- Use Stream from PC, Stop Streaming and Quit App on PC in Shortcuts on iPhone
+  and iPad. The Mac's launch and stop links work there too.
+
+- iPhone and iPad find a paired PC again when its local address changes, without
+  pairing again.
+
+- Mac performance recordings stay in local files, with session scorecards, frame
+  traces and Control-B bookmarks. The network metrics endpoint is removed.
+
+- The iPhone and iPad stream menu fades away while you play. Tap the top of the
+  picture or swipe down to bring it back. The close button returns to the game;
+  Disconnect ends the stream. The on-screen gamepad's menu button stays visible
+  and tappable while you play.
 
 - Running games now show their state on the app tile. Click or tap to resume,
   and use the tile's menu to quit.
@@ -22,9 +76,9 @@
   whether to include per-game controller layouts; paired PCs, your app library
   and diagnostics captures are kept.
 
-- The production iPhone and iPad app no longer includes diagnostic recording.
-  Beta builds keep local diagnostics on by default, with an option to turn them
-  off.
+- iPhone and iPad use Apple logs and reports in every build. Glimmer no longer
+  saves its own diagnostic files. Adaptive stream quality stays in Settings,
+  under Connection.
 
 - Open Support and the Privacy Policy from Settings on iPhone and iPad, or
   Settings → About on Mac.
@@ -121,6 +175,47 @@
 - The readiness chip shows Ready and latency when the PC is reachable.
 
 ### Bug fixes
+
+- Open hidden iPhone and iPad stream controls with a pointer click at the top,
+  Control-/, or a held controller Menu button. Mouse mode remains available in
+  the stream menu.
+
+- Pairing can retry after first-time identity creation is interrupted. Complete,
+  valid identities remain unchanged.
+
+- Restore compact launcher buttons on Mac, iPhone and iPad. Running games keep
+  their badge inside the same-sized button, with even spacing in its top-right
+  corner.
+
+- Keep existing PC pairing when preferences are reset or restored. Tests now use
+  separate storage so they cannot replace a saved pairing.
+
+- Fixed streams that sometimes started without sound on iPhone and iPad.
+- Turning off adaptive quality now stops its background checks during streams on
+  Mac, iPhone and iPad.
+
+- Resuming a portrait iPad stream keeps its previous size without briefly
+  shrinking the picture and resizing it again.
+
+- Opening Controller layouts during a stream keeps the stream and the PC game
+  running.
+- Disconnecting from fullscreen finishes even if macOS misses the closing
+  animation's completion.
+- Choosing “Use this screen's size” keeps that choice for the session instead of
+  switching back to 1080p.
+
+- Keep saved shortcuts when updating the Stats shortcut. If Control-Z is already
+  in use, Stats keeps Control-I when it is free.
+- Resizing an iPad stream keeps a screen size supported at its current frame
+  rate, including 120 fps.
+- Release controller shoulder buttons reliably when using layouts and controller
+  shortcuts.
+- Keep iPad window sizes and Low Data Mode in sync without undoing the latest
+  resize.
+- Command-line streaming reports a launch conflict or timeout instead of leaving
+  a waiting command stuck.
+
+- Fixed missed and delayed controller input on iPhone and iPad.
 
 - Fixed a crash when using a controller during a stream.
 - Fixed a crash when an iPhone could not rotate into a stream.

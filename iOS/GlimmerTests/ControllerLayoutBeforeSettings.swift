@@ -5,6 +5,18 @@ import GlimmerEngine
 import SwiftUI
 @testable import Glimmer
 
+enum ControllerMouseStick: String, CaseIterable, Identifiable, Sendable {
+    case left, right
+
+    var id: String { rawValue }
+    var label: String { self == .right ? "Right" : "Left" }
+    var mapping: ControllerMouseMapping { self == .right ? .rightStick : .leftStick }
+    var controls: String {
+        self == .right ? "Right stick moves. R2 clicks. R1 right-clicks. Left stick scrolls."
+            : "Left stick moves. L2 clicks. L1 right-clicks. Right stick scrolls."
+    }
+}
+
 @MainActor
 struct ControllerLayoutBeforeSettings: View {
     @Binding var profile: StreamProfile

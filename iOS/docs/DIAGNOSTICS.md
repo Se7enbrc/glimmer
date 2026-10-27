@@ -1,49 +1,25 @@
-# Record an iPhone test
+# Investigate an iPhone or iPad problem
 
-In Settings → Diagnostics, turn on **Record diagnostics**, then start a new
-stream. Development builds enable it by default; production builds default to
-off. The choice is saved. Recording uses the shared engine's existing diagnostic
-log, performance samples, frame traces and session report. Nothing is uploaded.
-Its metrics listener is loopback-only, even if a LAN preference exists.
+Use Apple's system logs and reports. Glimmer records no diagnostics of its own,
+in beta or production: no session files, frame traces, input captures or
+Diagnostics folder. There is no recording switch or diagnostic export.
 
-To investigate silent audio or rumble that stops:
+1. Note the time, device and OS version, stream format, audio output and
+   controller.
+2. Reproduce the problem and note what happened just before it, such as changing
+   audio output, connecting a controller or leaving the app.
+3. Use Console on a connected Mac to review the device's Glimmer logs, or
+   collect an Apple sysdiagnose when support requests one. Review it before
+   sharing.
+4. For TestFlight and App Store builds, review Apple's crash, hang, launch,
+   energy and disk-write reports in Xcode Organizer when available.
 
-1. Start a game or other PC source that is definitely producing sound.
-2. Note the selected iPhone output, volume, stream format and controller mode.
-3. Play for 30–60 seconds. Note when audio or rumble fails, and whether Menu
-   mouse mode, unplugging, backgrounding or changing audio output preceded it.
-4. Disconnect in Glimmer so the recorder flushes its files. Leave the PC game
-   running. Connect the unlocked iPhone directly to the Mac to retrieve the
-   files.
+System logs retain connection and lifecycle events at sensible levels and hide
+private PC details. Glimmer does not log keys, PINs, certificates or button
+presses. No MetricKit subscriber or custom upload service is installed.
 
-With Xcode command-line tools, copy only Glimmer's diagnostic directory:
+Old files from an earlier beta remain untouched. Do not copy pairing identity or
+certificate storage when investigating a problem. Settings → Connection contains
+Adaptive stream quality; it controls the connection, not recording.
 
-```sh
-xcrun devicectl device copy from --device YOUR_DEVICE_ID \
-  --domain-type appDataContainer --domain-identifier io.ugfugl.Glimmer.iOS \
-  --source Library/Application\ Support/Diagnostics --destination ./iphone-diagnostics
-```
-
-Files include `glimmer-*.log`, `telemetry-*.ndjson`, frame traces and
-`telemetry-session-*.json`, plus `controller-capabilities.json` with the
-controller kind, original face symbols and advertised rumble/touchpad
-capability. Private log fields are redacted and PC identifiers in telemetry are
-pseudonyms. Do not copy the app's identity or pairing storage. The shared
-recorder applies its existing retention and size limits. Disable recording for
-an overhead comparison after the problem is understood.
-
-Audio samples distinguish packet arrival, decoding, buffering, render progress,
-output state and volume. Controller logs include rumble activation, input
-ownership changes, native engine stop/reset and retry events. They do not record
-button presses or audio content. Missing platform-specific measurements remain
-unavailable; Mac Wi-Fi, GPU and power probes are not supplied by this iPhone
-adapter.
-
-This records evidence; it does not establish that missing audio or rumble is
-fixed. Correlate the iPhone files with Sunshine's logs and the player's notes.
-
-Some devicectl versions truncate ISO timestamp filenames at colons during a
-folder copy. Copy each file by its complete name instead, for example
-`Library/Application Support/Diagnostics/glimmer-2026-10-15T02:20:24Z.log`. Use
-a destination filename without colons. The full names follow the session's start
-timestamp; the session report uses its end timestamp.
+Next: [test the exact TestFlight candidate](TESTFLIGHT.md).

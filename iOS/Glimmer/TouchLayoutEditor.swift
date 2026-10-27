@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import SwiftUI
 
 struct TouchLayoutEditor: View {
@@ -173,7 +174,7 @@ struct TouchLayoutEditor: View {
 
     private func save() {
         drafts[family] = draft
-        let store = TouchLayoutStore(defaults: .standard)
+        let store = TouchLayoutStore(defaults: PersistentStorage.defaults)
         for (family, saved) in drafts {
             let defaults = TouchLayout.defaults(in: draftAreas[family] ?? area)
             var layout = saved
@@ -194,7 +195,7 @@ struct TouchLayoutEditor: View {
     private func load() {
         family = TouchLayout.family(in: area)
         draftAreas[family] = area
-        draft = drafts[family] ?? TouchLayoutStore(defaults: .standard).load(
+        draft = drafts[family] ?? TouchLayoutStore(defaults: PersistentStorage.defaults).load(
             pcID: launch.pcID, appID: launch.appID, family: family)
         select(selected)
     }

@@ -62,14 +62,14 @@ over the video makes macOS blend every frame; on the same M4 Pro the overlay
 cost about 0.66 W of GPU power and 8% of a core while visible, and nothing when
 hidden. A child window over the video composites the same way.
 
-The per-second rows carry `gpu_power_w` and `gpu_residency_percent`; Prometheus
-prefixes both with `glimmer_`. The session scorecard's `resources` object
-carries min/avg/max for both and `package_power_w`, over all available session
-samples (including startup and hidden windows). Missing rails and first samples
-are omitted. A flat Energy Model window retains its baseline and emits no power
-reading; zero GPU power is valid when other compute rails advance. All fields
-reuse the opt-in sampler's existing one-second cadence. The stats overlay
-currently shows neither GPU residency nor GPU power.
+The per-second NDJSON rows carry `gpu_power_w` and `gpu_residency_percent`. The
+session scorecard's `resources` object carries min/avg/max for both and
+`package_power_w`, over all available session samples (including startup and
+hidden windows). Missing rails and first samples are omitted. A flat Energy
+Model window retains its baseline and emits no power reading; zero GPU power is
+valid when other compute rails advance. All fields reuse the opt-in sampler's
+existing one-second cadence. The stats overlay currently shows neither GPU
+residency nor GPU power.
 
 ## Kernel receive timing
 
@@ -83,7 +83,7 @@ packet; its unavailable/unsupported fallback uses public `recvmsg`, retaining
 timestamps. Audio uses `recvmsg`. No probe or network round trip is added.
 
 Each per-second NDJSON row includes the following for each prefix `video` and
-`audio`. Prometheus uses the same fields prefixed with `glimmer_`.
+`audio`.
 
 | Suffix after `<stream>_rx_`              | Meaning in the capture window                        |
 | ---------------------------------------- | ---------------------------------------------------- |

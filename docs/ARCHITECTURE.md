@@ -64,7 +64,9 @@ mandatory quit confirmation. See [command reference](COMMAND_LINE.md).
 `GlimmerIntents.swift` provides Stream from PC, Wake PC, Stop Streaming and Quit
 App on PC. `PCEntity` exposes saved PCs; `GlimmerShortcuts` refreshes names
 after pairing, rename or removal. These actions use the launcher's own entry
-points.
+points. The same declarations compile into iOS, excluding Wake PC. Command URLs
+share `GlimmerCommandURL`; mobile commands use `LauncherModel` and its existing
+confirmation and session teardown paths.
 
 ## Shared engine and native adapters
 
@@ -88,8 +90,11 @@ app ID.
 Native display code calls `VideoDecoder.setPresentSuppressed(_:)` while hidden.
 It reuses newest-frame retention, decode gating and watchdog suppression.
 `PacerHeadroom` keeps policy reads inside the engine; frame releases do not call
-the app. Handed controller mouse mappings preserve the Mac default, shared curve
-and polling cadence.
+the app. Controller mouse mode compiles shared Right-handed or Left-handed
+bindings into a `ControllerMousePlan`. Both platforms use the same cubic curve,
+50 ms movement-only polling and click release ledger. Settings keep explicit
+overrides when a preset changes; the shared controller recorder rejects
+overlapping bindings.
 
 `LauncherArtCache` and `NetworkClient.appAsset(appID:)` share bounded artwork
 storage and pinned TLS. Shells decide when to fetch visible covers. An optional
@@ -319,6 +324,15 @@ through. Physical keys use positional scancodes with `0x8000`. Command stays
 local by default; forwarding applies only fullscreen or captured. Hotkeys
 precede that gate.
 
+On iOS, GameController keyboard and mouse callbacks run on a dedicated serial
+queue. Native focus and device changes retire callbacks before releasing held
+input. Both adapters use the engine's physical key map and release ledger; UIKit
+retains local shortcuts and requests scene pointer lock only during play.
+Opening stream controls releases capture, including when video is on an external
+display. Possible keyboard shortcuts wait for UIKit's layout-aware character
+event before forwarding. Both callback paths share physical press ownership;
+ordinary gameplay keys remain synchronous on the capture queue.
+
 ### Release ledger and text
 
 Keep failed releases pending before allowing new presses or text.
@@ -342,17 +356,19 @@ GameController callbacks use a serial user-interactive queue and locked
 `InputCore`. Arrival announces capabilities; reconnect removes stale slots
 before replaying arrivals and current state. Old callbacks cannot reach retired
 slots. Rumble, trigger rumble, motion, battery and light feedback use the shared
-routing.
+routing. System-profile callbacks own stick delivery unless a custom layout uses
+the physical profile exclusively. Shortcut observers do not also observe sticks.
+Settings capture replaces the stream handlers and restores them on exit.
 
 Mini Player retains background controller input, while keyboard/mouse follow
 focus. Background monitoring has shared ownership with diagnostics and shortcut
 recording and restores its original value after the last owner leaves.
 
-Start held over 750 ms then released toggles per-slot controller mouse. Stop
-chords cancel toggles. Mouse buttons share the release ledger; stick polling
-runs only while moving/scrolling. Touchpad coordinates come from GameController.
-Nintendo layout swaps only outgoing A/B and X/Y after positional mouse/chord
-handling.
+The configured mouse toggle held over 750 ms then released toggles per-slot
+controller mouse. Stop chords cancel toggles. Mouse buttons share the release
+ledger; stick polling runs only while moving/scrolling. Touchpad coordinates
+come from GameController. Nintendo layout swaps only outgoing A/B and X/Y after
+positional mouse/chord handling.
 
 ### Raw HID and gestures
 
@@ -407,9 +423,30 @@ sendability require documented invariants: serialized callback refs,
 decode-queue state, locked display-layer loads/stores and the locked shared
 format box. See [concurrency rules](CONTRIBUTING.md#concurrency).
 
+## Saved PC addresses
+
+`HostAddressRecovery` owns the bounded IPv4 discovery search for both clients.
+Only private LAN literals are eligible. Candidates must pass the saved TLS pin
+and PC ID; native storage updates the route only when the original address is
+unreachable. Explicit names and remote addresses remain unchanged. Recovery
+never changes pairing identity or installs a certificate.
+
 ## Identity & pairing
 
 Use the shared file-backed identity and authenticated pinning flow.
+
+| Store state (under the publication lock)                                         | Allowed action                      |
+| -------------------------------------------------------------------------------- | ----------------------------------- |
+| Absent                                                                           | Create                              |
+| Empty directory                                                                  | Remove with `rmdir`, then create    |
+| Staging-only leftover                                                            | Clean reserved staging, then create |
+| Complete valid identity                                                          | Use unchanged                       |
+| Established but incomplete, invalid, unreadable or containing only unknown files | Preserve and error                  |
+
+Only the first three states may create. Publication validates a complete staged
+identity before an exclusive atomic rename and cleans its own staging on
+failure. Crash staging is cleaned on the next locked load, without changing
+established files.
 
 Identity is RSA-2048 with owner-only files. Pairing performs four HTTP rounds
 and HTTPS liveness, using PIN-derived AES-ECB challenges and RSA proofs. Only a

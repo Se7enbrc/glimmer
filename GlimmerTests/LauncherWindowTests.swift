@@ -12,6 +12,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import ScreenCaptureKit
 import Testing
 @testable import Glimmer
 
@@ -168,58 +169,93 @@ struct PointerShortcutHelpTests {
 struct RunningTileWindowTests {
     private let settings = IsolatedDefaults()
 
-    @Test func launcherScreenshots() async throws {
+    @Test(arguments: [false, true], [false, true])
+    func launcherScreenshots(dark: Bool, running: Bool) async throws {
         let model = AppModel(defaults: settings.defaults)
+        let sunshine = FakeSunshine.scripted([:])
+        model.makeNetwork = { sunshine.client($0) }
         let apps = ["Desktop", "Steam Big Picture", "SuperTuxKart"].enumerated().map {
             LibraryApp(id: $0.offset + 1, name: $0.element, hdr: false, hidden: false)
         }
         let host = Host(id: "fixture", name: "Living room PC", customName: nil, localAddress: "192.0.2.1",
-                        manualAddress: nil, apps: apps, lastConnected: nil, serverCertPEM: "pin",
+                        manualAddress: nil, apps: apps, lastConnected: nil, serverCertPEM: nil,
                         appVersion: nil, macAddress: nil)
         model.hosts = [host]
         model.selectedHost = host
-        model.hostLiveStatus = .init(hostID: host.id, state: .streamingApp(name: "Desktop"), capturedAt: .now,
-                                    runningAppID: 1)
-        let window = NSWindow(contentRect: NSRect(x: 150, y: 200, width: 580, height: 300),
-                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        defer { window.close() }
-        window.title = "Glimmer"
-        window.identifier = NSUserInterfaceItemIdentifier("main")
-        let previousPolicy = NSApp.activationPolicy()
-        NSApp.setActivationPolicy(.regular)
-        defer { NSApp.setActivationPolicy(previousPolicy) }
-        let view = NSHostingView(rootView: RunningTileWindowFixture().environment(model))
-        window.contentView = view
-        view.layoutSubtreeIfNeeded()
-        let runningSize = view.fittingSize
+        model.hostStatusTask?.cancel()
+        model.cancelHostReadiness()
         model.hostLiveStatus = .init(hostID: host.id, state: .idle, capturedAt: .now)
+        let content = RunningTileWindowFixture().environment(model)
+            .tint(Color("AccentColor"))
+            .accentColor(Color("AccentColor"))
+            .background(.background)
+            .environment(\.colorScheme, dark ? .dark : .light)
+        let view = NSHostingView(rootView: content)
+        let idleSize = view.fittingSize
+        model.hostLiveStatus = .init(hostID: host.id,
+                                    state: running ? .streamingApp(name: "Desktop") : .idle,
+                                    capturedAt: .now, runningAppID: running ? 1 : nil)
         view.layoutSubtreeIfNeeded()
-        #expect(view.fittingSize == runningSize)
-        model.hostLiveStatus = .init(hostID: host.id, state: .streamingApp(name: "Desktop"),
-                                    capturedAt: .now, runningAppID: 1)
-        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            window.appearance = NSAppearance(named: appearance)
-            view.layoutSubtreeIfNeeded()
-            window.setContentSize(view.fittingSize)
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate()
-            #expect(view.fittingSize.width == 580)
-            if ProcessInfo.processInfo.environment["GLIMMER_UI_HOLD"] != nil {
-                try await Task.sleep(for: .seconds(30))
-            }
-            if let directory = ProcessInfo.processInfo.environment["GLIMMER_SCREENSHOTS"] {
-                try await Task.sleep(for: .milliseconds(500))
-                let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-                view.cacheDisplay(in: view.bounds, to: bitmap)
-                let data = try #require(bitmap.representation(using: .png, properties: [:]))
-                try data.write(to: URL(filePath: "\(directory)/mac-\(name)-view.png"))
-            }
-        }
+        #expect(view.fittingSize == idleSize)
+        #expect(idleSize.width == 580)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: idleSize),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.contentView = view
+        defer { window.contentView = nil; window.close() }
+        view.frame = NSRect(origin: .zero, size: idleSize)
+        view.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        let renderer = ImageRenderer(content: content.frame(width: 580))
+        renderer.scale = 2
+        let image = try #require(renderer.cgImage)
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        let data = try #require(bitmap.representation(using: .png, properties: [:]))
+        let name = "mac-\(dark ? "dark" : "light")-\(running ? "running" : "idle").png"
+        Attachment.record(Array(data), named: name)
     }
 }
 
 private struct RunningTileWindowFixture: View {
     @FocusState private var focus: LauncherFocus?
     var body: some View { ConnectSurface(focus: $focus).modifier(LauncherTakeoverConfirmation()) }
+}
+
+@Suite(.serialized)
+@MainActor
+struct ShortcutContrastWindowTests {
+    @Test(arguments: [false, true])
+    func compositedShortcutBadges(dark: Bool) async throws {
+        let settings = IsolatedDefaults()
+        let model = AppModel(defaults: settings.defaults)
+        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        let previous = NSApp.appearance
+        NSApp.appearance = appearance
+        defer { NSApp.appearance = previous }
+        let host = NSHostingController(rootView: ShortcutsPane().environment(model)
+            .environment(\.colorScheme, dark ? .dark : .light))
+        let window = NSWindow(contentViewController: host)
+        window.isReleasedWhenClosed = false
+        window.title = "Shortcut contrast verification"
+        window.appearance = appearance
+        window.setContentSize(CGSize(width: 620, height: 760))
+        window.orderFront(nil)
+        defer { window.contentViewController = nil; window.close() }
+        host.view.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        // This API exposes only this test host's windows and requires no screen-recording permission.
+        let content = try await SCShareableContent.currentProcess
+        let target = try #require(content.windows.first { $0.windowID == CGWindowID(window.windowNumber) })
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int(window.frame.width * 2)
+        configuration.height = Int(window.frame.height * 2)
+        configuration.showsCursor = false
+        configuration.ignoreShadowsSingleWindow = true
+        let image = try await SCScreenshotManager.captureImage(
+            contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: configuration)
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        let data = try #require(bitmap.representation(using: .png, properties: [:]))
+        Attachment.record(Array(data), named: "shortcut-composited-\(dark ? "dark" : "light").png")
+    }
 }

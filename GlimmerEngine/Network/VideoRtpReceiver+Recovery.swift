@@ -5,7 +5,7 @@ import Foundation
 
 /// One RFI loss episode: the first loss the depacketizer reports to the frame that
 /// ends it (the host's recovery frame or an IDR). Frame numbers are wrap-safe u32.
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 struct VideoLossEpisode {
 
     struct Summary: Equatable {
@@ -70,7 +70,7 @@ extension VideoRtpReceiver {
     /// The `idr_received` row; `requested` when an IDR request or an RFI was outstanding.
     static func idrReceivedFields(frame: Int32, atNanos: UInt64, requested: Bool,
                                   roundTripMs: Double?, bytes: Int32) -> [String] {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         var fields = [
             "\"event\":\"idr_received\"",
             "\"t_ns\":\(atNanos)",
@@ -86,7 +86,7 @@ extension VideoRtpReceiver {
     }
 
     func depacketizerDetectedFrameLoss(from: Int, to: Int) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         // One line when the episode opens; its summary logs at recovery.
         if lossEpisode.noteLoss(from: from, to: to, nowNanos: TelemetryCounters.monotonicNowNanos(),
                                 rfisSent: TelemetryCounters.shared.rfiTotal.value) {
@@ -99,7 +99,7 @@ extension VideoRtpReceiver {
     /// End the open loss episode at the first frame assembled after it: one log
     /// line, one `loss_episode` row, and an rfi_recovery observation.
     func closeLossEpisode(at unit: DecodeUnit, isIDR: Bool) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let now = TelemetryCounters.monotonicNowNanos()
         guard let episode = lossEpisode.close(frame: unit.frameNumber, isIDR: isIDR, nowNanos: now,
                                               rfisSent: TelemetryCounters.shared.rfiTotal.value) else { return }
@@ -113,7 +113,7 @@ extension VideoRtpReceiver {
 
     /// An IDR landed: resolve the explicit-IDR round trip when one was pending,
     /// and emit `idr_received`. Gate-on only, like the round-trip arm it pairs with.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     func noteKeyFrame(_ unit: DecodeUnit, tracker: FrameTimingTracker) {
         let now = TelemetryCounters.monotonicNowNanos()
         let roundTripMs = TelemetryCounters.shared.p2.resolveIdrArrival(now)

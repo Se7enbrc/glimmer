@@ -24,8 +24,8 @@ struct InputLatencyTests {
         core.publish(.init(ready: true, focused: true, mask: 1), backend: backend)
         core.withLock {
             var state = ControllerMouseState(isMouse: true)
-            state.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 32767,
-                                         leftStickY: 0, rightStickX: 0, rightStickY: 0)
+            state.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0,
+                                         leftStickY: 0, rightStickX: 32767, rightStickY: 0)
             core.controllerMouseStates[0] = state
             for timestamp in [1.0, 1.01] {
                 InputTimingContext.begin(source: .rawHID, timestamp: timestamp)
@@ -49,8 +49,8 @@ struct InputLatencyTests {
         let token = UUID()
         core.publish(.init(ready: true, focused: true, mask: 1), backend: InputRecordingBackend())
         var state = ControllerMouseState(isMouse: true)
-        state.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 32767,
-                                     leftStickY: 0, rightStickX: 0, rightStickY: 0)
+        state.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 0,
+                                     leftStickY: 0, rightStickX: 32767, rightStickY: 0)
         core.withLock { core.hidRegistrations[0] = token; core.controllerMouseStates[0] = state }
         InputTimingContext.begin(source: .rawHID, timestamp: 1)
         core.receiveHID(slot: 0, token: token, buttons: 0, analog: state.analog, capturedAt: 1)
@@ -105,7 +105,7 @@ struct InputLatencyTests {
         #expect(capture.histogram.observationCount == 0)
     }
 
-    @Test func bothExportersIncludeCountsMaximaAndQuantiles() {
+    @Test func ndjsonIncludesCountsMaximaAndQuantiles() {
         let latency = InputLatency()
         latency.observe(source: .mouse, stage: .captureSend, from: 1, to: 60_000_001)
         var json = TelemetryRenderer.NDJSONBuilder()
@@ -113,11 +113,8 @@ struct InputLatencyTests {
         #expect(json.line().contains("\"input_mouse_capture_send_max_ms\":60"))
         #expect(json.line().contains("\"input_mouse_capture_send_over_50ms\":1"))
         #expect(json.line().contains("input_mouse_capture_send_p99_ms"))
-        var prom = TelemetryRenderer.PromBuilder(session: "test", host: "pc")
-        TelemetryRenderer.promInputLatency(&prom, latency.snapshot())
-        #expect(prom.out.contains("glimmer_input_mouse_capture_send_ms_bucket"))
-        #expect(prom.out.contains("glimmer_input_mouse_capture_send_over_50ms_total"))
-        #expect(!prom.out.contains("glimmer_input_keyboard_capture_send"))
+        #expect(json.line().contains("input_mouse_capture_send_buckets"))
+        #expect(!json.line().contains("input_keyboard_capture_send"))
     }
 
     @Test func callbackGateRequiresFreshLocalProgress() {

@@ -232,7 +232,7 @@ final class AWDLHelperManager: ObservableObject {
             reachable: { await client.currentStatus() != nil },
             count: { await client.reSuppressCount() },
             daemonJobMissing: { await AWDLHelperRecovery.daemonJobMissing() },
-            daemonLayout: { await AWDLHelperRecovery.daemonLayout() }), defaults: .standard)
+            daemonLayout: { await AWDLHelperRecovery.daemonLayout() }), defaults: PersistentStorage.defaults)
     }
 
     init(operations: Operations, defaults: UserDefaults) {

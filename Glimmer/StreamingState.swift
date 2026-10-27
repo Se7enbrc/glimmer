@@ -40,6 +40,7 @@ extension PairingFailure {
         case .busy:
             return "\(pc) is busy with another pairing request. "
                 + "Cancel it on Sunshine's PIN page or wait a few minutes, then choose Try Again."
+        case .identityNeedsRestore: return StreamFailureCopy.identityNeedsRestore(pc)
         case .rejected: return "\(pc) didn't accept the pairing. Choose Try Again to get a new code."
         }
     }

@@ -32,6 +32,7 @@ final class LauncherModel {
     var endedGame: HostApp?
     var endedFormat: ContinuationFormat?
     var pendingGameAction: GameAction?
+    var pendingURLCommand: URLCommandRequest?
     var leaveGamesRunning = false
     var history: ContinuationHistory
     var pictureTrial: PictureTrial?
@@ -39,7 +40,6 @@ final class LauncherModel {
     private var returningPCID: String?
     var streamProfile: StreamProfile = .native120
     var touchMouseEnabled = true
-    var mouseStick: ControllerMouseStick = .right
     var session: StreamSessionModel?
     var hasActiveStream: Bool { session.map { !$0.phase.isEnded } ?? false }
     private var closingTask: Task<Void, Never>?
@@ -66,16 +66,20 @@ final class LauncherModel {
     private let discovery = HostDiscovery()
     var selected: PreparedPC?
     private var selection: SavedPC?
+    var pendingCommandPCID: String?
+    var pendingCommand: Bool { pendingCommandPCID != nil }
+    var commandEpoch: UInt64 = 0
+    var commandTask: Task<Void, Never>?
     var generation: UInt64 = 0
     var operation: Task<Void, Never>?
     private var discoveryTask: Task<Void, Never>?
     private var discoveryRun: UInt64?
-    private let artCache = LauncherArtCache(base: URL.cachesDirectory)
+    private let artCache = LauncherArtCache(base: PersistentStorage.caches)
     var active = false
     var needsRefresh = false
 
     init(services: LauncherServices?) {
-        history = ContinuationHistory(defaults: .standard)
+        history = ContinuationHistory(defaults: PersistentStorage.defaults)
         calls = services.map { services in
             Calls(savedPCs: { try services.savedPCs() },
                   prepare: { try await services.prepare(server: $0, saved: $1) },
@@ -91,7 +95,9 @@ final class LauncherModel {
     }
 
     init(calls: Calls, discoveryEnabled: Bool = true) {
-        let defaults = UserDefaults(suiteName: "launcher-test-\(UUID().uuidString)") ?? UserDefaults()
+        guard let defaults = UserDefaults(suiteName: "launcher-test-\(UUID().uuidString)") else {
+            preconditionFailure("Could not isolate launcher preferences")
+        }
         history = ContinuationHistory(defaults: defaults)
         self.calls = calls
         self.discoveryEnabled = discoveryEnabled
@@ -99,8 +105,8 @@ final class LauncherModel {
 
     static func make() -> LauncherModel {
         do {
-            let base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                                   appropriateFor: nil, create: true)
+            let base = PersistentStorage.supportRoot()
+            try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
             return LauncherModel(services: LauncherServices(base: base,
                 protectedData: ProtectedDataState(UIApplication.shared.isProtectedDataAvailable)))
         } catch { return LauncherModel(services: nil) }

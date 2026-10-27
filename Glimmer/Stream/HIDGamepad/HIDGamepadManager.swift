@@ -143,7 +143,7 @@ final class HIDGamepadManager {
 
     /// Debug switch: `defaults write io.ugfugl.Glimmer hidGamepadClaimAll -bool YES` makes the
     /// HID path take pads GameController owns too, to exercise it without exotic hardware.
-    static var claimAll: Bool { UserDefaults.standard.bool(forKey: "hidGamepadClaimAll") }
+    static var claimAll: Bool { PersistentStorage.defaults.bool(forKey: "hidGamepadClaimAll") }
 
     private func add(_ device: IOHIDDevice) {
         guard clients > 0 else { return }

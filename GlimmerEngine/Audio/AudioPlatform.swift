@@ -34,7 +34,7 @@ public struct AudioPlatform {
     /// Native session events join the recording. Pass only scalar state and system route types,
     /// never device names, identifiers, error text or audio contents.
     public static func recordSessionDiagnostic(_ message: String) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         Diag.notice("\(message)", "Stream.Audio")
         #endif
     }
@@ -47,6 +47,8 @@ public struct AudioPlatform {
     let removeDeviceListeners: () -> Void
     let captureVolume: () -> (() -> AudioOutputVolume)
     let environment: @Sendable () -> AudioEnvironment
+    // Session-backed output opts into packet-driven recovery, preparing after disposal and before rebuilding.
+    let prepareForRecovery: (() -> Void)?
 
     public init(makeOutput: @escaping (AVAudioFormat) throws -> AudioOutput,
                 sampleRoute: @escaping () -> AudioRoute,
@@ -55,7 +57,8 @@ public struct AudioPlatform {
                 installDeviceListeners: @escaping (DispatchQueue, @escaping @Sendable (UInt64) -> Void) -> Void,
                 removeDeviceListeners: @escaping () -> Void,
                 captureVolume: @escaping () -> (() -> AudioOutputVolume),
-                environment: @escaping @Sendable () -> AudioEnvironment) {
+                environment: @escaping @Sendable () -> AudioEnvironment,
+                prepareForRecovery: (() -> Void)? = nil) {
         self.makeOutput = makeOutput
         self.sampleRoute = sampleRoute
         self.installRouteListener = installRouteListener
@@ -64,6 +67,7 @@ public struct AudioPlatform {
         self.removeDeviceListeners = removeDeviceListeners
         self.captureVolume = captureVolume
         self.environment = environment
+        self.prepareForRecovery = prepareForRecovery
     }
 }
 

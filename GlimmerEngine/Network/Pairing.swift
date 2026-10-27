@@ -47,7 +47,7 @@ public actor PairingClient {
     private func runPairingFlow(pin: String) async throws -> ServerInfo {
 
         // Keep the interval and per-round events so Instruments identifies a stalled pairing step.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let pairingSignpostID = OSSignposter.pairing.makeSignpostID()
         let pairingIntervalState = OSSignposter.pairing.beginInterval(
             "PairingFlow",
@@ -146,7 +146,7 @@ public actor PairingClient {
         server.pairStatus = .paired
 
         log.info("Pairing succeeded for \(self.server.address, privacy: .private)")
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         pairingOutcome = "success"
         #endif
         return server
@@ -239,7 +239,7 @@ public actor PairingClient {
         timeout: TimeInterval = NetworkClient.pairTimeout,
         failureMessage: String
     ) async throws -> XMLNode {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.pairing.emitEvent(
             "PairingStep",
             id: signpostID,

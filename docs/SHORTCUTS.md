@@ -107,12 +107,12 @@ DualSense buttons** enabled in Settings › Input.
 
 ## Controller mouse and launcher
 
-| Control                                 | Result                                                                                 |
-| --------------------------------------- | -------------------------------------------------------------------------------------- |
-| Hold Start alone >0.75 seconds, release | Toggle mouse; DualSense needs Extra DualSense buttons.                                 |
-| D-pad / left stick in launcher          | Move focus; macOS-supported controllers only.                                          |
-| Bottom / right face button              | Select / dismiss.                                                                      |
-| Mouse controls                          | [Click, scroll and touchpad map](guides/CONTROLLERS.md#use-the-controller-as-a-mouse). |
+| Control                              | Result                                                                                 |
+| ------------------------------------ | -------------------------------------------------------------------------------------- |
+| Hold mouse-mode toggle, then release | Switch modes. Change the binding in Settings › Input › Controller mouse.               |
+| D-pad / left stick in launcher       | Move focus; macOS-supported controllers only.                                          |
+| Bottom / right face button           | Select / dismiss.                                                                      |
+| Mouse controls                       | [Click, scroll and touchpad map](guides/CONTROLLERS.md#use-the-controller-as-a-mouse). |
 
 ## When you forget
 

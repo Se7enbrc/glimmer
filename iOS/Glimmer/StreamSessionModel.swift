@@ -13,6 +13,7 @@ final class StreamSessionModel {
     }
 
     let shortcuts: StreamShortcuts
+    let menuVisibility: StreamMenuVisibility
     private(set) var statsShown: Bool
 
     private(set) var phase: Phase = .idle
@@ -46,18 +47,22 @@ final class StreamSessionModel {
     private(set) var canStart = true
     private(set) var controlsVisible = true
     private(set) var externalDisplayActive = false
+    private(set) var hardwareInputConnected = false
+    var hasGameInput: Bool { controllerConnected || hardwareInputConnected || touchGeometryUsable }
     var inputCaptureChanged: ((Bool) -> Void)?
     var presentationEnded: (() -> Void)?
     var inputFocused: Bool {
         canStart && phase == .streaming && !controlsVisible && !captureSuspended
-            && (controllerConnected || touchGeometryUsable)
+            && hasGameInput
     }
     var streamInput: StreamInput? { playback?.input }
     var touchGamepad: TouchGamepadCapture? { playback?.touchGamepad }
     var editingTouchControls = false
     private(set) var touchGeometryUsable = true
     private(set) var touchControlsRequested = false
-    var touchControlsVisible: Bool { inputFocused && (!controllerConnected || touchControlsRequested) }
+    var touchControlsVisible: Bool {
+        inputFocused && ((!controllerConnected && !hardwareInputConnected) || touchControlsRequested)
+    }
     var touchMouseActive: Bool {
         guard let registration = touchGamepad?.registration else { return false }
         return mouseControllers.contains(registration)
@@ -79,11 +84,13 @@ final class StreamSessionModel {
     private var windowResize: StreamWindowResize?
     private let resizeSleep: @Sendable (Duration) async throws -> Void
 
-    init(launch: StreamLaunch, defaults: UserDefaults = .standard,
+    init(launch: StreamLaunch, defaults: UserDefaults = PersistentStorage.defaults,
+         menuVisibility: StreamMenuVisibility = StreamMenuVisibility(),
          backgroundGrace: StreamBackgroundGrace = StreamBackgroundGrace(),
          resizeSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          makePlayback: @escaping @MainActor (StreamLaunch, StreamSurface,
             @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback = StreamPlayback.make) {
+        self.menuVisibility = menuVisibility
         shortcuts = StreamShortcuts(defaults: defaults)
         statsShown = defaults.bool(forKey: "showStreamStats")
         self.launch = launch
@@ -249,6 +256,15 @@ final class StreamSessionModel {
         }
     }
 
+    private(set) var menuController: ControllerRegistration?
+
+    var menuControllerUsesMouse: Bool { menuController.map { mouseControllers.contains($0) } ?? false }
+
+    func toggleControllerMouseMode() {
+        guard let menuController else { return }
+        streamInput?.setControllerMouseMode(!menuControllerUsesMouse, for: menuController)
+    }
+
     func showControls() {
         controlsRequested = true
         controlsVisible = true
@@ -258,32 +274,42 @@ final class StreamSessionModel {
     func touchGeometryChanged(usable: Bool) {
         guard touchGeometryUsable != usable else { return }
         touchGeometryUsable = usable
-        if phase == .streaming, !controllerConnected, !controlsRequested { controlsVisible = !usable }
+        if phase == .streaming, !controllerConnected, !hardwareInputConnected, !controlsRequested {
+            controlsVisible = !usable
+        }
         synchronizeInputFocus()
     }
 
     func resumeInput() {
-        guard canStart, phase == .streaming, controllerConnected || touchGeometryUsable else { return }
+        guard canStart, phase == .streaming, hasGameInput else { return }
         controlsRequested = false
         controlsVisible = false
         synchronizeInputFocus()
     }
 
     func toggleTouchControls() {
-        guard controllerConnected, phase == .streaming else { return }
+        guard controllerConnected || hardwareInputConnected, phase == .streaming else { return }
         touchControlsRequested.toggle()
         playback?.showTouchControls?(touchControlsRequested)
+    }
+
+    func hardwareConnectionChanged(_ connected: Bool) {
+        guard !phase.isEnded, hardwareInputConnected != connected else { return }
+        hardwareInputConnected = connected
+        if phase == .streaming, !controlsRequested { controlsVisible = !hasGameInput }
+        synchronizeInputFocus()
     }
 
     private func controllerConnectionChanged(_ connected: Bool) {
         guard !phase.isEnded, controllerConnected != connected else { return }
         controllerConnected = connected
         if phase == .streaming, !controlsRequested { controlsVisible = false }
-        if !connected, !touchGeometryUsable { controlsVisible = true }
+        if !connected, !hardwareInputConnected, !touchGeometryUsable { controlsVisible = true }
         synchronizeInputFocus()
     }
 
     private func synchronizeInputFocus() {
+        menuVisibility.setPlaying(inputFocused)
         playback?.showStats?(statsShown && canStart && phase == .streaming)
         playback?.focusInput?(inputFocused)
         inputCaptureChanged?(inputFocused)
@@ -292,7 +318,9 @@ final class StreamSessionModel {
 
     /// A resized window, or a continued game at an earlier size, moves to the window's listed mode.
     func windowChanged(surface: StreamSurface) {
-        guard let current = requestedFormat, let target = try? launch.profile.resolve(surface: surface) else { return }
+        guard let current = requestedFormat,
+              let target = try? launch.profile.resolve(surface: surface, preservingFPS: current.fps,
+                                                       useScreenSize: launch.useScreenSize) else { return }
         // The resume-only seam keeps the running frame rate.
         windowResize?.submit(StreamFormat(width: target.width, height: target.height, fps: current.fps,
                                           changeResolution: current.changeResolution))
@@ -321,6 +349,9 @@ final class StreamSessionModel {
         switch event {
         case .stopRequested: disconnect()
         case .statsRequested: toggleStats()
+        case .controlsRequested(let controller):
+            menuController = controller
+            showControls()
         // Engine activity includes the touch registration; only native discovery reports physical presence.
         case .controllersActive: break
         case .mouseMode(let controller, let enabled):
@@ -331,7 +362,7 @@ final class StreamSessionModel {
 
     private func showControllerMode(_ enabled: Bool) {
         modeNoticeTask?.cancel()
-        controllerModeMessage = enabled ? "Mouse mode · \(launch.mouseStick.label) stick" : "Gamepad mode"
+        controllerModeMessage = ControllerMouseMapping.modeMessage(enabled: enabled)
         modeNoticeTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(2)) } catch { return }
             self?.controllerModeMessage = nil
@@ -367,21 +398,33 @@ final class StreamSessionModel {
         synchronizeInputFocus()
     }
 
+    private func resumePlayback() {
+        recordFirstVideo()
+        hasReceivedVideo = true
+        endingMessage = nil
+        terminalFailure = false
+        captureSuspended = false
+        adjustingQuality = false
+        phase = .streaming
+        if !controlsRequested { controlsVisible = !controllerConnected && !touchGeometryUsable }
+        synchronizeInputFocus()
+    }
+
+    private func adoptSize(width: Int, height: Int) {
+        guard let current = requestedFormat else { return }
+        let format = StreamFormat(width: width, height: height, fps: current.fps,
+                                  changeResolution: current.changeResolution)
+        requestedFormat = format
+        windowResize?.adopt(format)
+    }
+
     func receive(_ update: StreamSession.Update) {
         guard playback?.id == update.sessionID, !phase.isEnded else { return }
         if case .stopped = update.event { if !quittingGame { complete() }; return }
         guard phase != .stopping else { return }
         switch update.event {
-        case .firstFrame, .reconnected:
-            recordFirstVideo()
-            hasReceivedVideo = true
-            endingMessage = nil
-            terminalFailure = false
-            captureSuspended = false
-            adjustingQuality = false
-            phase = .streaming
-            if !controlsRequested { controlsVisible = !controllerConnected && !touchGeometryUsable }
-            synchronizeInputFocus()
+        case .firstFrame, .reconnected: resumePlayback()
+        case .sizeChanged(let width, let height): adoptSize(width: width, height: height)
         case .reconnecting, .adjustingQuality: holdForRecovery(update.event)
         case .connectionTerminated(let code, let error):
             rejectPictureTrial()

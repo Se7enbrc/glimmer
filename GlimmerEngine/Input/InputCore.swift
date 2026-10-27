@@ -64,7 +64,10 @@ package final class InputCore: @unchecked Sendable {
     package var controllers: [ObjectIdentifier: ControllerSample] = [:]
     package var pendingTouchReleases: [(slot: UInt8, finger: ControllerTouchpadFinger)] = []
     package var touchpadStates: [UInt8: ControllerTouchpadState] = [:]
-    package var controllerMouseMapping = ControllerMouseMapping.standard
+    package var controllerMouseMapping = ControllerMouseMapping.rightStick {
+        didSet { controllerMousePlan = ControllerMousePlan(.init(preset: controllerMouseMapping)) }
+    }
+    package var controllerMousePlan = ControllerMousePlan()
     package var controllerMouseStates: [UInt8: ControllerMouseState] = [:]
     package var heldMouseButtons: Set<Int32> = []
     package var mousePollingGeneration: UInt64 = 0
@@ -72,6 +75,8 @@ package final class InputCore: @unchecked Sendable {
     package let mouseQueue = DispatchQueue(label: "io.ugfugl.Glimmer.controllerMouse", qos: .userInteractive)
     package var mouseTimings: [UInt8: [InputEventTiming]] = [:]
     package var onMotionInputEnabled: (@Sendable (UInt8, Bool) -> Void)?
+    package var controllerMenuOpensControls = false
+    package var onControllerMenu: (@Sendable (UInt8) -> Void)?
     package var onMouseMode: (@Sendable (UInt8, Bool) -> Void)?
     package var pointerResidual = SIMD2<Double>.zero
     var scrollQuantizer = ScrollQuantizer()
@@ -128,7 +133,8 @@ package final class InputCore: @unchecked Sendable {
     @discardableResult
     package func receive(slot: UInt8, buttons: Int32, analog: GamepadAnalog, chordButtons: Int32? = nil,
                          capturedAt: TimeInterval? = nil, extras: SIMD2<UInt64> = .zero,
-                         physicalSample: ControllerMappingSample? = nil) -> ControllerAcceptance {
+                         physicalSample: ControllerMappingSample? = nil,
+                         rawSupplement: (center: Int32, shoulders: Int32)? = nil) -> ControllerAcceptance {
         withLock {
             guard snapshot.ready, snapshot.focused, snapshot.mask & (1 << slot) != 0 else { return .gated }
             if let capturedAt, capturedAt < snapshot.acceptEventsAfter { return .gated }
@@ -146,8 +152,11 @@ package final class InputCore: @unchecked Sendable {
                 }
             }
             if let state = layouts?.states[Int(slot)] {
+                let physical = physicalSample ?? (rawSupplement == nil
+                    ? ControllerMappingSample(buttons: buttons, analog: analog, extras: extras) : nil)
+                let supplement = rawSupplement ?? chordButtons.map { (center: $0, shoulders: $0) }
                 return receiveLayout(state, slot: slot,
-                    sample: physicalSample ?? .init(buttons: chordButtons ?? buttons, analog: analog, extras: extras),
+                    sample: layoutSample(state, physical: physical, supplement: supplement),
                     systemSample: .init(buttons: buttons, analog: analog, extras: extras),
                     at: capturedAt ?? ProcessInfo.processInfo.systemUptime)
             }
@@ -158,7 +167,7 @@ package final class InputCore: @unchecked Sendable {
             updateChord(slot: slot, held: chord)
             let isMouse = routeControllerMouse(slot: slot, buttons: buttons, analog: analog,
                                                chordHeld: chord,
-                                               now: capturedAt ?? ProcessInfo.processInfo.systemUptime)
+                                               now: capturedAt ?? ProcessInfo.processInfo.systemUptime, extras: extras)
             let mapped = ControllerButtonLayout.apply(buttons, useNintendoLabels: snapshot.nintendoSlots.contains(slot))
             if chord {
                 guard needsRelease(slot: slot, buttons: mapped, leftDown: analog.leftTrigger > 0,

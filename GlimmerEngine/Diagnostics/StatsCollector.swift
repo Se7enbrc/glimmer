@@ -12,14 +12,14 @@ import os
 // The lock owns all counters, measurement windows and collection state.
 package final class StatsCollector: @unchecked Sendable {
 
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     var collecting = true
     #else
     var collecting = false
     #endif
 
     package func setOverlayCollection(_ enabled: Bool) {
-        #if !os(macOS) && !GLIMMER_DIAGNOSTICS
+        #if !os(macOS)
         lock.withLock {
             collecting = enabled
             submitFifo.removeAll(keepingCapacity: true)
@@ -321,7 +321,7 @@ package final class StatsCollector: @unchecked Sendable {
         for entry in submitFifo { if let state = entry.state { leftover.append(state) } }
         submitFifo.removeAll(keepingCapacity: true)
         lock.unlock()
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         for state in leftover {
             OSSignposter.decode.endInterval(
                 "DecodeFrame", state, "outcome=dropped")

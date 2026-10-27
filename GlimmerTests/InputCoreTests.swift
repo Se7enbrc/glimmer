@@ -152,8 +152,9 @@ struct InputCoreTests {
                             analog: InputCore.neutral, capturedAt: start + 1)
             core.receiveHID(slot: 0, token: token, buttons: 0,
                             analog: InputCore.neutral, capturedAt: start + 2)
-            core.receiveHID(slot: 0, token: token, buttons: StreamProtocol.A_FLAG,
-                            analog: InputCore.neutral, capturedAt: start + 3)
+            var primary = InputCore.neutral
+            primary.rightTrigger = 255
+            core.receiveHID(slot: 0, token: token, buttons: 0, analog: primary, capturedAt: start + 3)
         }
         #expect(backend.calls.first?.buttons == StreamProtocol.B_FLAG)
         #expect(core.withLock { core.controllerMouseStates[0]?.isMouse } == true)
@@ -202,7 +203,9 @@ struct InputCoreTests {
         forwarder.setMiniPlayer(true)
         defer { forwarder.detach() }
         forwarder.controllerMouseStates[0] = ControllerMouseState(isMouse: true)
-        forwarder.inputCore.receive(slot: 0, buttons: StreamProtocol.A_FLAG, analog: InputCore.neutral)
+        var primary = InputCore.neutral
+        primary.rightTrigger = 255
+        forwarder.inputCore.receive(slot: 0, buttons: 0, analog: primary)
         forwarder.inputOwnershipLost(reason: "test focus loss", includingControllers: false)
         #expect(backend.pointer.count == 1)
         forwarder.inputCore.receive(slot: 0, buttons: 0, analog: InputCore.neutral)
@@ -370,6 +373,26 @@ struct InputCoreTests {
         scheduled.forEach { $0() }
         #expect(edges.withLock { $0 } == [StreamProtocol.A_FLAG | StreamProtocol.B_FLAG, 0])
         #expect(capture.count == 2)
+    }
+
+    @Test func streamHIDHandlerReceivesExtraButtonsWithoutALayoutLease() {
+        let elements = [HIDGamepadElement(cookie: 1, page: 9, usage: 1, kind: .button),
+                        HIDGamepadElement(cookie: 2, page: 9, usage: 2, kind: .button)]
+        let readings = HIDGamepadReadings(descriptors: elements, logical: [
+            1: .init(minimum: 0, maximum: 1), 2: .init(minimum: 0, maximum: 1)])
+        let drains = OSAllocatedUnfairLock(initialState: [@Sendable () -> Void]())
+        let capture = HIDGamepadCapture(readings: readings,
+            mapping: HIDGamepadMapping(name: "Test", bindings: ["a": .button(0)]),
+            scheduleDrain: { drain in drains.withLock { $0.append(drain) } })
+        let samples = OSAllocatedUnfairLock(initialState: [ControllerMappingSample]())
+        capture.setStreamHandler(indexes: [1]) { sample, _ in samples.withLock { $0.append(sample) } }
+        capture.setReading(true)
+        capture.receive(cookie: 2, raw: 1, timestamp: 10, report: 1)
+        capture.receive(cookie: 2, raw: 0, timestamp: 20, report: 1)
+        drains.withLock { $0 }.forEach { $0() }
+        #expect(samples.withLock { $0.map(\.buttons) } == [0, 0])
+        #expect(samples.withLock { $0.map(\.extras) } == [SIMD2(1, 0), .zero])
+        capture.setHandler(nil)
     }
 
     @Test func lateRawCallbackCannotPressIntoAReusedSlot() {

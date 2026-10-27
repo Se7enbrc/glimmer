@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 
 // Snapshots contain performance values without PC identity or secrets.
 // Sendable reader closures connect the live engine to the opt-in exporter.
@@ -10,10 +10,8 @@ import Foundation
 
 // MARK: - Snapshot
 
-/// One fully-resolved 1Hz telemetry sample. Plain value type: built on the
-/// exporter's serial queue, rendered to both Prometheus text and NDJSON. Every
-/// field is a performance number - there is intentionally nothing here that
-/// could carry a secret/host identity.
+/// One resolved sample, built on the exporter queue for NDJSON and the session report.
+/// Fields carry performance values and pseudonyms, never credentials.
 package struct TelemetrySnapshot: Sendable {
 
     package init() {}
@@ -67,9 +65,8 @@ package struct TelemetrySnapshot: Sendable {
     /// that flushed the renderer + cleared the pacer queue. 0 on a healthy wired
     /// link; a nonzero delta is a real mid-stream format change / multi-frame skip.
     package var discontinuityFlushTotal: UInt64 = 0
-    /// Live DECODE state: HW-decode confirmation + pixel format + bit depth +
-    /// colorspace key. Emitted as a Prometheus info-gauge (labels carry the
-    /// state) + NDJSON fields. nil before the first decoded frame.
+    /// Hardware decode, pixel format, bit depth and colorspace for NDJSON.
+    /// Absent before the first decoded frame.
     package var decodeState: TelemetryCounters.DecodeState?
     /// Latest VTDecompressionSessionCreate wall-clock cost (ms): the HW-decoder
     /// bring-up that lands on the first-frame leg. 0 before the first create.
@@ -263,9 +260,7 @@ package struct TelemetrySnapshot: Sendable {
     package var refreshMinHz: Double?
     package var refreshAvgHz: Double?
     package var refreshMaxHz: Double?
-    /// 1 on a tick window where the realized refresh CHANGED (the ProMotion ramp
-    /// edge), else 0 - emitted as a gauge so a Grafana marker lines up with the
-    /// idle-resume transient.
+    /// Marks a realized refresh-rate change so it can be aligned with an idle-resume transient.
     package var refreshChanged: Bool = false
 
     // host encode latency trend (host idle-ramp visibility)
@@ -315,15 +310,8 @@ package struct TelemetrySnapshot: Sendable {
     package var cruiseBoostedBatchesTotal: UInt64 = 0
     package var cruiseIdentityBatchesTotal: UInt64 = 0
 
-    // Per-stage latency histograms. Captured from the FrameTimingTracker's
-    // cumulative atomic buckets (one snapshot/tick on the exporter queue - never
-    // per-frame on the hot path). Prometheus emits these as _bucket/_sum/_count
-    // so Grafana derives p50/p95/p99 with histogram_quantile; the per-second
-    // NDJSON snapshot carries pre-computed p50/p95/p99 per stage for a quick tail.
-    // nil when telemetry's latency rig has no data this tick. The
-    // `LatencyHistogramSnapshot` type lives in TelemetryLatency.swift with the
-    // rest of the latency rig. Includes the glass-to-glass (signal 1) +
-    // input-to-photon (signal 2) composite stages alongside the sub-stages.
+    // Cumulative histograms are captured once per tick, outside the frame path.
+    // NDJSON carries derived percentiles; absent observations remain unavailable.
     package var latencyHistograms: LatencyHistogramSnapshot?
 
     // Wi-Fi radio (signal 3). One CoreWLAN sample per ~1Hz tick (never the hot
@@ -332,11 +320,7 @@ package struct TelemetrySnapshot: Sendable {
     // fields are nil off Wi-Fi (an absent series == "no radio here").
     package var wifi: WiFiSnapshot?
 
-    // Build attribution (signal 5a). Compile-time constants from the generated
-    // BuildInfo - the git SHA + build date stamped at `make app`, emitted as a
-    // Prometheus info label + an NDJSON header field so every metric is
-    // attributable to a build. Session-constant; the exporter fills these from
-    // BuildInfo each tick (cheap string copies).
+    // Build identity is constant for a session and accompanies its NDJSON evidence.
     package var buildCommit: String = ""
     package var buildDate: String = ""
 
@@ -384,15 +368,8 @@ package struct TelemetrySnapshot: Sendable {
 
 // MARK: - Audio snapshot
 
-/// One tick's AUDIO telemetry (signal: AUDIO - the other stream alongside the
-/// video signals above). Plain value type assembled on the exporter queue from
-/// `TelemetryCounters`' always-live audio totals + the published playout state.
-/// Every field is a performance number - nothing that could carry a secret.
-///
-/// The RATES (pkts/s, loss, FEC recovery) are derived by the exporter from
-/// deltas of the monotonic totals against the audio-packets delta, mirroring how
-/// the video receive-quality rates are derived. The totals are carried too so a
-/// Prometheus scrape gets the raw counters (Grafana derives its own rates).
+/// Audio rates use deltas of monotonic totals against packet counts.
+/// Raw totals remain available for offline analysis.
 package struct AudioSnapshot: Sendable {
 
     package init(

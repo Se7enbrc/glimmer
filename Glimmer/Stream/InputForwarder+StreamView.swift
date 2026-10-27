@@ -109,15 +109,8 @@ extension InputForwarder: StreamInputViewDelegate {
         }
         if modifiersNeedResync, !syncModifiers(to: event.modifierFlags) { return }
         guard physicalKeys[event.keyCode] == nil else { return }
+        guard inputCore.pressKey(key, modifiers: Int8(bitPattern: modifierByte(from: mods))) else { return }
         physicalKeys[event.keyCode] = key
-        releases.hold(.key(key))
-        let rc = backend?.sendKeyboard(
-            keyCode: key.wireCode,
-            action: Int8(StreamProtocol.KEY_ACTION_DOWN),
-            modifiers: Int8(bitPattern: modifierByte(from: mods)),
-            flags: key.flags
-        ) ?? -2
-        record("LiSendKeyboardEvent2(down)", rc)
         heldKeys.insert(key)
         updateReconciliationTimer()
     }
@@ -466,6 +459,7 @@ extension HotkeyChord {
     }
 
     func matchKind(event: NSEvent, modifiers mods: NSEvent.ModifierFlags) -> MatchKind? {
+        guard !keyChar.isEmpty else { return nil }
         if (ctrl && !mods.contains(.control)) || (!ctrl && mods.contains(.control)) { return nil }
         if (alt && !mods.contains(.option))    || (!alt && mods.contains(.option)) { return nil }
         if (shift && !mods.contains(.shift))   || (!shift && mods.contains(.shift)) { return nil }

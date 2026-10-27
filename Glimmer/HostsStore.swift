@@ -35,6 +35,7 @@ extension AppModel {
         let flagKey = "glimmer.hostsMigratedFromMoonlightQt"
         guard !defaults.bool(forKey: flagKey) else { return }
 
+        guard !PersistentStorage.isTesting || moonlightSuite != IdentityManager.moonlightQtSuiteName else { return }
         guard let mq = UserDefaults(suiteName: moonlightSuite) else {
             defaults.set(true, forKey: flagKey)
             return
@@ -366,11 +367,7 @@ extension AppModel {
     /// Only a private-range IPv4 literal moves with a DHCP lease. A hostname or a
     /// Tailscale or public address is the user's stable choice, so it's never healed.
     nonisolated static func canHealAddress(_ address: String) -> Bool {
-        guard let raw = IPv4Address(address)?.rawValue else { return false }
-        let octets = Array(raw)
-        let (first, second) = (octets[0], octets[1])
-        return first == 10 || (first == 172 && (16...31).contains(second))
-            || (first == 192 && second == 168) || (first == 169 && second == 254)
+        HostAddressRecovery.canHeal(address)
     }
 
     /// A PC on a new DHCP lease still answers mDNS. Browse for up to `seconds` for an
@@ -379,35 +376,10 @@ extension AppModel {
     @discardableResult
     func healAddress(of host: Host, within seconds: Double) async -> Bool {
         guard !Task.isCancelled, !hostPolling.systemSleeping else { return false }
-        var probe = nativeServerInfo(for: host)
-        let saved = probe.address
-        guard probe.serverCertPEM != nil, Self.canHealAddress(saved) else { return false }
-        let discovery = HostDiscovery(ipv4Only: true)
-        let session = await discovery.start()
-        let deadline = Task {
-            try? await Task.sleep(for: .seconds(seconds))
-            await discovery.stop()
-        }
-        var moved: String?
-        // Every change to the list re-checks it, so a PC still booting gets another try.
-        search: for await found in session.stream {
-            for address in Set(found.hosts.map(\.host)) where address != saved && IPv4Address(address) != nil {
-                guard !Task.isCancelled, !hostPolling.systemSleeping else { break search }
-                probe.address = address
-                let client = makeNetwork(probe)
-                let answer = try? await client.fetchServerInfo()
-                await client.shutdown()
-                guard !Task.isCancelled, !hostPolling.systemSleeping else { break search }
-                if answer?.uniqueId == host.id {
-                    moved = address
-                    break search
-                }
-            }
-        }
-        deadline.cancel()
-        await discovery.stop()
-        guard let moved else { return false }
-        return await saveHealedAddress(of: host, moved: moved, saved: saved, port: probe.httpPort)
+        let probe = nativeServerInfo(for: host)
+        guard let moved = await HostAddressRecovery.find(probe, within: seconds, makeNetwork: makeNetwork),
+              !Task.isCancelled, !hostPolling.systemSleeping else { return false }
+        return await saveHealedAddress(of: host, moved: moved.address, saved: probe.address, port: probe.httpPort)
     }
 
     /// A second LAN interface can answer discovery too; replace only an unreachable address.

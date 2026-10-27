@@ -293,6 +293,7 @@ final class EnetControlChannel: @unchecked Sendable {
     static let localSentMaxEntries = 256
 
     /// Fresh matched-ACK round trips for the bandwidth policy's one-second windows, oldest dropped first.
+    let collectBandwidthSamples: Bool
     var rttSamples: [Double] = []
     static let rttSampleLimit = 256
 
@@ -456,7 +457,7 @@ final class EnetControlChannel: @unchecked Sendable {
     let startInstant = DispatchTime.now()
 
     init(host: NWEndpoint.Host, port: UInt16, controlConnectData: UInt32,
-         crypto: ControlCrypto,
+         crypto: ControlCrypto, collectBandwidthSamples: Bool = false,
          sealControl: @escaping @Sendable (ControlCrypto, UInt16, [UInt8], UInt32) throws -> [UInt8] = {
              try $0.seal(type: $1, payload: $2, seq: $3)
          }) {
@@ -464,6 +465,7 @@ final class EnetControlChannel: @unchecked Sendable {
         self.port = port
         self.controlConnectData = controlConnectData
         self.crypto = crypto
+        self.collectBandwidthSamples = collectBandwidthSamples
         self.sealControl = sealControl
         self.connectID = UInt32.random(in: UInt32.min...UInt32.max)
     }

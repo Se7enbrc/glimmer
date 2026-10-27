@@ -133,6 +133,7 @@ extension LauncherModel {
     }
 
     func confirmGameAction(_ action: GameAction) {
+        if session != nil { confirmStreamingAction(action); return }
         guard active, !busy, session == nil, let selected, let calls else { return }
         pendingGameAction = nil
         if let target = action.target {
@@ -218,7 +219,7 @@ extension LauncherModel {
         let preferred = startFormat ?? (continuing || useScreenSize ? nil : preferredStart(for: app))
         let session = calls.makeSession(StreamLaunch(network: selected.network,
             pcID: selected.server.uniqueId, pcName: selected.server.serverName, appID: app.id, appName: app.name,
-            profile: streamProfile, mouseStick: mouseStick, touchMouseEnabled: touchMouseEnabled,
+            profile: streamProfile, touchMouseEnabled: touchMouseEnabled,
             leaveGamesRunning: leaveGamesRunning, continuing: continuing, previousFormat: previous,
             useScreenSize: useScreenSize, approvedOccupant: approvedOccupant, startFormat: preferred))
         session.continuationEnded = { [weak self] in

@@ -43,7 +43,7 @@ enum LoginItemManager {
             Services(status: { service(helper: $0).status }, register: { try service(helper: $0).register() },
                      unregister: { try service(helper: $0).unregister() },
                      helperJobLoaded: { await LoginItemManager.helperJobLoaded() },
-                     defaults: .standard, currentBuild: LoginItemManager.currentBuild)
+                     defaults: PersistentStorage.defaults, currentBuild: LoginItemManager.currentBuild)
         }
     }
 
@@ -85,7 +85,7 @@ enum LoginItemManager {
         }
     }
 
-    static func registrationFailed(_ error: Error, defaults: UserDefaults = .standard) {
+    static func registrationFailed(_ error: Error, defaults: UserDefaults = PersistentStorage.defaults) {
         defaults.removeObject(forKey: registeredBuildKey)
         Diag.error("login item registration FAILED: \(error.localizedDescription, privacy: .private)", "LoginItem")
     }

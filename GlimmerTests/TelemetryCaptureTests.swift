@@ -84,7 +84,6 @@ final class TelemetryCaptureTests {
         _ exporter: TelemetryExporter, now: DispatchTime = .now()
     ) throws -> (TelemetrySnapshot, TelemetrySnapshot.Extras) {
         exporter.workQueue.sync { exporter.capture(now: now) }
-        return try #require(exporter.workQueue.sync { exporter.latestSample })
     }
 
     // MARK: - Seam
@@ -100,7 +99,7 @@ final class TelemetryCaptureTests {
         let services = SessionServices.recording(directory: dir, enabled: true)
         let exporter = try #require(services.makeExporter(source, Self.pcName))
         #expect(exporter.outputDirectory == dir)
-        #expect(exporter.ndjsonURL == nil && exporter.latestSample == nil)
+        #expect(exporter.ndjsonURL == nil)
         #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
     }
 
@@ -110,7 +109,6 @@ final class TelemetryCaptureTests {
         let exporter = try #require(made)
         #expect(exporter.outputDirectory == MacTelemetryCapture.logsDirectory)
         #expect(exporter.counters === TelemetryCounters.shared)
-        #expect(exporter.latestSample == nil)
         #expect(exporter.ndjsonURL == nil)
     }
 

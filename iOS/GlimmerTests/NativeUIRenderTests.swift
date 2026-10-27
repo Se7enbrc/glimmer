@@ -10,6 +10,31 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct NativeUIRenderTests {
+    @Test(arguments: ["stream", "stop"], [false, true])
+    func externalCommandConfirmation(action: String, dark: Bool) async throws {
+        let fixture = LauncherFixture()
+        let playback = PlaybackFixture()
+        fixture.makeSession = { playback.model(launch: $0) }
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(fixture.saved)
+        await model.waitUntilOperationFinishes()
+        if action == "stop" {
+            try await model.streamFromCommand(pc: fixture.pcID, app: fixture.app.name)
+            model.stream = nil
+        }
+        let name = "external-\(action)-\(dark ? "dark" : "light")"
+        let size = CGSize(width: 390, height: 844)
+        try await record(LauncherView(model: model), name: "\(name)-before", size: size, dark: dark, portrait: true)
+        let url = try #require(URL(string: "glimmer://\(action)?pc=\(fixture.pcID)"))
+        try await record(LauncherView(model: model), name: "\(name)-after", size: size,
+                         dark: dark, portrait: true, captureWindow: true, prepare: {
+            await model.handleCommandURL(url)?.value
+        })
+        model.pendingURLCommand = nil
+        _ = await model.stopFromCommand()
+    }
+
     @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 956, height: 440),
                       CGSize(width: 390, height: 844), CGSize(width: 1024, height: 768)], [false, true])
     func launcherAndPairing(size: CGSize, dark: Bool) async throws {
@@ -45,7 +70,7 @@ struct NativeUIRenderTests {
                          name: "pairing-\(style)", size: size, dark: dark)
         try await record(AddPCView(connect: { _ in }), name: "add-pc-\(style)", size: size, dark: dark)
         try await record(GlimmerSettings(profile: .constant(.native120),
-                                        stick: .constant(dark ? .left : .right), model: library),
+                                        model: library),
                          name: "mouse-settings-\(style)", size: size, dark: dark)
     }
 
@@ -101,7 +126,7 @@ struct NativeUIRenderTests {
             remember: { _ in [] }, protectedDataChanged: { _ in })
         let model = LauncherModel(calls: calls, discoveryEnabled: false)
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
-        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+        let settings = GlimmerSettings(profile: .constant(.native120), model: model)
         for page in GlimmerSettings.Page.allCases {
             let style = "\(Int(size.width))-\(dark ? "dark" : "light")"
             try await record(NavigationStack { settings.settingsPage(page) },
@@ -183,7 +208,7 @@ struct NativeUIRenderTests {
         let style = dark ? "dark" : "light"
         try await record(LauncherView(model: model), name: "testflight-launcher-\(style)",
                          size: nil, dark: dark, textSize: .large)
-        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+        let settings = GlimmerSettings(profile: .constant(.native120), model: model)
         for page in [GlimmerSettings.Page.input, .quality] {
             try await record(NavigationStack { settings.settingsPage(page) },
                              name: "testflight-\(page.rawValue)-\(style)", size: nil, dark: dark, textSize: .large)
@@ -196,7 +221,7 @@ struct NativeUIRenderTests {
             prepare: { _, _ in throw CancellationError() }, pair: { pc, _ in pc }, apps: { _ in [] },
             remember: { _ in [] }, protectedDataChanged: { _ in })
         let model = LauncherModel(calls: calls, discoveryEnabled: false)
-        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+        let settings = GlimmerSettings(profile: .constant(.native120), model: model)
         let style = "\(dark ? "dark" : "light")-\(textSize.isAccessibilitySize ? "accessibility" : "standard")"
         try await record(settings, name: "settings-support-\(style)", size: nil,
                          dark: dark, textSize: textSize, portrait: true)
@@ -396,11 +421,11 @@ struct NativeUIRenderTests {
                                captureWindow: Bool = false,
                                prepare: (() async -> Void)? = nil,
                                inspect: ((UIView) throws -> Void)? = nil) async throws {
-        let suite = "render-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = PersistentStorage.defaults
+        let previous = defaults.object(forKey: "leaveGamesRunning")
+        defer { defaults.set(previous, forKey: "leaveGamesRunning") }
         defaults.set(leaveRunning, forKey: "leaveGamesRunning")
-        let host = UIHostingController(rootView: content.defaultAppStorage(defaults).dynamicTypeSize(textSize))
+        let host = UIHostingController(rootView: content.dynamicTypeSize(textSize))
         try await recordController(host, name: name, size: size, dark: dark, portrait: portrait,
                                    captureWindow: captureWindow, prepare: prepare, textSize: textSize,
                                    landscapeRight: landscapeRight, inspect: inspect)
@@ -526,5 +551,33 @@ struct NativeUIRenderTests {
         guard view.isHidden == false, view.alpha > 0 else { return [] }
         let own = view is UINavigationBar || view is UIScrollView ? [view] : []
         return own + view.subviews.flatMap { launcherViewports(in: $0) }
+    }
+}
+
+@Suite(.serialized)
+@MainActor
+struct CompactLauncherRenderTests {
+    @Test(arguments: [false, true], [false, true])
+    func compactLauncherTiles(dark: Bool, running: Bool) async throws {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        let apps = ["Desktop", "Steam Big Picture", "SuperTuxKart"].enumerated().map {
+            HostApp(id: $0.offset + 1, name: $0.element, hdrCapable: false, hidden: false)
+        }
+        model.apps = apps
+        model.runningApp = running ? apps.first : nil
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        let size = tablet ? CGSize(width: 1024, height: 768) : CGSize(width: 390, height: 844)
+        let name = "\(tablet ? "ipad" : "iphone")-\(dark ? "dark" : "light")-\(running ? "running" : "idle")"
+        let content = VStack(alignment: .leading, spacing: 16) {
+            Text("Living room PC").font(.largeTitle.bold())
+            LauncherGallery(model: model, style: .buttons,
+                            size: CGSize(width: size.width - 48, height: size.height - 100))
+            Spacer()
+        }
+        .padding(24)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .background(Color(uiColor: .systemBackground))
+        try await NativeUIRenderTests().record(content, name: name, size: size, dark: dark, textSize: .large)
     }
 }

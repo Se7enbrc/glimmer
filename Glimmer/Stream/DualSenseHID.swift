@@ -167,7 +167,13 @@ final class DualSenseHID: @unchecked Sendable {
         get { lock.withLock { inputHandler } }
         set { lock.withLock { inputHandler = newValue } }
     }
-    @MainActor var onChange: (@MainActor (DualSenseDeviceKey) -> Void)?
+    private var changeGeneration: UInt64 = 0
+    private var hasChangeObserver = false
+    @MainActor var onChange: (@MainActor (DualSenseDeviceKey) -> Void)? {
+        didSet {
+            lock.withLock { changeGeneration &+= 1; hasChangeObserver = onChange != nil }
+        }
+    }
 
     /// Total raw input reports received since the manager opened - a live
     /// "is the device delivering anything?" signal for the input test. Zero
@@ -206,7 +212,7 @@ final class DualSenseHID: @unchecked Sendable {
         IOHIDManagerSetDeviceMatchingMultiple(manager, matches as CFArray)
     }
 
-    static var isEnabled: Bool { UserDefaults.standard.bool(forKey: "rawHIDControllerEnabled") }
+    static var isEnabled: Bool { PersistentStorage.defaults.bool(forKey: "rawHIDControllerEnabled") }
 
     // MARK: Input Monitoring permission
 
@@ -381,13 +387,23 @@ final class DualSenseHID: @unchecked Sendable {
         if changed { notifyInputChange(key, capturedAt: HIDInputThread.seconds(ticks: timestamp)) }
     }
 
-    func notifyInputChange(_ device: DualSenseDeviceKey, capturedAt: TimeInterval? = nil) {
+    func notifyInputChange(_ device: DualSenseDeviceKey, capturedAt: TimeInterval? = nil,
+                           scheduleUI: (@escaping @MainActor @Sendable () -> Void) -> Void = {
+                               DispatchQueue.main.async(execute: $0)
+                           }) {
         onInput?(device, capturedAt)
-        notifyChange(device)
+        notifyChange(device, scheduleUI: scheduleUI)
     }
 
-    private func notifyChange(_ device: DualSenseDeviceKey) {
-        DispatchQueue.main.async { MainActor.assumeIsolated { self.onChange?(device) } }
+    private func notifyChange(_ device: DualSenseDeviceKey,
+                              scheduleUI: (@escaping @MainActor @Sendable () -> Void) -> Void = {
+                                  DispatchQueue.main.async(execute: $0)
+                              }) {
+        guard let generation = lock.withLock({ hasChangeObserver ? changeGeneration : nil }) else { return }
+        scheduleUI {
+            guard self.lock.withLock({ self.changeGeneration == generation }) else { return }
+            self.onChange?(device)
+        }
     }
 
     func setAdaptiveTriggers(device: DualSenseDeviceKey, eventFlags: UInt8, typeLeft: UInt8, typeRight: UInt8,

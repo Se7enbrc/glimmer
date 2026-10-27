@@ -153,7 +153,7 @@ extension VideoDecoder {
             "Frame pacer transiently disabled after present-path stall (\(reason)); "
             + "stream continues with direct presentation, pacing re-engages when healthy",
             "Stream")
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.render.emitEvent("PacerDisabled", "reason=\(reason, privacy: .public)")
         #endif
         TelemetryCounters.shared.pacerDisabledTotal.increment()
@@ -181,7 +181,7 @@ extension VideoDecoder {
             "Frame pacer re-enabled after present-path recovery (warm handover); "
             + "pacing smoothing restores once the rebuilt link proves healthy ticks",
             "Stream")
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.render.emitEvent("PacerReenabled", "fps=\(configuredFps, privacy: .public)")
         #endif
         startPacing(display: display, configuredFps: configuredFps, warmHandover: true)
@@ -201,7 +201,7 @@ extension VideoDecoder {
             Present-path self-heal (\(reason, privacy: .public)) rendererFailed=\(failed, privacy: .public) - \
             flush\(failed ? "+rebuild" : "") requestKeyframe=\(needsKeyframe, privacy: .public)
             """)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.render.emitEvent(
             "PresentPathRecover",
             "reason=\(reason, privacy: .public) failed=\(failed, privacy: .public) keyframe=\(needsKeyframe, privacy: .public)")
@@ -223,7 +223,7 @@ extension VideoDecoder {
 
         // Readiness recovery can repaint from the next already-decoded image.
         guard needsKeyframe else { return }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         OSSignposter.decode.emitEvent("IDRRequested", "trigger=present_stall")
         #endif
         backend?.requestIdrFrame()
@@ -334,7 +334,7 @@ extension VideoDecoder {
                     AVSampleBufferDisplayLayer renderer FAILED; self-healing \
                     (error=\(errorDescription, privacy: .private))
                     """)
-                #if os(macOS) || GLIMMER_DIAGNOSTICS
+                #if os(macOS)
                 OSSignposter.render.emitEvent(
                     "RendererFailed",
                     """
@@ -357,7 +357,7 @@ extension VideoDecoder {
                     renderer: renderer, sampleBuffer: sampleBuffer, rejectedFrames: streak, recovered: false)
             }
             statsCollector.recordRendererBackpressureDrop()
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             OSSignposter.render.emitEvent(
                 "BackpressureDrop",
                 "streak=\(streak, privacy: .public)")
@@ -369,18 +369,18 @@ extension VideoDecoder {
         // The pacer owns release timing; RTP PTS is not the renderer's Mac host clock.
         // Keep PTS for pacing and telemetry, but display this decoded image when released.
         Self.markForImmediateDisplay(sampleBuffer)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let tracker = FrameTimingTracker.shared
         #endif
         guard performRendererSubmission(submission, sampleBuffer: sampleBuffer, enqueue: { $0.enqueue(sampleBuffer) }) else { return false }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let enqueueNanos = tracker?.now()
         #endif
         let priorRejections = consecutiveBackpressureDrops.exchange(0, ordering: .relaxed)
         sampleHUDBackdrop(sampleBuffer)
 
         // Capture enqueue before HUD sampling; later diagnostics retain that boundary.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if let tracker {
             let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             let rtpTimestamp = VideoDecoder.rtpTimestamp(from: pts)

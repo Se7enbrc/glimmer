@@ -89,7 +89,7 @@ extension EnetControlChannel {
         // age, the discriminator that separates a mid-rumble radio drop from
         // pad idle auto-sleep - both observed BT drops needed a three-file
         // join to recover exactly this number. Sub-µs locked store at ~135/s.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         TelemetryCounters.shared.rumbleActivity.stamp()
         #endif
         guard payload.count >= 10 else {

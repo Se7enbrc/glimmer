@@ -91,7 +91,7 @@ extension FramePacer {
         // the old one's - that timebase is discontinuous across rebuilds), and
         // is suspension-sized after a backgrounded window - the bounds below
         // exclude all three.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         var emitRefreshChange = false
         var changedFromHz = 0.0
         var changedToHz = 0.0
@@ -101,14 +101,14 @@ extension FramePacer {
             lock.unlock(); return
         }
         let generation = bindingGeneration
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let realizedInterval = target - Self.lastTickTargetTimestamp
         Self.lastTickTargetTimestamp = target
         #endif
         let hostNow = CFAbsoluteTimeGetCurrent()
         liveness.lastTickHostTime = hostNow
         liveness.tickCount &+= 1
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if realizedInterval.isFinite, realizedInterval > 0,
            realizedInterval <= Self.maxRealizedTickDeltaSeconds {
             refreshTelemetry.refreshIntervalSumSeconds += realizedInterval
@@ -163,14 +163,14 @@ extension FramePacer {
         // own lock) crosses threads. Reuses hostNow/realizedInterval/vsyncInterval -
         // no extra clock read. `entryGap` shares the realized delta's plausibility
         // bounds (NaN/first-tick + suspension-sized gaps excluded).
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         recordTickMiss(hostNow: hostNow, realizedInterval: realizedInterval,
                        vsyncInterval: vsyncInterval, timestamp: timestamp)
         #endif
 
         handleTickDeficitEvents(deficitEvents)
 
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if emitRefreshChange {
             OSSignposter.render.emitEvent(
                 "RefreshChanged",
@@ -230,7 +230,7 @@ extension FramePacer {
     static let reapplyHopMinInterval: CFTimeInterval = 0.1
     nonisolated(unsafe) static var lastReapplyHopHostTime: CFTimeInterval = .nan
 
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     private func recordTickMiss(hostNow: Double, realizedInterval: Double,
                                 vsyncInterval: Double, timestamp: Double) {
         let entryGap = hostNow - Self.lastTickEntryHostTime

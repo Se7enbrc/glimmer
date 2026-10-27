@@ -96,18 +96,24 @@ final class IOSAudioSession: @unchecked Sendable {
                 if !active { try calls.activate(); active = true }
                 let route = calls.route()
                 guard route.isUsable else { throw AudioOutput.Failure(status: kAudioUnitErr_FormatNotSupported) }
-                #if GLIMMER_DIAGNOSTICS
-                AudioPlatform.recordSessionDiagnostic(
-                    "iOS audio session active: generation=\(generation) ports=\(route.ports) "
-                    + "rate=\(route.sampleRate) channels=\(route.channels) volume=\(route.volume) "
-                    + "buffer_ms=\(route.bufferDuration * 1000)")
-                #endif
+
+                Self.log.info("Audio session active at \(route.sampleRate, privacy: .public) Hz")
                 leases += 1
                 return Lease(route: route, generation: generation)
             } catch {
                 if leases == 0, active { deactivate() }
                 throw error
             }
+        }
+    }
+
+    // Interruption-ended is not guaranteed. Let setActive arbitrate a fresh attempt after the watchdog delay.
+    func prepareForRecovery() {
+        lock.withLock {
+            guard wantsPlayback else { return }
+            generation &+= 1
+            active = false
+            interrupted = false
         }
     }
 
@@ -152,9 +158,8 @@ final class IOSAudioSession: @unchecked Sendable {
             try calls.deactivate()
             active = false
             configured = false
-            #if GLIMMER_DIAGNOSTICS
-            AudioPlatform.recordSessionDiagnostic("iOS audio session inactive")
-            #endif
+
+            Self.log.debug("iOS audio session inactive")
         } catch {
             Self.log.error("audio session deactivation failed: \(error.localizedDescription, privacy: .private)")
         }

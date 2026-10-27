@@ -20,7 +20,7 @@ enum MacPacer {
             return PacerScreen(identity: screen?.displayID.map { String($0) } ?? "none",
                                maximumHz: panelMaxHz(for: view), minimumHz: variableMinimumHz(for: view),
                                scale: Double(screen?.backingScaleFactor ?? 1))
-        }, tickOffMain: { UserDefaults.standard.bool(forKey: tickOffMainDefaultsKey) },
+        }, tickOffMain: { PersistentStorage.defaults.bool(forKey: tickOffMainDefaultsKey) },
            prepareTickThread: prepareTickThread)
     }
 

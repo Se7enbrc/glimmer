@@ -78,7 +78,7 @@ extension StreamSession {
 
     /// Spend one leave-hint show for `text`. A rebound hotkey or chord changes
     /// the text, and a new chord is a new lesson, so its budget starts over.
-    static func claimLeaveHintShow(_ text: String, defaults: UserDefaults = .standard) -> Bool {
+    static func claimLeaveHintShow(_ text: String, defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
         if defaults.string(forKey: leaveHintShownKey) != text {
             defaults.set(text, forKey: leaveHintShownKey)
             defaults.removeObject(forKey: HintBudget.leaveStream.defaultsKey)

@@ -15,21 +15,31 @@ final class LauncherMenuController {
     }
 
     var openMenu: (() -> Void)?
+    private var generation: UInt64 = 0
+
+    func update(active: Bool, streaming: Bool) {
+        if active && !streaming { start() } else { stop() }
+    }
 
     func start() {
         stop()
+        let attempt = generation
         for controller in controllers() {
             guard let button = controller.extendedGamepad?.buttonMenu,
                   button.pressedChangedHandler == nil else { continue }
             button.pressedChangedHandler = { @Sendable [weak self] _, _, pressed in
                 guard pressed else { return }
-                Task { @MainActor [weak self] in self?.openMenu?() }
+                Task { @MainActor [weak self] in
+                    guard let self, self.generation == attempt else { return }
+                    self.openMenu?()
+                }
             }
             buttons.append(button)
         }
     }
 
     func stop() {
+        generation &+= 1
         for button in buttons { button.pressedChangedHandler = nil }
         buttons.removeAll()
     }

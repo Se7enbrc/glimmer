@@ -28,11 +28,8 @@ struct ControllerLayoutShortcutHelp: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Hold all the buttons for a moment, then release. Shortcuts use physical buttons in every game.")
             Text("The PC sees the buttons until the hold completes. Normal game input is never delayed.")
-            #if os(macOS)
-            Text("Stop with the keyboard shortcut (⌃Q by default), or restore shortcuts with Reset to defaults in General.")
-            #else
-            Text("You can always disconnect from the stream menu, or restore shortcuts with Reset to defaults in General.")
-            #endif
-        }.font(.footnote).foregroundStyle(.secondary)
+            Text("Stop with the keyboard shortcut (⌃Q by default), or use the stream controls.")
+            Text("Restore shortcuts with Reset to defaults in General.")
+        }.controllerSettingsFootnote().foregroundStyle(.secondary)
     }
 }

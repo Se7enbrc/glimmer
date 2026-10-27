@@ -126,7 +126,7 @@ extension AudioDecoder {
                 if !nearMissLatched {
                     nearMissLatched = true
                     TelemetryCounters.shared.audioNearMissTotal.increment()
-                    #if os(macOS) || GLIMMER_DIAGNOSTICS
+                    #if os(macOS)
                     AudioPipelineTelemetry.shared.noteNearMiss()
                     #endif
                 }
@@ -348,7 +348,7 @@ extension AudioDecoder {
         // Later route or resampler work must not add its latency to this snapshot's drift.
         let observedAtNanos = now
         let aheadFrames = framesScheduled &- framesPlayed
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let residentSilenceFrames = pendingSilenceFrames
         #endif
         let rate = meterSampleRate
@@ -356,7 +356,7 @@ extension AudioDecoder {
         let anchorNanos = driftAnchorNanos
         let anchorFramesPlayed = driftAnchorFramesPlayed
         let playedFrames = framesPlayed
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let rePrimes = rePrimeCount
         let engineUp = engineRunning
         #endif
@@ -366,7 +366,7 @@ extension AudioDecoder {
         // target - without it a fill hugging a flat ceiling is indistinguishable
         // from the old disguised-permanent-give-up re-pin.
         let targetMs = playoutTargetMs
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let cushionMaxMs = effectiveCushionMaxMs
         #endif
         // Engage the drift resampler only in steady playout - the SAME gate the trim
@@ -382,7 +382,7 @@ extension AudioDecoder {
         // Surface resident corrector-silence to the A/V-skew meter so it subtracts
         // it from buffer fill: the silence is buffered media the audio RTP clock
         // never advanced past, so counting it makes audio read falsely "late".
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         AudioVideoSkewStore.shared.setResidentSilenceMs(
             Double(residentSilenceFrames) / rate * 1000.0)
         #endif
@@ -416,11 +416,11 @@ extension AudioDecoder {
             } ?? true
             resamplerSkewConverged = abs(resamplerIntegralPpm) <= Self.cushionReleaseSkewPpm && driftBounded
         }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let appliedPpm = resamplerEpsPpm
         #endif
         audioMeterLock.unlock()
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         TelemetryCounters.shared.setAudioState(
             TelemetryCounters.AudioState(
                 bufferFillMs: bufferFillMs,

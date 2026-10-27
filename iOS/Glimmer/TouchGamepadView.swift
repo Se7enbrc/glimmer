@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
+import GlimmerEngine
 import UIKit
 
 @MainActor
@@ -76,7 +77,7 @@ class TouchGamepadView: UIView {
         updateVisibility()
     }
 
-    // Only the pad follows the capture; the menu button stays the visible, tappable way back to the controls.
+    // The gamepad menu stays reachable even when the floating stream menu fades.
     private func updateVisibility() {
         let active = preview || capture?.enabled == true
         for (element, control) in controls { control.isHidden = !active || lastFrames[element] == nil }
@@ -105,25 +106,20 @@ class TouchGamepadView: UIView {
         updateVisibility()
     }
 
-    func mouseMode(_ enabled: Bool, leftStick: Bool) {
+    func mouseMode(_ enabled: Bool, bindings: ControllerMouseBindings = ControllerLayoutsModel.shared.mouse) {
         for (element, control) in controls {
             control.accessibilityLabel = element.name
             (control as? TouchAxisControl)?.showMode(nil)
             (control as? TouchTrigger)?.showMode(nil)
-            if element == .leftShoulder || element == .rightShoulder {
-                (control as? UIButton)?.setTitle(element.title, for: .normal)
-            }
         }
         guard enabled else { return }
-        (controls[leftStick ? .leftStick : .rightStick] as? TouchAxisControl)?.showMode("Pointer")
-        (controls[leftStick ? .rightStick : .leftStick] as? TouchAxisControl)?.showMode("Scroll")
-        let trigger = controls[leftStick ? .leftTrigger : .rightTrigger] as? TouchTrigger
-        trigger?.showMode("Click")
-        trigger?.accessibilityLabel = "Primary click"
-        let shoulder = controls[leftStick ? .leftShoulder : .rightShoulder] as? UIButton
-        shoulder?.setTitle("Right", for: .normal)
-        shoulder?.accessibilityLabel = "Secondary click"
-        controls[.dpad]?.accessibilityLabel = "Scroll"
+        for action in ControllerMouseAction.allCases {
+            for element in TouchElement.allCases where !element.mouseSources.isDisjoint(with: bindings[action]) {
+                controls[element]?.accessibilityLabel = "\(element.name), \(action.title)"
+                (controls[element] as? TouchAxisControl)?.showMode(action == .pointer ? "Pointer" : "Scroll")
+                (controls[element] as? TouchTrigger)?.showMode(action.title)
+            }
+        }
     }
 
     private func inputTracking(_ control: UIControl) -> TouchTracking? {

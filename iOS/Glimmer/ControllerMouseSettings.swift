@@ -4,32 +4,17 @@
 import GlimmerEngine
 import SwiftUI
 
-enum ControllerMouseStick: String, CaseIterable, Identifiable, Sendable {
-    case left, right
-
-    var id: String { rawValue }
-    var label: String { self == .right ? "Right" : "Left" }
-    var mapping: ControllerMouseMapping { self == .right ? .rightStick : .leftStick }
-    var controls: String {
-        self == .right ? "Right stick moves. R2 clicks. R1 right-clicks. Left stick scrolls."
-            : "Left stick moves. L2 clicks. L1 right-clicks. Right stick scrolls."
-    }
-}
-
 @MainActor
 struct GlimmerSettings: View {
     @Binding var profile: StreamProfile
-    @Binding var stick: ControllerMouseStick
     let model: LauncherModel
     var addPC: () -> Void = {}
     var pairPC: (HostDiscovery.Discovered) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     enum Page: String, CaseIterable, Identifiable {
-        case general, quality, pcs, input
-        #if GLIMMER_DIAGNOSTICS
-        case diagnostics
-        #endif
+        case general, quality, pcs, input, connection
+
         var id: Self { self }
         var title: String {
             switch self {
@@ -37,9 +22,7 @@ struct GlimmerSettings: View {
             case .quality: "Quality"
             case .pcs: "PCs"
             case .input: "Input"
-            #if GLIMMER_DIAGNOSTICS
-            case .diagnostics: "Diagnostics"
-            #endif
+            case .connection: "Connection"
             }
         }
         var symbol: String {
@@ -48,9 +31,7 @@ struct GlimmerSettings: View {
             case .quality: "gauge.with.dots.needle.67percent"
             case .pcs: "display"
             case .input: "gamecontroller"
-            #if GLIMMER_DIAGNOSTICS
-            case .diagnostics: "stethoscope"
-            #endif
+            case .connection: "network"
             }
         }
     }
@@ -89,7 +70,7 @@ struct GlimmerSettings: View {
     }
 
     func settingsPage(_ page: Page) -> some View {
-        GlimmerSettingsPage(profile: $profile, stick: $stick, model: model,
+        GlimmerSettingsPage(profile: $profile, model: model,
                             addPC: addPC, pairPC: pairPC, page: page)
     }
 }
@@ -97,18 +78,17 @@ struct GlimmerSettings: View {
 @MainActor
 private struct GlimmerSettingsPage: View {
     @Binding var profile: StreamProfile
-    @Binding var stick: ControllerMouseStick
     let model: LauncherModel
     let addPC: () -> Void
     let pairPC: (HostDiscovery.Discovered) -> Void
     let page: GlimmerSettings.Page
-    @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
-    @AppStorage("leaveGamesRunning") private var leaveGamesRunning = false
-    @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
-    #if GLIMMER_DIAGNOSTICS
-    @AppStorage("telemetryEnabled") private var diagnostics = true
-    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
-    #endif
+    @AppStorage("launcherStyle", store: PersistentStorage.defaults)
+    private var launcherStyle: LauncherStyle = .buttons
+    @AppStorage("leaveGamesRunning", store: PersistentStorage.defaults) private var leaveGamesRunning = false
+    @AppStorage("touchMouseEnabled", store: PersistentStorage.defaults) private var touchMouseEnabled = true
+
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -128,14 +108,13 @@ private struct GlimmerSettingsPage: View {
                 }
                 SettingsResetSection(enabled: model.session == nil && !model.busy) { includeGames in
                     try await ControllerLayoutsModel.shared.reset(includeGames: includeGames)
-                    SettingsReset.reset(defaults: .standard)
+                    SettingsReset.reset(defaults: PersistentStorage.defaults)
                 }
             case .quality: StreamQualitySettings(profile: $profile)
             case .pcs: computerSettings
             case .input: controllerSettings
-            #if GLIMMER_DIAGNOSTICS
-            case .diagnostics: diagnosticSettings
-            #endif
+
+            case .connection: connectionSettings
             }
         }
         .navigationTitle(page.title)
@@ -195,30 +174,17 @@ private struct GlimmerSettingsPage: View {
             Text("Turn off to avoid accidental touches while playing. Three-finger tap still shows controls. "
                  + "Changes apply to the next stream.")
         }
-        Section {
-            Picker("Mouse stick", selection: $stick) {
-                ForEach(ControllerMouseStick.allCases) { option in Text(option.label).tag(option) }
-            }
-        } header: {
-            Text("Controller")
-        } footer: {
-            Text("\(stick.controls) Hold Menu for a second and release to switch modes. "
-                 + "Changes apply to the next stream.")
-        }
+        ControllerMouseSettingsSection()
     }
 
-    #if GLIMMER_DIAGNOSTICS
-    private var diagnosticSettings: some View {
+    private var connectionSettings: some View {
         Section {
-            Toggle("Record diagnostics", isOn: $diagnostics)
             Toggle("Adaptive stream quality", isOn: $adaptiveBandwidth)
         } footer: {
-            Text("Saves performance and troubleshooting files on this device for the next stream. "
-                 + "Nothing is uploaded. Adaptive stream quality lowers the bitrate when the connection "
-                 + "struggles and raises it again once it recovers. Beta builds turn both on by default.")
+            Text("Adaptive stream quality lowers the bitrate when the connection struggles "
+                 + "and raises it again once it recovers.")
         }
     }
-    #endif
 }
 
 @MainActor
@@ -246,8 +212,9 @@ private struct PairedPCRow: View {
 @MainActor
 private struct StreamQualitySettings: View {
     @Binding var profile: StreamProfile
-    @AppStorage("showStreamStats") private var showStats = false
-    @AppStorage("statsOverlayPreset") private var preset: StatsOverlayPreset = .minimal
+    @AppStorage("showStreamStats", store: PersistentStorage.defaults) private var showStats = false
+    @AppStorage("statsOverlayPreset", store: PersistentStorage.defaults)
+    private var preset: StatsOverlayPreset = .minimal
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {

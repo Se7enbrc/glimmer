@@ -29,7 +29,7 @@ extension StreamSession {
         DispatchQueue.main.async { MainActor.assumeIsolated {
             if gate?.acceptsInput(attempt: attempt) == true { inp?.setReady(true) }
         } }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if let state = connectFlowState {
             OSSignposter.network.endInterval(
                 "ConnectFlow", state, "outcome=established")

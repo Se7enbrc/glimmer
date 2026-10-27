@@ -22,6 +22,10 @@ extension AudioDecoder {
         engineRestartGeneration &+= 1
         outputDiagnosticRequests = AudioOutputDiagnosticRequests()
         engineRestartRetries = 0
+        outputHealth = AudioOutputHealth()
+        receivedAudioPackets = 0
+        renderedAudioFrames = 0
+        outputRecoveryPending = false
         primeEdgeRetryAtNanos = 0
         primeEdgeFailureStreak = false
         channelCount = chCount
@@ -69,7 +73,7 @@ extension AudioDecoder {
         announceCushionSeed(seed)
         // A/V-skew session edge: the skew store's pair-anchor + accumulator
         // reset here (one audio init per session IS the pair's session edge).
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         AudioVideoSkewStore.shared.resetForNewSession()
         #endif
         return route
@@ -175,7 +179,7 @@ extension AudioDecoder {
                     observedRingUnderruns = 0
                     outputGraphNeedsReconnect = false
                     installDeviceListeners()
-                    #if os(macOS) || GLIMMER_DIAGNOSTICS
+                    #if os(macOS)
                     AudioPipelineTelemetry.shared.noteOutput(latencyMs: output.latencyMs)
                     #endif
                     Diag.notice("audio HAL ready: \(Int(output.sampleRate)) Hz, \(output.channels) channels, "
@@ -232,7 +236,9 @@ extension AudioDecoder {
     }
 
     private func scheduleEngineRestartRetry() {
-        guard engineRestartRetries < Self.maxEngineRestartRetries else { return }
+        // Session-backed output retries are packet-driven and share the bounded health backoff.
+        guard platform.prepareForRecovery == nil,
+              engineRestartRetries < Self.maxEngineRestartRetries else { return }
         engineRestartRetries += 1
         let attempt = engineRestartRetries
         let generation = engineRestartGeneration
@@ -261,7 +267,7 @@ extension AudioDecoder {
         let now = DispatchTime.now().uptimeNanoseconds
         guard now >= primeEdgeRetryAtNanos else { return false }
         if !allowRecovery && !engineRunning {
-            maintenanceSource.add(data: 1)
+            if platform.prepareForRecovery == nil { maintenanceSource.add(data: 1) }
             return false
         }
         if allowRecovery, !ensureEngineAtPrimeEdge(now: now) { return false }
@@ -340,6 +346,28 @@ extension AudioDecoder {
         } else {
             engineRestartRetries = 0
         }
+    }
+
+    func recoverSilentOutput() {
+        guard outputRecoveryPending else { return }
+        outputRecoveryPending = false
+        guard !isShutdown, let prepare = platform.prepareForRecovery else { return }
+        observeRenderClock()
+        guard renderedAudioFrames == outputHealth.rendered else { return }
+        if deviceRecoveryStarted == 0 { deviceRecoveryStarted = DispatchTime.now().uptimeNanoseconds }
+        discardOutput()
+        outputGraphNeedsReconnect = true
+        prepare()
+        let failure = startEngineSafely()
+        TelemetryCounters.shared.audioStallRecoveryTotal.increment()
+        Diag.notice("audio output recovery: attempt=\(outputHealth.attempt) running=\(engineRunning)", "Stream.Audio")
+        if let failure {
+            Diag.error("audio output recovery failed: \(failure, privacy: .private)", "Stream.Audio")
+        }
+        #if os(macOS)
+        TelemetryExporter.recordLiveEvent(["\"event\":\"audio_output_recovery\"",
+            "\"attempt\":\(outputHealth.attempt)", "\"engine_running\":\(engineRunning)"])
+        #endif
     }
 
     private func discardOutput() {

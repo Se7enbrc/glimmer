@@ -169,13 +169,15 @@ activation; adjustable actions provide partial values and an explicit release.
 This analog interaction needs usability validation; do not claim racing
 precision from the boards.
 
-Hold Menu alone for the existing one-second interval and release to enter
-controller mouse mode. Preserve the saved left/right mouse-stick mapping and
-existing engine threshold, curve and cadence. Show the existing brief mode
-notice for a touch registration too. Mouse-mode control labels/accessibility
-values identify pointer, scroll and clicks; do not emit simultaneous gamepad
-clicks. Direct center touch mouse remains independently available according to
-the player's existing Touch mouse preference. Add no second mode setting.
+On a hardware controller, hold Menu alone for the existing one-second interval
+and release to open controls. Its menu offers explicit mouse/gamepad switching.
+The touch registration keeps its existing mouse-mode gesture. Preserve the saved
+left/right mouse-stick mapping and existing engine threshold, curve and cadence.
+Show the existing brief mode notice for a touch registration too. Mouse-mode
+control labels/accessibility values identify pointer, scroll and clicks; do not
+emit simultaneous gamepad clicks. Direct center touch mouse remains
+independently available according to the player's existing Touch mouse
+preference. Add no second mode setting.
 
 ## Edit in context, remember only deliberate changes
 
@@ -323,14 +325,13 @@ triggers, not motion, battery, touchpad, light or rumble.
 
 ## Phase 2 proof required after design approval
 
-| Evidence                  | Method and acceptance                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Input correctness         | Swift Testing on Simulator: ownership, simultaneous axes/buttons, cancel, diagonals, trigger range, geometry clamp, layout persistence, handoff ordering, stale generation, focus and mouse-mode transitions. Deterministic clocks and injected submissions. Assert each release and timestamp.                                                                              |
-| Latency                   | Use existing `input_controller_capture_handler`, `handler_batcher`, `batcher_flush`, `flush_send` and `capture_send` p50/p95/p99/max and counts. Compare the touch adapter to direct normalized submission with the same recorded event trace, including idle, drag/button load and main-thread load. Keep original timestamps at the capture boundary.                      |
-| Timing validity           | `input_timing_dropped_total == 0`; equal event counts and capture windows; report bucket precision and run variability. At least three paired runs. No added timer, tap delay or frame boundary. Reject a repeatable tail increase beyond baseline variability; investigate any added >1ms p95 processing before acceptance. This is a proposed gate, not a measured result. |
-| Idle cost                 | Compare controls hidden, visible untouched, held stationary and actively moving. Instruments should show no added recurring overlay callback, redraw, timer or allocation while untouched/held. Measure compositor cost over moving video separately; alpha composition is not free.                                                                                         |
-| Energy and stream quality | Match scene, codec, resolution, fps, network, brightness and diagnostic mode. Compare process CPU, wakeups, allocation, frame pacing and available GPU/energy evidence. Mac `gpu_power_w`/`package_power_w` cannot be assumed available or representative on iOS Simulator. No decode/pacing/bitrate changes are authorized.                                                 |
-| Visual and access         | Before/after boards on small iPhone, Pro Max, iPad mini/large/resized and Duo outer/inner/partial-fold, both rotations and appearances. Include editor, physical connected, disconnect, mouse mode, no PC, many apps, background/recovery and accessibility sizes where relevant. Verify labels, keyboard navigation and actual hit frames.                                  |
+| Evidence                  | Method and acceptance                                                                                                                                                                                                                                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Input correctness         | Swift Testing on Simulator: ownership, simultaneous axes/buttons, cancel, diagonals, trigger range, geometry clamp, layout persistence, handoff ordering, stale generation, focus and mouse-mode transitions. Deterministic clocks and injected submissions. Assert each release and timestamp.                                             |
+| Latency                   | Use Apple Instruments and deterministic normalized-input tests. The iOS app has no custom input timing recorder. Preserve original event timestamps and compare the same workload.                                                                                                                                                          |
+| Timing validity           | Report the instrument, clock boundary and run variability. At least three paired runs; no added timer, tap delay or frame boundary.                                                                                                                                                                                                         |
+| Energy and stream quality | Match scene, codec, resolution, fps, network, brightness and Apple profiling configuration. Compare process CPU, wakeups, allocation, frame pacing and available GPU/energy evidence. Mac `gpu_power_w`/`package_power_w` cannot be assumed available or representative on iOS Simulator. No decode/pacing/bitrate changes are authorized.  |
+| Visual and access         | Before/after boards on small iPhone, Pro Max, iPad mini/large/resized and Duo outer/inner/partial-fold, both rotations and appearances. Include editor, physical connected, disconnect, mouse mode, no PC, many apps, background/recovery and accessibility sizes where relevant. Verify labels, keyboard navigation and actual hit frames. |
 
 The existing timing contract is in `docs/PROFILING.md:484` and `:508`.
 `capture_send` ends at NWConnection submission; it is not physical transmission,

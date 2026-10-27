@@ -172,10 +172,6 @@ struct AudioWorkerTests {
         #expect(json.line().contains("\"audio_device_recovery_ms\":90"))
         #expect(json.line().contains("\"audio_output_latency_ms\":12"))
         #expect(json.line().contains("\"audio_output_silent_s\":3"))
-        var prom = TelemetryRenderer.PromBuilder(session: "test", host: "pc")
-        TelemetryRenderer.promAudioPipeline(&prom, snapshot)
-        #expect(prom.out.contains("glimmer_audio_output_silent_s"))
-        #expect(prom.out.contains("glimmer_audio_receive_gap_ms_bucket"))
-        #expect(prom.out.contains("glimmer_audio_render_cushion_min_ms"))
+        #expect(json.line().contains("\"audio_render_cushion_min_ms\":3"))
     }
 }

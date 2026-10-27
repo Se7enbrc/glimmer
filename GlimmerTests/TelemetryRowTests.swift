@@ -52,39 +52,32 @@ struct TelemetryRowTests {
         #expect(tracker.flushRemainingDrops(nowNanos: 4_500_000_000) == 1)
     }
 
-    @Test func audioCushionRenderersUseTheCapturedValues() throws {
+    @Test func audioCushionRowsUseTheCapturedValues() throws {
         var extras = TelemetrySnapshot.Extras()
         extras.audioCushionFloorMs = 17
         extras.audioCushionSeedMs = 43
 
         var snap = TelemetrySnapshot()
         snap.audio = AudioSnapshot()
-        let prom = TelemetryRenderer.prometheus(snap, extras: extras)
         let ndjson = TelemetryRenderer.ndjson(snap, extras: extras)
         let row = try #require(try JSONSerialization.jsonObject(with: Data(ndjson.utf8)) as? [String: Any])
 
-        #expect(prom.contains("glimmer_audio_cushion_floor_ms") && prom.contains(" 17\n"))
-        #expect(prom.contains("glimmer_audio_cushion_seed_ms") && prom.contains(" 43\n"))
         #expect((row["audio_cushion_floor_ms"] as? NSNumber)?.doubleValue == 17)
         #expect((row["audio_cushion_seed_ms"] as? NSNumber)?.doubleValue == 43)
     }
 
     /// `UInt64?.map(Double.init)` resolves to `Double(bitPattern:)` and renders ~0.
-    @Test func uint64GaugesRenderTheirCounts() {
+    @Test func uint64GaugesRenderTheirCounts() throws {
         var snap = TelemetrySnapshot()
         snap.presentOnTimeCount = 4_321
         snap.presentLateCount = 1_234
         snap.awdlReSuppressTotal = 77
         snap.resource = ResourceSnapshot(physFootprintBytes: 987_654_321)
-        let lines = TelemetryRenderer.prometheus(snap, extras: TelemetrySnapshot.Extras())
-            .split(separator: "\n").filter { !$0.hasPrefix("#") }
-        func value(_ name: String) -> String? {
-            lines.first { $0.hasPrefix(name + "{") }?.split(separator: " ").last.map(String.init)
-        }
-        #expect(value("glimmer_present_on_time_frames") == "4321")
-        #expect(value("glimmer_present_late_frames") == "1234")
-        #expect(value("glimmer_awdl_resuppress_total") == "77")
-        #expect(value("glimmer_process_phys_footprint_bytes") == "987654321")
+        let row = try TelemetryRenderFixtures.row(TelemetryRenderer.ndjson(snap, extras: .init()))
+        #expect((row["present_on_time"] as? NSNumber)?.uint64Value == 4_321)
+        #expect((row["present_late"] as? NSNumber)?.uint64Value == 1_234)
+        #expect((row["awdl_resuppress_total"] as? NSNumber)?.uint64Value == 77)
+        #expect((row["phys_footprint_bytes"] as? NSNumber)?.uint64Value == 987_654_321)
     }
 
     @Test func resourceRowsKeepMemoryCategoriesClocksAndLocalThreadIdentity() throws {
@@ -114,32 +107,6 @@ struct TelemetryRowTests {
         #expect((row["resource_sample_duration_ms"] as? NSNumber)?.doubleValue == 0.125)
         let threads = try #require(row["threads"] as? [[String: Any]])
         #expect((threads[0]["tid"] as? NSNumber)?.uint64Value == 42 && threads[1]["tid"] == nil)
-        let prometheus = TelemetryRenderer.prometheus(snapshot, extras: extras)
-        #expect(!prometheus.contains("tid=\"42\""))
-        #expect(!prometheus.contains("glimmer_process_phys_footprint_bytes{"))
-        #expect(prometheus.contains("glimmer_process_resident_size_bytes{") && prometheus.contains("} 400\n"))
-    }
-
-    @Test func telemetryConnectionSlotsRejectAndRecoverCapacity() {
-        let connections = (0..<9).map { _ in NSObject() }
-        var slots = TelemetryConnectionSlots()
-        for connection in connections.prefix(8) {
-            let reserved = slots.reserve(ObjectIdentifier(connection))
-            #expect(reserved)
-        }
-        #expect(slots.count == 8)
-        let ninthReserved = slots.reserve(ObjectIdentifier(connections[8]))
-        #expect(!ninthReserved)
-
-        slots.release(ObjectIdentifier(connections[0]))
-        let reusedAfterFinish = slots.reserve(ObjectIdentifier(connections[8]))
-        #expect(reusedAfterFinish)
-        #expect(slots.count == 8)
-
-        slots.release(ObjectIdentifier(connections[1]))
-        let reusedAfterExpiry = slots.reserve(ObjectIdentifier(connections[0]))
-        #expect(reusedAfterExpiry)
-        #expect(slots.count == 8)
     }
 
     // MARK: - NDJSON row

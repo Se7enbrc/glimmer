@@ -7,12 +7,15 @@ public struct ControllerLayoutConfiguration: Sendable {
     public let plan: ControllerMappingPlan?
     public let stop: ControllerPhysicalChord
     public let stats: ControllerPhysicalChord
+    public let mouse: ControllerMousePlan?
 
     public init(layout: ControllerLayout?, shortcuts: ControllerLayoutShortcuts?,
-                available: Set<ControllerLayoutSource>, extras: [String] = []) throws {
+                available: Set<ControllerLayoutSource>, extras: [String] = [],
+                mouse: ControllerMouseBindings? = nil) throws {
         plan = try layout.map { try ControllerMappingPlan(layout: $0, available: available, extras: extras) }
         let shortcuts = shortcuts ?? ControllerLayoutShortcuts()
         try shortcuts.validate(available: available)
+        self.mouse = mouse.map { ControllerMousePlan($0, extras: extras, shortcuts: shortcuts) }
         stop = try ControllerPhysicalChord(sources: shortcuts.stop, extras: extras)
         // A legacy recording may overlap the new default; preserve it and leave Stats inactive until edited.
         stats = try ControllerPhysicalChord(sources: shortcuts.hasConflict ? [] : shortcuts.stats, extras: extras)

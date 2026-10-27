@@ -72,12 +72,12 @@ extension VideoDecoder {
         // HW decoder bring-up can't run until the first SPS/PPS, so this create
         // lands on the critical first-frame leg. Measure it: a signpost interval
         // for Instruments + a wall-clock ms gauge (glimmer_vt_session_create_ms).
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let createSignpostState = OSSignposter.decode.beginInterval("VTSessionCreate")
         let createStart = CFAbsoluteTimeGetCurrent()
         #endif
         let (status, sessionOut) = makeSession(formatDesc, decoderSpec, destImageBufferAttrs, callback)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let createMs = (CFAbsoluteTimeGetCurrent() - createStart) * 1000.0
         OSSignposter.decode.endInterval(
             "VTSessionCreate", createSignpostState,
@@ -144,7 +144,7 @@ extension VideoDecoder {
 
     nonisolated static let decompressionOutputCallback:
         VTDecompressionOutputCallback = { outputRefCon, frameRefCon, status, infoFlags, imageBuffer, presentationTimeStamp, _ in
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             let callbackEntry = DispatchTime.now().uptimeNanoseconds
             #endif
             guard let outputRefCon else { return }
@@ -155,7 +155,7 @@ extension VideoDecoder {
             let failed = status != noErr || imageBuffer == nil
             let epoch = UInt(bitPattern: frameRefCon)
             guard decoder.releaseInFlightDecode(epoch: epoch, submitted: true, vtFailed: failed) else { return }
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             let rtpTimestamp = VideoDecoder.rtpTimestamp(from: presentationTimeStamp)
             let tracker = FrameTimingTracker.shared
             let traceAttempt = tracker?.attemptForFrame(rtpTimestamp: rtpTimestamp)
@@ -176,7 +176,7 @@ extension VideoDecoder {
 
             // Every live output completes its own submit, including drops and failures.
             let dropped = infoFlags.contains(.frameDropped) || status != noErr || imageBuffer == nil
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             let intervalState = decoder.statsCollector.recordDecodeComplete(
                 dropped: dropped, identity: StatsCollector.DecodeIdentity(epoch: epoch, rtpTimestamp: rtpTimestamp))
 
@@ -272,7 +272,7 @@ extension VideoDecoder {
         // enqueue happens later in `presentFrame`, which re-reads displayLayer.
         guard displayLayer != nil else { return }
 
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let enqueueSignpostID = OSSignposter.render.makeSignpostID()
         let enqueueIntervalState = OSSignposter.render.beginInterval(
             "EnqueueFrame",
@@ -284,13 +284,13 @@ extension VideoDecoder {
 
         let controlHDR = hdrEnabled
         let color = resolveColorDescription(for: pixelBuffer, controlHDR: controlHDR)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let probe = beginColorProbe(pixelBuffer, color: color, controlHDR: controlHDR)
         #endif
         // Match the PC's pixel geometry rather than VT's display-aspect hint.
         CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferPixelAspectRatioKey)
         attachColorAndHDRMetadata(to: pixelBuffer, color: color)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         finishColorProbe(probe, pixelBuffer: pixelBuffer)
         #endif
 
@@ -338,7 +338,7 @@ extension VideoDecoder {
         guard let sb = sampleBuffer else { return }
         let route = presentationRoute()
         if let pacer = route.pacer {
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             FrameTimingTracker.shared?.recordPacerSubmitted(rtpTimestamp: Self.rtpTimestamp(from: hostPTS))
             #endif
             pacer.submit(sb, hostPTS: hostPTS)

@@ -23,7 +23,7 @@ struct AudioPCMQueue: ~Copyable {
     let fadeGain = Atomic<Float>(1)
     let firstRenderHostTime = Atomic<UInt64>(0)
     let lastRenderHostTime = Atomic<UInt64>(0)
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     let outputProbe = AudioOutputProbe()
     #endif
     // Only the render callback touches this latch, and only after initialization.
@@ -162,7 +162,7 @@ func renderAudioPCM(_ context: UnsafeMutableRawPointer, _ flags: UnsafeMutablePo
     let hostTime = timestamp.pointee.mFlags.contains(.hostTimeValid)
         ? timestamp.pointee.mHostTime : 0
     let status = queue.pointee.render(frames: Int(frames), buffers: buffers, hostTime: hostTime)
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     if status == noErr { queue.pointee.outputProbe.captureInput(buffers, frames: frames) }
     #endif
     return status

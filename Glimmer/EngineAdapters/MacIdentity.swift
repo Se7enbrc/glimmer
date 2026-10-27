@@ -8,9 +8,7 @@ import os.log
 extension URL {
     /// `~/Library/Application Support`, or `base` when a caller supplies its own root.
     static func supportRoot(base: URL?) throws -> URL {
-        if let base { return base }
-        return try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                           appropriateFor: nil, create: true)
+        PersistentStorage.supportRoot(base: base)
     }
 }
 
@@ -29,6 +27,7 @@ extension IdentityManager {
     }
 
     private static func adoptMoonlightQtIdentity(suite: String, currentID: String?) throws -> AdoptedQtIdentity? {
+        guard !PersistentStorage.isTesting || suite != moonlightQtSuiteName else { return nil }
         guard let moonlight = UserDefaults(suiteName: suite),
               let adopted = try Self.adoptedIdentity(fromMoonlightQt: moonlight,
                                                  currentID: currentID) else {

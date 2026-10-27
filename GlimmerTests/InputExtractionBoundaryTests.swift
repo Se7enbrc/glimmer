@@ -106,20 +106,22 @@ struct InputExtractionBoundaryTests {
     }
     @Test func staleMouseTimerCannotPollAResumedOwner() {
         let (core, backend) = rig()
-        core.controllerMouseStates[0] = ControllerMouseState(isMouse: true)
-        core.controllerMouseStates[0]?.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
-            leftStickX: 32767, leftStickY: 0, rightStickX: 0, rightStickY: 0)
-        core.updateControllerMousePolling()
-        let old = core.mousePollingGeneration
-        core.suspendControllerMouse()
-        core.controllerMouseStates[0]?.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
-            leftStickX: 32767, leftStickY: 0, rightStickX: 0, rightStickY: 0)
-        core.updateControllerMousePolling()
-        core.pollControllerMouse(generation: old)
-        #expect(backend.mouseMoves.isEmpty)
-        core.pollControllerMouse(generation: core.mousePollingGeneration)
-        #expect(backend.mouseMoves.count == 1)
-        core.suspendControllerMouse()
+        core.withLock {
+            core.controllerMouseStates[0] = ControllerMouseState(isMouse: true)
+            core.controllerMouseStates[0]?.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
+                leftStickX: 0, leftStickY: 0, rightStickX: 32767, rightStickY: 0)
+            core.updateControllerMousePolling()
+            let old = core.mousePollingGeneration
+            core.suspendControllerMouse()
+            core.controllerMouseStates[0]?.analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0,
+                leftStickX: 0, leftStickY: 0, rightStickX: 32767, rightStickY: 0)
+            core.updateControllerMousePolling()
+            core.pollControllerMouse(generation: old)
+            #expect(backend.mouseMoves.isEmpty)
+            core.pollControllerMouse(generation: core.mousePollingGeneration)
+            #expect(backend.mouseMoves.count == 1)
+            core.suspendControllerMouse()
+        }
     }
 
     @Test func publicTouchGeometryIsFiniteAndBoundedAtAcceptance() throws {

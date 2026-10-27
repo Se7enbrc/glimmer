@@ -10,7 +10,7 @@ import Foundation
 
 /// A run of frames that needed Reed-Solomon recovery, summarized once the run
 /// has been quiet for a while instead of logging a line per frame.
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 struct FecRecoveryEpisode {
     private(set) var frames = 0
     private var shards = 0
@@ -152,7 +152,7 @@ extension RtpVideoQueue {
     /// Count this frame's recovery for the metrics and the open episode. The first
     /// recovery of a stream logs on its own; later ones log as an episode summary.
     private func logFecRecovery() {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         currentFrameNeededFec = true
         let recovered = bufferDataPackets - receivedDataPackets
         let margin = bufferParityPackets - recovered
@@ -251,7 +251,7 @@ extension RtpVideoQueue {
 
         // Metrics: tally one completed frame and whether it needed FEC recovery
         // (any of its multi-FEC blocks). The latch is cleared per frame.
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         framesInWindow += 1
         if currentFrameNeededFec { fecRecoveredFramesInWindow += 1 }
         currentFrameNeededFec = false

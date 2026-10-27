@@ -6,24 +6,24 @@ import GlimmerEngine
 
 @MainActor
 final class IOSControllerLayouts {
-    private struct Entry {
+    struct Entry {
         let controller: GCController
         let registration: ControllerRegistration
         let reader: ControllerLayoutReader
         let mapsGameInput: Bool
-        var lease: ControllerLayoutInputLease?
+        let shortcutElements: Set<ObjectIdentifier>
     }
 
     private let input: StreamInput
     private let scope: ControllerLayoutScope
-    private let queue: DispatchQueue
     private var entries: [ObjectIdentifier: Entry] = [:]
 
-    init(input: StreamInput, scope: ControllerLayoutScope, queue: DispatchQueue) {
+    init(input: StreamInput, scope: ControllerLayoutScope) {
         self.input = input
         self.scope = scope
-        self.queue = queue
     }
+
+    func refreshMouseBindings() { input.setControllerMouseBindings(ControllerLayoutsModel.shared.mouse) }
 
     func configure(_ controller: GCController, registration: ControllerRegistration) {
         remove(controller)
@@ -33,49 +33,28 @@ final class IOSControllerLayouts {
         let record = model.library.resolve(reader.identity, scope: scope)
         let shortcuts = model.shortcuts(for: reader.identity)
         guard let configuration = try? ControllerLayoutConfiguration(layout: record?.layout, shortcuts: shortcuts,
-                available: reader.available, extras: reader.extras) else { return }
+                available: reader.available, extras: reader.extras, mouse: model.mouse) else { return }
         input.setControllerLayout(configuration, for: registration,
                                   held: reader.sample(), systemHeld: reader.systemSample())
         entries[ObjectIdentifier(controller)] = Entry(controller: controller, registration: registration,
-            reader: reader, mapsGameInput: configuration.plan != nil)
+            reader: reader, mapsGameInput: configuration.plan != nil,
+            shortcutElements: reader.shortcutElements(configuration))
     }
 
-    func install(_ controller: GCController) -> Bool {
-        let id = ObjectIdentifier(controller)
-        guard var entry = entries[id] else { return false }
-        entry.lease?.stop()
-        let reader = entry.reader
-        let registration = entry.registration
-        let mapsGameInput = entry.mapsGameInput
-        entry.lease = ControllerLayoutInputLease(controller: controller, reader: reader,
-            queue: queue) { [input] sample, now in
-            input.submitController(registration, sample: reader.streamSample(sample, mapsGameInput: mapsGameInput),
-                                   capturedAt: now)
-        }
-        entries[id] = entry
-        return true
-    }
+    func entry(_ controller: GCController) -> Entry? { entries[ObjectIdentifier(controller)] }
 
     func sample(_ controller: GCController) -> ControllerInputSample? {
         guard let entry = entries[ObjectIdentifier(controller)] else { return nil }
         return entry.reader.streamSample(entry.reader.sample(), mapsGameInput: entry.mapsGameInput)
     }
 
-    func suspend(_ controller: GCController) {
-        let id = ObjectIdentifier(controller)
-        entries[id]?.lease?.stop()
-        entries[id]?.lease = nil
-    }
-
     func remove(_ controller: GCController) {
         guard let entry = entries.removeValue(forKey: ObjectIdentifier(controller)) else { return }
-        entry.lease?.stop()
         input.setControllerLayout(nil, for: entry.registration,
                                   held: entry.reader.sample(), systemHeld: entry.reader.systemSample())
     }
 
     func stop() {
-        for entry in entries.values { entry.lease?.stop() }
         entries.removeAll()
     }
 }

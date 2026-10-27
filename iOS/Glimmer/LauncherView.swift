@@ -13,17 +13,17 @@ struct LauncherView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var controllers = ControllerMonitor()
     @State private var model: LauncherModel
-    @AppStorage("launcherStyle") private var launcherStyle: LauncherStyle = .buttons
+    @AppStorage("launcherStyle", store: PersistentStorage.defaults)
+    private var launcherStyle: LauncherStyle = .buttons
     @State private var addingPC = false
     @State private var pendingAddress: String?
     @State private var showingSettings = false
     @State private var pendingAddPC = false
     @State private var pendingPC: HostDiscovery.Discovered?
-    @AppStorage("leaveGamesRunning") private var leaveGamesRunning = false
-    @AppStorage("streamProfile") private var profile: StreamProfile = .native120
-    @AppStorage(AdaptiveBandwidth.defaultsKey) private var adaptiveBandwidth = false
-    @AppStorage("touchMouseEnabled") private var touchMouseEnabled = true
-    @AppStorage("controllerMouseStick") private var mouseStick: ControllerMouseStick = .right
+    @AppStorage("leaveGamesRunning", store: PersistentStorage.defaults) private var leaveGamesRunning = false
+    @AppStorage("streamProfile", store: PersistentStorage.defaults) private var profile: StreamProfile = .native120
+    @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
+    @AppStorage("touchMouseEnabled", store: PersistentStorage.defaults) private var touchMouseEnabled = true
 
     init(model: LauncherModel = .make(), style: LauncherStyle? = nil) {
         _model = State(initialValue: model)
@@ -72,7 +72,7 @@ struct LauncherView: View {
         }
         .tint(Color("AccentColor"))
         .sheet(isPresented: $showingSettings, onDismiss: finishSettings) {
-            GlimmerSettings(profile: $profile, stick: $mouseStick, model: model,
+            GlimmerSettings(profile: $profile, model: model,
                 addPC: { pendingAddPC = true; showingSettings = false },
                 pairPC: { pendingPC = $0; showingSettings = false })
         }
@@ -80,7 +80,6 @@ struct LauncherView: View {
         .modifier(RunningGameConfirmation(model: model))
         .onChange(of: touchMouseEnabled, initial: true) { _, enabled in model.touchMouseEnabled = enabled }
         .onChange(of: profile, initial: true) { _, profile in model.streamProfile = profile }
-        .onChange(of: mouseStick, initial: true) { _, stick in model.mouseStick = stick }
         .sheet(isPresented: $addingPC, onDismiss: {
             if let address = pendingAddress {
                 pendingAddress = nil
@@ -94,14 +93,21 @@ struct LauncherView: View {
         }
         .fullScreenCover(item: $model.stream, onDismiss: model.streamClosed) { session in
             StreamView(model: session) { model.stream = nil }
+                .modifier(RunningGameConfirmation(model: model, duringStream: true))
                 .ignoresSafeArea()
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)
+                .defersSystemGestures(on: .top)
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
-            if phase == .active { controllers.start() } else { controllers.stop() }
+            controllers.update(active: phase == .active, streaming: model.hasActiveStream)
             updateAvailability()
         }
+        .onChange(of: model.hasActiveStream) { _, streaming in
+            controllers.update(active: scenePhase == .active, streaming: streaming)
+        }
+        .onAppear { controllers.update(active: scenePhase == .active, streaming: model.hasActiveStream) }
+        .onDisappear { controllers.stop() }
         .onReceive(NotificationCenter.default.publisher(
             for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
             model.availabilityChanged(active: false, background: false, protectedDataAvailable: false)

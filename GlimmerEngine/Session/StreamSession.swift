@@ -23,7 +23,7 @@ public actor StreamSession {
     package var bandwidthProbeGeneration: UInt64?
     package var bandwidthSampler = BandwidthHealthSampler()
     package var bandwidthTransition: BandwidthRequest?
-    package var adaptiveBandwidth = false
+    package nonisolated let adaptiveBandwidth: Bool
     /// The rate the policy chose for this stream's first ANNOUNCE; nil when adaptive quality is off.
     public internal(set) var adaptiveStartKbps: Int?
     package var bandwidthSizeAttemptAt = -Double.infinity
@@ -271,7 +271,7 @@ public actor StreamSession {
     package nonisolated(unsafe) var presentMetricTimer: Timer?
     /// Opt-in telemetry exporter (all-interfaces /metrics + NDJSON); nil unless
     /// enabled. See StreamSession+Telemetry.swift for gating + safety.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     package var telemetryExporter: TelemetryExporter?
     #endif
 
@@ -318,7 +318,7 @@ public actor StreamSession {
     // `stop()` closes an aborted connection-flow interval when connection
     // setup fails before `nativeConnectionEstablished()`, keeping the
     // Instruments timeline from showing it as still open.
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     package var connectFlowState: OSSignpostIntervalState?
     package let connectFlowSignpostID = OSSignposter.network.makeSignpostID()
     #endif
@@ -365,7 +365,8 @@ public actor StreamSession {
                  backend: any StreamingBackend,
                  makeNetwork: @escaping @Sendable (ServerInfo) -> NetworkClient,
                  makeBackend: @escaping @Sendable () -> any StreamingBackend,
-                 clock: SessionClock = SessionClock(), publicMedia: PreparedMedia? = nil,
+                 clock: SessionClock = SessionClock(),
+                 adaptiveBandwidth: Bool = AdaptiveBandwidth.isEnabled(), publicMedia: PreparedMedia? = nil,
                  publicInput: StreamInput? = nil, preparedNetwork: NetworkClient? = nil, events: SessionEventSource = SessionEventSource()) {
         self.id = events.id
         self.attemptID = events.currentAttempt
@@ -376,6 +377,7 @@ public actor StreamSession {
         self.hostDisposition = hostDisposition
         self.audioDecoder = audioDecoder
         self.services = services
+        self.adaptiveBandwidth = adaptiveBandwidth && services.bandwidthInputs != nil
         self.backend = backend
         self.makeNetwork = makeNetwork
         self.makeBackend = makeBackend

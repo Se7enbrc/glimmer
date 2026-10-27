@@ -41,15 +41,15 @@ import Foundation
 }
 
 extension SessionServices {
-    /// Uses existing gated recorders; public consumers supply a local directory, never a LAN listener.
+    /// Uses existing gated recorders with a caller-owned local directory.
     package static func recording(directory: URL?, enabled: Bool = TelemetryGate.isEnabled) -> SessionServices {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         var services = SessionServices()
         guard enabled, let directory, directory.isFileURL else { return services }
         services.startLog = { SessionLogFileSink.startIfEnabled(enabled: true, directory: directory) }
         services.stopLog = { SessionLogFileSink.stop() }
         services.makeExporter = { source, name in
-            TelemetryExporter(source: source, serverName: name, outputDirectory: directory, listenOnLAN: false)
+            TelemetryExporter(source: source, serverName: name, outputDirectory: directory)
         }
         return services
         #else
@@ -87,7 +87,7 @@ package struct SessionServices: Sendable {
     package var makeEnvironment: @Sendable () -> EnvObservationSource? = { nil }
     package var feedback = SessionFeedback()
     package var defaultDisplayMode = ""
-    #if os(macOS) || GLIMMER_DIAGNOSTICS
+    #if os(macOS)
     package var makeCapture: @Sendable () -> TelemetryCapture = { TelemetryCapture() }
     package var makeExporter: @Sendable (TelemetrySource, String) -> TelemetryExporter? = { _, _ in nil }
     #endif
@@ -98,15 +98,15 @@ package struct SessionServices: Sendable {
 /// Distribution is a compiler decision; preferences cannot grant a missing capability.
 public enum DiagnosticsAvailability {
     public static var compiledIn: Bool {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         true
         #else
         false
         #endif
     }
 
-    public static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+    public static func isEnabled(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
+        #if os(macOS)
         defaults.object(forKey: "telemetryEnabled") as? Bool ?? true
         #else
         false
@@ -117,7 +117,7 @@ public enum DiagnosticsAvailability {
 package enum TelemetryGate {
     package static var isEnabled: Bool {
         #if os(macOS)
-        isEnabled(defaults: .standard, environmentValue: ProcessInfo.processInfo.environment["GLIMMER_TELEMETRY"])
+        isEnabled(defaults: PersistentStorage.defaults, environmentValue: ProcessInfo.processInfo.environment["GLIMMER_TELEMETRY"])
         #else
         DiagnosticsAvailability.isEnabled()
         #endif
@@ -131,17 +131,9 @@ package enum TelemetryGate {
         #endif
     }
 
-    package static func diagnosticsVisible(defaults: UserDefaults = .standard) -> Bool {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
-        defaults.bool(forKey: "showDiagnostics")
-        #else
-        false
-        #endif
-    }
-
-    package static func listensOnLAN(defaults: UserDefaults = .standard) -> Bool {
+    package static func diagnosticsVisible(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
         #if os(macOS)
-        defaults.bool(forKey: TelemetryExporter.lanBindDefaultsKey)
+        defaults.bool(forKey: "showDiagnostics")
         #else
         false
         #endif

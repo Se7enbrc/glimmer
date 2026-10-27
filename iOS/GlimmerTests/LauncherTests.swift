@@ -209,15 +209,12 @@ struct LauncherTests {
         model.select(fixture.saved)
         await model.waitUntilOperationFinishes()
         model.streamProfile = .native120
-        model.mouseStick = .left
         model.touchMouseEnabled = false
         model.launch(fixture.app)
         await model.waitUntilOperationFinishes()
         model.streamProfile = .fullHD60
-        model.mouseStick = .right
         model.touchMouseEnabled = true
         #expect(model.stream?.launch.profile == .native120)
-        #expect(model.stream?.launch.mouseStick == .left)
         #expect(model.stream?.launch.touchMouseEnabled == false)
         #expect(fixture.prepares == 1)
         model.streamClosed()

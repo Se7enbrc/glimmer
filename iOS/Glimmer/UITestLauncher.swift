@@ -9,16 +9,17 @@ import Foundation
 enum UITestLauncher {
     static func make() -> LauncherModel? {
         let environment = ProcessInfo.processInfo.environment
-        guard environment["GLIMMER_UI_TESTING"] != nil || environment["XCTestConfigurationFilePath"] != nil else {
+        guard PersistentStorage.isTesting else {
             return nil
         }
         let running = environment["GLIMMER_UI_TESTING"] == "running"
-        let streaming = environment["GLIMMER_UI_TESTING"] == "stream"
+        let controller = environment["GLIMMER_UI_TESTING"] == "stream-controller"
+        let streaming = environment["GLIMMER_UI_TESTING"] == "stream" || controller
         if streaming {
             for (key, chord) in [("quitHotkey", HotkeyChord.defaultQuit), ("statsHotkey", .defaultStats)] {
-                UserDefaults.standard.set(try? JSONEncoder().encode(chord), forKey: key)
+                PersistentStorage.defaults.set(try? JSONEncoder().encode(chord), forKey: key)
             }
-            UserDefaults.standard.set(false, forKey: "showStreamStats")
+            PersistentStorage.defaults.set(false, forKey: "showStreamStats")
         }
         let count = running ? 3 : environment["GLIMMER_UI_TESTING"] == "one" || streaming ? 1
             : environment["GLIMMER_UI_TESTING"] == "many" ? 12 : 0
@@ -64,7 +65,8 @@ enum UITestLauncher {
                     await MainActor.run { stats.setVisible(false) }
                     events.continuation.finish()
                 }, screenChanged: {},
-                   format: try launch.profile.resolve(surface: surface), showStats: stats.setVisible)
+                   format: try launch.profile.resolve(surface: surface),
+                   observeControllers: { $0(controller) }, showStats: stats.setVisible)
             })
         })
         return LauncherModel(calls: calls, discoveryEnabled: false)

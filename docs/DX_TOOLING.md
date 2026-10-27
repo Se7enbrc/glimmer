@@ -14,9 +14,9 @@ pushing. Start with [the developer setup](CONTRIBUTING.md#setup).
 | Removed | `dev`, `install`, `reinstall`, `open`, `release`, `dist`, `release-publish`, `brew-bump`, `sign`, `notarize`, `asan-reinstall`, `quit-running`, `uninstall`, `creds-init`, `codesign-teardown`, `sparkle-keys`, `dmg-background`         |
 
 `guard-clean-tree`, `guard-release-version` and `appcast-feed` remain shared
-release source checks. `profile`, `profile-signposts`, `enable-telem` and
-`disable-telem` remain available. Independent check prerequisites can run with
-`make -j`; recipes sequence operations that share build products explicitly.
+release source checks. `profile` and `profile-signposts` remain available.
+Independent check prerequisites can run with `make -j`; recipes sequence
+operations that share build products explicitly.
 
 ## Tool and hook coverage
 

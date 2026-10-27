@@ -8,6 +8,67 @@ import Testing
 
 @MainActor
 struct PairingRecoveryTests {
+    @Test func changedLANAddressReconnectsWithoutPairingAndSavesOnce() async {
+        var server = ServerInfo(address: "192.168.1.20", uniqueId: "saved-pc", serverName: "Den PC")
+        server.pairStatus = .paired
+        server.serverCertPEM = "test pin, never sent to a transport"
+        let saved = SavedPC(server: server)
+        var attempts: [String] = []
+        var remembers = 0
+        var pairs = 0
+        let pinned = server
+        let network = testLaunch().network
+        let calls = LauncherModel.Calls(savedPCs: { [saved] }, prepare: { candidate, saved in
+            try await LauncherServices.prepareRecovering(server: candidate, saved: saved, prepare: { value, _ in
+                attempts.append(value.address)
+                if value.address == pinned.address { throw StreamError.hostUnreachable("test") }
+                return PreparedPC(network: network, server: value)
+            }, recover: { original in
+                #expect(original.uniqueId == pinned.uniqueId)
+                var moved = pinned
+                moved.address = "192.168.1.30"
+                return moved
+            })
+        }, pair: { pc, _ in pairs += 1; return pc }, apps: { _ in [] }, remember: { pc in
+            remembers += 1
+            #expect(pc.server.serverCertPEM == pinned.serverCertPEM)
+            return [SavedPC(server: pc.server)]
+        }, protectedDataChanged: { _ in })
+        let model = LauncherModel(calls: calls, discoveryEnabled: false)
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.select(saved)
+        await model.waitUntilOperationFinishes()
+        #expect(model.message == nil)
+        #expect(attempts == ["192.168.1.20", "192.168.1.30"])
+        #expect(model.savedPCs.first?.address == "192.168.1.30")
+        #expect(remembers == 1 && pairs == 0)
+    }
+
+    @Test(arguments: ["tower.local", "100.64.1.2", "203.0.113.2"])
+    func stableRoutesNeverInvokeRecovery(address: String) async {
+        let server = ServerInfo(address: address, uniqueId: "pc", serverName: "Den PC")
+        do {
+            _ = try await LauncherServices.prepareRecovering(server: server, saved: true,
+                prepare: { _, _ in throw StreamError.hostUnreachable("test") }, recover: { _ in
+                    Issue.record("An explicit stable route must not be replaced")
+                    return nil
+                })
+            Issue.record("The original failure must reach the launcher")
+        } catch {}
+    }
+
+    @Test func certificateFailureNeverInvokesRecovery() async {
+        let server = ServerInfo(address: "192.168.1.20", uniqueId: "pc", serverName: "Den PC")
+        do {
+            _ = try await LauncherServices.prepareRecovering(server: server, saved: true,
+                prepare: { _, _ in throw StreamError.hostCertChanged("test") }, recover: { _ in
+                    Issue.record("Certificate failure cannot authorize an address change")
+                    return nil
+                })
+            Issue.record("The certificate failure must reach the launcher")
+        } catch {}
+    }
+
     @Test func protectedDataTransitionDoesNotLeaveAnUnlockMessage() {
         let fixture = LauncherFixture()
         let model = fixture.model()

@@ -9,6 +9,7 @@
 //  -psn_*, -NS*, Xcode and test arguments) starts the app; hosted tests skip its launch.
 //
 
+import GlimmerEngine
 import AppKit
 import Darwin
 import Foundation
@@ -21,7 +22,7 @@ enum GlimmerMain {
         reexecIfSymlinked()
         guard GlimmerCLI.isInvocation(CommandLine.arguments) else {
             // The test host shares the app's defaults domain and must not run its launch.
-            if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            if PersistentStorage.isTesting {
                 GlimmerApp.registerDefaults()
                 NSApplication.shared.run()
                 return

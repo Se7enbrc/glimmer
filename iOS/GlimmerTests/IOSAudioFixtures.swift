@@ -25,10 +25,11 @@ final class AudioSessionFixture: @unchecked Sendable {
         try lock.withLock { try body(&state) }
     }
 
-    func makeSession() -> IOSAudioSession {
+    func makeSession(activationFinished: @escaping @Sendable () -> Void = {}) -> IOSAudioSession {
         var calls = IOSAudioSession.Calls()
         calls.configure = { rate in self.read { $0.calls.append("configure:\(Int(rate))") } }
         calls.activate = {
+            defer { activationFinished() }
             let fail = self.read { $0.calls.append("activate"); return $0.activationFails }
             if fail { throw AudioOutput.Failure(status: -50) }
         }
@@ -64,7 +65,8 @@ final class AudioUnitFixture: @unchecked Sendable {
         var stopped: [AudioUnit] = []
         var formats: [AudioStreamBasicDescription] = []
         var callbackContexts: [UnsafeMutableRawPointer?] = []
-        var observerContexts: [UnsafeMutableRawPointer?] = []
+        var running = true
+        var failStart = false
         var failInitialization = false
         var failDisposal = false
         var hardwareRate: Double = 44_100
@@ -105,6 +107,8 @@ final class AudioUnitFixture: @unchecked Sendable {
                     format.mSampleRate = $0.hardwareRate
                     format.mChannelsPerFrame = $0.hardwareChannels
                     value.storeBytes(of: format, as: AudioStreamBasicDescription.self)
+                case kAudioOutputUnitProperty_IsRunning:
+                    value.storeBytes(of: UInt32($0.running ? 1 : 0), as: UInt32.self)
                 case kAudioUnitProperty_Latency: value.storeBytes(of: Float64(0.001), as: Float64.self)
                 case kAudioUnitProperty_MaximumFramesPerSlice: value.storeBytes(of: UInt32(4096), as: UInt32.self)
                 default: value.storeBytes(of: UInt32(1), as: UInt32.self)
@@ -113,11 +117,12 @@ final class AudioUnitFixture: @unchecked Sendable {
             return noErr
         }
         calls.parameter = { _, _, _, _, _, _ in noErr }
-        calls.observe = { _, _, context in self.read { $0.observerContexts.append(context) }; return noErr }
         calls.initialize = { unit in
             self.read { $0.initialized.append(unit); return $0.failInitialization ? -50 : noErr }
         }
-        calls.start = { _ in noErr }
+        calls.start = { _ in
+            self.read { $0.running = !$0.failStart; return $0.failStart ? -50 : noErr }
+        }
         calls.stop = { unit in self.read { $0.stopped.append(unit) }; return noErr }
         calls.uninitialize = { _ in noErr }
         calls.dispose = { unit in

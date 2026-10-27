@@ -11,11 +11,14 @@ final class StreamTouchCapture: NSObject, UIGestureRecognizerDelegate {
         let click: (Bool, TimeInterval) -> Void
         let endScroll: () -> Void
         let revealControls: () -> Void
+        var revealMenu: () -> Void = {}
     }
 
     let primaryTap = StreamTapRecognizer()
     let secondaryTap = StreamTapRecognizer()
     let revealTap = StreamTapRecognizer()
+    let menuTap = StreamTapRecognizer()
+    let menuSwipe = UISwipeGestureRecognizer()
     let pointerPan = StreamPanRecognizer()
     let scrollPan = StreamPanRecognizer()
     private let actions: Actions
@@ -33,6 +36,7 @@ final class StreamTouchCapture: NSObject, UIGestureRecognizerDelegate {
         primaryTap.numberOfTouchesRequired = 1
         secondaryTap.numberOfTouchesRequired = 2
         revealTap.numberOfTouchesRequired = 3
+        menuSwipe.direction = .down
         pointerPan.minimumNumberOfTouches = 1
         pointerPan.maximumNumberOfTouches = 1
         scrollPan.minimumNumberOfTouches = 2
@@ -44,6 +48,7 @@ final class StreamTouchCapture: NSObject, UIGestureRecognizerDelegate {
             recognizer.isEnabled = false
             view.addGestureRecognizer(recognizer)
         }
+        menuTap.allowedTouchTypes.append(NSNumber(value: UITouch.TouchType.indirectPointer.rawValue))
         // A multi-finger or moving gesture must resolve before a click reaches the PC.
         primaryTap.require(toFail: secondaryTap)
         primaryTap.require(toFail: revealTap)
@@ -59,21 +64,31 @@ final class StreamTouchCapture: NSObject, UIGestureRecognizerDelegate {
         for recognizer in recognizers { view?.removeGestureRecognizer(recognizer) }
     }
 
-    var recognizers: [UIGestureRecognizer] { [primaryTap, secondaryTap, revealTap, pointerPan, scrollPan] }
+    var recognizers: [UIGestureRecognizer] {
+        [primaryTap, secondaryTap, revealTap, menuTap, menuSwipe, pointerPan, scrollPan]
+    }
 
     func setEnabled(_ enabled: Bool, mouseEnabled: Bool = true) {
         guard self.enabled != enabled || self.mouseEnabled != mouseEnabled else { return }
         self.enabled = enabled
         self.mouseEnabled = mouseEnabled
         for recognizer in recognizers {
-            recognizer.isEnabled = enabled && (recognizer === revealTap || mouseEnabled)
+            recognizer.isEnabled = enabled
+                && (recognizer === revealTap || recognizer === menuTap || recognizer === menuSwipe || mouseEnabled)
         }
         if !enabled || !mouseEnabled { actions.endScroll() }
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard enabled else { return false }
-        return Self.acceptsTouch(startingIn: touch.view)
+        return acceptsTouch(gestureRecognizer, startingIn: touch.view, at: touch.location(in: view))
+    }
+
+    func acceptsTouch(_ recognizer: UIGestureRecognizer, startingIn target: UIView?, at point: CGPoint) -> Bool {
+        guard Self.acceptsTouch(startingIn: target) else { return false }
+        let top = point.y >= 0 && point.y < 44
+        if recognizer === menuTap || recognizer === menuSwipe { return top }
+        return recognizer === revealTap || !top
     }
 
     static func acceptsTouch(startingIn view: UIView?) -> Bool {
@@ -87,7 +102,9 @@ final class StreamTouchCapture: NSObject, UIGestureRecognizerDelegate {
 
     @objc private func changed(_ recognizer: UIGestureRecognizer) {
         guard enabled else { return }
-        if let pan = recognizer as? UIPanGestureRecognizer {
+        if recognizer === menuTap || recognizer === menuSwipe {
+            if recognizer.state == .recognized { actions.revealMenu() }
+        } else if let pan = recognizer as? UIPanGestureRecognizer {
             handlePan(scroll: pan === scrollPan, state: pan.state,
                       translation: pan.translation(in: view), capturedAt: timestamp(for: recognizer))
             pan.setTranslation(.zero, in: view)

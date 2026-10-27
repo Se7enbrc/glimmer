@@ -8,8 +8,10 @@ import Testing
 #if os(macOS)
 import AppKit
 import ApplicationServices
+typealias NativeControllerRenderView = NSView
 #else
 import UIKit
+typealias NativeControllerRenderView = UIView
 #endif
 
 @MainActor
@@ -38,7 +40,7 @@ struct ControllerLayoutRenderTests {
             .defaultAppStorage(settings.defaults), name: "after-general-\(style)", dark: dark)
         #else
         let launcher = LauncherFixture().model()
-        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: launcher)
+        let settings = GlimmerSettings(profile: .constant(.native120), model: launcher)
         try await record(NavigationStack { settings.settingsPage(.general) },
                          name: "after-general-\(style)", dark: dark)
         #endif
@@ -90,7 +92,7 @@ struct ControllerLayoutRenderTests {
         try await record(NavigationStack { ShortcutsPane().environment(app) }, name: "after-input-\(style)", dark: dark)
         #else
         let launcher = LauncherFixture().model()
-        let after = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: launcher)
+        let after = GlimmerSettings(profile: .constant(.native120), model: launcher)
         try await record(NavigationStack { after.settingsPage(.input) }, name: "after-input-\(style)", dark: dark)
         #endif
     }
@@ -237,11 +239,13 @@ struct ControllerLayoutRenderTests {
             owner: .type(identity.type), reader: nil, controller: nil, controls: controls, nintendoLabels: false)
     }
 
-    func record<Content: View>(_ content: Content, name: String, dark: Bool) async throws {
+    func record<Content: View>(_ content: Content, name: String, dark: Bool,
+                               prepare: ((NativeControllerRenderView) -> Void)? = nil) async throws {
         #if os(macOS)
         let host = NSHostingController(rootView: content.environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentViewController: host)
         window.title = name.contains("general") ? "General" : "Controller layouts"
+        if name.hasPrefix("mouse-") { window.title = "Controller mouse" }
         if name.contains("reset-confirmation") { window.title = "Reset to defaults?" }
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.styleMask = [.titled, .closable, .resizable]
@@ -252,6 +256,9 @@ struct ControllerLayoutRenderTests {
         view.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
         try await Task.sleep(for: .milliseconds(250))
+        prepare?(view)
+        view.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
         let frame = try #require(view.superview)
         let bitmap = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
         frame.cacheDisplay(in: frame.bounds, to: bitmap)
@@ -278,7 +285,6 @@ struct ControllerLayoutRenderTests {
         }
         #expect(drawn)
         let data = try #require(image.pngData())
-        try data.write(to: URL.documentsDirectory.appendingPathComponent("remapping-\(name).png"))
         #endif
         #expect(data.count > 1000)
         Attachment.record(Array(data), named: "\(name).png")

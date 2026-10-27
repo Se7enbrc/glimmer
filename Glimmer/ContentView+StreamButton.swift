@@ -57,7 +57,7 @@ struct AppTileStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(.white)
-            .background { RoundedRectangle(cornerRadius: 14, style: .continuous).accentSurface() }
+            .background { RoundedRectangle(cornerRadius: RunningTileBadge.tileCornerRadius, style: .continuous).accentSurface() }
             .opacity(isEnabled ? 1.0 : 0.55)
             .scaleEffect(Motion.pressedScale(configuration.isPressed, reduceMotion: reduceMotion))
             .animation(Motion.press(reduceMotion: reduceMotion), value: configuration.isPressed)

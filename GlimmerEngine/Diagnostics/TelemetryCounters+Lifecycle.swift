@@ -15,7 +15,7 @@ extension TelemetryCounters {
     package func initializeGaugeLocks() {
         jitterLock.initialize(to: os_unfair_lock_s())
         inputLock.initialize(to: os_unfair_lock_s())
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         rttLock.initialize(to: os_unfair_lock_s())
         vtSessionCreateLock.initialize(to: os_unfair_lock_s())
         cruiseMaxGainLock.initialize(to: os_unfair_lock_s())
@@ -35,7 +35,7 @@ extension TelemetryCounters {
     /// module-internal for the same reason - the class's `deinit` calls it.
     package func deallocateGaugeLocks() {
         jitterLock.deallocate(); inputLock.deallocate()
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         rttLock.deallocate(); vtSessionCreateLock.deallocate()
         cruiseMaxGainLock.deallocate()
         gapLock.deallocate()
@@ -51,26 +51,24 @@ extension TelemetryCounters {
     /// in-place reconnect keeps the totals, the first handshake and its audio TTF.
     package func anchorConnectStart(now: UInt64, reconnecting: Bool) {
         if reconnecting {
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             p2.anchorReconnect(now, audioTtfMs: audioFirstPacketMs, audioTtf: audioTtf.latched)
             #endif
             resetForReconnect()
         } else {
             resetForNewSession()
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             p2.reset()
             #endif
-            #if os(macOS) || GLIMMER_DIAGNOSTICS
+            #if os(macOS)
             p2.anchorConnectStart(now)
             #endif
         }
     }
 
-    /// Reset everything at a session's first connect (`anchorConnectStart`), not at
-    /// exporter start, so a warm host's one-shot latches can't serve a prior session's
-    /// values. A Prometheus scrape across the boundary just sees a counter reset.
+    /// Reset at first connect, before a warm PC can fill one-shot latches for the new session.
     package func resetForNewSession() {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         ReceiveTimingTelemetry.video.reset()
         ReceiveTimingTelemetry.audio.reset()
         AudioPipelineTelemetry.shared.reset()
@@ -138,6 +136,9 @@ extension TelemetryCounters {
         audioStateValue = nil; audioBufferFillMinMsValue = .infinity
         os_unfair_lock_unlock(audioStateLock)
         #else
+        #if GLIMMER_DIAGNOSTICS
+        _ = ReceivePolicyMeasurements.video.takeWindow()
+        #endif
         for counter in [videoPacketsTotal, videoPacketsOutOfOrderTotal, enetRetransmitTotal,
                         videoGapOver50msTotal, videoGapOver100msTotal,
                         audioGapOver50msTotal, audioGapOver100msTotal, audioUnderrunTotal] {
@@ -153,7 +154,7 @@ extension TelemetryCounters {
     /// so the receipt covers the whole session.
     package func resetForReconnect() {
         setRecvJitterMs(0)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         setRttMs(0)
         os_unfair_lock_lock(gapLock); packetGapValue = nil; os_unfair_lock_unlock(gapLock)
         os_unfair_lock_lock(fecHealthLock); fecHealthValue = nil; os_unfair_lock_unlock(fecHealthLock)

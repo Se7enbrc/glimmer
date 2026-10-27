@@ -316,7 +316,7 @@ struct RendererTelemetryTests {
         #expect(queue.sync { sampler.sample().status } == .unavailable)
     }
 
-    @Test func exportsCarrySameValuesAndOmitUnavailableCounts() throws {
+    @Test func ndjsonCarriesValuesAndOmitsUnavailableCounts() throws {
         var snap = TelemetrySnapshot()
         let extras = TelemetrySnapshot.Extras()
         let withoutRenderer = TelemetryRenderer.ndjson(snap, extras: extras)
@@ -329,7 +329,6 @@ struct RendererTelemetryTests {
             status: .ready, cumulative: values(100, dropped: 4, optimized: 80, delay: 0.5),
             delta: values(60, dropped: 1, optimized: 40, delay: 0.2),
             intervalSeconds: 1.1, ageSeconds: 0.9, resets: 2)
-        let prom = TelemetryRenderer.prometheus(snap, extras: extras)
         let json = TelemetryRenderer.ndjson(snap, extras: extras)
         let row = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
         #expect(row["renderer_metrics_status"] as? String == "ready")
@@ -338,14 +337,8 @@ struct RendererTelemetryTests {
                                  ("dropped_frames_delta", 1), ("optimized_frames_delta", 40),
                                  ("metrics_resets_total", 2)] {
             #expect((row["renderer_" + key] as? NSNumber)?.intValue == expected)
-            #expect(prom.split(separator: "\n").contains {
-                $0.hasPrefix("glimmer_renderer_" + key + "{") && $0.hasSuffix(" " + String(expected))
-            })
         }
         #expect((row["renderer_accumulated_frame_delay_s"] as? NSNumber)?.doubleValue == 0.5)
         #expect((row["renderer_frame_delay_delta_s"] as? NSNumber)?.doubleValue == 0.2)
-        #expect(prom.split(separator: "\n").contains {
-            $0.hasPrefix("glimmer_renderer_frame_delay_delta_seconds{") && $0.hasSuffix(" 0.200")
-        })
     }
 }

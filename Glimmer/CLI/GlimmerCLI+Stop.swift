@@ -2,18 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import Foundation
-
-enum CommandStopResult: String {
-    case stopped, noActiveStream, pcMismatch
-
-    var message: String {
-        switch self {
-        case .stopped: "Stream stopped."
-        case .noActiveStream: "No active stream."
-        case .pcMismatch: "That PC isn't the active stream. Run “glimmer status --json” to see the current PC."
-        }
-    }
-}
+import GlimmerEngine
 
 extension GlimmerCLI {
     static func stop(

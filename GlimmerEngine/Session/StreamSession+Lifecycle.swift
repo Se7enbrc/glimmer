@@ -110,7 +110,7 @@ extension StreamSession {
         // would show as a runaway-open span in Instruments. Closing here
         // with outcome=aborted is the universal cleanup for every stop
         // path (user quit, connection terminated, startConnection error).
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         if let state = connectFlowState {
             OSSignposter.network.endInterval(
                 "ConnectFlow", state, "outcome=aborted")
@@ -317,7 +317,7 @@ extension StreamSession {
     ) async throws -> LaunchResponse {
         let client = await network.clientUniqueID
         try checkAttempt(deadline: deadline)
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let start = Date()
         defer { ConnectTimingTelemetry.shared.recordLaunchLeg(launchMs: Date().timeIntervalSince(start) * 1000) }
         #endif

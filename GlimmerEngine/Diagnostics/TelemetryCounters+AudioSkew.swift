@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 
 //
 //  TelemetryCounters+AudioSkew.swift
@@ -224,11 +224,7 @@ package final class AudioVideoSkewStore: @unchecked Sendable {
         return rebases
     }
 
-    /// The 1Hz cold read: derive the current skew (ms, + = audio late), or nil
-    /// when either stream is dark/stale or the pair is (re-)anchoring this
-    /// tick. `accumulate` feeds the session percentile accumulator - set it
-    /// from exactly ONE caller cadence (the NDJSON tick) so the scorecard
-    /// can't double-count; other readers (Prometheus) derive without feeding.
+    /// Only the exporter cadence feeds the accumulator; other readers derive without feeding it.
     package func deriveSkewMs(
         bufferFillMs: Double?, accumulate: Bool, now: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) -> Double? {

@@ -24,7 +24,7 @@ package struct InputEventTiming: Sendable {
     }
 }
 
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 /// Each TLS cell belongs to one OS thread. Scopes clear it before returning to the event loop.
 package final class InputTimingContext: @unchecked Sendable {
 

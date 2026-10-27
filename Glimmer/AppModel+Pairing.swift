@@ -147,7 +147,7 @@ extension AppModel {
             let reason = error.localizedDescription
             log.error("Pairing: unreachable \(address, privacy: .private) - \(reason, privacy: .private)")
             Diag.error("Pairing: host unreachable", "Pairing")
-            pairingPhase = .failure(.unreachable)
+            pairingPhase = .failure(PairingFailure.from(error, fallback: .unreachable))
             return nil
         }
         guard !fetched.isRealGFE else {
@@ -186,7 +186,7 @@ extension AppModel {
                 \(String(describing: error), privacy: .private)
                 """
             )
-            let failure = error as? PairingFailure ?? .rejected
+            let failure = PairingFailure.from(error, fallback: .rejected)
             Diag.error("Pairing failed: \(failure)", "Pairing")
             pairingPhase = .failure(failure)
             return nil

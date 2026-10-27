@@ -9,10 +9,19 @@ import GlimmerEngine
 final class DualSenseRouting: @unchecked Sendable {
     static let shared = DualSenseRouting()
     private let lock = NSLock()
-    private var binder = DualSenseBinder()
+    private var binder: DualSenseBinder
+    private let schedule: @Sendable (@escaping @Sendable () -> Void) -> Void
     private var faces: [ObjectIdentifier: Set<DualSenseFaceButton>] = [:]
     private var inputTokens: [ObjectIdentifier: UUID] = [:]
     private var slots: [UInt8: ObjectIdentifier] = [:]
+
+    init(binder: DualSenseBinder = DualSenseBinder(),
+         schedule: @escaping @Sendable (@escaping @Sendable () -> Void) -> Void = { work in
+             DispatchQueue.main.asyncAfter(deadline: .now() + 2 * DualSenseBinder.window + 0.001, execute: work)
+         }) {
+        self.binder = binder
+        self.schedule = schedule
+    }
 
     func device(for controller: ObjectIdentifier) -> DualSenseDeviceKey? {
         lock.lock(); defer { lock.unlock() }
@@ -119,10 +128,12 @@ final class DualSenseRouting: @unchecked Sendable {
     }
 
     func hid(device: DualSenseDeviceKey, pressed: Set<DualSenseFaceButton>, at time: TimeInterval) {
-        lock.withLock {
+        let needsResolution = lock.withLock {
+            guard !pressed.isEmpty, binder.controller(for: device) == nil else { return false }
             for button in pressed { binder.hid(deviceID: device, button: button, at: time) }
+            return true
         }
-        scheduleResolution()
+        if needsResolution { scheduleResolution() }
     }
 
     func gc(pad: GCExtendedGamepad) {
@@ -147,6 +158,7 @@ final class DualSenseRouting: @unchecked Sendable {
         let changed = lock.withLock {
             let pressed = held.subtracting(faces[id] ?? [])
             faces[id] = held
+            guard binder.hidDevice(for: id) == nil else { return false }
             for button in pressed { binder.gc(controllerID: id, button: button, at: time) }
             return !pressed.isEmpty
         }
@@ -154,7 +166,7 @@ final class DualSenseRouting: @unchecked Sendable {
     }
 
     private func scheduleResolution() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2 * DualSenseBinder.window + 0.001) { [weak self] in
+        schedule { [weak self] in
             guard let self else { return }
             let matched = self.lock.withLock {
                 let before = self.boundRoutes

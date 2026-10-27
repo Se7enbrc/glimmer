@@ -193,11 +193,13 @@ struct ControllerTouchpadMouseTests {
         #expect(backend.mouseMoves.isEmpty)
     }
 
-    @Test func faceButtonAndPhysicalMouseKeepOwnershipAfterTouchpadRelease() {
+    @Test func triggerAndPhysicalMouseKeepOwnershipAfterTouchpadRelease() {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
         forwarder.forwardTouchpad(slot: 0, primary: (0.2, 0.2), secondary: idle, clicked: true)
-        forwarder.routeControllerMouse(slot: 0, buttons: StreamProtocol.A_FLAG, analog: neutral, chordHeld: false)
+        var primary = neutral
+        primary.rightTrigger = 255
+        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: primary, chordHeld: false)
         forwarder.forwardTouchpad(slot: 0, primary: idle, secondary: idle)
         #expect(backend.pointer.count == 1)
         forwarder.updatePhysicalMouseButton(StreamProtocol.BUTTON_LEFT, pressed: true)

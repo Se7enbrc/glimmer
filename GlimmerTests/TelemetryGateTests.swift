@@ -3,7 +3,6 @@
 
 import GlimmerEngine
 import Foundation
-import Network
 import Testing
 @testable import Glimmer
 
@@ -31,7 +30,6 @@ struct TelemetryGateTests {
         GlimmerApp.registerDefaults(defaults: defaults, diagnosticBuild: true)
         #expect(TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
         #expect(TelemetryGate.diagnosticsVisible(defaults: defaults))
-        #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
         #expect(defaults.persistentDomain(forName: name)?.isEmpty != false)
         defaults.set(false, forKey: "telemetryEnabled")
         GlimmerApp.registerDefaults(defaults: defaults, diagnosticBuild: true)
@@ -61,9 +59,6 @@ struct TelemetryGateTests {
         try withFreshDefaults { defaults in
             #expect(!TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
             #expect(!TelemetryGate.diagnosticsVisible(defaults: defaults))
-            #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
-            let parameters = TelemetryExporter.listenerParameters(listenOnLAN: TelemetryGate.listensOnLAN(defaults: defaults))
-            #expect(parameters.requiredInterfaceType == .loopback)
         }
     }
 
@@ -72,7 +67,6 @@ struct TelemetryGateTests {
         try withFreshDefaults { defaults in
             #expect(TelemetryGate.isEnabled(defaults: defaults, environmentValue: value) == (value == "1"))
             #expect(!TelemetryGate.diagnosticsVisible(defaults: defaults))
-            #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
         }
     }
 
@@ -82,30 +76,14 @@ struct TelemetryGateTests {
             defaults.set(true, forKey: "telemetryEnabled")
             #expect(TelemetryGate.isEnabled(defaults: defaults, environmentValue: value))
             #expect(!TelemetryGate.diagnosticsVisible(defaults: defaults))
-            #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
         }
     }
 
-    @Test func revealingDiagnosticsDoesNotEnableCollectionOrLAN() throws {
+    @Test func revealingDiagnosticsDoesNotEnableCollection() throws {
         try withFreshDefaults { defaults in
             defaults.set(true, forKey: "showDiagnostics")
             #expect(TelemetryGate.diagnosticsVisible(defaults: defaults))
             #expect(!TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
-            #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
-        }
-    }
-
-    @Test func lanBindingRequiresASeparatePreference() throws {
-        try withFreshDefaults { defaults in
-            defaults.set(true, forKey: "telemetryEnabled")
-            #expect(!TelemetryGate.listensOnLAN(defaults: defaults))
-            defaults.set(true, forKey: TelemetryExporter.lanBindDefaultsKey)
-            #expect(TelemetryGate.listensOnLAN(defaults: defaults))
-            let parameters = TelemetryExporter.listenerParameters(listenOnLAN: TelemetryGate.listensOnLAN(defaults: defaults))
-            #expect(parameters.requiredInterfaceType != .loopback)
-            defaults.set(false, forKey: "telemetryEnabled")
-            #expect(!TelemetryGate.isEnabled(defaults: defaults, environmentValue: nil))
-            #expect(!TelemetryGate.diagnosticsVisible(defaults: defaults))
         }
     }
 }

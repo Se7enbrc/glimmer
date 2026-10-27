@@ -30,14 +30,14 @@ extension TelemetryCounters {
     /// off the hot path - the audio decode path stamps it under the lock it already
     /// holds for the decode (no extra lock on the audio path).
     package func setAudioState(_ state: AudioState) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         os_unfair_lock_lock(audioStateLock); audioStateValue = state; os_unfair_lock_unlock(audioStateLock)
         #endif
     }
     /// Latest AUDIO playout state, or nil before the first decoded audio packet.
     /// Read by the exporter on its 1Hz queue (never the hot path).
     package var audioState: AudioState? {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         os_unfair_lock_lock(audioStateLock); defer { os_unfair_lock_unlock(audioStateLock) }
         return audioStateValue
         #else
@@ -50,7 +50,7 @@ extension TelemetryCounters {
     /// not this one - these are independent locks, no nesting). One compare + a
     /// conditional store; far below the 5ms audio budget.
     package func noteAudioBufferFill(ms: Double) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         os_unfair_lock_lock(audioStateLock)
         if ms < audioBufferFillMinMsValue { audioBufferFillMinMsValue = ms }
         os_unfair_lock_unlock(audioStateLock)
@@ -60,7 +60,7 @@ extension TelemetryCounters {
     /// exporter on its 1Hz queue (never the hot path); resetting on read makes each
     /// tick's min cover only that window's troughs. nil when no sample this window.
     package func takeAudioBufferFillMinMs() -> Double? {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         os_unfair_lock_lock(audioStateLock)
         let value = audioBufferFillMinMsValue
         audioBufferFillMinMsValue = .infinity
@@ -75,7 +75,7 @@ extension TelemetryCounters {
     /// audio receiver opens its socket; idempotent (a second call before the first
     /// packet is harmless, and after is ignored so the anchor stays the true start).
     package func anchorAudioStreamStart() {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let now = DispatchTime.now().uptimeNanoseconds
         os_unfair_lock_lock(audioFirstPacketLock)
         if audioStreamStartNanosValue == 0 { audioStreamStartNanosValue = now }
@@ -103,7 +103,7 @@ extension TelemetryCounters {
     /// open epoch is kept only as a fallback when the connect anchor is somehow
     /// unset.
     package func recordAudioFirstPacket() {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let now = DispatchTime.now().uptimeNanoseconds
         let connectStart = p2.connectStart
         os_unfair_lock_lock(audioFirstPacketLock)
@@ -119,7 +119,7 @@ extension TelemetryCounters {
     /// Time-to-first-decoded-audio (ms), or nil if not yet measured. Read by the
     /// exporter on its 1Hz queue (never the hot path).
     package var audioFirstPacketMs: Double? {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         os_unfair_lock_lock(audioFirstPacketLock); defer { os_unfair_lock_unlock(audioFirstPacketLock) }
         return audioFirstPacketMsValue != 0 ? audioFirstPacketMsValue : nil
         #else
@@ -133,7 +133,7 @@ extension TelemetryCounters {
 /// The longest gap between audio datagrams each 1 Hz tick, counting one still
 /// open at the tick, so a blackout reads as it grows rather than only once it
 /// ends. The receive thread notes every arrival; the exporter takes the max.
-#if os(macOS) || GLIMMER_DIAGNOSTICS
+#if os(macOS)
 package final class AudioArrivalGaps: Sendable {
 
     package init() {}

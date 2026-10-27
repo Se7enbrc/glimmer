@@ -63,11 +63,11 @@ struct TouchRenderTests {
             #expect(!StreamTouchCapture.acceptsTouch(startingIn: control))
             for child in control.subviews { #expect(!StreamTouchCapture.acceptsTouch(startingIn: child)) }
         }
-        view.mouseMode(true, leftStick: false)
+        view.mouseMode(true)
         #expect(view.controls[.rightStick]?.accessibilityLabel == "Pointer")
-        #expect(view.controls[.rightTrigger]?.accessibilityLabel == "Primary click")
-        #expect(view.controls[.rightShoulder]?.accessibilityLabel == "Secondary click")
-        view.mouseMode(false, leftStick: false)
+        #expect(view.controls[.rightTrigger]?.accessibilityLabel == "Right trigger, Primary click")
+        #expect(view.controls[.rightShoulder]?.accessibilityLabel == "Right shoulder, Secondary click")
+        view.mouseMode(false)
         #expect(view.controls[.a]?.accessibilityLabel == "A")
     }
 
@@ -137,7 +137,7 @@ struct TouchRenderTests {
         let size = viewport.fold ? CGSize(width: viewport.size.width, height: 395) : viewport.size
         let area = CGRect(origin: .zero, size: size).insetBy(dx: 24, dy: 12)
         let launch = testLaunch()
-        let store = TouchLayoutStore(defaults: .standard)
+        let store = TouchLayoutStore(defaults: PersistentStorage.defaults)
         let family = TouchLayout.family(in: area)
         let previous = store.load(pcID: launch.pcID, appID: launch.appID, family: family)
         defer { store.save(previous, pcID: launch.pcID, appID: launch.appID, family: family) }
@@ -167,7 +167,7 @@ struct TouchRenderTests {
     @Test(arguments: [TouchElement?.none, .rightStick])
     func nativeOpacitySliderPreviewsBothEndpointsWithoutSaving(selected: TouchElement?) async throws {
         let launch = testLaunch()
-        let store = TouchLayoutStore(defaults: .standard)
+        let store = TouchLayoutStore(defaults: PersistentStorage.defaults)
         let saved = store.load(pcID: launch.pcID, appID: launch.appID, family: .compact)
         store.save(TouchLayout(), pcID: launch.pcID, appID: launch.appID, family: .compact)
         defer { store.save(saved, pcID: launch.pcID, appID: launch.appID, family: .compact) }
@@ -214,7 +214,7 @@ struct TouchRenderTests {
     func globalOpacityPanelWithAndWithoutSelection(viewport: Viewport, dark: Bool) async throws {
         let area = CGRect(origin: .zero, size: viewport.size).insetBy(dx: 24, dy: 12)
         let launch = testLaunch()
-        let store = TouchLayoutStore(defaults: .standard)
+        let store = TouchLayoutStore(defaults: PersistentStorage.defaults)
         let family = TouchLayout.family(in: area)
         let saved = store.load(pcID: launch.pcID, appID: launch.appID, family: family)
         store.save(TouchLayout(), pcID: launch.pcID, appID: launch.appID, family: family)

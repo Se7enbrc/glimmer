@@ -219,6 +219,8 @@ public enum StreamEvent: Sendable {
     /// returns to the streaming state; the fresh `.connectionEstablished` /
     /// `.firstFrame` edges also promote the phase, so this is belt-and-braces.
     case reconnected
+    /// The requested encoded size applied after a resume-only transition.
+    case sizeChanged(width: Int, height: Int)
     case connectionStatus(ConnectionQuality)
     /// The PC's HDR intent, which can differ from the actual decoded format and output.
     /// Use hdrActive for the effective presentation state.

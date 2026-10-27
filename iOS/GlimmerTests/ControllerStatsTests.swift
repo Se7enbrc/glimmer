@@ -64,7 +64,7 @@ struct ControllerStatsTests {
 
     @Test func controlQAlwaysOffersAnIndependentStopCommand() throws {
         let controller = StreamViewController(model: PlaybackFixture().model(), close: {})
-        let command = try #require(controller.keyCommands?.first)
+        let command = try #require(controller.keyCommands?.first { $0.input == "q" })
         #expect(controller.canBecomeFirstResponder)
         #expect(command.input == "q" && command.modifierFlags == .control)
         #expect(command.wantsPriorityOverSystemBehavior)

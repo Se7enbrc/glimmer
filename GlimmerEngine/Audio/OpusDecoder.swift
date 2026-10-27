@@ -84,7 +84,7 @@ final class OpusDecoder {
     func decodeOrConceal(_ packet: UnsafeRawBufferPointer?, into pcm: UnsafeMutablePointer<Float>) -> Int {
         let result = decode(packet, into: pcm)
         guard packet != nil, result == 0, !acceptedPriming else { return result }
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         TelemetryCounters.shared.audioDecodeFailedTotal.increment()
         #endif
         if !reportedFailure {

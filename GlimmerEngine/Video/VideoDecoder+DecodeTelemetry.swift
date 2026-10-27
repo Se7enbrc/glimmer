@@ -63,7 +63,7 @@ extension VideoDecoder {
     /// (idempotent in P2State); off the per-frame path (the caller fires this
     /// exactly once per session, behind its own first-frame latch).
     nonisolated static func noteFirstDecodedFrameTelemetry() {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         TelemetryCounters.shared.p2.markFirstFrame(TelemetryCounters.monotonicNowNanos())
         // Resolve TRUE click-to-pixels at the SAME first-decoded-frame edge as
         // handshake_total (so the two share an endpoint); no-op without a click.
@@ -88,7 +88,7 @@ extension VideoDecoder {
     nonisolated func noteSessionCreatedTelemetry(
         outputPixelFormat: OSType, cause: SessionCreateCause
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let counters = TelemetryCounters.shared
         counters.decoderRecreateTotal.increment()
         switch cause {
@@ -110,7 +110,7 @@ extension VideoDecoder {
     private nonisolated func publishDecodeStateTelemetry(
         session: VTDecompressionSession, outputPixelFormat: OSType
     ) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         let isTenBit = (streamVideoFormat & StreamProtocol.VIDEO_FORMAT_MASK_10BIT) != 0
         let counters = TelemetryCounters.shared
         counters.setDecodeState(TelemetryCounters.DecodeState(
@@ -158,7 +158,7 @@ extension VideoDecoder {
     /// branch stays out of that function. No-op before the first session-create
     /// publish, or when the key is unchanged.
     nonisolated func noteColorSpaceChangeTelemetry(_ key: String) {
-        #if os(macOS) || GLIMMER_DIAGNOSTICS
+        #if os(macOS)
         guard FrameTimingTracker.shared != nil else { return }
         guard var state = TelemetryCounters.shared.decodeState, state.colorSpaceKey != key else {
             return
