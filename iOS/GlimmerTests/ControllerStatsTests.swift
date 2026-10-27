@@ -80,7 +80,7 @@ struct ControllerStatsTests {
         surface.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
         surface.updateTraitsIfNeeded()
         overlay.update(snapshot: .init(), enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
-        #expect(overlay.resolvedLabelFont.pointSize > 20)
+        #expect(overlay.resolvedLabelFont.pointSize == Self.cappedCaption)
         for size in [CGSize(width: 320, height: 600), CGSize(width: 667, height: 375),
                      CGSize(width: 1920, height: 1080)] {
             surface.bounds.size = size
@@ -109,10 +109,10 @@ struct ControllerStatsTests {
         #expect(controls.allSatisfy { !$0.intersects(frame) })
         let scale = frame.width / stats.overlay.layer.bounds.width
         if largest {
-            #expect(stats.overlay.resolvedLabelFont.pointSize > 20)
+            #expect(stats.overlay.resolvedLabelFont.pointSize == Self.cappedCaption)
             #expect(stats.overlay.resolvedLabelFont.pointSize * scale >= 13)
         } else {
-            #expect(scale >= 0.8)
+            #expect(stats.overlay.resolvedLabelFont.pointSize * scale >= 11)
         }
         let notice = CGRect(x: size.width / 2 - 100, y: 112, width: 200, height: 44)
         surface.overlayAppearance.noticeFrame = notice
@@ -120,6 +120,48 @@ struct ControllerStatsTests {
         surface.overlayAppearance.noticeFrame = nil
         surface.overlayAppearance.touchObstacles = []
         #expect(stats.overlay.placementBounds == nil && !stats.overlay.compactRows)
+        stats.setVisible(false)
+    }
+
+    static let cappedCaption = UIFont.preferredFont(forTextStyle: .caption2, compatibleWith:
+        UITraitCollection(preferredContentSizeCategory: .extraExtraExtraLarge)).pointSize
+
+    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 874, height: 402),
+                      CGSize(width: 1194, height: 834)], [false, true])
+    func statsStayClearOfTheOpenMenu(size: CGSize, largest: Bool) {
+        let surface = StreamSurface(frame: CGRect(origin: .zero, size: size))
+        surface.layoutIfNeeded()
+        if largest {
+            surface.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
+            surface.updateTraitsIfNeeded()
+        }
+        let stats = StreamStats(surface: surface, snapshot: { .init() }, collection: { _ in },
+                                videoSize: { size }, backdrop: { _ in nil })
+        let menu = CGRect(x: size.width - 12 - (largest ? 560 : 360), y: 12, width: largest ? 560 : 360,
+                          height: size.height - 24)
+        surface.overlayAppearance.menuFrame = menu
+        stats.setVisible(true)
+        #expect(surface.bounds.contains(stats.overlay.layer.frame))
+        #expect(!stats.overlay.layer.frame.intersects(menu))
+        surface.overlayAppearance.menuFrame = nil
+        #expect(stats.overlay.placementBounds == nil)
+        stats.setVisible(false)
+    }
+
+    @Test func statsKeepTheirCornerWhileTouchControlsShow() {
+        let size = CGSize(width: 1194, height: 834)
+        let surface = StreamSurface(frame: CGRect(origin: .zero, size: size))
+        surface.layoutIfNeeded()
+        let stats = StreamStats(surface: surface, snapshot: { .init() }, collection: { _ in },
+                                videoSize: { size }, backdrop: { _ in nil })
+        stats.setVisible(true)
+        let free = stats.overlay.layer.frame
+        let controls = Array(TouchLayout().frames(in: surface.bounds).values)
+            + [TouchLayout.menuFrame(in: surface.bounds)]
+        surface.overlayAppearance.touchObstacles = controls
+        let touch = stats.overlay.layer.frame
+        #expect(controls.allSatisfy { !$0.intersects(touch) })
+        #expect(abs(touch.minX - free.minX) < 1 && abs(touch.minY - free.minY) < 1)
         stats.setVisible(false)
     }
 

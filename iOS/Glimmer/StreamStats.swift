@@ -19,6 +19,7 @@ final class StreamStats {
     private var chromeVisible = false
     private var lastTouchArea: CGRect?
     private var lastTouchObstacles: [CGRect] = []
+    private var lastContent = CGSize.zero
     var isRefreshing: Bool { timer != nil }
 
     init(surface: StreamSurface, defaults: UserDefaults = PersistentStorage.defaults,
@@ -74,21 +75,32 @@ final class StreamStats {
         guard let surface else { return }
         if overlay.layer.superlayer !== surface.displayLayer { overlay.attach(to: surface.displayLayer) }
         let touchControls = surface.overlayAppearance.touchObstacles
-        let obstacles = touchControls + (surface.overlayAppearance.noticeFrame.map { [$0] } ?? [])
+        let obstacles = touchControls + [surface.overlayAppearance.noticeFrame, surface.overlayAppearance.menuFrame]
+            .compactMap { $0 }
         let area = surface.bounds.inset(by: surface.safeAreaInsets)
-        if lastTouchArea != area || lastTouchObstacles != obstacles {
+        let content = overlay.layer.bounds.size
+        if lastTouchArea != area || lastTouchObstacles != obstacles || lastContent != content {
             lastTouchArea = area
             lastTouchObstacles = obstacles
-            let clear = Self.clearStatsArea(in: area, avoiding: obstacles)
+            lastContent = content
+            overlay.compactRows = !obstacles.isEmpty && surface.bounds.height < 500
+            // Seek a gap that holds the HUD at full size, so its text never shrinks below the system size.
+            let scale = StatsOverlayLayer.viewportScale(in: area.size)
+            let margin: CGFloat = overlay.compactRows ? 16 : 32
+            let target = content.width > 0
+                ? CGSize(width: content.width * scale + margin, height: content.height * scale + margin) : nil
+            let clear = Self.clearStatsArea(in: area, avoiding: obstacles, corner: overlay.corner, target: target)
             overlay.placementBounds = obstacles.isEmpty ? nil
                 : CGRect(x: clear.minX, y: surface.bounds.maxY - clear.maxY, width: clear.width, height: clear.height)
-            overlay.compactRows = !touchControls.isEmpty && surface.bounds.height < 500
         }
         overlay.layoutInHost(surface.displayLayer)
     }
 
     func tick() {
-        if overlay.isVisible { updateStats() }
+        if overlay.isVisible {
+            updateStats()
+            if overlay.layer.bounds.size != lastContent { layout() }
+        }
         // Share one sample: preserve the HUD's local contrast when it is visible.
         let rect = overlay.isVisible ? overlay.backdropSampleRect
             : Self.chromeSampleRect(view: surface?.bounds.size ?? .zero, video: videoSize())

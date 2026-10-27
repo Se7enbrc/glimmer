@@ -161,6 +161,7 @@ final class StatsTrace {
     private let criticals = CAShapeLayer()
     private let dot = CAShapeLayer()
     private var target = 60.0
+    static let minimumHistory = 8
 
     init(metric: Metric) {
         self.metric = metric
@@ -215,7 +216,8 @@ final class StatsTrace {
 
     func draw() {
         let bounds = layer.bounds.insetBy(dx: 2, dy: 2)
-        guard !bounds.isEmpty else {
+        // Two seconds of readings first: a lone reference line and a stub read as stray dashes.
+        guard !bounds.isEmpty, history.count >= Self.minimumHistory else {
             for shape in [baseline, line, cautions, criticals, dot] { shape.path = nil }
             return
         }

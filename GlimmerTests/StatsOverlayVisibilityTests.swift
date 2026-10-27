@@ -306,12 +306,19 @@ struct StatsOverlayVisibilityTests {
         }
     }
 
-    @Test func tracesWaitForDrawableBoundsAndClearTheirPathsWhenCollapsed() {
+    @Test func tracesWaitForBoundsAndHistoryAndClearTheirPathsWhenCollapsed() {
         let trace = StatsTrace(metric: .render)
         trace.draw()
         let shapes = (trace.layer.sublayers ?? []).compactMap { $0 as? CAShapeLayer }
         #expect(shapes.allSatisfy { $0.path == nil })
         trace.layer.bounds = CGRect(x: 0, y: 0, width: 160, height: 17)
+        var snapshot = StreamStatsSnapshot()
+        snapshot.renderedFps = 60
+        for count in 1...StatsTrace.minimumHistory {
+            trace.draw()
+            #expect(shapes.allSatisfy { $0.path == nil }, "no stub before \(count) readings")
+            trace.append(snapshot: snapshot, targetFps: 60, thresholds: .default)
+        }
         trace.draw()
         #expect(shapes.contains { $0.path?.isEmpty == false })
         trace.layer.bounds = .zero

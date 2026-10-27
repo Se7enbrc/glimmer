@@ -29,6 +29,10 @@ struct StreamControls: View {
                             .labelStyle(StreamMenuLabelStyle(titlesOnly: textSize.isAccessibilitySize))
                             .frame(width: min(max(0, geometry.size.width - 24),
                                               textSize.isAccessibilitySize ? 560 : 360))
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                                model.overlayAppearance.menuFrame = frame.isEmpty ? nil : frame
+                            }
+                            .onDisappear { model.overlayAppearance.menuFrame = nil }
                             .padding(12)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                     }

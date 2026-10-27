@@ -159,4 +159,32 @@ struct TouchLayout: Codable, Equatable {
         }
         return area
     }
+
+    /// The free rectangle that best fits `target`. Among those that fit it whole, the one nearest
+    /// `anchor` wins, so an overlay keeps its usual corner whenever that corner is clear.
+    static func clearArea(in bounds: CGRect, avoiding controls: [CGRect], target: CGSize,
+                          anchor: CGPoint? = nil) -> CGRect {
+        let obstacles = controls.map { $0.insetBy(dx: -8, dy: -8).intersection(bounds) }.filter { !$0.isNull }
+        let edges = Set([bounds.minX, bounds.maxX] + obstacles.flatMap { [$0.minX, $0.maxX] }).sorted()
+        var best = CGRect.zero
+        var score: CGFloat = 0
+        var distance = CGFloat.infinity
+        for (index, left) in edges.enumerated() {
+            for right in edges.dropFirst(index + 1) {
+                let blocked = obstacles.filter { $0.minX < right && $0.maxX > left }.sorted { $0.minY < $1.minY }
+                var top = bounds.minY
+                for block in blocked + [CGRect(x: left, y: bounds.maxY, width: right - left, height: 0)] {
+                    let gap = CGRect(x: left, y: top, width: right - left, height: max(0, block.minY - top))
+                    let fit = min(gap.width / target.width, gap.height / target.height)
+                    let away = anchor.map { hypot(max(gap.minX - $0.x, 0, $0.x - gap.maxX),
+                                                  max(gap.minY - $0.y, 0, $0.y - gap.maxY)) } ?? 0
+                    if fit >= 1 && anchor != nil ? score < 1 || away < distance : fit > score {
+                        best = gap; score = fit; distance = away
+                    }
+                    top = max(top, block.maxY)
+                }
+            }
+        }
+        return best
+    }
 }

@@ -30,7 +30,7 @@ extension StatsOverlayLayer {
         #if os(macOS)
         Self.labelFont
         #else
-        UIFont.preferredFont(forTextStyle: .caption2, compatibleWith: displayView?.traitCollection)
+        UIFont.preferredFont(forTextStyle: .caption2, compatibleWith: hudTraits)
         #endif
     }
 
@@ -39,7 +39,7 @@ extension StatsOverlayLayer {
         Self.detailFont
         #else
         UIFont.monospacedDigitSystemFont(ofSize: UIFont.preferredFont(
-            forTextStyle: .footnote, compatibleWith: displayView?.traitCollection).pointSize, weight: .medium)
+            forTextStyle: .footnote, compatibleWith: hudTraits).pointSize, weight: .medium)
         #endif
     }
 
@@ -48,10 +48,19 @@ extension StatsOverlayLayer {
         Self.platformValueFont(bold: bold)
         #else
         UIFont.monospacedDigitSystemFont(ofSize: UIFont.preferredFont(
-            forTextStyle: .title3, compatibleWith: displayView?.traitCollection).pointSize,
+            forTextStyle: .title3, compatibleWith: hudTraits).pointSize,
             weight: bold ? .bold : .semibold)
         #endif
     }
+
+    #if os(iOS)
+    // The HUD stops growing at the largest standard size so accessibility sizes cannot bury the picture.
+    private var hudTraits: UITraitCollection? {
+        guard let traits = displayView?.traitCollection,
+              traits.preferredContentSizeCategory > .extraExtraExtraLarge else { return displayView?.traitCollection }
+        return traits.modifyingTraits { $0.preferredContentSizeCategory = .extraExtraExtraLarge }
+    }
+    #endif
 
     var resolvedTextScale: CGFloat {
         #if os(macOS)
