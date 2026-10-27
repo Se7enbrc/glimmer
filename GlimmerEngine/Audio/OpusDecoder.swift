@@ -54,7 +54,7 @@ final class OpusDecoder {
             guard let duration = validate(packet) else { return 0 }
             frames = duration
         } else {
-            frames = samplesPerFrame
+            frames = lanes[0].framesPerPacket
         }
         var start = 0
         var common = frames

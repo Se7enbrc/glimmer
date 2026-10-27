@@ -15,6 +15,8 @@ GLIMMER_APP_DST ?= /Applications/Glimmer.app
 CONFIG          ?= Debug
 SWIFTC          ?= xcrun swiftc
 TEST_SUITE      ?=
+# Simulator for make differential; empty asks scripts/ci-ios-simulator.sh.
+IOS_DESTINATION ?=
 # COVERAGE=1 measures the test and release-tool runs into build/coverage, with no threshold.
 COVERAGE        ?=
 COVERAGE_PY     ?= coverage
@@ -50,7 +52,7 @@ HELPER_SDK    = $(shell xcrun --sdk macosx --show-sdk-path)
 HELPER_TARGET := arm64-apple-macos15.7
 HELPER_BUNDLE := $(GLIMMER_APP_SRC)/Contents/Library/LaunchServices/Glimmer Network Helper.app
 
-.PHONY: help all app test test-asan test-build test-run helper-build embed-helper clean verify preflight rc \
+.PHONY: help all app test test-asan test-build test-run differential helper-build embed-helper clean verify preflight rc \
         guard-clean-tree guard-release-version appcast-feed profile profile-signposts
 
 all: help
@@ -65,6 +67,7 @@ help:
 	@printf '%s\n' 'Test'
 	@printf '%s\n' '  test                 Run Mac tests; TEST_SUITE selects one suite'
 	@printf '%s\n' '  test-asan            Run protocol fuzz tests under AddressSanitizer'
+	@printf '%s\n' '  differential         Replay clean-room regions against the last release'
 	@printf '%s\n' '  ios-test             Run iPhone Simulator tests'
 	@printf '%s\n' '  ios-touch-journeys    Run iPhone/iPad touch and controller journeys in light and dark'
 	@printf '%s\n' '  mac-controller-journeys Run Mac controller journeys in light and dark'
@@ -104,6 +107,19 @@ test-asan:
 	  -enableAddressSanitizer YES -only-testing:GlimmerTests/FuzzTests \
 	  -only-testing:GlimmerTests/StreamFuzzTests; \
 	  status=$$?; $(UNREGISTER_BUILDS); exit $$status
+
+# Clean-room regions replayed against golden vectors from the last release; see scripts/differential/README.md.
+differential:
+	@scripts/generate-build-info.sh
+	xcodebuild test -project Glimmer.xcodeproj -scheme Glimmer -configuration Debug \
+	  -xcconfig $(STREAM_XCCONFIG) \
+	  CODE_SIGNING_ALLOWED=NO -derivedDataPath $(DERIVED) -destination 'platform=macOS' \
+	  -only-testing:GlimmerTests/CleanRoomEngineDifferentialTests \
+	  -only-testing:GlimmerTests/CleanRoomMacDifferentialTests; \
+	  status=$$?; $(UNREGISTER_BUILDS); \
+	  dest="$(IOS_DESTINATION)"; [ -n "$$dest" ] || dest=$$(scripts/ci-ios-simulator.sh) || exit 1; \
+	  $(MAKE) -C iOS test TEST_DESTINATION="$$dest" \
+	    TEST_FLAGS=-only-testing:GlimmerTests/CleanRoomEngineDifferentialTests || status=1; exit $$status
 
 app:
 	@echo "▶ Building Glimmer.app ($(CONFIG))..."

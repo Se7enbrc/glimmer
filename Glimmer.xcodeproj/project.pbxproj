@@ -792,6 +792,16 @@
 		480BABD3E8374E42B78AC323 /* MacControllerJourneyUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7F585A77B334514A0C0EAB1; };
 		7E05E4774F1C45B9862FE1C0 /* JourneyControllerReading.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE208CDD8E5045AFA6D77D8B; };
 		C4A77CFAD9D2485EB397FB43 /* JourneyInputAssertions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF2D9A300F874751B8C5A9B7; };
+		C1EA20261027000000000002 /* CleanRoomProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000001 /* CleanRoomProbe.swift */; };
+		C1EA20261027000000000004 /* CleanRoomProbe+Audio.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000003 /* CleanRoomProbe+Audio.swift */; };
+		C1EA20261027000000000006 /* CleanRoomProbe+Video.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000005 /* CleanRoomProbe+Video.swift */; };
+		C1EA20261027000000000008 /* CleanRoomProbe+Observation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000007 /* CleanRoomProbe+Observation.swift */; };
+		C1EA2026102700000000000A /* CleanRoomProbe+Helper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000009 /* CleanRoomProbe+Helper.swift */; };
+		C1EA2026102700000000000C /* CleanRoomProbe+Grid.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA2026102700000000000B /* CleanRoomProbe+Grid.swift */; };
+		C1EA2026102700000000000E /* CleanRoomGridHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA2026102700000000000D /* CleanRoomGridHost.swift */; };
+		C1EA20261027000000000010 /* CleanRoomDifferentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA2026102700000000000F /* CleanRoomDifferentialTests.swift */; };
+		C1EA20261027000000000012 /* CleanRoomMacDifferentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000011 /* CleanRoomMacDifferentialTests.swift */; };
+		C1EA20261027000000000014 /* CleanRoomVectors in Resources */ = {isa = PBXBuildFile; fileRef = C1EA20261027000000000013 /* CleanRoomVectors */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1640,6 +1650,16 @@
 		D7F585A77B334514A0C0EAB1 /* MacControllerJourneyUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerUITests/MacControllerJourneyUITests.swift"; sourceTree = SOURCE_ROOT; };
 		CE208CDD8E5045AFA6D77D8B /* JourneyControllerReading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Journeys/Shared/JourneyControllerReading.swift"; sourceTree = SOURCE_ROOT; };
 		FF2D9A300F874751B8C5A9B7 /* JourneyInputAssertions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "JourneySupport/JourneyInputAssertions.swift"; sourceTree = SOURCE_ROOT; };
+		C1EA20261027000000000001 /* CleanRoomProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomProbe.swift"; sourceTree = SOURCE_ROOT; };
+		C1EA20261027000000000003 /* CleanRoomProbe+Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomProbe+Audio.swift"; sourceTree = SOURCE_ROOT; };
+		C1EA20261027000000000005 /* CleanRoomProbe+Video.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomProbe+Video.swift"; sourceTree = SOURCE_ROOT; };
+		C1EA20261027000000000007 /* CleanRoomProbe+Observation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomProbe+Observation.swift"; sourceTree = SOURCE_ROOT; };
+		C1EA20261027000000000009 /* CleanRoomProbe+Helper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomProbe+Helper.swift"; sourceTree = SOURCE_ROOT; };
+		C1EA2026102700000000000B /* CleanRoomProbe+Grid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomProbe+Grid.swift"; sourceTree = SOURCE_ROOT; };
+		C1EA2026102700000000000D /* CleanRoomGridHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomGridHost.swift"; sourceTree = SOURCE_ROOT; };
+		C1EA2026102700000000000F /* CleanRoomDifferentialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomDifferentialTests.swift"; sourceTree = SOURCE_ROOT; };
+		C1EA20261027000000000011 /* CleanRoomMacDifferentialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/CleanRoomMacDifferentialTests.swift"; sourceTree = SOURCE_ROOT; };
+		C1EA20261027000000000013 /* CleanRoomVectors */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "GlimmerTests/Fixtures/CleanRoomVectors"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2063,6 +2083,16 @@
 				D2B0000F /* HostResolutionTests.swift */,
 				D2C00001 /* ControlTransportTests.swift */,
 				D2C00009 /* OpusDecoderTests.swift */,
+				C1EA20261027000000000001 /* CleanRoomProbe.swift */,
+				C1EA20261027000000000003 /* CleanRoomProbe+Audio.swift */,
+				C1EA20261027000000000005 /* CleanRoomProbe+Video.swift */,
+				C1EA20261027000000000007 /* CleanRoomProbe+Observation.swift */,
+				C1EA20261027000000000009 /* CleanRoomProbe+Helper.swift */,
+				C1EA2026102700000000000B /* CleanRoomProbe+Grid.swift */,
+				C1EA2026102700000000000D /* CleanRoomGridHost.swift */,
+				C1EA2026102700000000000F /* CleanRoomDifferentialTests.swift */,
+				C1EA20261027000000000011 /* CleanRoomMacDifferentialTests.swift */,
+				C1EA20261027000000000013 /* CleanRoomVectors */,
 				C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */,
 				D81200000000000000000008 /* ReceiveTimingTests.swift */,
 				D2C0000F /* DatagramBatchTests.swift */,
@@ -2674,7 +2704,7 @@
         D1A620261022000000000003 /* Resources */ = {
             isa = PBXResourcesBuildPhase;
             buildActionMask = 2147483647;
-            files = (D1A620261022000000000001 /* instruments-clock-references.xml in Resources */);
+            files = (D1A620261022000000000001 /* instruments-clock-references.xml in Resources */, C1EA20261027000000000014 /* CleanRoomVectors in Resources */);
             runOnlyForDeploymentPostprocessing = 0;
         };
 		3668FA7D9C62CEACAE1753D6 /* Resources */ = {
@@ -3026,6 +3056,15 @@
 				D2B00010 /* HostResolutionTests.swift in Sources */,
 				D2C00002 /* ControlTransportTests.swift in Sources */,
 				D2C0000A /* OpusDecoderTests.swift in Sources */,
+				C1EA20261027000000000002 /* CleanRoomProbe.swift in Sources */,
+				C1EA20261027000000000004 /* CleanRoomProbe+Audio.swift in Sources */,
+				C1EA20261027000000000006 /* CleanRoomProbe+Video.swift in Sources */,
+				C1EA20261027000000000008 /* CleanRoomProbe+Observation.swift in Sources */,
+				C1EA2026102700000000000A /* CleanRoomProbe+Helper.swift in Sources */,
+				C1EA2026102700000000000C /* CleanRoomProbe+Grid.swift in Sources */,
+				C1EA2026102700000000000E /* CleanRoomGridHost.swift in Sources */,
+				C1EA20261027000000000010 /* CleanRoomDifferentialTests.swift in Sources */,
+				C1EA20261027000000000012 /* CleanRoomMacDifferentialTests.swift in Sources */,
 				FC1A1D15E9FD497EB88F904A /* SurroundToneData.swift in Sources */,
 				D81200000000000000000009 /* ReceiveTimingTests.swift in Sources */,
 				D2C00010 /* DatagramBatchTests.swift in Sources */,

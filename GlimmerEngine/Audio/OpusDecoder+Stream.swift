@@ -8,29 +8,48 @@ import Synchronization
 final class NativeOpusLane {
     let width: Int
     let output: AVAudioPCMBuffer
-    private let converter: AVAudioConverter
-    private let packetSource: OpusConversionInput
+    private let rate: Int32
+    private var converter: AVAudioConverter
+    private var packetSource: OpusConversionInput
+    private(set) var framesPerPacket: Int
 
     init?(rate: Int32, width: Int, capacity: Int) {
-        self.width = width
-        var source = AudioStreamBasicDescription(
-            mSampleRate: Double(rate), mFormatID: kAudioFormatOpus, mFormatFlags: 0,
-            mBytesPerPacket: 0, mFramesPerPacket: UInt32(capacity), mBytesPerFrame: 0,
-            mChannelsPerFrame: UInt32(width), mBitsPerChannel: 0, mReserved: 0)
-        guard let input = AVAudioFormat(streamDescription: &source),
-              let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(rate),
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(rate),
                                          channels: AVAudioChannelCount(width), interleaved: true),
-              let converter = AVAudioConverter(from: input, to: format),
-              let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(capacity)) else {
+              let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(capacity)),
+              let (converter, source) = Self.decoder(rate: rate, width: width, frames: capacity, to: format) else {
             return nil
         }
-        self.converter = converter
+        self.width = width
+        self.rate = rate
         self.output = output
-        packetSource = OpusConversionInput(format: input)
+        self.converter = converter
+        packetSource = source
+        framesPerPacket = capacity
+    }
+
+    // Apple's Opus decoder emits its format's frames per packet, whatever the packet holds,
+    // so the declared size must follow the stream's real packet duration.
+    private static func decoder(rate: Int32, width: Int, frames: Int,
+                                to format: AVAudioFormat) -> (AVAudioConverter, OpusConversionInput)? {
+        var source = AudioStreamBasicDescription(
+            mSampleRate: Double(rate), mFormatID: kAudioFormatOpus, mFormatFlags: 0,
+            mBytesPerPacket: 0, mFramesPerPacket: UInt32(frames), mBytesPerFrame: 0,
+            mChannelsPerFrame: UInt32(width), mBitsPerChannel: 0, mReserved: 0)
+        guard let input = AVAudioFormat(streamDescription: &source),
+              let converter = AVAudioConverter(from: input, to: format) else { return nil }
         converter.primeMethod = .none
+        return (converter, OpusConversionInput(format: input))
     }
 
     func convert(_ bytes: UnsafeRawBufferPointer?, span: Range<Int>, removing: Range<Int>, frames: Int) -> Int? {
+        if frames != framesPerPacket {
+            guard let (replacement, source) = Self.decoder(rate: rate, width: width, frames: frames,
+                                                           to: output.format) else { return nil }
+            converter = replacement
+            packetSource = source
+            framesPerPacket = frames
+        }
         guard packetSource.prepare(bytes, span: span, removing: removing, frames: frames) else { return nil }
         output.frameLength = 0
         var error: NSError?
