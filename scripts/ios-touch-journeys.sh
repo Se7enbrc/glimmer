@@ -50,8 +50,9 @@ for index in "${indices[@]}"; do
     selection="-only-testing:GlimmerUITests/TouchJourneyUITests -only-testing:GlimmerUITests/ControllerJourneyUITests"
     if [ "$index" -eq 1 ]; then selection+=" -only-testing:GlimmerUITests/IPadTouchJourneyUITests"; fi
     for appearance in "${appearances[@]}"; do
-        python3 scripts/check-journey-silence.py --simulator "$device"
+        # Already checked before the build; finish booting first so the live speech check can reach it.
         xcrun simctl bootstatus "$device" -b
+        python3 scripts/check-journey-silence.py --simulator "$device"
         xcrun simctl uninstall "$device" io.ugfugl.Glimmer.iOS.UITests.xctrunner >/dev/null 2>&1 || true
         xcrun simctl uninstall "$device" io.ugfugl.Glimmer.iOS >/dev/null 2>&1 || true
         xcrun simctl ui "$device" appearance "$appearance"
