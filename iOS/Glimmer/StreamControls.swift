@@ -47,7 +47,9 @@ struct StreamControls: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay { noticeOverlay }
-        .environment(\.colorScheme, model.overlayAppearance.colorScheme ?? .dark)
+        // Before the first sample a card sits on a black picture, so it starts dark; play follows the sampler.
+        .environment(\.colorScheme, model.overlayAppearance.colorScheme
+            ?? (model.phase == .streaming ? colorScheme : .dark))
         .opacity(model.dismissWhenStopped ? 0 : 1)
         .allowsHitTesting(!model.dismissWhenStopped)
         .accessibilityHidden(model.dismissWhenStopped)

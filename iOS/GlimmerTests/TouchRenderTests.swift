@@ -185,14 +185,14 @@ struct TouchRenderTests {
         _ = try await waitForOpacity(0.2, in: host.view)
         let sliders = descendants(host.view).compactMap { $0 as? UISlider }.filter { !($0 is TouchTrigger) }
         #expect(sliders.count == (selected == nil ? 1 : 2))
-        let slider = try #require(sliders.first)
-        let sizeValue = selected == nil ? nil : sliders.last?.value
+        let slider = try #require(sliders.last)
+        let sizeValue = selected == nil ? nil : sliders.first?.value
         for (nativeValue, opacity) in [(slider.maximumValue, 0.6), (slider.minimumValue, 0.1)] {
             slider.value = nativeValue
             slider.sendActions(for: .valueChanged)
             let preview = try await waitForOpacity(opacity, in: host.view)
             try verifyWholeOverlay(preview, opacity: opacity)
-            if let sizeValue { #expect(sliders.last?.value == sizeValue) }
+            if let sizeValue { #expect(sliders.first?.value == sizeValue) }
             #expect(store.load(pcID: launch.pcID, appID: launch.appID, family: .compact).opacity == 0.2)
         }
     }
@@ -263,7 +263,8 @@ struct TouchRenderTests {
         if let opacity {
             let views = descendants(host.view)
             let preview = try #require(views.compactMap { $0 as? TouchGamepadView }.first)
-            let slider = try #require(views.compactMap { $0 as? UISlider }.first { !($0 is TouchTrigger) })
+            // A selected control's Size slider comes first; Opacity is always last.
+            let slider = try #require(views.compactMap { $0 as? UISlider }.last { !($0 is TouchTrigger) })
             #expect(preview.opacity == opacity)
             #expect(abs(Double(slider.value) - (opacity - 0.1) / 0.5) < 0.00001)
         }

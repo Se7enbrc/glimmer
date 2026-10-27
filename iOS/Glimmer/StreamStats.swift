@@ -86,7 +86,7 @@ final class StreamStats {
         let touchControls = surface.overlayAppearance.touchObstacles
         let obstacles = touchControls + [surface.overlayAppearance.noticeFrame, surface.overlayAppearance.menuFrame]
             .compactMap { $0 }
-        let area = surface.bounds.inset(by: surface.edgeInsets(for: .safeArea(cornerAdaptation: .vertical)))
+        let area = surface.bounds.inset(by: StatsOverlayLayer.overlayInsets(for: surface))
         let content = overlay.layer.bounds.size
         if lastTouchArea != area || lastTouchObstacles != obstacles || lastContent != content {
             lastTouchArea = area

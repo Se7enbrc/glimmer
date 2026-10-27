@@ -184,6 +184,15 @@ extension StatsOverlayLayer {
     }
 
     #if os(iOS)
+    /// A window smaller than its screen keeps the iPad's window controls in a top corner; overlays clear them.
+    static func overlayInsets(for view: UIView) -> UIEdgeInsets {
+        guard let window = view.window, let scene = window.windowScene,
+              window.bounds.size != scene.screen.bounds.size else {
+            return view.safeAreaInsets
+        }
+        return view.edgeInsets(for: .safeArea(cornerAdaptation: .vertical))
+    }
+
     func updateAccessibleRows(_ rows: [StatsRow], cap: String) {
         guard let view = displayView else { return }
         let value = isVisible
