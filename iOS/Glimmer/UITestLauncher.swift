@@ -4,6 +4,8 @@
 #if DEBUG
 import GlimmerEngine
 import Foundation
+import GameController
+import UIKit
 
 @MainActor
 enum UITestLauncher {
@@ -48,28 +50,58 @@ enum UITestLauncher {
            lastConnectedPCID: { pcs.first?.id }, artwork: { _, _ in Data() }, makeSession: { launch in
             StreamSessionModel(launch: launch, makePlayback: { launch, surface, _ in
                 guard streaming else { throw CancellationError() }
-                let stats = StreamStats(surface: surface, snapshot: {
-                    var snapshot = StreamStatsSnapshot()
-                    snapshot.hostFps = 59.9
-                    snapshot.rttMs = 5.9
-                    snapshot.measuredBitrateMbps = 45.2
-                    snapshot.videoCodec = "HEVC"
-                    return snapshot
-                }, collection: { _ in }, videoSize: { surface.bounds.size }, backdrop: { _ in nil })
-                let id = UUID()
-                let events = AsyncStream<StreamSession.Update>.makeStream()
-                return StreamPlayback(id: id, events: events.stream, start: {
-                    events.continuation.yield(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
-                    return nil
-                }, stop: {
-                    await MainActor.run { stats.setVisible(false) }
-                    events.continuation.finish()
-                }, screenChanged: {},
-                   format: try launch.profile.resolve(surface: surface),
-                   observeControllers: { $0(controller) }, showStats: stats.setVisible)
+                return try playback(launch: launch, surface: surface, controller: controller)
             })
         })
         return LauncherModel(calls: calls, discoveryEnabled: false)
+    }
+
+    private static func playback(launch: StreamLaunch, surface: StreamSurface,
+                                 controller: Bool) throws -> StreamPlayback {
+        let state = ProcessInfo.processInfo.environment["GLIMMER_OVERLAY_STATE"]
+        if state == "failure" { throw URLError(.cannotConnectToHost) }
+        let format = try launch.profile.resolve(surface: surface)
+        let decoder = VideoDecoder(configuration: format.configuration(potentialEDRHeadroom: 1), displayInfo: { nil })
+        let connection = StreamConnection(video: decoder) { _, _ in }
+        let controllers = IOSControllerCapture(calls: .init(register: connection.input.registerController,
+            unregister: connection.input.unregisterController, submit: connection.input.submitController,
+            focus: { _ in }), center: NotificationCenter(),
+            readControllers: { controller ? [GCController.withExtendedGamepad()] : [] })
+        let native = NativeInputLifetime()
+        native.start(input: connection.input, controllers: controllers)
+        let bright = ProcessInfo.processInfo.environment["GLIMMER_OVERLAY_PICTURE"] == "light"
+        surface.displayLayer.backgroundColor = (bright ? UIColor(white: 0.94, alpha: 1) : .black).cgColor
+        let stats = StreamStats(surface: surface, snapshot: {
+            var snapshot = StreamStatsSnapshot()
+            snapshot.renderedFps = 59.9
+            snapshot.rttMs = 5.9
+            snapshot.measuredBitrateMbps = 45.2
+            snapshot.videoCodec = "HEVC"
+            return snapshot
+        }, collection: { _ in }, videoSize: { surface.bounds.size }, backdrop: { _ in bright ? 0.85 : 0.01 })
+        let id = UUID()
+        let events = AsyncStream<StreamSession.Update>.makeStream()
+        return StreamPlayback(id: id, events: events.stream, start: {
+            if state != "connecting" {
+                events.continuation.yield(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+            }
+            if state == "reconnecting" || state == "waiting" {
+                events.continuation.yield(.init(sessionID: id, attemptID: UUID(),
+                    event: state == "waiting" ? .waitingForVideo(true) : .reconnecting))
+            }
+            return nil
+        }, stop: {
+            await MainActor.run {
+                stats.setChromeVisible(false)
+                stats.setVisible(false)
+                native.stop()
+            }
+            await connection.stop()
+            events.continuation.finish()
+        }, screenChanged: {}, input: connection.input, focusInput: native.focus,
+           format: format, observeControllers: native.observeControllers,
+           touchGamepad: native.touch, showTouchControls: native.showTouchControls,
+           showStats: stats.setVisible, showOverlayChrome: stats.setChromeVisible)
     }
 }
 #endif

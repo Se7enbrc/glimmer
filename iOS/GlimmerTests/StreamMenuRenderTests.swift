@@ -15,7 +15,7 @@ struct StreamMenuRenderTests {
         let tablet = UIDevice.current.userInterfaceIdiom == .pad
         let widths: [CGSize?] = tablet ? [CGSize(width: 1194, height: 834), CGSize(width: 507, height: 834)] : [nil]
         for size in widths {
-            for state in ["stats", "touch", "menu", "reconnecting"] {
+            for state in ["stats", "menu", "reconnecting"] {
                 let fixture = PlaybackFixture()
                 fixture.format = StreamFormat(width: 1920, height: 1080, fps: 60)
                 let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
@@ -53,7 +53,7 @@ struct StreamMenuRenderTests {
                         if state == "reconnecting" { model.receive(fixture.update(.reconnecting)) }
                         overlay.update(snapshot: snapshot, enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
                         overlay.updateBackdropLuminance(dark ? 0.01 : 0.85)
-                        overlay.setVisible(state == "touch" || state == "stats")
+                        overlay.setVisible(state == "stats")
                         overlay.layer.removeAllAnimations()
                     }, textSize: largest ? .accessibility5 : .large)
                 model.stop()

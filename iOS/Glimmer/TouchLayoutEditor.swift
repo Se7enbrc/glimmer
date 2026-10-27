@@ -8,6 +8,7 @@ struct TouchLayoutEditor: View {
     let launch: StreamLaunch
     let area: CGRect
     let close: () -> Void
+    @Environment(\.dynamicTypeSize) private var textSize
     @State private var draft = TouchLayout()
     @State private var selected: TouchElement?
     @State private var size = 1.0
@@ -39,6 +40,7 @@ struct TouchLayoutEditor: View {
                             .frame(width: frame.width, height: frame.height).contentShape(.rect)
                     }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("touch-editor-\(element.rawValue)")
                         .focused($focused, equals: element)
                         .overlay {
                             if element == selected { RoundedRectangle(cornerRadius: 24).stroke(.tint, lineWidth: 3) }
@@ -71,53 +73,64 @@ struct TouchLayoutEditor: View {
         }
         .confirmationDialog("Reset this app's layout?", isPresented: $resetRequested, titleVisibility: .visible) {
             Button("Reset layout", role: .destructive) { draft = TouchLayout(); select(nil) }
-            Button("Cancel", role: .cancel) {}
+                .accessibilityIdentifier("touch-editor-reset-confirm")
+            Button("Cancel", role: .cancel) {}.accessibilityIdentifier("touch-editor-reset-cancel")
         }
-        .alert("Move a control to make room.", isPresented: $addBlocked) { Button("OK", role: .cancel) {} }
+        .alert("Move a control to make room.", isPresented: $addBlocked) {
+            Button("OK", role: .cancel) {}.accessibilityIdentifier("touch-editor-room-dismiss")
+        }
     }
 
     private var inspector: some View {
-        ScrollView {
-            VStack(spacing: 10) {
+        VStack(spacing: 0) {
+            VStack(spacing: 4) {
                 Text("Edit controls").font(.headline)
                 HStack {
-                    Button("Cancel", action: close)
+                    Button("Cancel", action: close).accessibilityIdentifier("touch-editor-cancel")
                     Spacer()
-                    Button("Done", action: save).fontWeight(.semibold)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("All controls").font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
-                    opacityControl
-                }
-                Divider()
-                if let selected {
+                    Button("Done", action: save).fontWeight(.semibold).accessibilityIdentifier("touch-editor-done")
+                }.buttonStyle(.bordered).controlSize(.large)
+            }.padding(12)
+            ScrollView {
+                VStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(selected.name).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
-                            Spacer()
-                            Button("Hide") { hide(selected) }.buttonStyle(.bordered)
-                        }
-                        sizeControl
-                        if selected.isTrigger {
-                            Text("Press fully, then drag inward to reduce the trigger.").font(.caption)
-                        }
+                        Text("All controls").font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                        opacityControl
                     }
-                } else {
-                    Text("Select a control to move or resize it.").font(.callout).foregroundStyle(.secondary)
-                }
-                ViewThatFits(in: .horizontal) {
-                    HStack { editingActions }
-                    VStack { editingActions }
-                }.buttonStyle(.bordered)
-            }.padding()
+                    Divider()
+                    if let selected {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(selected.name).font(.subheadline.weight(.semibold))
+                                    .accessibilityAddTraits(.isHeader)
+                                Spacer()
+                                Button("Hide") { hide(selected) }.buttonStyle(.bordered).controlSize(.large)
+                                    .accessibilityIdentifier("touch-editor-hide")
+                            }
+                            sizeControl
+                            if selected.isTrigger {
+                                Text("Press fully, then drag inward to reduce the trigger.").font(.caption)
+                            }
+                        }
+                    } else {
+                        Text("Select a control to move or resize it.").font(.callout).foregroundStyle(.secondary)
+                    }
+                    ViewThatFits(in: .horizontal) {
+                        HStack { editingActions }
+                        VStack { editingActions }
+                    }.buttonStyle(.bordered).controlSize(.large)
+                }.padding(.horizontal, 16).padding(.bottom, 16)
+            }.scrollBounceBehavior(.basedOnSize).accessibilityIdentifier("touch-editor-inspector")
         }
         .background(.regularMaterial, in: .rect(cornerRadius: 24))
+        .tint(.primary)
     }
 
     private var sizeControl: some View {
         HStack {
             Text("Size").font(.subheadline).accessibilityHidden(true)
             Slider(value: Binding(get: { size }, set: { resize($0) }), in: 0.75...1.5, step: 0.05) { Text("Size") }
+                .accessibilityIdentifier("touch-editor-size")
                 .accessibilityValue(size.formatted(.percent.precision(.fractionLength(0))))
         }.frame(minWidth: 140)
     }
@@ -134,6 +147,7 @@ struct TouchLayoutEditor: View {
             Slider(value: Binding(get: { draft.opacity * 100 }, set: { draft.opacity = $0 / 100 }),
                    in: (TouchLayout.opacityRange.lowerBound * 100)...(TouchLayout.opacityRange.upperBound * 100),
                    step: 5) { Text("Opacity") }
+                .accessibilityIdentifier("touch-editor-opacity")
                 .accessibilityValue(draft.opacity.formatted(.percent.precision(.fractionLength(0))))
         }.frame(minWidth: 140)
     }
@@ -152,7 +166,8 @@ struct TouchLayoutEditor: View {
         let region = candidates.max { min($0.width, 440) * min($0.height, 340)
             < min($1.width, 440) * min($1.height, 340) } ?? area
         let width = min(440, region.width - 16)
-        let height = min(selected == nil ? 280 : 340, region.height - 8)
+        let preferredHeight = textSize.isAccessibilitySize ? region.height - 8 : selected == nil ? 280.0 : 340.0
+        let height = min(preferredHeight, region.height - 8)
         return CGRect(x: region.midX - width / 2, y: region.minY + 4, width: width, height: height)
     }
 
@@ -166,10 +181,10 @@ struct TouchLayoutEditor: View {
                         draft.changes[element] = value
                         select(element)
                     } else { addBlocked = true }
-                }
+                }.accessibilityIdentifier("touch-editor-add-\(element.rawValue)")
             }
-        }
-        Button("Reset layout…") { resetRequested = true }
+        }.accessibilityIdentifier("touch-editor-add")
+        Button("Reset layout…") { resetRequested = true }.accessibilityIdentifier("touch-editor-reset")
     }
 
     private func save() {

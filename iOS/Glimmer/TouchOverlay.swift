@@ -11,23 +11,28 @@ struct TouchOverlay: View {
     var body: some View {
         GeometryReader { geometry in
             let area = Self.area(geometry)
+            let layout = TouchLayoutStore(defaults: PersistentStorage.defaults).load(
+                pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
+            let origin = geometry.frame(in: .global).origin
+            let frames = layout.frames(in: area)
+            let obstacles = model.touchControlsVisible && !model.externalDisplayActive
+                ? TouchElement.allCases.compactMap { frames[$0] } + [TouchLayout.menuFrame(in: area)] : []
             // Zero-sized: accessibility hit tests land even on a hidden full-size view, covering the stream menu.
             Color.clear.frame(width: 0, height: 0).allowsHitTesting(false).accessibilityHidden(true)
                 .onChange(of: area, initial: true) { _, area in
                     guard geometry.size.width > 0, geometry.size.height > 0 else { return }
                     model.touchGeometryChanged(usable: !TouchLayout().frames(in: area).isEmpty)
                 }
+                .onChange(of: obstacles.map { $0.offsetBy(dx: origin.x, dy: origin.y) }, initial: true) { _, frames in
+                    model.overlayAppearance.touchObstacles = frames
+                }
             if model.editingTouchControls {
                 TouchLayoutEditor(launch: model.launch, area: area) { model.editingTouchControls = false }
             } else if model.touchControlsVisible {
-                let layout = TouchLayoutStore(defaults: PersistentStorage.defaults).load(
-                    pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
                 TouchPlayControls(capture: model.touchGamepad, layout: layout, area: area,
                                   mouseMode: model.touchMouseActive,
                                   showControls: model.showControls)
             } else if model.inputFocused {
-                let layout = TouchLayoutStore(defaults: PersistentStorage.defaults).load(
-                    pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
                 TouchControlsButton(area: area, opacity: layout.opacity, visible: model.menuVisibility.visible,
                                     showControls: model.showControls)
             }
@@ -85,6 +90,7 @@ private struct TouchControlsButton: View {
                 let frame = CGRect(x: area.maxX - 52, y: area.midY - 22, width: 44, height: 44)
                 Button("Show controls", systemImage: "ellipsis", action: showControls)
                     .labelStyle(.iconOnly).buttonStyle(TouchMenuStyle(opacity: opacity))
+                    .accessibilityIdentifier("stream-controls-show")
                     .position(x: min(frame.midX, geometry.size.width - 22),
                               y: min(frame.midY, geometry.size.height - 22))
                     .hoverEffect(.highlight)

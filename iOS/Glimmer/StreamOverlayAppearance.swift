@@ -8,6 +8,10 @@ import SwiftUI
 @Observable
 final class StreamOverlayAppearance {
     private(set) var colorScheme: ColorScheme?
+    @ObservationIgnored var layoutChanged: (() -> Void)?
+    @ObservationIgnored var touchObstacles: [CGRect] = [] {
+        didSet { if oldValue != touchObstacles { layoutChanged?() } }
+    }
 
     func update(luminance: Double) {
         guard luminance.isFinite, (0...1).contains(luminance) else { return }

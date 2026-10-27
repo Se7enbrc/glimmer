@@ -88,6 +88,50 @@ struct ControllerStatsTests {
         }
     }
 
+    @Test(arguments: [CGSize(width: 667, height: 375), CGSize(width: 874, height: 402),
+                      CGSize(width: 1194, height: 834)], [false, true])
+    func touchStatsNeverCoverControls(size: CGSize, largest: Bool) {
+        let surface = StreamSurface(frame: CGRect(origin: .zero, size: size))
+        surface.layoutIfNeeded()
+        if largest {
+            surface.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
+            surface.updateTraitsIfNeeded()
+        }
+        let controls = Array(TouchLayout().frames(in: surface.bounds).values)
+            + [TouchLayout.menuFrame(in: surface.bounds)]
+        let stats = StreamStats(surface: surface, snapshot: { .init() }, collection: { _ in },
+                                videoSize: { size }, backdrop: { _ in nil })
+        surface.overlayAppearance.touchObstacles = controls
+        stats.setVisible(true)
+        let frame = stats.overlay.layer.frame
+        #expect(surface.bounds.contains(frame))
+        #expect(controls.allSatisfy { !$0.intersects(frame) })
+        let scale = frame.width / stats.overlay.layer.bounds.width
+        if largest {
+            #expect(stats.overlay.resolvedLabelFont.pointSize > 20)
+            #expect(stats.overlay.resolvedLabelFont.pointSize * scale >= 13)
+        } else {
+            #expect(scale >= 0.8)
+        }
+        surface.overlayAppearance.touchObstacles = []
+        #expect(stats.overlay.placementBounds == nil && !stats.overlay.compactRows)
+        stats.setVisible(false)
+    }
+
+    @Test func editingTemporarilyHidesStatsWithoutChangingThePreference() async {
+        let fixture = PlaybackFixture()
+        let model = fixture.model()
+        model.start(surface: StreamSurface())
+        model.receive(fixture.update(.firstFrame))
+        model.toggleStats()
+        model.editingTouchControls = true
+        #expect(model.statsShown && fixture.statsHistory.last == false)
+        model.editingTouchControls = false
+        #expect(model.statsShown && fixture.statsHistory.last == true)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
     @Test func shortcutAndMenuToggleTheSameOverlayOnlyDuringStreaming() async {
         let fixture = PlaybackFixture()
         let model = fixture.model()

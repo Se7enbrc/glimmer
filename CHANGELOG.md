@@ -4,10 +4,10 @@
 
 - iPhone and iPad stream controls stay within thumb reach, with touch-first help
   and an always-visible Disconnect action. Controls adapt to the picture's
-  brightness.
+  brightness. Done and Cancel stay reachable when editing touch controls.
 
 - Stream stats scale with the window on Mac, iPhone and iPad, including larger
-  text on iPhone and iPad.
+  text on iPhone and iPad. Stats stay clear of the touch gamepad.
 
 - Controller sticks no longer send duplicate input while streaming.
 

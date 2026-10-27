@@ -17,6 +17,8 @@ final class StreamStats {
     private let defaults: UserDefaults
     private let chromeSampling: (Bool) -> Void
     private var chromeVisible = false
+    private var lastTouchArea: CGRect?
+    private var lastTouchObstacles: [CGRect] = []
     var isRefreshing: Bool { timer != nil }
 
     init(surface: StreamSurface, defaults: UserDefaults = PersistentStorage.defaults,
@@ -34,6 +36,7 @@ final class StreamStats {
         overlay.corner = .persisted(defaults: defaults)
         overlay.attach(to: surface.displayLayer)
         surface.stats = self
+        surface.overlayAppearance.layoutChanged = { [weak self] in self?.layout() }
     }
 
     func setVisible(_ visible: Bool) {
@@ -70,6 +73,16 @@ final class StreamStats {
     func layout() {
         guard let surface else { return }
         if overlay.layer.superlayer !== surface.displayLayer { overlay.attach(to: surface.displayLayer) }
+        let obstacles = surface.overlayAppearance.touchObstacles
+        let area = surface.bounds.inset(by: surface.safeAreaInsets)
+        if lastTouchArea != area || lastTouchObstacles != obstacles {
+            lastTouchArea = area
+            lastTouchObstacles = obstacles
+            let clear = Self.clearStatsArea(in: area, avoiding: obstacles)
+            overlay.placementBounds = obstacles.isEmpty ? nil
+                : CGRect(x: clear.minX, y: surface.bounds.maxY - clear.maxY, width: clear.width, height: clear.height)
+            overlay.compactRows = !obstacles.isEmpty && surface.bounds.height < 500
+        }
         overlay.layoutInHost(surface.displayLayer)
     }
 

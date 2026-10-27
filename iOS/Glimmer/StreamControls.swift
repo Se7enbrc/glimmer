@@ -59,7 +59,8 @@ struct StreamControls: View {
         .confirmationDialog("Quit \(model.launch.appName) on \(model.launch.pcName)?",
                             isPresented: $confirmingQuit, titleVisibility: .visible) {
             Button("Quit \(model.launch.appName)", role: .destructive, action: model.quitGame)
-            Button("Cancel", role: .cancel) { }
+                .accessibilityIdentifier("stream-quit-confirm")
+            Button("Cancel", role: .cancel) { }.accessibilityIdentifier("stream-quit-cancel")
         } message: {
             Text("Unsaved progress may be lost. Other streams from \(model.launch.pcName) will stop.")
         }
@@ -67,7 +68,11 @@ struct StreamControls: View {
             NavigationStack {
                 StreamControlsHelp(model: model, keyboardConnected: keyboardConnected)
                     .navigationTitle("Stream controls")
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingHelp = false } } }
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingHelp = false }.accessibilityIdentifier("stream-help-done")
+                        }
+                    }
             }
         }
     }
@@ -79,21 +84,22 @@ struct StreamControls: View {
 
     private var menu: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(model.launch.appName).font(.headline).lineLimit(1)
-                Text(model.launch.pcName).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-            }
-            .accessibilityElement(children: .combine)
-            .padding(16)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
+            List {
+                Group {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.launch.appName).font(.headline).lineLimit(1)
+                        Text(model.launch.pcName).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.vertical, 8)
                     status
                     if model.phase == .streaming { playActions }
                     if model.pictureNeedsReview {
-                        Divider()
                         Text("Does \(model.launch.appName) look right?")
-                        Button("Keep this size") { model.keepSize?() }
+                        Button("Keep this size") { model.keepSize?() }.accessibilityIdentifier("stream-size-keep")
                         Button("Use the previous size") { model.restoreSize?() }
+                            .accessibilityIdentifier("stream-size-restore")
                     }
                     if let format = model.requestedFormat {
                         Text("Requested: \(format.summary)"
@@ -103,13 +109,15 @@ struct StreamControls: View {
                     if !model.phase.isEnded {
                         Button("Quit \(model.launch.appName)…", systemImage: "stop", role: .destructive) {
                             confirmingQuit = true
-                        }.disabled(model.phase == .stopping)
+                        }.disabled(model.phase == .stopping).accessibilityIdentifier("stream-quit")
                     }
                 }
-                .padding(.horizontal, 16).padding(.bottom, 8)
+                .listRowBackground(Color.clear).listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
             }
+            .listStyle(.plain).scrollContentBackground(.hidden)
             .scrollBounceBehavior(.basedOnSize)
-            .defaultScrollAnchor(.top)
+            .accessibilityIdentifier("stream-controls-actions")
             connectionActions.padding(.horizontal, 16).padding(.bottom, 12)
         }
         .buttonStyle(StreamMenuActionStyle())
@@ -120,19 +128,25 @@ struct StreamControls: View {
         Button("Resume", systemImage: "play.fill", action: model.resumeInput)
             .disabled(!model.hasGameInput)
             .accessibilityHint("Returns game input to the PC.")
+            .accessibilityIdentifier("stream-resume")
         Button(model.statsShown ? "Hide Stream Stats" : "Show Stream Stats",
                systemImage: "chart.xyaxis.line", action: model.toggleStats)
+            .accessibilityIdentifier("stream-stats-toggle")
         if model.controllerConnected || model.hardwareInputConnected {
             Button(model.touchControlsRequested ? "Hide touch controls" : "Show touch controls",
                    systemImage: "hand.draw", action: model.toggleTouchControls)
+                .accessibilityIdentifier("stream-touch-toggle")
         }
         if model.menuController != nil {
             Button(model.menuControllerUsesMouse ? "Use gamepad mode" : "Use mouse mode",
                    systemImage: "computermouse", action: model.toggleControllerMouseMode)
+                .accessibilityIdentifier("stream-controller-mode")
         }
         Button("Edit controls…", systemImage: "hand.draw") { model.editingTouchControls = true }
+            .accessibilityIdentifier("stream-edit-controls")
         IOSControllerLayoutStreamButton(model: model)
         Button("How to play", systemImage: "questionmark.circle") { showingHelp = true }
+            .accessibilityIdentifier("stream-help")
     }
 
     @ViewBuilder private var connectionActions: some View {
@@ -141,6 +155,7 @@ struct StreamControls: View {
             if model.phase.isEnded { close() } else { model.disconnect() }
         }
         .disabled(model.phase == .stopping)
+        .accessibilityIdentifier("stream-disconnect")
         .accessibilityHint(model.phase.isEnded ? "Returns to your apps."
             : model.launch.leaveGamesRunning ? "Ends this stream and leaves the game running on the PC."
             : "Ends this stream and quits the game on the PC.")

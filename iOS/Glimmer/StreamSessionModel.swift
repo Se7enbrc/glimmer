@@ -58,7 +58,9 @@ final class StreamSessionModel {
     }
     var streamInput: StreamInput? { playback?.input }
     var touchGamepad: TouchGamepadCapture? { playback?.touchGamepad }
-    var editingTouchControls = false
+    var editingTouchControls = false {
+        didSet { playback?.showStats?(statsShown && canStart && phase == .streaming && !editingTouchControls) }
+    }
     private(set) var touchGeometryUsable = true
     private(set) var touchControlsRequested = false
     var touchControlsVisible: Bool {
@@ -319,7 +321,7 @@ final class StreamSessionModel {
 
     private func synchronizeInputFocus() {
         menuVisibility.setPlaying(inputFocused)
-        playback?.showStats?(statsShown && canStart && phase == .streaming)
+        playback?.showStats?(statsShown && canStart && phase == .streaming && !editingTouchControls)
         if !canStart || phase.isEnded || phase == .stopping { playback?.showOverlayChrome?(false) }
         playback?.focusInput?(inputFocused)
         inputCaptureChanged?(inputFocused)
