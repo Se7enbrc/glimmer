@@ -71,17 +71,20 @@ update Homebrew.
 refuses a dirty or unpushed tree, a build number that doesn't exceed every build
 on the `appcast` branch, and a marketing version that already has a final tag.
 It waits up to 90 minutes for integration checks, then atomically reserves X and
-moves `release-candidate`. It dispatches credential-free Verify and CodeQL and
-waits up to 45 minutes for candidate checks and processing, stopping on a
-terminal failure. Only then does it create and push the next signed `-rc.N` tag
-and dispatch **Release**. It opens the run; approving the protected `release`
-deployment there is the remaining step. Rerunning prints an existing Release
-run, or resumes the held scans without replacing a failed attempt. Rerun failed
-jobs in Actions before resuming. `make rc DRY_RUN=1` prints the steps without
-changing remote state. A timeout or failed dispatch keeps the reservation. If
-the PR has advanced, resume the original cutter workflow or check out the held
-`release-candidate` branch locally and rerun the cutter there. Resumption does
-not ask the moving PR ref to prove X again.
+moves `release-candidate`. If the held candidate has the same marketing version
+and an older build, it automatically abandons that candidate as superseded,
+provided delivery has stopped and it has not been promoted to GA. It dispatches
+credential-free Verify and CodeQL and waits up to 45 minutes for candidate
+checks and processing, stopping on a terminal failure. Only then does it create
+and push the next signed `-rc.N` tag and dispatch **Release**. It opens the run;
+approving the protected `release` deployment there is the remaining step.
+Rerunning prints an existing Release run, or resumes the held scans without
+replacing a failed attempt. Rerun failed jobs in Actions before resuming.
+`make rc DRY_RUN=1` prints the steps without changing remote state. A timeout or
+failed dispatch keeps the reservation. If the PR has advanced, resume the
+original cutter workflow or check out the held `release-candidate` branch
+locally and rerun the cutter there. Resumption does not ask the moving PR ref to
+prove X again.
 
 **From the pull request.** Adding the `rc` label to a pull request from this
 repository runs the same cut in the **Release candidate** workflow, which
@@ -90,17 +93,18 @@ the maintainer's step. It runs when the label is added and again each time
 Verify or CodeQL finishes, and cuts only once every required check is green on
 the pull request's current head; until then it stops in seconds without loading
 the app's key. It runs main's tooling and never checks out the pull request.
-While the label stays, a new head can get the next candidate only after the
-previous reservation is explicitly released or abandoned. If a cut was refused
-while reserved, remove and reapply the label after releasing it. The workflow
-tags as the release GitHub App rather than with a personal signature; the run's
-attestation identifies the build. It needs a GitHub App installed only on this
-repository, with read and write access to contents, workflows, actions and pull
-requests and read access to checks and code scanning alerts, no webhook, and a
-bypass on the ruleset that protects `release-candidate`. Its client ID and
-private key live in the `rc-cut` environment (no required reviewers) as
-`GLIMMER_RC_APP_CLIENT_ID` and `GLIMMER_RC_APP_PRIVATE_KEY`, synced from Doppler
-like the release secrets.
+While the label stays, a new head with a higher build for the same marketing
+version automatically supersedes an idle, unpublished candidate. The same
+delivery and promotion guards apply as for `make rc`. If a cut was refused while
+delivery was pending, remove and reapply the label after delivery stops and its
+claims are reconciled. The workflow tags as the release GitHub App rather than
+with a personal signature; the run's attestation identifies the build. It needs
+a GitHub App installed only on this repository, with read and write access to
+contents, workflows, actions and pull requests and read access to checks and
+code scanning alerts, no webhook, and a bypass on the ruleset that protects
+`release-candidate`. Its client ID and private key live in the `rc-cut`
+environment (no required reviewers) as `GLIMMER_RC_APP_CLIENT_ID` and
+`GLIMMER_RC_APP_PRIVATE_KEY`, synced from Doppler like the release secrets.
 
 CodeQL records its `sarif-id` as a successful job step after the extraction
 safeguard. The gate joins that receipt to the selected run ID, producing
@@ -127,6 +131,30 @@ together; there is no automatic expiry or release on cancellation, failure or
 successful publication. Both platform gates require the reservation still to be
 held. Schema 2 records also contain durable delivery claims, each bound to a
 workflow, run ID, attempt, head SHA and ref.
+
+When reserving a newer build of the same marketing version, both `make rc` and
+the CI `--ci-sha` cutter retire the previous hold automatically. They read both
+versions from the exact source commits, then refuse replacement if any delivery
+claim remains or any `release.yml`, `ios-testflight-build.yml` or
+`ios-testflight.yml` run is incomplete, including deployment approval waits. The
+workflow, run ID and status identify pending work; claims identify the workflow,
+run ID and attempt to reconcile. The run check includes other refs, because
+promotion and iOS delivery can run on `main`.
+
+A final version tag or a GA GitHub release for that version also blocks
+automatic retirement. Complete or repair that promotion and explicitly release
+its hold. A reservation already marked `released` stays released in history.
+Different marketing versions, equal or lower builds, moved refs and `closing`
+holds still require explicit recovery or retirement.
+
+Automatic retirement records the previous SHA as `abandoned`, with
+`superseded_by` naming its successor, in the reservation's commit history. This
+uses the existing state set; legacy schema 1 records remain readable. The
+retirement record and new reservation are published with the candidate ref in
+one atomic push under both leases. No intermediate unheld state is published,
+and a racing delivery admission prevents the replacement. The cutter prints one
+line naming the retired SHA and its successor. `make rc DRY_RUN=1` performs the
+same guards and prints what it would retire without changing either ref.
 
 Keep both branches under the maintainer/RC App write restrictions. All branch
 moves must use the cutter; manual bypass writes can break availability and are
@@ -162,9 +190,10 @@ the normal origin credentials:
 python3 scripts/candidate_reservation.py release FULL_CANDIDATE_SHA
 ```
 
-If abandoning X, first cancel its pending workflows and wait for them to stop,
-then run `python3 scripts/candidate_reservation.py abandon FULL_CANDIDATE_SHA`.
-Both commands first atomically fence the reservation as `closing`, denying new
+To abandon X without cutting a superseding build, first cancel its pending
+workflows and wait for them to stop, then run
+`python3 scripts/candidate_reservation.py abandon FULL_CANDIDATE_SHA`. Both
+commands first atomically fence the reservation as `closing`, denying new
 admissions. A delivery whose claim won the lease first may finish, with its live
 analysis gate still enforced; retirement cannot complete while any claim
 remains. The command also refuses while any Mac Release or iOS build/delivery

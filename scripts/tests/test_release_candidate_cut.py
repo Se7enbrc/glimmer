@@ -92,7 +92,9 @@ elif sys.argv[1:3] == ["workflow", "run"]:
            "url": f"https://github.com/Se7enbrc/glimmer/actions/runs/{{100 + len(runs)}}"}}
     (state / "runs.json").write_text(json.dumps([run] + runs))
 elif sys.argv[1] == "api":
-    if "actions/workflows/" in sys.argv[-1]:
+    if "/releases?" in sys.argv[-1]:
+        print('[[]]')
+    elif "actions/workflows/" in sys.argv[-1]:
         workflow = sys.argv[-1].split("actions/workflows/", 1)[1].split("/", 1)[0]
         data = state / (workflow + ".json")
         print(data.read_text() if data.exists() else '[{{"workflow_runs": []}}]')
@@ -381,6 +383,53 @@ class ReleaseCandidateCutTests(FixtureTestCase):
                      f"Would run: git push origin refs/tags/{VERSION}-rc.1",
                      "Would run: gh workflow run release.yml --ref release-candidate -f operation=candidate"):
             self.assertIn(line, result.stdout)
+
+    def hold_previous(self):
+        (self.state / 'pr-head').write_text(self.old)
+        result = self.cut('--ci-sha', self.old, '--pr', '114')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        (self.state / 'pr-head').write_text(self.sha)
+
+    def test_local_cut_automatically_retires_the_previous_build(self):
+        self.hold_previous()
+        result = self.cut()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f'Abandoned candidate {self.old}, superseded by {self.sha}', result.stdout)
+        self.assertIn(f'{self.sha}\trefs/heads/release-candidate', self.remote())
+        self.assertEqual(len(self.dispatches()), 2)
+
+    def test_ci_cut_retires_using_source_versions_even_from_an_older_checkout(self):
+        self.hold_previous()
+        self.git('checkout', '--quiet', '--detach', self.old)
+        result = self.cut('--ci-sha', self.sha, '--pr', '114')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f'Abandoned candidate {self.old}, superseded by {self.sha}', result.stdout)
+        self.assertIn(f'{self.sha}\trefs/heads/release-candidate', self.remote())
+        self.assertEqual(len(self.dispatches()), 2)
+
+    def test_cutter_dry_run_prints_retirement_without_mutation(self):
+        self.hold_previous()
+        before = self.remote()
+        for args in (('--dry-run',), ('--dry-run', '--ci-sha', self.sha, '--pr', '114')):
+            with self.subTest(args=args):
+                result = self.cut(*args)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f'Would abandon candidate {self.old}, superseded by {self.sha}', result.stdout)
+                self.assertEqual(self.remote(), before)
+                self.assertEqual(len(self.dispatches()), 1)
+
+    def test_cutter_refuses_previous_candidate_waiting_for_approval(self):
+        self.hold_previous()
+        before = self.remote()
+        (self.state / 'ios-testflight.yml.json').write_text(json.dumps([{'workflow_runs': [
+            {'id': 76, 'status': 'waiting', 'head_sha': self.old}]}]))
+        for args in ((), ('--ci-sha', self.sha, '--pr', '114')):
+            with self.subTest(args=args):
+                result = self.cut(*args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('ios-testflight.yml run 76 (waiting', result.stderr)
+                self.assertEqual(self.remote(), before)
+                self.assertEqual(len(self.dispatches()), 1)
 
     def test_non_fast_forward_moves_branch_with_lease(self):
         self.git("checkout", "--quiet", "-b", "older", self.old)
