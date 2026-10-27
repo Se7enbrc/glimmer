@@ -43,7 +43,6 @@ extension InputForwarder {
         inputCore.withLock { inputCore.updatePhysicalMouseButton(button, pressed: pressed) }
     }
 
-    static func controllerMouseDelta(_ axis: Int16) -> Int16 { InputCore.controllerMouseDelta(axis) }
     func pollControllerMouse() { inputCore.pollControllerMouse() }
     func suspendControllerMouse() { inputCore.suspendControllerMouse() }
     func resetControllerMouse(slot: UInt8? = nil) { inputCore.resetControllerMouse(slot: slot) }

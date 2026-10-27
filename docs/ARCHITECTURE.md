@@ -91,10 +91,10 @@ Native display code calls `VideoDecoder.setPresentSuppressed(_:)` while hidden.
 It reuses newest-frame retention, decode gating and watchdog suppression.
 `PacerHeadroom` keeps policy reads inside the engine; frame releases do not call
 the app. Controller mouse mode compiles shared Right-handed or Left-handed
-bindings into a `ControllerMousePlan`. Both platforms use the same cubic curve,
-50 ms movement-only polling and click release ledger. Settings keep explicit
-overrides when a preset changes; the shared controller recorder rejects
-overlapping bindings.
+bindings into a `ControllerMousePlan`. Both platforms use the same velocity
+curve, display-rate movement-only polling and click release ledger. Settings
+keep explicit overrides when a preset changes; the shared controller recorder
+rejects overlapping bindings.
 
 `LauncherArtCache` and `NetworkClient.appAsset(appID:)` share bounded artwork
 storage and pinned TLS. Shells decide when to fetch visible covers. An optional

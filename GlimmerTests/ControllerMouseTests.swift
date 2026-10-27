@@ -31,6 +31,14 @@ struct ControllerMouseTests {
         forwarder.routeControllerMouse(slot: slot, buttons: 0, analog: neutral, chordHeld: false, now: now + 0.751)
     }
 
+    // Explicit-time polls must not race the live display-rate timer.
+    private func stopPollingTimer(_ forwarder: InputForwarder) {
+        forwarder.inputCore.withLock {
+            forwarder.inputCore.controllerMouseTimer?.cancel()
+            forwarder.inputCore.controllerMouseTimer = nil
+        }
+    }
+
     @Test func idleMouseModeSleepsAndMovementRearmsPolling() {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
@@ -48,6 +56,21 @@ struct ControllerMouseTests {
         analog.rightStickY = 30_000
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false)
         #expect(forwarder.controllerMouseTask != nil)
+    }
+
+    // rc.20 stepped the pointer every 50 ms; known-good iOS moved it every display tick.
+    @Test func pointerMovesEveryTickAtMoonlightSpeed() {
+        let (forwarder, backend) = rig()
+        defer { forwarder.detach() }
+        toggle(forwarder)
+        var analog = neutral
+        analog.rightStickX = 32767
+        analog.leftStickX = 32767
+        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false, now: 11)
+        stopPollingTimer(forwarder)
+        for tick in 0..<60 { forwarder.inputCore.pollControllerMouse(now: 11 + Double(tick) / 120) }
+        #expect(backend.mouseMoves.count == 60)
+        #expect(abs(backend.mouseMoves.map { Int($0.dx) }.reduce(0, +) - 620) <= 1)
     }
 
     @Test func togglesOnlyOnReleaseAfterMoonlightsThreshold() {
@@ -250,15 +273,15 @@ struct ControllerMouseTests {
         let analog = GamepadAnalog(leftTrigger: 0, rightTrigger: 0, leftStickX: 32767, leftStickY: 32767,
                                    rightStickX: -32767, rightStickY: 32767)
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false)
-        forwarder.pollControllerMouse()
-        forwarder.pollControllerMouse()
-        #expect(backend.mouseMoves == [.init(dx: -62, dy: -62), .init(dx: -62, dy: -62)])
-        #expect(backend.pointer == [.scroll(62), .hScroll(62), .scroll(62), .hScroll(62)])
+        stopPollingTimer(forwarder)
+        forwarder.inputCore.pollControllerMouse(now: 1)
+        forwarder.inputCore.pollControllerMouse(now: 1 + 1.0 / 120)
+        #expect(backend.mouseMoves == [.init(dx: -7, dy: -7), .init(dx: -7, dy: -7)])
+        #expect(backend.pointer == [.scroll(7), .hScroll(7), .scroll(7), .hScroll(7)])
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: neutral, chordHeld: false)
-        forwarder.pollControllerMouse()
+        forwarder.inputCore.pollControllerMouse(now: 1 + 2.0 / 120)
         #expect(backend.mouseMoves.count == 2)
-        #expect(InputForwarder.controllerMouseDelta(1000) == 0)
-        #expect(InputForwarder.controllerMouseDelta(-32768) == -62)
+        #expect(ControllerMouseMotion.velocity(SIMD2(3000, 3000)) == .zero)
     }
 
     @Test func unboundFaceAndDirectionalButtonsNeverClickOrScroll() {

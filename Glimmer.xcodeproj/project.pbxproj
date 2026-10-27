@@ -776,6 +776,7 @@
 		56A574311FFA79E0A008A3EF /* SettingsResetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837D4DB90C33C0B07D279747 /* SettingsResetTests.swift */; };
 		B5A8C42988592CE8A90BE235 /* ControllerShortcutGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12799C4B7B919D281A7E4B84 /* ControllerShortcutGesture.swift */; };
 		E31B347927A1170384BBEB95 /* ControllerShortcutSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD515C08AFF793031FF8AC1D /* ControllerShortcutSection.swift */; };
+		A1C0DE5A77E14D3B9F2C6E02 /* ControllerMouseMotionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE5A77E14D3B9F2C6E01 /* ControllerMouseMotionTests.swift */; };
 		D7F330D765E7A73DE210A28E /* ControllerShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 056C6102A2BD668896A01FCE /* ControllerShortcutTests.swift */; };
 		B6D5ED5AF9A2619C75EAE789 /* ControllerShortcutRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */; };
 		114D0A9130EE107F0ED56FF8 /* ControllerShortcutRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */; };
@@ -1609,6 +1610,7 @@
 		837D4DB90C33C0B07D279747 /* SettingsResetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/SettingsResetTests.swift"; sourceTree = SOURCE_ROOT; };
 		12799C4B7B919D281A7E4B84 /* ControllerShortcutGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerShortcutGesture.swift"; sourceTree = SOURCE_ROOT; };
 		DD515C08AFF793031FF8AC1D /* ControllerShortcutSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerShortcutSection.swift"; sourceTree = SOURCE_ROOT; };
+		A1C0DE5A77E14D3B9F2C6E01 /* ControllerMouseMotionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ControllerMouseMotionTests.swift"; sourceTree = SOURCE_ROOT; };
 		056C6102A2BD668896A01FCE /* ControllerShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ControllerShortcutTests.swift"; sourceTree = SOURCE_ROOT; };
 		A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerShortcutRoutingTests.swift"; sourceTree = SOURCE_ROOT; };
 		0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerShortcutRenderTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -1947,6 +1949,7 @@
 				C7C0E1B0EA955CEF50500AC9 /* ControllerLayoutRoutingTests.swift */,
 				A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */,
 				524586702307A7A6D49FE698 /* ControllerLayoutEscapeTests.swift */,
+				A1C0DE5A77E14D3B9F2C6E01 /* ControllerMouseMotionTests.swift */,
 				056C6102A2BD668896A01FCE /* ControllerShortcutTests.swift */,
 				A0025D74D58DC051547B66EC /* ControllerLayoutPersistenceTests.swift */,
 				22786CD127B725B21D9AF285 /* ControllerMappingTests.swift */,
@@ -2892,6 +2895,7 @@
 				C7FF37545FB1A12CC429370A /* ControllerLayoutRoutingTests.swift in Sources */,
 				B6D5ED5AF9A2619C75EAE789 /* ControllerShortcutRoutingTests.swift in Sources */,
 				019739D198D497E6988A315D /* ControllerLayoutEscapeTests.swift in Sources */,
+				A1C0DE5A77E14D3B9F2C6E02 /* ControllerMouseMotionTests.swift in Sources */,
 				D7F330D765E7A73DE210A28E /* ControllerShortcutTests.swift in Sources */,
 				FB9C61E6827CF796431E0A86 /* ControllerLayoutPersistenceTests.swift in Sources */,
 				77DB31637950C41A7C275C4D /* ControllerMappingTests.swift in Sources */,

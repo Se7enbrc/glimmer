@@ -88,8 +88,8 @@ struct ControllerMouseParityTests {
             input.core.controllerMouseTimer = nil
             input.core.pollControllerMouse()
         }
-        #expect(backend.mouseMoves == [.init(dx: 62, dy: 0)])
-        #expect(backend.pointer == [.button(action: 7, button: 1), .button(action: 7, button: 3), .scroll(62)])
+        #expect(backend.mouseMoves == [.init(dx: 10, dy: 0)])
+        #expect(backend.pointer == [.button(action: 7, button: 1), .button(action: 7, button: 3), .scroll(10)])
         input.submitController(pad, sample: .init(), capturedAt: ProcessInfo.processInfo.systemUptime)
         #expect(backend.pointer.suffix(2) == [.button(action: 8, button: 1), .button(action: 8, button: 3)])
     }
@@ -119,8 +119,8 @@ struct ControllerMouseParityTests {
         var analog = InputCore.neutral
         analog.leftStickX = 32767
         analog.rightStickY = 32767
-        #expect(plan.motion(analog).pointer == SIMD2(62, 0))
-        #expect(plan.motion(analog).scroll == SIMD2(0, 62))
+        #expect(plan.sticks(analog).pointer == SIMD2(32767, 0))
+        #expect(plan.sticks(analog).scroll == SIMD2(0, 32767))
     }
     @Test func customMouseAndShortcutConflictsCannotChangeEitherSavedChoice() async throws {
         let defaults = try defaults()

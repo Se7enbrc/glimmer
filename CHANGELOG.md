@@ -9,6 +9,9 @@
 - Controller sticks no longer send duplicate input while streaming, including on
   controllers whose stick press shares the stick's element.
 
+- The controller mouse pointer moves smoothly at display rate on Mac, iPhone and
+  iPad, at the same top speed as before.
+
 - Controllers avoid mouse calculations while mouse mode is off.
 
 - Controller mouse bindings now check shortcuts used by every controller,
