@@ -26,6 +26,11 @@ public final class AudioDecoder: @unchecked Sendable {
     var spliceLease: AudioPCMBufferPool.Lease?
     var renderMonitor: DispatchSourceTimer?
     var renderProgress = AudioRenderProgress()
+    // Decode admission or the graph gate guards health; only consumed PCM counts as progress.
+    var outputHealth = AudioOutputHealth()
+    var receivedAudioPackets: UInt64 = 0
+    var renderedAudioFrames: UInt64 = 0
+    var outputRecoveryPending = false
     lazy var maintenanceSource = makeMaintenanceSource()
     lazy var linkResolveSource = makeLinkResolveSource()
     var isShutdown = false

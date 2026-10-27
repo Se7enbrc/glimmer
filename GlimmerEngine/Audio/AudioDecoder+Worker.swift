@@ -58,11 +58,24 @@ extension AudioDecoder {
             self.beginGraphChange()
             defer { self.endGraphChange() }
             guard !self.isShutdown else { return }
+            if self.platform.prepareForRecovery != nil {
+                self.recoverSilentOutput()
+                return
+            }
             self.recoverIfPlayoutStalled()
             _ = self.ensureEngineAtPrimeEdge(now: DispatchTime.now().uptimeNanoseconds)
         }
         source.activate()
         return source
+    }
+
+    // The existing monitor supplies time; packets and render callbacks add no clocks or timers.
+    func checkOutputHealth(now: UInt64) {
+        guard !isShutdown, platform.prepareForRecovery != nil else { return }
+        if outputHealth.observe(packets: receivedAudioPackets, rendered: renderedAudioFrames, now: now) {
+            outputRecoveryPending = true
+            maintenanceSource.add(data: 1)
+        }
     }
 
     func installRenderMonitor() {
@@ -78,6 +91,10 @@ extension AudioDecoder {
             self.halOutput?.observeOutputSilence()
             #endif
             let frames = self.observeRenderClock()
+            if self.platform.prepareForRecovery != nil {
+                self.checkOutputHealth(now: DispatchTime.now().uptimeNanoseconds)
+                return
+            }
             if self.renderProgress.needsRunningCheck(frames: frames) { self.refreshOutputRunningState() }
             if !self.engineRunning { self.maintenanceSource.add(data: 1) }
         }
@@ -95,6 +112,7 @@ extension AudioDecoder {
         let silent = observation.silence
         let underruns = observation.underruns
         let frames = consumed &- observedRingFrames
+        renderedAudioFrames &+= frames
         #if os(macOS)
         if frames > 0 { telemetry?.renderedFrames.wrappingAdd(frames, ordering: .relaxed) }
         #endif
@@ -199,5 +217,40 @@ struct AudioRenderProgress {
         defer { lastFrames = frames }
         guard let frames, let lastFrames else { return true }
         return frames <= lastFrames
+    }
+}
+
+// A session can report running without ever pulling PCM. Require incoming packets and bound rebuild frequency.
+struct AudioOutputHealth {
+    private var packets: UInt64 = 0
+    private(set) var rendered: UInt64 = 0
+    private var lastPacketAt: UInt64?
+    private var stalledAt: UInt64?
+    private var retryAt: UInt64 = 0
+    private var retryDelay: UInt64 = 1_000_000_000
+    private(set) var attempt = 0
+
+    mutating func observe(packets: UInt64, rendered: UInt64, now: UInt64) -> Bool {
+        if packets != self.packets {
+            self.packets = packets
+            lastPacketAt = now
+            if stalledAt == nil { stalledAt = now }
+        }
+        if rendered != self.rendered {
+            self.rendered = rendered
+            stalledAt = now
+            attempt = 0
+            retryAt = 0
+            retryDelay = 1_000_000_000
+        }
+        guard let lastPacketAt, now &- lastPacketAt < 1_000_000_000 else {
+            stalledAt = nil
+            return false
+        }
+        guard let stalledAt, now &- stalledAt >= 1_000_000_000, now >= retryAt else { return false }
+        attempt += 1
+        retryDelay = min(retryDelay * 2, 5_000_000_000)
+        retryAt = now &+ retryDelay
+        return true
     }
 }

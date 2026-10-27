@@ -143,6 +143,7 @@
 - Keep existing PC pairing when preferences are reset or restored. Tests now use
   separate storage so they cannot replace a saved pairing.
 
+- Fixed streams that sometimes started without sound on iPhone and iPad.
 - Fixed a crash when using a controller during a stream.
 - Fixed a crash when an iPhone could not rotate into a stream.
 - Keep your chosen stats thresholds, launcher style, codec and touch opacity

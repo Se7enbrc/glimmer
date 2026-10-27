@@ -107,6 +107,16 @@ final class IOSAudioSession: @unchecked Sendable {
         }
     }
 
+    // Interruption-ended is not guaranteed. Let setActive arbitrate a fresh attempt after the watchdog delay.
+    func prepareForRecovery() {
+        lock.withLock {
+            guard wantsPlayback else { return }
+            generation &+= 1
+            active = false
+            interrupted = false
+        }
+    }
+
     func release() {
         lock.withLock {
             leases -= 1
