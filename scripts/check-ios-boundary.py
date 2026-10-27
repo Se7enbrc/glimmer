@@ -83,7 +83,9 @@ def expected_sources(root):
     # These transport fakes and session tests also compile in the Mac test target.
     shared = ("BitrateActuatorTests.swift", "FakeSunshine.swift", "InputRecordingBackend.swift",
               "BandwidthPolicyTests.swift", "BandwidthActuatorTests.swift",
-              "OpusDecoderTests.swift", "SurroundToneData.swift", "VideoDepacketizerRecoveryTests.swift")
+              "OpusDecoderTests.swift", "SurroundToneData.swift", "VideoDepacketizerRecoveryTests.swift",
+              "CleanRoomDifferentialTests.swift", "CleanRoomProbe.swift", "CleanRoomProbe+Audio.swift",
+              "CleanRoomProbe+Video.swift")
     for name in shared:
         if not (root / "GlimmerTests" / name).is_file():
             raise ValueError(f"Missing shared test source: {name}")

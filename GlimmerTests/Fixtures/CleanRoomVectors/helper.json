@@ -1,0 +1,3 @@
+{"baseline":"2026.10.7 (d15d21236d1f3025f073c7e9da4f0e12db400fc6)","cases":[
+{"expected":{"events":["status -> true connections 1 late 0","down:silent -> false connections 1 late 0","status -> true connections 2 late 0 previous rejected","count:late -> nil connections 2 late 0 previous rejected","status -> true connections 3 late 2 previous rejected","status:silent -> nil connections 3 late 0 previous rejected","down -> true connections 4 late 0 previous rejected","count -> 7 connections 4 late 0 previous rejected"]},"input":{"ops":["status","down:silent","status","count:late","status","status:silent","down","count"]},"name":"timeouts"}
+]}
