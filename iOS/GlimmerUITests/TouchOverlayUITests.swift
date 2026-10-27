@@ -135,8 +135,10 @@ final class TouchOverlayUITests: XCTestCase {
         let target = app.buttons[identifier]
         for _ in 0..<32 {
             // Menu rows scroll under the pinned Disconnect bar; a visible row ends above it.
-            let floor = container == "stream-controls-actions" && identifier != "stream-disconnect"
-                ? app.buttons["stream-disconnect"].frame.minY : scroll.frame.maxY
+            let inBar = ["stream-disconnect", "stream-quit"].contains(identifier)
+            let floor = container != "stream-controls-actions" || inBar ? scroll.frame.maxY
+                : ["stream-disconnect", "stream-quit"].map { app.buttons[$0] }.filter(\.exists)
+                    .map(\.frame.minY).min() ?? scroll.frame.maxY
             if target.exists, !target.frame.intersects(scroll.frame)
                 || target.frame.minY >= scroll.frame.minY && target.frame.maxY <= floor + 1, target.isHittable { break }
             let offset = target.exists ? min(40, max(-40, (scroll.frame.minY + floor) / 2 - target.frame.midY))

@@ -241,7 +241,8 @@ final class TouchJourneyUITests: TouchJourneyTestCase {
         let list = app.descendants(matching: .any).matching(identifier: "stream-controls-actions").firstMatch
         // Rows scroll under the pinned Disconnect bar, so a visible row ends above it.
         let pinned = ["stream-disconnect", "stream-quit"].contains(id)
-        let floor = app.buttons["stream-disconnect"].frame.minY
+        let quit = app.buttons["stream-quit"]
+        let floor = min(app.buttons["stream-disconnect"].frame.minY, quit.exists ? quit.frame.minY : .infinity)
         func visible() -> Bool {
             pinned || list.frame.contains(control.frame) && control.frame.maxY <= floor + 1
         }
