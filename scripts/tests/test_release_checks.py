@@ -240,7 +240,10 @@ class RequiredChecksTests(FixtureTestCase):
         with patch.object(sys, "argv", ["x", SHA]), patch.object(CHECKS, "check", side_effect=ValueError("red")), \
                 contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
             CHECKS.main()
-        self.assertEqual((caught.exception.code, err.getvalue()), (1, "ERR: red\n"))
+        self.assertEqual(caught.exception.code, 1)
+        self.assertTrue(err.getvalue().endswith("ERR: red\n"))
+        self.assertIn("Starting: required checks", err.getvalue())
+        self.assertIn("Ended: required checks", err.getvalue())
         out = io.StringIO()
         with patch.object(sys, "argv", ["x", SHA]), \
                 patch.object(CHECKS, "check", return_value={"sha": SHA, "runs": []}) as check, \

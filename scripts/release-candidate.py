@@ -20,6 +20,7 @@ import xml.etree.ElementTree as ET
 
 from release_validation import SPARKLE, validate_feed
 from release_candidate_kind import parse_tag
+from release_progress import progress
 import candidate_reservation
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -41,6 +42,7 @@ RELEASE_PATHS = (
     'scripts/release_symbols.py',
     'scripts/candidate_reservation.py',
     'scripts/candidate_delivery.py',
+    'scripts/release_progress.py',
     '.github/workflows/candidate-delivery.yml',
     '.github/workflows/verify.yml',
     '.github/workflows/codeql.yml',
@@ -76,19 +78,22 @@ POLL_SECONDS = 60
 TIMEOUT_SECONDS = 90 * 60
 
 
-def output(args, message=None):
-    result = subprocess.run(args, capture_output=True, text=True, timeout=300)
-    if result.returncode:
-        if message is None:
-            return ""
-        raise ValueError(message)
+def output(args, message=None, timeout=300):
+    with progress(shlex.join(args), timeout):
+        result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        if result.returncode:
+            if message is None:
+                return ""
+            raise ValueError(message)
     return result.stdout.strip()
 
 
 def step(dry_run, args, message):
     print(f"{'Would run' if dry_run else 'Running'}: {shlex.join(args)}", flush=True)
-    if not dry_run and subprocess.run(args, timeout=300).returncode:
-        raise ValueError(message)
+    if not dry_run:
+        with progress(shlex.join(args), 300):
+            if subprocess.run(args, timeout=300).returncode:
+                raise ValueError(message)
 
 
 def remote_refs(*patterns):
@@ -99,10 +104,10 @@ def remote_refs(*patterns):
     return refs
 
 
-def release_runs(sha):
+def release_runs(sha, timeout=300):
     runs = json.loads(output(["gh", "run", "list", "--workflow", "release.yml", "--branch", BRANCH,
                               "--event", "workflow_dispatch", "--json", "databaseId,headSha,url",
-                              "--limit", "50"], "couldn't list Release workflow runs"))
+                              "--limit", "50"], "couldn't list Release workflow runs", timeout=timeout))
     return [run for run in runs if run.get("headSha") == sha]
 
 
@@ -132,36 +137,48 @@ def check_build(version, build):
     validate_feed(channel, version, build, "rc")
 
 
-def checks_pending(sha):
+def checks_pending(sha, update, timeout):
     pages = json.loads(output(["gh", "api", "--paginate", "--slurp",
                                f"repos/{CHECKS.REPO}/commits/{sha}/check-runs?per_page=100"],
-                              "couldn't list check runs"))
+                              "couldn't list check runs", timeout=timeout))
     latest = {}
     for run in sorted((run for page in pages for run in page.get("check_runs", [])), key=lambda r: r.get("id", 0)):
         latest[run.get("name")] = run
     names = set().union(*CHECKS.REQUIRED.values())
+    update('; '.join(f"{name}: {latest.get(name, {}).get('status', 'missing')} "
+                     f"{latest.get(name, {}).get('details_url', '')}" for name in sorted(names)))
     return any(latest.get(name, {}).get("status") != "completed" for name in names)
 
 
 def wait_for_checks(sha, dry_run):
-    started = time.monotonic()
-    while True:
-        result = subprocess.run([sys.executable, str(SCRIPTS / "release-checks.py"), sha],
-                                capture_output=True, text=True, timeout=600)
-        if result.returncode == 0:
-            print(f"Required checks passed for {sha}")
-            return
-        reason = (result.stderr or result.stdout).strip().removeprefix("ERR: ") or "release checks failed"
-        if not checks_pending(sha):
-            raise ValueError(f"required checks failed for {sha}: {reason}")
-        minutes = int(time.monotonic() - started) // 60
-        if dry_run:
-            print(f"Checks pending ({reason}); would wait up to {TIMEOUT_SECONDS // 60} min")
-            return
-        if minutes >= TIMEOUT_SECONDS // 60:
-            raise ValueError(f"checks still pending after {minutes} min: {reason}")
-        print(f"Waiting for checks on {sha[:12]}: {reason} ({minutes} min elapsed)", flush=True)
-        time.sleep(POLL_SECONDS)
+    deadline = time.monotonic() + TIMEOUT_SECONDS
+    label = f'integration checks for {sha}: https://github.com/{CHECKS.REPO}/commit/{sha}/checks'
+    with progress(label, TIMEOUT_SECONDS) as update:
+        while time.monotonic() < deadline:
+            pending = checks_pending(sha, update, min(300, remaining(deadline)))
+            result = subprocess.run([sys.executable, '-u', str(SCRIPTS / 'release-checks.py'), sha],
+                                    capture_output=True, text=True, timeout=min(600, remaining(deadline)))
+            remaining(deadline)
+            if result.returncode == 0:
+                print(f'Required checks passed for {sha}', flush=True)
+                return
+            reason = next((line.removeprefix('ERR: ') for line in result.stderr.splitlines()
+                           if line.startswith('ERR: ')), 'release checks failed')
+            if not pending:
+                raise ValueError(f'required checks failed for {sha}: {reason}')
+            if dry_run:
+                update(f'Checks pending ({reason}); would wait up to {TIMEOUT_SECONDS // 60} min')
+                return
+            update(f'Waiting for checks on {sha[:12]}: {reason}')
+            time.sleep(min(POLL_SECONDS, remaining(deadline)))
+        raise ValueError('integration checks timed out; inspect the linked runs before retrying')
+
+
+def remaining(deadline):
+    seconds = deadline - time.monotonic()
+    if seconds <= 0:
+        raise ValueError('release wait timed out; inspect the linked runs before retrying')
+    return seconds
 
 
 def prepare_reviewed(sha, dry_run, pr=None):
@@ -175,7 +192,8 @@ def prepare_reviewed(sha, dry_run, pr=None):
 
 
 def candidate_runs(sha, workflow):
-    pages = CHECKS.api(f"actions/workflows/{workflow}/runs?head_sha={sha}&per_page=100")
+    with progress(f'{workflow} runs for {sha}: https://github.com/{CHECKS.REPO}/actions/workflows/{workflow}', 60):
+        pages = CHECKS.api(f"actions/workflows/{workflow}/runs?head_sha={sha}&per_page=100")
     if any(page.get("total_count", 0) >= 1000 for page in pages):
         raise ValueError("candidate run search may be truncated")
     return [run for page in pages for run in page.get("workflow_runs", [])
@@ -186,8 +204,10 @@ def candidate_runs(sha, workflow):
 def prepare_candidate(sha, dry_run):
     fresh = candidate_reservation.reserve(sha, dry_run, CHECKS)
     minimum = {}
+    links = set()
     for workflow in CHECKS.REQUIRED:
         runs = candidate_runs(sha, workflow.rsplit("/", 1)[1])
+        links.update(f"https://github.com/{CHECKS.REPO}/actions/runs/{run['id']}" for run in runs)
         if fresh or not runs:
             minimum[workflow] = max((run["id"] for run in runs), default=0)
             step(dry_run, ["gh", "workflow", "run", workflow.rsplit("/", 1)[1], "--ref", BRANCH],
@@ -196,19 +216,39 @@ def prepare_candidate(sha, dry_run):
         print("Would wait up to 45 min for direct candidate Verify, CodeQL processing and alert checks")
         return
     deadline = time.monotonic() + 45 * 60
-    while time.monotonic() < deadline:
-        try:
-            with CHECKS.read_budget(deadline):
-                for workflow, previous in minimum.items():
-                    runs = candidate_runs(sha, workflow.rsplit("/", 1)[1])
-                    if not any(run["id"] > previous for run in runs):
-                        raise CHECKS.ChecksPending(f"waiting for dispatched {workflow}")
-                CHECKS.check(sha, candidate=True)
-            return
-        except CHECKS.ChecksPending as error:
-            print(f"Waiting for candidate evidence: {error}", flush=True)
-        time.sleep(min(POLL_SECONDS, max(0, deadline - time.monotonic())))
-    raise ValueError("candidate checks timed out; reservation retained, rerun failed jobs or resume the cutter")
+    urls = ', '.join(sorted(links)) or f'https://github.com/{CHECKS.REPO}/actions?query=branch%3Arelease-candidate'
+    label = f'candidate Verify and CodeQL for {sha}: {urls}'
+    with progress(label, 45 * 60) as update:
+        while time.monotonic() < deadline:
+            try:
+                with CHECKS.read_budget(deadline):
+                    for workflow, previous in minimum.items():
+                        runs = candidate_runs(sha, workflow.rsplit("/", 1)[1])
+                        links.update(f"https://github.com/{CHECKS.REPO}/actions/runs/{run['id']}" for run in runs)
+                        update(f'{workflow}: ' + ', '.join(
+                            f"https://github.com/{CHECKS.REPO}/actions/runs/{run['id']}" for run in runs))
+                        if not any(run["id"] > previous for run in runs):
+                            raise CHECKS.ChecksPending(f"waiting for dispatched {workflow}")
+                    CHECKS.check(sha, candidate=True)
+                    remaining(deadline)
+                return
+            except CHECKS.ChecksPending as error:
+                update(f"Waiting for candidate evidence: {error}; runs: {', '.join(sorted(links))}")
+            time.sleep(min(POLL_SECONDS, max(0, deadline - time.monotonic())))
+        raise ValueError("candidate checks timed out; reservation retained, rerun failed jobs or resume the cutter")
+
+
+def wait_for_release(sha, before):
+    deadline = time.monotonic() + 60
+    label = f'Release dispatch for {sha}: https://github.com/{CHECKS.REPO}/actions/workflows/release.yml'
+    with progress(label, 60):
+        while time.monotonic() < deadline:
+            runs = release_runs(sha, timeout=remaining(deadline))
+            remaining(deadline)
+            if new := [run for run in runs if run['databaseId'] not in before]:
+                return new[0]['url']
+            time.sleep(min(2, remaining(deadline)))
+        raise ValueError("dispatched, but the new Release run didn't appear; check the Actions tab")
 
 
 def signed(tag):
@@ -308,15 +348,12 @@ def cut(dry_run, ci_sha=None, pr=None, diagnostic=False, prepare_only=False, sou
     if dry_run:
         print("Would open the new Release run to approve its protected `release` deployment.")
         return
-    for _ in range(30):
-        if new := [run for run in release_runs(sha) if run["databaseId"] not in before]:
-            show(new[0]["url"], dry_run, pr)
-            return
-        time.sleep(2)
-    raise ValueError("dispatched, but the new Release run didn't appear; check the Actions tab")
+    show(wait_for_release(sha, before), False, pr)
 
 
 def main():
+    sys.stdout.reconfigure(line_buffering=True, write_through=True)
+    sys.stderr.reconfigure(line_buffering=True, write_through=True)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="print every step without pushing, tagging or dispatching")
     parser.add_argument("--source-only", action="store_true", help="pre-push source checks; requires --dry-run")

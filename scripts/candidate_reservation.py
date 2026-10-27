@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-"""Hold one candidate and serialize delivery admission with explicit retirement."""
+"""Hold one candidate and serialize delivery admission with safe retirement."""
 
 import argparse
 import importlib
@@ -10,6 +10,9 @@ import os
 import re
 import subprocess
 import time
+
+from release_candidate_kind import parse_tag
+from release_progress import progress, report
 
 BRANCH = 'refs/heads/release-candidate'
 RESERVATION = 'refs/heads/candidate-reservation'
@@ -84,9 +87,10 @@ def require(sha, object_api, delivery=False):
 
 
 def git(*args, input=None):
-    result = subprocess.run(['git', *args], input=input, capture_output=True, text=True, timeout=300)
-    if result.returncode:
-        raise ValueError('candidate reservation git operation failed; reload state before retrying')
+    with progress(f"reservation git {args[0]}: {BRANCH}, {RESERVATION}", 300):
+        result = subprocess.run(['git', *args], input=input, capture_output=True, text=True, timeout=300)
+        if result.returncode:
+            raise ValueError('candidate reservation git operation failed; reload state before retrying')
     return result.stdout.strip()
 
 
@@ -102,23 +106,37 @@ def snapshot():
 def quiescent(checks):
     # Delivery runs can wait at approval with a main head SHA, so inspect all refs.
     for workflow in DELIVERIES:
-        pages = checks.api(f'actions/workflows/{workflow}/runs?per_page=100')
+        with progress(f'delivery lookup: https://github.com/Se7enbrc/glimmer/actions/workflows/{workflow}', 60):
+            pages = checks.api(f'actions/workflows/{workflow}/runs?per_page=100')
         if not pages or any(not isinstance(page, dict) or not isinstance(page.get('workflow_runs'), list)
                             for page in pages):
             raise ValueError('delivery run lookup returned invalid data')
         if any(page.get('total_count', 0) >= 1000 for page in pages):
             raise ValueError('delivery history may be truncated; inspect and partition before releasing')
         runs = [run for page in pages for run in page.get('workflow_runs', [])]
-        if any(run.get('status') != 'completed' for run in runs):
-            raise ValueError('Mac publication or iOS delivery is pending; finish or cancel it first')
+        for run in runs:
+            if run.get('status') != 'completed':
+                raise ValueError(f"delivery pending: {workflow} run {run.get('id', 'unknown')} "
+                                 f"({run.get('status', 'unknown')}, SHA {run.get('head_sha', 'unknown')}); "
+                                 'finish or cancel it first')
 
 
-def write(refs, sha, state, claims=None):
+def commit_record(sha, state, claims, parent, superseded_by=None):
     tree = git('mktree', input='')
-    parent = ['-p', refs[RESERVATION]] if RESERVATION in refs else []
-    message = json.dumps({'schema': 2, 'sha': sha, 'state': state, 'claims': claims if claims is not None else {}}, sort_keys=True)
+    data = {'schema': 2, 'sha': sha, 'state': state, 'claims': claims if claims is not None else {}}
+    if superseded_by:
+        data['superseded_by'] = superseded_by
+    message = json.dumps(data, sort_keys=True)
     record(message)
-    commit = git('commit-tree', tree, *parent, '-m', message)
+    return git('commit-tree', tree, *(['-p', parent] if parent else []), '-m', message)
+
+
+def write(refs, sha, state, claims=None, superseded=None):
+    parent = refs.get(RESERVATION, '')
+    if superseded:
+        # Publish retirement and replacement together; admission races lose the same lease.
+        parent = commit_record(superseded, 'abandoned', {}, parent, superseded_by=sha)
+    commit = commit_record(sha, state, claims, parent)
     command = ['push', '--atomic', f"--force-with-lease={RESERVATION}:{refs.get(RESERVATION, '')}"]
     updates = [f'{commit}:{RESERVATION}']
     if state == 'reserved' and claims is None:
@@ -127,21 +145,73 @@ def write(refs, sha, state, claims=None):
     git(*command, 'origin', *updates)
 
 
+def candidate_version(sha):
+    config = git('show', f'{sha}:Glimmer/Version.xcconfig')
+    values = dict(re.findall(r'^(MARKETING_VERSION|CURRENT_PROJECT_VERSION)\s*=\s*(\S+)\s*$', config, re.M))
+    version, build = values.get('MARKETING_VERSION', ''), values.get('CURRENT_PROJECT_VERSION', '')
+    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version) or not re.fullmatch(r'[1-9][0-9]*', build):
+        raise ValueError(f'candidate {sha} has invalid version or build metadata')
+    return version, int(build)
+
+
+def unpublished(version, checks):
+    if git('ls-remote', 'origin', f'refs/tags/{version}'):
+        raise ValueError(f'{version} has a final tag; cannot automatically abandon a promoted candidate')
+    with progress('GA publication lookup: https://github.com/Se7enbrc/glimmer/releases', 60):
+        pages = checks.api('releases?per_page=100')
+    if not pages or any(not isinstance(page, list) for page in pages):
+        raise ValueError('release lookup returned invalid data; cannot automatically retire candidate')
+    for release in (item for page in pages for item in page):
+        if not isinstance(release, dict) or not isinstance(release.get('tag_name'), str):
+            raise ValueError('release lookup returned invalid data')
+        tag = release['tag_name']
+        try:
+            short = parse_tag(tag)[0]
+        except ValueError:
+            short = tag
+        if short == version and release.get('prerelease') is not True:
+            raise ValueError(f'{tag} is a GA release; cannot automatically abandon a published candidate')
+
+
+def superseded_candidate(refs, data, sha, checks):
+    if refs.get(BRANCH) != data['sha']:
+        raise ValueError('reserved candidate branch moved; review recovery before continuing')
+    if data['claims']:
+        names = ', '.join(f"{claim['workflow']} run {claim['run']} attempt {claim['attempt']}"
+                          for claim in data['claims'].values())
+        raise ValueError(f'candidate has admitted deliveries: {names}; finish and reconcile them first')
+    git('fetch', '--quiet', 'origin', data['sha'])
+    old_version, old_build = candidate_version(data['sha'])
+    version, build = candidate_version(sha)
+    if version != old_version or build <= old_build:
+        raise ValueError(f"candidate {data['sha']} is reserved ({old_version} build {old_build}); "
+                         'automatic retirement requires the same marketing version and a higher build')
+    unpublished(old_version, checks)
+    return data['sha']
+
+
 def reserve(sha, dry_run, checks):
     refs, data = snapshot()
+    report(f"Reservation for {sha}: " + (f"{data['sha']} is {data['state']}" if data else 'no held candidate'))
+    superseded = None
     if data and data['state'] == 'closing':
         raise ValueError('candidate is closing; drain admitted deliveries and finish retirement first')
     if data and data['state'] == 'reserved':
-        if data['sha'] != sha:
-            raise ValueError(f"candidate {data['sha']} is reserved; explicitly release or abandon it first")
-        if refs.get(BRANCH) != sha:
-            raise ValueError('reserved candidate branch moved; review recovery before continuing')
-        return False
-    if data and data['sha'] == sha:
+        if data['sha'] == sha:
+            if refs.get(BRANCH) != sha:
+                raise ValueError('reserved candidate branch moved; review recovery before continuing')
+            return False
+        superseded = superseded_candidate(refs, data, sha, checks)
+    elif data and data['sha'] == sha:
         raise ValueError('this candidate was released or abandoned; use a new source commit')
     quiescent(checks)
     if dry_run:
+        if superseded:
+            print(f'Would abandon candidate {superseded}, superseded by {sha}, in the atomic reservation')
         print(f'Would atomically reserve {sha} for Mac and iOS and move release-candidate')
+    elif superseded:
+        write(refs, sha, 'reserved', superseded=superseded)
+        print(f'Abandoned candidate {superseded}, superseded by {sha}, in the atomic reservation')
     else:
         write(refs, sha, 'reserved')
     return True
@@ -208,14 +278,20 @@ def finish(sha, state, checks):
 
 def wait(sha, object_api, budget):
     deadline = time.monotonic() + 20 * 60
-    with budget(deadline):
+    run = os.environ.get('GITHUB_RUN_ID', '')
+    links = 'https://github.com/Se7enbrc/glimmer/actions/workflows/candidate-delivery.yml'
+    if run:
+        links += f'; delivery https://github.com/Se7enbrc/glimmer/actions/runs/{run}'
+    with progress(f'delivery admission for {sha}: {links}', 20 * 60), budget(deadline):
         while time.monotonic() < deadline:
             try:
                 require(sha, object_api, delivery=True)
+                if time.monotonic() >= deadline:
+                    raise ValueError('delivery admission timed out; inspect the trusted controller')
                 return
             except AdmissionPending:
                 time.sleep(min(10, max(0, deadline - time.monotonic())))
-    raise ValueError('delivery admission timed out; inspect the trusted controller')
+        raise ValueError('delivery admission timed out; inspect the trusted controller')
 
 
 def main():
@@ -233,7 +309,7 @@ def main():
             finish(args.sha, 'released' if args.operation == 'release' else 'abandoned', checks)
     except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
         parser.exit(1, f'ERR: {error}\n')
-    print(f'Candidate {args.sha}: {args.operation} complete.')
+    print(f'Candidate {args.sha}: {args.operation} complete.', flush=True)
 
 
 if __name__ == '__main__':
