@@ -196,6 +196,49 @@ struct ContinuationTests {
         model.receive(fixture.update(.stopped))
     }
 
+    @Test(arguments: [StreamFormat(width: 1668, height: 2388, fps: 60),
+                      StreamFormat(width: 2064, height: 2752, fps: 60)])
+    func portraitResumeKeepsItsFormatWithoutACorrectiveResize(previous: StreamFormat) async throws {
+        let original = testLaunch()
+        let pixels = CGSize(width: previous.width, height: previous.height)
+        let native = try StreamProfile.native120.resolve(windowPixels: pixels, maximumFramesPerSecond: previous.fps)
+        let launch = StreamLaunch(network: original.network, pcID: "pc", pcName: "PC", appID: 1, appName: "Game",
+                                  continuing: true, previousFormat: previous.continuationFormat)
+        let resumed = StreamFormat.continuing(launch, native: native, maximumFPS: 60)
+        #expect(resumed == previous && native == previous)
+        var requests: [StreamFormat] = []
+        let resize = StreamWindowResize(format: resumed, request: { requests.append($0); return .applied },
+                                        applied: { _ in }, sleep: { _ in })
+        resize.submit(native)
+        resize.setAvailable(true)
+        await resize.waitForPendingChange()
+        #expect(requests.isEmpty)
+        resize.stop()
+    }
+
+    @Test func everyFreshCatalogModeCanResumeUnchanged() throws {
+        try #require(!StreamDisplayModes.bundled.isEmpty)
+        let original = testLaunch()
+        for mode in StreamDisplayModes.bundled {
+            let launch = StreamLaunch(network: original.network, pcID: "pc", pcName: "PC", appID: 1, appName: "Game",
+                                      continuing: true, previousFormat: mode.continuationFormat)
+            #expect(StreamFormat.continuing(launch, native: mode, maximumFPS: mode.fps) == mode)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func oversizedContinuationKeepsAspectWithinOrientedBounds(portrait: Bool) {
+        let original = testLaunch()
+        let old = ContinuationFormat(width: portrait ? 2400 : 7680, height: portrait ? 4000 : 4320,
+                                     fps: 120, hdr: true)
+        let launch = StreamLaunch(network: original.network, pcID: "pc", pcName: "PC", appID: 1, appName: "Game",
+                                  continuing: true, previousFormat: old)
+        let result = StreamFormat.continuing(launch, native: StreamFormat(width: 1920, height: 1080, fps: 60),
+                                             maximumFPS: 60)
+        #expect(result.width == (portrait ? 2160 : 3840) && result.height == (portrait ? 3600 : 2160))
+        #expect(result.fps == 60 && !result.changeResolution)
+    }
+
     @Test func continuationKeepsKnownSizeAndUnknownFormatDoesNotRequestResize() {
         let original = testLaunch()
         let previous = ContinuationFormat(width: 1920, height: 1080, fps: 60, hdr: false)

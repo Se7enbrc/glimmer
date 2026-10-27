@@ -125,6 +125,9 @@
 
 ### Bug fixes
 
+- Resuming a portrait iPad stream keeps its previous size without briefly
+  shrinking the picture and resizing it again.
+
 - Opening Controller layouts during a stream keeps the stream and the PC game
   running.
 - Disconnecting from fullscreen finishes even if macOS misses the closing

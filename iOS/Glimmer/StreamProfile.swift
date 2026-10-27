@@ -109,8 +109,10 @@ struct StreamFormat: Hashable, Sendable {
     static func continuing(_ launch: StreamLaunch, native: StreamFormat, maximumFPS: Int) -> StreamFormat {
         guard !launch.useScreenSize else { return native }
         let previous = launch.continuing ? launch.previousFormat : launch.startFormat
-        if let old = previous?.supported(maximumWidth: 3840, maximumHeight: 2160,
-                                                       maximumFPS: maximumFPS, supportsHDR: false) {
+        let portrait = previous.map { $0.height > $0.width } ?? false
+        if let old = previous?.supported(maximumWidth: portrait ? 2160 : 3840,
+                                        maximumHeight: portrait ? 3840 : 2160,
+                                        maximumFPS: maximumFPS, supportsHDR: false) {
             return StreamFormat(width: old.width, height: old.height, fps: old.fps,
                                 changeResolution: old.changeResolution)
         }
