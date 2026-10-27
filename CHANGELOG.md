@@ -10,6 +10,9 @@
 - Play on iPhone and iPad with a hardware keyboard, mouse or trackpad. Opening
   stream controls releases the pointer, and Glimmer's shortcuts stay local.
 
+- Controller layouts and mouse controls now use matching rows and labeled
+  controller diagrams on Mac, iPhone and iPad.
+
 - Controller mouse buttons have changed on Mac: the right stick moves the
   pointer, R2 clicks and R1 right-clicks. Choose Left-handed or remap any mouse
   control in Settings on Mac, iPhone and iPad.

@@ -8,6 +8,42 @@ import Testing
 @testable import Glimmer
 
 struct ControllerDiagramTests {
+    @Test(arguments: ControllerMouseMapping.allCases)
+    func mouseDiagramLabelsEveryBindingAndFollowsRemaps(preset: ControllerMouseMapping) {
+        var bindings = ControllerMouseBindings(preset: preset)
+        let controls = ControllerLayout.standard(buttons: ControllerMappedButton.allCases).bindings.map {
+            ControllerLayoutControl(id: $0.source, name: $0.source.layoutName, symbol: $0.source.layoutSymbol)
+        }
+        let annotations = ControllerDiagramAnnotation.mouse(bindings)
+        #expect(annotations.map(\.action) == ControllerMouseAction.allCases)
+        for family in ControllerDiagramFamily.allCases {
+            for annotation in annotations {
+                #expect(annotation.sources == bindings[annotation.action])
+                #expect(!annotation.points(controls: controls, family: family, rear: false).isEmpty)
+            }
+            let pointer = annotations.first { $0.action == .pointer }
+            #expect(pointer?.points(controls: controls, family: family, rear: false)
+                == [preset == .rightStick ? family.rightStick : family.leftStick])
+        }
+        bindings.assign([], to: .middle)
+        bindings.assign([.button(.up)], to: .primary)
+        let changed = ControllerDiagramAnnotation.mouse(bindings)
+        #expect(!changed.contains { $0.action == .middle })
+        #expect(changed.first { $0.action == .primary }?.sources == [.button(.up)])
+    }
+
+    @Test func mouseDiagramUsesReportedRearPositionsWithoutInventingUnknownOnes() throws {
+        var bindings = ControllerMouseBindings()
+        bindings.assign([.extra("rear")], to: .middle)
+        let annotation = try #require(ControllerDiagramAnnotation.mouse(bindings).first { $0.action == .middle })
+        let known = ControllerLayoutControl(id: .extra("rear"), name: "Rear button", symbol: "",
+                                             position: .backLeftPrimary)
+        #expect(annotation.points(controls: [known], family: .dualSenseEdge, rear: false).isEmpty)
+        #expect(annotation.points(controls: [known], family: .dualSenseEdge, rear: true).count == 1)
+        let unknown = ControllerLayoutControl(id: .extra("rear"), name: "Rear button", symbol: "")
+        #expect(annotation.points(controls: [unknown], family: .generic, rear: true).isEmpty)
+    }
+
     @Test func shouldersAndTriggersShareAnOverlappingAssembly() throws {
         for family in ControllerDiagramFamily.allCases {
             for rear in [false, true] {
@@ -42,17 +78,13 @@ struct ControllerDiagramTests {
                                 #expect(core.intersects(bounds) == false, "Shoulder target covers \(family) \(button)")
                             }
                         }
-                        // The union target ships only in the iOS 26 menu; macOS 15's path union drops coincident edges.
-                        var target: CGPath?
-                        if #available(macOS 26, *) {
-                            target = ControllerShoulderTarget(family: family, controls: controls, rear: rear, left: left,
+                        let target = ControllerShoulderTarget(family: family, controls: controls, rear: rear, left: left,
                                                               scale: scale).path(in: frame).cgPath
-                        }
                         for row in 0..<8 {
                             for column in 0..<8 {
                                 let point = CGPoint(x: core.minX + (CGFloat(column) + 0.5) * core.width / 8,
                                                     y: core.minY + (CGFloat(row) + 0.5) * core.height / 8)
-                                if let target { #expect(target.contains(point)) }
+                                #expect(target.contains(point))
                             }
                         }
                         for control in controls {
@@ -63,7 +95,7 @@ struct ControllerDiagramTests {
                             let part = ControllerButtonShape(family: family, placement: placement, source: control.id)
                                 .path(in: placement.bounds.applying(.init(scaleX: scale, y: scale))).cgPath
                             #expect(part.contains(point), "Label outside \(family) \(control.id), rear \(rear)")
-                            if let target { #expect(target.contains(point)) }
+                            #expect(target.contains(point))
                         }
                     }
                 }

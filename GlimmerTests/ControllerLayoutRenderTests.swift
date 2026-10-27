@@ -8,8 +8,10 @@ import Testing
 #if os(macOS)
 import AppKit
 import ApplicationServices
+typealias NativeControllerRenderView = NSView
 #else
 import UIKit
+typealias NativeControllerRenderView = UIView
 #endif
 
 @MainActor
@@ -237,7 +239,8 @@ struct ControllerLayoutRenderTests {
             owner: .type(identity.type), reader: nil, controller: nil, controls: controls, nintendoLabels: false)
     }
 
-    func record<Content: View>(_ content: Content, name: String, dark: Bool) async throws {
+    func record<Content: View>(_ content: Content, name: String, dark: Bool,
+                               prepare: ((NativeControllerRenderView) -> Void)? = nil) async throws {
         #if os(macOS)
         let host = NSHostingController(rootView: content.environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentViewController: host)
@@ -253,6 +256,9 @@ struct ControllerLayoutRenderTests {
         view.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
         try await Task.sleep(for: .milliseconds(250))
+        prepare?(view)
+        view.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
         let frame = try #require(view.superview)
         let bitmap = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
         frame.cacheDisplay(in: frame.bounds, to: bitmap)

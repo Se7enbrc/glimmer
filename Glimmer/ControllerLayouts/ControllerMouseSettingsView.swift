@@ -44,19 +44,21 @@ struct ControllerMouseSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Picker("Preset", selection: Binding(get: { model.mouse.preset }, set: { selectPreset($0) })) {
+                ControllerSettingsPicker(title: "Preset", value: model.mouse.preset.title,
+                    selection: Binding(get: { model.mouse.preset }, set: { selectPreset($0) })) {
                     ForEach(ControllerMouseMapping.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 if model.mouse.isCustom {
                     LabeledContent("Mapping", value: "Custom")
                     Text("Your custom bindings are kept when you choose a preset.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .controllerSettingsFootnote().foregroundStyle(.secondary)
                 }
-                Button("Reset to \(model.mouse.preset.title)…") { resetting = true }
+                ControllerSettingsRow(title: "Reset to \(model.mouse.preset.title)…") { resetting = true }
             }
             if model.devices.count > 1 {
                 Section {
-                    Picker("Controller", selection: Binding(get: { device.id }, set: { deviceID = $0 })) {
+                    ControllerSettingsPicker(title: "Controller", value: device.name,
+                        selection: Binding(get: { device.id }, set: { deviceID = $0 })) {
                         ForEach(model.devices) { Text($0.name).tag($0.id) }
                     }
                 }
@@ -64,20 +66,20 @@ struct ControllerMouseSettingsView: View {
             Section {
                 ControllerMouseDiagram(bindings: effective, device: device)
             }
-            Section("Mouse controls") {
+            Section {
                 ForEach(ControllerMouseAction.allCases) { item in
-                    Button { action = item } label: {
-                        LabeledContent(item.title, value: ControllerMouseHelp.describe(effective[item], device: device))
-                    }
+                    ControllerSettingsRow(title: item.title,
+                        value: ControllerMouseHelp.describe(effective[item], device: device)) { action = item }
+                        .accessibilityHint("Changes this mouse binding.")
                 }
-            }
+            } header: { Text("Mouse controls").foregroundStyle(.secondary) }
             Section {
                 Text("Hold the mouse-mode toggle for a second and release to switch between the game and the mouse.")
                 Text("Bindings use physical controls in every game. A control already in use must be changed first.")
-            }.font(.footnote).foregroundStyle(.secondary)
+            }.controllerSettingsFootnote().foregroundStyle(.secondary)
             if let failure = failure ?? model.loadError { Section { Text(failure).foregroundStyle(.red) } }
         }
-        .formStyle(.grouped)
+        .controllerSettingsForm()
         .disabled(!model.loaded)
         .navigationTitle("Controller mouse")
         #if os(iOS)
@@ -108,17 +110,18 @@ struct ControllerMouseDiagram: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("Show control", selection: $selected) {
+            ControllerSettingsPicker(title: "Show control", value: selected.title, selection: $selected) {
                 ForEach(ControllerMouseAction.allCases) { Text($0.title).tag($0) }
             }
             ControllerLayoutDiagram(family: device.diagramFamily, controls: device.controls,
-                highlighted: bindings[selected]) { control in
+                highlighted: Set(ControllerMouseAction.allCases.flatMap { bindings[$0] }),
+                annotations: ControllerDiagramAnnotation.mouse(bindings), focused: bindings[selected]) { control in
                     if let action = ControllerMouseAction.allCases.first(where: { bindings[$0].contains(control.id) }) {
                         selected = action
                     }
                 }
             Text("\(selected.title): \(ControllerMouseHelp.describe(bindings[selected], device: device))")
-                .font(.footnote).foregroundStyle(.secondary)
+                .controllerSettingsFootnote().foregroundStyle(.secondary)
         }
     }
 }

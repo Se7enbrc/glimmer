@@ -54,11 +54,11 @@ struct ControllerBindingRecorder: View {
                 if let capture { Section { Text(capture.message) } }
                 if let problem { Section { Text(problem).foregroundStyle(.red) } }
                 if let warning = ControllerLayoutShortcuts.warning(for: sources) {
-                    Section { Text(warning).font(.footnote).foregroundStyle(.secondary) }
+                    Section { Text(warning).controllerSettingsFootnote().foregroundStyle(.secondary) }
                 }
                 if let failure { Section { Text(failure).foregroundStyle(.red) } }
             }
-            .formStyle(.grouped)
+            .controllerSettingsForm()
             .navigationTitle("Change \(target.title)")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -91,7 +91,8 @@ struct ControllerBindingRecorder: View {
     }
 
     private var stickPicker: some View {
-        Picker("Stick", selection: $sources) {
+        ControllerSettingsPicker(title: "Stick", value: ControllerMouseHelp.describe(sources, device: device),
+                                 selection: $sources) {
             Text("Not set").tag(Set<ControllerLayoutSource>())
             Text("Left stick").tag(ControllerMouseMapping.stick(right: false))
             Text("Right stick").tag(ControllerMouseMapping.stick(right: true))
@@ -101,9 +102,9 @@ struct ControllerBindingRecorder: View {
     private var buttonChoices: some View {
         Group {
             Text("Select buttons in the diagram or record them on your controller.")
-                .font(.footnote).foregroundStyle(.secondary)
-            Button("Record buttons…") { record() }.disabled(device.captureSource == nil || !device.connected)
-            Button("Clear binding") { capture?.stop(); capture = nil; sources = [] }
+                .controllerSettingsFootnote().foregroundStyle(.secondary)
+            ControllerSettingsRow(title: "Record buttons…") { record() }.disabled(device.captureSource == nil || !device.connected)
+            ControllerSettingsRow(title: "Clear binding") { capture?.stop(); capture = nil; sources = [] }
             ForEach(device.controls.filter { allowed($0.id) }) { control in
                 Toggle(control.name, isOn: Binding(get: { sources.contains(control.id) }, set: { _ in toggle(control.id) }))
             }

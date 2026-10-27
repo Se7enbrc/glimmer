@@ -35,10 +35,10 @@ struct ControllerShortcutRenderTests {
             Form {
                 Section { ControllerLayoutDiagram(family: device.diagramFamily, controls: device.controls) { _ in } }
                 ControllerShortcutSection(model: model, device: device)
-            }.formStyle(.grouped).navigationTitle(device.name)
+            }.controllerSettingsForm().navigationTitle(device.name)
         }, name: "chords-summary-\(style)", dark: dark)
         let capture = ControllerLayoutCapture(input: input, recordingChord: true)
-        try await renderer.record(ControllerShortcutRecorder(model: model, device: device, action: .stats, capture: capture),
+        try await renderer.record(ControllerBindingRecorder(model: model, device: device, target: .shortcut(.stats), capture: capture),
                                   name: "chords-recording-\(style)", dark: dark)
         capture.start(cancel: {})
         let buttons = ControllerLayoutShortcuts.defaultStats.reduce(UInt32.zero) { mask, source in
@@ -50,7 +50,7 @@ struct ControllerShortcutRenderTests {
         deliver?(.init(), 10.5)
         #expect(capture.finished)
         capture.stop()
-        try await renderer.record(ControllerShortcutRecorder(model: model, device: device, action: .stats, capture: capture),
+        try await renderer.record(ControllerBindingRecorder(model: model, device: device, target: .shortcut(.stats), capture: capture),
                                   name: "chords-review-\(style)", dark: dark)
         capture.restart(cancel: {})
         let previous = ControllerMappedButton.options.rawValue
@@ -60,7 +60,7 @@ struct ControllerShortcutRenderTests {
         deliverPrevious?(.init(), 12.5)
         #expect(capture.finished)
         capture.stop()
-        try await renderer.record(ControllerShortcutRecorder(model: model, device: device, action: .stats, capture: capture),
+        try await renderer.record(ControllerBindingRecorder(model: model, device: device, target: .shortcut(.stats), capture: capture),
                                   name: "chords-thumb-warning-\(style)", dark: dark)
         try await renderer.record(StatsBoardView(), name: "chords-stats-\(style)", dark: dark)
     }

@@ -25,7 +25,7 @@ struct ControllerLayoutAssignment: View {
             Form {
                 Section {
                     Label(control.name, systemImage: control.symbol).font(.title2)
-                    Picker("Send to PC", selection: $destination) {
+                    ControllerSettingsPicker(title: "Send to PC", value: destination.layoutName, selection: $destination) {
                         ForEach(ControllerLayoutDestination.choices(for: control.id), id: \.self) { choice in
                             Text(choice.layoutName).tag(choice)
                         }
@@ -34,18 +34,21 @@ struct ControllerLayoutAssignment: View {
                         $0.source != control.id && $0.destination == destination && destination != .disabled
                     }) {
                         Text("\(duplicate.source.layoutName) also sends \(destination.layoutName). Either control will work.")
-                            .font(.footnote).foregroundStyle(.secondary)
+                            .controllerSettingsFootnote().foregroundStyle(.secondary)
                     }
                 }
                 Section {
                     Text("This layout replaces system button and stick remapping for the selected games.")
                     Text("The controller's own saved profiles still apply.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .controllerSettingsFootnote().foregroundStyle(.secondary)
                 }
                 if let failure { Section { Text(failure).foregroundStyle(.red) } }
             }
-            .formStyle(.grouped)
+            .controllerSettingsForm()
             .navigationTitle("Change control")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
                 ToolbarItem(placement: .confirmationAction) {
@@ -115,8 +118,11 @@ struct ControllerLayoutCaptureSheet: View {
                         }
                         if let failure { Section { Text(failure).foregroundStyle(.red) } }
                     }
-                    .formStyle(.grouped)
+                    .controllerSettingsForm()
                     .navigationTitle("Press a control")
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    #endif
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     }

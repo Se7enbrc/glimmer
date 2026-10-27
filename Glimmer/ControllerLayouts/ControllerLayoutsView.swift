@@ -8,9 +8,10 @@ struct ControllerLayoutsView: View {
     var model = ControllerLayoutsModel.shared
     var initialScope: ControllerLayoutScope = .allGames
     @State private var editingID = UUID()
+    @ScaledMetric(relativeTo: .caption) private var statusTextSize = 12.0
 
     var body: some View {
-        List {
+        Form {
             if let error = model.loadError {
                 Section { Text(error).foregroundStyle(.secondary) }
             }
@@ -24,16 +25,19 @@ struct ControllerLayoutsView: View {
                         ControllerLayoutEditor(model: model, device: device, scope: initialScope)
                     } label: {
                         VStack(alignment: .leading, spacing: 3) {
-                            Label(device.name, systemImage: "gamecontroller")
+                            Label { Text(device.name) } icon: {
+                                Image(systemName: "gamecontroller").foregroundStyle(Color.accentColor)
+                            }
                             Text(device.connected ? "Connected" : "Not connected")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.system(size: statusTextSize)).foregroundStyle(.secondary)
                         }
                     }
                 }
             } footer: {
-                Text("Layouts are saved on this device.")
+                Text("Layouts are saved on this device.").controllerSettingsFootnote()
             }
         }
+        .controllerSettingsForm()
         .navigationTitle("Controller layouts")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -74,7 +78,7 @@ struct ControllerLayoutEditor: View {
             scopeSection
             if let failure { Section { Text(failure).foregroundStyle(.red) } }
             Section {
-                Button("Change a button…", systemImage: "hand.point.up.left") { capturing = true }
+                ControllerSettingsRow(title: "Change a button…", symbol: "hand.point.up.left") { capturing = true }
                     .disabled(device.captureSource == nil || !device.connected)
             }
             if !typeSize.isAccessibilitySize, !device.controls.isEmpty {
@@ -85,33 +89,26 @@ struct ControllerLayoutEditor: View {
             }
             Section {
                 ForEach(device.controls) { control in
-                    Button {
-                        selected = control
-                    } label: {
-                        LabeledContent {
-                            Text(destination(control.id).layoutName).foregroundStyle(.secondary)
-                        } label: {
-                            Label(control.name, systemImage: control.symbol)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                    ControllerSettingsRow(title: control.name, value: destination(control.id).layoutName,
+                                          symbol: control.symbol) { selected = control }
                     .accessibilityLabel("\(control.name), sends \(destination(control.id).layoutName)")
                     .accessibilityHint("Changes the layout for \(scopeName).")
                 }
-            } header: { Text("Send to PC") }
+            } header: { Text("Send to PC").foregroundStyle(.secondary) }
             .disabled(!canEdit)
             shortcutsSection
             ControllerMouseSettingsSection(model: model)
             Section {
-                Button("Reset to standard…") { standardReset = true }.disabled(!canEdit)
-                Button(scope == .allGames ? "Use system layout…" : "Use All games…", role: .destructive) { resetting = true }
+                ControllerSettingsRow(title: "Reset to standard…") { standardReset = true }.disabled(!canEdit)
+                ControllerSettingsRow(title: scope == .allGames ? "Use system layout…" : "Use All games…",
+                                      role: .destructive) { resetting = true }
                     .disabled(!model.library.records.contains { $0.key == key })
             } footer: {
                 Text("Game layouts change only what the PC receives. Glimmer's controls stay the same.")
+                    .controllerSettingsFootnote()
             }
         }
-        .formStyle(.grouped)
+        .controllerSettingsForm()
         .navigationTitle(device.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -151,7 +148,7 @@ struct ControllerLayoutEditor: View {
 
     private var scopeSection: some View {
         Section {
-            Picker("Layout for", selection: $scope) {
+            ControllerSettingsPicker(title: "Layout for", value: scopeName, selection: $scope) {
                 Text("All games").tag(ControllerLayoutScope.allGames)
                 ForEach(model.games) { game in Text(game.title).tag(game.id) }
                 if scope != .allGames, !model.games.contains(where: { $0.id == scope }) {
@@ -162,7 +159,7 @@ struct ControllerLayoutEditor: View {
                 (record?.key.scope == scope ? "Custom layout" : "All games layout"))
             if scope != .allGames, record?.key.scope == scope {
                 Label("Changed for this game", systemImage: "app.badge.checkmark")
-                    .font(.footnote)
+                    .controllerSettingsFootnote()
             }
         } footer: {
             VStack(alignment: .leading, spacing: 5) {
@@ -172,7 +169,7 @@ struct ControllerLayoutEditor: View {
                 } else if !device.connected {
                     Text("Connect this controller to capture a button. You can still edit the list.")
                 }
-            }
+            }.controllerSettingsFootnote()
         }
     }
 

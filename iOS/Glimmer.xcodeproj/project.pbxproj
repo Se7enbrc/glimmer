@@ -9,6 +9,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3648795000A1400DBA7C5E51 /* ControllerDiagramAnnotations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4147DFEAEE39499582B6B470 /* ControllerDiagramAnnotations.swift */; };
+		F152D365B71443239D3FAB91 /* ControllerSettingsRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0984E010F34ABA80177F78 /* ControllerSettingsRow.swift */; };
 		BE96F5B75BF44AFDB115C7C5 /* ControllerMouseRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401A7BF4B42246CDB950AC5A /* ControllerMouseRenderTests.swift */; };
 		0730CBD469AA4F238DCF2870 /* StreamInputMouseModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC13F94EED443929E0801C6 /* StreamInputMouseModeTests.swift */; };
 		179D11C0F19244A79F391AD8 /* ControllerMouseParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB3A9A16C04C4CCFA4075316 /* ControllerMouseParityTests.swift */; };
@@ -216,6 +218,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		4147DFEAEE39499582B6B470 /* ControllerDiagramAnnotations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerDiagramAnnotations.swift"; sourceTree = SOURCE_ROOT; };
+		9D0984E010F34ABA80177F78 /* ControllerSettingsRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../Glimmer/ControllerLayouts/ControllerSettingsRow.swift"; sourceTree = SOURCE_ROOT; };
 		401A7BF4B42246CDB950AC5A /* ControllerMouseRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerMouseRenderTests.swift"; sourceTree = SOURCE_ROOT; };
 		0CC13F94EED443929E0801C6 /* StreamInputMouseModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/StreamInputMouseModeTests.swift"; sourceTree = SOURCE_ROOT; };
 		DB3A9A16C04C4CCFA4075316 /* ControllerMouseParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/ControllerMouseParityTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -611,6 +615,8 @@
 				73CC95F8EC63419BB7F0CE6A /* TouchGamepadState.swift */,
 				39635D55176B424A921A367A /* TouchElement.swift */,
 				AB23EA1F483F54E8A8E253B0 /* ControllerLayoutDiagram.swift */,
+				4147DFEAEE39499582B6B470 /* ControllerDiagramAnnotations.swift */,
+				9D0984E010F34ABA80177F78 /* ControllerSettingsRow.swift */,
 				6228325111154BF28193D564 /* ControllerControlArtwork.swift */,
 				6157B25E00E64C8EA422CF21 /* ControllerDpadSurface.swift */,
 				7F37D021E6E54166A96FFD0A /* ControllerShoulderControls.swift */,
@@ -933,6 +939,8 @@
 				F61CCAED0B834DEE848A5BD2 /* TouchGamepadState.swift in Sources */,
 				B31A7ED272F743128976E242 /* TouchElement.swift in Sources */,
 				AC3D71723C87AA05D590B304 /* ControllerLayoutDiagram.swift in Sources */,
+				3648795000A1400DBA7C5E51 /* ControllerDiagramAnnotations.swift in Sources */,
+				F152D365B71443239D3FAB91 /* ControllerSettingsRow.swift in Sources */,
 				04118575E4384832A7C75F77 /* ControllerControlArtwork.swift in Sources */,
 				AFC585F573F4436AAC70BD67 /* ControllerDpadSurface.swift in Sources */,
 				DEA3E708B2B3486488721058 /* ControllerShoulderControls.swift in Sources */,

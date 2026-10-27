@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		78E416D5EA4243A18D2F5B06 /* ControllerDiagramAnnotations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */; };
+		61BD251C254D4F3D837B8C60 /* ControllerSettingsRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A6D083A7C3C423E8F74E77A /* ControllerSettingsRow.swift */; };
 		0F8D68E993AC460C9B7489CE /* ControllerMouseRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376C60990C2F4043828839C4 /* ControllerMouseRenderTests.swift */; };
 		34BA9722E4094FD9A99EA3B4 /* ControllerMouseParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C08B8B621C243F4B15E46AF /* ControllerMouseParityTests.swift */; };
 		60607C6E677F4C51B4F13301 /* ControllerMouseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */; };
@@ -834,6 +836,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerDiagramAnnotations.swift"; sourceTree = SOURCE_ROOT; };
+		8A6D083A7C3C423E8F74E77A /* ControllerSettingsRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerSettingsRow.swift"; sourceTree = SOURCE_ROOT; };
 		376C60990C2F4043828839C4 /* ControllerMouseRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerMouseRenderTests.swift"; sourceTree = SOURCE_ROOT; };
 		0C08B8B621C243F4B15E46AF /* ControllerMouseParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerMouseParityTests.swift"; sourceTree = SOURCE_ROOT; };
 		74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerMouseSettingsView.swift"; sourceTree = SOURCE_ROOT; };
@@ -1700,6 +1704,8 @@
 			children = (
 				DB3E6E14588045D7BC957D35 /* StatsOverlayLayer+Platform.swift */,
 				E92A400B198D99C4E81A5016 /* ControllerLayoutDiagram.swift */,
+				03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */,
+				8A6D083A7C3C423E8F74E77A /* ControllerSettingsRow.swift */,
 				7A5CCFA05CF442C1BDADE0D8 /* ControllerControlArtwork.swift */,
 				B0089F02437244E2B2B52A5F /* ControllerDpadSurface.swift */,
 				AE6EA36684EE48E5B46CE965 /* ControllerShoulderControls.swift */,
@@ -2655,6 +2661,8 @@
 			files = (
 				AC0296E69DA245A6B89DDD62 /* StatsOverlayLayer+Platform.swift in Sources */,
 				51DAB01AF73E7404229D81AF /* ControllerLayoutDiagram.swift in Sources */,
+				78E416D5EA4243A18D2F5B06 /* ControllerDiagramAnnotations.swift in Sources */,
+				61BD251C254D4F3D837B8C60 /* ControllerSettingsRow.swift in Sources */,
 				059E9C4832CB459FB0FB8300 /* ControllerControlArtwork.swift in Sources */,
 				966232EF57614C298EE9BFD6 /* ControllerDpadSurface.swift in Sources */,
 				10668594F8644C5E802B0541 /* ControllerShoulderControls.swift in Sources */,
