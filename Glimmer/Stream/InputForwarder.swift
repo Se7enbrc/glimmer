@@ -295,7 +295,7 @@ public final class InputForwarder {
         set { inputCore.withLock { inputCore.snapshot.mask = newValue }; publishInputSnapshot() }
     }
 
-    var onControllerMouseChanged: (@MainActor (String) -> Void)?
+    var onControllerMouseChanged: (@MainActor (String, Bool) -> Void)?
     var nintendoLayoutProvider: @MainActor () -> Bool = { ControllerButtonLayout.usesLabels() }
     var useNintendoLabels = false { didSet { publishInputSnapshot() } }
     var nintendoLayoutObserver: NSObjectProtocol?

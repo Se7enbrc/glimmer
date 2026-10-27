@@ -42,6 +42,7 @@ final class StreamSessionModel {
     var controllerMouseActive: Bool { !mouseControllers.isEmpty }
     private(set) var controllerConnected = false
     private(set) var controllerModeMessage: String?
+    private(set) var controllerModeSymbol = ControllerMouseMapping.modeSymbol(enabled: false)
     private(set) var dismissWhenStopped = false
     private let backgroundGrace: StreamBackgroundGrace
     private(set) var canStart = true
@@ -362,7 +363,11 @@ final class StreamSessionModel {
 
     private func showControllerMode(_ enabled: Bool) {
         modeNoticeTask?.cancel()
-        controllerModeMessage = ControllerMouseMapping.modeMessage(enabled: enabled)
+        let message = ControllerMouseMapping.modeMessage(enabled: enabled)
+        controllerModeMessage = message
+        controllerModeSymbol = ControllerMouseMapping.modeSymbol(enabled: enabled)
+        // The notice ignores touches, so VoiceOver hears the change rather than finding it.
+        UIAccessibility.post(notification: .announcement, argument: message)
         modeNoticeTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(2)) } catch { return }
             self?.controllerModeMessage = nil

@@ -30,6 +30,8 @@ public final class StreamBannerLayer {
     private let textLayer: CATextLayer
     private let dotLayer: CALayer
     private let anchor: StreamBannerAnchor
+    private let accent: CGColor
+    private var symbol: String?
     /// Distance from the anchored screen edge. Configurable so co-anchored pills
     /// (e.g. network + leave-hint, both bottomCenter) can stack without overlap.
     private let inset: CGFloat
@@ -52,6 +54,7 @@ public final class StreamBannerLayer {
 
     public init(anchor: StreamBannerAnchor, accent: CGColor, inset: CGFloat = 28) {
         self.anchor = anchor
+        self.accent = accent
         self.inset = inset
         let bg = CALayer()
         bg.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 0.55)
@@ -99,6 +102,21 @@ public final class StreamBannerLayer {
         if string == baseText { return }
         baseText = string
         render()
+    }
+
+    /// A leading SF Symbol in place of the accent dot; nil restores the dot.
+    func setSymbol(_ name: String?) {
+        guard name != symbol else { return }
+        symbol = name
+        let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+            .applying(.init(paletteColors: [.white]))
+        let image = name.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }?
+            .withSymbolConfiguration(configuration)
+        dotLayer.contents = image?.layerContents(forContentsScale: layer.contentsScale)
+        dotLayer.contentsGravity = .resizeAspect
+        dotLayer.backgroundColor = image == nil ? accent : nil
+        dotLayer.cornerRadius = image == nil ? 4 : 0
+        if let host = layer.superlayer { layoutInHost(host) }
     }
 
     /// The text the pill shows right now, linger hint included.
@@ -211,8 +229,8 @@ public final class StreamBannerLayer {
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
 
-        let dotW: CGFloat = 8
-        let dotGap: CGFloat = 8
+        let dotW: CGFloat = symbol == nil ? 8 : 17
+        let dotGap: CGFloat = symbol == nil ? 8 : 7
         let padH: CGFloat = 16
         let height: CGFloat = 34
         let font = NSFont.systemFont(ofSize: 13, weight: .medium)

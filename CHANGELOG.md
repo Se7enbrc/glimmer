@@ -19,6 +19,10 @@
   mode. Once a shortcut's buttons are pressed together, Menu's hold action waits
   until every button is released; a lone Menu hold still works.
 
+- Turning controller mouse mode on or off shows the same short notice, with a
+  mouse or controller symbol, on Mac, iPhone and iPad, and VoiceOver announces
+  it.
+
 - Controllers avoid mouse calculations while mouse mode is off.
 
 - Controller mouse bindings now check shortcuts used by every controller,

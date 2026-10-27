@@ -21,7 +21,7 @@ extension InputForwarder {
 
     func controllerMouseModeChanged(slot: UInt8, enabled: Bool) {
         guard isReady, controllerMouseStates[slot]?.isMouse == enabled else { return }
-        onControllerMouseChanged?(controllerMouseMessage(enabled: enabled, slot: slot))
+        onControllerMouseChanged?(controllerMouseMessage(enabled: enabled, slot: slot), enabled)
     }
 
     func controllerMouseMessage(enabled: Bool, slot: UInt8) -> String {
