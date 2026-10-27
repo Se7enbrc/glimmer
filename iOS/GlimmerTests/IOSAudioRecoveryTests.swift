@@ -24,6 +24,28 @@ struct IOSAudioRecoveryTests {
         try fixture.expectPCMConsumption(decoder)
     }
 
+    @Test func packetDuringGraphChangeCannotEstablishStallBaseline() throws {
+        let fixture = try RecoveryFixture()
+        let decoder = fixture.start()
+        defer { decoder.shutdown() }
+        fixture.sessionFixture.post(AVAudioSession.interruptionNotification, to: fixture.session,
+            info: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue])
+        decoder.handleEngineConfigurationChange {
+            RecoveryFixture.submit(decoder)
+            #expect(decoder.receivedAudioPackets == 0)
+        }
+        fixture.check(decoder, at: 1_000_000_000)
+        #expect(decoder.outputHealth.attempt == 0)
+        fixture.feedAndCheck(decoder, at: 2_010_000_000)
+        #expect(decoder.receivedAudioPackets == 1)
+        #expect(decoder.outputHealth.attempt == 0)
+        fixture.feedAndCheck(decoder, at: 3_020_000_000)
+        #expect(decoder.receivedAudioPackets == 2)
+        #expect(decoder.outputHealth.attempt == 1)
+        #expect(fixture.activations == 2)
+        try fixture.expectPCMConsumption(decoder)
+    }
+
     @Test func activationFailureRetriesWithoutReconnect() throws {
         let fixture = try RecoveryFixture()
         fixture.sessionFixture.read { $0.activationFails = true }
@@ -132,12 +154,13 @@ private final class RecoveryFixture {
     let sessionFixture = AudioSessionFixture()
     let units = AudioUnitFixture()
     let session: IOSAudioSession
+    let activationFinished = DispatchSemaphore(value: 0)
 
     let suite = "IOSAudioRecoveryTests.\(UUID().uuidString)"
     let defaults: UserDefaults
 
     init() throws {
-        session = sessionFixture.makeSession()
+        session = sessionFixture.makeSession { [activationFinished] in activationFinished.signal() }
         defaults = try #require(UserDefaults(suiteName: suite))
     }
 
@@ -167,6 +190,15 @@ private final class RecoveryFixture {
     }
 
     func feed(_ decoder: AudioDecoder) {
+        // A queue fence cannot drain work enqueued behind it by a configuration callback.
+        decoder.routeListenerQueue.sync {
+            let expected = decoder.receivedAudioPackets &+ (decoder.isShutdown ? 0 : 1)
+            Self.submit(decoder)
+            #expect(decoder.receivedAudioPackets == expected)
+        }
+    }
+
+    static func submit(_ decoder: AudioDecoder) {
         let hex = "ec7f4bd60777985d8731b747622a18fd2b679a2e9def04904278899d9136b906038d671fa4e046bc58"
             + "abc93cb740be2bcd584efccd910bf0cff90084"
         let chars = Array(hex)
@@ -180,15 +212,25 @@ private final class RecoveryFixture {
     }
 
     func check(_ decoder: AudioDecoder, at now: UInt64) {
-        decoder.stateLock.withLock {
-            decoder.observeRenderClock()
-            decoder.checkOutputHealth(now: now)
+        // Discard startup acknowledgements; each requested recovery must finish its own activation attempt.
+        while activationFinished.wait(timeout: .now()) == .success {}
+        let pending = decoder.routeListenerQueue.sync {
+            decoder.stateLock.withLock {
+                decoder.observeRenderClock()
+                decoder.checkOutputHealth(now: now)
+                return decoder.outputRecoveryPending
+            }
         }
-        decoder.routeListenerQueue.sync {}
+        if pending { #expect(activationFinished.wait(timeout: .now() + 10) == .success) }
+        decoder.routeListenerQueue.sync { #expect(!decoder.outputRecoveryPending) }
     }
 
     func expectPCMConsumption(_ decoder: AudioDecoder) throws {
         for _ in 0..<16 { feed(decoder) }
+        try decoder.routeListenerQueue.sync { try renderPCM(decoder) }
+    }
+
+    private func renderPCM(_ decoder: AudioDecoder) throws {
         let output = try #require(decoder.halOutput)
         #expect(output.queue.pointee.enabled.load(ordering: .acquiring) == true)
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))

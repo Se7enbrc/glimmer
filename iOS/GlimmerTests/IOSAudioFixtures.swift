@@ -25,10 +25,11 @@ final class AudioSessionFixture: @unchecked Sendable {
         try lock.withLock { try body(&state) }
     }
 
-    func makeSession() -> IOSAudioSession {
+    func makeSession(activationFinished: @escaping @Sendable () -> Void = {}) -> IOSAudioSession {
         var calls = IOSAudioSession.Calls()
         calls.configure = { rate in self.read { $0.calls.append("configure:\(Int(rate))") } }
         calls.activate = {
+            defer { activationFinished() }
             let fail = self.read { $0.calls.append("activate"); return $0.activationFails }
             if fail { throw AudioOutput.Failure(status: -50) }
         }
