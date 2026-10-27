@@ -44,11 +44,12 @@ struct TouchLayout: Codable, Equatable {
     static func defaults(in area: CGRect) -> [TouchElement: Placement] {
         let expanded = family(in: area) == .expanded
         let outer = expanded ? 100.0 : 72.0
-        let inner = expanded ? 254.0 : 214.0
+        // Narrow phones pull the d-pad and right stick inward so Options and Menu keep the bottom center.
+        let inner = expanded ? 254.0 : min(214, max(194, area.width / 2 - 124))
         let lower = expanded ? 118.0 : 80.0
         let upper = expanded ? 266.0 : 188.0
         let face = expanded ? 60.0 : 54.0
-        let menuBottom = area.width < (expanded ? 756 : 680) ? area.height - 30 : 30
+        let menuBottom = area.width < (expanded ? 756 : 636) ? area.height - 30 : 30
         return [
             .leftStick: .init(edge: outer, bottom: upper), .rightStick: .init(edge: inner, bottom: lower),
             .dpad: .init(edge: inner, bottom: lower),
