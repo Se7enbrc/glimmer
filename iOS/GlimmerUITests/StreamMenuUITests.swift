@@ -76,7 +76,10 @@ final class StreamMenuUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 5))
     }
 
-    func testLargestTextKeepsResumeAndDisconnectReachable() {
+    func testLargestTextKeepsResumeAndDisconnectReachable() throws {
+        // The largest-text launcher outgrows a 4.7-inch screen before the stream starts; CI uses the 17 Pro.
+        let screen = XCUIApplication(bundleIdentifier: "com.apple.springboard").frame
+        try XCTSkipIf(max(screen.width, screen.height) < 800, "Largest text needs an iPhone 17 Pro-sized screen")
         let app = launchStream(controllerConnected: false, largestText: true)
         defer { app.terminate() }
         let menu = app.buttons["Show controls"].firstMatch
