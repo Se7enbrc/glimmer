@@ -241,7 +241,8 @@ private enum StickCallbackDelivery {
         let aliases: Set<String>
         let localizedName: String? = nil
         let sfSymbolsName: String? = nil
-        init(_ name: String) { aliases = [name] }
+        // Real pads expose each stick press as an alias of the stick element itself.
+        init(_ name: String) { aliases = [name, name + " Button"] }
     }
 
     static func send(input: GCControllerLiveInput, stick: any GCPhysicalInputElement,

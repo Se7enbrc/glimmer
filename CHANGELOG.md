@@ -6,7 +6,8 @@
   and iPad, without waiting for release. Holding Menu on iPhone and iPad opens
   stream controls without interfering with those shortcuts.
 
-- Controller sticks no longer send duplicate input while streaming.
+- Controller sticks no longer send duplicate input while streaming, including on
+  controllers whose stick press shares the stick's element.
 
 - Controllers avoid mouse calculations while mouse mode is off.
 

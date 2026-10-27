@@ -102,11 +102,7 @@ final class ControllerLayoutReader: @unchecked Sendable {
     }
 
     func shortcutElements(_ configuration: ControllerLayoutConfiguration) -> Set<ObjectIdentifier> {
-        Set(Self.shortcutNames(configuration, extras: extras).compactMap { name in
-            if let button = input.buttons[name] { return ObjectIdentifier(button) }
-            if let dpad = input.dpads[name] { return ObjectIdentifier(dpad) }
-            return nil
-        })
+        Set(Self.shortcutNames(configuration, extras: extras).compactMap { input.buttons[$0].map(ObjectIdentifier.init) })
     }
 
     static func shortcutNames(_ configuration: ControllerLayoutConfiguration, extras: [String]) -> Set<String> {
@@ -114,17 +110,15 @@ final class ControllerLayoutReader: @unchecked Sendable {
         let buttons = configuration.stop.buttons | configuration.stats.buttons | mouse.buttons
         let triggers = configuration.stop.triggers | configuration.stats.triggers | mouse.triggers
         let extraMask = configuration.stop.extras | configuration.stats.extras | mouse.extras
-        var names = Set(standardButtons.filter { buttons & $0.1.rawValue != 0 }.map(\.0))
+        // The system profile already delivers sticks, stick presses and the D-pad; a stick press aliases its stick.
+        let delivered = ControllerMappedButton.leftStick.rawValue | ControllerMappedButton.rightStick.rawValue
+        var names = Set(standardButtons.filter { buttons & ~delivered & $0.1.rawValue != 0 }.map(\.0))
         for (index, name) in [GCInputLeftTrigger, GCInputRightTrigger].enumerated() where triggers & (1 << index) != 0 {
             names.insert(name)
         }
         for (index, name) in extras.enumerated() where extraMask[index / 64] & (1 << (index % 64)) != 0 {
             names.insert(name)
         }
-        let directions: UInt32 = ControllerMappedButton.up.rawValue | ControllerMappedButton.down.rawValue
-            | ControllerMappedButton.left.rawValue | ControllerMappedButton.right.rawValue
-        if buttons & directions != 0 { names.insert(GCInputDirectionPad) }
-        // System-profile callbacks already sample physical sticks; custom layouts observe every physical element.
         return names
     }
 
