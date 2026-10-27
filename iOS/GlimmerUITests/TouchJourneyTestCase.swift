@@ -62,6 +62,14 @@ class TouchJourneyTestCase: XCTestCase {
         option.tap()
     }
 
+    func openInputSettings(_ app: XCUIApplication) {
+        app.buttons["Settings"].tap()
+        // Settings slides in after a rotation; tapping before it lands misses the row.
+        let input = app.buttons["Input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+    }
+
     func play(_ app: XCUIApplication) throws {
         let game = app.buttons["launcher-app-1"].firstMatch
         XCTAssertTrue(game.waitForExistence(timeout: 10))

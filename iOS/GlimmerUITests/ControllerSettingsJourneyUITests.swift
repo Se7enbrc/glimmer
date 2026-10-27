@@ -24,8 +24,7 @@ extension ControllerJourneyUITests {
         let app = try launch()
         try controller(connect: true, profile: "ps")
         XCUIDevice.shared.orientation = .portrait
-        app.buttons["Settings"].tap()
-        app.buttons["Input"].tap()
+        openInputSettings(app)
         app.buttons["Controller layouts"].tap()
         let device = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Backbone One")).firstMatch
         XCTAssertTrue(device.waitForExistence(timeout: 5))
@@ -112,8 +111,7 @@ extension ControllerJourneyUITests {
         let app = try launch()
         try controller(connect: true, profile: "nintendo")
         XCUIDevice.shared.orientation = .portrait
-        app.buttons["Settings"].tap()
-        app.buttons["Input"].tap()
+        openInputSettings(app)
         app.buttons["Controller layouts"].tap()
         let device = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Switch Pro Controller")).firstMatch
         XCTAssertTrue(device.waitForExistence(timeout: 5))

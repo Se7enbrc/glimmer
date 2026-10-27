@@ -16,8 +16,7 @@ extension ControllerJourneyUITests {
         let app = try launch()
         try controller(connect: true, profile: "xbox")
         XCUIDevice.shared.orientation = .portrait
-        app.buttons["Settings"].tap()
-        app.buttons["Input"].tap()
+        openInputSettings(app)
         let mouse = button(startingWith: "Controller mouse", in: app)
         reveal(mouse, in: app)
         mouse.tap()

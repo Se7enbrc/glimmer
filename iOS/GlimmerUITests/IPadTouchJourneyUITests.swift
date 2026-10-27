@@ -6,7 +6,7 @@ import XCTest
 @MainActor
 final class IPadTouchJourneyUITests: TouchJourneyTestCase {
     func testSplitWindowDuringPlayKeepsPictureAndTouchExit() throws {
-        XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad, "Run this journey on the iPad destination")
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "Split View needs the iPad destination")
         let app = try launch(windowed: true)
         addTeardownBlock { @MainActor [self] in setWindowMode(windowed: false) }
         let system = XCUIApplication(bundleIdentifier: "com.apple.springboard")
