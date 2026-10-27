@@ -466,6 +466,7 @@ extension HotkeyChord {
     }
 
     func matchKind(event: NSEvent, modifiers mods: NSEvent.ModifierFlags) -> MatchKind? {
+        guard !keyChar.isEmpty else { return nil }
         if (ctrl && !mods.contains(.control)) || (!ctrl && mods.contains(.control)) { return nil }
         if (alt && !mods.contains(.option))    || (!alt && mods.contains(.option)) { return nil }
         if (shift && !mods.contains(.shift))   || (!shift && mods.contains(.shift)) { return nil }

@@ -122,6 +122,9 @@
 
 ### Bug fixes
 
+- Keep saved shortcuts when updating the Stats shortcut. If Control-Z is already
+  in use, Stats keeps Control-I when it is free.
+
 - Fixed missed and delayed controller input on iPhone and iPad.
 
 - Fixed a crash when using a controller during a stream.

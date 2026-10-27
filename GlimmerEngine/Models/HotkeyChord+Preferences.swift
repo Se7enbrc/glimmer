@@ -6,15 +6,26 @@ import Foundation
 extension HotkeyChord {
     /// Move only the old default once; a later explicit choice of Control-I belongs to the player.
     public static func persistedStats(defaults: UserDefaults = .standard) -> Self {
-        guard let data = defaults.data(forKey: "statsHotkey"),
-              let saved = try? JSONDecoder().decode(Self.self, from: data) else { return .defaultStats }
-        guard !defaults.bool(forKey: "statsControlZDefaultApplied") else { return saved }
-        let oldDefault = Self(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
-        let migrated = saved == oldDefault ? .defaultStats : saved
-        if saved == oldDefault, let data = try? JSONEncoder().encode(migrated) {
-            defaults.set(data, forKey: "statsHotkey")
+        let saved = defaults.data(forKey: "statsHotkey").flatMap {
+            try? JSONDecoder().decode(Self.self, from: $0)
         }
-        defaults.set(true, forKey: "statsControlZDefaultApplied")
+        if let saved, defaults.bool(forKey: "statsControlZDefaultApplied") { return saved }
+        let oldDefault = Self(ctrl: true, alt: false, shift: false, cmd: false, keyChar: "i")
+        if let saved, saved != oldDefault {
+            defaults.set(true, forKey: "statsControlZDefaultApplied")
+            return saved
+        }
+        let owners: [(String, Self)] = [("quitHotkey", .defaultQuit),
+                                      ("releasePointerHotkey", .defaultReleasePointer),
+                                      ("miniPlayerHotkey", .defaultMiniPlayer)]
+        let occupied = owners.map { key, fallback in
+            defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(Self.self, from: $0) } ?? fallback
+        }
+        let migrated = [Self.defaultStats, oldDefault].first { candidate in
+            !occupied.contains { $0.serialized == candidate.serialized }
+        } ?? Self(ctrl: false, alt: false, shift: false, cmd: false, keyChar: "")
+        // Keep pristine defaults absent, but persist a collision decision so it never silently moves later.
+        if saved != nil || migrated != .defaultStats { migrated.persistStats(defaults: defaults) }
         return migrated
     }
 

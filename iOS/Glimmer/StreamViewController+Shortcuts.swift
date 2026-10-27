@@ -8,8 +8,9 @@ extension StreamViewController {
 
     override var keyCommands: [UIKeyCommand]? {
         guard model.canStart, !model.phase.isEnded, model.phase != .stopping else { return [] }
-        return StreamShortcuts.Action.allCases.map { action in
+        return StreamShortcuts.Action.allCases.compactMap { action in
             let chord = model.shortcuts.chord(for: action)
+            guard !chord.keyChar.isEmpty else { return nil }
             let command = UIKeyCommand(title: action.title, action: #selector(streamShortcut),
                                        input: chord.keyChar, modifierFlags: chord.modifiers)
             command.wantsPriorityOverSystemBehavior = true
