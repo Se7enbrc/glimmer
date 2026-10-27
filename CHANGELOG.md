@@ -124,6 +124,8 @@
 
 - Opening Controller layouts during a stream keeps the stream and the PC game
   running.
+- Disconnecting from fullscreen finishes even if macOS misses the closing
+  animation's completion.
 
 - Keep saved shortcuts when updating the Stats shortcut. If Control-Z is already
   in use, Stats keeps Control-I when it is free.

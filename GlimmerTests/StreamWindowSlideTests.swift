@@ -4,6 +4,8 @@
 // Interrupted cover motion must return to identity and ignore superseded completions.
 
 import AppKit
+@testable import GlimmerEngine
+import Synchronization
 import QuartzCore
 import Testing
 import SwiftUI
@@ -11,6 +13,57 @@ import SwiftUI
 
 @MainActor
 struct StreamWindowSlideTests {
+    @Test(arguments: [false, true])
+    func lostClosingCompletionSettlesTeardownExactlyOnce(retreating: Bool) async {
+        let stream = StreamWindow()
+        let animations = AnimationDriver()
+        animations.install(on: stream)
+        var deadlines: [@MainActor () -> Void] = []
+        stream.scheduleCoverSettlement = { delay, settle in
+            #expect(delay > 0 && delay < 2)
+            deadlines.append(settle)
+        }
+        defer { stream.resetCoverSlide() }
+        if retreating { stream.slideCover(entering: false) {} }
+        let power = Mutex(0)
+        var services = SessionServices()
+        services.beginActivity = { power.withLock { $0 += 1 } }
+        services.endActivity = { power.withLock { $0 -= 1 } }
+        let defaults = IsolatedDefaults()
+        let pc = FakeSunshine.scripted([:])
+        let session = StreamSession(hostDisposition: .disconnectOnly,
+            audioDecoder: AudioDecoder(defaults: defaults.defaults), services: services,
+            backend: InputRecordingBackend(), makeNetwork: { pc.client($0) }, makeBackend: { InputRecordingBackend() })
+        let presentation = SessionPresentation()
+        var closes = 0
+        presentation.close = {
+            stream.didClose = true
+            stream.slideCover(entering: false, closing: true) {
+                closes += 1
+                stream.completeVisualClose()
+            }
+        }
+        let waiting = SafetyTestGate()
+        presentation.waitForVisualClose = {
+            await waiting.open()
+            await stream.waitForVisualClose()
+        }
+        await session.installCloseFixture(presentation, streaming: true)
+        await session.beginPowerAssertion()
+        let stopping = Task { await session.stop() }
+        await waiting.wait()
+        #expect(power.withLock { $0 } == 1 && !stream.visualCloseFinished)
+        #expect(deadlines.count == 1)
+        if let deadline = deadlines.first { deadline() } else { stream.completeVisualClose() }
+        await stopping.value
+        for await _ in session.events {}
+        #expect(stream.visualCloseFinished && power.withLock { $0 } == 0)
+        #expect(closes == 1)
+        animations.finish()
+        deadlines.first?()
+        #expect(closes == 1 && power.withLock { $0 } == 0)
+    }
+
     @Test func resumeWaitsForOpaqueSettlementEvenWhenAnimationCompletionIsLost() throws {
         let stream = StreamWindow()
         let animations = AnimationDriver()
