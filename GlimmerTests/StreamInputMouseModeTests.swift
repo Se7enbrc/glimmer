@@ -96,10 +96,10 @@ struct StreamInputMouseModeTests {
         rig.input.core.pollControllerMouse()
         if mapping == .rightStick {
             #expect(rig.backend.mouseMoves == [.init(dx: 0, dy: -10)])
-            #expect(rig.backend.pointer == [.hScroll(10)])
+            #expect(rig.backend.pointer.isEmpty)
         } else {
             #expect(rig.backend.mouseMoves == [.init(dx: 10, dy: 0)])
-            #expect(rig.backend.pointer == [.scroll(10)])
+            #expect(rig.backend.pointer.isEmpty)
         }
     }
 

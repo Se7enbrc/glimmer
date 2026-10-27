@@ -35,11 +35,21 @@ struct ControllerMouseMotionTests {
         #expect(distance(hz: 120, axis: -7000) == -distance(hz: 120, axis: 7000))
     }
 
+    @Test func stickScrollSendsWholeWheelNotchesOnly() {
+        var state = ControllerMouseState(isMouse: true)
+        let sent = (0..<120).map { state.sampleMotion((.zero, SIMD2(32767, 32767)), now: Double($0) / 120).scroll }
+            .filter { $0 != .zero }
+        #expect(!sent.isEmpty)
+        #expect(sent.allSatisfy { $0.x % 120 == 0 && $0.y % 120 == 0 && abs(Int($0.x)) <= 120 })
+        state.resetIdleMotion((.zero, .zero))
+        #expect(state.sampleMotion((.zero, SIMD2(0, 20000)), now: 10).scroll == .zero)
+    }
+
     @Test func samplingDropsResidualOnCenteringAndBoundsStalls() {
         var state = ControllerMouseState(isMouse: true)
         let first = state.sampleMotion((SIMD2(16384, 0), SIMD2(0, 32767)), now: 1)
         #expect(first.pointer.x > 0 && first.pointer.y == 0)
-        #expect(first.scroll.x == 0 && first.scroll.y > 0)
+        #expect(first.scroll == .zero)
         state.resetIdleMotion((.zero, .zero))
         #expect(state.sampledAt == nil)
         #expect(state.sampleMotion((SIMD2(32767, 0), .zero), now: 100).pointer.x == 10)

@@ -15,6 +15,7 @@ package struct ControllerMouseState {
     package var pointerMotion = ControllerMouseMotion()
     package var scrollMotion = ControllerMouseMotion()
     package var sampledAt: TimeInterval?
+    private var scrollNotches = ScrollQuantizer()
     private var startDownAt: TimeInterval?
     private var blocked = false
     private var holdComplete = false
@@ -33,7 +34,7 @@ package struct ControllerMouseState {
         let pointerIdle = !isMouse || ControllerMouseMotion.velocity(sticks.pointer) == .zero
         let scrollIdle = !isMouse || ControllerMouseMotion.velocity(sticks.scroll) == .zero
         if pointerIdle { pointerMotion = ControllerMouseMotion() }
-        if scrollIdle { scrollMotion = ControllerMouseMotion() }
+        if scrollIdle { scrollMotion = ControllerMouseMotion(); scrollNotches.reset() }
         if pointerIdle && scrollIdle { sampledAt = nil }
     }
 
@@ -41,7 +42,11 @@ package struct ControllerMouseState {
         -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>) {
         let seconds = sampledAt.map { now - $0 } ?? InputCore.controllerMousePollInterval
         sampledAt = now
-        return (pointerMotion.step(sticks.pointer, seconds: seconds), scrollMotion.step(sticks.scroll, seconds: seconds))
+        let scroll = scrollMotion.step(sticks.scroll, seconds: seconds)
+        // Games count wheel messages, so a stick scrolls in whole notches like a wheel.
+        let notches = SIMD2(Int16(clamping: scrollNotches.consumeHorizontal(Int(scroll.x), precise: true)),
+                            Int16(clamping: scrollNotches.consumeVertical(Int(scroll.y), precise: true)))
+        return (pointerMotion.step(sticks.pointer, seconds: seconds), notches)
     }
 
     // A hold changes modes only on release; another button or a system chord spends the hold.

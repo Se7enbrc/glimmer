@@ -12,6 +12,9 @@
 - The controller mouse pointer moves smoothly at display rate on Mac, iPhone and
   iPad, at the same top speed as before.
 
+- Scrolling with a stick in controller mouse mode sends whole wheel notches, so
+  games no longer switch weapons on every small stick movement.
+
 - Controllers avoid mouse calculations while mouse mode is off.
 
 - Controller mouse bindings now check shortcuts used by every controller,

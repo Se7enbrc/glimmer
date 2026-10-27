@@ -59,7 +59,7 @@ struct ControllerMouseTests {
     }
 
     // rc.20 stepped the pointer every 50 ms; known-good iOS moved it every display tick.
-    @Test func pointerMovesEveryTickAtMoonlightSpeed() {
+    @Test func pointerMovesEveryTickAtMoonlightSpeedAndStickScrollsInWholeNotches() {
         let (forwarder, backend) = rig()
         defer { forwarder.detach() }
         toggle(forwarder)
@@ -71,6 +71,9 @@ struct ControllerMouseTests {
         for tick in 0..<60 { forwarder.inputCore.pollControllerMouse(now: 11 + Double(tick) / 120) }
         #expect(backend.mouseMoves.count == 60)
         #expect(abs(backend.mouseMoves.map { Int($0.dx) }.reduce(0, +) - 620) <= 1)
+        let scrolls = backend.pointer.compactMap { if case .hScroll(let units) = $0 { units } else { nil } }
+        #expect(scrolls.count == 5 && scrolls.allSatisfy { $0 == 120 })
+        #expect(backend.pointer.allSatisfy { if case .hScroll = $0 { true } else { false } })
     }
 
     @Test func togglesOnlyOnReleaseAfterMoonlightsThreshold() {
@@ -277,7 +280,7 @@ struct ControllerMouseTests {
         forwarder.inputCore.pollControllerMouse(now: 1)
         forwarder.inputCore.pollControllerMouse(now: 1 + 1.0 / 120)
         #expect(backend.mouseMoves == [.init(dx: -7, dy: -7), .init(dx: -7, dy: -7)])
-        #expect(backend.pointer == [.scroll(7), .hScroll(7), .scroll(7), .hScroll(7)])
+        #expect(backend.pointer.isEmpty)
         forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: neutral, chordHeld: false)
         forwarder.inputCore.pollControllerMouse(now: 1 + 2.0 / 120)
         #expect(backend.mouseMoves.count == 2)

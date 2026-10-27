@@ -89,7 +89,7 @@ struct ControllerMouseParityTests {
             input.core.pollControllerMouse()
         }
         #expect(backend.mouseMoves == [.init(dx: 10, dy: 0)])
-        #expect(backend.pointer == [.button(action: 7, button: 1), .button(action: 7, button: 3), .scroll(10)])
+        #expect(backend.pointer == [.button(action: 7, button: 1), .button(action: 7, button: 3)])
         input.submitController(pad, sample: .init(), capturedAt: ProcessInfo.processInfo.systemUptime)
         #expect(backend.pointer.suffix(2) == [.button(action: 8, button: 1), .button(action: 8, button: 3)])
     }
