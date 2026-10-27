@@ -72,7 +72,7 @@ def expected_sources(root):
     expected["GlimmerTests"].update("../GlimmerTests/" + name for name in
                                   ["ControllerLayoutRenderTests.swift", "ControllerLayoutCaptureTests.swift",
                                    "ControllerLayoutDeliveryTests.swift", "HostAddressRecoveryTests.swift",
-                                   "StreamKeyboardTests.swift",
+                                   "StreamKeyboardTests.swift", "IdentityPublicationTests.swift",
                                    "ControllerDiagramTests.swift", "SettingsResetTests.swift",
                                    "ControllerShortcutRenderTests.swift"])
     expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in

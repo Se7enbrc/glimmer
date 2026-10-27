@@ -126,13 +126,31 @@ package enum FileIdentityStore {
         do { try FileManager.default.removeItem(at: staging) } catch CocoaError.fileNoSuchFile { return }
     }
 
+    /// Unknown files count as established material, even when all expected components are absent.
+    package static func hasStoredFiles(base: URL) throws -> Bool {
+        do {
+            return try !FileManager.default.contentsOfDirectory(atPath: directoryURL(base: base).path).isEmpty
+        } catch CocoaError.fileReadNoSuchFile { return false }
+    }
+
     /// The caller holds the publication lock; the exclusive rename cannot replace an established store.
-    package static func publish(_ identity: IdentityManager.Identity, base: URL) throws {
+    package static func publish(_ identity: IdentityManager.Identity, base: URL,
+                                didStageKey: () throws -> Void = {}) throws {
         let destination = try directoryURL(base: base)
         let staging = destination.deletingLastPathComponent()
             .appendingPathComponent(".identity-staging", isDirectory: true)
+        // rmdir atomically refuses every nonempty directory, including unexpected files.
+        if rmdir(destination.path) != 0 && errno != ENOENT {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        guard mkdir(staging.path, 0o700) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        // Clean only this publication's staging; a crash leftover is handled by the next locked load.
+        defer { try? FileManager.default.removeItem(at: staging) }
         try write(Data(identity.certPEM.utf8), to: staging.appendingPathComponent(certFileName))
         try write(Data(identity.keyPEM.utf8), to: staging.appendingPathComponent(keyFileName))
+        try didStageKey()
         try write(Data(identity.uniqueID.utf8), to: staging.appendingPathComponent(uidFileName))
         let cert = try String(contentsOf: staging.appendingPathComponent(certFileName), encoding: .utf8)
         let key = try String(contentsOf: staging.appendingPathComponent(keyFileName), encoding: .utf8)

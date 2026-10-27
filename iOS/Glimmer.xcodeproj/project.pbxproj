@@ -9,6 +9,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A78336325844472590753B7B /* IdentityPublicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94EB009CD4AF4783819C44D5 /* IdentityPublicationTests.swift */; };
 		2BF877D495524893934065B9 /* IOSCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160644308A9E43FCA623B084 /* IOSCommandTests.swift */; };
 		87087747D4634603B3D50A5D /* LauncherModel+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = C963F274D6E74EA08022C248 /* LauncherModel+Commands.swift */; };
 		A6E129727F9D4211BB71C571 /* GlimmerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B057B317A014971AA58DB55 /* GlimmerIntents.swift */; };
@@ -212,6 +213,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		94EB009CD4AF4783819C44D5 /* IdentityPublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/IdentityPublicationTests.swift"; sourceTree = SOURCE_ROOT; };
 		160644308A9E43FCA623B084 /* IOSCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSCommandTests.swift"; sourceTree = "<group>"; };
 		C963F274D6E74EA08022C248 /* LauncherModel+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherModel+Commands.swift"; sourceTree = "<group>"; };
 		3B057B317A014971AA58DB55 /* GlimmerIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "../Glimmer/GlimmerIntents.swift"; sourceTree = SOURCE_ROOT; };
@@ -531,6 +533,7 @@
 				160644308A9E43FCA623B084 /* IOSCommandTests.swift */,
 				D2C5636D760A4B91BE27582A /* IOSHardwareInputTests.swift */,
 				6C283979306F47F4A3C3EBBB /* StreamKeyboardTests.swift */,
+				94EB009CD4AF4783819C44D5 /* IdentityPublicationTests.swift */,
 				F42E3BB6206747FC838CEE8B /* HostAddressRecoveryTests.swift */,
 				DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */,
 				CC4120261025000000000004 /* StreamWindowResizeCoordinatorTests.swift */,
@@ -858,6 +861,7 @@
 				2BF877D495524893934065B9 /* IOSCommandTests.swift in Sources */,
 				8F073063DDF3462385DBE24B /* IOSHardwareInputTests.swift in Sources */,
 				365CE7505E6044CD98112D87 /* StreamKeyboardTests.swift in Sources */,
+				A78336325844472590753B7B /* IdentityPublicationTests.swift in Sources */,
 				5DE272109AB34679845F986A /* HostAddressRecoveryTests.swift in Sources */,
 				CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */,
 				CC4120261025000000000003 /* StreamWindowResizeCoordinatorTests.swift in Sources */,

@@ -112,10 +112,10 @@ extension IdentityManager {
     /// Established bytes are never repaired or replaced, including an orphaned client ID.
     func loadFromFileStore() throws -> Identity? {
         let base = try storageRoot()
+        guard try FileIdentityStore.hasStoredFiles(base: base) else { return nil }
         let certData = try FileIdentityStore.read(account: Self.accountCert, base: base)
         let keyData = try FileIdentityStore.read(account: Self.accountKey, base: base)
         let uidData = try FileIdentityStore.read(account: Self.accountUID, base: base)
-        guard certData != nil || keyData != nil || uidData != nil else { return nil }
         guard let certData, let keyData, let uidData,
               let certPEM = String(data: certData, encoding: .utf8), !certPEM.isEmpty,
               let keyPEM = String(data: keyData, encoding: .utf8), !keyPEM.isEmpty,

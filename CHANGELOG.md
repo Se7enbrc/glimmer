@@ -2,6 +2,10 @@
 
 ## 2026.10.8 - Unreleased
 
+- First pairing can recover from an empty identity folder. Failed attempts now
+  remove their temporary identity files immediately and preserve saved pairing
+  files.
+
 - Keyboard shortcuts on iPhone and iPad follow the active keyboard layout,
   keeping their keys out of the game on non-US keyboards too.
 

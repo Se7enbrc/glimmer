@@ -431,6 +431,19 @@ never changes pairing identity or installs a certificate.
 
 Use the shared file-backed identity and authenticated pinning flow.
 
+| Store state (under the publication lock)                                         | Allowed action                      |
+| -------------------------------------------------------------------------------- | ----------------------------------- |
+| Absent                                                                           | Create                              |
+| Empty directory                                                                  | Remove with `rmdir`, then create    |
+| Staging-only leftover                                                            | Clean reserved staging, then create |
+| Complete valid identity                                                          | Use unchanged                       |
+| Established but incomplete, invalid, unreadable or containing only unknown files | Preserve and error                  |
+
+Only the first three states may create. Publication validates a complete staged
+identity before an exclusive atomic rename and cleans its own staging on
+failure. Crash staging is cleaned on the next locked load, without changing
+established files.
+
 Identity is RSA-2048 with owner-only files. Pairing performs four HTTP rounds
 and HTTPS liveness, using PIN-derived AES-ECB challenges and RSA proofs. Only a
 verified signature and PIN proof permit pinning. First contact never pins. See
