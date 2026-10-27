@@ -4,6 +4,9 @@
 
 ### Features
 
+- iPhone and iPad find a paired PC again when its local address changes, without
+  pairing again.
+
 - Mac performance recordings stay in local files, with session scorecards, frame
   traces and Control-B bookmarks. The network metrics endpoint is removed.
 

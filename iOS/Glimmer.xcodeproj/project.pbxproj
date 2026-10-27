@@ -9,6 +9,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5DE272109AB34679845F986A /* HostAddressRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F42E3BB6206747FC838CEE8B /* HostAddressRecoveryTests.swift */; };
 		33C0D17E262F4D809887601F /* VideoDepacketizerRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 341CAF7988644E99A10BC53D /* VideoDepacketizerRecoveryTests.swift */; };
 		250E25E573A443BE9C3BBD08 /* SurroundToneData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD2E9ABEEA564234A78BE3B8 /* SurroundToneData.swift */; };
 		73CAFAE2E75840F2A20E657D /* OpusDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A107D9A4D66D492CBF3A5CC1 /* OpusDecoderTests.swift */; };
@@ -204,6 +205,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		F42E3BB6206747FC838CEE8B /* HostAddressRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/HostAddressRecoveryTests.swift"; sourceTree = SOURCE_ROOT; };
 		341CAF7988644E99A10BC53D /* VideoDepacketizerRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/VideoDepacketizerRecoveryTests.swift"; sourceTree = SOURCE_ROOT; };
 		BD2E9ABEEA564234A78BE3B8 /* SurroundToneData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/SurroundToneData.swift"; sourceTree = SOURCE_ROOT; };
 		A107D9A4D66D492CBF3A5CC1 /* OpusDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/OpusDecoderTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -512,6 +514,7 @@
 				8555DB5EA75B418E897CCF7A /* FakeSunshine.swift */,
 				874E99130A9D48429E652464 /* BitrateActuatorTests.swift */,
 				DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */,
+				F42E3BB6206747FC838CEE8B /* HostAddressRecoveryTests.swift */,
 				DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */,
 				CC4120261025000000000004 /* StreamWindowResizeCoordinatorTests.swift */,
 				B9C36C65CD684E2EB8BCC2EC /* VideoColorPatternTests.swift */,
@@ -831,6 +834,7 @@
 				6888DE0E431441AEA6A34799 /* FakeSunshine.swift in Sources */,
 				8658F00DB4C641D0AAF1281A /* BitrateActuatorTests.swift in Sources */,
 				00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */,
+				5DE272109AB34679845F986A /* HostAddressRecoveryTests.swift in Sources */,
 				CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */,
 				CC4120261025000000000003 /* StreamWindowResizeCoordinatorTests.swift in Sources */,
 				AE6A23CC6494422DB3DB8C77 /* VideoColorPatternTests.swift in Sources */,

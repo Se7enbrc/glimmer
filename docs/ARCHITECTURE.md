@@ -407,6 +407,14 @@ sendability require documented invariants: serialized callback refs,
 decode-queue state, locked display-layer loads/stores and the locked shared
 format box. See [concurrency rules](CONTRIBUTING.md#concurrency).
 
+## Saved PC addresses
+
+`HostAddressRecovery` owns the bounded IPv4 discovery search for both clients.
+Only private LAN literals are eligible. Candidates must pass the saved TLS pin
+and PC ID; native storage updates the route only when the original address is
+unreachable. Explicit names and remote addresses remain unchanged. Recovery
+never changes pairing identity or installs a certificate.
+
 ## Identity & pairing
 
 Use the shared file-backed identity and authenticated pinning flow.

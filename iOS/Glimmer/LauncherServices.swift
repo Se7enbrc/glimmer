@@ -88,6 +88,43 @@ final class LauncherServices {
     }
 
     func prepare(server: ServerInfo, saved: Bool) async throws -> PreparedPC {
+        try await Self.prepareRecovering(server: server, saved: saved, prepare: prepareOnce, recover: recoverAddress)
+    }
+
+    static func prepareRecovering(server: ServerInfo, saved: Bool,
+                                  prepare: (ServerInfo, Bool) async throws -> PreparedPC,
+                                  recover: (ServerInfo) async throws -> ServerInfo?) async throws -> PreparedPC {
+        do { return try await prepare(server, saved) } catch {
+            try Task.checkCancellation()
+            guard saved, HostAddressRecovery.canHeal(server.address),
+                  let failure = error as? StreamError else { throw error }
+            switch failure {
+            case .hostUnreachable, .hostTimedOut: break
+            default: throw error
+            }
+            guard let moved = try await recover(server), moved.uniqueId == server.uniqueId,
+                  moved.serverCertPEM != nil else { throw error }
+            try Task.checkCancellation()
+            return try await prepare(moved, true)
+        }
+    }
+
+    private func recoverAddress(_ server: ServerInfo) async throws -> ServerInfo? {
+        guard protectedData.read() else { throw Failure.unavailable }
+        var pinned = server
+        pinned.serverCertPEM = try loadPin(server.uniqueId)
+        let identity = identity
+        let deviceName = deviceName
+        guard let moved = await HostAddressRecovery.find(pinned, makeNetwork: {
+            NetworkClient(server: $0, identity: identity, deviceName: deviceName)
+        }) else { return nil }
+        let status = await HostReachability.measureRTT(host: server.address, port: server.httpPort, timeoutMs: 2_000)
+        try Task.checkCancellation()
+        guard protectedData.read() else { throw Failure.unavailable }
+        return status == .unreachable ? moved : nil
+    }
+
+    private func prepareOnce(server: ServerInfo, saved: Bool) async throws -> PreparedPC {
         guard protectedData.read() else { throw Failure.unavailable }
         var server = server
         if !server.uniqueId.isEmpty { server.serverCertPEM = try loadPin(server.uniqueId) }

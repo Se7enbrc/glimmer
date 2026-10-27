@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		651BC5F366B4467696D49881 /* HostAddressRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21B1572525E486591449527 /* HostAddressRecoveryTests.swift */; };
+		CE6406B783AD4C12A954E343 /* HostAddressRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */; };
 		E02000000000000000000002 /* PersistentStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02000000000000000000001 /* PersistentStorage.swift */; };
 		FC1A1D15E9FD497EB88F904A /* SurroundToneData.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */; };
 		EB34C1CBD1FD44719A09B90D /* OpusDecoder+Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */; };
@@ -824,6 +826,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F21B1572525E486591449527 /* HostAddressRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostAddressRecoveryTests.swift"; sourceTree = "<group>"; };
+		DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/HostAddressRecovery.swift"; sourceTree = SOURCE_ROOT; };
 		E02000000000000000000001 /* PersistentStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/PersistentStorage.swift; sourceTree = "<group>"; };
 		C46F0F03B8FC41F4BABFECB1 /* SurroundToneData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurroundToneData.swift; sourceTree = "<group>"; };
 		4E70920C5EF94CE4BF037E74 /* OpusDecoder+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Audio/OpusDecoder+Stream.swift"; sourceTree = "<group>"; };
@@ -2046,6 +2050,7 @@
 				DEC0DE202609221900000005 /* TelemetryConfigRowTests.swift */,
 				DEC0DE202609221900000009 /* VideoRecoveryEventTests.swift */,
 				DEC0DE202609230200000002 /* HostsStoreTests.swift */,
+				F21B1572525E486591449527 /* HostAddressRecoveryTests.swift */,
 				DEC0DE202609221000000002 /* EnetControlChannelTests.swift */,
 				F00400000000000000000002 /* EnetSocketReadinessTests.swift */,
 				6A0C06102026101000000008 /* VideoRtpReceiverDelegateTests.swift */,
@@ -2368,6 +2373,7 @@
 				D100005B /* Identity+Crypto.swift */,
 				AB00000005 /* Identity.swift */,
 				AB00000011 /* Discovery.swift */,
+				DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */,
 				48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */,
 				F5C645FD3D094A728226497C /* HostRecord.swift */,
 				18473C03B5D940B9BC3CA2AA /* StreamRequest.swift */,
@@ -2977,6 +2983,7 @@
 				DEC0DE202609221900000006 /* TelemetryConfigRowTests.swift in Sources */,
 				DEC0DE202609221900000010 /* VideoRecoveryEventTests.swift in Sources */,
 				DEC0DE202609230200000001 /* HostsStoreTests.swift in Sources */,
+				651BC5F366B4467696D49881 /* HostAddressRecoveryTests.swift in Sources */,
 				DEC0DE202609221000000001 /* EnetControlChannelTests.swift in Sources */,
 				F00400000000000000000001 /* EnetSocketReadinessTests.swift in Sources */,
 				6A0C06102026101000000007 /* VideoRtpReceiverDelegateTests.swift in Sources */,
@@ -3298,6 +3305,7 @@
 				D100005C /* Identity+Crypto.swift in Sources */,
 				AB00000006 /* Identity.swift in Sources */,
 				AB00000012 /* Discovery.swift in Sources */,
+				CE6406B783AD4C12A954E343 /* HostAddressRecovery.swift in Sources */,
 				C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */,
 				7502C8910A0C4B688E5F7444 /* HostRecord.swift in Sources */,
 				227254F4AB8A45BA94D2F158 /* StreamRequest.swift in Sources */,
