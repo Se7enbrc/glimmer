@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- Releasing a game key on iPhone or iPad no longer leaves it held when you press
+  a shortcut modifier before letting go.
+
 - Glimmer preserves saved pairing identity files after an incomplete restore and
   explains when they need to be restored from a backup.
 

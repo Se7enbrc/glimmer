@@ -58,6 +58,31 @@ struct IOSHardwareInputTests {
         #expect(backend.keyboard.count == 1)
     }
 
+    @Test(arguments: [false, true])
+    func gameplayReleaseKeepsItsOwnerWhenModifiersChange(remapped: Bool) {
+        let backend = InputRecordingBackend()
+        let input = StreamInput(backend: backend, emit: { _ in })
+        defer { input.stop() }
+        input.setFocused(true)
+        input.activate(true)
+        let chord = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false,
+                                keyChar: remapped ? "a" : "z")
+        let capture = IOSHardwareInput(input: input, quit: .defaultQuit, stats: chord)
+        let generation = capture.focus(true)
+        let key: UInt16 = remapped ? 4 : 29
+        let now = ProcessInfo.processInfo.systemUptime
+        capture.key(key, pressed: true, modifiers: 0, at: now, generation: generation)
+        capture.key(224, pressed: true, modifiers: 2, at: now, generation: generation)
+        capture.key(key, pressed: true, modifiers: 2, at: now, generation: generation)
+        capture.key(key, pressed: false, modifiers: 2, at: now, generation: generation)
+        capture.key(224, pressed: false, modifiers: 0, at: now, generation: generation)
+        let game = backend.keyboard.filter { $0.keyCode == Int16(bitPattern: remapped ? 0x8041 : 0x805A) }
+        #expect(game.map(\.action) == [Int8(StreamProtocol.KEY_ACTION_DOWN), Int8(StreamProtocol.KEY_ACTION_UP)])
+        let count = backend.keyboard.count
+        input.releaseKeyboardAndPointer()
+        #expect(backend.keyboard.count == count)
+    }
+
     @Test func callbacksRetiredByControlsOrFocusLossCannotReplay() {
         let backend = InputRecordingBackend()
         let input = StreamInput(backend: backend, emit: { _ in })

@@ -27,6 +27,7 @@ final class IOSHardwareInput: Sendable {
         var active = false
         var generation: UInt64 = 0
         var localKeys: Set<UInt16> = []
+        var gameKeys: Set<UInt16> = []
     }
     private let state = Mutex(State())
     private let input: StreamInput
@@ -45,6 +46,7 @@ final class IOSHardwareInput: Sendable {
             $0.generation &+= 1
             $0.active = active
             $0.localKeys.removeAll(keepingCapacity: true)
+            $0.gameKeys.removeAll(keepingCapacity: true)
             if !active { input.releaseKeyboardAndPointer() }
             return $0.generation
         }
@@ -60,10 +62,11 @@ final class IOSHardwareInput: Sendable {
             let local = (usage == 56 && modifiers == 2)
                 || (usage == quit.usage && modifiers == quit.modifiers)
                 || (usage == stats.usage && modifiers == stats.modifiers)
-            if local {
-                if pressed { $0.localKeys.insert(usage) }
+            if pressed, !$0.gameKeys.contains(usage), local {
+                $0.localKeys.insert(usage)
                 return
             }
+            if pressed { $0.gameKeys.insert(usage) } else { $0.gameKeys.remove(usage) }
             input.setKey(hidUsage: usage, pressed: pressed, modifiers: modifiers, capturedAt: time)
         }
     }
