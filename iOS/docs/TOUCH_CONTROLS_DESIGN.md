@@ -169,13 +169,15 @@ activation; adjustable actions provide partial values and an explicit release.
 This analog interaction needs usability validation; do not claim racing
 precision from the boards.
 
-Hold Menu alone for the existing one-second interval and release to enter
-controller mouse mode. Preserve the saved left/right mouse-stick mapping and
-existing engine threshold, curve and cadence. Show the existing brief mode
-notice for a touch registration too. Mouse-mode control labels/accessibility
-values identify pointer, scroll and clicks; do not emit simultaneous gamepad
-clicks. Direct center touch mouse remains independently available according to
-the player's existing Touch mouse preference. Add no second mode setting.
+On a hardware controller, hold Menu alone for the existing one-second interval
+and release to open controls. Its menu offers explicit mouse/gamepad switching.
+The touch registration keeps its existing mouse-mode gesture. Preserve the saved
+left/right mouse-stick mapping and existing engine threshold, curve and cadence.
+Show the existing brief mode notice for a touch registration too. Mouse-mode
+control labels/accessibility values identify pointer, scroll and clicks; do not
+emit simultaneous gamepad clicks. Direct center touch mouse remains
+independently available according to the player's existing Touch mouse
+preference. Add no second mode setting.
 
 ## Edit in context, remember only deliberate changes
 

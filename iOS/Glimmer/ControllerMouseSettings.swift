@@ -195,7 +195,8 @@ private struct GlimmerSettingsPage: View {
         } header: {
             Text("Controller")
         } footer: {
-            Text("\(stick.controls) Hold Menu for a second and release to switch modes. "
+            Text("\(stick.controls) Hold Menu for a second and release to open controls, "
+                 + "then choose a mode. "
                  + "Changes apply to the next stream.")
         }
     }

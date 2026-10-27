@@ -72,6 +72,8 @@ package final class InputCore: @unchecked Sendable {
     package let mouseQueue = DispatchQueue(label: "io.ugfugl.Glimmer.controllerMouse", qos: .userInteractive)
     package var mouseTimings: [UInt8: [InputEventTiming]] = [:]
     package var onMotionInputEnabled: (@Sendable (UInt8, Bool) -> Void)?
+    package var controllerMenuOpensControls = false
+    package var onControllerMenu: (@Sendable (UInt8) -> Void)?
     package var onMouseMode: (@Sendable (UInt8, Bool) -> Void)?
     package var pointerResidual = SIMD2<Double>.zero
     var scrollQuantizer = ScrollQuantizer()

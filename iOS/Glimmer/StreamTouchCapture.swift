@@ -48,6 +48,7 @@ final class StreamTouchCapture: NSObject, UIGestureRecognizerDelegate {
             recognizer.isEnabled = false
             view.addGestureRecognizer(recognizer)
         }
+        menuTap.allowedTouchTypes.append(NSNumber(value: UITouch.TouchType.indirectPointer.rawValue))
         // A multi-finger or moving gesture must resolve before a click reaches the PC.
         primaryTap.require(toFail: secondaryTap)
         primaryTap.require(toFail: revealTap)

@@ -36,6 +36,7 @@ public final class StreamInput: @unchecked Sendable {
     public enum Event: Sendable, Equatable {
         case controllersActive(Bool)
         case mouseMode(ControllerRegistration, enabled: Bool)
+        case controlsRequested(ControllerRegistration)
         case stopRequested
         case statsRequested
     }
@@ -58,6 +59,10 @@ public final class StreamInput: @unchecked Sendable {
             self?.emit(action == .stop ? .stopRequested : .statsRequested)
         }
         core.onChord = { [weak self] slot, held, edge in self?.chordChanged(slot: slot, held: held, edge: edge) }
+        core.onControllerMenu = { [weak self] slot in
+            guard let self, let registration = self.registrations[slot] else { return }
+            self.emit(.controlsRequested(registration.identity))
+        }
         core.onMouseMode = { [weak self] slot, enabled in
             guard let self, let registration = self.registrations[slot] else { return }
             self.emit(.mouseMode(registration.identity, enabled: enabled))

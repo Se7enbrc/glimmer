@@ -252,6 +252,15 @@ final class StreamSessionModel {
         }
     }
 
+    private(set) var menuController: ControllerRegistration?
+
+    var menuControllerUsesMouse: Bool { menuController.map { mouseControllers.contains($0) } ?? false }
+
+    func toggleControllerMouseMode() {
+        guard let menuController else { return }
+        streamInput?.setControllerMouseMode(!menuControllerUsesMouse, for: menuController)
+    }
+
     func showControls() {
         controlsRequested = true
         controlsVisible = true
@@ -325,6 +334,9 @@ final class StreamSessionModel {
         switch event {
         case .stopRequested: disconnect()
         case .statsRequested: toggleStats()
+        case .controlsRequested(let controller):
+            menuController = controller
+            showControls()
         // Engine activity includes the touch registration; only native discovery reports physical presence.
         case .controllersActive: break
         case .mouseMode(let controller, let enabled):

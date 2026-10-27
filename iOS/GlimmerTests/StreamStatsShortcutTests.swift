@@ -144,8 +144,9 @@ struct StreamStatsShortcutTests {
         let model = PlaybackFixture().model()
         let controller = StreamViewController(model: model, close: {})
         let commands = try #require(controller.keyCommands)
-        #expect(commands.map(\.input) == [model.shortcuts.quit.keyChar, model.shortcuts.stats.keyChar])
+        #expect(commands.map(\.input)
+            == ["/", model.shortcuts.quit.keyChar, model.shortcuts.stats.keyChar])
         #expect(commands.allSatisfy { $0.wantsPriorityOverSystemBehavior })
-        #expect(commands.map(\.title) == StreamShortcuts.Action.allCases.map(\.title))
+        #expect(commands.map(\.title) == ["Show controls"] + StreamShortcuts.Action.allCases.map(\.title))
     }
 }

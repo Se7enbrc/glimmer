@@ -21,7 +21,8 @@ package struct ControllerMouseState {
     package init(isMouse: Bool = false) { self.isMouse = isMouse }
 
     // Moonlight toggles on release; another button or a stop chord spends the whole hold.
-    package mutating func update(buttons: Int32, analog: GamepadAnalog, chordHeld: Bool, now: TimeInterval) -> Bool {
+    package mutating func update(buttons: Int32, analog: GamepadAnalog, chordHeld: Bool,
+                                 now: TimeInterval, toggleOnHold: Bool = true) -> Bool {
         let start = StreamProtocol.PLAY_FLAG
         let wasDown = self.buttons & start != 0
         let isDown = buttons & start != 0
@@ -32,7 +33,7 @@ package struct ControllerMouseState {
         if !isDown { startDownAt = nil }
         self.buttons = buttons
         self.analog = chordHeld ? InputCore.neutral : analog
-        if toggle { isMouse.toggle() }
+        if toggle && toggleOnHold { isMouse.toggle() }
         return toggle
     }
 }
@@ -63,7 +64,14 @@ extension InputCore {
         var state = controllerMouseStates[slot] ?? ControllerMouseState()
         let previous = state.buttons
         let previousAnalog = state.analog
-        let toggled = state.update(buttons: buttons, analog: analog, chordHeld: chordHeld, now: now)
+        let opensControls = controllerMenuOpensControls && notifyMode
+        let toggled = state.update(buttons: buttons, analog: analog, chordHeld: chordHeld, now: now,
+                                   toggleOnHold: !opensControls)
+        if toggled && opensControls {
+            controllerMouseStates[slot] = state
+            onControllerMenu?(slot)
+            return state.isMouse
+        }
         #if os(iOS)
         if state.isMouse || toggled {
             state.resetIdleMotion(rightPointer: controllerMouseMapping == .rightStick)

@@ -110,6 +110,7 @@ struct StreamPlayback {
                                                   hostDisposition: launch.hostDisposition,
             bandwidthInputs: bandwidth.inputs)
         input.setStopChord(.menuOptionsShoulders)
+        input.setControllerMenuOpensControls(true)
         input.setControllerMouseMapping(launch.mouseStick.mapping)
         nativeInput.start(input: input, scope: .game(pcID: launch.pcID, appID: UInt32(clamping: launch.appID)))
         return StreamPlayback(id: session.id, events: session.events, start: {

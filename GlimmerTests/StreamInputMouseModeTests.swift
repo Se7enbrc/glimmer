@@ -44,6 +44,27 @@ struct StreamInputMouseModeTests {
         submit(input, registration, .init(), capturedAt: start + 0.751)
     }
 
+    @Test func nativeMenuHoldKeepsMouseModeAndExplicitSwitchRejectsStaleControllers() throws {
+        let rig = rig()
+        defer { rig.input.stop() }
+        rig.input.setControllerMenuOpensControls(true)
+        let controller = try #require(rig.input.registerController(descriptor))
+        toggle(rig.input, controller)
+        #expect(rig.events.withLock { $0.contains(.controlsRequested(controller)) })
+        #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[controller.slot]?.isMouse } == false)
+        rig.input.setControllerMouseMode(true, for: controller)
+        #expect(rig.events.withLock { $0.last } == .mouseMode(controller, enabled: true))
+        toggle(rig.input, controller)
+        #expect(rig.events.withLock { $0.last } == .controlsRequested(controller))
+        #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[controller.slot]?.isMouse } == true)
+        rig.input.setControllerMouseMode(false, for: controller)
+        #expect(rig.events.withLock { $0.last } == .mouseMode(controller, enabled: false))
+        rig.input.unregisterController(controller)
+        let replacement = try #require(rig.input.registerController(descriptor))
+        rig.input.setControllerMouseMode(true, for: controller)
+        #expect(rig.input.core.withLock { rig.input.core.controllerMouseStates[replacement.slot]?.isMouse } != true)
+    }
+
     @Test(arguments: [ControllerMouseMapping.leftStick, .rightStick])
     func selectedHandMovesPointerAndOppositeHandScrolls(mapping: ControllerMouseMapping) throws {
         let rig = rig()

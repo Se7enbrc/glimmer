@@ -92,6 +92,8 @@ streams/tests. Other pads and Extra DualSense buttons need Input Monitoring.
 
 ## Use the controller as a mouse
 
+On Mac:
+
 1. Hold Menu, Options or Start alone for over 0.75 seconds.
 2. Release to toggle modes.
 
@@ -105,10 +107,12 @@ On Mac:
 | L1 / R1                          | Back / forward.                                                               |
 | DualSense / DualShock 4 touchpad | One finger moves, two scroll; two-contact click right-clicks, otherwise left. |
 
-On iPhone and iPad, Settings › Input › “Mouse stick” chooses Right or Left for
-the next stream. Right is the default: the right stick moves, R2 clicks, R1
-right-clicks and the left stick scrolls. Left swaps those roles to the left
-stick, L2 and L1, with the right stick scrolling.
+On iPhone and iPad, hold Menu for a second and release to open controls, then
+choose Use mouse mode or Use gamepad mode. Close the menu to return to play.
+Settings › Input › “Mouse stick” chooses Right or Left for the next stream.
+Right is the default: the right stick moves, R2 clicks, R1 right-clicks and the
+left stick scrolls. Left swaps those roles to the left stick, L2 and L1, with
+the right stick scrolling.
 
 ## Play with touch controls on iPhone and iPad
 

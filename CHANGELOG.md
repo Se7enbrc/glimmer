@@ -129,6 +129,10 @@
 
 ### Bug fixes
 
+- Open hidden iPhone and iPad stream controls with a pointer click at the top,
+  Control-/, or a held controller Menu button. Mouse mode remains available in
+  the stream menu.
+
 - Pairing can retry after first-time identity creation is interrupted. Complete,
   valid identities remain unchanged.
 

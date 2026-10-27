@@ -285,6 +285,11 @@ struct StreamControls: View {
                 VStack(alignment: .trailing) { controlActions }
             }
             if model.phase == .streaming, model.controllerConnected {
+                if model.menuController != nil {
+                    Button(model.menuControllerUsesMouse ? "Use gamepad mode" : "Use mouse mode",
+                           systemImage: "computermouse", action: model.toggleControllerMouseMode)
+                        .buttonStyle(.glass)
+                }
                 Button(model.touchControlsRequested ? "Hide touch controls" : "Show touch controls",
                        systemImage: "gamecontroller", action: model.toggleTouchControls)
                     .buttonStyle(.glass)
@@ -345,7 +350,7 @@ struct StreamControls: View {
             if model.controlsVisible {
                 ScrollView {
                     VStack(spacing: 12) {
-                        Text("Hold Menu for a second and release to switch between gamepad and mouse.")
+                        Text("Hold Menu for a second and release to open controls.")
                         Text(model.launch.mouseStick.controls)
                         Text("Change Stop streaming and Stats shortcuts in Controller layouts. "
                              + "Hold a shortcut, then release to use it.")
@@ -353,7 +358,9 @@ struct StreamControls: View {
                             Text("Drag to move the pointer. Tap to click.")
                             Text("Use two fingers to scroll or tap for a secondary click.")
                         }
-                        Text("Tap the top of the picture or swipe down from its top edge to reveal the menu. "
+                        Text("Tap or click the top of the picture, or swipe down from its top edge, "
+                             + "to reveal the menu. "
+                            + "Press Control-/ to open controls. "
                              + "Tap with three fingers to open these controls.")
                             .accessibilityHint("VoiceOver users can choose Show controls on the video.")
                         if model.audioUnavailable { Label("Audio is unavailable", systemImage: "speaker.slash") }

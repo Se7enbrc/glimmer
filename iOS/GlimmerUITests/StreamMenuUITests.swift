@@ -45,6 +45,19 @@ final class StreamMenuUITests: XCTestCase {
         XCTAssertFalse(app.otherElements["Video from the PC"].exists)
     }
 
+    func testKeyboardOpensHiddenControlsAndKeepsStopShortcut() {
+        let app = launchStream(hardwareKeyboard: true)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["Show controls"].firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.otherElements["Video from the PC"].exists)
+        app.typeKey("/", modifierFlags: .control)
+        XCTAssertTrue(app.buttons["Close menu"].waitForExistence(timeout: 5))
+        app.buttons["Close menu"].tap()
+        XCTAssertTrue(app.otherElements["Video from the PC"].exists)
+        app.typeKey("q", modifierFlags: .control)
+        XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 5))
+    }
+
     private func revealMenu(_ app: XCUIApplication) {
         let menu = app.buttons["Show controls"].firstMatch
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0))
@@ -52,12 +65,13 @@ final class StreamMenuUITests: XCTestCase {
         XCTAssertTrue(menu.exists)
     }
 
-    private func launchStream() -> XCUIApplication {
+    private func launchStream(hardwareKeyboard: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "stream"
         app.launch()
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 10))
+        if hardwareKeyboard { app.connectHardwareKeyboard() }
         app.buttons["Desktop"].tap()
         XCTAssertTrue(app.otherElements["Video from the PC"].waitForExistence(timeout: 10))
         return app

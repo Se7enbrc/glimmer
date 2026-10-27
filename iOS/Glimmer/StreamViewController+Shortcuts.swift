@@ -8,7 +8,10 @@ extension StreamViewController {
 
     override var keyCommands: [UIKeyCommand]? {
         guard model.canStart, !model.phase.isEnded, model.phase != .stopping else { return [] }
-        return StreamShortcuts.Action.allCases.map { action in
+        let controls = UIKeyCommand(title: "Show controls", action: #selector(showStreamControls),
+                                    input: "/", modifierFlags: .control)
+        controls.wantsPriorityOverSystemBehavior = true
+        return [controls] + StreamShortcuts.Action.allCases.map { action in
             let chord = model.shortcuts.chord(for: action)
             let command = UIKeyCommand(title: action.title, action: #selector(streamShortcut),
                                        input: chord.keyChar, modifierFlags: chord.modifiers)
@@ -16,6 +19,8 @@ extension StreamViewController {
             return command
         }
     }
+
+    @objc func showStreamControls() { model.showControls() }
 
     @objc private func streamShortcut(_ command: UIKeyCommand) {
         guard let input = command.input else { return }
@@ -25,6 +30,10 @@ extension StreamViewController {
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         let remaining = presses.filter { press in
             guard let key = press.key else { return true }
+            if key.charactersIgnoringModifiers == "/", key.modifierFlags == .control {
+                model.showControls()
+                return false
+            }
             return !model.shortcuts.handle(input: key.charactersIgnoringModifiers, modifiers: key.modifierFlags,
                                            perform: model.performShortcut)
         }
@@ -34,6 +43,7 @@ extension StreamViewController {
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         let remaining = presses.filter { press in
             guard let key = press.key else { return true }
+            if key.charactersIgnoringModifiers == "/", key.modifierFlags == .control { return false }
             return !model.shortcuts.release(input: key.charactersIgnoringModifiers)
         }
         if !remaining.isEmpty { super.pressesEnded(remaining, with: event) }

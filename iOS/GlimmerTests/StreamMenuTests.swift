@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 import Testing
+import GlimmerEngine
 import UIKit
 @testable import Glimmer
 
@@ -62,6 +63,52 @@ struct StreamMenuTests {
         await clock.advance(by: .seconds(10))
         await pending?.value
         #expect(!menu.visible && !menu.hasPendingHide)
+    }
+
+    @Test func keyboardAndControllerCanOpenControlsAfterTheButtonHides() async throws {
+        let clock = MenuClock()
+        let visibility = StreamMenuVisibility(voiceOver: false, sleep: clock.sleep)
+        let fixture = PlaybackFixture()
+        fixture.controllerConnected = true
+        let model = fixture.model(menuVisibility: visibility)
+        let controller = StreamViewController(model: model, close: {})
+        controller.loadViewIfNeeded()
+        model.start(surface: controller.surface)
+        model.receive(fixture.update(.firstFrame))
+        await clock.waitForSleeps(1)
+        await clock.advance(by: .seconds(2))
+        await visibility.waitForPendingHide()
+        #expect(!visibility.visible)
+        let command = try #require(controller.keyCommands?.first { $0.input == "/" })
+        #expect(command.modifierFlags == .control)
+        #expect(command.action == #selector(StreamViewController.showStreamControls))
+        controller.showStreamControls()
+        #expect(model.controlsVisible && model.phase == .streaming && !model.inputFocused)
+        model.resumeInput()
+        await clock.waitForSleeps(2)
+        await clock.advance(by: .seconds(2))
+        await visibility.waitForPendingHide()
+        let connection = StreamConnection(video: ConnectionTestVideoSink()) { _, _ in }
+        let registration = try #require(connection.input.registerController(
+            ControllerDescriptor(kind: .unknown, supportedButtons: [], capabilities: [])))
+        model.receive(fixture.update(.input(.controlsRequested(registration))))
+        #expect(model.controlsVisible && model.menuController == registration && model.phase == .streaming)
+        #expect(!model.inputFocused && !visibility.hasPendingHide)
+        model.stop()
+        await model.waitUntilStopped()
+        await connection.stop()
+    }
+
+    @Test func hardwarePointerCanRevealTheMenuWithoutBecomingGameplayTouch() {
+        let view = UIView(frame: CGRect(x: 0, y: 0, width: 900, height: 400))
+        let capture = StreamTouchCapture(view: view, actions: .init(
+            move: { _, _ in }, scroll: { _, _ in }, click: { _, _ in }, endScroll: {}, revealControls: {}))
+        let pointer = NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
+        #expect(capture.menuTap.allowedTouchTypes.contains(pointer))
+        #expect(capture.acceptsTouch(capture.menuTap, startingIn: view, at: CGPoint(x: 200, y: 22)))
+        #expect(!capture.acceptsTouch(capture.menuTap, startingIn: view, at: CGPoint(x: 200, y: 44)))
+        #expect(!capture.primaryTap.allowedTouchTypes.contains(pointer))
+        #expect(!capture.pointerPan.allowedTouchTypes.contains(pointer))
     }
 
     @Test func topRevealAreaExcludesControlsAndLeavesOtherMouseTouchesAlone() {

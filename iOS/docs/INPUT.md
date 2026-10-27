@@ -43,9 +43,11 @@ arrow-key moves.
 
 ## Controller mouse mode
 
-Hold Menu alone for a second and release to switch between gamepad and mouse. No
-on-screen mode switch is needed. A brief confirmation appears without
-interrupting input, then fades. The stream otherwise stays clear.
+Hold Menu alone for a second and release to open stream controls. Choose Use
+mouse mode or Use gamepad mode, then close the menu to return to play. The
+choice applies to the controller that opened the menu. Control-/ also opens
+controls from a keyboard; touch or click the picture's top strip to reveal the
+menu button.
 
 In Settings → Input, choose **Mouse stick** before starting a stream. Right is
 the default: the right stick moves the pointer, R2 left-clicks, R1 right-clicks,
@@ -53,7 +55,7 @@ and the left stick scrolls. Left uses the left stick, L2 and L1, with the right
 stick scrolling. Triggers click when pressed halfway. D-pad scroll and supported
 controller touchpads keep their shared engine behavior. The stick choice applies
 to the next stream. A newly attached controller starts in gamepad mode; each
-controller toggles its own mode with Menu.
+controller keeps its own mode.
 
 The shared engine owns mapping, motion, clicks and release ordering. Mouse-mode
 clicks do not also reach the PC as gamepad buttons. Mac consumers retain their
