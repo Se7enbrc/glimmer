@@ -9,6 +9,11 @@ final class IPadTouchJourneyUITests: TouchJourneyTestCase {
         XCTAssertEqual(UIDevice.current.userInterfaceIdiom, .pad, "Run this journey on the iPad destination")
         let app = try launch(windowed: true)
         addTeardownBlock { @MainActor [self] in setWindowMode(windowed: false) }
+        // A window that still fills the screen hides its controls; shrink it first, as a player would.
+        let launcher = app.windows.firstMatch
+        let corner = launcher.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.99))
+        let target = launcher.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35))
+        corner.press(forDuration: 0.3, thenDragTo: target)
         let system = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let controls = system.buttons["window-controls:io.ugfugl.Glimmer.iOS"]
         XCTAssertTrue(controls.waitForExistence(timeout: 5))
