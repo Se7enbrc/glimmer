@@ -33,12 +33,7 @@ struct ControllerBindingRecorder: View {
         switch target {
         case .mouse(let action): return model.mouseProblem(sources, action: action, device: device)
         case .shortcut(let action):
-            var value = model.shortcuts(device)
-            value[action] = sources
-            if model.mouse.overrides.values.contains(where: { ControllerMouseBindings.overlaps($0, sources) }) {
-                return "Already used for Controller mouse. Change that binding first."
-            }
-            return value.recordingProblem(for: action, available: Set(device.controls.map(\.id)))
+            return model.shortcutProblem(sources, action: action, device: device)
         }
     }
 

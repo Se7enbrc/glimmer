@@ -2,6 +2,10 @@
 
 ## 2026.10.8 - Unreleased
 
+- Controller mouse bindings now check shortcuts used by every controller,
+  including inherited shortcuts, so entering mouse mode cannot accidentally stop
+  a stream.
+
 - First pairing can recover from an empty identity folder. Failed attempts now
   remove their temporary identity files immediately and preserve saved pairing
   files.

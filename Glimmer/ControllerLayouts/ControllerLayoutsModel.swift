@@ -120,18 +120,28 @@ final class ControllerLayoutsModel {
             ?? ControllerLayoutShortcuts.savedGlobal(in: defaults) ?? .init()
     }
 
+    func shortcutProblem(_ buttons: Set<ControllerLayoutSource>, action: ControllerShortcutAction,
+                         device: ControllerLayoutDevice) -> String? {
+        var value = shortcuts(device)
+        value[action] = buttons
+        if let problem = value.recordingProblem(for: action, available: Set(device.controls.map(\.id))) {
+            return problem
+        }
+        if ControllerMouseAction.allCases.contains(where: { ControllerMouseBindings.overlaps(mouse[$0], buttons) }) {
+            return "Already used for Controller mouse. Change that binding first."
+        }
+        return nil
+    }
+
     func saveShortcut(_ buttons: Set<ControllerLayoutSource>, action: ControllerShortcutAction,
                       device: ControllerLayoutDevice) async throws {
         guard loaded, !saving else { throw ControllerLayoutError.invalidDocument }
+        guard shortcutProblem(buttons, action: action, device: device) == nil else {
+            throw ControllerLayoutError.invalidBindings
+        }
         var value = shortcuts(device)
         value[action] = buttons
         let available = Set(device.controls.map(\.id))
-        guard value.recordingProblem(for: action, available: available) == nil else {
-            throw ControllerLayoutError.invalidBindings
-        }
-        guard !mouse.overrides.values.contains(where: { ControllerMouseBindings.overlaps($0, buttons) }) else {
-            throw ControllerLayoutError.invalidBindings
-        }
         saving = true
         defer { saving = false }
         var next = library
@@ -161,11 +171,8 @@ final class ControllerLayoutsModel {
     func mouseProblem(_ sources: Set<ControllerLayoutSource>, action: ControllerMouseAction,
                       device: ControllerLayoutDevice) -> String? {
         let explicit = library.shortcuts.map(\.shortcuts) + [ControllerLayoutShortcuts.savedGlobal(in: defaults)].compactMap { $0 }
-        if sources == mouse[action], !explicit.contains(where: {
-            ControllerMouseBindings.overlaps(sources, $0.stop) || ControllerMouseBindings.overlaps(sources, $0.stats)
-        }) { return nil }
         return mouse.recordingProblem(sources, for: action, available: Set(device.controls.map(\.id)),
-            shortcuts: library.shortcuts.map(\.shortcuts) + [shortcuts(device)])
+            shortcuts: explicit + [.init(), shortcuts(device)])
     }
 
     func saveMouse(_ sources: Set<ControllerLayoutSource>, action: ControllerMouseAction,

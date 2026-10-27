@@ -173,6 +173,8 @@ struct ControllerLayoutCaptureTests {
             owner: .type(identity.type), reader: nil, controller: nil, controls: source.controls, nintendoLabels: false)
         let stop: Set<ControllerLayoutSource> = [.button(.a), .button(.b), .button(.menu)]
         let stats: Set<ControllerLayoutSource> = [.button(.options), .trigger(.left), .extra("back")]
+        try model.saveMouse([], action: .toggle, device: device)
+        try model.saveMouse([], action: .back, device: device)
         try await model.saveShortcut(stop, action: .stop, device: device)
         try await model.saveShortcut(stats, action: .stats, device: device)
         let bytes = try Data(contentsOf: url)
@@ -202,6 +204,7 @@ struct ControllerLayoutCaptureTests {
         let device = ControllerLayoutRenderTests().fixture(.dualSense)
         let previous: Set<ControllerLayoutSource> = [.button(.options), .button(.leftStick), .button(.rightStick)]
         #expect(model.shortcuts(device).stats == ControllerLayoutShortcuts.defaultStats)
+        try model.saveMouse([], action: .middle, device: device)
         try await model.saveShortcut(previous, action: .stats, device: device)
         let bytes = try Data(contentsOf: url)
         let reloaded = ControllerLayoutsModel(url: url, defaults: defaults)

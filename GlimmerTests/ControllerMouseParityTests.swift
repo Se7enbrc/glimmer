@@ -137,6 +137,7 @@ struct ControllerMouseParityTests {
         }
         #expect(model.shortcuts(device).stats == ControllerLayoutShortcuts.defaultStats)
         try model.resetMouseToPreset()
+        try model.saveMouse([], action: .toggle, device: device)
         try await model.saveShortcut(chord, action: .stats, device: device)
         let bytes = try Data(contentsOf: url)
         #expect(throws: ControllerLayoutError.invalidBindings) {
@@ -148,6 +149,102 @@ struct ControllerMouseParityTests {
         await reloaded.load()
         #expect(reloaded.shortcuts(device).stats == chord)
         #expect(reloaded.mouse.preset == .leftStick)
+    }
+
+    @Test(arguments: ["global", "device", "default"], [-1, 0, 1])
+    func mouseRecordingsRespectEveryControllersShortcuts(origin: String, relation: Int) async throws {
+        let defaults = try defaults()
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { SettingsReset.reset(defaults: defaults); try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("layouts.json")
+        let device = ControllerLayoutRenderTests().fixture(.dualSense)
+        let other = ControllerLayoutRenderTests().fixture(.xbox)
+        let available = Set(device.controls.map(\.id))
+        let chord: Set<ControllerLayoutSource> = origin == "default" ? ControllerLayoutShortcuts.fixedStop
+            : [.button(.up), .button(.options), .button(.menu)]
+        if origin == "global" {
+            defaults.set("custom", forKey: "controllerQuitChord")
+            defaults.set(try JSONEncoder().encode(Set<ControllerButton>([.dpadUp, .create, .options])),
+                         forKey: "customControllerChord")
+        }
+        var library = ControllerLayoutLibrary()
+        try library.saveShortcuts(.init(owner: device.owner,
+            shortcuts: .init(stop: [.button(.down), .button(.left), .button(.right)]), available: available))
+        if origin == "device" {
+            try library.saveShortcuts(.init(owner: other.owner, shortcuts: .init(stop: chord), available: available))
+        }
+        try await ControllerLayoutStore(url: url).save(library)
+        let bytes = try Data(contentsOf: url)
+        var candidate = chord
+        if relation < 0 { candidate.remove(.button(.options)) }
+        if relation > 0 { candidate.insert(.button(.down)) }
+        for action in ControllerMouseAction.allCases where !action.isStick {
+            let original = ControllerMouseBindings(overrides: Dictionary(uniqueKeysWithValues:
+                ControllerMouseAction.allCases.map { ($0, Set<ControllerLayoutSource>()) }))
+            try original.save(to: defaults)
+            let mouseBytes = defaults.data(forKey: "controllerMouseBindings")
+            let model = ControllerLayoutsModel(url: url, defaults: defaults)
+            await model.load()
+            #expect(model.shortcuts(other).stop == chord)
+            #expect(throws: ControllerLayoutError.invalidBindings) {
+                try model.saveMouse(candidate, action: action, device: device)
+            }
+            #expect(model.mouse == original)
+            #expect(defaults.data(forKey: "controllerMouseBindings") == mouseBytes)
+            #expect(try Data(contentsOf: url) == bytes)
+            #expect(model.library.shortcuts == library.shortcuts)
+        }
+    }
+
+    @Test(arguments: [-1, 0, 1])
+    func shortcutRecordingsRespectEveryCustomMouseFunction(relation: Int) async throws {
+        let defaults = try defaults()
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { SettingsReset.reset(defaults: defaults); try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("layouts.json")
+        let device = ControllerLayoutRenderTests().fixture(.dualSense)
+        let chord: Set<ControllerLayoutSource> = [.button(.up), .button(.options), .button(.menu), .button(.down)]
+        var candidate = chord
+        if relation < 0 { candidate.remove(.button(.down)) }
+        if relation > 0 { candidate.insert(.button(.left)) }
+        for action in ControllerMouseAction.allCases where !action.isStick {
+            let original = ControllerMouseBindings(overrides: [action: chord])
+            try original.save(to: defaults)
+            let model = ControllerLayoutsModel(url: url, defaults: defaults)
+            await model.load()
+            for shortcut in ControllerShortcutAction.allCases {
+                await #expect(throws: ControllerLayoutError.invalidBindings) {
+                    try await model.saveShortcut(candidate, action: shortcut, device: device)
+                }
+            }
+            #expect(model.library.shortcuts.isEmpty)
+            #expect(!FileManager.default.fileExists(atPath: url.path))
+            #expect(ControllerMouseBindings.load(from: defaults) == original)
+        }
+    }
+
+    @Test(arguments: ControllerMouseMapping.allCases)
+    func shortcutRecordingsCannotTakePresetMouseControls(preset: ControllerMouseMapping) async throws {
+        let defaults = try defaults()
+        let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { SettingsReset.reset(defaults: defaults); try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("layouts.json")
+        let original = ControllerMouseBindings(preset: preset)
+        try original.save(to: defaults)
+        let model = ControllerLayoutsModel(url: url, defaults: defaults)
+        await model.load()
+        let device = ControllerLayoutRenderTests().fixture(.dualSense)
+        for action in ControllerMouseAction.allCases where !action.isStick {
+            let candidate = original[action].union([.button(.up), .button(.down)])
+            for shortcut in ControllerShortcutAction.allCases {
+                await #expect(throws: ControllerLayoutError.invalidBindings) {
+                    try await model.saveShortcut(candidate, action: shortcut, device: device)
+                }
+            }
+        }
+        #expect(model.library.shortcuts.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+        #expect(ControllerMouseBindings.load(from: defaults) == original)
     }
 
     @Test func remappedExtraClicksReachTheStreamAndChangingLayoutRearmsWithoutLeavingMouseMode() throws {
