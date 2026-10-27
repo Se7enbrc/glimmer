@@ -12,7 +12,10 @@ extension IdentityManager {
         guard protectedDataAvailable() else { throw IdentityStorageError.unavailable }
         guard let defaults else { throw IdentityStorageError.defaultsUnavailable }
         if let cached { return cached }
-        _ = try storageRoot()
+        return try FileIdentityStore.withExclusiveAccess(base: storageRoot()) { try loadUncached(defaults: defaults) }
+    }
+
+    private func loadUncached(defaults: UserDefaults) throws -> Identity {
 
         // Files are authoritative even when preferences were reset or restored separately.
         if let identity = try loadFromFileStore() {
@@ -100,17 +103,17 @@ extension IdentityManager {
 
     // MARK: File store (current backend)
 
-    /// Missing material falls through to the next source. IO failures throw instead of regenerating.
+    /// Recover interrupted first writes, but never treat read failures as missing or invalid material.
     func loadFromFileStore() throws -> Identity? {
         let certData = try FileIdentityStore.read(account: Self.accountCert, base: storageRoot())
         let keyData = try FileIdentityStore.read(account: Self.accountKey, base: storageRoot())
-        guard certData != nil || keyData != nil else { return nil }
         guard let certData, let keyData,
               let certPEM = String(data: certData, encoding: .utf8), !certPEM.isEmpty,
-              let keyPEM = String(data: keyData, encoding: .utf8), !keyPEM.isEmpty else {
-            throw IdentityStorageError.unavailable
+              let keyPEM = String(data: keyData, encoding: .utf8), !keyPEM.isEmpty,
+              (try? PEM.identity(certPEM: certPEM, keyPEM: keyPEM)) != nil else {
+            try FileIdentityStore.discardIncompleteIdentity(base: storageRoot())
+            return nil
         }
-        _ = try PEM.identity(certPEM: certPEM, keyPEM: keyPEM)
         let uid: String
         if let uidData = try FileIdentityStore.read(account: Self.accountUID, base: storageRoot()),
            let stored = String(data: uidData, encoding: .utf8)?

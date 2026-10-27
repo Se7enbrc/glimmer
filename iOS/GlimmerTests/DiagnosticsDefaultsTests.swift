@@ -83,6 +83,21 @@ struct DiagnosticsDefaultsTests {
 }
 
 struct PersistentStorageTests {
+    @Test func interruptedFirstPublicationCanRetry() async throws {
+        let suite = "identity-retry-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        let root = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let first = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
+        let pair = try await first.generateKeyPairAndCert()
+        try FileIdentityStore.write(Data(pair.certPEM.utf8), account: IdentityManager.accountCert, base: root)
+        let retry = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
+        let certificate = try await retry.clientCertPEM()
+        _ = try PEM.identity(certPEM: certificate, keyPEM: await retry.clientKeyPEM())
+        let next = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
+        #expect(try await next.clientCertPEM() == certificate)
+    }
+
     @Test func existingIdentitySurvivesResetPreferences() async throws {
         let suite = "identity-preservation-" + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))

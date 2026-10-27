@@ -30,6 +30,32 @@ struct IdentityPersistenceTests {
         return try #require(attrs[.posixPermissions] as? Int) & 0o777
     }
 
+    @Test(arguments: [false, true])
+    func interruptedFirstPublicationCanRetry(migrating: Bool) async throws {
+        let store = try IsolatedStore("id-interrupted-first")
+        defer { store.remove() }
+        let pair = try await manager(store).generateKeyPairAndCert()
+        // Simulate termination after the first component was published, before caching or setting the flag.
+        try FileIdentityStore.write(Data(pair.certPEM.utf8), account: IdentityManager.accountCert,
+                                    base: store.directory)
+        if migrating {
+            store.defaults.set(pair.certPEM, forKey: IdentityKey.certificate)
+            store.defaults.set(pair.keyPEM, forKey: IdentityKey.privateKey)
+            store.defaults.set("MIGRATED", forKey: IdentityKey.uniqueID)
+        }
+        let retry = manager(store)
+        let certificate = try await retry.clientCertPEM()
+        let key = try await retry.clientKeyPEM()
+        _ = try PEM.identity(certPEM: certificate, keyPEM: key)
+        let uniqueID = try await retry.uniqueID()
+        if migrating {
+            #expect(certificate == pair.certPEM && key == pair.keyPEM && uniqueID == "MIGRATED")
+        }
+        let next = manager(store)
+        #expect(try await next.clientCertPEM() == certificate)
+        #expect(try await next.uniqueID() == uniqueID)
+    }
+
     @Test func filesSurviveMissingMigrationFlagAndConflictingDefaults() async throws {
         let store = try IsolatedStore("id-missing-flag")
         defer { store.remove() }
@@ -121,27 +147,27 @@ struct IdentityPersistenceTests {
         #expect(FileManager.default.fileExists(atPath: identityFile(store, "client-cert.pem").path))
     }
 
-    @Test func aCorruptCertificateFileSurfacesInsteadOfRegenerating() async throws {
+    @Test func aCorruptCertificateFileCanRecover() async throws {
         let store = try IsolatedStore("id-corrupt")
         defer { store.remove() }
         _ = try await manager(store).uniqueID()
         try Data("not a pem".utf8).write(to: identityFile(store, "client-cert.pem"))
-        await #expect(throws: (any Error).self) { try await manager(store).uniqueID() }
-        let kept = try String(contentsOf: identityFile(store, "client-cert.pem"), encoding: .utf8)
-        #expect(kept == "not a pem")
+        let recovered = manager(store)
+        _ = try PEM.identity(certPEM: await recovered.clientCertPEM(), keyPEM: await recovered.clientKeyPEM())
     }
 
     @Test(arguments: ["client-cert.pem", "client-key.pem"])
-    func incompleteIdentityNeverReplacesTheRemainingMaterial(missing: String) async throws {
+    func incompleteIdentityCanRecoverWithoutBlockingPairing(missing: String) async throws {
         let store = try IsolatedStore("id-partial")
         defer { store.remove() }
         _ = try await manager(store).uniqueID()
         let remaining = missing == "client-cert.pem" ? "client-key.pem" : "client-cert.pem"
         let original = try Data(contentsOf: identityFile(store, remaining))
         try FileManager.default.removeItem(at: identityFile(store, missing))
-        await #expect(throws: (any Error).self) { try await manager(store).uniqueID() }
-        #expect(try Data(contentsOf: identityFile(store, remaining)) == original)
-        #expect(FileManager.default.fileExists(atPath: identityFile(store, missing).path) == false)
+        let recovered = manager(store)
+        _ = try PEM.identity(certPEM: await recovered.clientCertPEM(), keyPEM: await recovered.clientKeyPEM())
+        #expect(try Data(contentsOf: identityFile(store, remaining)) != original)
+        #expect(FileManager.default.fileExists(atPath: identityFile(store, missing).path))
     }
 
     @Test func theFileStoreRefusesUnknownAccountsAndDeletesIdempotently() throws {

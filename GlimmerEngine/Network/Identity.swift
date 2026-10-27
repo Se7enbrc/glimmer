@@ -5,6 +5,7 @@
 // File-backed identities avoid keychain prompts; see docs/SECURITY.md for the same-user threat model.
 
 import Foundation
+import Darwin
 import os.log
 import Security
 
@@ -92,6 +93,30 @@ package enum FileIdentityStore {
         }
         // A hard link publishes complete, protected bytes and atomically refuses an existing destination.
         try fm.linkItem(at: temporary, to: url)
+    }
+
+    /// Serialize recovery and publication across managers and processes; a crash releases the lock.
+    package static func withExclusiveAccess<T>(base: URL, _ body: () throws -> T) throws -> T {
+        let parent = try directoryURL(base: base).deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        let descriptor = open(parent.appendingPathComponent(".identity-lock").path,
+                              O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(descriptor) }
+        while flock(descriptor, LOCK_EX) != 0 {
+            guard errno == EINTR else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        }
+        defer { flock(descriptor, LOCK_UN) }
+        return try body()
+    }
+
+    /// Called under the publication lock only after readable bytes fail complete-pair validation.
+    package static func discardIncompleteIdentity(base: URL) throws {
+        for account in [IdentityManager.accountCert, IdentityManager.accountKey, IdentityManager.accountUID] {
+            guard let url = try fileURL(account: account, base: base) else { continue }
+            do { try FileManager.default.removeItem(at: url) } catch CocoaError.fileNoSuchFile { continue }
+        }
     }
 
     /// Idempotent unlink. Used by cleanup / future migrations.

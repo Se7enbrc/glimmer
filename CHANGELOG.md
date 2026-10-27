@@ -129,6 +129,9 @@
 
 ### Bug fixes
 
+- Pairing can retry after first-time identity creation is interrupted. Complete,
+  valid identities remain unchanged.
+
 - Restore compact launcher buttons on Mac, iPhone and iPad. Running games keep
   their badge inside the same-sized button.
 
