@@ -13,7 +13,8 @@ enum UITestLauncher {
             return nil
         }
         let running = environment["GLIMMER_UI_TESTING"] == "running"
-        let streaming = environment["GLIMMER_UI_TESTING"] == "stream"
+        let controller = environment["GLIMMER_UI_TESTING"] == "stream-controller"
+        let streaming = environment["GLIMMER_UI_TESTING"] == "stream" || controller
         if streaming {
             for (key, chord) in [("quitHotkey", HotkeyChord.defaultQuit), ("statsHotkey", .defaultStats)] {
                 PersistentStorage.defaults.set(try? JSONEncoder().encode(chord), forKey: key)
@@ -64,7 +65,8 @@ enum UITestLauncher {
                     await MainActor.run { stats.setVisible(false) }
                     events.continuation.finish()
                 }, screenChanged: {},
-                   format: try launch.profile.resolve(surface: surface), showStats: stats.setVisible)
+                   format: try launch.profile.resolve(surface: surface),
+                   observeControllers: { $0(controller) }, showStats: stats.setVisible)
             })
         })
         return LauncherModel(calls: calls, discoveryEnabled: false)

@@ -81,14 +81,17 @@ private struct TouchControlsButton: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let frame = TouchLayout.menuFrame(in: area)
-            Button("Show controls", systemImage: "ellipsis", action: showControls)
-                .labelStyle(.iconOnly).buttonStyle(TouchMenuStyle(opacity: opacity))
-                .opacity(visible ? 1 : 0).allowsHitTesting(visible).accessibilityHidden(!visible)
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: visible)
-                .position(x: min(frame.midX, geometry.size.width - 22),
-                          y: min(frame.midY, geometry.size.height - 22))
+            if visible {
+                let frame = TouchLayout.menuFrame(in: area)
+                Button("Show controls", systemImage: "ellipsis", action: showControls)
+                    .labelStyle(.iconOnly).buttonStyle(TouchMenuStyle(opacity: opacity))
+                    .position(x: min(frame.midX, geometry.size.width - 22),
+                              y: min(frame.midY, geometry.size.height - 22))
+                    .transition(.opacity)
+            }
         }
+        .allowsHitTesting(visible).accessibilityHidden(!visible)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: visible)
     }
 }
 
