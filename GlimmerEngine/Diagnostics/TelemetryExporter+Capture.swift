@@ -23,14 +23,14 @@ extension TelemetryExporter {
         // 1s cadence with a generous leeway - telemetry is diagnostic, not
         // realtime, and the leeway lets the OS coalesce the wakeup.
         timer.schedule(deadline: .now() + 1.0, repeating: 1.0, leeway: .milliseconds(100))
-        timer.setEventHandler { [weak self] in self?.capture() }
+        timer.setEventHandler { [weak self] in _ = self?.capture() }
         captureTimer = timer
         timer.resume()
     }
 
-    /// Build one snapshot from live sources, retain it for HTTP scrapes, and
-    /// append the NDJSON line. On `workQueue`.
-    package func capture(now: DispatchTime = .now()) {
+    /// Build and append one NDJSON snapshot on `workQueue`.
+    @discardableResult
+    package func capture(now: DispatchTime = .now()) -> (TelemetrySnapshot, TelemetrySnapshot.Extras) {
         recordClockAnchor()
         let stats = source.videoStats()
         let rtt = source.estimatedRtt()
@@ -92,12 +92,8 @@ extension TelemetryExporter {
         // renderers as one value.
         var extras = fillExtras(now: now, pacing: pacing, audioState: audioState)
 
-        // A/V skew is NON-IDEMPOTENT (it latches the pair epoch and reads its own
-        // clock), so derive it EXACTLY ONCE per tick and hand both renderers the
-        // same value - calling it twice (Prometheus + NDJSON) made one wire form
-        // see the anchor's nil and the other the post-anchor value for one tick.
-        // `accumulate:true` keeps the NDJSON percentile accumulator fed (the one
-        // feeder cadence). `lastTrueClockSkew`/`rebaseTotal` read the same derive.
+        // Derive A/V skew once per tick: it latches the epoch and reads its own clock.
+        // The same observation feeds the percentile accumulator and current skew fields.
         let skewStore = AudioVideoSkewStore.shared
         extras.avSkewMs = skewStore.deriveSkewMs(
             bufferFillMs: snap.audio?.bufferFillMs, accumulate: true)
@@ -127,8 +123,8 @@ extension TelemetryExporter {
         // audio and corruption per-second rates permanently unemitted.
         prevCaptureTime = now
 
-        latestSample = (snap, extras)
         appendNDJSON(TelemetryRenderer.ndjson(snap, extras: extras))
+        return (snap, extras)
     }
 
     /// Fill the core video block: the fps triple, the decode-time EMA (the raw

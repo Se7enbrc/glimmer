@@ -151,10 +151,7 @@ package final class TelemetryCounters: @unchecked Sendable {
     /// Per session like `reconnectTotal`; a climb before a reconnect/disconnect marks
     /// the wake-on-different-AP stale-link case.
     package let wakeTotal = Counter()
-    /// ROUTE-CHANGE count (signal: lifecycle): incremented each time the stream's
-    /// egress route/link-class flips (the WiFiTelemetry route-change edge that
-    /// already fires an NDJSON event). Run-global (NOT reset per session) so a
-    /// wake-on-a-different-AP is visible in Prometheus, not just the NDJSON/Loki.
+    /// Count waking onto a different access point as well as recording its event.
     package let routeChangeTotal = Counter()
     /// EXPLICIT REQUEST_IDR sends that started a round-trip measurement
     /// (signal: IDR-RTT). RE-BASELINE NOTE: RFI sends no longer arm round-trips

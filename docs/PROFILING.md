@@ -364,9 +364,8 @@ scorecard.
 3. Start the stream and press Control-B at each rough moment.
 4. Save progress, stop, and inspect `~/Library/Logs/Glimmer/`.
 
-`make enable-telem` and `make disable-telem` change the same preference. Changes
-apply to the next stream. The live controller test and log viewer need no
-hidden-setting gesture.
+Changes apply to the next stream. The live controller test and log viewer need
+no hidden-setting gesture.
 
 | File                                  | Contents                                                            |
 | ------------------------------------- | ------------------------------------------------------------------- |
@@ -385,14 +384,10 @@ final-mixer output. Two consecutive samples log once per episode. Muted/empty
 input, missing samples and route replacement reset it. It cannot detect physical
 mute or acoustic faults after HAL; compare listening and `audio_output_state`.
 
-### Retention and metrics access
+### Retention
 
-Use files for portable evidence; the optional HTTP endpoint exposes the same
-per-second metrics.
-
-Telemetry enables loopback `/metrics` on port 9847. LAN access requires a
-separate opt-in and has no authentication or encryption. No external dashboard
-service is required.
+Telemetry writes local files only. It opens no inbound metrics socket and needs
+no dashboard or log service.
 
 At every launch, files older than 14 days are pruned. At diagnostics-session
 start, traces then per-second files are trimmed oldest-first to 300 MB, the most
@@ -413,9 +408,8 @@ Check status, sample age and interval before reading renderer deltas.
 
 The opt-in sampler runs once a second with one outstanding request. Replacement
 or counter rollback starts a new baseline; two valid samples are needed for
-deltas. Late teardown/replacement replies are ignored. Prometheus uses
-`glimmer_renderer_*`. These counters are not game FPS or physical scanout
-measurements.
+deltas. Late teardown/replacement replies are ignored. These counters are not
+game FPS or physical scanout measurements.
 
 ### Pacing fields
 
@@ -476,8 +470,7 @@ Subtract histogram buckets, counts and sums across each load window; never
 subtract percentiles.
 
 NDJSON carries `audio_timing_bounds_ms`, `_buckets`, `_count`, `_sum_ms` and
-cumulative percentiles. Prometheus uses `glimmer_<family>_ms_bucket`, `_sum`,
-`_count`; calculate quantiles over rates.
+cumulative percentiles. Calculate windowed quantiles from bucket differences.
 
 HAL counts missing PCM directly, excluding startup/stopped graphs. Older
 player-clock polling could miss short gaps, so the counters are not identical
@@ -546,15 +539,13 @@ Maxima and strictly-greater-than counts are exact; percentiles interpolate
 buckets. Each slot retains up to 4096 samples. The scorecard's `input_latency`
 includes startup.
 
-Prometheus exposes `glimmer_input_<source>_<stage>_ms_{bucket,sum,count}`,
-`_max_ms` and `_over_{10,20,50}ms_total`. Use bucket differences or rates for
-windowed quantiles. Compare maxima in separate fixed-duration sessions.
-
-The callback-queue probe is `lat_input_callback_queue_{p50,p95,p99}_ms` or
-`glimmer_input_callback_queue_ms`. Submission/ACK-silence gates require local
-queue progress within 2 ms. ACK silence uses `max(30 ms, 3 × RTT)` and eight
-submissions; ACK-only holds end after 10 ms. Edges bypass gates. A local queue
-stall can mask simultaneous network trouble; check real loss separately.
+Use bucket differences for windowed quantiles. Compare maxima in separate
+fixed-duration sessions. The callback-queue fields are
+`lat_input_callback_queue_{p50,p95,p99}_ms`. Submission/ACK-silence gates
+require local queue progress within 2 ms. ACK silence uses `max(30 ms, 3 × RTT)`
+and eight submissions; ACK-only holds end after 10 ms. Edges bypass gates. A
+local queue stall can mask simultaneous network trouble; check real loss
+separately.
 
 ### Reproduce and compare
 
@@ -781,7 +772,6 @@ the next stream unless noted.
 | ---------------------------- | ---------------- | --------------------------------------------------------------------------- |
 | `bitrateBoostWifi`           | float 1.5        | Highest quality Wi-Fi multiplier; radio gate and cap still apply.           |
 | `hidGamepadClaimAll`         | bool NO          | Claim GameController pads through raw HID too; reconnect/relaunch to apply. |
-| `telemetryListenLAN`         | bool NO          | Bind metrics to every interface, readable by anyone on the LAN.             |
 | `diagFileLogDebug`           | bool NO          | Verbose in-app/session file log; also in the hidden Telemetry pane.         |
 | `pacerTickOffMain`           | bool YES         | NO moves ticks to the main run loop.                                        |
 | `pacerTickRealtime`          | bool YES         | NO removes real-time tick scheduling.                                       |
@@ -840,9 +830,9 @@ Alternate off/on/on/off sessions of the same Release executable after warm-up.
 
 Keep scene, display, settings and HUD fixed. Sample CPU/wakeups externally so
 the measurement works with telemetry off. Compare footprint separately from
-allocation churn. Confirm off sessions have no telemetry file/listener, and
-restore the previous preference. Measure signpost overhead too; do not assume a
-fixed cost or disable production evidence without measurement.
+allocation churn. Confirm off sessions have no telemetry files, and restore the
+previous preference. Measure signpost overhead too; do not assume a fixed cost
+or disable production evidence without measurement.
 
 ## Build configuration
 

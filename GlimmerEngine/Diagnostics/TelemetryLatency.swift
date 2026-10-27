@@ -56,11 +56,7 @@ package final class FrameTimingTracker: @unchecked Sendable {
     // ---- Instance state (only exists when enabled) ----
 
     package let histograms = LatencyHistograms()
-    /// CLIENT-SIDE input latency: the queue→wire age of merged input - how long
-    /// an event waited on the batcher between enqueue and flush. Standalone (not in
-    /// `histograms`) so it stays a Prometheus-only input-family signal without
-    /// threading through the composite-snapshot plumbing. Observed off the present
-    /// path on the batcher queue; the Stage is self-locked, so cross-thread is safe.
+    /// Callback-queue delay stays separate from the five-stage pipeline aggregate.
     package let inputTimingDropped = AtomicCounter()
     package let inputLatency = InputLatency()
     package let inputCallbackLatency = LatencyHistograms.Stage()

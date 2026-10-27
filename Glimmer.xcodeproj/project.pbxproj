@@ -144,11 +144,7 @@
 		ABCD20260609000000000802 /* TelemetryCounters+Gauges.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */; };
 		ABCD20260609000000000902 /* TelemetryCounters+AudioGauges.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */; };
 		ABCD20260609000000001002 /* TelemetryCounters+InputActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */; };
-		ABCD20260609000000001102 /* TelemetryExporter+RenderVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001101 /* TelemetryExporter+RenderVideo.swift */; };
 		DA2026100900000000000013 /* TelemetryExporter+RenderRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000014 /* TelemetryExporter+RenderRenderer.swift */; };
-		ABCD20260609000000001202 /* TelemetryExporter+RenderNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001201 /* TelemetryExporter+RenderNetwork.swift */; };
-		ABCD20260609000000001302 /* TelemetryExporter+RenderAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001301 /* TelemetryExporter+RenderAudio.swift */; };
-		ABCD20260609000000001402 /* TelemetryExporter+RenderSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001401 /* TelemetryExporter+RenderSystem.swift */; };
 		ABCD20260609000000001502 /* TelemetryExporter+CaptureSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001501 /* TelemetryExporter+CaptureSections.swift */; };
 		ABCD20260609000000001602 /* TelemetryExporter+CaptureExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001601 /* TelemetryExporter+CaptureExtras.swift */; };
 		ABCD20260609000000001702 /* ControllerMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD20260609000000001701 /* ControllerMotion.swift */; };
@@ -258,7 +254,6 @@
 		D10000E3 /* VideoDecoder+DecodeTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000E2 /* VideoDecoder+DecodeTelemetry.swift */; };
 		D10000F1 /* TelemetrySessionEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F0 /* TelemetrySessionEvents.swift */; };
 		D10000F3 /* TelemetryLatencySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F2 /* TelemetryLatencySnapshot.swift */; };
-		D10000F5 /* TelemetryExporter+RenderP2.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10000F4 /* TelemetryExporter+RenderP2.swift */; };
 		D1000201 /* ResourceTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1000200 /* ResourceTelemetry.swift */; };
 		DA2026100900000000000011 /* RendererTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026100900000000000012 /* RendererTelemetry.swift */; };
 		DA2026101200000000000021 /* VideoDecoder+Compositing.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA2026101200000000000022 /* VideoDecoder+Compositing.swift */; };
@@ -407,7 +402,6 @@
 		DEC0DE202609221800000004 /* TelemetryRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202609221800000003 /* TelemetryRowTests.swift */; };
 		DEC0DE26101013000000000A /* TelemetrySessionReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000009 /* TelemetrySessionReportTests.swift */; };
 		DEC0DE261010130000000008 /* TelemetrySessionAggregateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000007 /* TelemetrySessionAggregateTests.swift */; };
-		DEC0DE261010130000000006 /* TelemetryPrometheusRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000005 /* TelemetryPrometheusRenderTests.swift */; };
 		DEC0DE261010130000000004 /* TelemetryNDJSONRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000003 /* TelemetryNDJSONRenderTests.swift */; };
 		DEC0DE261010130000000002 /* TelemetryRenderFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE261010130000000001 /* TelemetryRenderFixtures.swift */; };
 		DEC0DE202610105100000002 /* DecodeTimeSplitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */; };
@@ -417,7 +411,6 @@
 		C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000103 /* TelemetryCounterStateTests.swift */; };
 		C4A4000000000000000003F2 /* TelemetryCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */; };
 		C4A40000000000000000E2A4 /* TelemetrySinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A40000000000000000E2A3 /* TelemetrySinkTests.swift */; };
-		C4A40000000000000000E2A2 /* TelemetryListenerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A40000000000000000E2A1 /* TelemetryListenerTests.swift */; };
 		C4A400000000000000000106 /* StatsCollectorWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000105 /* StatsCollectorWindowTests.swift */; };
 		C4A400000000000000000108 /* StatsSnapshotRowsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */; };
 		C4A400000000000000000110 /* StatsSupportTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A400000000000000000109 /* StatsSupportTypesTests.swift */; };
@@ -973,11 +966,7 @@
 		ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryCounters+Gauges.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryCounters+AudioGauges.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000001001 /* TelemetryCounters+InputActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryCounters+InputActivity.swift"; sourceTree = SOURCE_ROOT; };
-		ABCD20260609000000001101 /* TelemetryExporter+RenderVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderVideo.swift"; sourceTree = SOURCE_ROOT; };
 		DA2026100900000000000014 /* TelemetryExporter+RenderRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderRenderer.swift"; sourceTree = SOURCE_ROOT; };
-		ABCD20260609000000001201 /* TelemetryExporter+RenderNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderNetwork.swift"; sourceTree = SOURCE_ROOT; };
-		ABCD20260609000000001301 /* TelemetryExporter+RenderAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderAudio.swift"; sourceTree = SOURCE_ROOT; };
-		ABCD20260609000000001401 /* TelemetryExporter+RenderSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderSystem.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000001501 /* TelemetryExporter+CaptureSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+CaptureSections.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000001601 /* TelemetryExporter+CaptureExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+CaptureExtras.swift"; sourceTree = SOURCE_ROOT; };
 		ABCD20260609000000001701 /* ControllerMotion.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ControllerMotion.swift; path = Stream/ControllerMotion.swift; sourceTree = "<group>"; };
@@ -1103,7 +1092,6 @@
 		D10000E2 /* VideoDecoder+DecodeTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+DecodeTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		D10000F0 /* TelemetrySessionEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetrySessionEvents.swift"; sourceTree = SOURCE_ROOT; };
 		D10000F2 /* TelemetryLatencySnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryLatencySnapshot.swift"; sourceTree = SOURCE_ROOT; };
-		D10000F4 /* TelemetryExporter+RenderP2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/TelemetryExporter+RenderP2.swift"; sourceTree = SOURCE_ROOT; };
 		D1000200 /* ResourceTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/EngineAdapters/ResourceTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		DA2026100900000000000012 /* RendererTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Diagnostics/RendererTelemetry.swift"; sourceTree = SOURCE_ROOT; };
 		DA2026101200000000000022 /* VideoDecoder+Compositing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Video/VideoDecoder+Compositing.swift"; sourceTree = SOURCE_ROOT; };
@@ -1253,7 +1241,6 @@
 		DEC0DE202609221800000003 /* TelemetryRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryRowTests.swift"; sourceTree = "<group>"; };
 		DEC0DE261010130000000009 /* TelemetrySessionReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetrySessionReportTests.swift"; sourceTree = "<group>"; };
 		DEC0DE261010130000000007 /* TelemetrySessionAggregateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetrySessionAggregateTests.swift"; sourceTree = "<group>"; };
-		DEC0DE261010130000000005 /* TelemetryPrometheusRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryPrometheusRenderTests.swift"; sourceTree = "<group>"; };
 		DEC0DE261010130000000003 /* TelemetryNDJSONRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryNDJSONRenderTests.swift"; sourceTree = "<group>"; };
 		DEC0DE261010130000000001 /* TelemetryRenderFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryRenderFixtures.swift"; sourceTree = "<group>"; };
 		DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DecodeTimeSplitTests.swift"; sourceTree = "<group>"; };
@@ -1263,7 +1250,6 @@
 		C4A400000000000000000103 /* TelemetryCounterStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryCounterStateTests.swift"; sourceTree = "<group>"; };
 		C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryCaptureTests.swift"; sourceTree = "<group>"; };
 		C4A40000000000000000E2A3 /* TelemetrySinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetrySinkTests.swift"; sourceTree = "<group>"; };
-		C4A40000000000000000E2A1 /* TelemetryListenerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TelemetryListenerTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000105 /* StatsCollectorWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsCollectorWindowTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsSnapshotRowsTests.swift"; sourceTree = "<group>"; };
 		C4A400000000000000000109 /* StatsSupportTypesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatsSupportTypesTests.swift"; sourceTree = "<group>"; };
@@ -2035,7 +2021,6 @@
 				DEC0DE202609221800000003 /* TelemetryRowTests.swift */,
 				DEC0DE261010130000000009 /* TelemetrySessionReportTests.swift */,
 				DEC0DE261010130000000007 /* TelemetrySessionAggregateTests.swift */,
-				DEC0DE261010130000000005 /* TelemetryPrometheusRenderTests.swift */,
 				DEC0DE261010130000000003 /* TelemetryNDJSONRenderTests.swift */,
 				DEC0DE261010130000000001 /* TelemetryRenderFixtures.swift */,
 				DEC0DE202610105100000001 /* DecodeTimeSplitTests.swift */,
@@ -2050,7 +2035,6 @@
 				C4A400000000000000000103 /* TelemetryCounterStateTests.swift */,
 				C4A4000000000000000003F1 /* TelemetryCaptureTests.swift */,
 				C4A40000000000000000E2A3 /* TelemetrySinkTests.swift */,
-				C4A40000000000000000E2A1 /* TelemetryListenerTests.swift */,
 				C4A400000000000000000105 /* StatsCollectorWindowTests.swift */,
 				C4A400000000000000000107 /* StatsSnapshotRowsTests.swift */,
 				C4A400000000000000000109 /* StatsSupportTypesTests.swift */,
@@ -2436,7 +2420,6 @@
 				D6D80A720000000000000032 /* TelemetrySessionAggregate.swift */,
 				A0D10A110000000000000003 /* TelemetryExporter+AudioPipeline.swift */,
 				D6D80A720000000000000028 /* TelemetryExporter+Sinks.swift */,
-				D10000F4 /* TelemetryExporter+RenderP2.swift */,
 				D10000C0 /* TelemetryCounters.swift */,
 				ABCD20260609000000000801 /* TelemetryCounters+Gauges.swift */,
 				D6D80A720000000000000026 /* TelemetryCounters+Lifecycle.swift */,
@@ -2449,16 +2432,12 @@
 				D1A6202610180000000005F /* DiagnosticEvidence+Analysis.swift */,
 				D1A6202610180000000004F /* DiagnosticEvidence+Files.swift */,
 				D1A6202610180000000003F /* DiagnosticEvidence.swift */,
-				ABCD20260609000000001101 /* TelemetryExporter+RenderVideo.swift */,
-				ABCD20260609000000001301 /* TelemetryExporter+RenderAudio.swift */,
 				D10000F0 /* TelemetrySessionEvents.swift */,
 				D1000086 /* TelemetryLatency.swift */,
 				D1000080 /* TelemetryExporter.swift */,
-				ABCD20260609000000001201 /* TelemetryExporter+RenderNetwork.swift */,
 				4E5DA9A384944F01B901C609 /* TelemetryExporter+RenderInput.swift */,
 				ABCD20260609000000000901 /* TelemetryCounters+AudioGauges.swift */,
 				D10000CC /* TelemetryFrameTrace.swift */,
-				ABCD20260609000000001401 /* TelemetryExporter+RenderSystem.swift */,
 				E2610121000000000000000A /* Protocol */,
 			);
 			path = GlimmerEngine;
@@ -2973,7 +2952,6 @@
 				DEC0DE202609221800000004 /* TelemetryRowTests.swift in Sources */,
 				DEC0DE26101013000000000A /* TelemetrySessionReportTests.swift in Sources */,
 				DEC0DE261010130000000008 /* TelemetrySessionAggregateTests.swift in Sources */,
-				DEC0DE261010130000000006 /* TelemetryPrometheusRenderTests.swift in Sources */,
 				DEC0DE261010130000000004 /* TelemetryNDJSONRenderTests.swift in Sources */,
 				DEC0DE261010130000000002 /* TelemetryRenderFixtures.swift in Sources */,
 				DEC0DE202610105100000002 /* DecodeTimeSplitTests.swift in Sources */,
@@ -2987,7 +2965,6 @@
 				C4A400000000000000000104 /* TelemetryCounterStateTests.swift in Sources */,
 				C4A4000000000000000003F2 /* TelemetryCaptureTests.swift in Sources */,
 				C4A40000000000000000E2A4 /* TelemetrySinkTests.swift in Sources */,
-				C4A40000000000000000E2A2 /* TelemetryListenerTests.swift in Sources */,
 				C4A400000000000000000106 /* StatsCollectorWindowTests.swift in Sources */,
 				C4A400000000000000000108 /* StatsSnapshotRowsTests.swift in Sources */,
 				C4A400000000000000000110 /* StatsSupportTypesTests.swift in Sources */,
@@ -3372,7 +3349,6 @@
 				D6D80A720000000000000031 /* TelemetrySessionAggregate.swift in Sources */,
 				A0D10A110000000000000004 /* TelemetryExporter+AudioPipeline.swift in Sources */,
 				D6D80A720000000000000027 /* TelemetryExporter+Sinks.swift in Sources */,
-				D10000F5 /* TelemetryExporter+RenderP2.swift in Sources */,
 				D10000C1 /* TelemetryCounters.swift in Sources */,
 				ABCD20260609000000000802 /* TelemetryCounters+Gauges.swift in Sources */,
 				D6D80A720000000000000025 /* TelemetryCounters+Lifecycle.swift in Sources */,
@@ -3385,16 +3361,12 @@
 				D1A6202610180000000005B /* DiagnosticEvidence+Analysis.swift in Sources */,
 				D1A6202610180000000004B /* DiagnosticEvidence+Files.swift in Sources */,
 				D1A6202610180000000003B /* DiagnosticEvidence.swift in Sources */,
-				ABCD20260609000000001102 /* TelemetryExporter+RenderVideo.swift in Sources */,
-				ABCD20260609000000001302 /* TelemetryExporter+RenderAudio.swift in Sources */,
 				D10000F1 /* TelemetrySessionEvents.swift in Sources */,
 				D1000087 /* TelemetryLatency.swift in Sources */,
 				D1000081 /* TelemetryExporter.swift in Sources */,
-				ABCD20260609000000001202 /* TelemetryExporter+RenderNetwork.swift in Sources */,
 				3B48EA62232E4E4CAFEECF3D /* TelemetryExporter+RenderInput.swift in Sources */,
 				ABCD20260609000000000902 /* TelemetryCounters+AudioGauges.swift in Sources */,
 				D10000CD /* TelemetryFrameTrace.swift in Sources */,
-				ABCD20260609000000001402 /* TelemetryExporter+RenderSystem.swift in Sources */,
 				D1000018 /* EnetWire.swift in Sources */,
 				D1000020 /* ReedSolomon.swift in Sources */,
 				D1000032 /* AudioFecDecoder.swift in Sources */,

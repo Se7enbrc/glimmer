@@ -284,8 +284,7 @@ final class StreamRouteProbe: @unchecked Sendable {
                     || fresh.interfaceName != previous.interfaceName {
             Diag.notice("Stream ROUTE CHANGE: \(previous.linkLabel)/\(previous.interfaceName ?? "?") "
                 + "→ \(fresh.linkLabel)/\(ifLabel)", TelemetryExporter.logCategory)
-            // Also bump the Prometheus counter so a wake-on-different-AP is visible
-            // in Prometheus, not only the NDJSON/Loki event below. Same detection.
+            // Count reassociations as well as recording the event row.
             TelemetryCounters.shared.routeChangeTotal.increment()
             TelemetryExporter.recordEvent([
                 "\"event\":\"route_change\"",

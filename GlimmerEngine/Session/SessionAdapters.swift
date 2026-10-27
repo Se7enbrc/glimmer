@@ -41,7 +41,7 @@ import Foundation
 }
 
 extension SessionServices {
-    /// Uses existing gated recorders; public consumers supply a local directory, never a LAN listener.
+    /// Uses existing gated recorders with a caller-owned local directory.
     package static func recording(directory: URL?, enabled: Bool = TelemetryGate.isEnabled) -> SessionServices {
         #if os(macOS)
         var services = SessionServices()
@@ -49,7 +49,7 @@ extension SessionServices {
         services.startLog = { SessionLogFileSink.startIfEnabled(enabled: true, directory: directory) }
         services.stopLog = { SessionLogFileSink.stop() }
         services.makeExporter = { source, name in
-            TelemetryExporter(source: source, serverName: name, outputDirectory: directory, listenOnLAN: false)
+            TelemetryExporter(source: source, serverName: name, outputDirectory: directory)
         }
         return services
         #else
@@ -134,14 +134,6 @@ package enum TelemetryGate {
     package static func diagnosticsVisible(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
         #if os(macOS)
         defaults.bool(forKey: "showDiagnostics")
-        #else
-        false
-        #endif
-    }
-
-    package static func listensOnLAN(defaults: UserDefaults = PersistentStorage.defaults) -> Bool {
-        #if os(macOS)
-        defaults.bool(forKey: TelemetryExporter.lanBindDefaultsKey)
         #else
         false
         #endif

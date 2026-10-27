@@ -34,11 +34,11 @@ final class TelemetrySinkTests {
                           diagnostic: Bool = false)
         -> TelemetryExporter {
         TelemetryExporter.captureBaselines = TelemetryExporter.CaptureBaselines()
-        var source = TelemetryListenerTests.source()
+        var source = TelemetryRenderFixtures.source()
         source.capture.configuration.diagnosticBuild = diagnostic
         return TelemetryExporter(
             source: source, serverName: "Den PC", outputDirectory: directory ?? dir,
-            counters: counters, port: 0, listenOnLAN: false)
+            counters: counters)
     }
 
     @Test(arguments: [false, true])
@@ -264,7 +264,7 @@ final class TelemetrySinkTests {
         TelemetryExporter.recordEvent(["\"event\":\"audio_ttf\"", "\"ms\":12"])
         let exporter = exporter()
         exporter.start()
-        _ = try await TelemetryListenerTests.readyPort(exporter)
+        #expect(exporter.workQueue.sync { exporter.fileHandle != nil })
         TelemetryExporter.recordEvent(["\"event\":\"audio_pending\""])
         TelemetryExporter.recordLiveEvent(["\"event\":\"video_gap\""])
         exporter.stop()
@@ -276,7 +276,7 @@ final class TelemetrySinkTests {
         #expect(!events.contains("after_stop"))
         #expect(try rows(exporter).allSatisfy { $0["session"] as? String == exporter.sessionId })
         #expect(try reportNames().count == 1)
-        #expect(exporter.workQueue.sync { exporter.fileHandle == nil && exporter.listener == nil })
+        #expect(exporter.workQueue.sync { exporter.fileHandle == nil && exporter.captureTimer == nil })
         #expect(TelemetryExporter.eventSinkBox.withLock { $0 } == nil)
         #expect(FrameTimingTracker.shared == nil)
         #expect(TelemetryExporter.preStartEvents.drain().map(\.fields) == [["\"event\":\"after_stop\""]])
@@ -359,16 +359,16 @@ final class TelemetrySinkTests {
             #expect(source.stream?.width == 3840 && source.stream?.height == 2160 && source.stream?.fps == 120)
             #expect(source.stream?.codec == "av1" && source.stream?.bitrate == nil)
             return TelemetryExporter(source: source, serverName: name, outputDirectory: dir,
-                                     counters: counters, port: 0, listenOnLAN: false)
+                                     counters: counters)
         })
         let exporter = try #require(await session.telemetryExporter)
-        _ = try await TelemetryListenerTests.readyPort(exporter)
+        #expect(exporter.workQueue.sync { exporter.fileHandle != nil })
         await session.recordTelemetryBookmark()
         #expect(counters.bookmarkTotal.value == 1)
 
         await session.stopTelemetryExporter()
         #expect(await session.telemetryExporter == nil)
-        #expect(exporter.workQueue.sync { exporter.listener == nil && exporter.fileHandle == nil })
+        #expect(exporter.workQueue.sync { exporter.captureTimer == nil && exporter.fileHandle == nil })
         #expect(try reportNames().count == 1)
         await session.stopTelemetryExporter()
     }

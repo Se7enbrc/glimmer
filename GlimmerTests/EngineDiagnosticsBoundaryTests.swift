@@ -19,8 +19,7 @@ struct EngineDiagnosticsBoundaryTests {
     @Test func absentPlatformProbesStayAbsent() throws {
         let exporter = TelemetryExporter(source: source(), serverName: "Test PC",
             outputDirectory: .temporaryDirectory, counters: TelemetryCounters())
-        exporter.workQueue.sync { exporter.capture() }
-        let (snapshot, extras) = try #require(exporter.latestSample)
+        let (snapshot, extras) = exporter.workQueue.sync { exporter.capture() }
         #expect(snapshot.wifi == nil && snapshot.resource == nil && snapshot.clusterResidency == nil)
         #expect(snapshot.processCpuPercent == nil && snapshot.threadCount == nil)
         #expect(snapshot.onBattery == false)
@@ -33,21 +32,19 @@ struct EngineDiagnosticsBoundaryTests {
 
     @Test(arguments: [nil, ResourceSnapshot(), ResourceSnapshot(onBattery: false),
                       ResourceSnapshot(onBattery: true)])
-    func batteryMetricAlwaysSurvivesMissingResourceEvidence(resource: ResourceSnapshot?) throws {
+    func batteryRowAlwaysSurvivesMissingResourceEvidence(resource: ResourceSnapshot?) throws {
         let capture = TelemetryCapture(resource: { resource })
         let exporter = TelemetryExporter(
             source: source(capture: capture), serverName: "Test PC",
             outputDirectory: .temporaryDirectory, counters: TelemetryCounters())
-        exporter.workQueue.sync { exporter.capture() }
-        let (snapshot, extras) = try #require(exporter.latestSample)
+        let (snapshot, extras) = exporter.workQueue.sync { exporter.capture() }
         let expected = resource?.onBattery ?? false
         #expect(snapshot.onBattery == expected)
-        let metric = TelemetryRenderer.prometheus(snapshot, extras: extras)
-            .split(separator: "\n").first { $0.hasPrefix("glimmer_on_battery{") }
-        #expect(try #require(metric).hasSuffix(expected ? " 1" : " 0"))
+        let row = try TelemetryRenderFixtures.row(TelemetryRenderer.ndjson(snapshot, extras: extras))
+        #expect(row["on_battery"] as? Bool == expected)
     }
 
-    @Test func suppliedEvidenceIsCapturedOnceForBothRenderers() throws {
+    @Test func suppliedEvidenceIsCapturedOnceForNDJSON() throws {
         let calls = Mutex(0)
         var capture = TelemetryCapture()
         capture.configuration.clientLabel = "1234abcd"
@@ -61,16 +58,14 @@ struct EngineDiagnosticsBoundaryTests {
         let exporter = TelemetryExporter(
             source: source(capture: capture), serverName: "Test PC",
             outputDirectory: .temporaryDirectory, counters: TelemetryCounters())
-        exporter.workQueue.sync { exporter.capture() }
-        let (snapshot, extras) = try #require(exporter.latestSample)
+        let (snapshot, extras) = exporter.workQueue.sync { exporter.capture() }
         #expect(calls.withLock { $0 } == 1)
         #expect(snapshot.clientLabel == "1234abcd" && snapshot.buildCommit == "test-commit")
         #expect(extras.envStateOrdinal == 2 && extras.keepaliveIntervalMs == 500)
         #expect(extras.videoPingsSentTotal == 11 && extras.audioPingsSentTotal == 13)
         #expect(extras.dualSenseHidReportsPerSecond == 250)
         let ndjson = TelemetryRenderer.ndjson(snapshot, extras: extras)
-        let prometheus = TelemetryRenderer.prometheus(snapshot, extras: extras)
-        #expect(ndjson.contains("1234abcd") && prometheus.contains("1234abcd"))
+        #expect(ndjson.contains("1234abcd"))
         #expect(calls.withLock { $0 } == 1)
     }
 

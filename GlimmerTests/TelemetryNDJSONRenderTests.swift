@@ -289,4 +289,35 @@ struct TelemetryNDJSONRenderTests {
         #expect(sample.threadCount > 0)
         #expect(sample.cpuPercent >= 0)
     }
+    @Test func pseudonymIsStableKeyedAndEightHexDigits() {
+        let saltA = TelemetryRenderer.installSalt
+        let first = TelemetryRenderer.pseudonym("Den PC", salt: saltA)
+        #expect(first == TelemetryRenderer.pseudonym("Den PC", salt: saltA))
+        #expect(first != TelemetryRenderer.pseudonym("Den PC 2", salt: saltA))
+        #expect(first.count == 8 && first.allSatisfy(\.isHexDigit))
+        #expect(!first.localizedCaseInsensitiveContains("den"))
+        let otherSalt = TelemetryRenderer.pseudonym("Den PC", salt: .init(size: .bits256))
+        #expect(otherSalt != first)
+    }
+
+    @Test func quantilesInterpolateWithinTheMatchingBucket() throws {
+        let tens = Fixtures.stage(1)
+        #expect(try #require(TelemetryRenderer.histogramQuantile(0.5, stage: tens)) == 0.875)
+        #expect(try #require(TelemetryRenderer.histogramQuantile(1, stage: tens)) == 1)
+        // Half the samples at 0.5 ms, half at 3 ms: p50 lands at the top of the 0.5 ms bucket.
+        let split = LatencyHistograms.Stage()
+        for _ in 0..<5 { split.observe(0.5) }
+        for _ in 0..<5 { split.observe(3) }
+        let value = split.snapshotValue()
+        #expect(try #require(TelemetryRenderer.histogramQuantile(0.5, stage: value)) == 0.5)
+        let p90 = try #require(TelemetryRenderer.histogramQuantile(0.9, stage: value))
+        #expect(p90 > 2 && p90 < 3)
+    }
+
+    @Test func quantileClampsToTopBoundAndIsNilWhenEmpty() {
+        let top = LatencyHistograms.Stage.boundsMs.last
+        let overflow = Fixtures.stage(10_000)
+        #expect(TelemetryRenderer.histogramQuantile(0.99, stage: overflow) == top)
+        #expect(TelemetryRenderer.histogramQuantile(0.5, stage: Fixtures.stage(1, count: 0)) == nil)
+    }
 }

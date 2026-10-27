@@ -68,8 +68,7 @@ struct DiagnosticsPane: View {
                     Toggle(isOn: $model.telemetryEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Performance telemetry").fontWeight(.medium)
-                            Text("Exposes per-second stream metrics over a local "
-                                + "Prometheus endpoint and an NDJSON log, plus a "
+                            Text("Saves per-second stream metrics in a local NDJSON log, plus a "
                                 + "richer per-session diagnostic log. "
                                 + (DiagnosticBuild.isEnabled ? "On by default in this diagnostic build; " : "Off by default; ")
                                 + "carries only performance numbers, never secrets.")

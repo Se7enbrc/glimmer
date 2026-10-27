@@ -164,13 +164,7 @@ extension TelemetryExporter {
 // MARK: - Extras (the sidecar counter sample)
 
 extension TelemetrySnapshot {
-    /// The pacer/suppression/control/audio-trim counters and gauges, sampled
-    /// once per capture tick ALONGSIDE the main snapshot and handed to both
-    /// renderers as one value - the same read-once / two-sinks discipline as the
-    /// snapshot itself (each counter is read exactly once per tick, so the
-    /// Prometheus and NDJSON forms of one tick can never disagree). A sidecar
-    /// rather than more snapshot fields so the sample, its delta baselines, and
-    /// the only code that fills it stay together in this capture unit.
+    /// Counters sampled once alongside the main snapshot, with their delta baselines in this unit.
     package struct Extras: Sendable {
 
         package init() {}
@@ -244,11 +238,8 @@ extension TelemetrySnapshot {
         /// Raw DualSense input reports per second (fastest open pad), to compare with
         /// the GameController pad cadence. nil while the raw HID path is off.
         package var dualSenseHidReportsPerSecond: Double?
-        /// CROSS-STREAM A/V skew + its cushion-subtracted true clock skew +
-        /// rebase count, derived ONCE per capture tick (`deriveSkewMs` is
-        /// non-idempotent - it latches the epoch and reads its own clock), so the
-        /// Prometheus and NDJSON forms of one tick carry identical values. nil
-        /// while either stream is dark/stale or the pair is (re-)anchoring.
+        /// A/V skew and its clock-skew/rebase fields share one derivation per tick.
+        /// Missing or stale streams and a new anchor have no skew value.
         package var avSkewMs: Double?
         package var avClockSkewMs: Double?
         package var avSkewRebaseTotal: UInt64 = 0

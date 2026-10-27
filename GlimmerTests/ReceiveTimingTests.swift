@@ -80,21 +80,18 @@ struct ReceiveTimingTests {
         #expect(SocketTimestamp.arrival(in: nil, length: 0, flags: 0) == nil)
         #expect(!SocketTimestamp.enable(on: -1))
     }
-    @Test func bothRenderersExportEachSocketAndOmitEmptyWindowMeasurements() throws {
+    @Test func ndjsonExportsEachSocketAndOmitEmptyWindowMeasurements() throws {
         var snapshot = TelemetryRenderFixtures.snapshot()
         snapshot.receiveVideo = .init(samples: 100, missing: 2, delayMaxMs: 224, delayP99Ms: 2,
                                       gapMaxMs: 8, gapP99Ms: 5)
         snapshot.receiveAudio = .init(samples: 200, delayMaxMs: 225, delayP99Ms: 3, gapMaxMs: 9, gapP99Ms: 6)
         let extras = TelemetrySnapshot.Extras()
         let row = try TelemetryRenderFixtures.row(TelemetryRenderer.ndjson(snapshot, extras: extras))
-        let prom = TelemetryRenderer.prometheus(snapshot, extras: extras)
         for (name, value) in [("video", 224), ("audio", 225)] {
             #expect((row["\(name)_rx_read_delay_max_ms"] as? NSNumber)?.intValue == value)
-            #expect(prom.contains("glimmer_\(name)_rx_read_delay_max_ms"))
             #expect(row["\(name)_rx_kernel_gap_p99_ms"] != nil)
         }
         #expect(!row.keys.contains { $0.hasPrefix("enet_rx_") })
-        #expect(!prom.contains("glimmer_enet_rx_"))
         #expect((row["video_rx_timestamp_missing"] as? NSNumber)?.intValue == 2)
         snapshot.receiveVideo = .init()
         let empty = try TelemetryRenderFixtures.row(TelemetryRenderer.ndjson(snapshot, extras: extras))

@@ -105,7 +105,7 @@ struct InputLatencyTests {
         #expect(capture.histogram.observationCount == 0)
     }
 
-    @Test func bothExportersIncludeCountsMaximaAndQuantiles() {
+    @Test func ndjsonIncludesCountsMaximaAndQuantiles() {
         let latency = InputLatency()
         latency.observe(source: .mouse, stage: .captureSend, from: 1, to: 60_000_001)
         var json = TelemetryRenderer.NDJSONBuilder()
@@ -113,11 +113,8 @@ struct InputLatencyTests {
         #expect(json.line().contains("\"input_mouse_capture_send_max_ms\":60"))
         #expect(json.line().contains("\"input_mouse_capture_send_over_50ms\":1"))
         #expect(json.line().contains("input_mouse_capture_send_p99_ms"))
-        var prom = TelemetryRenderer.PromBuilder(session: "test", host: "pc")
-        TelemetryRenderer.promInputLatency(&prom, latency.snapshot())
-        #expect(prom.out.contains("glimmer_input_mouse_capture_send_ms_bucket"))
-        #expect(prom.out.contains("glimmer_input_mouse_capture_send_over_50ms_total"))
-        #expect(!prom.out.contains("glimmer_input_keyboard_capture_send"))
+        #expect(json.line().contains("input_mouse_capture_send_buckets"))
+        #expect(!json.line().contains("input_keyboard_capture_send"))
     }
 
     @Test func callbackGateRequiresFreshLocalProgress() {

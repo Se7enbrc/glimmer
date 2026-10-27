@@ -4,6 +4,9 @@
 
 ### Features
 
+- Mac performance recordings stay in local files, with session scorecards, frame
+  traces and Control-B bookmarks. The network metrics endpoint is removed.
+
 - The iPhone and iPad stream menu fades away while you play. Tap the top of the
   picture or swipe down to bring it back. The close button returns to the game;
   Disconnect ends the stream.

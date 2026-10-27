@@ -22,40 +22,16 @@ import os
 
 // MARK: - Latency histograms
 
-/// Fixed-bucket, atomic-increment histograms for the five latency stages. We use
-/// real Prometheus histograms (`_bucket`/`_sum`/`_count`) rather than
-/// pre-computed `_p50/_p95/_p99` gauges because it is BOTH lower-overhead on the
-/// hot path AND more queryable: a record is a branchless bucket find + a single
-/// locked add (no sorted reservoir / live-quantile maintenance per frame), and
-/// Grafana derives p50/p95/p99 from the cumulative buckets with
-/// `histogram_quantile(0.95, rate(..._bucket[1m]))`. Cardinality stays low - five
-/// families, ~12 buckets each, one `{session}` label.
-///
-/// `@unchecked Sendable`: every counter is its own `os_unfair_lock`-guarded
-/// UInt64 (the same discipline as `TelemetryCounters.Counter`), safe from the
-/// receive thread, the decode queue, and the pacer's serial queue.
+/// Cumulative atomic buckets, sums and counts support session and windowed percentiles.
+/// Snapshot once per capture tick, never once per frame.
 package final class LatencyHistograms: @unchecked Sendable {
 
     package init() {}
 
-    /// One stage's cumulative histogram: per-bucket counts (Prometheus `le`
-    /// semantics - bucket[i] counts observations ≤ bounds[i]), plus running sum
-    /// (ms) and total count. One lock per stage keeps the five stages
-    /// contention-free against each other.
+    /// One stage stores cumulative counts at each inclusive upper bound.
     package final class Stage: @unchecked Sendable {
-        /// Upper bounds in MILLISECONDS. Chosen to span the realistic per-stage
-        /// range for 60-240fps streaming: sub-ms assemble/submit jitter through
-        /// to multi-frame decode/pace stalls. The implicit `+Inf` bucket (count
-        /// vs total) is emitted by the renderer.
-        ///
-        /// FINE LOW/MID RESOLUTION where it matters: the e2e pipeline lands at
-        /// ~5-6ms, and the old [4,8,16] spacing left a 4→8→16 gap (a ~12ms-wide
-        /// "blur" bucket) right across that range, so p50/p95/p99 had no real
-        /// resolution exactly where the signal lives. The bounds below add
-        /// sub-ms and few-ms edges (0.1...6) so quantiles resolve to sub-ms / few-ms
-        /// precision, while the coarse tail (8...528) still captures multi-frame
-        /// stalls. boundsMs is read by both the Prometheus render and the NDJSON
-        /// quantile estimator, so this single edit propagates to all consumers.
+        /// Fine sub-stage bounds preserve small latency differences without losing long stalls.
+        /// The snapshot carries these same bounds to the quantile estimator.
         package static let boundsMs: [Double] = [
             0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 33, 66, 132, 264, 528
         ]
@@ -79,10 +55,7 @@ package final class LatencyHistograms: @unchecked Sendable {
             0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 25, 33, 40, 50, 66, 132, 264, 528
         ]
 
-        /// The bounds THIS stage buckets against. Per-stage so the fine sub-stage
-        /// histograms and the coarse composite ones share one observe/snapshot
-        /// path; read by both the Prometheus render and the NDJSON quantile
-        /// estimator (carried on the snapshot) so they stay consistent.
+        /// Stage-specific bounds keep fine pipeline and coarse composite histograms consistent.
         package let bounds: [Double]
 
         private let lock = os_unfair_lock_t.allocate(capacity: 1)

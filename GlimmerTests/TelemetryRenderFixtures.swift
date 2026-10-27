@@ -306,27 +306,12 @@ enum TelemetryRenderFixtures {
         try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
     }
 
-    struct Sample {
-        let labels: String
-        let value: Double
-    }
-
-    /// A Prometheus text body as metric name to its samples.
-    static func parseProm(_ body: String) -> [String: [Sample]] {
-        var out: [String: [Sample]] = [:]
-        for line in body.split(separator: "\n") where !line.hasPrefix("#") {
-            let text = String(line)
-            guard let space = text.lastIndex(of: " ") else { continue }
-            let head = text[..<space]
-            let value = Double(text[text.index(after: space)...]) ?? .nan
-            var name = String(head)
-            var labels = ""
-            if let brace = head.firstIndex(of: "{") {
-                name = String(head[..<brace])
-                labels = String(head[brace...])
-            }
-            out[name, default: []].append(Sample(labels: labels, value: value))
-        }
-        return out
+    static func source() -> TelemetrySource {
+        TelemetrySource(
+            videoStats: { StreamStatsSnapshot() }, decoderDrops: { 0 }, backpressureDrops: { 0 },
+            presentationLateDrops: { 0 }, presentationGaps: { 0 }, estimatedRtt: { nil },
+            enetHealth: { nil }, pacingLiveness: { nil }, inFlightDecodeBacklog: { 0 },
+            refreshWindow: { nil }, displayProbe: { nil }, displayMode: "window",
+            stream: StreamTelemetryConfig(width: 1920, height: 1080, fps: 60, codec: "HEVC", bitrate: nil))
     }
 }

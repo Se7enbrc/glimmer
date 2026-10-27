@@ -5,32 +5,6 @@
 import Foundation
 
 extension TelemetryRenderer {
-    package static func promAudioPipeline(_ builder: inout PromBuilder, _ snapshot: AudioPipelineTelemetry.Snapshot?) {
-        guard let snapshot else { return }
-        for (name, stage) in audioPipelineStages(snapshot) {
-            builder.emitHistogram("glimmer_\(name)_ms", "Audio pipeline duration in milliseconds.", stage: stage)
-        }
-        builder.emit("glimmer_audio_render_cushion_min_ms", "Minimum render-clock cushion this window.",
-                          snapshot.window.minimumRenderCushionMs)
-        builder.emit("glimmer_audio_output_silent_s", "Consecutive sampled seconds of silent output with nonzero PCM.",
-                     snapshot.window.outputSilentSeconds)
-        builder.emit("glimmer_audio_output_probe_result", "Mixer probe: 0 pending, 1 flowing/idle, 2 silent, 3 failed.",
-                     snapshot.window.outputProbeResult.map(Double.init))
-        builder.emit("glimmer_audio_output_probe_input_audible", "Nonzero PCM in the completed mixer probe.",
-                     snapshot.window.outputProbeInputAudible.map { $0 ? 1 : 0 })
-        builder.emit("glimmer_audio_output_latency_ms", "HAL latency, safety offset and buffer duration.",
-                     snapshot.window.outputLatencyMs)
-        builder.emit("glimmer_audio_device_recovery_ms", "Device change to first rendered PCM.",
-                     snapshot.window.deviceRecoveryMs)
-        builder.emit("glimmer_audio_near_misses_window", "Accounting near misses this capture window.",
-                          Double(snapshot.window.nearMisses))
-        builder.emit("glimmer_audio_decode_realtime", "Mach time constraint policy applied to audio worker.",
-                          snapshot.window.realtime ? 1 : 0)
-        for (name, count) in audioPipelineCounts(snapshot) {
-            builder.emitCounter("glimmer_\(name)", "Audio pipeline cumulative events.", count)
-        }
-    }
-
     package static func ndjsonAudioPipeline(
         _ builder: inout NDJSONBuilder,
         _ snapshot: AudioPipelineTelemetry.Snapshot?

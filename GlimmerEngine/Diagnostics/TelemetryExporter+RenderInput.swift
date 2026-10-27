@@ -24,17 +24,6 @@ extension TelemetryRenderer {
             builder.addCount("\(name)_over_50ms", row.over50)
         }
     }
-
-    package static func promInputLatency(_ builder: inout PromBuilder, _ rows: [InputLatency.Row]) {
-        for row in rows where row.histogram.hasObservations {
-            let name = "glimmer_input_\(row.source.rawValue)_\(row.stage.rawValue)"
-            builder.emitHistogram("\(name)_ms", "Local input stage latency in milliseconds.", stage: row.histogram)
-            builder.emit("\(name)_max_ms", "Maximum local input stage latency in milliseconds.", row.maxMs)
-            for (label, count) in [("10", row.over10), ("20", row.over20), ("50", row.over50)] {
-                builder.emitCounter("\(name)_over_\(label)ms_total", "Input stage gaps above \(label) ms.", count)
-            }
-        }
-    }
 }
 
 #endif

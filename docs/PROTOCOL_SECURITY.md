@@ -122,14 +122,14 @@ delayed.
 
 Use this list for the connections outside the media stream.
 
-| Path                      | Exposure and check                                                                                                                     |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Bonjour discovery         | Unauthenticated `_nvstream._tcp` and `_nvstream-tcp._tcp`; a discovered address is saved only after pinned HTTPS confirms the PC's ID. |
-| Reachability probe        | TCP connect to the PC's HTTP port, no payload; status can be forged, trust cannot.                                                     |
-| Stream keepalives         | Unencrypted UDP ping identifiers, no keys or input.                                                                                    |
-| Wake on LAN               | Unauthenticated UDP magic packets, including ports 9 and 47009 and Sunshine ports; the PC's MAC address is visible.                    |
-| Updates                   | HTTPS feed and GitHub downloads; each ZIP has an Ed25519 signature. The feed is unsigned.                                              |
-| Optional metrics listener | HTTP port 9847 on loopback; a separate LAN opt-in allows anyone on the network to read metrics.                                        |
+| Path               | Exposure and check                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Bonjour discovery  | Unauthenticated `_nvstream._tcp` and `_nvstream-tcp._tcp`; a discovered address is saved only after pinned HTTPS confirms the PC's ID. |
+| Reachability probe | TCP connect to the PC's HTTP port, no payload; status can be forged, trust cannot.                                                     |
+| Stream keepalives  | Unencrypted UDP ping identifiers, no keys or input.                                                                                    |
+| Wake on LAN        | Unauthenticated UDP magic packets, including ports 9 and 47009 and Sunshine ports; the PC's MAC address is visible.                    |
+| Updates            | HTTPS feed and GitHub downloads; each ZIP has an Ed25519 signature. The feed is unsigned.                                              |
+| Diagnostics        | Local files only on Mac. No inbound metrics socket; iOS uses Apple logs and reports.                                                   |
 
 Glimmer makes no analytics or tracking calls. See [Privacy](PRIVACY.md).
 

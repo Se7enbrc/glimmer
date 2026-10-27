@@ -66,9 +66,7 @@ extension TelemetryCounters {
         }
     }
 
-    /// Reset everything at a session's first connect (`anchorConnectStart`), not at
-    /// exporter start, so a warm host's one-shot latches can't serve a prior session's
-    /// values. A Prometheus scrape across the boundary just sees a counter reset.
+    /// Reset at first connect, before a warm PC can fill one-shot latches for the new session.
     package func resetForNewSession() {
         #if os(macOS)
         ReceiveTimingTelemetry.video.reset()
