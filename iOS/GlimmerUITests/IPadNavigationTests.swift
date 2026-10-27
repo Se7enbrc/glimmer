@@ -45,11 +45,7 @@ final class IPadNavigationTests: XCTestCase {
             XCUIDevice.shared.orientation = orientation
             XCTAssertTrue(app.buttons["Desktop"].waitForExistence(timeout: 10))
             app.buttons["Desktop"].tap()
-            // Without a controller the stream starts in touch play; its menu button opens the controls.
-            let menu = app.buttons["Show controls"].firstMatch
-            XCTAssertTrue(menu.waitForExistence(timeout: 10))
-            XCTAssertTrue(menu.isHittable)
-            menu.tap()
+            app.openStreamControls()
             XCTAssertTrue(app.buttons["Close menu"].waitForExistence(timeout: 10))
             XCTAssertTrue(app.buttons["Disconnect"].isHittable)
             recordScreen(app, name: "whole-window-native-stream-\(orientation.rawValue)")
@@ -63,10 +59,8 @@ final class IPadNavigationTests: XCTestCase {
                     withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)))
         }
         app.buttons["Desktop"].tap()
-        // A window too small for touch controls opens on the stream menu instead of its menu button.
-        let way = app.buttons.matching(NSPredicate(format: "label IN %@", ["Show controls", "Disconnect"])).firstMatch
-        XCTAssertTrue(way.waitForExistence(timeout: 10))
-        XCTAssertTrue(way.isHittable)
+        app.openStreamControls()
+        XCTAssertTrue(app.buttons["Disconnect"].isHittable)
         recordScreen(app, name: "whole-window-native-resize-request")
     }
 
@@ -108,6 +102,7 @@ final class IPadNavigationTests: XCTestCase {
         }
         recordScreen(app, name: "whole-window-\(mode)-launcher")
         app.buttons["Desktop"].tap()
+        app.openStreamControls()
         XCTAssertTrue(app.buttons["Close menu"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Disconnect"].isHittable)
         XCTAssertLessThan(app.windows.firstMatch.frame.width, app.windows.firstMatch.frame.height)
@@ -132,11 +127,7 @@ final class IPadNavigationTests: XCTestCase {
             }
             settings.tap()
             XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
-            #if GLIMMER_DIAGNOSTICS
-            let pages = ["General", "Quality", "Input", "Diagnostics"]
-            #else
-            let pages = ["General", "Quality", "Input"]
-            #endif
+            let pages = ["General", "Quality", "Input", "Connection"]
             for page in pages {
                 app.buttons[page].tap()
                 XCTAssertTrue(app.navigationBars[page].waitForExistence(timeout: 5))

@@ -10,7 +10,7 @@ final class StreamMenuUITests: XCTestCase {
         defer { app.terminate() }
         let menu = app.buttons["Show controls"].firstMatch
         XCTAssertTrue(menu.waitForNonExistence(timeout: 5))
-        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0))
+        let top = app.otherElements["Video from the PC"].coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0))
             .withOffset(CGVector(dx: 0, dy: 22))
         top.tap()
         XCTAssertTrue(menu.exists)
@@ -60,7 +60,7 @@ final class StreamMenuUITests: XCTestCase {
 
     private func revealMenu(_ app: XCUIApplication) {
         let menu = app.buttons["Show controls"].firstMatch
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0))
+        app.otherElements["Video from the PC"].coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0))
             .withOffset(CGVector(dx: 0, dy: 22)).tap()
         XCTAssertTrue(menu.exists)
     }
@@ -75,5 +75,20 @@ final class StreamMenuUITests: XCTestCase {
         app.buttons["Desktop"].tap()
         XCTAssertTrue(app.otherElements["Video from the PC"].waitForExistence(timeout: 10))
         return app
+    }
+}
+
+extension XCUIApplication {
+    func openStreamControls() {
+        if buttons["Close menu"].exists { return }
+        let video = otherElements["Video from the PC"]
+        XCTAssertTrue(video.waitForExistence(timeout: 10))
+        if buttons["Close menu"].exists { return }
+        video.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0))
+            .withOffset(CGVector(dx: 0, dy: 22)).tap()
+        let menu = buttons["Show controls"].firstMatch
+        XCTAssertTrue(menu.exists)
+        menu.tap()
+        XCTAssertTrue(buttons["Close menu"].waitForExistence(timeout: 5))
     }
 }
