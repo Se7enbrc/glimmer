@@ -11,8 +11,9 @@ import SwiftUI
 @Suite(.serialized)
 struct ControllerStatsTests {
     @Test func touchHelpNeverRequiresAnAbsentKeyboard() {
-        #expect(StreamControlsHelp.menuHint.hasPrefix("Tap"))
+        #expect(StreamControlsHelp.menuHint.contains("three fingers"))
         #expect(!StreamControlsHelp.menuHint.contains("Control-"))
+        #expect(StreamControlsHelp.gamepadHint.contains("Edit controls…"))
         #expect(StreamControlsHelp.keyboardHint(connected: false, stats: "⌃Z", stop: "⌃Q") == nil)
         let hint = StreamControlsHelp.keyboardHint(connected: true, stats: "⌃Z", stop: "⌃Q")
         #expect(hint?.contains("⌃Z") == true && hint?.contains("⌃Q") == true)

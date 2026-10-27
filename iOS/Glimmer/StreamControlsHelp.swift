@@ -10,7 +10,14 @@ struct StreamControlsHelp: View {
     var body: some View {
         Form {
             Section("Touch") {
-                Text(Self.menuHint)
+                Text("Tap \(Image(systemName: "ellipsis.circle")) to open the stream menu. \(Self.menuHint)")
+                    .accessibilityLabel("Tap Show controls to open the stream menu. \(Self.menuHint)")
+                Text("""
+                    Play with the on-screen controller. Its \(Image(systemName: "rectangle.on.rectangle")) Options \
+                    and \(Image(systemName: "line.3.horizontal")) Menu buttons go to the game. Choose Edit controls… \
+                    to move, resize or hide controls.
+                    """)
+                    .accessibilityLabel(Self.gamepadHint)
                 if model.launch.touchMouseEnabled {
                     Text("Drag to move the pointer. Tap to click.")
                     Text("Use two fingers to scroll or tap for a secondary click.")
@@ -20,7 +27,7 @@ struct StreamControlsHelp: View {
             Section("Controller") {
                 Text("Change Stop streaming and Stats shortcuts in Controller layouts. "
                      + "Hold a shortcut, then release to use it.")
-                ControllerMouseDiagram(bindings: ControllerLayoutsModel.shared.mouse)
+                ControllerMouseDiagram(bindings: ControllerLayoutsModel.shared.mouse).tint(.primary)
                 Text("Hold the mouse-mode toggle for a second and release to switch modes.")
             }
             if let hint = Self.keyboardHint(connected: keyboardConnected,
@@ -31,10 +38,11 @@ struct StreamControlsHelp: View {
         }
     }
 
-    static let menuHint = "Tap … for stream controls. If it's hidden, tap the top of the picture to reveal it. "
-        + "You can also tap with three fingers to open controls."
+    static let menuHint = "If it's hidden, tap the top of the picture to reveal it, or tap with three fingers."
+    static let gamepadHint = "Play with the on-screen controller. Its Options and Menu buttons go to the game. "
+        + "Choose Edit controls… to move, resize or hide controls."
 
     static func keyboardHint(connected: Bool, stats: String, stop: String) -> String? {
-        connected ? "\(stats) shows stream stats. \(stop) disconnects. Control-/ opens controls." : nil
+        connected ? "\(stats) shows stream stats. \(stop) disconnects. Control-/ opens the stream menu." : nil
     }
 }

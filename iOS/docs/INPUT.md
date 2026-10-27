@@ -45,15 +45,15 @@ arrow-key moves.
 
 ## Controller mouse mode
 
-Tap **…** to open stream controls. If it is hidden, tap the top of the picture
-to reveal it, or tap with three fingers to open controls directly. With a
-controller, hold Menu alone for a second and release. Choose **Use mouse mode**
-or **Use gamepad mode**, then **Resume** to return to play. The choice applies
-to the controller that opened the menu.
+Tap **…** to open the stream menu. If it is hidden, tap the top of the picture
+to reveal it, or tap with three fingers to open it directly. With a controller,
+hold Menu alone for a second and release. Choose **Use mouse mode** or **Use
+gamepad mode**, then **Resume** to return to play. The choice applies to the
+controller that opened the menu.
 
-With a keyboard connected, Control-/ opens controls, ⌃Z shows stream stats and
-⌃Q disconnects. The last two shortcuts can be changed in Settings → Input. Touch
-and controller actions remain available without a keyboard.
+With a keyboard connected, Control-/ opens the stream menu, ⌃Z shows stream
+stats and ⌃Q disconnects. The last two shortcuts can be changed in Settings →
+Input. Touch and controller actions remain available without a keyboard.
 
 In Settings → Input, choose **Mouse stick** before starting a stream. Right is
 the default: the right stick moves the pointer, R2 left-clicks, R1 right-clicks,

@@ -48,12 +48,21 @@ enum UITestLauncher {
                               server: current)
         }, pair: { pc, _ in pc }, apps: { _ in apps }, remember: { _ in pcs }, protectedDataChanged: { _ in },
            lastConnectedPCID: { pcs.first?.id }, artwork: { _, _ in Data() }, makeSession: { launch in
-            StreamSessionModel(launch: launch, makePlayback: { launch, surface, _ in
+            StreamSessionModel(launch: reviewed(launch), makePlayback: { launch, surface, _ in
                 guard streaming else { throw CancellationError() }
                 return try playback(launch: launch, surface: surface, controller: controller)
             })
         })
         return LauncherModel(calls: calls, discoveryEnabled: false)
+    }
+
+    // The picture-size question appears only for a continued stream that tries this screen's size.
+    private static func reviewed(_ launch: StreamLaunch) -> StreamLaunch {
+        guard ProcessInfo.processInfo.environment["GLIMMER_OVERLAY_STATE"] == "review" else { return launch }
+        return StreamLaunch(network: launch.network, pcID: launch.pcID, pcName: launch.pcName, appID: launch.appID,
+                            appName: launch.appName, continuing: true,
+                            previousFormat: ContinuationFormat(width: 1920, height: 1080, fps: 60, hdr: false),
+                            useScreenSize: true)
     }
 
     private static func playback(launch: StreamLaunch, surface: StreamSurface,
@@ -63,7 +72,11 @@ enum UITestLauncher {
         let format = try launch.profile.resolve(surface: surface)
         let decoder = VideoDecoder(configuration: format.configuration(potentialEDRHeadroom: 1), displayInfo: { nil })
         let connection = StreamConnection(video: decoder) { _, _ in }
-        let controllers = IOSControllerCapture(calls: .init(register: connection.input.registerController,
+        let registered = RegisteredController()
+        let controllers = IOSControllerCapture(calls: .init(register: {
+            registered.value = connection.input.registerController($0) ?? registered.value
+            return registered.value
+        },
             unregister: connection.input.unregisterController, submit: connection.input.submitController,
             focus: { _ in }), center: NotificationCenter(),
             readControllers: { controller ? [GCController.withExtendedGamepad()] : [] })
@@ -85,6 +98,11 @@ enum UITestLauncher {
             if state != "connecting" {
                 events.continuation.yield(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
             }
+            if let registration = await registered.value, state == "controller-menu" || state == "controller-mode" {
+                let input: StreamInput.Event = state == "controller-menu" ? .controlsRequested(registration)
+                    : .mouseMode(registration, enabled: true)
+                events.continuation.yield(.init(sessionID: id, attemptID: UUID(), event: .input(input)))
+            }
             if state == "reconnecting" || state == "waiting" {
                 events.continuation.yield(.init(sessionID: id, attemptID: UUID(),
                     event: state == "waiting" ? .waitingForVideo(true) : .reconnecting))
@@ -103,5 +121,9 @@ enum UITestLauncher {
            touchGamepad: native.touch, showTouchControls: native.showTouchControls,
            showStats: stats.setVisible, showOverlayChrome: stats.setChromeVisible)
     }
+}
+@MainActor
+private final class RegisteredController {
+    var value: ControllerRegistration?
 }
 #endif
