@@ -198,6 +198,7 @@ final class ControllerLayoutInputLease {
     private let previousQueue: DispatchQueue?
     private let previousHandler: ((any GCDevicePhysicalInput, any GCPhysicalInputElement) -> Void)?
     private let previousGamepadHandler: GCExtendedGamepadValueChangedHandler?
+    private let previousButtonHandlers: [GCControllerButtonValueChangedHandler?]
     private var active = true
     private let delivery = Delivery()
 
@@ -214,7 +215,9 @@ final class ControllerLayoutInputLease {
         previousQueue = input.queue
         previousHandler = input.elementValueDidChangeHandler
         previousGamepadHandler = controller.extendedGamepad?.valueChangedHandler
+        previousButtonHandlers = ControllerButtonRoutes.buttons(controller).map(\.pressedChangedHandler)
         controller.extendedGamepad?.valueChangedHandler = nil
+        ControllerButtonRoutes.set(controller, nil)
         input.queue = queue
         // GameController calls this on the input queue; nested closures must not inherit the main actor.
         input.elementValueDidChangeHandler = { @Sendable [delivery] input, _ in
@@ -233,5 +236,8 @@ final class ControllerLayoutInputLease {
         input.queue = previousQueue
         input.elementValueDidChangeHandler = previousHandler
         controller.extendedGamepad?.valueChangedHandler = previousGamepadHandler
+        for (button, handler) in zip(ControllerButtonRoutes.buttons(controller), previousButtonHandlers) {
+            button.pressedChangedHandler = handler
+        }
     }
 }

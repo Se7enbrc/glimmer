@@ -216,24 +216,48 @@ enum ControllerStreamHandlers {
                         receive: @escaping @Sendable (ControllerMappingSample, TimeInterval) -> Void) {
         controller.extendedGamepad?.valueChangedHandler = nil
         input.elementValueDidChangeHandler = nil
+        ControllerButtonRoutes.set(controller, nil)
         controller.handlerQueue = queue
         input.queue = queue
         let timestamp = Mutex<TimeInterval>(0)
-        let deliver: @Sendable (TimeInterval) -> Void = { value in
+        let delivered = Mutex<ControllerMappingSample?>(nil)
+        let deliver: @Sendable (TimeInterval, Bool) -> Void = { value, onlyChanges in
+            let sample = read()
+            let changed = delivered.withLock { last in
+                defer { last = sample }
+                return last != sample
+            }
+            guard changed || !onlyChanges else { return }
             let now = timestamp.withLock { last in
                 last = max(last, value)
                 return last
             }
-            receive(read(), now)
+            receive(sample, now)
+        }
+        // A button route repeats what the profile already delivered unless the controller used only that route.
+        ControllerButtonRoutes.set(controller) { @Sendable _, _, _ in
+            deliver(ProcessInfo.processInfo.systemUptime, true)
         }
         if mapsGameInput || !shortcutElements.isEmpty {
             input.elementValueDidChangeHandler = { @Sendable input, element in
                 guard mapsGameInput || shortcutElements.contains(ObjectIdentifier(element)) else { return }
-                deliver(ProcessInfo.processInfo.systemUptime - max(0, input.lastEventLatency))
+                deliver(ProcessInfo.processInfo.systemUptime - max(0, input.lastEventLatency), false)
             }
         }
         if !mapsGameInput {
-            controller.extendedGamepad?.valueChangedHandler = { @Sendable pad, _ in deliver(pad.lastEventTimestamp) }
+            controller.extendedGamepad?.valueChangedHandler = { @Sendable pad, _ in deliver(pad.lastEventTimestamp, false) }
         }
+    }
+}
+
+// Some controllers report gesture-capable buttons only through the button's own handler.
+enum ControllerButtonRoutes {
+    static func buttons(_ controller: GCController) -> [GCControllerButtonInput] {
+        guard let pad = controller.extendedGamepad else { return [] }
+        return [pad.buttonMenu, pad.buttonOptions, pad.buttonHome].compactMap { $0 }
+    }
+
+    static func set(_ controller: GCController, _ handler: GCControllerButtonValueChangedHandler?) {
+        for button in buttons(controller) { button.pressedChangedHandler = handler }
     }
 }

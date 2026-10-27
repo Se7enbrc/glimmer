@@ -224,6 +224,7 @@ final class IOSControllerCapture {
         _ = delivery.registrations.withLock { $0.removeValue(forKey: entry.registration) }
         entry.controller.extendedGamepad?.valueChangedHandler = nil
         entry.controller.input.unmapped?.elementValueDidChangeHandler = nil
+        ControllerButtonRoutes.set(entry.controller, nil)
         entry.controller.input.unmapped?.queue = entry.priorInputQueue
         entry.controller.handlerQueue = entry.priorQueue
         entry.controller.extendedGamepad?.valueChangedHandler = entry.priorHandler
