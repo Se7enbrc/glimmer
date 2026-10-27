@@ -99,7 +99,7 @@ struct TouchLayoutEditor: View {
             ScrollView {
                 VStack(spacing: 10) {
                     // At accessibility sizes the actions lead the list; pinned, they would fill the panel.
-                    if textSize.isAccessibilitySize { actions }
+                    if textSize.isAccessibilitySize && selected == nil { actions }
                     if let selected {
                         VStack(alignment: .leading, spacing: 4) {
                             ViewThatFits(in: .horizontal) {
@@ -119,7 +119,7 @@ struct TouchLayoutEditor: View {
                     }
                     if selected == nil {
                         Text("Select a control to move or resize it.").font(.callout).foregroundStyle(.secondary)
-                    } else if !textSize.isAccessibilitySize {
+                    } else {
                         actions
                     }
                 }.padding(.horizontal, 16).padding(.bottom, 8)
