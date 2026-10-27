@@ -12,6 +12,7 @@ import subprocess
 import time
 
 from release_candidate_kind import parse_tag
+from release_progress import progress, report
 
 BRANCH = 'refs/heads/release-candidate'
 RESERVATION = 'refs/heads/candidate-reservation'
@@ -86,9 +87,10 @@ def require(sha, object_api, delivery=False):
 
 
 def git(*args, input=None):
-    result = subprocess.run(['git', *args], input=input, capture_output=True, text=True, timeout=300)
-    if result.returncode:
-        raise ValueError('candidate reservation git operation failed; reload state before retrying')
+    with progress(f"reservation git {args[0]}: {BRANCH}, {RESERVATION}", 300):
+        result = subprocess.run(['git', *args], input=input, capture_output=True, text=True, timeout=300)
+        if result.returncode:
+            raise ValueError('candidate reservation git operation failed; reload state before retrying')
     return result.stdout.strip()
 
 
@@ -104,7 +106,8 @@ def snapshot():
 def quiescent(checks):
     # Delivery runs can wait at approval with a main head SHA, so inspect all refs.
     for workflow in DELIVERIES:
-        pages = checks.api(f'actions/workflows/{workflow}/runs?per_page=100')
+        with progress(f'delivery lookup: https://github.com/Se7enbrc/glimmer/actions/workflows/{workflow}', 60):
+            pages = checks.api(f'actions/workflows/{workflow}/runs?per_page=100')
         if not pages or any(not isinstance(page, dict) or not isinstance(page.get('workflow_runs'), list)
                             for page in pages):
             raise ValueError('delivery run lookup returned invalid data')
@@ -154,7 +157,8 @@ def candidate_version(sha):
 def unpublished(version, checks):
     if git('ls-remote', 'origin', f'refs/tags/{version}'):
         raise ValueError(f'{version} has a final tag; cannot automatically abandon a promoted candidate')
-    pages = checks.api('releases?per_page=100')
+    with progress('GA publication lookup: https://github.com/Se7enbrc/glimmer/releases', 60):
+        pages = checks.api('releases?per_page=100')
     if not pages or any(not isinstance(page, list) for page in pages):
         raise ValueError('release lookup returned invalid data; cannot automatically retire candidate')
     for release in (item for page in pages for item in page):
@@ -188,6 +192,7 @@ def superseded_candidate(refs, data, sha, checks):
 
 def reserve(sha, dry_run, checks):
     refs, data = snapshot()
+    report(f"Reservation for {sha}: " + (f"{data['sha']} is {data['state']}" if data else 'no held candidate'))
     superseded = None
     if data and data['state'] == 'closing':
         raise ValueError('candidate is closing; drain admitted deliveries and finish retirement first')
@@ -273,14 +278,20 @@ def finish(sha, state, checks):
 
 def wait(sha, object_api, budget):
     deadline = time.monotonic() + 20 * 60
-    with budget(deadline):
+    run = os.environ.get('GITHUB_RUN_ID', '')
+    links = 'https://github.com/Se7enbrc/glimmer/actions/workflows/candidate-delivery.yml'
+    if run:
+        links += f'; delivery https://github.com/Se7enbrc/glimmer/actions/runs/{run}'
+    with progress(f'delivery admission for {sha}: {links}', 20 * 60), budget(deadline):
         while time.monotonic() < deadline:
             try:
                 require(sha, object_api, delivery=True)
+                if time.monotonic() >= deadline:
+                    raise ValueError('delivery admission timed out; inspect the trusted controller')
                 return
             except AdmissionPending:
                 time.sleep(min(10, max(0, deadline - time.monotonic())))
-    raise ValueError('delivery admission timed out; inspect the trusted controller')
+        raise ValueError('delivery admission timed out; inspect the trusted controller')
 
 
 def main():
@@ -298,7 +309,7 @@ def main():
             finish(args.sha, 'released' if args.operation == 'release' else 'abandoned', checks)
     except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
         parser.exit(1, f'ERR: {error}\n')
-    print(f'Candidate {args.sha}: {args.operation} complete.')
+    print(f'Candidate {args.sha}: {args.operation} complete.', flush=True)
 
 
 if __name__ == '__main__':

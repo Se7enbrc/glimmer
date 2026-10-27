@@ -34,6 +34,7 @@ RELEASE_PATHS = (
     'scripts/release_symbols.py',
     'scripts/candidate_reservation.py',
     'scripts/candidate_delivery.py',
+    'scripts/release_progress.py',
     '.github/workflows/candidate-delivery.yml',
     '.github/workflows/verify.yml',
     '.github/workflows/codeql.yml',
@@ -147,6 +148,7 @@ class ReleaseCandidateCutTests(FixtureTestCase):
         shutil.copy2(SCRIPTS / "release_validation.py", self.work / "scripts")
         shutil.copy2(SCRIPTS / "release_candidate_kind.py", self.work / "scripts")
         shutil.copy2(SCRIPTS / "candidate_reservation.py", self.work / "scripts")
+        shutil.copy2(SCRIPTS / "release_progress.py", self.work / "scripts")
         (self.work / "scripts/release-checks.py").write_text(
             f"import os, runpy, sys\nREAL = runpy.run_path({str(SCRIPTS / 'release-checks.py')!r})\n"
             'REPO, REQUIRED = REAL["REPO"], REAL["REQUIRED"]\n'

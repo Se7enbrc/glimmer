@@ -86,6 +86,28 @@ original cutter workflow or check out the held `release-candidate` branch
 locally and rerun the cutter there. Resumption does not ask the moving PR ref to
 prove X again.
 
+Every cutter wait reports its start, timeout and completion with UTC timestamps.
+While blocked, it prints a heartbeat every 60 seconds, including during Git and
+API calls. Progress goes to stderr and is flushed immediately; ordinary cutter
+output is also unbuffered. Check messages link the source checks, workflow or
+specific runs as soon as their IDs are available. Integration checks have a
+90-minute budget, candidate scans 45 minutes, and delivery admission 20 minutes.
+Release-run discovery has a one-minute wall-clock deadline, including API time.
+Individual Git commands have a five-minute timeout, and API lookups one minute.
+
+The local cutter does not wait for the main **Release candidate** workflow or
+poll an occupied reservation. A green main workflow can mean its `ready` job
+finished but its `cut` job was skipped; inspect both jobs. On October 27, the
+[07:31 UTC run](https://github.com/Se7enbrc/glimmer/actions/runs/40467656334)
+skipped cutting because PR #205 did not satisfy its label/base requirements. RC
+19's hold was only
+[abandoned at 09:51:34 UTC](https://github.com/Se7enbrc/glimmer/commit/4549b8d79423a7ebbec84087c3f24f4fcc7a0452),
+and RC 20 was
+[reserved at 09:52:41 UTC](https://github.com/Se7enbrc/glimmer/commit/815d73aa99c3c2e83a4a1741e5f8800d0efd0f0f),
+before its scans dispatched at 09:53. GitHub records locate the gap before
+reservation; a local terminal log is needed to attribute time to a local command
+or retry. No delivery-admission run occurred between 07:00 and 10:00 UTC.
+
 **From the pull request.** Adding the `rc` label to a pull request from this
 repository runs the same cut in the **Release candidate** workflow, which
 comments the Release run on the pull request; approving the deployment is still

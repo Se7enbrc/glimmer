@@ -18,6 +18,7 @@ import time
 from urllib.parse import quote
 
 import candidate_reservation
+from release_progress import progress
 
 REPO = "Se7enbrc/glimmer"
 READ_DEADLINE = ContextVar("release_read_deadline", default=float("inf"))
@@ -294,10 +295,13 @@ def main():
             raise ValueError("reviewed SHA must be a full lowercase commit SHA")
         if args.delivery and not args.candidate:
             raise ValueError("delivery admission requires the candidate gate")
-        if args.delivery:
-            evidence = check(args.sha, candidate=True, delivery=True)
-        else:
-            evidence = check(args.sha, candidate=True) if args.candidate else check(args.sha)
+        timeout = 30 * 60 if args.delivery else 10 * 60
+        label = f'required checks for {args.sha}: https://github.com/{REPO}/commit/{args.sha}/checks'
+        with progress(label, timeout), read_budget(time.monotonic() + timeout):
+            if args.delivery:
+                evidence = check(args.sha, candidate=True, delivery=True)
+            else:
+                evidence = check(args.sha, candidate=True) if args.candidate else check(args.sha)
         if os.environ.get("RELEASE_CHECKS_FILE"):
             Path(os.environ["RELEASE_CHECKS_FILE"]).write_text(json.dumps(evidence) + "\n")
         if os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -310,7 +314,7 @@ def main():
         parser.exit(2, f"ERR: {error}\n")
     except (ValueError, KeyError, TypeError, subprocess.TimeoutExpired, OSError) as error:
         parser.exit(1, f"ERR: {error}\n")
-    print("Reviewed commit passed Verify, all CodeQL languages and code-scanning alert checks.")
+    print("Reviewed commit passed Verify, all CodeQL languages and code-scanning alert checks.", flush=True)
 
 
 if __name__ == "__main__":
