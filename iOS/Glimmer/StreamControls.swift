@@ -43,7 +43,7 @@ struct StreamControls: View {
             TouchOverlay(model: model)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .top) { if model.inputFocused { notices.padding(12) } }
+        .overlay { noticeOverlay }
         .environment(\.colorScheme, model.overlayAppearance.colorScheme ?? colorScheme)
         .opacity(model.dismissWhenStopped ? 0 : 1)
         .allowsHitTesting(!model.dismissWhenStopped)
@@ -174,6 +174,23 @@ struct StreamControls: View {
             if model.audioUnavailable { Label("Audio is unavailable", systemImage: "speaker.slash") }
             if model.connectionPoor { Label("Connection is unstable", systemImage: "wifi.exclamationmark") }
         }
+    }
+
+    private var noticeOverlay: some View {
+        GeometryReader { geometry in
+            if model.inputFocused {
+                notices
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                        model.overlayAppearance.noticeFrame = frame.isEmpty ? nil : frame
+                    }
+                    .onDisappear { model.overlayAppearance.noticeFrame = nil }
+                    .padding(.horizontal, 12)
+                    .padding(.top, model.touchControlsVisible
+                             ? TouchLayout.menuFrame(in: TouchOverlay.area(geometry)).maxY + 8 : 12)
+                    .frame(maxWidth: .infinity, alignment: .top)
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     private var notices: some View {

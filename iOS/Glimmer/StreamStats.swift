@@ -73,7 +73,8 @@ final class StreamStats {
     func layout() {
         guard let surface else { return }
         if overlay.layer.superlayer !== surface.displayLayer { overlay.attach(to: surface.displayLayer) }
-        let obstacles = surface.overlayAppearance.touchObstacles
+        let touchControls = surface.overlayAppearance.touchObstacles
+        let obstacles = touchControls + (surface.overlayAppearance.noticeFrame.map { [$0] } ?? [])
         let area = surface.bounds.inset(by: surface.safeAreaInsets)
         if lastTouchArea != area || lastTouchObstacles != obstacles {
             lastTouchArea = area
@@ -81,7 +82,7 @@ final class StreamStats {
             let clear = Self.clearStatsArea(in: area, avoiding: obstacles)
             overlay.placementBounds = obstacles.isEmpty ? nil
                 : CGRect(x: clear.minX, y: surface.bounds.maxY - clear.maxY, width: clear.width, height: clear.height)
-            overlay.compactRows = !obstacles.isEmpty && surface.bounds.height < 500
+            overlay.compactRows = !touchControls.isEmpty && surface.bounds.height < 500
         }
         overlay.layoutInHost(surface.displayLayer)
     }

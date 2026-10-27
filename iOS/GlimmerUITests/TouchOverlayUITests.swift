@@ -22,6 +22,8 @@ final class TouchOverlayUITests: XCTestCase {
             if state == "waiting" {
                 XCTAssertTrue(app.staticTexts["Waiting for video…"].waitForExistence(timeout: 5))
                 record("touch-ui-state-waiting-banner", app: app)
+                XCTAssertFalse(app.staticTexts["Waiting for video…"].frame.intersects(
+                    app.buttons["stream-controls-show"].frame))
                 app.buttons["stream-controls-show"].tap()
             }
             let exit = app.buttons["stream-disconnect"]

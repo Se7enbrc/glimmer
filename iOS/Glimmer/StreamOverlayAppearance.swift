@@ -13,6 +13,10 @@ final class StreamOverlayAppearance {
         didSet { if oldValue != touchObstacles { layoutChanged?() } }
     }
 
+    @ObservationIgnored var noticeFrame: CGRect? {
+        didSet { if oldValue != noticeFrame { layoutChanged?() } }
+    }
+
     func update(luminance: Double) {
         guard luminance.isFinite, (0...1).contains(luminance) else { return }
         let darkInk = StatsOverlayLayer.shouldUseDarkInk(luminance: luminance, currentlyDark: colorScheme == .light)

@@ -113,6 +113,10 @@ struct ControllerStatsTests {
         } else {
             #expect(scale >= 0.8)
         }
+        let notice = CGRect(x: size.width / 2 - 100, y: 112, width: 200, height: 44)
+        surface.overlayAppearance.noticeFrame = notice
+        #expect(!stats.overlay.layer.frame.intersects(notice))
+        surface.overlayAppearance.noticeFrame = nil
         surface.overlayAppearance.touchObstacles = []
         #expect(stats.overlay.placementBounds == nil && !stats.overlay.compactRows)
         stats.setVisible(false)
