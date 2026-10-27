@@ -39,7 +39,9 @@ struct IOSCommandTests {
         for await pending in Observations({ model.pendingCommand }) where pending { break }
         #expect(model.session == nil)
         if cancel {
-            #expect(await model.stopFromCommand() == .stopped)
+            #expect(await model.stopFromCommand(matching: "another PC") == .pcMismatch)
+            #expect(await model.stopFromCommand(matching: fixture.pcID) == .stopped)
+            _ = await model.stopFromCommand()
             await #expect(throws: CancellationError.self) { try await launch.value }
         } else {
             model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
@@ -79,7 +81,9 @@ struct IOSCommandTests {
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
         let launch = Task { try await model.streamFromCommand(pc: fixture.pcID, app: "Game") }
         await gate.waitUntilEntered()
-        #expect(await model.stopFromCommand() == .stopped)
+        #expect(await model.stopFromCommand(matching: "another PC") == .pcMismatch)
+        #expect(await model.stopFromCommand(matching: fixture.pcID) == .stopped)
+        _ = await model.stopFromCommand()
         await gate.release()
         do {
             try await launch.value
@@ -126,7 +130,7 @@ struct IOSCommandTests {
         await disposal.waitUntilEntered()
         #expect(sessions == 1)
         if cancel {
-            let stopping = Task { await model.stopFromCommand() }
+            let stopping = Task { await model.stopFromCommand(matching: fixture.pcID) }
             while model.commandTask != nil { await Task.yield() }
             await disposal.release()
             #expect(await stopping.value == .stopped)

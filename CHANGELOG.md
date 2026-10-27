@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- Stop requests for a specific PC now cancel its pending launch on iPhone and
+  iPad, even while Glimmer is waiting to reconnect or return to the foreground.
+
 - Links from other apps now ask before starting or stopping a stream on Mac,
   iPhone and iPad. An old confirmation cannot stop a newer stream.
 

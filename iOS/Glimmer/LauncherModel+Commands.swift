@@ -28,8 +28,8 @@ extension LauncherModel {
         let pc = try commandPC(query)
         commandEpoch &+= 1
         let epoch = commandEpoch
-        pendingCommand = true
-        defer { if commandEpoch == epoch { pendingCommand = false } }
+        pendingCommandPCID = pc.id
+        defer { if commandEpoch == epoch { pendingCommandPCID = nil } }
         if let session, !session.phase.isEnded {
             guard session.launch.pcID == pc.id else { throw PCIntentError.alreadyStreaming }
             guard let name else { stream = session; return }
@@ -77,11 +77,11 @@ extension LauncherModel {
 
     func stopFromCommand(matching query: String? = nil) async -> CommandStopResult {
         if let query {
-            let id = session?.launch.pcID ?? selected?.server.uniqueId
+            let id = pendingCommandPCID ?? session?.launch.pcID ?? selected?.server.uniqueId
             guard let pc = try? commandPC(query), pc.id == id else { return .pcMismatch }
         }
         let pending = pendingCommand || busy || pendingGameAction != nil || commandTask != nil
-        pendingCommand = false
+        pendingCommandPCID = nil
         commandEpoch &+= 1
         commandTask?.cancel()
         commandTask = nil
@@ -137,7 +137,9 @@ extension LauncherModel {
         if action.target == nil { session.quitGame(); return }
         commandEpoch &+= 1
         let epoch = commandEpoch
+        pendingCommandPCID = session.launch.pcID
         commandTask = Task {
+            defer { if commandEpoch == epoch { pendingCommandPCID = nil } }
             streamClosed()
             await waitUntilStreamClosed()
             guard commandEpoch == epoch, !Task.isCancelled,
@@ -166,7 +168,8 @@ extension LauncherModel {
         do {
             let pc = try command.pc.map(commandPC)
             if command.action == .stop {
-                if let pc, pc.id != session?.launch.pcID, pc.id != selected?.server.uniqueId, !pendingCommand {
+                if let pc, pc.id != session?.launch.pcID,
+                   pc.id != selected?.server.uniqueId, pc.id != pendingCommandPCID {
                     message = CommandStopResult.pcMismatch.message
                     return nil
                 }

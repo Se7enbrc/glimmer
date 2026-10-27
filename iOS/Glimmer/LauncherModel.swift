@@ -66,7 +66,8 @@ final class LauncherModel {
     private let discovery = HostDiscovery()
     var selected: PreparedPC?
     private var selection: SavedPC?
-    var pendingCommand = false
+    var pendingCommandPCID: String?
+    var pendingCommand: Bool { pendingCommandPCID != nil }
     var commandEpoch: UInt64 = 0
     var commandTask: Task<Void, Never>?
     var generation: UInt64 = 0
