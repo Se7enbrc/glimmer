@@ -79,10 +79,18 @@ package enum FileIdentityStore {
             guard existing == data else { throw IdentityStorageError.alreadyExists }
             return
         }
+        try write(data, to: url)
+    }
+
+    private static func write(_ data: Data, to url: URL) throws {
         let fm = FileManager.default
-        let dir = try directoryURL(base: base)
+        let dir = url.deletingLastPathComponent()
         try fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        let permissions = try fm.attributesOfItem(atPath: dir.path)[.posixPermissions] as? NSNumber
+        guard permissions?.uint16Value == 0o700 else {
+            throw StreamError.crypto("Could not protect client identity permissions")
+        }
         let temporary = dir.appendingPathComponent("." + UUID().uuidString)
         defer { try? fm.removeItem(at: temporary) }
         try data.write(to: temporary, options: .withoutOverwriting)
@@ -111,11 +119,28 @@ package enum FileIdentityStore {
         return try body()
     }
 
-    /// Called under the publication lock only after readable bytes fail complete-pair validation.
-    package static func discardIncompleteIdentity(base: URL) throws {
-        for account in [IdentityManager.accountCert, IdentityManager.accountKey, IdentityManager.accountUID] {
-            guard let url = try fileURL(account: account, base: base) else { continue }
-            do { try FileManager.default.removeItem(at: url) } catch CocoaError.fileNoSuchFile { continue }
+    /// Only this reserved staging directory can contain an interrupted, unpublished identity.
+    package static func discardStaging(base: URL) throws {
+        let staging = try directoryURL(base: base).deletingLastPathComponent()
+            .appendingPathComponent(".identity-staging", isDirectory: true)
+        do { try FileManager.default.removeItem(at: staging) } catch CocoaError.fileNoSuchFile { return }
+    }
+
+    /// The caller holds the publication lock; the exclusive rename cannot replace an established store.
+    package static func publish(_ identity: IdentityManager.Identity, base: URL) throws {
+        let destination = try directoryURL(base: base)
+        let staging = destination.deletingLastPathComponent()
+            .appendingPathComponent(".identity-staging", isDirectory: true)
+        try write(Data(identity.certPEM.utf8), to: staging.appendingPathComponent(certFileName))
+        try write(Data(identity.keyPEM.utf8), to: staging.appendingPathComponent(keyFileName))
+        try write(Data(identity.uniqueID.utf8), to: staging.appendingPathComponent(uidFileName))
+        let cert = try String(contentsOf: staging.appendingPathComponent(certFileName), encoding: .utf8)
+        let key = try String(contentsOf: staging.appendingPathComponent(keyFileName), encoding: .utf8)
+        _ = try PEM.identity(certPEM: cert, keyPEM: key)
+        guard try Data(contentsOf: staging.appendingPathComponent(uidFileName)) == Data(identity.uniqueID.utf8),
+              !identity.uniqueID.isEmpty else { throw IdentityStorageError.incompleteIdentity }
+        guard renamex_np(staging.path, destination.path, UInt32(RENAME_EXCL)) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
     }
 
@@ -219,4 +244,6 @@ public enum IdentityStorageError: Error, Sendable {
     case unavailable
     case defaultsUnavailable
     case alreadyExists
+    case incompleteIdentity
+    case invalidIdentity
 }

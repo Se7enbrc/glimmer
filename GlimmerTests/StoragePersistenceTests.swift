@@ -35,9 +35,9 @@ struct IdentityPersistenceTests {
         let store = try IsolatedStore("id-interrupted-first")
         defer { store.remove() }
         let pair = try await manager(store).generateKeyPairAndCert()
-        // Simulate termination after the first component was published, before caching or setting the flag.
-        try FileIdentityStore.write(Data(pair.certPEM.utf8), account: IdentityManager.accountCert,
-                                    base: store.directory)
+        let staging = store.directory.appendingPathComponent("Glimmer/.identity-staging")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        try Data(pair.certPEM.utf8).write(to: staging.appendingPathComponent("client-cert.pem"))
         if migrating {
             store.defaults.set(pair.certPEM, forKey: IdentityKey.certificate)
             store.defaults.set(pair.keyPEM, forKey: IdentityKey.privateKey)
@@ -51,6 +51,7 @@ struct IdentityPersistenceTests {
         if migrating {
             #expect(certificate == pair.certPEM && key == pair.keyPEM && uniqueID == "MIGRATED")
         }
+        #expect(!FileManager.default.fileExists(atPath: staging.path))
         let next = manager(store)
         #expect(try await next.clientCertPEM() == certificate)
         #expect(try await next.uniqueID() == uniqueID)
@@ -99,7 +100,7 @@ struct IdentityPersistenceTests {
     @Test func plaintextDefaultsMoveToFilesAndAreWiped() async throws {
         let store = try IsolatedStore("id-plaintext")
         defer { store.remove() }
-        let pair = try await IdentityManager.shared.generateKeyPairAndCert()
+        let pair = try await manager(store).generateKeyPairAndCert()
         store.defaults.set(pair.certPEM, forKey: IdentityKey.certificate)
         store.defaults.set(pair.keyPEM, forKey: IdentityKey.privateKey)
         store.defaults.set("OLDUID", forKey: IdentityKey.uniqueID)
@@ -116,7 +117,7 @@ struct IdentityPersistenceTests {
         let store = try IsolatedStore("id-qt")
         let qt = try IsolatedStore("id-qt-source")
         defer { store.remove(); qt.remove() }
-        let pair = try await IdentityManager.shared.generateKeyPairAndCert()
+        let pair = try await manager(store).generateKeyPairAndCert()
         qt.defaults.set(Data(pair.certPEM.utf8), forKey: "certificate")
         qt.defaults.set(Data(pair.keyPEM.utf8), forKey: "key")
         qt.defaults.set("QTUID", forKey: "uniqueid")
@@ -125,16 +126,6 @@ struct IdentityPersistenceTests {
         #expect(try await loaded.uniqueID() == "QTUID")
         #expect(qt.defaults.data(forKey: "key") != nil)
         #expect(qt.defaults.string(forKey: "uniqueid") == "QTUID")
-    }
-
-    @Test func aMissingUniqueIDFileIsSynthesisedAndStaysStable() async throws {
-        let store = try IsolatedStore("id-uid")
-        defer { store.remove() }
-        _ = try await manager(store).uniqueID()
-        try FileManager.default.removeItem(at: identityFile(store, "client-uniqueid.txt"))
-        let repaired = try await manager(store).uniqueID()
-        #expect(repaired.count == 32)
-        #expect(try await manager(store).uniqueID() == repaired)
     }
 
     @Test func aWipedFileStoreWithTheFlagSetRegenerates() async throws {
@@ -147,27 +138,35 @@ struct IdentityPersistenceTests {
         #expect(FileManager.default.fileExists(atPath: identityFile(store, "client-cert.pem").path))
     }
 
-    @Test func aCorruptCertificateFileCanRecover() async throws {
-        let store = try IsolatedStore("id-corrupt")
-        defer { store.remove() }
-        _ = try await manager(store).uniqueID()
-        try Data("not a pem".utf8).write(to: identityFile(store, "client-cert.pem"))
-        let recovered = manager(store)
-        _ = try PEM.identity(certPEM: await recovered.clientCertPEM(), keyPEM: await recovered.clientKeyPEM())
-    }
-
-    @Test(arguments: ["client-cert.pem", "client-key.pem"])
-    func incompleteIdentityCanRecoverWithoutBlockingPairing(missing: String) async throws {
+    @Test(arguments: ["client-cert.pem", "client-key.pem", "client-uniqueid.txt", "corrupt", "mismatch"])
+    func incompleteIdentityPreservesSurvivingMaterial(damage: String) async throws {
         let store = try IsolatedStore("id-partial")
-        defer { store.remove() }
+        let qt = try IsolatedStore("id-conflicting-migration")
+        defer { store.remove(); qt.remove() }
         _ = try await manager(store).uniqueID()
-        let remaining = missing == "client-cert.pem" ? "client-key.pem" : "client-cert.pem"
-        let original = try Data(contentsOf: identityFile(store, remaining))
-        try FileManager.default.removeItem(at: identityFile(store, missing))
-        let recovered = manager(store)
-        _ = try PEM.identity(certPEM: await recovered.clientCertPEM(), keyPEM: await recovered.clientKeyPEM())
-        #expect(try Data(contentsOf: identityFile(store, remaining)) != original)
-        #expect(FileManager.default.fileExists(atPath: identityFile(store, missing).path))
+        try PinnedCertStore.store(pem: "ESTABLISHED-PIN", forHostID: "PC",
+                                 defaults: store.defaults, base: store.directory)
+        let conflicting = try await manager(qt).generateKeyPairAndCert()
+        qt.defaults.set(conflicting.certPEM, forKey: IdentityKey.certificate)
+        qt.defaults.set(conflicting.keyPEM, forKey: IdentityKey.privateKey)
+        qt.defaults.set("CONFLICTING-ID", forKey: IdentityKey.uniqueID)
+        if damage == "corrupt" || damage == "mismatch" {
+            let bytes = damage == "corrupt" ? Data("not a pem".utf8) : Data(conflicting.certPEM.utf8)
+            try bytes.write(to: identityFile(store, "client-cert.pem"))
+        } else {
+            try FileManager.default.removeItem(at: identityFile(store, damage))
+        }
+        let names = ["client-cert.pem", "client-key.pem", "client-uniqueid.txt"].filter { $0 != damage }
+        let original = try names.map { try Data(contentsOf: identityFile(store, $0)) }
+        await #expect(throws: (any Error).self) {
+            _ = try await manager(store, qt: qt.domain).uniqueID()
+        }
+        #expect(try names.map { try Data(contentsOf: identityFile(store, $0)) } == original)
+        if names.count == 2 {
+            #expect(!FileManager.default.fileExists(atPath: identityFile(store, damage).path))
+        }
+        #expect(PinnedCertStore.load(forHostID: "PC", defaults: store.defaults,
+                                    base: store.directory) == "ESTABLISHED-PIN")
     }
 
     @Test func theFileStoreRefusesUnknownAccountsAndDeletesIdempotently() throws {

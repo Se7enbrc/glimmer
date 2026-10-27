@@ -34,6 +34,8 @@ enum StreamSessionFailureCopy {
             "Couldn't start the video decoder for \(pcName). Close the stream and try again."
         case .audioFailed:
             "Couldn't start audio for \(pcName). Check this device's sound output, then try again."
+        case .identityNeedsRestore:
+            StreamFailureCopy.identityNeedsRestore(pcName)
         case .security, .invalidSessionKey:
             "A security error stopped the connection to \(pcName). Try again, and pair again if it keeps happening."
         case .cancelled:

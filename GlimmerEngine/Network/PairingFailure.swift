@@ -8,4 +8,10 @@ public enum PairingFailure: Error, Equatable, Sendable {
     case timedOut
     case busy
     case rejected
+    case identityNeedsRestore
+
+    public static func from(_ error: Error, fallback: Self) -> Self {
+        if StreamFailure.connection(error) == .identityNeedsRestore { return .identityNeedsRestore }
+        return error as? Self ?? fallback
+    }
 }

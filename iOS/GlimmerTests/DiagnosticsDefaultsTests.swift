@@ -90,10 +90,13 @@ struct PersistentStorageTests {
         defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
         let first = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
         let pair = try await first.generateKeyPairAndCert()
-        try FileIdentityStore.write(Data(pair.certPEM.utf8), account: IdentityManager.accountCert, base: root)
+        let staging = root.appendingPathComponent("Glimmer/.identity-staging")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        try Data(pair.certPEM.utf8).write(to: staging.appendingPathComponent("client-cert.pem"))
         let retry = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
         let certificate = try await retry.clientCertPEM()
         _ = try PEM.identity(certPEM: certificate, keyPEM: await retry.clientKeyPEM())
+        #expect(!FileManager.default.fileExists(atPath: staging.path))
         let next = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
         #expect(try await next.clientCertPEM() == certificate)
     }
@@ -114,6 +117,29 @@ struct PersistentStorageTests {
         let second = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
         #expect(try await second.uniqueID() == originalID)
         #expect(try Data(contentsOf: certificate) == originalCertificate)
+    }
+
+    @Test(arguments: ["client-cert.pem", "client-key.pem", "client-uniqueid.txt"])
+    func incompleteIdentityPreservesEverySurvivingByte(missing: String) async throws {
+        let suite = "identity-partial-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        let root = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let first = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
+        _ = try await first.uniqueID()
+        let directory = root.appendingPathComponent("Glimmer/Identity")
+        let names = ["client-cert.pem", "client-key.pem", "client-uniqueid.txt"].filter { $0 != missing }
+        let original = try names.map { try Data(contentsOf: directory.appendingPathComponent($0)) }
+        try FileManager.default.removeItem(at: directory.appendingPathComponent(missing))
+        let retry = IdentityManager(defaultsSuite: suite, supportBase: root, protectedDataAvailable: { true })
+        await #expect(throws: (any Error).self) { _ = try await retry.uniqueID() }
+        #expect(try names.map { try Data(contentsOf: directory.appendingPathComponent($0)) } == original)
+        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent(missing).path))
+        let error = IdentityStorageError.incompleteIdentity
+        #expect(LauncherFailureCopy.message(error, pcName: "Den PC")
+                == StreamFailureCopy.identityNeedsRestore("Den PC"))
+        #expect(StreamSessionFailureCopy.connection(StreamFailure.connection(error), pcName: "Den PC")
+                == StreamFailureCopy.identityNeedsRestore("Den PC"))
     }
 
     @Test func testProcessCannotResolveInstallationStorage() throws {

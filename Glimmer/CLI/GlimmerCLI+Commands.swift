@@ -49,7 +49,7 @@ extension GlimmerCLI {
             "\(pc) is busy with another pairing request. "
                 + "Cancel it on Sunshine's PIN page or wait a few minutes, then run glimmer pair again."
         case .rejected: "\(pc) didn't accept the pairing. Run glimmer pair again for a new code."
-        case .invalidAddress, .unreachable, .gameStream: failure.message(pc: pc)
+        case .invalidAddress, .unreachable, .gameStream, .identityNeedsRestore: failure.message(pc: pc)
         }
     }
 

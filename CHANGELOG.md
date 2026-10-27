@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- Glimmer preserves saved pairing identity files after an incomplete restore and
+  explains when they need to be restored from a backup.
+
 - Stop now cancels a queued command-line game launch, including a switch waiting
   for the previous stream to close.
 

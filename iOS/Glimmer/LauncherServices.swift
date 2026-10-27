@@ -204,6 +204,9 @@ enum LauncherFailureCopy {
     }
 
     static func message(_ error: Error, pcName: String = "the PC") -> String {
+        if StreamFailure.connection(error) == .identityNeedsRestore {
+            return StreamFailureCopy.identityNeedsRestore(pcName)
+        }
         if case LauncherServices.Failure.missingPin = error {
             return "Glimmer couldn't use its saved pairing with \(pcName). "
                 + "In Settings → PCs, forget the PC and pair again."

@@ -13,7 +13,7 @@ public enum StreamFailure {
         case unreachable, sunshineRequired, pairingRejected, hostTimedOut
         case pairing(String), sunshineNeedsRestart(String), launchRefused(String)
         case portsBlocked(proto: String, port: UInt16)
-        case launchFailed, sessionFailed, decoderFailed, audioFailed, security
+        case launchFailed, sessionFailed, decoderFailed, audioFailed, security, identityNeedsRestore
         case alreadyStarted, invalidConfiguration, pairingRequired, invalidSessionKey, cancelled
         case takeoverRequired(appID: Int)
 
@@ -32,6 +32,8 @@ public enum StreamFailure {
     }
 
     public static func connection(_ error: Error) -> ConnectionReason {
+        if case IdentityStorageError.incompleteIdentity = error { return .identityNeedsRestore }
+        if case IdentityStorageError.invalidIdentity = error { return .identityNeedsRestore }
         if error is CancellationError { return .cancelled }
         if let takeover = error as? TakeoverRequired { return .takeoverRequired(appID: takeover.appID) }
         if let failure = error as? StreamConnection.Failure {
