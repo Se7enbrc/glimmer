@@ -368,21 +368,33 @@ final class StreamSessionModel {
         synchronizeInputFocus()
     }
 
+    private func resumePlayback() {
+        recordFirstVideo()
+        hasReceivedVideo = true
+        endingMessage = nil
+        terminalFailure = false
+        captureSuspended = false
+        adjustingQuality = false
+        phase = .streaming
+        if !controlsRequested { controlsVisible = !controllerConnected && !touchGeometryUsable }
+        synchronizeInputFocus()
+    }
+
+    private func adoptSize(width: Int, height: Int) {
+        guard let current = requestedFormat else { return }
+        let format = StreamFormat(width: width, height: height, fps: current.fps,
+                                  changeResolution: current.changeResolution)
+        requestedFormat = format
+        windowResize?.adopt(format)
+    }
+
     func receive(_ update: StreamSession.Update) {
         guard playback?.id == update.sessionID, !phase.isEnded else { return }
         if case .stopped = update.event { if !quittingGame { complete() }; return }
         guard phase != .stopping else { return }
         switch update.event {
-        case .firstFrame, .reconnected:
-            recordFirstVideo()
-            hasReceivedVideo = true
-            endingMessage = nil
-            terminalFailure = false
-            captureSuspended = false
-            adjustingQuality = false
-            phase = .streaming
-            if !controlsRequested { controlsVisible = !controllerConnected && !touchGeometryUsable }
-            synchronizeInputFocus()
+        case .firstFrame, .reconnected: resumePlayback()
+        case .sizeChanged(let width, let height): adoptSize(width: width, height: height)
         case .reconnecting, .adjustingQuality: holdForRecovery(update.event)
         case .connectionTerminated(let code, let error):
             rejectPictureTrial()

@@ -75,6 +75,73 @@ struct StreamWindowResizeCoordinatorTests {
         await model.waitUntilStopped()
     }
 
+    @Test func adoptingReducedStartupDoesNotRestoreAnObsoleteFullSize() async {
+        var requests: [StreamFormat] = []
+        let resize = StreamWindowResize(format: initial, request: { requests.append($0); return .applied },
+                                        applied: { _ in }, sleep: { _ in })
+        resize.adopt(narrow)
+        resize.setAvailable(true)
+        await resize.waitForPendingChange()
+        #expect(requests.isEmpty)
+        resize.submit(initial)
+        await resize.waitForPendingChange()
+        #expect(requests.isEmpty)
+        resize.stop()
+    }
+
+    @Test func adoptingStartupPreservesANewerWindowRequest() async {
+        var requests: [StreamFormat] = []
+        let resize = StreamWindowResize(format: initial, request: { requests.append($0); return .applied },
+                                        applied: { _ in }, sleep: { _ in })
+        resize.submit(wide)
+        resize.adopt(narrow)
+        resize.setAvailable(true)
+        await resize.waitForPendingChange()
+        #expect(requests == [wide])
+        resize.stop()
+    }
+
+    @Test func appliedDataModeSizesDoNotReassertTheWindowGeometry() async {
+        var requests: [StreamFormat] = []
+        var applied: [StreamFormat] = []
+        let resize = StreamWindowResize(format: initial, request: {
+            requests.append($0)
+            return .adapted(self.narrow)
+        }, applied: { applied.append($0) }, sleep: { _ in })
+        resize.setAvailable(true)
+        resize.submit(wide)
+        await resize.waitForPendingChange()
+        #expect(requests == [wide] && applied == [narrow])
+        resize.submit(wide)
+        resize.adopt(initial)
+        await resize.waitForPendingChange()
+        #expect(requests == [wide])
+        resize.stop()
+    }
+
+    @Test func engineSizeUpdatesSynchronizeTheModelWithoutAnotherResize() async throws {
+        let id = UUID()
+        var requests: [StreamFormat] = []
+        let reduced = narrow
+        let model = StreamSessionModel(launch: testLaunch(), resizeSleep: { _ in }, makePlayback: { _, _, _ in
+            StreamPlayback(id: id, events: AsyncStream { _ in },
+                start: { StreamStart(format: reduced, startKbps: nil) }, stop: {}, screenChanged: {},
+                format: self.initial, requestFormatChange: { requests.append($0); return .applied })
+        })
+        model.start(surface: StreamSurface())
+        await model.waitUntilStartFinishes()
+        model.receive(.init(sessionID: id, attemptID: UUID(), event: .firstFrame))
+        await model.waitForWindowResize()
+        #expect(model.requestedFormat == reduced && requests.isEmpty)
+        model.receive(.init(sessionID: id, attemptID: UUID(),
+                            event: .sizeChanged(width: wide.width, height: wide.height)))
+        model.receive(.init(sessionID: id, attemptID: UUID(), event: .reconnected))
+        await model.waitForWindowResize()
+        #expect(model.requestedFormat == wide && requests.isEmpty)
+        model.stop()
+        await model.waitUntilStopped()
+    }
+
     @Test func resizeDebouncesLatestSizeAndDoesNotResetForDuplicateLayout() async {
         let clock = WindowResizeClock()
         var requests: [StreamFormat] = []

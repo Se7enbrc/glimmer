@@ -381,7 +381,7 @@ extension AppModel {
             nativeHDRActive = false
             showStreamEnded(code: code, error: error, host: host)
         // A quality change is named by the stream window's banner; the launcher and menu bar stay live.
-        case .waitingForVideo, .adjustingQuality: break
+        case .waitingForVideo, .adjustingQuality, .sizeChanged: break
         case .reconnecting:
             // The host closed a live session (it likely restarted across a
             // lock/desktop transition) and the engine is silently re-establishing

@@ -53,6 +53,15 @@ struct StreamProfileTests {
         }
     }
 
+    @Test func resizedDataModePairsSupportTheRunningFPS() {
+        for mode in StreamDisplayModes.bundled {
+            let formats = StreamFormats(resizing: mode)
+            #expect(formats.full == mode)
+            #expect(formats.lowData.fps == mode.fps)
+            #expect(StreamDisplayModes.bundled.contains(formats.lowData))
+        }
+    }
+
     @Test(arguments: [CGSize.zero, CGSize(width: CGFloat.infinity, height: 1000),
                       CGSize(width: 1000, height: CGFloat.nan), CGSize(width: -1, height: 10000)])
     func invalidWindowCannotRequestAnInvalidMode(pixels: CGSize) {

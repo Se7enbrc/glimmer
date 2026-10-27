@@ -73,6 +73,13 @@ struct StreamFormats: Equatable, Sendable {
                                changeResolution: full.changeResolution)
     }
 
+    init(resizing full: StreamFormat) {
+        self.full = full
+        let reduced = StreamDisplayModes.closest(to: CGSize(width: 1920, height: 1080),
+                                                 maximumFPS: full.fps, requiredFPS: full.fps) ?? full
+        lowData = reduced.width * reduced.height < full.width * full.height ? reduced : full
+    }
+
     /// Start under Low Data Mode at the reduced mode; either way both sizes ride along for later edges.
     func start(lowData constrained: Bool) -> StreamFormat { constrained ? lowData : full }
 

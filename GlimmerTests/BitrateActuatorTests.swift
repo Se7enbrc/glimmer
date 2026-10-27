@@ -139,6 +139,48 @@ struct BitrateActuatorTests {
         await fixture.stopLocally()
     }
 
+    @Test func windowResizeReplacesTheAdaptiveGeometry() async throws {
+        let replay = BandwidthReplay()
+        let inputs = BandwidthInputs(.init(path: replay.policy.path, environment: replay.policy.environment))
+        let fixture = await BitrateFixture(bandwidthInputs: inputs)
+        await fixture.session.armBandwidthForTest(replay.policy, enabled: true, sizes: DataModeSizes(
+            fullWidth: 1920, fullHeight: 1080, lowDataWidth: 1280, lowDataHeight: 720))
+        #expect(await fixture.session.request(width: 1280, height: 720) == .accepted)
+        await fixture.session.waitForBitrateTask()
+        #expect(await fixture.session.dataModeTarget(lowData: false) == nil)
+        await fixture.session.observeBandwidth(at: 100, attempt: fixture.session.attemptID)
+        await fixture.session.waitForBitrateTask()
+        #expect(await fixture.session.reconnectConfig?.width == 1280)
+        await fixture.stopLocally()
+    }
+
+    @Test func lowDataModeUsesTheLatestWindowPairAcrossTransitions() async throws {
+        let replay = BandwidthReplay(constrained: true)
+        let inputs = BandwidthInputs(.init(path: replay.policy.path, environment: replay.policy.environment))
+        let fixture = await BitrateFixture(bandwidthInputs: inputs)
+        await fixture.session.armBandwidthForTest(replay.policy, enabled: true, sizes: DataModeSizes(
+            fullWidth: 1920, fullHeight: 1080, lowDataWidth: 1280, lowDataHeight: 720))
+        let sizes = DataModeSizes(fullWidth: 1366, fullHeight: 2064, lowDataWidth: 750, lowDataHeight: 972)
+        #expect(await fixture.session.request(width: 1366, height: 2064, sizes: sizes) == .accepted)
+        await fixture.session.waitForBitrateTask()
+        #expect(await fixture.session.requestedSize.map { [$0.width, $0.height] } == [750, 972])
+        #expect(await fixture.session.dataModeTarget(lowData: true) == nil)
+        #expect(await fixture.session.dataModeTarget(lowData: false).map { [$0.width, $0.height] } == [1366, 2064])
+        var snapshot = inputs.snapshot()
+        snapshot.path.constrained = false
+        inputs.update(snapshot)
+        await fixture.session.observeBandwidth(at: 100, attempt: fixture.session.attemptID)
+        await fixture.session.waitForBitrateTask()
+        #expect(await fixture.session.requestedSize.map { [$0.width, $0.height] } == [1366, 2064])
+        snapshot.path.constrained = true
+        inputs.update(snapshot)
+        await fixture.session.observeBandwidth(at: 200, attempt: fixture.session.attemptID)
+        await fixture.session.waitForBitrateTask()
+        #expect(await fixture.session.requestedSize.map { [$0.width, $0.height] } == [750, 972])
+        #expect(fixture.pc.paths.allSatisfy { $0 == "serverinfo" || $0 == "resume" })
+        await fixture.stopLocally()
+    }
+
     @Test func resizeSeamRenegotiatesSizeAtTheSameRate() async throws {
         let fixture = await BitrateFixture()
         #expect(await fixture.session.request(width: 1920, height: 1080) == .rejected)

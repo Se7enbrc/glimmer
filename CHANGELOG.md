@@ -128,6 +128,8 @@
   rate, including 120 fps.
 - Release controller shoulder buttons reliably when using layouts and controller
   shortcuts.
+- Keep iPad window sizes and Low Data Mode in sync without undoing the latest
+  resize.
 
 - Fixed missed and delayed controller input on iPhone and iPad.
 
