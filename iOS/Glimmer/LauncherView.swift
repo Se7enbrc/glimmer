@@ -96,6 +96,7 @@ struct LauncherView: View {
         }
         .fullScreenCover(item: $model.stream, onDismiss: model.streamClosed) { session in
             StreamView(model: session) { model.stream = nil }
+                .modifier(RunningGameConfirmation(model: model, duringStream: true))
                 .ignoresSafeArea()
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)

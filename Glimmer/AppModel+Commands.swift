@@ -86,7 +86,7 @@ enum CommandChannel {
         case notMine
     }
 
-    static let alreadyStreaming = "Glimmer is already streaming. Stop Streaming, then try again."
+    static let alreadyStreaming = StreamCommandMatch.alreadyStreaming
 
     static func post(_ name: Notification.Name, _ info: [String: String]) {
         DistributedNotificationCenter.default().postNotificationName(

@@ -28,10 +28,12 @@ struct RunningGameMenu: View {
 
 struct RunningGameConfirmation: ViewModifier {
     @Bindable var model: LauncherModel
+    var duringStream = false
 
     func body(content: Content) -> some View {
         content.alert(title, isPresented: Binding(
-            get: { model.pendingGameAction != nil }, set: { if !$0 { model.pendingGameAction = nil } }),
+            get: { model.pendingGameAction != nil && (model.stream != nil) == duringStream },
+            set: { if !$0 { model.pendingGameAction = nil } }),
             presenting: model.pendingGameAction) { action in
             Button(button(action), role: action.resize && !action.restart ? nil : .destructive) {
                 model.confirmGameAction(action)

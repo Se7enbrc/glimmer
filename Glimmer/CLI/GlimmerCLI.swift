@@ -179,9 +179,8 @@ enum GlimmerCLI {
     /// A paired PC by name, id or address, ignoring case (moonlight's rule).
     nonisolated static func matchHost(_ query: String, in hosts: [Host]) -> Host? {
         hosts.first { host in
-            [host.displayName, host.name, host.id, host.localAddress, host.manualAddress]
-                .compactMap { $0 }
-                .contains { $0.caseInsensitiveCompare(query) == .orderedSame }
+            StreamCommandMatch.pc(query, names: [host.displayName, host.name, host.id,
+                                                 host.localAddress, host.manualAddress])
         }
     }
 

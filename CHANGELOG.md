@@ -4,6 +4,9 @@
 
 ### Features
 
+- Use Stream from PC, Stop Streaming and Quit App on PC in Shortcuts on iPhone
+  and iPad. The Mac's launch and stop links work there too.
+
 - iPhone and iPad find a paired PC again when its local address changes, without
   pairing again.
 

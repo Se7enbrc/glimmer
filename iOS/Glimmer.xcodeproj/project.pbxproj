@@ -9,6 +9,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2BF877D495524893934065B9 /* IOSCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160644308A9E43FCA623B084 /* IOSCommandTests.swift */; };
+		87087747D4634603B3D50A5D /* LauncherModel+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = C963F274D6E74EA08022C248 /* LauncherModel+Commands.swift */; };
+		A6E129727F9D4211BB71C571 /* GlimmerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B057B317A014971AA58DB55 /* GlimmerIntents.swift */; };
 		5DE272109AB34679845F986A /* HostAddressRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F42E3BB6206747FC838CEE8B /* HostAddressRecoveryTests.swift */; };
 		33C0D17E262F4D809887601F /* VideoDepacketizerRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 341CAF7988644E99A10BC53D /* VideoDepacketizerRecoveryTests.swift */; };
 		250E25E573A443BE9C3BBD08 /* SurroundToneData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD2E9ABEEA564234A78BE3B8 /* SurroundToneData.swift */; };
@@ -205,6 +208,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		160644308A9E43FCA623B084 /* IOSCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSCommandTests.swift"; sourceTree = "<group>"; };
+		C963F274D6E74EA08022C248 /* LauncherModel+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LauncherModel+Commands.swift"; sourceTree = "<group>"; };
+		3B057B317A014971AA58DB55 /* GlimmerIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "../Glimmer/GlimmerIntents.swift"; sourceTree = SOURCE_ROOT; };
 		F42E3BB6206747FC838CEE8B /* HostAddressRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/HostAddressRecoveryTests.swift"; sourceTree = SOURCE_ROOT; };
 		341CAF7988644E99A10BC53D /* VideoDepacketizerRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/VideoDepacketizerRecoveryTests.swift"; sourceTree = SOURCE_ROOT; };
 		BD2E9ABEEA564234A78BE3B8 /* SurroundToneData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../GlimmerTests/SurroundToneData.swift"; sourceTree = SOURCE_ROOT; };
@@ -514,6 +520,7 @@
 				8555DB5EA75B418E897CCF7A /* FakeSunshine.swift */,
 				874E99130A9D48429E652464 /* BitrateActuatorTests.swift */,
 				DE04A5E755E74C3DAF69B79E /* StreamProfileTests.swift */,
+				160644308A9E43FCA623B084 /* IOSCommandTests.swift */,
 				F42E3BB6206747FC838CEE8B /* HostAddressRecoveryTests.swift */,
 				DF60269557D04F5DAE21A6FE /* StreamWindowResizeTests.swift */,
 				CC4120261025000000000004 /* StreamWindowResizeCoordinatorTests.swift */,
@@ -607,6 +614,7 @@
 				E3225303E73FF1C74315DDB3 /* PairingView.swift */,
 				E9554A6317AB4B3B8CCC0DD2 /* AddPCView.swift */,
 				1708D34DD38370C3FDAE9CD6 /* LauncherModel.swift */,
+				C963F274D6E74EA08022C248 /* LauncherModel+Commands.swift */,
 				E17D2D3911834B9DA3DC2F22 /* RunningGameRow.swift */,
 				394F1F37D1084B11B1806BF5 /* TakeoverDialogCopy.swift */,
 				48DC170283CC433DA3AF4472 /* LauncherMenuController.swift */,
@@ -644,6 +652,7 @@
 				D46ADEF81D9B207FD34CBB22 /* IOSAudio.swift */,
 				EDC8777C55611710BADD7484 /* EngineLink.swift */,
 				CB5FA496B339386824307D80 /* GlimmerApp.swift */,
+				3B057B317A014971AA58DB55 /* GlimmerIntents.swift */,
 				BB04CBAA442A417DB7141C7D /* StreamDefaults.swift */,
 				C27E8A6F7449606A4E16DB8B /* LauncherView.swift */,
 				4083AB719BDD4036984B93B7 /* UITestLauncher.swift */,
@@ -834,6 +843,7 @@
 				6888DE0E431441AEA6A34799 /* FakeSunshine.swift in Sources */,
 				8658F00DB4C641D0AAF1281A /* BitrateActuatorTests.swift in Sources */,
 				00BE025E101646279C5E7E1E /* StreamProfileTests.swift in Sources */,
+				2BF877D495524893934065B9 /* IOSCommandTests.swift in Sources */,
 				5DE272109AB34679845F986A /* HostAddressRecoveryTests.swift in Sources */,
 				CAE5034DDA08403687054E70 /* StreamWindowResizeTests.swift in Sources */,
 				CC4120261025000000000003 /* StreamWindowResizeCoordinatorTests.swift in Sources */,
@@ -918,6 +928,7 @@
 				CF6514282E3FDE69E7FE6EA8 /* PairingView.swift in Sources */,
 				38C80A9D0A874449A43CE593 /* AddPCView.swift in Sources */,
 				AF9547F4F7817E3F82B8F721 /* LauncherModel.swift in Sources */,
+				87087747D4634603B3D50A5D /* LauncherModel+Commands.swift in Sources */,
 				8B4D6483C510474393BBEAEE /* RunningGameRow.swift in Sources */,
 				E94290EEB35C48DC8E6922DA /* TakeoverDialogCopy.swift in Sources */,
 				9BB6957693B54148BC89B654 /* LauncherMenuController.swift in Sources */,
@@ -954,6 +965,7 @@
 				670FF5C58DCCB38D0C0F55D6 /* IOSAudio.swift in Sources */,
 				348684B76496EAF753290EF6 /* EngineLink.swift in Sources */,
 				352C1011524E806B983A697E /* GlimmerApp.swift in Sources */,
+				A6E129727F9D4211BB71C571 /* GlimmerIntents.swift in Sources */,
 				B426095DE40544C9800A59D3 /* StreamDefaults.swift in Sources */,
 				10896918E526BAFB88FC984F /* LauncherView.swift in Sources */,
 				F01EE836436E483F863DF4F4 /* UITestLauncher.swift in Sources */,
@@ -994,6 +1006,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				INFOPLIST_FILE = Glimmer/Info.plist;
+				LM_SKIP_METADATA_EXTRACTION = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.iOS;
@@ -1154,6 +1167,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				INFOPLIST_FILE = Glimmer/Info.plist;
+				LM_SKIP_METADATA_EXTRACTION = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.iOS;

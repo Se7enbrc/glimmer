@@ -133,6 +133,7 @@ extension LauncherModel {
     }
 
     func confirmGameAction(_ action: GameAction) {
+        if session != nil { confirmStreamingAction(action); return }
         guard active, !busy, session == nil, let selected, let calls else { return }
         pendingGameAction = nil
         if let target = action.target {

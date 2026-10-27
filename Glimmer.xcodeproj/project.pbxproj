@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CEAB7AF24D024627A8D4BB78 /* GlimmerCommandURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */; };
 		651BC5F366B4467696D49881 /* HostAddressRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21B1572525E486591449527 /* HostAddressRecoveryTests.swift */; };
 		CE6406B783AD4C12A954E343 /* HostAddressRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */; };
 		E02000000000000000000002 /* PersistentStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02000000000000000000001 /* PersistentStorage.swift */; };
@@ -826,6 +827,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/GlimmerCommandURL.swift"; sourceTree = SOURCE_ROOT; };
 		F21B1572525E486591449527 /* HostAddressRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostAddressRecoveryTests.swift"; sourceTree = "<group>"; };
 		DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Network/HostAddressRecovery.swift"; sourceTree = SOURCE_ROOT; };
 		E02000000000000000000001 /* PersistentStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models/PersistentStorage.swift; sourceTree = "<group>"; };
@@ -2376,6 +2378,7 @@
 				DB6D64F5DD3147FEBCB38C0E /* HostAddressRecovery.swift */,
 				48756631ACFBD0A1FFEBD539 /* ControlTransport.swift */,
 				F5C645FD3D094A728226497C /* HostRecord.swift */,
+				19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */,
 				18473C03B5D940B9BC3CA2AA /* StreamRequest.swift */,
 				C2A6490A4BF841A6926E8139 /* VKScanCode.swift */,
 				88F1DC9482A344A691EB712D /* ProcessThermalState.swift */,
@@ -3308,6 +3311,7 @@
 				CE6406B783AD4C12A954E343 /* HostAddressRecovery.swift in Sources */,
 				C6C5CBE04F4781BF9891C433 /* ControlTransport.swift in Sources */,
 				7502C8910A0C4B688E5F7444 /* HostRecord.swift in Sources */,
+				CEAB7AF24D024627A8D4BB78 /* GlimmerCommandURL.swift in Sources */,
 				227254F4AB8A45BA94D2F158 /* StreamRequest.swift in Sources */,
 				7A51BDEA113A4AC3BC826DE8 /* VKScanCode.swift in Sources */,
 				3FEEF5AF74D64A53A74FC5B2 /* ProcessThermalState.swift in Sources */,

@@ -64,7 +64,9 @@ mandatory quit confirmation. See [command reference](COMMAND_LINE.md).
 `GlimmerIntents.swift` provides Stream from PC, Wake PC, Stop Streaming and Quit
 App on PC. `PCEntity` exposes saved PCs; `GlimmerShortcuts` refreshes names
 after pairing, rename or removal. These actions use the launcher's own entry
-points.
+points. The same declarations compile into iOS, excluding Wake PC. Command URLs
+share `GlimmerCommandURL`; mobile commands use `LauncherModel` and its existing
+confirmation and session teardown paths.
 
 ## Shared engine and native adapters
 
