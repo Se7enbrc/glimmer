@@ -73,7 +73,7 @@ struct StreamSessionTests {
             ControllerDescriptor(kind: .unknown, supportedButtons: [], capabilities: [])))
         model.receive(fixture.update(.input(.mouseMode(registration, enabled: true))))
         #expect(model.controllerMouseActive && model.inputFocused && !model.controlsVisible)
-        #expect(model.controllerModeMessage == "Mouse mode · Right stick")
+        #expect(model.controllerModeMessage == "Mouse mode")
         model.receive(fixture.update(.input(.controllersActive(false))))
         #expect(model.controllerMouseActive)
         model.receive(fixture.update(.input(.mouseMode(registration, enabled: false))))

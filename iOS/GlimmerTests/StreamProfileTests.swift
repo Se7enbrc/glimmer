@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
-import GlimmerEngine
+@testable import GlimmerEngine
 import Testing
 import UIKit
 @testable import Glimmer
@@ -134,11 +134,12 @@ struct StreamProfileTests {
         Attachment.record(Array(geometry.utf8), named: "physical-panel-request.txt")
     }
 
-    @Test func mouseHandUsesTheMatchingSharedEngineMapping() {
-        #expect(ControllerMouseStick.right.mapping == .rightStick)
-        #expect(ControllerMouseStick.left.mapping == .leftStick)
-        #expect(ControllerMouseStick.right.controls.contains("R2 clicks. R1 right-clicks."))
-        #expect(ControllerMouseStick.left.controls.contains("L2 clicks. L1 right-clicks."))
+    @MainActor @Test func controllerMouseMatchesMac() {
+        let input = StreamInput(emit: { _ in })
+        input.setControllerMouseMapping(.rightStick)
+        StreamPlayback.configureInput(input)
+        #expect(input.core.controllerMouseMapping == .standard)
+        #expect(StreamLaunch.mouseControls.contains("A clicks. B right-clicks."))
     }
 
     @Test(arguments: ["", " ", "https://pc.local", "pc.local:47989", "pc.local/path", "pc.local?x=1",

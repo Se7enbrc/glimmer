@@ -24,7 +24,6 @@ struct TouchOverlay: View {
                     pcID: model.launch.pcID, appID: model.launch.appID, family: TouchLayout.family(in: area))
                 TouchPlayControls(capture: model.touchGamepad, layout: layout, area: area,
                                   mouseMode: model.touchMouseActive,
-                                  leftStick: model.launch.mouseStick == .left,
                                   menuVisible: model.menuVisibility.visible,
                                   showControls: model.showControls)
             } else if model.inputFocused {
@@ -56,7 +55,6 @@ struct TouchPlayControls: View {
     let layout: TouchLayout
     let area: CGRect
     var mouseMode = false
-    var leftStick = false
     var menuVisible = true
     var preview = false
     let showControls: () -> Void
@@ -64,7 +62,7 @@ struct TouchPlayControls: View {
     var body: some View {
         ZStack {
             TouchGamepadRepresentation(capture: capture, layout: layout, area: area,
-                                       mouseMode: mouseMode, leftStick: leftStick,
+                                       mouseMode: mouseMode,
                                        menuVisible: menuVisible, preview: preview,
                                        showControls: showControls)
             if TouchLayout().frames(in: area).isEmpty {
@@ -131,7 +129,6 @@ struct TouchGamepadRepresentation: UIViewRepresentable {
     let layout: TouchLayout
     let area: CGRect
     var mouseMode = false
-    var leftStick = false
     var menuVisible = true
     var preview = false
 
@@ -142,7 +139,7 @@ struct TouchGamepadRepresentation: UIViewRepresentable {
     func updateUIView(_ view: TouchGamepadView, context: Context) {
         view.menuButton.showControls = showControls
         view.configure(capture: capture, layout: layout, area: area, preview: preview)
-        view.mouseMode(mouseMode, leftStick: leftStick)
+        view.mouseMode(mouseMode)
         view.setMenuVisible(menuVisible, animated: !reduceMotion)
     }
 }

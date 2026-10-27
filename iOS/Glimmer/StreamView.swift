@@ -351,7 +351,7 @@ struct StreamControls: View {
                 ScrollView {
                     VStack(spacing: 12) {
                         Text("Hold Menu for a second and release to open controls.")
-                        Text(model.launch.mouseStick.controls)
+                        Text(StreamLaunch.mouseControls)
                         Text("Change Stop streaming and Stats shortcuts in Controller layouts. "
                              + "Hold a shortcut, then release to use it.")
                         if model.launch.touchMouseEnabled {

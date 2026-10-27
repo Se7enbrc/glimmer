@@ -45,7 +45,7 @@ struct NativeUIRenderTests {
                          name: "pairing-\(style)", size: size, dark: dark)
         try await record(AddPCView(connect: { _ in }), name: "add-pc-\(style)", size: size, dark: dark)
         try await record(GlimmerSettings(profile: .constant(.native120),
-                                        stick: .constant(dark ? .left : .right), model: library),
+                                        model: library),
                          name: "mouse-settings-\(style)", size: size, dark: dark)
     }
 
@@ -101,7 +101,7 @@ struct NativeUIRenderTests {
             remember: { _ in [] }, protectedDataChanged: { _ in })
         let model = LauncherModel(calls: calls, discoveryEnabled: false)
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
-        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+        let settings = GlimmerSettings(profile: .constant(.native120), model: model)
         for page in GlimmerSettings.Page.allCases {
             let style = "\(Int(size.width))-\(dark ? "dark" : "light")"
             try await record(NavigationStack { settings.settingsPage(page) },
@@ -183,7 +183,7 @@ struct NativeUIRenderTests {
         let style = dark ? "dark" : "light"
         try await record(LauncherView(model: model), name: "testflight-launcher-\(style)",
                          size: nil, dark: dark, textSize: .large)
-        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+        let settings = GlimmerSettings(profile: .constant(.native120), model: model)
         for page in [GlimmerSettings.Page.input, .quality] {
             try await record(NavigationStack { settings.settingsPage(page) },
                              name: "testflight-\(page.rawValue)-\(style)", size: nil, dark: dark, textSize: .large)
@@ -196,7 +196,7 @@ struct NativeUIRenderTests {
             prepare: { _, _ in throw CancellationError() }, pair: { pc, _ in pc }, apps: { _ in [] },
             remember: { _ in [] }, protectedDataChanged: { _ in })
         let model = LauncherModel(calls: calls, discoveryEnabled: false)
-        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+        let settings = GlimmerSettings(profile: .constant(.native120), model: model)
         let style = "\(dark ? "dark" : "light")-\(textSize.isAccessibilitySize ? "accessibility" : "standard")"
         try await record(settings, name: "settings-support-\(style)", size: nil,
                          dark: dark, textSize: textSize, portrait: true)

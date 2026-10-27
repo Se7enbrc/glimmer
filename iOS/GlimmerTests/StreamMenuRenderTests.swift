@@ -38,9 +38,34 @@ struct StreamMenuRenderTests {
     }
 
     @Test(arguments: [false, true])
+    func mouseSettings(dark: Bool) async throws {
+        let fixture = LauncherFixture()
+        let settings = GlimmerSettings(profile: .constant(.native120), model: fixture.model())
+        let host = UIHostingController(rootView: NavigationStack { settings.settingsPage(.input) })
+        let tablet = UIDevice.current.userInterfaceIdiom == .pad
+        let size = tablet ? CGSize(width: 768, height: 1024) : CGSize(width: 390, height: 844)
+        let name = "\(tablet ? "ipad" : "iphone")-\(dark ? "dark" : "light")-mouse-settings"
+        try await NativeUIRenderTests().recordController(host, name: name, size: size, dark: dark,
+            portrait: true, prepare: {
+                guard let scroll = Self.scrollView(in: host.view) else {
+                    Issue.record("Input settings must scroll")
+                    return
+                }
+                let bottom = max(-scroll.adjustedContentInset.top,
+                                 scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+                scroll.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
+            }, textSize: .large)
+    }
+
+    private static func scrollView(in view: UIView) -> UIScrollView? {
+        if let scroll = view as? UIScrollView { return scroll }
+        return view.subviews.lazy.compactMap { scrollView(in: $0) }.first
+    }
+
+    @Test(arguments: [false, true])
     func settings(dark: Bool) async throws {
         let fixture = LauncherFixture()
-        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: fixture.model())
+        let settings = GlimmerSettings(profile: .constant(.native120), model: fixture.model())
         let tablet = UIDevice.current.userInterfaceIdiom == .pad
         let size = tablet ? CGSize(width: 768, height: 1024) : CGSize(width: 390, height: 844)
         let name = "\(tablet ? "ipad" : "iphone")-\(dark ? "dark" : "light")-settings"

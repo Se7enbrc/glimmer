@@ -90,8 +90,9 @@ app ID.
 Native display code calls `VideoDecoder.setPresentSuppressed(_:)` while hidden.
 It reuses newest-frame retention, decode gating and watchdog suppression.
 `PacerHeadroom` keeps policy reads inside the engine; frame releases do not call
-the app. Handed controller mouse mappings preserve the Mac default, shared curve
-and polling cadence.
+the app. Controller mouse mode uses the Mac's standard stick and button mapping
+on both platforms; native scheduling retains each platform's existing motion
+cadence.
 
 `LauncherArtCache` and `NetworkClient.appAsset(appID:)` share bounded artwork
 storage and pinned TLS. Shells decide when to fetch visible covers. An optional

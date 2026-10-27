@@ -121,24 +121,20 @@ class TouchGamepadView: UIView {
         updateVisibility()
     }
 
-    func mouseMode(_ enabled: Bool, leftStick: Bool) {
+    func mouseMode(_ enabled: Bool) {
         for (element, control) in controls {
             control.accessibilityLabel = element.name
             (control as? TouchAxisControl)?.showMode(nil)
             (control as? TouchTrigger)?.showMode(nil)
-            if element == .leftShoulder || element == .rightShoulder {
-                (control as? UIButton)?.setTitle(element.title, for: .normal)
-            }
         }
         guard enabled else { return }
-        (controls[leftStick ? .leftStick : .rightStick] as? TouchAxisControl)?.showMode("Pointer")
-        (controls[leftStick ? .rightStick : .leftStick] as? TouchAxisControl)?.showMode("Scroll")
-        let trigger = controls[leftStick ? .leftTrigger : .rightTrigger] as? TouchTrigger
-        trigger?.showMode("Click")
-        trigger?.accessibilityLabel = "Primary click"
-        let shoulder = controls[leftStick ? .leftShoulder : .rightShoulder] as? UIButton
-        shoulder?.setTitle("Right", for: .normal)
-        shoulder?.accessibilityLabel = "Secondary click"
+        (controls[.leftStick] as? TouchAxisControl)?.showMode("Pointer")
+        (controls[.rightStick] as? TouchAxisControl)?.showMode("Scroll")
+        let clicks: [(TouchElement, String)] = [
+            (.a, "Primary click"), (.b, "Secondary click"), (.x, "Middle click"),
+            (.leftShoulder, "Back"), (.rightShoulder, "Forward")
+        ]
+        for (element, label) in clicks { controls[element]?.accessibilityLabel = label }
         controls[.dpad]?.accessibilityLabel = "Scroll"
     }
 

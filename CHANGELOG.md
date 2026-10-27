@@ -4,6 +4,9 @@
 
 ### Features
 
+- Controller mouse mode now uses the same controls on Mac, iPhone and iPad: left
+  stick to move, right stick to scroll, and A, B and X to click.
+
 - Use Stream from PC, Stop Streaming and Quit App on PC in Shortcuts on iPhone
   and iPad. The Mac's launch and stop links work there too.
 

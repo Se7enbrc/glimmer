@@ -77,7 +77,7 @@ extension NativeUIRenderTests {
             if apps > 1 {
                 try await record(LauncherView(model: model, style: .covers), name: "covers-\(name)", size: nil,
                                  dark: dark, textSize: textSize, portrait: portrait)
-                let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+                let settings = GlimmerSettings(profile: .constant(.native120), model: model)
                 try await record(settings, name: "settings-root-\(name)", size: nil,
                                  dark: dark, textSize: textSize, portrait: portrait)
                 for page in GlimmerSettings.Page.allCases {

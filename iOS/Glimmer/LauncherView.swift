@@ -24,8 +24,6 @@ struct LauncherView: View {
     @AppStorage("streamProfile", store: PersistentStorage.defaults) private var profile: StreamProfile = .native120
     @AppStorage(AdaptiveBandwidth.defaultsKey, store: PersistentStorage.defaults) private var adaptiveBandwidth = false
     @AppStorage("touchMouseEnabled", store: PersistentStorage.defaults) private var touchMouseEnabled = true
-    @AppStorage("controllerMouseStick", store: PersistentStorage.defaults)
-    private var mouseStick: ControllerMouseStick = .right
 
     init(model: LauncherModel = .make(), style: LauncherStyle? = nil) {
         _model = State(initialValue: model)
@@ -74,7 +72,7 @@ struct LauncherView: View {
         }
         .tint(Color("AccentColor"))
         .sheet(isPresented: $showingSettings, onDismiss: finishSettings) {
-            GlimmerSettings(profile: $profile, stick: $mouseStick, model: model,
+            GlimmerSettings(profile: $profile, model: model,
                 addPC: { pendingAddPC = true; showingSettings = false },
                 pairPC: { pendingPC = $0; showingSettings = false })
         }
@@ -82,7 +80,6 @@ struct LauncherView: View {
         .modifier(RunningGameConfirmation(model: model))
         .onChange(of: touchMouseEnabled, initial: true) { _, enabled in model.touchMouseEnabled = enabled }
         .onChange(of: profile, initial: true) { _, profile in model.streamProfile = profile }
-        .onChange(of: mouseStick, initial: true) { _, stick in model.mouseStick = stick }
         .sheet(isPresented: $addingPC, onDismiss: {
             if let address = pendingAddress {
                 pendingAddress = nil

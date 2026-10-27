@@ -347,7 +347,7 @@ final class StreamSessionModel {
 
     private func showControllerMode(_ enabled: Bool) {
         modeNoticeTask?.cancel()
-        controllerModeMessage = enabled ? "Mouse mode · \(launch.mouseStick.label) stick" : "Gamepad mode"
+        controllerModeMessage = enabled ? "Mouse mode" : "Gamepad mode"
         modeNoticeTask = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(2)) } catch { return }
             self?.controllerModeMessage = nil

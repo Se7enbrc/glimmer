@@ -43,7 +43,7 @@ extension NativeUIRenderTests {
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
         for textSize in [DynamicTypeSize.large, .accessibility5] {
             let label = "ipad-\(layout)-\(dark ? "dark" : "light")-\(textSize == .large ? "default" : "ax5")"
-            let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+            let settings = GlimmerSettings(profile: .constant(.native120), model: model)
             try await record(settings, name: "\(label)-settings", size: size, dark: dark, textSize: textSize)
             for page in GlimmerSettings.Page.allCases {
                 try await record(NavigationStack { settings.settingsPage(page) },
@@ -60,7 +60,7 @@ extension NativeUIRenderTests {
             let label = "ipad-\(layout)-\(dark ? "dark" : "light")-\(textSize == .large ? "default" : "ax5")"
             try await iPadLauncherInventory(label: label, size: size, dark: dark, textSize: textSize)
             let model = iPadLibrary(count: 12)
-            try await record(GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model),
+            try await record(GlimmerSettings(profile: .constant(.native120), model: model),
                              name: "\(label)-settings", size: size, dark: dark, textSize: textSize)
         }
     }

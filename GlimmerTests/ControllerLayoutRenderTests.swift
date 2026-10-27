@@ -38,7 +38,7 @@ struct ControllerLayoutRenderTests {
             .defaultAppStorage(settings.defaults), name: "after-general-\(style)", dark: dark)
         #else
         let launcher = LauncherFixture().model()
-        let settings = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: launcher)
+        let settings = GlimmerSettings(profile: .constant(.native120), model: launcher)
         try await record(NavigationStack { settings.settingsPage(.general) },
                          name: "after-general-\(style)", dark: dark)
         #endif
@@ -90,7 +90,7 @@ struct ControllerLayoutRenderTests {
         try await record(NavigationStack { ShortcutsPane().environment(app) }, name: "after-input-\(style)", dark: dark)
         #else
         let launcher = LauncherFixture().model()
-        let after = GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: launcher)
+        let after = GlimmerSettings(profile: .constant(.native120), model: launcher)
         try await record(NavigationStack { after.settingsPage(.input) }, name: "after-input-\(style)", dark: dark)
         #endif
     }

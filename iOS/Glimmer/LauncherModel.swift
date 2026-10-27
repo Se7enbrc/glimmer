@@ -39,7 +39,6 @@ final class LauncherModel {
     private var returningPCID: String?
     var streamProfile: StreamProfile = .native120
     var touchMouseEnabled = true
-    var mouseStick: ControllerMouseStick = .right
     var session: StreamSessionModel?
     var hasActiveStream: Bool { session.map { !$0.phase.isEnded } ?? false }
     private var closingTask: Task<Void, Never>?

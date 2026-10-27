@@ -4,22 +4,9 @@
 import GlimmerEngine
 import SwiftUI
 
-enum ControllerMouseStick: String, CaseIterable, Identifiable, Sendable {
-    case left, right
-
-    var id: String { rawValue }
-    var label: String { self == .right ? "Right" : "Left" }
-    var mapping: ControllerMouseMapping { self == .right ? .rightStick : .leftStick }
-    var controls: String {
-        self == .right ? "Right stick moves. R2 clicks. R1 right-clicks. Left stick scrolls."
-            : "Left stick moves. L2 clicks. L1 right-clicks. Right stick scrolls."
-    }
-}
-
 @MainActor
 struct GlimmerSettings: View {
     @Binding var profile: StreamProfile
-    @Binding var stick: ControllerMouseStick
     let model: LauncherModel
     var addPC: () -> Void = {}
     var pairPC: (HostDiscovery.Discovered) -> Void = { _ in }
@@ -83,7 +70,7 @@ struct GlimmerSettings: View {
     }
 
     func settingsPage(_ page: Page) -> some View {
-        GlimmerSettingsPage(profile: $profile, stick: $stick, model: model,
+        GlimmerSettingsPage(profile: $profile, model: model,
                             addPC: addPC, pairPC: pairPC, page: page)
     }
 }
@@ -91,7 +78,6 @@ struct GlimmerSettings: View {
 @MainActor
 private struct GlimmerSettingsPage: View {
     @Binding var profile: StreamProfile
-    @Binding var stick: ControllerMouseStick
     let model: LauncherModel
     let addPC: () -> Void
     let pairPC: (HostDiscovery.Discovered) -> Void
@@ -188,16 +174,11 @@ private struct GlimmerSettingsPage: View {
             Text("Turn off to avoid accidental touches while playing. Three-finger tap still shows controls. "
                  + "Changes apply to the next stream.")
         }
-        Section {
-            Picker("Mouse stick", selection: $stick) {
-                ForEach(ControllerMouseStick.allCases) { option in Text(option.label).tag(option) }
-            }
-        } header: {
-            Text("Controller")
-        } footer: {
-            Text("\(stick.controls) Hold Menu for a second and release to open controls, "
-                 + "then choose a mode. "
-                 + "Changes apply to the next stream.")
+        Section("Controller") {
+            Text(StreamLaunch.mouseControls)
+                .font(.footnote).foregroundStyle(.secondary)
+            Text("Hold Menu for a second and release to open controls, then choose a mode.")
+                .font(.footnote).foregroundStyle(.secondary)
         }
     }
 

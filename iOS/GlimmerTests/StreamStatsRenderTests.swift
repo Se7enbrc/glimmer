@@ -82,7 +82,7 @@ struct StreamStatsRenderTests {
         }, pair: { pc, _ in pc }, apps: { _ in [] }, remember: { _ in [] }, protectedDataChanged: { _ in })
         let model = LauncherModel(calls: calls, discoveryEnabled: false)
         let view = NavigationStack {
-            GlimmerSettings(profile: .constant(.native120), stick: .constant(.right), model: model)
+            GlimmerSettings(profile: .constant(.native120), model: model)
                 .settingsPage(.input)
         }
         let scene = try await testWindowScene()

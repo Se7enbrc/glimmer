@@ -6,6 +6,8 @@ import GlimmerEngine
 import UIKit
 
 struct StreamLaunch: Identifiable, Sendable {
+    static let mouseControls = "Left stick moves. Right stick scrolls. A clicks. B right-clicks. "
+        + "X middle-clicks. L1 goes back. R1 goes forward."
     let id = UUID()
     let network: NetworkClient
     let pcID: String
@@ -13,7 +15,6 @@ struct StreamLaunch: Identifiable, Sendable {
     let appID: Int
     let appName: String
     let profile: StreamProfile
-    let mouseStick: ControllerMouseStick
     let touchMouseEnabled: Bool
     let leaveGamesRunning: Bool
     let continuing: Bool
@@ -24,7 +25,7 @@ struct StreamLaunch: Identifiable, Sendable {
     var hostDisposition: StreamHostDisposition { .init(leaveGamesRunning: leaveGamesRunning) }
 
     init(network: NetworkClient, pcID: String, pcName: String, appID: Int, appName: String,
-         profile: StreamProfile = .native120, mouseStick: ControllerMouseStick = .right,
+         profile: StreamProfile = .native120,
          touchMouseEnabled: Bool = true, leaveGamesRunning: Bool = false,
          continuing: Bool = false, previousFormat: ContinuationFormat? = nil,
          useScreenSize: Bool = false, approvedOccupant: Int? = nil, startFormat: ContinuationFormat? = nil) {
@@ -34,7 +35,6 @@ struct StreamLaunch: Identifiable, Sendable {
         self.appID = appID
         self.appName = appName
         self.profile = profile
-        self.mouseStick = mouseStick
         self.touchMouseEnabled = touchMouseEnabled
         self.leaveGamesRunning = leaveGamesRunning
         self.continuing = continuing
@@ -69,6 +69,12 @@ struct StreamPlayback {
     /// Moves a running stream to a new listed size through the resume-only seam; the game keeps running.
     var requestFormatChange: StreamWindowResize.Request?
     var showStats: (@MainActor (Bool) -> Void)?
+
+    static func configureInput(_ input: StreamInput) {
+        input.setStopChord(.menuOptionsShoulders)
+        input.setControllerMenuOpensControls(true)
+        input.setControllerMouseMapping(.standard)
+    }
 
     static func make(launch: StreamLaunch, surface: StreamSurface,
                      quiesce: @escaping @MainActor @Sendable () -> Void) throws -> StreamPlayback {
@@ -109,9 +115,7 @@ struct StreamPlayback {
         let (session, input) = StreamSession.make(media: media, network: launch.network,
                                                   hostDisposition: launch.hostDisposition,
             bandwidthInputs: bandwidth.inputs)
-        input.setStopChord(.menuOptionsShoulders)
-        input.setControllerMenuOpensControls(true)
-        input.setControllerMouseMapping(launch.mouseStick.mapping)
+        configureInput(input)
         nativeInput.start(input: input, scope: .game(pcID: launch.pcID, appID: UInt32(clamping: launch.appID)))
         return StreamPlayback(id: session.id, events: session.events, start: {
             if launch.continuing {
