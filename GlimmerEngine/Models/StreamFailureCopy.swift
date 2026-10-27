@@ -2,6 +2,10 @@
 // SPDX-FileCopyrightText: 2026 ugfugl.io
 
 public enum StreamFailureCopy {
+    public static func identityNeedsRestore(_ pc: String) -> String {
+        "Couldn't read Glimmer's saved identity for \(pc). Restore Glimmer's identity from a backup, then try again."
+    }
+
     public static func gameEnded(_ app: String, pc: String) -> String {
         "\(app) ended on \(pc)."
     }

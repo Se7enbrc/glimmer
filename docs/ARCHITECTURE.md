@@ -329,7 +329,9 @@ queue. Native focus and device changes retire callbacks before releasing held
 input. Both adapters use the engine's physical key map and release ledger; UIKit
 retains local shortcuts and requests scene pointer lock only during play.
 Opening stream controls releases capture, including when video is on an external
-display.
+display. Possible keyboard shortcuts wait for UIKit's layout-aware character
+event before forwarding. Both callback paths share physical press ownership;
+ordinary gameplay keys remain synchronous on the capture queue.
 
 ### Release ledger and text
 
@@ -430,6 +432,19 @@ never changes pairing identity or installs a certificate.
 ## Identity & pairing
 
 Use the shared file-backed identity and authenticated pinning flow.
+
+| Store state (under the publication lock)                                         | Allowed action                      |
+| -------------------------------------------------------------------------------- | ----------------------------------- |
+| Absent                                                                           | Create                              |
+| Empty directory                                                                  | Remove with `rmdir`, then create    |
+| Staging-only leftover                                                            | Clean reserved staging, then create |
+| Complete valid identity                                                          | Use unchanged                       |
+| Established but incomplete, invalid, unreadable or containing only unknown files | Preserve and error                  |
+
+Only the first three states may create. Publication validates a complete staged
+identity before an exclusive atomic rename and cleans its own staging on
+failure. Crash staging is cleaned on the next locked load, without changing
+established files.
 
 Identity is RSA-2048 with owner-only files. Pairing performs four HTTP rounds
 and HTTPS liveness, using PIN-derived AES-ECB challenges and RSA proofs. Only a

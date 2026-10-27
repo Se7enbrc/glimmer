@@ -58,6 +58,144 @@ struct IOSHardwareInputTests {
         #expect(backend.keyboard.count == 1)
     }
 
+    @Test(arguments: [false, true])
+    func gameplayReleaseKeepsItsOwnerWhenModifiersChange(remapped: Bool) {
+        let backend = InputRecordingBackend()
+        let input = StreamInput(backend: backend, emit: { _ in })
+        defer { input.stop() }
+        input.setFocused(true)
+        input.activate(true)
+        let chord = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false,
+                                keyChar: remapped ? "a" : "z")
+        let capture = IOSHardwareInput(input: input, quit: .defaultQuit, stats: chord)
+        let generation = capture.focus(true)
+        let key: UInt16 = remapped ? 4 : 29
+        let now = ProcessInfo.processInfo.systemUptime
+        capture.key(key, pressed: true, modifiers: 0, at: now, generation: generation)
+        capture.key(224, pressed: true, modifiers: 2, at: now, generation: generation)
+        capture.key(key, pressed: true, modifiers: 2, at: now, generation: generation)
+        capture.key(key, pressed: false, modifiers: 2, at: now, generation: generation)
+        capture.key(224, pressed: false, modifiers: 0, at: now, generation: generation)
+        let game = backend.keyboard.filter { $0.keyCode == Int16(bitPattern: remapped ? 0x8041 : 0x805A) }
+        #expect(game.map(\.action) == [Int8(StreamProtocol.KEY_ACTION_DOWN), Int8(StreamProtocol.KEY_ACTION_UP)])
+        let count = backend.keyboard.count
+        input.releaseKeyboardAndPointer()
+        #expect(backend.keyboard.count == count)
+    }
+
+    @Test(arguments: ["z", "é"], [false, true])
+    func layoutCharactersOwnPhysicalPresses(character: String, nativeFirst: Bool) throws {
+        let defaults = try #require(UserDefaults(suiteName: "layout-shortcut-\(UUID().uuidString)"))
+        let shortcuts = StreamShortcuts(defaults: defaults)
+        shortcuts.stats = HotkeyChord(ctrl: true, alt: false, shift: false, cmd: false, keyChar: character)
+        let backend = InputRecordingBackend()
+        let input = StreamInput(backend: backend, emit: { _ in })
+        defer { input.stop() }
+        input.setFocused(true)
+        input.activate(true)
+        let capture = IOSHardwareInput(input: input, quit: shortcuts.quit, stats: shortcuts.stats)
+        let generation = capture.focus(true)
+        var actions: [StreamShortcuts.Action] = []
+        let usage: UInt16 = character == "z" ? 28 : 52
+        func deliver(_ key: UInt16, _ text: String, pressed: Bool) {
+            let time = ProcessInfo.processInfo.systemUptime
+            func raw() { capture.key(key, pressed: pressed, modifiers: 2, at: time, generation: generation) }
+            func native() {
+                shortcuts.routeKey(usage: key, input: text, modifiers: .control, pressed: pressed, forward: {
+                    capture.key(key, pressed: pressed, modifiers: 2, at: time, generation: generation, local: $0)
+                }, perform: { actions.append($0) }, showControls: {})
+            }
+            if nativeFirst { native(); raw() } else { raw(); native() }
+        }
+        deliver(usage, character, pressed: true)
+        deliver(usage, character, pressed: true)
+        deliver(usage, character, pressed: false)
+        #expect(actions == [.stats])
+        #expect(backend.keyboard.isEmpty)
+        deliver(29, "y", pressed: true)
+        deliver(29, "y", pressed: false)
+        #expect(backend.keyboard.map(\.action)
+                == [Int8(StreamProtocol.KEY_ACTION_DOWN), Int8(StreamProtocol.KEY_ACTION_UP)])
+        #expect(actions == [.stats])
+    }
+
+    @Test(arguments: [UInt8(0), UInt8(2)], [false, true])
+    func lateCallbackSequencesCannotReplayGameplay(modifiers: UInt8, nativeFirst: Bool) {
+        let backend = InputRecordingBackend()
+        let input = StreamInput(backend: backend, emit: { _ in })
+        defer { input.stop() }
+        input.setFocused(true)
+        input.activate(true)
+        let capture = IOSHardwareInput(input: input, quit: .defaultQuit, stats: .defaultStats)
+        let generation = capture.focus(true)
+        func sequence(native: Bool) {
+            for pressed in [true, false] {
+                capture.key(29, pressed: pressed, modifiers: modifiers, at: ProcessInfo.processInfo.systemUptime,
+                            generation: generation, local: native ? false : nil)
+            }
+        }
+        sequence(native: nativeFirst)
+        sequence(native: !nativeFirst)
+        #expect(backend.keyboard.map(\.action)
+                == [Int8(StreamProtocol.KEY_ACTION_DOWN), Int8(StreamProtocol.KEY_ACTION_UP)])
+    }
+
+    @Test func aLayoutChangeUsesTheNextNativeCharacterAndKeepsGameRepeats() throws {
+        let defaults = try #require(UserDefaults(suiteName: "layout-change-\(UUID().uuidString)"))
+        let shortcuts = StreamShortcuts(defaults: defaults)
+        let backend = InputRecordingBackend()
+        let input = StreamInput(backend: backend, emit: { _ in })
+        defer { input.stop() }
+        input.setFocused(true)
+        input.activate(true)
+        let capture = IOSHardwareInput(input: input, quit: shortcuts.quit, stats: shortcuts.stats)
+        let generation = capture.focus(true)
+        var actions: [StreamShortcuts.Action] = []
+        func native(_ text: String, pressed: Bool) {
+            shortcuts.routeKey(usage: 28, input: text, modifiers: .control, pressed: pressed, forward: {
+                capture.key(28, pressed: pressed, modifiers: 2, at: ProcessInfo.processInfo.systemUptime,
+                            generation: generation, local: $0)
+            }, perform: { actions.append($0) }, showControls: {})
+        }
+        native("z", pressed: true)
+        native("z", pressed: false)
+        native("y", pressed: true)
+        #expect(!shortcuts.handle(input: "y", modifiers: .control) { actions.append($0) })
+        native("y", pressed: false)
+        native("z", pressed: true)
+        native("z", pressed: false)
+        #expect(actions == [.stats, .stats])
+        #expect(backend.keyboard.count == 2)
+    }
+
+    @Test func nativeRepeatsCannotStealAForwardedGameKey() throws {
+        let defaults = try #require(UserDefaults(suiteName: "native-repeat-\(UUID().uuidString)"))
+        let shortcuts = StreamShortcuts(defaults: defaults)
+        let backend = InputRecordingBackend()
+        let input = StreamInput(backend: backend, emit: { _ in })
+        defer { input.stop() }
+        input.setFocused(true)
+        input.activate(true)
+        let capture = IOSHardwareInput(input: input, quit: shortcuts.quit, stats: shortcuts.stats)
+        let generation = capture.focus(true)
+        var actions: [StreamShortcuts.Action] = []
+        func deliver(pressed: Bool, modifiers: UInt8) {
+            let time = ProcessInfo.processInfo.systemUptime
+            capture.key(29, pressed: pressed, modifiers: modifiers, at: time, generation: generation)
+            shortcuts.routeKey(usage: 29, input: "z", modifiers: modifiers == 2 ? .control : [],
+                pressed: pressed, forward: {
+                    capture.key(29, pressed: pressed, modifiers: modifiers, at: time, generation: generation, local: $0)
+                }, perform: { actions.append($0) }, showControls: {})
+        }
+        deliver(pressed: true, modifiers: 0)
+        deliver(pressed: true, modifiers: 2)
+        #expect(!shortcuts.handle(input: "z", modifiers: .control) { actions.append($0) })
+        deliver(pressed: false, modifiers: 2)
+        #expect(actions.isEmpty)
+        #expect(backend.keyboard.map(\.action)
+                == [Int8(StreamProtocol.KEY_ACTION_DOWN), Int8(StreamProtocol.KEY_ACTION_UP)])
+    }
+
     @Test func callbacksRetiredByControlsOrFocusLossCannotReplay() {
         let backend = InputRecordingBackend()
         let input = StreamInput(backend: backend, emit: { _ in })

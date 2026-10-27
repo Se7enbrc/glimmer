@@ -28,6 +28,44 @@ public struct GlimmerCommandURL: Equatable, Sendable {
     }
 }
 
+/// External links request intent; only an in-app choice authorizes a session change.
+public struct CommandURLPrompt: Sendable {
+    public let action: GlimmerCommandURL.Action
+    public let pc: String
+    public let app: String
+
+    public init(action: GlimmerCommandURL.Action, pc: String, app: String) {
+        self.action = action
+        self.pc = pc
+        self.app = app
+    }
+
+    public static func requiresConfirmation(_ action: GlimmerCommandURL.Action) -> Bool { action != .wake }
+
+    public var title: String {
+        switch action {
+        case .stream: "Stream \(app) from \(pc)?"
+        case .stop: "Stop streaming from \(pc)?"
+        case .quit: "Quit \(app) on \(pc)?"
+        case .wake: "Wake \(pc)?"
+        }
+    }
+
+    public var button: String {
+        switch action {
+        case .stream: "Stream"
+        case .stop: "Stop Streaming"
+        case .quit: "Quit"
+        case .wake: "Wake"
+        }
+    }
+
+    public var message: String {
+        action == .stream ? "This link will open a stream in Glimmer."
+            : "The game on the PC may close. Unsaved progress may be lost."
+    }
+}
+
 public enum CommandStopResult: String, Sendable {
     case stopped, noActiveStream, pcMismatch
 

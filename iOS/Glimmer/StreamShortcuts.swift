@@ -18,6 +18,7 @@ final class StreamShortcuts {
     var quit: HotkeyChord { didSet { save(quit, key: Action.quit.key) } }
     var stats: HotkeyChord { didSet { stats.persistStats(defaults: defaults) } }
     private var held: Set<String> = []
+    private var physicalKeys: [UInt16: (input: String, local: Bool)] = [:]
 
     init(defaults: UserDefaults = PersistentStorage.defaults) {
         self.defaults = defaults
@@ -47,6 +48,7 @@ final class StreamShortcuts {
     @discardableResult
     func handle(input: String, modifiers: UIKeyModifierFlags, perform: (Action) -> Void) -> Bool {
         let key = input.lowercased()
+        guard !physicalKeys.values.contains(where: { !$0.local && $0.input == key }) else { return false }
         if held.contains(key) { return true }
         guard let action = match(input: input, modifiers: modifiers) else { return false }
         held.insert(key)
@@ -57,7 +59,32 @@ final class StreamShortcuts {
     @discardableResult
     func release(input: String) -> Bool { held.remove(input.lowercased()) != nil }
 
-    func reset() { held.removeAll() }
+    func reset() {
+        held.removeAll()
+        physicalKeys.removeAll()
+    }
+
+    /// UIKit resolves the current layout; physical ownership then lasts until that key is released.
+    @discardableResult
+    func routeKey(usage: UInt16, input: String, modifiers: UIKeyModifierFlags, pressed: Bool,
+                  forward: (Bool) -> Bool, perform: (Action) -> Void, showControls: () -> Void) -> Bool {
+        let previous = physicalKeys[usage]
+        let controls = input == "/" && modifiers == .control
+        let local = previous?.local ?? (controls || match(input: input, modifiers: modifiers) != nil)
+        let owned = forward(local)
+        if pressed {
+            if previous == nil { physicalKeys[usage] = (input.lowercased(), owned) }
+            if owned {
+                if controls {
+                    if previous == nil { showControls() }
+                } else { handle(input: previous?.input ?? input, modifiers: modifiers, perform: perform) }
+            }
+        } else {
+            let original = physicalKeys.removeValue(forKey: usage)?.input ?? input
+            release(input: original)
+        }
+        return owned
+    }
 
     private func save(_ chord: HotkeyChord, key: String) {
         guard let data = try? JSONEncoder().encode(chord) else { return }

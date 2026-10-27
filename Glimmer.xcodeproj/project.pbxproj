@@ -14,6 +14,7 @@
 		60607C6E677F4C51B4F13301 /* ControllerMouseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */; };
 		CAF9EA985F46440091EE1715 /* ControllerBindingRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A25B0561ABC542C0B5DF91C7 /* ControllerBindingRecorder.swift */; };
 		CBE056E47FDE4F7A89BE875E /* ControllerMousePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB730F819CA459E8B6D5181 /* ControllerMousePlan.swift */; };
+		9DDB441923404B7D8F333E15 /* IdentityPublicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E83044D4D1B64CACA2E2F8A7 /* IdentityPublicationTests.swift */; };
 		CEAB7AF24D024627A8D4BB78 /* GlimmerCommandURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */; };
 		8989D451DBCF4948B25421E6 /* StreamKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */; };
 		A3BD7B1A7DF94D61957AC2EB /* StreamInput+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5803B42776646209AB7B6BC /* StreamInput+Keyboard.swift */; };
@@ -843,6 +844,7 @@
 		74217567F2BB4354B44EF4FE /* ControllerMouseSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerMouseSettingsView.swift"; sourceTree = SOURCE_ROOT; };
 		A25B0561ABC542C0B5DF91C7 /* ControllerBindingRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/ControllerLayouts/ControllerBindingRecorder.swift"; sourceTree = SOURCE_ROOT; };
 		5FB730F819CA459E8B6D5181 /* ControllerMousePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/ControllerMousePlan.swift"; sourceTree = SOURCE_ROOT; };
+		E83044D4D1B64CACA2E2F8A7 /* IdentityPublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/IdentityPublicationTests.swift"; sourceTree = SOURCE_ROOT; };
 		19968444E2314342A44D6BFD /* GlimmerCommandURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Models/GlimmerCommandURL.swift"; sourceTree = SOURCE_ROOT; };
 		B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamKeyboardTests.swift; sourceTree = "<group>"; };
 		A5803B42776646209AB7B6BC /* StreamInput+Keyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerEngine/Input/StreamInput+Keyboard.swift"; sourceTree = SOURCE_ROOT; };
@@ -2086,6 +2088,7 @@
 				6A0C06102026101000000002 /* EnetControlInboundTests.swift */,
 				21C273D96FC84878A5D36D98 /* InputCoreTests.swift */,
 				B055A9EB2CC84541AFDC3CEC /* StreamKeyboardTests.swift */,
+				E83044D4D1B64CACA2E2F8A7 /* IdentityPublicationTests.swift */,
 				495E63BB12264898A2E14C16 /* StreamInputChordEdgeTests.swift */,
 				A94F72CE390A4492A80CBC69 /* SessionHostDispositionTests.swift */,
 				48520FACFC0E4646AEB1A004 /* SessionContinuationTests.swift */,
@@ -3029,6 +3032,7 @@
 				6A0C06102026101000000001 /* EnetControlInboundTests.swift in Sources */,
 				FC0BF6D54C37471FB74A1E5E /* InputCoreTests.swift in Sources */,
 				8989D451DBCF4948B25421E6 /* StreamKeyboardTests.swift in Sources */,
+				9DDB441923404B7D8F333E15 /* IdentityPublicationTests.swift in Sources */,
 				D218BE89D58F4B61A16B6530 /* StreamInputChordEdgeTests.swift in Sources */,
 				21B30BD95DBE473A9BE2CC35 /* SessionHostDispositionTests.swift in Sources */,
 				58E68087D1C647789143820A /* SessionContinuationTests.swift in Sources */,

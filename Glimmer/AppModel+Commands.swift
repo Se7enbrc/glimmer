@@ -150,7 +150,8 @@ extension AppModel {
     }
 
     func handleCommand(_ info: [String: String], fromURL: Bool = false,
-                       confirmQuit: ((LibraryApp, Host) -> Void)? = nil) {
+                       confirmQuit: ((LibraryApp, Host) -> Void)? = nil,
+                       confirmExternal: ((CommandURLPrompt) -> Bool)? = nil) {
         if fromURL, info[CommandChannel.Key.verb] == "quit",
            let host = hosts.first(where: { $0.id == info[CommandChannel.Key.host] }) {
             confirmURLQuit(on: host, confirm: confirmQuit)
@@ -165,6 +166,8 @@ extension AppModel {
         else { return }
         switch decision {
         case .stream(let app, let host, let takeover):
+            if fromURL, !confirmURLAction(CommandURLPrompt(action: .stream, pc: host.displayName, app: app.name),
+                                          confirm: confirmExternal) { return }
             Diag.notice(fromURL ? "Stream requested from a URL" : "Stream requested from the command line", "Stream")
             // The terminal settled the takeover; an older unanswered prompt no longer applies.
             pendingTakeover = nil
@@ -178,13 +181,7 @@ extension AppModel {
         case .stop:
             stopForCommand(id)
         case .stopStreaming(let pc):
-            Task {
-                let result = await stopActiveStream(matching: pc, source: fromURL ? "a URL" : "the command line")
-                if fromURL, result != .stopped {
-                    Diag.notice("Ignored a stop URL without a matching active stream", "Commands")
-                }
-                replyToCommand(id, result.rawValue)
-            }
+            stopStreamingForCommand(id, pc: pc, fromURL: fromURL, confirm: confirmExternal)
         case .wake(let host):
             Task {
                 await CLITerminal.$write.withValue({ _, _ in }, operation: {
@@ -201,6 +198,20 @@ extension AppModel {
             }
         case .notMine:
             replyToCommand(id, CommandChannel.Event.notMine)
+        }
+    }
+
+    private func stopStreamingForCommand(_ id: String, pc: String?, fromURL: Bool,
+                                         confirm: ((CommandURLPrompt) -> Bool)?) {
+        if fromURL, !confirmURLStop(matching: pc, confirm: confirm) { return }
+        let scope = urlCommandScope
+        Task {
+            guard !fromURL || scope == urlCommandScope else { return }
+            let result = await stopActiveStream(matching: pc, source: fromURL ? "a URL" : "the command line")
+            if fromURL, result != .stopped {
+                Diag.notice("Ignored a stop URL without a matching active stream", "Commands")
+            }
+            replyToCommand(id, result.rawValue)
         }
     }
 

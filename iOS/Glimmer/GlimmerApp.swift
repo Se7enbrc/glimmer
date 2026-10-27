@@ -25,7 +25,7 @@ struct GlimmerApp: App {
     var body: some Scene {
         WindowGroup {
             LauncherView(model: launcher)
-                .onOpenURL(perform: launcher.handleCommandURL)
+                .onOpenURL { launcher.handleCommandURL($0) }
                 .onChange(of: launcher.savedPCs.map { PCEntity(id: $0.id, name: $0.name) }) { _, _ in
                     GlimmerShortcuts.updateAppShortcutParameters()
                 }

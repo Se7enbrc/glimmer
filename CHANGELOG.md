@@ -2,6 +2,25 @@
 
 ## 2026.10.8 - Unreleased
 
+- First pairing can recover from an empty identity folder. Failed attempts now
+  remove their temporary identity files immediately and preserve saved pairing
+  files.
+
+- Keyboard shortcuts on iPhone and iPad follow the active keyboard layout,
+  keeping their keys out of the game on non-US keyboards too.
+
+- Stop requests for a specific PC now cancel its pending launch on iPhone and
+  iPad, even while Glimmer is waiting to reconnect or return to the foreground.
+
+- Links from other apps now ask before starting or stopping a stream on Mac,
+  iPhone and iPad. An old confirmation cannot stop a newer stream.
+
+- Releasing a game key on iPhone or iPad no longer leaves it held when you press
+  a shortcut modifier before letting go.
+
+- Glimmer preserves saved pairing identity files after an incomplete restore and
+  explains when they need to be restored from a backup.
+
 - Stop now cancels a queued command-line game launch, including a switch waiting
   for the previous stream to close.
 

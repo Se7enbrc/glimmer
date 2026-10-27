@@ -17,6 +17,7 @@ extension IdentityManager {
 
     private func loadUncached(defaults: UserDefaults) throws -> Identity {
 
+        try FileIdentityStore.discardStaging(base: storageRoot())
         // Files are authoritative even when preferences were reset or restored separately.
         if let identity = try loadFromFileStore() {
             cached = identity
@@ -43,7 +44,12 @@ extension IdentityManager {
         }
 
         // The shell may copy a legacy identity. It validates PEMs and never modifies the source suite.
-        let needsMigration = (storedCert?.isEmpty ?? true) || (storedKey?.isEmpty ?? true)
+        let hasLegacyIdentity = storedCert != nil || storedKey != nil || storedID != nil
+        if hasLegacyIdentity {
+            guard let storedCert, !storedCert.isEmpty, let storedKey, !storedKey.isEmpty,
+                  let storedID, !storedID.isEmpty else { throw IdentityStorageError.incompleteIdentity }
+        }
+        let needsMigration = !hasLegacyIdentity
         if needsMigration, let adopted = try migrateIdentity(storedID) {
             storedCert = adopted.certPEM
             storedKey  = adopted.keyPEM
@@ -103,44 +109,32 @@ extension IdentityManager {
 
     // MARK: File store (current backend)
 
-    /// Recover interrupted first writes, but never treat read failures as missing or invalid material.
+    /// Established bytes are never repaired or replaced, including an orphaned client ID.
     func loadFromFileStore() throws -> Identity? {
-        let certData = try FileIdentityStore.read(account: Self.accountCert, base: storageRoot())
-        let keyData = try FileIdentityStore.read(account: Self.accountKey, base: storageRoot())
-        guard let certData, let keyData,
+        let base = try storageRoot()
+        guard try FileIdentityStore.hasStoredFiles(base: base) else { return nil }
+        let certData = try FileIdentityStore.read(account: Self.accountCert, base: base)
+        let keyData = try FileIdentityStore.read(account: Self.accountKey, base: base)
+        let uidData = try FileIdentityStore.read(account: Self.accountUID, base: base)
+        guard let certData, let keyData, let uidData,
               let certPEM = String(data: certData, encoding: .utf8), !certPEM.isEmpty,
               let keyPEM = String(data: keyData, encoding: .utf8), !keyPEM.isEmpty,
-              (try? PEM.identity(certPEM: certPEM, keyPEM: keyPEM)) != nil else {
-            try FileIdentityStore.discardIncompleteIdentity(base: storageRoot())
-            return nil
+              let uid = String(data: uidData, encoding: .utf8),
+              !uid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw IdentityStorageError.incompleteIdentity
         }
-        let uid: String
-        if let uidData = try FileIdentityStore.read(account: Self.accountUID, base: storageRoot()),
-           let stored = String(data: uidData, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-           !stored.isEmpty {
-            uid = stored
-        } else {
-            // Preserve valid PEMs after a partial restore; synthesize only the missing unique ID.
-            uid = try generateUniqueID()
-            let uidBytes = Data(uid.utf8)
-            try FileIdentityStore.write(uidBytes, account: Self.accountUID, base: storageRoot())
-            log.info("File store missing uniqueID - synthesised and wrote a fresh one")
+        do { _ = try PEM.identity(certPEM: certPEM, keyPEM: keyPEM) } catch {
+            throw IdentityStorageError.invalidIdentity
         }
         return Identity(uniqueID: uid, certPEM: certPEM, keyPEM: keyPEM)
     }
 
-    /// Persist an Identity to the file store. Each component goes through
-    /// `FileIdentityStore.write` which enforces mode 0600 and verifies it
-    /// stuck via stat(2).
+    /// Publish the entire validated identity at once, leaving failed creation only in staging.
     func writeIdentityToFileStore(_ identity: Identity) throws {
-        _ = try PEM.identity(certPEM: identity.certPEM, keyPEM: identity.keyPEM)
-        try FileIdentityStore.write(Data(identity.certPEM.utf8),
-                                    account: Self.accountCert, base: storageRoot())
-        try FileIdentityStore.write(Data(identity.keyPEM.utf8),
-                                    account: Self.accountKey, base: storageRoot())
-        try FileIdentityStore.write(Data(identity.uniqueID.utf8),
-                                    account: Self.accountUID, base: storageRoot())
+        do { _ = try PEM.identity(certPEM: identity.certPEM, keyPEM: identity.keyPEM) } catch {
+            throw IdentityStorageError.invalidIdentity
+        }
+        try FileIdentityStore.publish(identity, base: storageRoot())
     }
 
     // MARK: UserDefaults plaintext cleanup

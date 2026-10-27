@@ -31,6 +31,10 @@ extension StreamViewController {
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         let remaining = presses.filter { press in
             guard let key = press.key else { return true }
+            if model.inputFocused, let capture = keyboardMouseCapture {
+                routeKey(key, pressed: true, capture: capture)
+                return false
+            }
             if key.charactersIgnoringModifiers == "/", key.modifierFlags == .control {
                 model.showControls()
                 return false
@@ -45,10 +49,21 @@ extension StreamViewController {
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         let remaining = presses.filter { press in
             guard let key = press.key else { return true }
+            if let capture = keyboardMouseCapture {
+                routeKey(key, pressed: false, capture: capture)
+                return !model.inputFocused
+            }
             if key.charactersIgnoringModifiers == "/", key.modifierFlags == .control { return false }
             return !model.shortcuts.release(input: key.charactersIgnoringModifiers) && !model.inputFocused
         }
         if !remaining.isEmpty { super.pressesEnded(remaining, with: event) }
+    }
+
+    private func routeKey(_ key: UIKey, pressed: Bool, capture: IOSKeyboardMouseCapture) {
+        model.shortcuts.routeKey(usage: UInt16(clamping: key.keyCode.rawValue),
+            input: key.charactersIgnoringModifiers, modifiers: key.modifierFlags, pressed: pressed,
+            forward: { capture.key(key, pressed: pressed, local: $0) },
+            perform: model.performShortcut, showControls: model.showControls)
     }
 
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {

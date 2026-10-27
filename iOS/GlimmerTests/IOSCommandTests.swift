@@ -39,7 +39,9 @@ struct IOSCommandTests {
         for await pending in Observations({ model.pendingCommand }) where pending { break }
         #expect(model.session == nil)
         if cancel {
-            #expect(await model.stopFromCommand() == .stopped)
+            #expect(await model.stopFromCommand(matching: "another PC") == .pcMismatch)
+            #expect(await model.stopFromCommand(matching: fixture.pcID) == .stopped)
+            _ = await model.stopFromCommand()
             await #expect(throws: CancellationError.self) { try await launch.value }
         } else {
             model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
@@ -79,7 +81,9 @@ struct IOSCommandTests {
         model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
         let launch = Task { try await model.streamFromCommand(pc: fixture.pcID, app: "Game") }
         await gate.waitUntilEntered()
-        #expect(await model.stopFromCommand() == .stopped)
+        #expect(await model.stopFromCommand(matching: "another PC") == .pcMismatch)
+        #expect(await model.stopFromCommand(matching: fixture.pcID) == .stopped)
+        _ = await model.stopFromCommand()
         await gate.release()
         do {
             try await launch.value
@@ -126,7 +130,7 @@ struct IOSCommandTests {
         await disposal.waitUntilEntered()
         #expect(sessions == 1)
         if cancel {
-            let stopping = Task { await model.stopFromCommand() }
+            let stopping = Task { await model.stopFromCommand(matching: fixture.pcID) }
             while model.commandTask != nil { await Task.yield() }
             await disposal.release()
             #expect(await stopping.value == .stopped)
@@ -158,6 +162,56 @@ struct IOSCommandTests {
         model.pendingGameAction = nil
         try await model.quitFromCommand(pc: fixture.pcID, confirmation: false)
         #expect(fixture.quitIDs == [fixture.app.id])
+    }
+
+    @Test(arguments: [false, true])
+    func externalStopCannotEndTheSessionWithoutConfirmation(leaveRunning: Bool) async throws {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        model.leaveGamesRunning = leaveRunning
+        try await model.streamFromCommand(pc: fixture.pcID, app: fixture.app.name)
+        let original = try #require(model.session)
+        await model.handleCommandURL(try #require(URL(string: "glimmer://stop")))?.value
+        #expect(model.session === original)
+        #expect(!original.phase.isEnded)
+        let cancelled = try #require(model.pendingURLCommand)
+        model.pendingURLCommand = nil
+        #expect(model.confirmURLCommand(cancelled) == nil)
+        #expect(model.session === original)
+        await model.handleCommandURL(try #require(URL(string: "glimmer://stop")))?.value
+        let approved = try #require(model.pendingURLCommand)
+        await model.confirmURLCommand(approved)?.value
+        #expect(model.session == nil)
+        #expect(model.confirmURLCommand(approved) == nil)
+    }
+
+    @Test func externalLaunchCannotStartWithoutConfirmation() async throws {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        let url = try #require(URL(string: "glimmer://stream?pc=\(fixture.pcID)&app=Game"))
+        await model.handleCommandURL(url)?.value
+        #expect(model.session == nil)
+        let request = try #require(model.pendingURLCommand)
+        await model.confirmURLCommand(request)?.value
+        #expect(model.session?.launch.appID == fixture.app.id)
+        _ = await model.stopFromCommand()
+    }
+
+    @Test func aStaleExternalStopCannotEndAReplacementSession() async throws {
+        let fixture = LauncherFixture()
+        let model = fixture.model()
+        model.availabilityChanged(active: true, background: false, protectedDataAvailable: true)
+        try await model.streamFromCommand(pc: fixture.pcID, app: fixture.app.name)
+        await model.handleCommandURL(try #require(URL(string: "glimmer://stop")))?.value
+        let request = try #require(model.pendingURLCommand)
+        _ = await model.stopFromCommand()
+        try await model.streamFromCommand(pc: fixture.pcID, app: fixture.hidden.name)
+        let replacement = try #require(model.session)
+        await model.confirmURLCommand(request)?.value
+        #expect(model.session === replacement)
+        _ = await model.stopFromCommand()
     }
 
     @Test func applicationRegistersLinksAndExtractsTheSharedShortcuts() throws {
