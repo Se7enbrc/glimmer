@@ -50,13 +50,17 @@ struct ControllerChordHoldConflictTests {
         }
 
         var lateEcho = false
+        var dualSense = false
 
         // The stream hears the system profile and a physical observer; the second can stamp a little earlier.
         func deliver() {
-            let sample = ControllerMappingSample(buttons: held)
+            // A DualSense's centre buttons reach the stream only through the raw-HID supplement.
+            let center = ControllerMappedButton.menu.rawValue | ControllerMappedButton.options.rawValue
+            let sample = ControllerMappingSample(buttons: dualSense ? held & ~center : held)
+            let supplement = dualSense ? (Int32(bitPattern: held & center), Int32(0)) : nil
             for stamp in lateEcho ? [time, time - 0.002] : [time] {
                 core.receive(slot: 0, buttons: Int32(bitPattern: held), analog: InputCore.neutral, capturedAt: stamp,
-                             physicalSample: sample)
+                             physicalSample: sample, rawSupplement: supplement)
             }
             core.withLock {
                 core.layouts?.states[0]?.timer?.cancel()
@@ -80,12 +84,16 @@ struct ControllerChordHoldConflictTests {
         return permutations([0, 1, 2, 3])
     }()
 
-    @Test(arguments: [false, true], [false, true])
-    func stopChordFiresWithoutMouseModeOrStrayInputInEveryOrder(menuOpensControls: Bool, jitter: Bool) throws {
+    // Variants: bit 0 adds report jitter with a late second source, bit 1 models a DualSense.
+    @Test(arguments: [false, true], 0..<4)
+    func stopChordFiresWithoutMouseModeOrStrayInputInEveryOrder(menuOpensControls: Bool, variant: Int) throws {
+        let jitter = variant & 1 != 0
+        let dualSense = variant & 2 != 0
         for press in Self.orders {
             for release in Self.orders {
                 let rig = try Rig(menuOpensControls: menuOpensControls)
                 rig.lateEcho = jitter
+                rig.dualSense = dualSense
                 for index in press { rig.set(Self.stop[index], true); rig.wait(0.03, jitter: jitter) }
                 rig.wait(0.5, jitter: jitter)
                 #expect(rig.actions.withLock { $0 } == [.stop], "press \(press)")
