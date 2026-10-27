@@ -76,7 +76,8 @@ def expected_sources(root):
                                    "ControllerMouseParityTests.swift",
                                    "StreamInputMouseModeTests.swift", "ControllerMouseRenderTests.swift",
                                    "ControllerDiagramTests.swift", "SettingsResetTests.swift",
-                                   "ControllerShortcutRenderTests.swift", "ControllerStopChordTests.swift"])
+                                   "ControllerShortcutRenderTests.swift", "ControllerStopChordTests.swift",
+                                   "ControllerChordHoldConflictTests.swift"])
     expected["GlimmerTests"].update("../EnginePackageTests/" + name for name in
                                   ["ControllerMappingTests.swift", "ControllerLayoutPersistenceTests.swift",
                                    "ControllerLayoutEscapeTests.swift", "ControllerShortcutTests.swift"])
