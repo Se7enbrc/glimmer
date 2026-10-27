@@ -62,8 +62,18 @@ final class TouchOverlayUITests: XCTestCase {
         stick.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.1,
             thenDragTo: stick.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)))
         record(prefix + "-play", app: app)
+        let more = app.buttons["stream-controls-show"].frame
+        for id in ["touch-control-options", "touch-control-menu"] {
+            XCTAssertFalse(app.buttons[id].frame.insetBy(dx: -16, dy: -40).intersects(more), id)
+        }
         app.buttons["stream-controls-show"].tap()
         record(prefix + "-menu", app: app)
+        let actions = app.descendants(matching: .any).matching(identifier: "stream-controls-actions").firstMatch
+        if !large {
+            for id in ["stream-resume", "stream-stats-toggle", "stream-edit-controls", "stream-help"] {
+                XCTAssertTrue(actions.frame.contains(app.buttons[id].frame), "\(id) shows without scrolling")
+            }
+        }
         XCTAssertNoThrow(try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription, .trait]))
         XCTAssertTrue(app.buttons["stream-disconnect"].isHittable)
         XCTAssertGreaterThanOrEqual(app.buttons["stream-disconnect"].frame.height, 44)
@@ -85,14 +95,7 @@ final class TouchOverlayUITests: XCTestCase {
         record(prefix + "-help", app: app)
         app.buttons["stream-help-done"].tap()
         reveal("stream-edit-controls", in: app, backward: true)
-        app.buttons["stream-edit-controls"].tap()
-        XCTAssertTrue(app.buttons["touch-editor-done"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["touch-editor-done"].isHittable)
-        XCTAssertGreaterThanOrEqual(app.buttons["touch-editor-done"].frame.height, 44)
-        XCTAssertGreaterThanOrEqual(app.buttons["touch-editor-cancel"].frame.height, 44)
-        XCTAssertFalse((video.value as? String)?.contains("59.9 FPS") == true)
-        record(prefix + "-editor", app: app)
-        XCTAssertNoThrow(try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription, .trait]))
+        editControls(app, large: large, prefix: prefix, video: video)
         app.buttons["touch-editor-done"].tap()
         XCTAssertTrue(app.buttons["stream-disconnect"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["stream-disconnect"].isHittable)
@@ -107,12 +110,32 @@ final class TouchOverlayUITests: XCTestCase {
         record(prefix + "-disconnected", app: app)
     }
 
-    private func reveal(_ identifier: String, in app: XCUIApplication, backward: Bool = false) {
-        let scroll = app.descendants(matching: .any).matching(identifier: "stream-controls-actions").firstMatch
+    private func editControls(_ app: XCUIApplication, large: Bool, prefix: String, video: XCUIElement) {
+        app.buttons["stream-edit-controls"].tap()
+        XCTAssertTrue(app.buttons["touch-editor-done"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["touch-editor-done"].isHittable)
+        XCTAssertGreaterThanOrEqual(app.buttons["touch-editor-done"].frame.height, 44)
+        XCTAssertGreaterThanOrEqual(app.buttons["touch-editor-cancel"].frame.height, 44)
+        XCTAssertFalse((video.value as? String)?.contains("59.9 FPS") == true)
+        record(prefix + "-editor", app: app)
+        if !large {
+            let panel = app.descendants(matching: .any).matching(identifier: "touch-editor-inspector").firstMatch
+                .frame.union(app.buttons["touch-editor-done"].frame).union(app.buttons["touch-editor-reset"].frame)
+            for id in ["leftShoulder", "rightShoulder", "leftTrigger", "rightTrigger", "y", "x", "b", "a", "dpad"] {
+                XCTAssertFalse(app.buttons["touch-editor-\(id)"].frame.intersects(panel), "panel covers \(id)")
+            }
+        }
+        reveal("touch-editor-reset", in: app, container: "touch-editor-inspector")
+        XCTAssertNoThrow(try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription, .trait]))
+    }
+
+    private func reveal(_ identifier: String, in app: XCUIApplication, backward: Bool = false,
+                        container: String = "stream-controls-actions") {
+        let scroll = app.descendants(matching: .any).matching(identifier: container).firstMatch
         let target = app.buttons[identifier]
         for _ in 0..<32 {
-            if target.exists && target.isHittable && target.frame.minY >= scroll.frame.minY
-                && target.frame.maxY <= scroll.frame.maxY { break }
+            if target.exists && target.isHittable && (!target.frame.intersects(scroll.frame)
+                || target.frame.minY >= scroll.frame.minY && target.frame.maxY <= scroll.frame.maxY) { break }
             let offset = target.exists ? min(40, max(-40, scroll.frame.midY - target.frame.midY))
                 : backward ? 40.0 : -40.0
             let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
