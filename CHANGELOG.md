@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- Stop now cancels a queued command-line game launch, including a switch waiting
+  for the previous stream to close.
+
 ### Features
 
 - Running games now show their state on the app tile. Click or tap to resume,

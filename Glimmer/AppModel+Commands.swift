@@ -11,12 +11,13 @@ import Observation
 @MainActor
 final class PendingCommandStream {
     let id: String
-    let hostID: String
+    let host: Host
+    var hostID: String { host.id }
     var task: Task<Void, Never>?
 
-    init(id: String, hostID: String) {
+    init(id: String, host: Host) {
         self.id = id
-        self.hostID = hostID
+        self.host = host
     }
 }
 
@@ -203,19 +204,21 @@ extension AppModel {
         }
     }
 
-    /// Retain the route wait so quit can invalidate it before any session exists.
+    /// Retain launch ownership through route readiness and replacement teardown.
     func beginCommandStream(_ id: String, app: LibraryApp, on host: Host, takeover: Bool, approvedOccupant: Int? = nil,
                             fromURL: Bool = false, waitForRoute: (@MainActor () async -> Void)? = nil) {
         cancelPendingCommandStream()
-        let request = PendingCommandStream(id: id, hostID: host.id)
+        let request = PendingCommandStream(id: id, host: host)
         pendingCommandStream = request
         request.task = Task {
-            defer { request.task = nil }
+            defer {
+                request.task = nil
+                if pendingCommandStream === request { pendingCommandStream = nil }
+            }
             if let waitForRoute { await waitForRoute() } else { await awaitRouteSettled(for: host) }
             if !Task.isCancelled { await hostPolling.readinessTasks[host.id]?.value }
             // A cancelled wait may still resume after a newer request took its place.
             guard !Task.isCancelled, pendingCommandStream === request else { return }
-            pendingCommandStream = nil
             if isStreaming {
                 guard let active = lastLaunchAttempt, active.host.id == host.id else {
                     replyToCommand(id, CommandChannel.Event.rejected, CommandChannel.alreadyStreaming)
@@ -236,8 +239,11 @@ extension AppModel {
                 }
                 let ending = nativeStreamTask
                 await nativeSession?.disconnectLeavingGameRunning()
+                guard !Task.isCancelled, pendingCommandStream === request else { return }
                 await ending?.value
             }
+            guard !Task.isCancelled, pendingCommandStream === request else { return }
+            pendingCommandStream = nil
             stream(app: app, on: host, takeoverAuthorized: takeover && approvedOccupant == nil,
                    approvedOccupant: approvedOccupant)
             replyToCommand(id, CommandChannel.Event.accepted)
@@ -408,13 +414,20 @@ extension AppModel {
 
     /// Match the session's PC, even when the launcher has selected a different one.
     func stopActiveStream(matching pc: String? = nil, source: String) async -> CommandStopResult {
-        guard nativeSession != nil, !menuStopInProgress else { return .noActiveStream }
+        guard nativeSession != nil || nativeStreamTask != nil || pendingCommandStream != nil else {
+            return .noActiveStream
+        }
         if let pc {
-            guard let active = lastLaunchAttempt?.host, GlimmerCLI.matchHost(pc, in: [active]) != nil else {
+            let active = pendingCommandStream?.host ?? lastLaunchAttempt?.host
+            guard let active, GlimmerCLI.matchHost(pc, in: [active]) != nil else {
                 return .pcMismatch
             }
         }
-        guard let stop = stopStreamFromMenu(source: source) else { return .noActiveStream }
+        let pending = pendingCommandStream != nil
+        cancelPendingCommandStream()
+        guard let stop = stopStreamFromMenu(source: source) else {
+            return pending ? .stopped : .noActiveStream
+        }
         await stop.value
         return .stopped
     }
