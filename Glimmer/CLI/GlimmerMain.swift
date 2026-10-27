@@ -21,6 +21,12 @@ enum GlimmerMain {
         _ = ResourceTelemetry.mainThreadID   // recorded here, on the main thread
         reexecIfSymlinked()
         guard GlimmerCLI.isInvocation(CommandLine.arguments) else {
+            #if DEBUG
+            if PersistentStorage.isTesting, ProcessInfo.processInfo.environment["GLIMMER_JOURNEY_DIRECTORY"] != nil {
+                JourneyMacApp.main()
+                return
+            }
+            #endif
             // The test host shares the app's defaults domain and must not run its launch.
             if PersistentStorage.isTesting {
                 GlimmerApp.registerDefaults()

@@ -781,6 +781,16 @@
 		D7F330D765E7A73DE210A28E /* ControllerShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 056C6102A2BD668896A01FCE /* ControllerShortcutTests.swift */; };
 		B6D5ED5AF9A2619C75EAE789 /* ControllerShortcutRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */; };
 		114D0A9130EE107F0ED56FF8 /* ControllerShortcutRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */; };
+		C183E685559C49D580594109 /* JourneyBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E48DEED83EF4427991E9FBB; };
+		0C4E5FD35A244CF3AA5F0444 /* JourneyControllerDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6831248D946547B19795BF82; };
+		1DE5EBEAC5754A719137C204 /* JourneyVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 163BA39D30E34216A44AA84C; };
+		AF147243C69D43D691FCA081 /* JourneySnapshotController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E161BB57F8B491A8BC8C175; };
+		6C81FEB6ADA641FC98B0B247 /* JourneyTimestampGamepad.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56EFBF6CA0B54F779CB427A4; };
+		7058D714CC2144759C6B9A56 /* JourneyMacPC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3FB0CBBBFE4DD39284AC0A; };
+		C95CAD42575747179DAA368C /* JourneyMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05CD612156F54E76875BF1FE; };
+		480BABD3E8374E42B78AC323 /* MacControllerJourneyUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7F585A77B334514A0C0EAB1; };
+		7E05E4774F1C45B9862FE1C0 /* JourneyControllerReading.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE208CDD8E5045AFA6D77D8B; };
+		C4A77CFAD9D2485EB397FB43 /* JourneyInputAssertions.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF2D9A300F874751B8C5A9B7; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -812,6 +822,7 @@
 			remoteGlobalIDString = E26101210000000000000002;
 			remoteInfo = GlimmerEngine;
 		};
+		93B80AF9714E428DA1573F05 = {isa = PBXContainerItemProxy; containerPortal = A10000050; proxyType = 1; remoteGlobalIDString = A10000040; remoteInfo = Glimmer; };
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -1616,6 +1627,17 @@
 		056C6102A2BD668896A01FCE /* ControllerShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EnginePackageTests/ControllerShortcutTests.swift"; sourceTree = SOURCE_ROOT; };
 		A56A7305A05A4171FE737951 /* ControllerShortcutRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerShortcutRoutingTests.swift"; sourceTree = SOURCE_ROOT; };
 		0272456E1C1B0FF2DE802F30 /* ControllerShortcutRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerTests/ControllerShortcutRenderTests.swift"; sourceTree = SOURCE_ROOT; };
+		4E48DEED83EF4427991E9FBB /* JourneyBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Journeys/Shared/JourneyBackend.swift"; sourceTree = SOURCE_ROOT; };
+		6831248D946547B19795BF82 /* JourneyControllerDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Journeys/Shared/JourneyControllerDriver.swift"; sourceTree = SOURCE_ROOT; };
+		163BA39D30E34216A44AA84C /* JourneyVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Journeys/Shared/JourneyVideo.swift"; sourceTree = SOURCE_ROOT; };
+		0E161BB57F8B491A8BC8C175 /* JourneySnapshotController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Journeys/Shared/JourneySnapshotController.swift"; sourceTree = SOURCE_ROOT; };
+		56EFBF6CA0B54F779CB427A4 /* JourneyTimestampGamepad.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Journeys/Shared/JourneyTimestampGamepad.swift"; sourceTree = SOURCE_ROOT; };
+		1A3FB0CBBBFE4DD39284AC0A /* JourneyMacPC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Journeys/JourneyMacPC.swift"; sourceTree = SOURCE_ROOT; };
+		05CD612156F54E76875BF1FE /* JourneyMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Journeys/JourneyMacApp.swift"; sourceTree = SOURCE_ROOT; };
+		497CDC28478643C4A07E84FD = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = GlimmerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D7F585A77B334514A0C0EAB1 /* MacControllerJourneyUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlimmerUITests/MacControllerJourneyUITests.swift"; sourceTree = SOURCE_ROOT; };
+		CE208CDD8E5045AFA6D77D8B /* JourneyControllerReading.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Glimmer/Journeys/Shared/JourneyControllerReading.swift"; sourceTree = SOURCE_ROOT; };
+		FF2D9A300F874751B8C5A9B7 /* JourneyInputAssertions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "JourneySupport/JourneyInputAssertions.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1651,6 +1673,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		719B08D4A6AE41F3AA720598 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -1703,6 +1726,7 @@
 				A10000032 /* Products */,
 				6C549F55F46655F4FA62E269 /* Frameworks */,
 				9F01DE6ECB9422F81F38F159 /* LoginHelper */,
+				51ADF827FFF047528CB65054 /* GlimmerUITests */,
 				D2000016 /* GlimmerTests */,
 			);
 			sourceTree = "<group>";
@@ -1710,6 +1734,14 @@
 		A10000031 /* Glimmer */ = {
 			isa = PBXGroup;
 			children = (
+				CE208CDD8E5045AFA6D77D8B /* JourneyControllerReading.swift */,
+				05CD612156F54E76875BF1FE /* JourneyMacApp.swift */,
+				1A3FB0CBBBFE4DD39284AC0A /* JourneyMacPC.swift */,
+				56EFBF6CA0B54F779CB427A4 /* JourneyTimestampGamepad.swift */,
+				0E161BB57F8B491A8BC8C175 /* JourneySnapshotController.swift */,
+				163BA39D30E34216A44AA84C /* JourneyVideo.swift */,
+				6831248D946547B19795BF82 /* JourneyControllerDriver.swift */,
+				4E48DEED83EF4427991E9FBB /* JourneyBackend.swift */,
 				DB3E6E14588045D7BC957D35 /* StatsOverlayLayer+Platform.swift */,
 				E92A400B198D99C4E81A5016 /* ControllerLayoutDiagram.swift */,
 				03A7DCA29B1043989FC1186E /* ControllerDiagramAnnotations.swift */,
@@ -1929,6 +1961,7 @@
 				E26101210000000000000001 /* GlimmerEngine.framework */,
 				A10000010 /* Glimmer.app */,
 				68E50C51912216A5F5FDA2C6 /* Glimmer Login Helper.app */,
+				497CDC28478643C4A07E84FD /* GlimmerUITests.xctest */,
 				D2000019 /* GlimmerTests.xctest */,
 			);
 			name = Products;
@@ -2511,6 +2544,9 @@
 			path = Protocol;
 			sourceTree = "<group>";
 		};
+		51ADF827FFF047528CB65054 /* GlimmerUITests */ = {isa = PBXGroup; children = (
+				FF2D9A300F874751B8C5A9B7 /* JourneyInputAssertions.swift */,
+				D7F585A77B334514A0C0EAB1 /* MacControllerJourneyUITests.swift */,); name = GlimmerUITests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -2590,6 +2626,7 @@
 			productReference = E26101210000000000000001 /* GlimmerEngine.framework */;
 			productType = "com.apple.product-type.framework";
 		};
+		647D79B51C41461690C7BAF3 = {isa = PBXNativeTarget; buildConfigurationList = 60ACCBE08CFA41EAB7073372; buildPhases = (4B857E3FD98F432CB502D12A, 719B08D4A6AE41F3AA720598, E5EEF415EF544054B93E2C6F); buildRules = (); dependencies = (E6CBBDCCC4A4413FB9AF7A68); name = GlimmerUITests; productName = GlimmerUITests; productReference = 497CDC28478643C4A07E84FD; productType = "com.apple.product-type.bundle.ui-testing"; };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -2624,6 +2661,7 @@
 				E26101210000000000000002 /* GlimmerEngine */,
 				A10000040 /* Glimmer */,
 				AD84EE95363FBCE53F028062 /* Glimmer Login Helper */,
+				647D79B51C41461690C7BAF3 /* GlimmerUITests */,
 				D2000010 /* GlimmerTests */,
 			);
 		};
@@ -2656,6 +2694,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E5EEF415EF544054B93E2C6F = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -2671,6 +2710,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7E05E4774F1C45B9862FE1C0 /* JourneyControllerReading.swift in Sources */,
+				C95CAD42575747179DAA368C /* JourneyMacApp.swift in Sources */,
+				7058D714CC2144759C6B9A56 /* JourneyMacPC.swift in Sources */,
+				6C81FEB6ADA641FC98B0B247 /* JourneyTimestampGamepad.swift in Sources */,
+				AF147243C69D43D691FCA081 /* JourneySnapshotController.swift in Sources */,
+				1DE5EBEAC5754A719137C204 /* JourneyVideo.swift in Sources */,
+				0C4E5FD35A244CF3AA5F0444 /* JourneyControllerDriver.swift in Sources */,
+				C183E685559C49D580594109 /* JourneyBackend.swift in Sources */,
 				AC0296E69DA245A6B89DDD62 /* StatsOverlayLayer+Platform.swift in Sources */,
 				51DAB01AF73E7404229D81AF /* ControllerLayoutDiagram.swift in Sources */,
 				78E416D5EA4243A18D2F5B06 /* ControllerDiagramAnnotations.swift in Sources */,
@@ -3448,6 +3495,9 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4B857E3FD98F432CB502D12A /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+				C4A77CFAD9D2485EB397FB43 /* JourneyInputAssertions.swift in Sources */,
+				480BABD3E8374E42B78AC323 /* MacControllerJourneyUITests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -3473,6 +3523,7 @@
 			target = E26101210000000000000002 /* GlimmerEngine */;
 			targetProxy = E26101210000000000000018 /* PBXContainerItemProxy */;
 		};
+		E6CBBDCCC4A4413FB9AF7A68 = {isa = PBXTargetDependency; target = A10000040; targetProxy = 93B80AF9714E428DA1573F05; };
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -3798,6 +3849,8 @@
 			};
 			name = Release;
 		};
+		C38C8A241CC44E0889F7A398 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 15.7; PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.Journeys.UITests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 6.0; SWIFT_STRICT_CONCURRENCY = complete; TEST_TARGET_NAME = Glimmer; ENABLE_APP_SANDBOX = NO; LM_SKIP_METADATA_EXTRACTION = YES;}; name = Debug; };
+		BA1A3F25A2054A8E9F5A31B6 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; GENERATE_INFOPLIST_FILE = YES; MACOSX_DEPLOYMENT_TARGET = 15.7; PRODUCT_BUNDLE_IDENTIFIER = io.ugfugl.Glimmer.Journeys.UITests; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 6.0; SWIFT_STRICT_CONCURRENCY = complete; TEST_TARGET_NAME = Glimmer; ENABLE_APP_SANDBOX = NO; LM_SKIP_METADATA_EXTRACTION = YES;}; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -3846,6 +3899,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		60ACCBE08CFA41EAB7073372 = {isa = XCConfigurationList; buildConfigurations = (C38C8A241CC44E0889F7A398, BA1A3F25A2054A8E9F5A31B6); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */

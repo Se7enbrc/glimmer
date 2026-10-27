@@ -66,6 +66,8 @@ help:
 	@printf '%s\n' '  test                 Run Mac tests; TEST_SUITE selects one suite'
 	@printf '%s\n' '  test-asan            Run protocol fuzz tests under AddressSanitizer'
 	@printf '%s\n' '  ios-test             Run iPhone Simulator tests'
+	@printf '%s\n' '  ios-touch-journeys    Run iPhone/iPad touch and controller journeys in light and dark'
+	@printf '%s\n' '  mac-controller-journeys Run Mac controller journeys in light and dark'
 	@printf '%s\n' '  test-scripts         Run release and tooling fixtures'
 	@printf '%s\n' 'Check'
 	@printf '%s\n' '  check                Run all hooks, boundary audits and tooling tests'

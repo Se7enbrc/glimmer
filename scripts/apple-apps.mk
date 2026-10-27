@@ -17,3 +17,11 @@ verify-all: verify
 
 ci-parity:
 	@scripts/ci-parity.sh
+
+.PHONY: ios-touch-journeys
+ios-touch-journeys:
+	@scripts/ios-touch-journeys.sh
+
+.PHONY: mac-controller-journeys
+mac-controller-journeys:
+	@scripts/mac-controller-journeys.sh
