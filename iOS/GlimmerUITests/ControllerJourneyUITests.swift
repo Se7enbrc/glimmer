@@ -41,10 +41,19 @@ final class ControllerJourneyUITests: TouchJourneyTestCase {
         record("controller-launcher-focus")
         try press("a")
         record("controller-launch-result")
-        XCTAssertTrue(waitForReceipt("launch"), "The focused game must launch using A without touch")
+        // CJ99-04: library focus is UIKit's controller navigation, which a GCVirtualController cannot drive.
+        XCTExpectFailure("CJ99-04: a virtual controller cannot move UIKit focus; needs a hardware check") {
+            XCTAssertTrue(waitForReceipt("launch", timeout: 2), "The focused game must launch using A without touch")
+        }
+        if !receipts().contains(where: { $0["launch"] != nil }) { app.buttons["launcher-app-1"].firstMatch.tap() }
         XCTAssertTrue(waitForReceipt("rendered"))
         XCTAssertFalse(app.buttons["A"].exists, "A connected controller must hide the touch gamepad")
         try assertPicture(app)
+        try controller(steps: ["lb", "rb", "options", "menu"].map {
+            ["element": $0, "value": 1, "milliseconds": $0 == "menu" ? 600 : 10]
+        } + ["menu", "options", "rb", "lb"].map { ["element": $0, "value": 0] })
+        XCTAssertTrue(waitForReceipt("stop"), "The virtual controller's Stop chord must end the stream")
+        XCTAssertTrue(app.buttons["launcher-app-1"].firstMatch.waitForExistence(timeout: 5))
     }
 
     func testPlayStationInputAndStopChord() throws {

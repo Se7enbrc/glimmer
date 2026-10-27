@@ -45,9 +45,7 @@ final class JourneyControllerDriver {
     }
 
     func start() {
-        #if os(macOS)
         registry.install()
-        #endif
         task = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -93,7 +91,6 @@ final class JourneyControllerDriver {
 
     private func connection(_ connect: Bool, profile: String?) async throws {
         if connect, let profile {
-            registry.install()
             let snapshot = JourneySnapshotController(profile: profile)
             receipts.record(["profileButtons": Double(snapshot.input.buttons.count),
                              "unmappedButtons": Double(snapshot.input.unmapped?.buttons.count ?? 0)])
@@ -107,12 +104,14 @@ final class JourneyControllerDriver {
             let controller = GCVirtualController(configuration: configuration)
             virtual = controller
             try await controller.connect()
+            // Discovery is limited to journey devices, so the framework controller joins it explicitly.
+            if let device = controller.controller { registry.add(device) }
             #endif
-        } else if !snapshots.isEmpty {
-            snapshots.removeLast()
-            registry.removeLast()
+        } else if !snapshots.isEmpty, let snapshot = snapshots.popLast() {
+            registry.remove(snapshot)
         } else {
             #if os(iOS)
+            if let device = virtual?.controller { registry.remove(device) }
             virtual?.disconnect()
             virtual = nil
             #endif

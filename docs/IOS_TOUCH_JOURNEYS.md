@@ -30,7 +30,7 @@ minutes per parallel CI shard plus a cold build; these are measured local
 durations, not a hosted CI guarantee. The matrix currently reports unresolved
 failures described below.
 
-`JOURNEY_RUNTIME` defaults to `com.apple.CoreSimulator.SimRuntime.iOS-26-5`.
+`JOURNEY_RUNTIME` defaults to `com.apple.CoreSimulator.SimRuntime.iOS-27-0`.
 `JOURNEY_DERIVED` and `JOURNEY_RESULTS` select build/results directories. Keep
 separate DerivedData for each Xcode version. `JOURNEY_PHONE_ID` and
 `JOURNEY_IPAD_ID` may reuse dedicated test Simulators; the script deletes only

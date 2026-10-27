@@ -133,6 +133,20 @@ final class JourneyControllerRegistry {
             return controllers as NSArray
         }
         original = method_setImplementation(method, imp_implementationWithBlock(block))
+        #if os(iOS)
+        // Simulators forward the host Mac's own controllers, mice and keyboards; journeys see only their devices.
+        Self.replace(GCMouse.self, #selector(GCMouse.mice),
+                     with: { () -> NSArray in [] } as @convention(block) () -> NSArray)
+        Self.replace(GCMouse.self, #selector(getter: GCMouse.current),
+                     with: { () -> GCMouse? in nil } as @convention(block) () -> GCMouse?)
+        Self.replace(GCKeyboard.self, #selector(getter: GCKeyboard.coalesced),
+                     with: { () -> GCKeyboard? in nil } as @convention(block) () -> GCKeyboard?)
+        #endif
+    }
+
+    private static func replace(_ type: AnyClass, _ selector: Selector, with block: Any) {
+        guard let method = class_getClassMethod(type, selector) else { return }
+        method_setImplementation(method, imp_implementationWithBlock(block))
     }
 
     func add(_ controller: GCController) {
@@ -140,8 +154,8 @@ final class JourneyControllerRegistry {
         NotificationCenter.default.post(name: .GCControllerDidConnect, object: controller)
     }
 
-    func removeLast() {
-        guard let controller = controllers.popLast() else { return }
+    func remove(_ controller: GCController) {
+        controllers.removeAll { $0 === controller }
         NotificationCenter.default.post(name: .GCControllerDidDisconnect, object: controller)
     }
 }

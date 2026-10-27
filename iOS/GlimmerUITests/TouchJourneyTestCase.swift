@@ -79,9 +79,9 @@ class TouchJourneyTestCase: XCTestCase {
         return events
     }
 
-    func waitForReceipt(_ key: String, value: Double = 1) -> Bool {
+    func waitForReceipt(_ key: String, value: Double = 1, timeout: TimeInterval = 10) -> Bool {
         let predicate = NSPredicate { [self] _, _ in receipts().contains { $0[key] == value } }
-        return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: 10)
+        return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: timeout)
             == .completed
     }
 

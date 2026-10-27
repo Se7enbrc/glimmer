@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 derived="${JOURNEY_DERIVED:-$PWD/iOS/build/touch-journeys}"
 results="${JOURNEY_RESULTS:-$PWD/iOS/build/touch-journey-results}"
-runtime="${JOURNEY_RUNTIME:-com.apple.CoreSimulator.SimRuntime.iOS-26-5}"
+runtime="${JOURNEY_RUNTIME:-com.apple.CoreSimulator.SimRuntime.iOS-27-0}"
 mkdir -p "$results"
 started=$SECONDS
 created=()

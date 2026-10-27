@@ -139,6 +139,14 @@ extension ControllerJourneyUITests {
             if app.buttons["Done"].firstMatch.exists {
                 app.buttons["Done"].firstMatch.tap()
                 XCUIDevice.shared.orientation = .landscapeLeft
+                // iOS 27 drops a tap that lands while the sheet dismisses or the window rotates.
+                let window = app.windows.firstMatch
+                let settled = NSPredicate { _, _ in
+                    !app.buttons["Done"].exists && window.frame.width > window.frame.height
+                }
+                let waited = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: settled, object: nil)],
+                                              timeout: 5)
+                XCTAssertEqual(waited, .completed, "The library must settle in landscape")
                 return
             }
             guard let back = app.navigationBars.buttons.allElementsBoundByIndex.last(where: { $0.isHittable }) else {
