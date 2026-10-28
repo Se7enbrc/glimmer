@@ -35,8 +35,7 @@ class VerificationTimeoutTests(FixtureTestCase):
                           ("ios-core", "Build and test the source package"),
                           ("ios-core", "Build engine for device and Simulator"),
                           ("ios-core", "Build production iPhone app without signing"),
-                          ("extended", "Render and UI tests"), ("extended", "User journeys"),
-                          ("extended", "Address sanitizer and deterministic fuzz tests"),
+                          ("extended", "Run pending or affected acceptance cases"),
                           ("fuzz", "Fuzz protocol parsers")):
             with self.subTest(job=job, step=step):
                 source = self.job(job)
@@ -50,7 +49,8 @@ class VerificationTimeoutTests(FixtureTestCase):
             ("verify", "Save Mac results", ("build/logs/", "build/Logs/Test/", "build/coverage/swift/")),
             ("sequoia", "Save macOS 15 results", ("build/logs/", "build/sequoia.xcresult")),
             ("ios-core", "Save core results", ("iOS/build/ci/core/",)),
-            ("extended", "Save extended results", ("iOS/build/ci/render/", "build/logs/", "build/Logs/Test/")),
+            ("extended", "Save hosted acceptance evidence", ("iOS/build/ci/render/", "build/logs/", "build/acceptance/")),
+            ("extended", "Preserve acceptance ledger", ("build/acceptance/ledger.json", "build/acceptance/summary.md")),
             ("fuzz", "Save fuzzer results", ("build/logs/", "build/fuzz/")),
         ):
             with self.subTest(job=job):
@@ -67,7 +67,6 @@ class VerificationTimeoutTests(FixtureTestCase):
         for job, step, path in (
             ("ios-core", "Build and test the source package", "build/logs/package-test.log"),
             ("ios-core", "Build production iPhone app without signing", "iOS/build/logs/device.log"),
-            ("extended", "Address sanitizer and deterministic fuzz tests", "build/logs/asan.log"),
             ("sequoia", "Run the unit tests on macOS 15", "build/logs/sequoia.log"),
             ("fuzz", "Fuzz protocol parsers", "build/logs/fuzz.log"),
         ):
@@ -79,8 +78,7 @@ class VerificationTimeoutTests(FixtureTestCase):
             ("verify", "Build the shared Mac test products", "mac --build-only"),
             ("verify", "Run Mac tests", "mac --run-only"),
             ("ios-core", "Build Simulator tests and run core", "core"),
-            ("extended", "Render and UI tests", "render --run-only"),
-            ("extended", "User journeys", "journeys"),
+            ("extended", "Run pending or affected acceptance cases", "acceptance"),
         ):
             self.assertIn(f"python3 scripts/ci-local.py {command}", self.step(self.job(job), step))
 

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # SPDX-FileCopyrightText: 2026 ugfugl.io
 
-"""The two Simulator shards must cover every test while sharing one compilation."""
+"""Core and acceptance partition Simulator coverage without rerunning acceptance on pushes."""
 
 from pathlib import Path
 import subprocess
@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class IOSCIShardTests(FixtureTestCase):
-    def test_shards_are_exact_complements_and_both_required(self):
+    def test_shards_are_exact_complements_with_acceptance_off_the_push_gate(self):
         suites = ["NativeUIRenderTests", "ControllerMouseRenderTests", "ControllerLayoutRenderTests",
                   "ControllerShortcutRenderTests"]
         with patch.object(RUNNER, "render_suites", return_value=suites):
@@ -28,24 +28,22 @@ class IOSCIShardTests(FixtureTestCase):
         self.assertEqual(included, {f"GlimmerTests/{suite}" for suite in suites})
         workflow = (ROOT / ".github/workflows/verify.yml").read_text()
         core_job = workflow.split("  ios-core:\n", 1)[1].split("  extended:\n", 1)[0]
-        render_job = workflow.split("  extended:\n", 1)[1].split("  tier2:\n", 1)[0]
+        acceptance = workflow.split("  extended:\n", 1)[1].split("  sequoia:\n", 1)[0]
         self.assertIn("python3 scripts/ci-local.py core", core_job)
-        self.assertIn('tar -C iOS/build/ci/DerivedData/Build -czf "$RUNNER_TEMP/ios-tests.tgz" Products', core_job)
-        self.assertIn("name: ios-tests", core_job)
-        self.assertIn("needs: [changes, gate]", render_job)
-        self.assertIn("name: ios-tests", render_job)
-        self.assertIn('tar -C iOS/build/ci/DerivedData/Build -xzf "$RUNNER_TEMP/ios-tests.tgz"', render_job)
-        self.assertIn("python3 scripts/ci-local.py render --run-only", render_job)
-        self.assertNotIn("test-build", render_job)
+        self.assertNotIn("ios-tests.tgz", core_job)
+        self.assertIn("inputs.mode == 'acceptance'", acceptance)
+        self.assertIn("github.event_name == 'workflow_dispatch'", acceptance)
+        self.assertIn("needs: changes", acceptance)
+        self.assertIn("python3 scripts/ci-local.py acceptance", acceptance)
+        self.assertIn("name: acceptance-ledger", acceptance)
+        self.assertIn("run-id: ${{ inputs.resume_run }}", acceptance)
+        self.assertNotIn("  tier2:", workflow)
+        self.assertNotIn("  schedule:", workflow)
         self.assertIn("IOS_CORE: ${{ needs.ios-core.result }}", workflow)
         self.assertIn('test "$IOS_CORE" = success', workflow)
         self.assertIn('test "$IOS_CORE" = skipped', workflow)
-        tier2 = workflow.split("  tier2:\n", 1)[1].split("  sequoia:\n", 1)[0]
-        self.assertIn("needs: [gate, extended]", tier2)
-        self.assertIn('test "$CORE" = success', tier2)
-        self.assertIn('test "$EXTENDED" = success', tier2)
         self.assertIn("name: ios-core-results", core_job)
-        self.assertIn("iOS/build/ci/render/", render_job)
+        self.assertIn("iOS/build/ci/render/", acceptance)
 
     def test_test_without_building_uses_only_downloaded_products(self):
         result = subprocess.run(["make", "-n", "-C", "iOS", "test-run",
