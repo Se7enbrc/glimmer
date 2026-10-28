@@ -119,6 +119,13 @@ changes and supplies affected `rerun` patterns, for example
 `iphone/*/*Rotation* mac/*/*Mouse*`. This historical acceptance record does not
 claim that every retained pass tested the latest SHA.
 
+To work on a focused area, supply `only` patterns such as `mac/*` or
+`iphone/*/*Rotation*` (`--only` locally). Only matching pending or affected
+cases run; unrelated pending cases stay in the ledger. A focused green run means
+its selected scope passed, and the summary still reports the whole release's
+remaining work. Use `rerun` as well to repeat selected cases that already
+passed.
+
 New or changed journey methods and their test helpers become pending
 automatically. Journey methods are batched by device and appearance, with one
 build per platform. Passing methods survive a failed batch. Render/UI is one

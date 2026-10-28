@@ -317,16 +317,18 @@ def acceptance(args):
                    "source": "render and UI batch", "definition": sha256("".join(
                        str(path.relative_to(ROOT)) + path.read_text() for path in sorted(render_sources)).encode()).hexdigest()}
     cases.insert(0, render_case)
+    scoped = ledger.select(cases, args.only)
     state = ledger.load(args.ledger, args.release)
     seed = ROOT / "docs/release-acceptance" / f"{args.release}.json"
     if not args.ledger.exists() and seed.exists():
         state = ledger.load(seed, args.release)
     selected = ledger.pending(state, cases, args.rerun)
+    selected = [case for case in selected if case in scoped]
     ledger.save(state, args.ledger)
     folder = args.ledger.parent
     def publish():
         ledger.save(state, args.ledger)
-        report = ledger.summary(state)
+        report = ledger.summary(state, scoped)
         (folder / "summary.md").write_text(report)
         print(report)
         if os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -365,7 +367,7 @@ def acceptance(args):
                 ledger.save(state, args.ledger)
     finally:
         publish()
-    return status or int(any(state["cases"][case["key"]]["status"] != "passed" for case in cases))
+    return status or int(any(state["cases"][case["key"]]["status"] != "passed" for case in scoped))
 
 
 def main():
@@ -375,6 +377,7 @@ def main():
     parser.add_argument("--release", default=os.environ.get("ACCEPTANCE_RELEASE", ""))
     parser.add_argument("--ledger", type=Path, default=ROOT / "build/acceptance/ledger.json")
     parser.add_argument("--rerun", default=os.environ.get("ACCEPTANCE_RERUN", ""))
+    parser.add_argument("--only", default=os.environ.get("ACCEPTANCE_ONLY", ""), help="Limit acceptance to matching case patterns")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--build-only", action="store_true")
     group.add_argument("--run-only", action="store_true")
