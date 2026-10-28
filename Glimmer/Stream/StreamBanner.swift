@@ -167,6 +167,21 @@ public final class StreamBanner {
 
     var isOnScreenWithStream: Bool { panel?.parent != nil }
 
+    /// The notice's window, so the stream's close fade can take it along.
+    var noticeWindow: NSWindow? { panel }
+
+    /// The stream has gone: drop the notice and its window at once, with no fade of its own.
+    func removeWithStream() {
+        visible = false
+        showGeneration &+= 1
+        if let resizeObservation { NotificationCenter.default.removeObserver(resizeObservation) }
+        resizeObservation = nil
+        guard let panel else { return }
+        panel.parent?.removeChildWindow(panel)
+        panel.orderOut(nil)
+        self.panel = nil
+    }
+
     /// Centres the notice on the anchored edge, never wider than the window less 16pt each side.
     private func layout() {
         guard let parent, let panel, let host = panel.contentView as? NSHostingView<StreamNoticeView> else { return }

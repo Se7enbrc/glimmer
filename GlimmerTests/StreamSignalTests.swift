@@ -335,6 +335,21 @@ extension StreamSession {
 
 @MainActor
 struct MouseModeBadgeTests {
+    // Closing the stream takes its notices with it: no click-through window outlives the stream.
+    @Test func closingTheStreamRemovesItsNoticeWindows() async throws {
+        let stream = StreamWindow()
+        stream.leaveHintBanner.announce = { _ in }
+        stream.leaveHintBanner.setText("Stream started")
+        stream.leaveHintBanner.setVisible(true)
+        stream.mouseModeBadge.setVisible(true)
+        #expect(stream.leaveHintBanner.noticeFrame != nil)
+        stream.close()
+        try await Task.sleep(for: .seconds(1))
+        for notice in [stream.leaveHintBanner, stream.mouseModeBadge] {
+            #expect(!notice.isVisible && notice.noticeFrame == nil)
+        }
+    }
+
     @Test func theBadgeFollowsMouseModeAfterTheNotice() throws {
         let stream = StreamWindow()
         defer { stream.close() }

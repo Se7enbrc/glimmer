@@ -109,6 +109,10 @@ extension StreamWindow {
         }
     }
 
+    var notices: [StreamBanner] {
+        [reconnectBanner, networkBanner, leaveHintBanner, captureHintBanner, mouseModeBadge]
+    }
+
     func configureMouseModeBadge() {
         let badge = mouseModeBadge
         badge.setSymbol(ControllerMouseMapping.modeSymbol(enabled: true))
