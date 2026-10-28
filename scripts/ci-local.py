@@ -6,6 +6,7 @@
 
 import argparse
 from contextlib import contextmanager
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import time
 from threading import Thread
+from types import SimpleNamespace
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -270,10 +272,109 @@ def journeys():
     return status
 
 
+def acceptance_batch(device, theme, batch, destination, built):
+    import acceptance_ledger as ledger
+    if device == "ios":
+        before = set((ROOT / "iOS/build/ci/render").glob("*.xcresult"))
+        attempt = ios(SimpleNamespace(shard="render", run_only=False, build_only=False, diagnostic_retry=False))
+        if attempt and not set((ROOT / "iOS/build/ci/render").glob("*.xcresult")) - before:
+            raise ValueError("Render build or startup failed without a test receipt; acceptance stopped")
+        return attempt, {"render": "passed" if attempt == 0 else "failed"}
+    platform = "mac" if device == "mac" else "ios"
+    script = "mac-controller-journeys" if platform == "mac" else "ios-touch-journeys"
+    os.environ.update(JOURNEY_APPEARANCE=theme, JOURNEY_DEVICE="phone" if device == "iphone" else "ipad",
+                      JOURNEY_RESULTS=str(destination), JOURNEY_DERIVED=str(ROOT / "build/ci-journeys" / platform),
+                      JOURNEY_TEST_FLAGS=" ".join(f"-only-testing:GlimmerUITests/{case['test']}" for case in batch),
+                      JOURNEY_SKIP_BUILD="1" if platform in built else "0")
+    os.environ["JOURNEY_RUNTIME"] = "com.apple.CoreSimulator.SimRuntime.iOS-" + output(
+        ["xcrun", "--sdk", "iphonesimulator", "--show-sdk-version"]).replace(".", "-")
+    for name in ("JOURNEY_PHONE_ID", "JOURNEY_IPAD_ID"):
+        os.environ.pop(name, None)
+    attempt = run(["bash", f"scripts/{script}.sh"], destination / "run.log", 2400)
+    receipts = list(destination.glob("*.xcresult"))
+    if len(receipts) != 1:
+        raise ValueError(f"Expected one {device}/{theme} result bundle; found {len(receipts)}")
+    document = json.loads(output(["xcrun", "xcresulttool", "get", "test-results", "tests",
+                                  "--path", str(receipts[0])], 60))
+    (destination / "tests.json").write_text(json.dumps(document, indent=2) + "\n")
+    results = ledger.outcomes(document)
+    if not results:
+        raise ValueError(f"No test cases in {device}/{theme}; stop before repeating the infrastructure failure")
+    built.add(platform)
+    return attempt, results
+
+
+def acceptance(args):
+    import acceptance_ledger as ledger
+    cases = ledger.definitions(ROOT)
+    if not cases:
+        raise ValueError("This checkout has no acceptance journeys; use the feature release branch")
+    render_sources = [path for path in (ROOT / "iOS/GlimmerTests").glob("*.swift")
+                      if re.search(r"\b(?:struct|class)\s+\w*RenderTests\b", path.read_text())]
+    render_sources += list((ROOT / "GlimmerTests").glob("Controller*RenderTests.swift"))
+    render_sources += [path for path in (ROOT / "iOS/GlimmerUITests").glob("*.swift") if "Journey" not in path.name]
+    render_case = {"key": "ios/all/render", "test": "render", "device": "ios", "theme": "all",
+                   "source": "render and UI batch", "definition": sha256("".join(
+                       str(path.relative_to(ROOT)) + path.read_text() for path in sorted(render_sources)).encode()).hexdigest()}
+    cases.insert(0, render_case)
+    state = ledger.load(args.ledger, args.release)
+    seed = ROOT / "docs/release-acceptance" / f"{args.release}.json"
+    if not args.ledger.exists() and seed.exists():
+        state = ledger.load(seed, args.release)
+    selected = ledger.pending(state, cases, args.rerun)
+    ledger.save(state, args.ledger)
+    folder = args.ledger.parent
+    def publish():
+        ledger.save(state, args.ledger)
+        report = ledger.summary(state)
+        (folder / "summary.md").write_text(report)
+        print(report)
+        if os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+                stream.write(report)
+    if not selected:
+        publish()
+        return 0
+    toolchain()
+    sha = output(["git", "rev-parse", "HEAD"])
+    if output(["git", "status", "--porcelain", "--untracked-files=no"]):
+        raise ValueError("Acceptance execution requires committed sources; import reviewed working-tree evidence separately")
+    run_id = os.environ.get("GITHUB_RUN_ID", "local")
+    batches = {}
+    for case in selected:
+        batches.setdefault((case["device"], case["theme"]), []).append(case)
+    built = set()
+    status = 0
+    try:
+        for (device, theme), batch in batches.items():
+            results = {}
+            evidence = f"{device}-{theme}-{uuid.uuid4()}"
+            destination = folder / evidence
+            destination.mkdir()
+            try:
+                attempt, results = acceptance_batch(device, theme, batch, destination, built)
+                status = status or attempt
+                if attempt == 124:
+                    break
+            except (ValueError, OSError, subprocess.SubprocessError) as error:
+                print(f"Acceptance batch {device}/{theme}: {error}", file=sys.stderr)
+                status = 1
+                break
+            finally:
+                ledger.record(state, batch, results, sha, evidence, run_id)
+                ledger.save(state, args.ledger)
+    finally:
+        publish()
+    return status or int(any(state["cases"][case["key"]]["status"] != "passed" for case in cases))
+
+
 def main():
     os.chdir(ROOT)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("shard", choices=("core", "render", "journeys", "mac"))
+    parser.add_argument("shard", choices=("core", "render", "journeys", "mac", "acceptance"))
+    parser.add_argument("--release", default=os.environ.get("ACCEPTANCE_RELEASE", ""))
+    parser.add_argument("--ledger", type=Path, default=ROOT / "build/acceptance/ledger.json")
+    parser.add_argument("--rerun", default=os.environ.get("ACCEPTANCE_RERUN", ""))
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--build-only", action="store_true")
     group.add_argument("--run-only", action="store_true")
@@ -282,10 +383,14 @@ def main():
     args = parser.parse_args()
     try:
         if args.diagnostic_retry and (os.environ.get("GITHUB_ACTIONS") == "true" or args.build_only
-                                      or args.validate_result or args.shard == "journeys"):
+                                      or args.validate_result or args.shard in {"journeys", "acceptance"}):
             raise ValueError("Diagnostic retries are local-only test runs for core, render or mac")
         if args.validate_result:
             return receipt_status(args.validate_result, journeys=args.shard == "journeys")
+        if args.shard == "acceptance":
+            if args.build_only or args.run_only:
+                raise ValueError("Acceptance resumes from its ledger, not build/run-only flags")
+            return acceptance(args)
         toolchain()
         if args.shard == "journeys":
             if args.build_only or args.run_only:
