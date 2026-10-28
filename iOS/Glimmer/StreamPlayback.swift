@@ -104,7 +104,7 @@ struct StreamPlayback {
         let stats = StreamStats(surface: surface, snapshot: { video.overlaySnapshot() },
             collection: { video.statsOverlayEnabled = $0 }, videoSize: { video.overlayVideoSize },
             backdrop: { video.hudBackdropRect = $0; return video.hudBackdropLuminance },
-            chromeSampling: { video.overlayChromeEnabled = $0 })
+            chromeSampling: { video.overlayChromeEnabled = $0 }, observeBackdrop: { video.observeBackdrop($0) })
         let nativeInput = NativeInputLifetime()
         let adaptive = AdaptiveBandwidth.isEnabled()
         let bandwidth = BandwidthSignals()
