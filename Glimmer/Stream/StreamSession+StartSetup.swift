@@ -116,6 +116,7 @@ extension StreamSession {
         inp.onControllerMouseChanged = { [weak win] message, enabled in
             win?.showControllerMouseMode(message, enabled: enabled)
         }
+        inp.onControllerMouseActiveChanged = { [weak win] active in win?.setControllerMouseActive(active) }
         // Hotkey chords need to be readable LIVE on every keyDown so
         // changes in Settings take effect without restarting the
         // stream. Capture-at-attach silently strands edits. The

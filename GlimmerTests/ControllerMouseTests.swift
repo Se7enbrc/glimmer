@@ -77,6 +77,27 @@ struct ControllerMouseTests {
         #expect(backend.pointer.allSatisfy { if case .hScroll = $0 { true } else { false } })
     }
 
+    // The corner badge follows whether any slot is a mouse, including after a mouse-mode pad leaves.
+    @Test func mouseActivityFollowsAnySlotThroughDetach() throws {
+        let (forwarder, _) = rig()
+        defer { forwarder.detach() }
+        var active: [Bool] = []
+        forwarder.onControllerMouseActiveChanged = { active.append($0) }
+        let first = GCController.withExtendedGamepad()
+        let second = GCController.withExtendedGamepad()
+        forwarder.attach(gamepad: first)
+        forwarder.attach(gamepad: second)
+        let one = try #require(forwarder.attachedControllers[ObjectIdentifier(first)]?.slot)
+        let two = try #require(forwarder.attachedControllers[ObjectIdentifier(second)]?.slot)
+        toggle(forwarder, slot: one)
+        toggle(forwarder, slot: two, now: 20)
+        #expect(active == [true])
+        toggle(forwarder, slot: one, now: 30)
+        #expect(active == [true], "Another pad is still a mouse")
+        forwarder.detach(gamepad: second)
+        #expect(active == [true, false])
+    }
+
     @Test func togglesOnlyOnReleaseAfterMoonlightsThreshold() {
         var state = ControllerMouseState()
         let toggled1 = state.update(buttons: start, analog: neutral, chordHeld: false, now: 0)

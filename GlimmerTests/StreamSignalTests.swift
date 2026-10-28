@@ -332,15 +332,20 @@ struct MouseModeBadgeTests {
             pending.append(action)
         }
         stream.showControllerMouseMode("Controller is now a mouse.", enabled: true)
+        stream.setControllerMouseActive(true)
         #expect(!stream.mouseModeBadge.isVisible && stream.leaveHintBanner.isVisible)
         pending.removeFirst()()
         #expect(stream.mouseModeBadge.isVisible)
         #expect(stream.mouseModeBadge.content.accessibilityName == "Mouse mode on")
-        stream.showControllerMouseMode("Controller is back in the game.", enabled: false)
-        #expect(!stream.mouseModeBadge.isVisible && stream.leaveHintBanner.isVisible)
+        // One pad back in the game while another is still a mouse keeps the badge.
+        stream.showControllerMouseMode("Controller 1 is back in the game.", enabled: false)
+        stream.setControllerMouseActive(true)
+        #expect(stream.mouseModeBadge.isVisible && pending.isEmpty)
+        stream.setControllerMouseActive(false)
+        #expect(!stream.mouseModeBadge.isVisible)
         // A quick off-on-off never revives a stale badge.
-        stream.showControllerMouseMode("Controller is now a mouse.", enabled: true)
-        stream.showControllerMouseMode("Controller is back in the game.", enabled: false)
+        stream.setControllerMouseActive(true)
+        stream.setControllerMouseActive(false)
         for action in pending { action() }
         #expect(!stream.mouseModeBadge.isVisible)
     }

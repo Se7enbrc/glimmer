@@ -92,11 +92,16 @@ extension StreamWindow {
         captureHintBanner.setVisible(false)
     }
 
-    // The mode pill speaks for 2 s, then a silent glyph stays in a clear corner until the mode ends.
     func showControllerMouseMode(_ message: String, enabled: Bool) {
         showStreamToast(message, for: 2, symbol: ControllerMouseMapping.modeSymbol(enabled: enabled))
+    }
+
+    // While any controller is a mouse, a silent glyph follows the 2 s mode notice and stays until none is.
+    func setControllerMouseActive(_ active: Bool) {
+        guard active != controllerMouseActive else { return }
+        controllerMouseActive = active
         mouseModeBadgeGeneration &+= 1
-        guard enabled else { mouseModeBadge.setVisible(false); return }
+        guard active else { mouseModeBadge.setVisible(false); return }
         let generation = mouseModeBadgeGeneration
         scheduleMouseModeBadge(2) { [weak self] in
             guard let self, self.mouseModeBadgeGeneration == generation else { return }
