@@ -6,6 +6,7 @@
 import importlib.util
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -30,6 +31,22 @@ RUNNER = load("ci-local")
 RESULTS = load("ci-test-results")
 
 
+def project_fixture(paths):
+    objects = {
+        "project": {"isa": "PBXProject", "mainGroup": "group"},
+        "group": {"isa": "PBXGroup", "children": []},
+        "target": {"isa": "PBXNativeTarget", "name": "GlimmerTests", "buildPhases": ["phase"]},
+        "phase": {"isa": "PBXSourcesBuildPhase", "files": []},
+    }
+    for index, path in enumerate(paths):
+        reference, build = f"file{index}", f"build{index}"
+        objects[reference] = {"isa": "PBXFileReference", "path": path, "sourceTree": "SOURCE_ROOT"}
+        objects[build] = {"isa": "PBXBuildFile", "fileRef": reference}
+        objects["group"]["children"].append(reference)
+        objects["phase"]["files"].append(build)
+    return {"rootObject": "project", "objects": objects}
+
+
 class CILocalTests(FixtureTestCase):
     def test_core_and_render_cover_all_unit_and_ui_suites_without_overlap(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -37,17 +54,78 @@ class CILocalTests(FixtureTestCase):
             source = root / "iOS/GlimmerTests"
             source.mkdir(parents=True)
             (source / "Snapshot.swift").write_text("struct NativeUIRenderTests {}\nclass CompactLauncherRenderTests {}\nstruct UnitTests {}")
-            core, render = RUNNER.filters("core", root), RUNNER.filters("render", root)
+            shared = root / "GlimmerTests"
+            shared.mkdir()
+            (shared / "Controller.swift").write_text("struct ControllerMouseRenderTests {}")
+            (shared / "MacOnly.swift").write_text("struct MacOnlyRenderTests {}")
+            project = project_fixture(["GlimmerTests/Snapshot.swift", "../GlimmerTests/Controller.swift"])
+            with patch.object(RUNNER, "output", return_value=json.dumps(project)):
+                core, render = RUNNER.filters("core", root), RUNNER.filters("render", root)
             self.assertEqual(core[0], "-only-testing:GlimmerTests")
             self.assertEqual(render[-1], "-only-testing:GlimmerUITests")
             excluded = {name.replace("-skip-testing:", "") for name in core[1:]}
             included = {name.replace("-only-testing:", "") for name in render[:-1]}
             self.assertEqual(excluded, included)
-            self.assertEqual(len(excluded), 2)
+            self.assertEqual(len(excluded), 3)
+            self.assertIn("GlimmerTests/ControllerMouseRenderTests", included)
+            self.assertNotIn("GlimmerTests/MacOnlyRenderTests", included)
 
     def test_empty_render_discovery_fails_instead_of_skipping_tests(self):
-        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(ValueError, "No render suites"):
-            RUNNER.filters("render", Path(directory))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "iOS").mkdir()
+            (root / "iOS/Units.swift").write_text("struct UnitTests {}")
+            with patch.object(RUNNER, "output", return_value=json.dumps(project_fixture(["Units.swift"]))):
+                with self.assertRaisesRegex(ValueError, "No render suites"):
+                    RUNNER.filters("render", root)
+
+    def test_missing_target_and_unresolved_membership_fail_closed(self):
+        for project in (project_fixture([]), {"rootObject": "project", "objects": {}}):
+            with self.subTest(project=project), self.assertRaises(ValueError):
+                RUNNER.configured_test_sources(project, Path("/fixture/iOS"))
+        project = project_fixture(["Tests.swift"])
+        project["objects"]["group"]["children"] = []
+        with self.assertRaisesRegex(ValueError, "complete configured"):
+            RUNNER.configured_test_sources(project, Path("/fixture/iOS"))
+
+    def test_normal_runs_use_one_attempt_and_diagnostic_success_stays_nonqualifying(self):
+        self.assertEqual(RUNNER.test_flags(), ["-test-iterations", "1"])
+        self.assertIn("-retry-tests-on-failure", RUNNER.test_flags(True))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(RUNNER.completion_status(0, False), 0)
+            self.assertNotEqual(RUNNER.completion_status(0, True), 0)
+            self.assertEqual(RUNNER.completion_status(65, True), 65)
+        workflow = (ROOT / ".github/workflows/verify.yml").read_text()
+        self.assertNotIn("--diagnostic-retry", workflow)
+
+    def test_hosted_diagnostic_retry_fails_before_toolchain_or_tests(self):
+        with patch.dict(os.environ, GITHUB_ACTIONS="true"), patch.object(sys, "argv", ["ci-local", "core", "--diagnostic-retry"]), \
+                patch.object(RUNNER, "toolchain") as toolchain, contextlib.redirect_stderr(io.StringIO()):
+            self.assertNotEqual(RUNNER.main(), 0)
+            toolchain.assert_not_called()
+
+    def test_receipt_only_validation_does_not_change_the_compatibility_toolchain(self):
+        with patch.object(sys, "argv", ["ci-local", "mac", "--validate-result", "sequoia.xcresult"]), \
+                patch.object(RUNNER, "toolchain") as toolchain, patch.object(RUNNER, "receipt_status", return_value=1) as validate:
+            self.assertEqual(RUNNER.main(), 1)
+            toolchain.assert_not_called()
+            validate.assert_called_once_with(Path("sequoia.xcresult"), journeys=False)
+
+    def test_manifest_reset_preserves_other_schemes_and_rejects_ambiguous_products(self):
+        with tempfile.TemporaryDirectory() as directory:
+            derived = Path(directory)
+            products = derived / "Build/Products"
+            products.mkdir(parents=True)
+            for name in ("Glimmer-iOS_old.xctestrun", "Glimmer-iOS_new.xctestrun", "Other_arm64.xctestrun"):
+                (products / name).touch()
+            with self.assertRaisesRegex(ValueError, "Expected one"):
+                RUNNER.manifests(derived, "Glimmer-iOS")
+            RUNNER.manifests(derived, "Glimmer-iOS", clear=True)
+            self.assertEqual([path.name for path in products.iterdir()], ["Other_arm64.xctestrun"])
+            with self.assertRaises(ValueError):
+                RUNNER.manifests(derived, "Glimmer-iOS")
+            (products / "Glimmer-iOS_arm64.xctestrun").touch()
+            RUNNER.manifests(derived, "Glimmer-iOS")
 
     def test_wrong_xcode_fails_before_building(self):
         with patch.dict(os.environ, DEVELOPER_DIR="/fixture/Xcode"), patch.object(RUNNER, "output", return_value="Xcode 27.1\nBuild version x"):
@@ -80,11 +158,18 @@ class CILocalTests(FixtureTestCase):
                 self.assertEqual(RUNNER.run([sys.executable, "-c", "print('file.swift: warning: suspicious')"], log), 1)
 
     def test_empty_skipped_or_failed_journeys_cannot_pass_validation(self):
-        RUNNER.validate_journey_result({"passedTests": 10, "failedTests": 0, "skippedTests": 0})
+        RUNNER.validate_test_result({"passedTests": 10, "failedTests": 0, "skippedTests": 0})
         for summary in ({}, {"passedTests": 0}, {"passedTests": 1, "skippedTests": 9},
                         {"passedTests": 9, "failedTests": 1}, {"passedTests": 10, "expectedFailures": 1}):
             with self.subTest(summary=summary), self.assertRaises(ValueError):
-                RUNNER.validate_journey_result(summary)
+                RUNNER.validate_test_result(summary, journeys=True)
+
+    def test_empty_and_failed_core_render_or_mac_receipts_cannot_pass(self):
+        RUNNER.validate_test_result({"passedTests": 1, "failedTests": 0, "skippedTests": 1})
+        for summary in ({}, {"passedTests": 0, "failedTests": 0}, {"passedTests": True, "failedTests": 0},
+                        {"passedTests": 10}, {"passedTests": 9, "failedTests": 1}):
+            with self.subTest(summary=summary), self.assertRaises(ValueError):
+                RUNNER.validate_test_result(summary)
 
     def test_candidate_needs_successful_tier_two_on_exact_sha(self):
         required = CHECKS.REQUIRED[".github/workflows/verify.yml"]

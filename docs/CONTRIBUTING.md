@@ -96,17 +96,21 @@ production device builds, and macOS 15 validation remain required.
 Run the same test shard with `make ci-local SHARD=mac`, `core`, `render`, or
 `journeys`. The command requires Xcode 26.6 and its matching Simulator runtime;
 it fails explicitly when either is unavailable. Each simulator run uses a new
-owned device and deletes only that device. Core and render share one test build;
-use `CI_TEST_FLAGS=--run-only` to reuse it. Journeys always run their full
-Mac/iPhone/iPad and light/dark matrix. Local simulator tooling can be selected
-explicitly through `GLIMMER_SIMCTL` for core/render; the selected Xcode and SDK
-never change implicitly.
+owned device and deletes only that device. Core and render share one arm64
+Simulator build in `iOS/build/ci/DerivedData`; use `CI_TEST_FLAGS=--run-only` to
+reuse it. Fresh builds replace only the runner's own scheme manifests, keeping
+manual build products separate. Journeys always run their full Mac/iPhone/iPad
+and light/dark matrix. Local simulator tooling can be selected explicitly
+through `GLIMMER_SIMCTL` for core/render; the selected Xcode and SDK never
+change implicitly.
 
 The shard logs, result bundles, coverage and failure summaries are under
 `build/logs`, `build/coverage`, and `iOS/build/ci`. Test failures appear with
-source locations when available. XCTest retries are limited to one within the
-same invocation; recovered failures are listed as flakes, not erased by a
-whole-job rerun. Runtime limits produce a failure and preserve the log.
+source locations when available. Normal runs use one attempt and require a
+positive passed-test count. Local diagnosis can use
+`CI_TEST_FLAGS='--run-only --diagnostic-retry'` to retry once; it always exits
+nonzero and cannot qualify a candidate. Recovered failures remain visible.
+Runtime limits produce a failure and preserve the log.
 
 The CodeQL compiler wrapper limits each concurrent platform build to one WMO
 thread on the three-core host. Compare traced build duration and complete

@@ -18,7 +18,6 @@ from threading import Thread
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
-RETRY = ["-retry-tests-on-failure", "-test-iterations", "2"]
 
 
 def output(args, timeout=30):
@@ -37,20 +36,65 @@ def toolchain():
     print(version, flush=True)
     config = ROOT / "build/ci-tests.xcconfig"
     config.parent.mkdir(parents=True, exist_ok=True)
-    config.write_text("COMPILATION_CACHE_ENABLE_CACHING = YES\n"
+    config.write_text("ARCHS = arm64\nONLY_ACTIVE_ARCH = YES\n"
+                      "COMPILATION_CACHE_ENABLE_CACHING = YES\n"
                       "SWIFT_SUPPRESS_WARNINGS = NO\n"
                       "SWIFT_TREAT_WARNINGS_AS_ERRORS = YES\n"
                       "GCC_TREAT_WARNINGS_AS_ERRORS = YES\n")
     os.environ["XCODE_XCCONFIG_FILE"] = str(config)
 
 
+def configured_test_sources(project, directory):
+    objects = project["objects"]
+    targets = [item for item in objects.values() if item["isa"] == "PBXNativeTarget" and item.get("name") == "GlimmerTests"]
+    if len(targets) != 1:
+        raise ValueError("Expected one configured GlimmerTests target")
+    references = set()
+    for phase_id in targets[0]["buildPhases"]:
+        phase = objects[phase_id]
+        if phase["isa"] == "PBXSourcesBuildPhase":
+            references.update(objects[entry]["fileRef"] for entry in phase["files"])
+    paths, visited = {}, set()
+    def visit(identifier, parent):
+        if identifier in visited:
+            raise ValueError(f"Repeated project group membership: {identifier}")
+        visited.add(identifier)
+        item = objects[identifier]
+        tree = item.get("sourceTree", "<group>")
+        if tree not in ("<group>", "SOURCE_ROOT"):
+            return
+        base = directory if tree == "SOURCE_ROOT" else parent
+        path = (base / item.get("path", "")).resolve()
+        if item["isa"] == "PBXGroup":
+            for child in item.get("children", []):
+                visit(child, path)
+        elif item["isa"] == "PBXFileReference":
+            paths[identifier] = path
+    visit(objects[project["rootObject"]]["mainGroup"], directory)
+    if not references or references - paths.keys():
+        raise ValueError("Cannot resolve the complete configured test source set")
+    sources = {paths[key] for key in references}
+    if any(not path.is_relative_to(directory.parent.resolve()) for path in sources):
+        raise ValueError("Configured test sources must stay inside this checkout")
+    return sources
+
+
 def render_suites(root=ROOT):
+    directory = root / "iOS"
+    project = json.loads(output(["plutil", "-convert", "json", "-o", "-", str(directory / "Glimmer.xcodeproj/project.pbxproj")]))
     suites = set()
-    for path in (root / "iOS/GlimmerTests").glob("*.swift"):
-        suites.update(re.findall(r"\b(?:struct|class)\s+(\w*RenderTests)\b", path.read_text()))
+    for path in configured_test_sources(project, directory):
+        if path.suffix == ".swift":
+            suites.update(re.findall(r"\b(?:struct|class)\s+(\w*RenderTests)\b", path.read_text()))
     if not suites:
         raise ValueError("No render suites found; refusing an empty or incomplete iOS partition")
     return sorted(suites)
+
+
+def test_flags(diagnostic_retry=False):
+    if diagnostic_retry:
+        return ["-retry-tests-on-failure", "-test-iterations", "2"]
+    return ["-test-iterations", "1"]
 
 
 def filters(shard, root=ROOT):
@@ -118,26 +162,42 @@ def run(command, log, timeout=2400):
     return status or (1 if re.search(r"(^|\s)warning:", text) else 0)
 
 
+def manifests(derived, scheme, clear=False):
+    paths = sorted((derived / "Build/Products").glob(f"{scheme}_*.xctestrun"))
+    if clear:
+        for path in paths:
+            path.unlink()
+    elif len(paths) != 1:
+        raise ValueError(f"Expected one {scheme} test manifest in {derived}; rebuild this shard")
+
+
 def ios(args):
     if not (ROOT / "iOS/Makefile").exists():
         raise ValueError("This checkout has no iOS app")
     scheme = "Glimmer-iOS"
     folder = ROOT / "iOS/build/ci" / args.shard
     folder.mkdir(parents=True, exist_ok=True)
-    derived = ROOT / "iOS/build/production/DerivedData"
+    derived = ROOT / "iOS/build/ci/DerivedData"
+    selection = filters(args.shard)
     make = ["make", "-C", "iOS", f"SCHEME={scheme}", f"DERIVED={derived}"]
     if not args.run_only:
+        manifests(derived, scheme, clear=True)
         status = run([*make, "test-build", "TEST_DESTINATION=generic/platform=iOS Simulator",
                       "TEST_FLAGS=-enableCodeCoverage YES"], folder / "build.log", 900)
         if status:
             subprocess.run([sys.executable, "scripts/ci-test-results.py", args.shard, str(folder / "missing.xcresult"),
                             str(folder / "build.log"), str(status)], check=True)
-        if status or args.build_only:
+        if status:
             return status
+        manifests(derived, scheme)
+        if args.build_only:
+            return 0
+    manifests(derived, scheme)
     result = folder / f"{uuid.uuid4()}.xcresult"
     with simulator() as destination:
-        flags = ["-enableCodeCoverage", "YES", "-resultBundlePath", str(result), *RETRY, *filters(args.shard)]
+        flags = ["-enableCodeCoverage", "YES", "-resultBundlePath", str(result), *test_flags(args.diagnostic_retry), *selection]
         status = run([*make, "test-run", f"TEST_DESTINATION={destination}", "TEST_FLAGS=" + " ".join(flags)], folder / "test.log")
+    status = status or receipt_status(result)
     if not status:
         with (folder / "coverage.json").open("w") as stream:
             subprocess.run(["xcrun", "xccov", "view", "--report", "--json", str(result)], stdout=stream, check=True)
@@ -148,10 +208,34 @@ def ios(args):
     return status
 
 
-def validate_journey_result(summary):
-    if (summary.get("passedTests", 0) <= 0 or summary.get("failedTests", 0)
-            or summary.get("skippedTests", 0) or summary.get("expectedFailures", 0)):
-        raise ValueError("Journey evidence must contain passed tests with no failures or skips")
+def validate_test_result(summary, journeys=False):
+    passed, failed = summary.get("passedTests"), summary.get("failedTests")
+    if type(passed) is not int or passed <= 0 or type(failed) is not int or failed != 0:
+        raise ValueError("Test evidence must contain positive passed tests and zero failures")
+    if journeys and (summary.get("skippedTests", 0) or summary.get("expectedFailures", 0)):
+        raise ValueError("Journey evidence must contain no skips or expected failures")
+
+
+def receipt_status(result, journeys=False):
+    try:
+        summary = json.loads(output(["xcrun", "xcresulttool", "get", "test-results", "summary", "--path", str(result)], 60))
+        result.with_suffix(".json").write_text(json.dumps(summary, indent=2) + "\n")
+        validate_test_result(summary, journeys)
+        return 0
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        message = f"Invalid test receipt {result}: {error}"
+        print(message, file=sys.stderr)
+        if os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+                stream.write(f"### Test receipt rejected\n\n{message}\n")
+        return 1
+
+
+def completion_status(status, diagnostic_retry):
+    if diagnostic_retry:
+        print("Diagnostic retry results cannot qualify a candidate; a clean first attempt is required.")
+        return status or 2
+    return status
 
 
 def journeys():
@@ -180,15 +264,9 @@ def journeys():
             print(f"Incomplete journey matrix: expected {expected} result bundles, found {len(receipts)}", file=sys.stderr)
             status = 1
         for result in receipts:
-            receipt_status = attempt
-            try:
-                summary = json.loads(output(["xcrun", "xcresulttool", "get", "test-results", "summary", "--path", str(result)], 60))
-                result.with_suffix(".json").write_text(json.dumps(summary, indent=2) + "\n")
-                validate_journey_result(summary)
-            except (ValueError, subprocess.SubprocessError) as error:
-                print(f"Invalid journey receipt {result}: {error}", file=sys.stderr)
-                status = receipt_status = 1
-            subprocess.run([sys.executable, "scripts/ci-test-results.py", "journeys", str(result), str(log), str(receipt_status)], check=True)
+            result_status = attempt or receipt_status(result, journeys=True)
+            status = status or result_status
+            subprocess.run([sys.executable, "scripts/ci-test-results.py", "journeys", str(result), str(log), str(result_status)], check=True)
     return status
 
 
@@ -199,27 +277,39 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--build-only", action="store_true")
     group.add_argument("--run-only", action="store_true")
+    group.add_argument("--validate-result", type=Path, help="Validate an existing test receipt without selecting a build toolchain")
+    parser.add_argument("--diagnostic-retry", action="store_true", help="Retry once for diagnosis; always exits nonzero and is forbidden in hosted CI")
     args = parser.parse_args()
     try:
+        if args.diagnostic_retry and (os.environ.get("GITHUB_ACTIONS") == "true" or args.build_only
+                                      or args.validate_result or args.shard == "journeys"):
+            raise ValueError("Diagnostic retries are local-only test runs for core, render or mac")
+        if args.validate_result:
+            return receipt_status(args.validate_result, journeys=args.shard == "journeys")
         toolchain()
         if args.shard == "journeys":
             if args.build_only or args.run_only:
                 raise ValueError("Journey runners always build and execute the full device/appearance matrix")
             return journeys()
         if args.shard != "mac":
-            return ios(args)
+            return completion_status(ios(args), args.diagnostic_retry)
         folder = ROOT / "build/logs"
         folder.mkdir(parents=True, exist_ok=True)
         status = 0
         if not args.run_only:
+            manifests(ROOT / "build", "Glimmer", clear=True)
             status = run(["make", "test-build", "COVERAGE=1"], folder / "test-build.log", 900)
-        if status or args.build_only:
+        if status:
             return status
-        status = run(["make", "test-run", "COVERAGE=1", "TEST_FLAGS=" + " ".join(RETRY)], folder / "mac.log")
+        manifests(ROOT / "build", "Glimmer")
+        if args.build_only:
+            return 0
+        status = run(["make", "test-run", "COVERAGE=1", "TEST_FLAGS=" + " ".join(test_flags(args.diagnostic_retry))], folder / "mac.log")
+        status = status or receipt_status(ROOT / "build/coverage/swift/glimmer.xcresult")
         subprocess.run([sys.executable, "scripts/ci-test-results.py", "mac", "build/coverage/swift/glimmer.xcresult",
                         str(folder / "mac.log"), str(status), "--coverage", "build/coverage/swift/summary.md"], check=True)
-        return status
-    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        return completion_status(status, args.diagnostic_retry)
+    except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
         message = f"CI prerequisite or execution failed: {error}"
         print(message, file=sys.stderr)
         if os.environ.get("GITHUB_STEP_SUMMARY"):

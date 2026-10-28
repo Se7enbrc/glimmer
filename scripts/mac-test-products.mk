@@ -17,7 +17,7 @@ test-build:
 
 test-run:
 	$(if $(COVERAGE),@rm -rf $(DERIVED)/coverage/swift $(DERIVED)/Build/ProfileData)
-	@set -- "$(DERIVED)"/Build/Products/*.xctestrun; test -f "$$1" || { echo "ERR: run make test-build first" >&2; exit 1; }; \
+	@set -- "$(DERIVED)"/Build/Products/Glimmer_*.xctestrun; test "$$#" -eq 1 && test -f "$$1" || { echo "ERR: run make test-build first" >&2; exit 1; }; \
 	  xcodebuild test-without-building -xctestrun "$$1" -destination 'platform=macOS' \
 	  -derivedDataPath $(DERIVED) $(TEST_FLAGS) \
 	  $(if $(COVERAGE),-enableCodeCoverage YES -resultBundlePath $(DERIVED)/coverage/swift/glimmer.xcresult); \
