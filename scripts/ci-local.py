@@ -94,7 +94,7 @@ def render_suites(root=ROOT):
 def test_flags(diagnostic_retry=False):
     if diagnostic_retry:
         return ["-retry-tests-on-failure", "-test-iterations", "2"]
-    return ["-test-iterations", "1"]
+    return []
 
 
 def filters(shard, root=ROOT):

@@ -433,7 +433,7 @@ jobs:
           mkdir -p build/Build build/logs
           tar -C build/Build -xzf "$RUNNER_TEMP/sequoia-tests.tgz"
           status=0
-          make test-run TEST_FLAGS='-test-iterations 1 -resultBundlePath build/sequoia.xcresult' \
+          make test-run TEST_FLAGS='-resultBundlePath build/sequoia.xcresult' \
             2>&1 | tee build/logs/sequoia.log || status=$?
           python3 scripts/ci-local.py mac --validate-result build/sequoia.xcresult || status=1
           python3 scripts/ci-test-results.py mac build/sequoia.xcresult build/logs/sequoia.log "$status"
