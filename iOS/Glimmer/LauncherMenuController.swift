@@ -4,6 +4,7 @@
 import GameController
 import GlimmerEngine
 import SwiftUI
+import Synchronization
 
 @MainActor
 final class LauncherMenuController {
@@ -24,11 +25,13 @@ final class LauncherMenuController {
     func start() {
         stop()
         let attempt = generation
+        // The stream owns Menu's pressed handler; the launcher listens on its own value handler.
         for controller in controllers() {
             guard let button = controller.extendedGamepad?.buttonMenu,
-                  button.pressedChangedHandler == nil else { continue }
-            button.pressedChangedHandler = { @Sendable [weak self] _, _, pressed in
-                guard pressed else { return }
+                  button.valueChangedHandler == nil else { continue }
+            let wasPressed = Mutex(button.isPressed)
+            button.valueChangedHandler = { @Sendable [weak self] _, _, pressed in
+                guard wasPressed.withLock({ defer { $0 = pressed }; return pressed && !$0 }) else { return }
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == attempt else { return }
                     self.openMenu?()
@@ -40,7 +43,7 @@ final class LauncherMenuController {
 
     func stop() {
         generation &+= 1
-        for button in buttons { button.pressedChangedHandler = nil }
+        for button in buttons { button.valueChangedHandler = nil }
         buttons.removeAll()
     }
 }
