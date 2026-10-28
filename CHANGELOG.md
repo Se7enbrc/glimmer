@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- Performance telemetry keeps its channel lookup objects alive, fixing a crash
+  while sampling on macOS 15.
+
 - Controller shortcuts keep recognizing Menu and Options after stream input
   switches from a focus refresh to live controller reports.
 

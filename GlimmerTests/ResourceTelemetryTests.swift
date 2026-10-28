@@ -17,6 +17,27 @@ import Testing
 
 struct ResourceTelemetryTests {
 
+    @Test func reportChannelsRemainAliveAfterSampleDictionaryIsReleased() throws {
+        let channels: [CFDictionary] = autoreleasepool {
+            let channel = NSMutableDictionary(dictionary: ["name": "CPU telemetry test channel"])
+            let delta = NSMutableDictionary(dictionary: ["IOReportChannels": [channel]])
+            return IOReportSampler.reportChannels(in: delta as CFDictionary)
+        }
+        let channel = try #require(channels.first)
+        #expect(channels.count == 1)
+        #expect((channel as NSDictionary)["name"] as? String == "CPU telemetry test channel")
+    }
+
+    @Test func reportChannelsRejectUnexpectedSampleShapes() {
+        let samples: [NSDictionary] = [
+            [:], ["IOReportChannels": "not an array"], ["IOReportChannels": [1]],
+            ["IOReportChannels": [["name": "valid"], "invalid"]], ["IOReportChannels": []]
+        ]
+        for sample in samples {
+            #expect(IOReportSampler.reportChannels(in: sample as CFDictionary).isEmpty)
+        }
+    }
+
     @Test func vmProbeKeepsFootprintDistinctFromResidentAndPreservesZeroCompression() throws {
         var info = task_vm_info_data_t()
         info.phys_footprint = 120
