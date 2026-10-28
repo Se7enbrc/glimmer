@@ -4,7 +4,10 @@
 """Core and acceptance partition Simulator coverage without rerunning acceptance on pushes."""
 
 from pathlib import Path
+import json
+import os
 import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -45,17 +48,40 @@ class IOSCIShardTests(FixtureTestCase):
         self.assertIn("name: ios-core-results", core_job)
         self.assertIn("iOS/build/ci/render/", acceptance)
 
-    def test_test_without_building_uses_only_downloaded_products(self):
-        result = subprocess.run(["make", "-n", "-C", "iOS", "test-run",
-                                 "DERIVED=/tmp/isolated test products",
-                                 "TEST_FLAGS=-only-testing:GlimmerTests/NativeUIRenderTests"],
-                                cwd=ROOT, capture_output=True, text=True)
+    def test_test_without_building_retains_scheme_coverage_and_existing_products(self):
+        root = Path.cwd()
+        derived = root / "isolated test products"
+        products = derived / "Build/Products"
+        products.mkdir(parents=True)
+        (products / "Glimmer-iOS_iphonesimulator26.5-arm64.xctestrun").touch()
+        binary = root / "bin"
+        binary.mkdir()
+        fake = binary / "xcodebuild"
+        fake.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
+                        "from pathlib import Path\n"
+                        "Path(os.environ['XCODE_ARGUMENTS']).write_text(json.dumps(sys.argv[1:]))\n")
+        fake.chmod(0o755)
+        recorded = root / "arguments.json"
+        flags = ("-enableCodeCoverage YES -only-testing:GlimmerTests/NativeUIRenderTests "
+                 "-skip-testing:GlimmerTests/NativeUIRenderTests/excluded "
+                 "-resultBundlePath 'result with spaces.xcresult'")
+        env = {**os.environ, "PATH": f"{binary}:{os.environ['PATH']}", "XCODE_ARGUMENTS": str(recorded)}
+        result = subprocess.run(["make", "-C", "iOS", "test-run", f"DERIVED={derived}",
+                                 "TEST_DESTINATION=platform=iOS Simulator,id=fixture", f"TEST_FLAGS={flags}"],
+                                cwd=ROOT, env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("test-without-building -xctestrun", result.stdout)
-        self.assertIn('-derivedDataPath "/tmp/isolated test products"', result.stdout)
-        self.assertNotIn("-project", result.stdout)
-        self.assertIn("-parallel-testing-enabled NO", result.stdout)
-        self.assertIn("-only-testing:GlimmerTests/NativeUIRenderTests", result.stdout)
+        arguments = json.loads(recorded.read_text())
+        for key, value in {"-project": "Glimmer.xcodeproj", "-scheme": "Glimmer-iOS",
+                           "-configuration": "Debug", "-derivedDataPath": str(derived),
+                           "-destination": "platform=iOS Simulator,id=fixture", "-enableCodeCoverage": "YES",
+                           "-parallel-testing-enabled": "NO", "-resultBundlePath": "result with spaces.xcresult"}.items():
+            self.assertIn(key, arguments)
+            self.assertEqual(arguments[arguments.index(key) + 1], value)
+        self.assertIn("test-without-building", arguments)
+        self.assertIn("-only-testing:GlimmerTests/NativeUIRenderTests", arguments)
+        self.assertIn("-skip-testing:GlimmerTests/NativeUIRenderTests/excluded", arguments)
+        self.assertIn("CODE_SIGNING_ALLOWED=NO", arguments)
+        self.assertFalse({"-xctestrun", "build", "build-for-testing", "test"}.intersection(arguments))
 
     def test_build_for_testing_has_no_suite_filter(self):
         result = subprocess.run(["make", "-n", "-C", "iOS", "test-build",
