@@ -77,6 +77,65 @@ struct ControllerMouseTests {
         #expect(backend.pointer.allSatisfy { if case .hScroll = $0 { true } else { false } })
     }
 
+    // The corner badge follows whether any slot is a mouse, including after a mouse-mode pad leaves.
+    @Test func mouseActivityFollowsAnySlotThroughDetach() throws {
+        let (forwarder, _) = rig()
+        defer { forwarder.detach() }
+        var active: [Bool] = []
+        forwarder.onControllerMouseActiveChanged = { active.append($0) }
+        let first = GCController.withExtendedGamepad()
+        let second = GCController.withExtendedGamepad()
+        forwarder.attach(gamepad: first)
+        forwarder.attach(gamepad: second)
+        let one = try #require(forwarder.attachedControllers[ObjectIdentifier(first)]?.slot)
+        let two = try #require(forwarder.attachedControllers[ObjectIdentifier(second)]?.slot)
+        toggle(forwarder, slot: one)
+        toggle(forwarder, slot: two, now: 20)
+        #expect(active == [true])
+        toggle(forwarder, slot: one, now: 30)
+        #expect(active == [true], "Another pad is still a mouse")
+        forwarder.detach(gamepad: second)
+        #expect(active == [true, false])
+    }
+
+    // A vertical scroll push with a natural 20-30 degree lean must not send sideways wheel notches.
+    @Test(arguments: [20.0, 25.0, 30.0])
+    func aLeaningScrollPushSendsOnlyVerticalNotches(lean: Double) {
+        let (forwarder, backend) = rig()
+        defer { forwarder.detach() }
+        toggle(forwarder)
+        var analog = neutral
+        analog.leftStickX = Int16(sin(lean * .pi / 180) * 32767)
+        analog.leftStickY = Int16(cos(lean * .pi / 180) * 32767)
+        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false, now: 11)
+        stopPollingTimer(forwarder)
+        for tick in 0..<120 { forwarder.inputCore.pollControllerMouse(now: 11 + Double(tick) / 120) }
+        let vertical = backend.pointer.filter { if case .scroll = $0 { true } else { false } }
+        let horizontal = backend.pointer.filter { if case .hScroll = $0 { true } else { false } }
+        #expect(!vertical.isEmpty)
+        #expect(horizontal.isEmpty, "\(lean) degrees sent \(horizontal.count) sideways notches")
+    }
+
+    // A resting stick that drifts just past the dead zone must not wake the 120 Hz pointer timer.
+    @Test func aDriftingRestingStickNeverStartsThePointerTimer() {
+        let (forwarder, _) = rig()
+        defer { forwarder.detach() }
+        toggle(forwarder)
+        func stick(_ fraction: Double) {
+            var analog = neutral
+            analog.rightStickX = Int16(fraction * 32767)
+            forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false)
+        }
+        stick(0.17)
+        #expect(forwarder.controllerMouseTask == nil)
+        stick(0.5)
+        #expect(forwarder.controllerMouseTask != nil)
+        stick(0.17)
+        #expect(forwarder.controllerMouseTask != nil, "An easing stick keeps gliding to a stop")
+        stick(0.1)
+        #expect(forwarder.controllerMouseTask == nil)
+    }
+
     @Test func togglesOnlyOnReleaseAfterMoonlightsThreshold() {
         var state = ControllerMouseState()
         let toggled1 = state.update(buttons: start, analog: neutral, chordHeld: false, now: 0)

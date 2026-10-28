@@ -54,6 +54,7 @@ public final class StreamWindow {
     public let mouseModeBadge: StreamBanner
     var streamToastGeneration: UInt64 = 0
     var mouseModeBadgeGeneration: UInt64 = 0
+    var controllerMouseActive = false
     var scheduleMouseModeBadge: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, action in
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(action) }
     }

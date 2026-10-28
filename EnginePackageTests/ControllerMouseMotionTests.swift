@@ -45,6 +45,17 @@ struct ControllerMouseMotionTests {
         #expect(state.sampleMotion((.zero, SIMD2(0, 20000)), now: 10).scroll == .zero)
     }
 
+    @Test func aScrollStickWobblingAroundTheDiagonalKeepsOneAxis() {
+        var state = ControllerMouseState(isMouse: true)
+        let sticks = (0..<240).map { $0.isMultiple(of: 2) ? SIMD2<Int16>(22000, 23500) : SIMD2<Int16>(23500, 22000) }
+        let sent = sticks.enumerated().map { state.sampleMotion((.zero, $1), now: Double($0) / 120).scroll }
+        #expect(sent.contains { $0.y != 0 })
+        #expect(sent.allSatisfy { $0.x == 0 })
+        state.resetIdleMotion((.zero, .zero))
+        let sideways = (0..<120).map { state.sampleMotion((.zero, SIMD2(32767, 6000)), now: 10 + Double($0) / 120).scroll }
+        #expect(sideways.contains { $0.x != 0 } && sideways.allSatisfy { $0.y == 0 })
+    }
+
     @Test func samplingDropsResidualOnCenteringAndBoundsStalls() {
         var state = ControllerMouseState(isMouse: true)
         let first = state.sampleMotion((SIMD2(16384, 0), SIMD2(0, 32767)), now: 1)

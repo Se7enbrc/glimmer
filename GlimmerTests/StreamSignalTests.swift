@@ -47,6 +47,19 @@ struct StreamSignalTests {
         #expect(pill.isVisible && pill.noticeFrame != nil)
     }
 
+    // A notice raised while the stream window was ordered out joins it when the window returns.
+    @Test func aNoticeRaisedWhileHiddenAppearsWhenTheWindowReturns() {
+        let (pill, host, _) = banner()
+        host.setFrameOrigin(CGPoint(x: -30_000, y: -30_000))
+        pill.setText("Reconnecting…")
+        pill.setVisible(true)
+        #expect(!pill.isOnScreenWithStream)
+        host.orderFront(nil)
+        defer { host.orderOut(nil) }
+        pill.relayout()
+        #expect(pill.isOnScreenWithStream)
+    }
+
     @Test func macOS15UsesTheMaterialFallback() {
         let (pill, _, _) = banner()
         pill.glassAvailable = false
@@ -322,6 +335,21 @@ extension StreamSession {
 
 @MainActor
 struct MouseModeBadgeTests {
+    // Closing the stream takes its notices with it: no click-through window outlives the stream.
+    @Test func closingTheStreamRemovesItsNoticeWindows() async throws {
+        let stream = StreamWindow()
+        stream.leaveHintBanner.announce = { _ in }
+        stream.leaveHintBanner.setText("Stream started")
+        stream.leaveHintBanner.setVisible(true)
+        stream.mouseModeBadge.setVisible(true)
+        #expect(stream.leaveHintBanner.noticeFrame != nil)
+        stream.close()
+        try await Task.sleep(for: .seconds(1))
+        for notice in [stream.leaveHintBanner, stream.mouseModeBadge] {
+            #expect(!notice.isVisible && notice.noticeFrame == nil)
+        }
+    }
+
     @Test func theBadgeFollowsMouseModeAfterTheNotice() throws {
         let stream = StreamWindow()
         defer { stream.close() }
@@ -332,15 +360,20 @@ struct MouseModeBadgeTests {
             pending.append(action)
         }
         stream.showControllerMouseMode("Controller is now a mouse.", enabled: true)
+        stream.setControllerMouseActive(true)
         #expect(!stream.mouseModeBadge.isVisible && stream.leaveHintBanner.isVisible)
         pending.removeFirst()()
         #expect(stream.mouseModeBadge.isVisible)
         #expect(stream.mouseModeBadge.content.accessibilityName == "Mouse mode on")
-        stream.showControllerMouseMode("Controller is back in the game.", enabled: false)
-        #expect(!stream.mouseModeBadge.isVisible && stream.leaveHintBanner.isVisible)
+        // One pad back in the game while another is still a mouse keeps the badge.
+        stream.showControllerMouseMode("Controller 1 is back in the game.", enabled: false)
+        stream.setControllerMouseActive(true)
+        #expect(stream.mouseModeBadge.isVisible && pending.isEmpty)
+        stream.setControllerMouseActive(false)
+        #expect(!stream.mouseModeBadge.isVisible)
         // A quick off-on-off never revives a stale badge.
-        stream.showControllerMouseMode("Controller is now a mouse.", enabled: true)
-        stream.showControllerMouseMode("Controller is back in the game.", enabled: false)
+        stream.setControllerMouseActive(true)
+        stream.setControllerMouseActive(false)
         for action in pending { action() }
         #expect(!stream.mouseModeBadge.isVisible)
     }

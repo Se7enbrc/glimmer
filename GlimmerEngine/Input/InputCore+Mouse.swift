@@ -16,6 +16,8 @@ package struct ControllerMouseState {
     package var scrollMotion = ControllerMouseMotion()
     package var sampledAt: TimeInterval?
     private var scrollNotches = ScrollQuantizer()
+    /// The scroll stick's chosen axis; it changes only when the other clearly dominates.
+    private var scrollVertical: Bool?
     private var startDownAt: TimeInterval?
     private var blocked = false
     private var holdComplete = false
@@ -23,11 +25,18 @@ package struct ControllerMouseState {
 
     package init(isMouse: Bool = false) { self.isMouse = isMouse }
 
+    // Starting needs a clear push (20% travel) so a stick drifting just past the 15% dead zone stays idle;
+    // once gliding, the pointer keeps moving until the stick is back inside the dead zone.
     @inline(__always)
-    package func isMoving(_ sticks: @autoclosure () -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>)) -> Bool {
+    package func isMoving(_ sticks: @autoclosure () -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>),
+                          starting: Bool = false) -> Bool {
         guard isMouse else { return false }
         let sticks = sticks()
-        return ControllerMouseMotion.velocity(sticks.pointer) != .zero || ControllerMouseMotion.velocity(sticks.scroll) != .zero
+        let floor = starting ? 0.2 : 0
+        return [sticks.pointer, sticks.scroll].contains { stick in
+            ControllerMouseMotion.velocity(stick) != .zero
+                && hypot(Double(stick.x), Double(stick.y)) / 32767 > floor
+        }
     }
 
     // Idle sticks drop their residual so a new deflection never starts with a stale step.
@@ -35,7 +44,7 @@ package struct ControllerMouseState {
         let pointerIdle = !isMouse || ControllerMouseMotion.velocity(sticks.pointer) == .zero
         let scrollIdle = !isMouse || ControllerMouseMotion.velocity(sticks.scroll) == .zero
         if pointerIdle { pointerMotion = ControllerMouseMotion() }
-        if scrollIdle { scrollMotion = ControllerMouseMotion(); scrollNotches.reset() }
+        if scrollIdle { scrollMotion = ControllerMouseMotion(); scrollNotches.reset(); scrollVertical = nil }
         if pointerIdle && scrollIdle { sampledAt = nil }
     }
 
@@ -43,11 +52,21 @@ package struct ControllerMouseState {
         -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>) {
         let seconds = sampledAt.map { now - $0 } ?? InputCore.controllerMousePollInterval
         sampledAt = now
-        let scroll = scrollMotion.step(sticks.scroll, seconds: seconds)
+        let scroll = scrollMotion.step(dominantScrollAxis(sticks.scroll), seconds: seconds)
         // Games count wheel messages, so a stick scrolls in whole notches like a wheel.
         let notches = SIMD2(Int16(clamping: scrollNotches.consumeHorizontal(Int(scroll.x), precise: true)),
                             Int16(clamping: scrollNotches.consumeVertical(Int(scroll.y), precise: true)))
         return (pointerMotion.step(sticks.pointer, seconds: seconds), notches)
+    }
+
+    // A wheel has one axis: a vertical push with a natural lean must not also scroll sideways, and the
+    // chosen axis holds until the other leads by 25%, so it doesn't flip near the diagonal.
+    private mutating func dominantScrollAxis(_ stick: SIMD2<Int16>) -> SIMD2<Int16> {
+        let x = abs(Double(stick.x))
+        let y = abs(Double(stick.y))
+        if scrollVertical == nil || y > x * 1.25 { scrollVertical = y >= x }
+        if x > y * 1.25 { scrollVertical = false }
+        return scrollVertical == true ? SIMD2(0, stick.y) : SIMD2(stick.x, 0)
     }
 
     // A hold changes modes only on release; another button spends it. A chord spends holds until every control
@@ -185,8 +204,9 @@ extension InputCore {
     }
 
     package func updateControllerMousePolling() {
+        let starting = controllerMouseTimer == nil
         let moving = controllerMouseStates.contains { slot, state in
-            state.isMoving(mousePlan(slot: slot).sticks(state.analog))
+            state.isMoving(mousePlan(slot: slot).sticks(state.analog), starting: starting)
         }
         guard snapshot.ready, snapshot.focused, moving else {
             mousePollingGeneration &+= 1

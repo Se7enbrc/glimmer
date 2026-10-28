@@ -102,6 +102,9 @@ extension StreamWindow {
             guard let self else { return }
             self.applyPresentationOptions(coversNotch: self.coversNotch)
             self.refreshPresentationVisibility(reason: .coverReturnCompleted)
+            // Notices raised while the window was ordered out join it now.
+            for notice in [self.reconnectBanner, self.networkBanner, self.leaveHintBanner, self.captureHintBanner,
+                           self.mouseModeBadge] { notice.relayout() }
         }
         if coverTransition(.back, reduceMotion: reduceMotion) == .fade {
             fadeCover(entering: true, completion: completion)
