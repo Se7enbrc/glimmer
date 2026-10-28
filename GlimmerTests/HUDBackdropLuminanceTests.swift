@@ -7,6 +7,7 @@ import CoreGraphics
 import CoreMedia
 import CoreVideo
 import Foundation
+import os
 import Testing
 @testable import GlimmerEngine
 @testable import Glimmer
@@ -218,6 +219,26 @@ struct HUDBackdropLuminanceTests {
         #expect(decoder.hudBackdropLuminance == nil)
         decoder.sampleHUDBackdrop(white)
         #expect(decoder.hudBackdropLuminance == nil)
+    }
+
+    @Test @MainActor func chromeAloneSamplesOncePerSecondAndReportsEachReading() throws {
+        let decoder = VideoDecoder()
+        let readings = OSAllocatedUnfairLock<[Double]>(initialState: [])
+        decoder.observeBackdrop { value in readings.withLock { $0.append(value) } }
+        decoder.overlayChromeEnabled = true
+        #expect(decoder.hudBackdropState.intervalNanos == VideoDecoder.chromeSampleIntervalNanos)
+        decoder.statsOverlayEnabled = true
+        #expect(decoder.hudBackdropState.intervalNanos == VideoDecoder.backdropSampleIntervalNanos)
+        decoder.statsOverlayEnabled = false
+        decoder.hudBackdropRect = whole
+        let white = try sample(try pixelBuffer(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, code: 235))
+        decoder.sampleHUDBackdrop(white)
+        decoder.sampleHUDBackdrop(white)
+        #expect(readings.withLock { $0.count } == 1)
+        #expect(!VideoDecoder.backdropSampleDue(now: 900_000_000, last: 1,
+                                                interval: VideoDecoder.chromeSampleIntervalNanos))
+        decoder.observeBackdrop(nil)
+        decoder.overlayChromeEnabled = false
     }
 
     @Test @MainActor func presentPathHoldsTheSampleUntilTheNextQuarterSecond() throws {

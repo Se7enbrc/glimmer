@@ -36,25 +36,39 @@ struct ControllerStatsTests {
         #expect(appearance.colorScheme == .dark)
     }
 
-    @Test func chromeDoesNotCollectStatsAndStopsWhenAllOverlaysHide() {
+    @Test func chromeAloneSchedulesNoTimerAndFlipsOnlyOnPresentPathReadings() async {
         let surface = StreamSurface(frame: CGRect(x: 0, y: 0, width: 800, height: 400))
         var collections: [Bool] = []
         var sampling: [Bool] = []
         var reads = 0
         var rect = CGRect.zero
+        nonisolated(unsafe) var report: (@Sendable (Double) -> Void)?
         let stats = StreamStats(surface: surface, snapshot: { reads += 1; return .init() },
             collection: { collections.append($0) }, videoSize: { CGSize(width: 1920, height: 1080) },
-            backdrop: { rect = $0; return 0.85 }, chromeSampling: { sampling.append($0) })
+            backdrop: { rect = $0; return 0.85 }, chromeSampling: { sampling.append($0) },
+            observeBackdrop: { report = $0 })
         stats.setChromeVisible(true)
-        #expect(stats.isRefreshing && !stats.overlay.isVisible && reads == 0 && collections.isEmpty)
+        #expect(!stats.isRefreshing && !stats.overlay.isVisible && reads == 0 && collections.isEmpty)
         #expect(sampling == [true] && rect.width == 1)
+        #expect(surface.overlayAppearance.colorScheme == nil)
+        report?(0.85)
+        for _ in 0..<20 where surface.overlayAppearance.colorScheme == nil { await Task.yield() }
         #expect(surface.overlayAppearance.colorScheme == .light)
         stats.setVisible(true)
-        #expect(reads == 1 && collections == [true])
+        #expect(stats.isRefreshing && reads == 1 && collections == [true])
         stats.setVisible(false)
-        #expect(stats.isRefreshing && reads == 1)
+        #expect(!stats.isRefreshing && reads == 1 && rect.width == 1)
         stats.setChromeVisible(false)
         #expect(!stats.isRefreshing && sampling == [true, false] && rect == .zero)
+    }
+
+    @Test func chromeInkHopsOnlyWhenTheHysteresisFlips() {
+        let ink = ChromeInk()
+        #expect(ink.flips(0.01))
+        #expect(!ink.flips(0.02) && !ink.flips(pow(0.60, 2.4)))
+        #expect(ink.flips(pow(0.63, 2.4)))
+        #expect(!ink.flips(pow(0.5, 2.4)) && !ink.flips(.nan))
+        #expect(ink.flips(pow(0.47, 2.4)))
     }
 
     @Test func chromeSamplesOnlyTheVisiblePictureAfterAspectFill() {

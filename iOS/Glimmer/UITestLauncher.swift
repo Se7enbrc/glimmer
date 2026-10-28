@@ -95,7 +95,8 @@ enum UITestLauncher {
             snapshot.measuredBitrateMbps = 45.2
             snapshot.videoCodec = "HEVC"
             return snapshot
-        }, collection: { _ in }, videoSize: { surface.bounds.size }, backdrop: { _ in bright ? 0.85 : 0.01 })
+        }, collection: { _ in }, videoSize: { surface.bounds.size }, backdrop: { _ in bright ? 0.85 : 0.01 },
+           observeBackdrop: { $0(bright ? 0.85 : 0.01) })
         let id = UUID()
         let events = AsyncStream<StreamSession.Update>.makeStream()
         return StreamPlayback(id: id, events: events.stream, start: {

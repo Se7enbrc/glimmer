@@ -3,6 +3,7 @@
 
 import GameController
 import GlimmerEngine
+import os
 import UIKit
 
 @MainActor
@@ -27,7 +28,8 @@ final class StreamStats {
     init(surface: StreamSurface, defaults: UserDefaults = PersistentStorage.defaults,
          snapshot: @escaping () -> StreamStatsSnapshot, collection: @escaping (Bool) -> Void,
          videoSize: @escaping () -> CGSize, backdrop: @escaping (CGRect) -> Double?,
-         chromeSampling: @escaping (Bool) -> Void = { _ in }) {
+         chromeSampling: @escaping (Bool) -> Void = { _ in },
+         observeBackdrop: (@escaping @Sendable (Double) -> Void) -> Void = { _ in }) {
         self.surface = surface
         self.defaults = defaults
         self.snapshot = snapshot
@@ -40,6 +42,12 @@ final class StreamStats {
         overlay.attach(to: surface.displayLayer)
         surface.stats = self
         surface.overlayAppearance.layoutChanged = { [weak self] in self?.layout() }
+        // Readings arrive on the present path; only an ink flip hops to the main actor.
+        let ink = ChromeInk()
+        observeBackdrop { [weak self] luminance in
+            guard ink.flips(luminance) else { return }
+            Task { @MainActor [weak self] in self?.surface?.overlayAppearance.update(luminance: luminance) }
+        }
     }
 
     func setVisible(_ visible: Bool) {
@@ -56,6 +64,7 @@ final class StreamStats {
         refreshTimer()
     }
 
+    // Chrome alone needs no timer: the present path reports brightness and flips arrive by callback.
     func setChromeVisible(_ visible: Bool) {
         guard visible != chromeVisible else { return }
         chromeVisible = visible
@@ -63,8 +72,13 @@ final class StreamStats {
         refreshTimer()
     }
 
+    private var chromeRect: CGRect {
+        Self.chromeSampleRect(view: surface?.bounds.size ?? .zero, video: videoSize())
+    }
+
     private func refreshTimer() {
-        if overlay.isVisible || chromeVisible {
+        if !overlay.isVisible { _ = backdrop(chromeVisible ? chromeRect : .zero) }
+        if overlay.isVisible {
             tick()
             guard timer == nil else { return }
             let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
@@ -76,13 +90,13 @@ final class StreamStats {
         } else {
             timer?.invalidate()
             timer = nil
-            _ = backdrop(.zero)
         }
     }
 
     func layout() {
         guard let surface else { return }
         if overlay.layer.superlayer !== surface.displayLayer { overlay.attach(to: surface.displayLayer) }
+        if chromeVisible && !overlay.isVisible { _ = backdrop(chromeRect) }
         let touchControls = surface.overlayAppearance.touchObstacles
         let obstacles = touchControls + [surface.overlayAppearance.noticeFrame, surface.overlayAppearance.menuFrame]
             .compactMap { $0 }
@@ -114,13 +128,9 @@ final class StreamStats {
             updateStats()
             if overlay.layer.bounds.size != lastContent { layout() }
         }
-        // Share one sample: preserve the HUD's local contrast when it is visible.
-        let rect = overlay.isVisible ? overlay.backdropSampleRect
-            : Self.chromeSampleRect(view: surface?.bounds.size ?? .zero, video: videoSize())
-        if let luminance = backdrop(rect) {
-            if overlay.isVisible { overlay.updateBackdropLuminance(luminance) }
-            if chromeVisible { surface?.overlayAppearance.update(luminance: luminance) }
-        }
+        // Share one sample: chrome follows the HUD's local reading while the HUD is up.
+        guard overlay.isVisible, let luminance = backdrop(overlay.backdropSampleRect) else { return }
+        overlay.updateBackdropLuminance(luminance)
     }
 
     static func chromeSampleRect(view: CGSize, video: CGSize) -> CGRect {
@@ -161,5 +171,18 @@ final class StreamStats {
         chromeSampling(false)
         _ = backdrop(.zero)
         overlay.layer.removeFromSuperlayer()
+    }
+}
+
+/// Applies the overlay hysteresis off the main actor so steady scenes cost no main-thread work.
+final class ChromeInk: Sendable {
+    private let dark = OSAllocatedUnfairLock<Bool?>(initialState: nil)
+
+    func flips(_ luminance: Double) -> Bool {
+        dark.withLock { current in
+            let next = StatsOverlayLayer.shouldUseDarkInk(luminance: luminance, currentlyDark: current ?? false)
+            defer { current = next }
+            return current != next
+        }
     }
 }

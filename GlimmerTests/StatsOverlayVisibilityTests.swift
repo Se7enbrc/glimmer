@@ -9,13 +9,26 @@ import Testing
 
 @MainActor
 struct StatsOverlayVisibilityTests {
-    @Test func viewportScalingIsBoundedAndRespondsToWindowGeometry() {
-        let phone = StatsOverlayLayer.viewportScale(in: CGSize(width: 667, height: 375))
-        let tablet = StatsOverlayLayer.viewportScale(in: CGSize(width: 1194, height: 834))
-        let desktop = StatsOverlayLayer.viewportScale(in: CGSize(width: 1920, height: 1080))
-        #expect(phone == 1 && tablet > phone && desktop > tablet)
-        #expect(StatsOverlayLayer.viewportScale(in: CGSize(width: 7680, height: 4320)) == 1.6)
-        #expect(StatsOverlayLayer.viewportScale(in: .zero) == 1)
+    @Test func macHUDKeeps2026_10_7SizeAtEveryWindowSize() {
+        for size in [CGSize(width: 667, height: 375), CGSize(width: 1920, height: 1080), .zero,
+                     CGSize(width: 7680, height: 4320)] {
+            #expect(StatsOverlayLayer.viewportScale(in: size) == 1)
+        }
+        // 2026.10.7: three core rows of 54 pt with 3 pt gaps plus the 12 pt cap, 160 pt wide, never scaled up.
+        var snapshot = StreamStatsSnapshot()
+        snapshot.negotiatedBitrateMbps = 50
+        for size in [CGSize(width: 1_920, height: 1_080), CGSize(width: 2_560, height: 1_440),
+                     CGSize(width: 3_840, height: 2_160), CGSize(width: 5_120, height: 2_880)] {
+            let overlay = StatsOverlayLayer()
+            let video = CALayer()
+            video.bounds = CGRect(origin: .zero, size: size)
+            overlay.attach(to: video)
+            overlay.videoSize = size
+            overlay.update(snapshot: snapshot, enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
+            #expect(overlay.layer.frame.size == CGSize(width: 160, height: 180), "\(size)")
+            #expect(overlay.layer.frame.minX == 16 && overlay.layer.frame.maxY == size.height - 16, "\(size)")
+            #expect(overlay.resolvedLabelFont.pointSize == NSFont.preferredFont(forTextStyle: .caption2).pointSize)
+        }
         let area = CGRect(x: 0, y: 0, width: 320, height: 240)
         for corner in StatsOverlayCorner.allCases {
             let frame = StatsOverlayLayer.panelFrame(size: CGSize(width: 500, height: 600),
@@ -270,9 +283,7 @@ struct StatsOverlayVisibilityTests {
             overlay.videoSize = picture
             overlay.update(snapshot: snapshot, enabled: StatsOverlayDefaults.minimalRows, targetFps: 60)
             let available = StatsOverlayLayer.availableRect(in: video.bounds, videoSize: picture, safeArea: NSEdgeInsets())
-            let scale = StatsOverlayLayer.viewportScale(in: available.size)
-            let width = 160 * scale
-            let height = 180 * scale
+            let (width, height): (CGFloat, CGFloat) = (160, 180)
             for corner in StatsOverlayCorner.allCases {
                 overlay.corner = corner
                 let rect = overlay.backdropSampleRect

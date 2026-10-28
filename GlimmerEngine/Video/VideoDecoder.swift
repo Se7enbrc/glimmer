@@ -122,7 +122,9 @@ public final class VideoDecoder {
 
     private func updateBackdropSampling() {
         let enabled = statsOverlayEnabled || overlayChromeEnabled
+        let interval = statsOverlayEnabled ? Self.backdropSampleIntervalNanos : Self.chromeSampleIntervalNanos
         backdropBox.withLock {
+            $0.intervalNanos = interval
             guard $0.overlayEnabled != enabled else { return }
             $0.overlayEnabled = enabled
             $0.luminance = nil
