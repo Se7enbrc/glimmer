@@ -98,6 +98,24 @@ struct ControllerMouseTests {
         #expect(active == [true, false])
     }
 
+    // A vertical scroll push with a natural 20-30 degree lean must not send sideways wheel notches.
+    @Test(arguments: [20.0, 25.0, 30.0])
+    func aLeaningScrollPushSendsOnlyVerticalNotches(lean: Double) {
+        let (forwarder, backend) = rig()
+        defer { forwarder.detach() }
+        toggle(forwarder)
+        var analog = neutral
+        analog.leftStickX = Int16(sin(lean * .pi / 180) * 32767)
+        analog.leftStickY = Int16(cos(lean * .pi / 180) * 32767)
+        forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false, now: 11)
+        stopPollingTimer(forwarder)
+        for tick in 0..<120 { forwarder.inputCore.pollControllerMouse(now: 11 + Double(tick) / 120) }
+        let vertical = backend.pointer.filter { if case .scroll = $0 { true } else { false } }
+        let horizontal = backend.pointer.filter { if case .hScroll = $0 { true } else { false } }
+        #expect(!vertical.isEmpty)
+        #expect(horizontal.isEmpty, "\(lean) degrees sent \(horizontal.count) sideways notches")
+    }
+
     @Test func togglesOnlyOnReleaseAfterMoonlightsThreshold() {
         var state = ControllerMouseState()
         let toggled1 = state.update(buttons: start, analog: neutral, chordHeld: false, now: 0)
