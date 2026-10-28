@@ -136,9 +136,10 @@ class RequiredChecksTests(FixtureTestCase):
                 return [{"workflow_runs": [run(workflow_id=2 if workflow == WORKFLOW else 3, path=workflow,
                                               run_attempt=2, run_started_at="2026-10-09T21:00:00Z")]}]
             if "/jobs?" in path:
-                return [{"jobs": [*jobs.values(), {"name": "macOS", "head_sha": SHA,
-                                                  "status": "completed", "conclusion": "success",
-                                                  "run_id": 1, "run_attempt": 2, "head_branch": None}]}]
+                return [{"jobs": [*jobs.values(), *[{"name": name, "head_sha": SHA,
+                                                    "status": "completed", "conclusion": "success",
+                                                    "run_id": 1, "run_attempt": 2, "head_branch": None}
+                                                   for name in ("macOS", "Tier 2")]]}]
             if "analyses?" in path:
                 return [data]
             alert_queries.append(path)
@@ -206,7 +207,15 @@ class RequiredChecksTests(FixtureTestCase):
         with self.assertRaisesRegex(ValueError, "missing checks"):
             CHECKS.latest_run([run(head_sha=MERGE)], WORKFLOW, SHA, 2)
         with self.assertRaisesRegex(ValueError, "unexpected check trigger"):
-            CHECKS.latest_run([run(event="schedule")], WORKFLOW, SHA, 2)
+            CHECKS.latest_run([run(event="repository_dispatch")], WORKFLOW, SHA, 2)
+
+    def test_scheduled_validation_is_eligible_only_on_the_exact_commit(self):
+        scheduled = run(event="schedule", head_branch="main")
+        self.assertEqual(CHECKS.latest_run([scheduled], WORKFLOW, SHA, 2), scheduled)
+        with self.assertRaisesRegex(ValueError, "missing checks"):
+            CHECKS.latest_run([{**scheduled, "head_sha": MERGE}], WORKFLOW, SHA, 2)
+        with self.assertRaisesRegex(ValueError, "missing checks"):
+            CHECKS.latest_run([scheduled], WORKFLOW, SHA, 2, candidate=True)
 
     def test_languages_must_agree_on_one_commit(self):
         data = analyses()

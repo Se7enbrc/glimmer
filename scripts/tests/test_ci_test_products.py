@@ -36,8 +36,8 @@ class CITestProductsTests(FixtureTestCase):
     def test_only_one_ci_mac_test_compilation(self):
         workflow = (ROOT / ".github/workflows/verify.yml").read_text()
         self.assertNotIn("  sequoia-build:\n", workflow)
-        self.assertEqual(workflow.count("make test-build COVERAGE=1"), 1)
-        self.assertIn('"target":"test-run"', workflow)
+        self.assertEqual(workflow.count("python3 scripts/ci-local.py mac --build-only"), 1)
+        self.assertIn("python3 scripts/ci-local.py mac --run-only", workflow)
         self.assertIn("needs: [changes, verify]", workflow)
         self.assertIn("name: sequoia-tests", workflow)
         self.assertIn("runs-on: macos-15", workflow)
@@ -49,4 +49,4 @@ class CITestProductsTests(FixtureTestCase):
         for command in ("swift build -Xswiftc -warnings-as-errors", "swift test -Xswiftc -warnings-as-errors",
                         "generic/platform=iOS Simulator", "generic/platform=iOS", "make ios-device"):
             self.assertIn(command, workflow)
-        self.assertIn("matrix.part == 'checks' && needs.changes.outputs.build == 'true'", workflow)
+        self.assertIn("needs.changes.outputs.build == 'true'", workflow)

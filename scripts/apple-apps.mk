@@ -25,3 +25,7 @@ ios-touch-journeys:
 .PHONY: mac-controller-journeys
 mac-controller-journeys:
 	@scripts/mac-controller-journeys.sh
+
+.PHONY: ci-local
+ci-local:
+	@$(TOOLS) python3 scripts/ci-local.py $(SHARD) $(CI_TEST_FLAGS)
