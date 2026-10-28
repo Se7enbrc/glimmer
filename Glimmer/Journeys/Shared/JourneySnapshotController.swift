@@ -44,45 +44,58 @@ final class JourneySnapshotController: GCController {
     }
 
     @MainActor func send(element: String, value: Float, y: Float?, buttonOnly: Bool = false) async -> Bool {
-        guard let pad = extendedGamepad else { return false }
-        let changed: GCControllerElement
-        if let y {
-            let axes = ["left": pad.leftThumbstick, "right": pad.rightThumbstick, "dpad": pad.dpad]
-            guard let axis = axes[element] else { return false }
-            axis.setValueForXAxis(value, yAxis: y)
-            changed = axis
-        } else {
-            let buttons = ["a": pad.buttonA, "b": pad.buttonB, "x": pad.buttonX, "y": pad.buttonY,
-                "lb": pad.leftShoulder, "rb": pad.rightShoulder, "lt": pad.leftTrigger, "rt": pad.rightTrigger,
-                "ls": pad.leftThumbstickButton, "rs": pad.rightThumbstickButton,
-                "menu": pad.buttonMenu, "options": pad.buttonOptions].compactMapValues { $0 }
-            guard let button = buttons[element] else { return false }
-            button.setValue(value)
-            changed = button
+        await withCheckedContinuation { continuation in
+            send(element: element, value: value, y: y, buttonOnly: buttonOnly) { continuation.resume(returning: $0) }
         }
+    }
+
+    @MainActor func send(element: String, value: Float, y: Float?, buttonOnly: Bool = false,
+                         completion: @escaping @Sendable (Bool) -> Void) {
+        guard let pad = extendedGamepad, let changed = update(element: element, value: value, y: y) else {
+            completion(false)
+            return
+        }
+        let group = DispatchGroup()
         if buttonOnly, let button = changed as? GCControllerButtonInput {
             if let handler = button.pressedChangedHandler {
-                await withCheckedContinuation { continuation in
-                    handlerQueue.async(execute: Self.buttonDelivery(button, handler: handler) { continuation.resume() })
-                }
+                deliver(Self.buttonDelivery(button, handler: handler), on: handlerQueue, group: group)
             }
-            return true
-        }
-        if let handler = pad.valueChangedHandler {
-            await withCheckedContinuation { continuation in
-                handlerQueue.async(execute: Self.delivery(pad, changed: changed, handler: handler) { continuation.resume() })
+        } else {
+            if let handler = pad.valueChangedHandler {
+                deliver(Self.delivery(pad, changed: changed, handler: handler), on: handlerQueue, group: group)
             }
-        }
-        let physical = input.unmapped ?? input
-        if let handler = physical.elementValueDidChangeHandler {
-            let queue = physical.queue ?? handlerQueue
-            await withCheckedContinuation { continuation in
-                queue.async(execute: Self.physicalDelivery(name: element, handler: handler) {
-                    continuation.resume()
-                })
+            let physical = input.unmapped ?? input
+            if let handler = physical.elementValueDidChangeHandler {
+                deliver(Self.physicalDelivery(name: element, handler: handler),
+                        on: physical.queue ?? handlerQueue, group: group)
             }
         }
-        return true
+        group.notify(queue: .global()) { @Sendable in completion(true) }
+    }
+
+    @MainActor private func deliver(_ work: DispatchWorkItem, on queue: DispatchQueue, group: DispatchGroup) {
+        // Native menu tracking nests the main run loop inside a main-queue callback.
+        if queue.label == DispatchQueue.main.label { work.perform(); return }
+        group.enter()
+        work.notify(queue: .global()) { @Sendable in group.leave() }
+        queue.async(execute: work)
+    }
+
+    @MainActor private func update(element: String, value: Float, y: Float?) -> GCControllerElement? {
+        guard let pad = extendedGamepad else { return nil }
+        if let y {
+            let axes = ["left": pad.leftThumbstick, "right": pad.rightThumbstick, "dpad": pad.dpad]
+            guard let axis = axes[element] else { return nil }
+            axis.setValueForXAxis(value, yAxis: y)
+            return axis
+        }
+        let buttons = ["a": pad.buttonA, "b": pad.buttonB, "x": pad.buttonX, "y": pad.buttonY,
+            "lb": pad.leftShoulder, "rb": pad.rightShoulder, "lt": pad.leftTrigger, "rt": pad.rightTrigger,
+            "ls": pad.leftThumbstickButton, "rs": pad.rightThumbstickButton,
+            "menu": pad.buttonMenu, "options": pad.buttonOptions].compactMapValues { $0 }
+        guard let button = buttons[element] else { return nil }
+        button.setValue(value)
+        return button
     }
 
     private final class Element: NSObject, GCPhysicalInputElement {
@@ -99,21 +112,19 @@ final class JourneySnapshotController: GCController {
     }
 
     private static func physicalDelivery(name: String,
-                                         handler: @escaping (any GCDevicePhysicalInput, any GCPhysicalInputElement) -> Void,
-                                         completion: @escaping @Sendable () -> Void) -> DispatchWorkItem {
-        DispatchWorkItem { handler(PhysicalEvent(), Element(name: name)); completion() }
+                                         handler: @escaping (any GCDevicePhysicalInput, any GCPhysicalInputElement) -> Void)
+        -> DispatchWorkItem {
+        DispatchWorkItem { handler(PhysicalEvent(), Element(name: name)) }
     }
 
     private static func buttonDelivery(_ button: GCControllerButtonInput,
-                                       handler: @escaping GCControllerButtonValueChangedHandler,
-                                       completion: @escaping @Sendable () -> Void) -> DispatchWorkItem {
-        DispatchWorkItem { handler(button, button.value, button.isPressed); completion() }
+                                       handler: @escaping GCControllerButtonValueChangedHandler) -> DispatchWorkItem {
+        DispatchWorkItem { handler(button, button.value, button.isPressed) }
     }
 
     private static func delivery(_ pad: GCExtendedGamepad, changed: GCControllerElement,
-                                 handler: @escaping GCExtendedGamepadValueChangedHandler,
-                                 completion: @escaping @Sendable () -> Void) -> DispatchWorkItem {
-        DispatchWorkItem { handler(pad, changed); completion() }
+                                 handler: @escaping GCExtendedGamepadValueChangedHandler) -> DispatchWorkItem {
+        DispatchWorkItem { handler(pad, changed) }
     }
 }
 

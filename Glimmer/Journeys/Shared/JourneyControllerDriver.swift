@@ -14,7 +14,7 @@ final class JourneyControllerDriver {
         let slot: Int?
         let steps: [Step]?
     }
-    struct Step: Decodable {
+    struct Step: Decodable, Sendable {
         let element: String
         let value: Double
         let y: Double?
@@ -31,6 +31,13 @@ final class JourneyControllerDriver {
     private var snapshots: [JourneySnapshotController] = []
     private var task: Task<Void, Never>?
     private var lastID = 0
+    #if os(macOS)
+    private var timer: Timer?
+    private var command: Command?
+    private var stepIndex = 0
+    private var nextStepAt: TimeInterval = 0
+    private var delivering = false
+    #endif
     var controllers: [GCController] {
         #if os(iOS)
         snapshots + (virtual?.controller.map { [$0] } ?? [])
@@ -46,6 +53,14 @@ final class JourneyControllerDriver {
 
     func start() {
         registry.install()
+        #if os(macOS)
+        let timer = Timer(timeInterval: 0.01, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.advanceCommand() }
+        }
+        self.timer = timer
+        RunLoop.main.add(timer, forMode: .common)
+        RunLoop.main.add(timer, forMode: .eventTracking)
+        #else
         task = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -57,12 +72,61 @@ final class JourneyControllerDriver {
                 }
             }
         }
+        #endif
+    }
+
+    #if os(macOS)
+    private func advanceCommand() {
+        guard !delivering, ProcessInfo.processInfo.systemUptime >= nextStepAt else { return }
+        if command == nil {
+            guard let next = nextCommand() else { return }
+            command = next
+            stepIndex = 0
+            if let connect = next.connect {
+                _ = snapshotConnection(connect, profile: next.profile)
+                receipts.record(["gcConnected": Double(controllers.count)])
+            }
+        }
+        guard let command else { return }
+        let steps = command.steps ?? []
+        guard stepIndex < steps.count else {
+            receipts.record(["command": Double(command.id)])
+            self.command = nil
+            return
+        }
+        let step = steps[stepIndex]
+        guard Self.elements[step.element] != nil, snapshots.indices.contains(command.slot ?? 0) else {
+            receipts.record(["controllerError": 1])
+            self.command = nil
+            return
+        }
+        let snapshot = snapshots[command.slot ?? 0]
+        receipts.record(["injected": Double(command.id)])
+        delivering = true
+        snapshot.send(element: step.element, value: Float(step.value), y: step.y.map(Float.init),
+                      buttonOnly: step.route == "button") { [weak self] success in
+            RunLoop.main.perform(inModes: [.common, .eventTracking]) {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if !success { self.receipts.record(["controllerError": 1]) }
+                    self.stepIndex += 1
+                    self.nextStepAt = ProcessInfo.processInfo.systemUptime + Double(step.milliseconds ?? 0) / 1000
+                    self.delivering = false
+                }
+            }
+        }
+    }
+    #endif
+
+    private func nextCommand() -> Command? {
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent("gamecontroller.json")),
+              let command = try? JSONDecoder().decode(Command.self, from: data), command.id != lastID else { return nil }
+        lastID = command.id
+        return command
     }
 
     private func readCommand() async throws {
-        guard let data = try? Data(contentsOf: directory.appendingPathComponent("gamecontroller.json")),
-              let command = try? JSONDecoder().decode(Command.self, from: data), command.id != lastID else { return }
-        lastID = command.id
+        guard let command = nextCommand() else { return }
         if let connect = command.connect { try await connection(connect, profile: command.profile) }
         for step in command.steps ?? [] {
             guard let element = Self.elements[step.element] else {
@@ -71,9 +135,6 @@ final class JourneyControllerDriver {
             }
             receipts.record(["injected": Double(command.id)])
             if let snapshot = snapshots.indices.contains(command.slot ?? 0) ? snapshots[command.slot ?? 0] : nil {
-                let physical = snapshot.input.unmapped ?? snapshot.input
-                receipts.record(["gcProfileCallback": snapshot.extendedGamepad?.valueChangedHandler == nil ? 0 : 1,
-                                 "gcPhysicalCallback": physical.elementValueDidChangeHandler == nil ? 0 : 1])
                 guard await snapshot.send(element: step.element, value: Float(step.value),
                                           y: step.y.map(Float.init), buttonOnly: step.route == "button")
                 else { receipts.record(["controllerError": 1]); return }
@@ -89,31 +150,36 @@ final class JourneyControllerDriver {
         receipts.record(["command": Double(command.id)])
     }
 
-    private func connection(_ connect: Bool, profile: String?) async throws {
+    private func snapshotConnection(_ connect: Bool, profile: String?) -> Bool {
         if connect, let profile {
             let snapshot = JourneySnapshotController(profile: profile)
-            receipts.record(["profileButtons": Double(snapshot.input.buttons.count),
-                             "unmappedButtons": Double(snapshot.input.unmapped?.buttons.count ?? 0)])
             snapshots.append(snapshot)
             registry.add(snapshot)
-        } else if connect {
-            #if os(iOS)
-            let configuration = GCVirtualController.Configuration()
-            configuration.isHidden = true
-            configuration.elements = Set(Self.elements.values)
-            let controller = GCVirtualController(configuration: configuration)
-            virtual = controller
-            try await controller.connect()
-            // Discovery is limited to journey devices, so the framework controller joins it explicitly.
-            if let device = controller.controller { registry.add(device) }
-            #endif
-        } else if !snapshots.isEmpty, let snapshot = snapshots.popLast() {
+            return true
+        }
+        if !connect, let snapshot = snapshots.popLast() {
             registry.remove(snapshot)
-        } else {
+            return true
+        }
+        return false
+    }
+
+    private func connection(_ connect: Bool, profile: String?) async throws {
+        if !snapshotConnection(connect, profile: profile) {
             #if os(iOS)
-            if let device = virtual?.controller { registry.remove(device) }
-            virtual?.disconnect()
-            virtual = nil
+            if connect {
+                let configuration = GCVirtualController.Configuration()
+                configuration.isHidden = true
+                configuration.elements = Set(Self.elements.values)
+                let controller = GCVirtualController(configuration: configuration)
+                virtual = controller
+                try await controller.connect()
+                if let device = controller.controller { registry.add(device) }
+            } else {
+                if let device = virtual?.controller { registry.remove(device) }
+                virtual?.disconnect()
+                virtual = nil
+            }
             #endif
         }
         receipts.record(["gcConnected": Double(controllers.count)])

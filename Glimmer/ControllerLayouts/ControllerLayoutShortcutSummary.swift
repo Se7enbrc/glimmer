@@ -26,7 +26,7 @@ struct ControllerLayoutShortcutSummary: View {
 struct ControllerLayoutShortcutHelp: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Hold all the buttons for a moment, then release. Shortcuts use physical buttons in every game.")
+            Text("Hold all the buttons together for a moment. Shortcuts use physical buttons in every game.")
             Text("The PC sees the buttons until the hold completes. Normal game input is never delayed.")
             #if os(iOS)
             Text("Open stream controls and tap Disconnect to stop streaming.")

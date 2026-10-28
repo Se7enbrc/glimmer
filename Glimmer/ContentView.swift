@@ -13,6 +13,7 @@ struct MainWindow: View {
     @Environment(\.openSettings) private var openSettings
     @FocusState private var launcherFocus: LauncherFocus?
     @State private var focusCells: [LauncherFocus] = []
+    @State private var pendingLauncherCommand: LauncherCommand?
     @State private var showAWDLPrompt = false
     @State private var awdlPromptChecked = false
 
@@ -35,6 +36,11 @@ struct MainWindow: View {
             if let launcherFocus, launcherFocus != .pc, !cells.contains(launcherFocus) {
                 self.launcherFocus = cells.first
             }
+        }
+        .onPreferenceChange(LauncherControllerFocusReady.self) { ready in
+            guard ready, let command = pendingLauncherCommand else { return }
+            pendingLauncherCommand = nil
+            navigateLauncher(command)
         }
         .onChange(of: model.selectedHost?.id) { _, _ in launcherFocus = nil }
         .onChange(of: launcherFocus) { _, focus in
@@ -129,10 +135,10 @@ struct MainWindow: View {
 
     private func navigateLauncher(_ command: LauncherCommand) {
         guard !model.isStreaming || model.nativeStreamBackgrounded else { return }
-        // The controls become focusable a render later, so the first command waits a turn.
+        // Apply the first command only after SwiftUI installs the controller focus targets.
         guard model.launcherControllerNavigating else {
+            pendingLauncherCommand = command
             model.launcherControllerNavigating = true
-            DispatchQueue.main.async { navigateLauncher(command) }
             return
         }
         let modal = showAWDLPrompt || model.pairSheetShown || model.showRawHIDPrompt

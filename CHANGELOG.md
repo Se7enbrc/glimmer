@@ -2,6 +2,17 @@
 
 ## 2026.10.8 - Unreleased
 
+- Controller shortcuts keep recognizing Menu and Options after stream input
+  switches from a focus refresh to live controller reports.
+
+- Controller navigation and Back keep responding while a Mac context menu is
+  open, even after you release every button.
+
+- The first controller direction reliably focuses a game in the Mac launcher.
+
+- Controller settings on Mac use native pickers, so mouse presets and the
+  diagram's control selector open reliably.
+
 - Controller Stop and Stats shortcuts respond after a short hold on Mac, iPhone
   and iPad, without waiting for release. Holding Menu on iPhone and iPad opens
   stream controls without interfering with those shortcuts.
@@ -75,7 +86,8 @@
   stream controls releases the pointer, and Glimmer's shortcuts stay local.
 
 - Controller layouts and mouse controls now use matching rows and labeled
-  controller diagrams on Mac, iPhone and iPad.
+  controller diagrams on Mac, iPhone and iPad. Mac settings use system text
+  sizes and row spacing.
 
 - Controller mouse buttons have changed on Mac: the right stick moves the
   pointer, R2 clicks and R1 right-clicks. Choose Left-handed or remap any mouse

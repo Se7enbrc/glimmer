@@ -20,6 +20,9 @@ final class JourneyMacPC {
             preconditionFailure("A journey needs isolated receipt storage")
         }
         let directory = PersistentStorage.checked(URL(fileURLWithPath: path))
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch { preconditionFailure("Could not create isolated journey storage") }
         receipts = JourneyReceipts(directory: directory)
         network = JourneyMacNetwork(receipts: receipts)
         driver = JourneyControllerDriver(directory: directory, receipts: receipts)
@@ -31,6 +34,10 @@ final class JourneyMacPC {
         let model = AppModel()
         model.makeNetwork = { [network] in network.client($0) }
         model.measureRTT = { _, _, _ in .reachable(rttMs: 1) }
+        model.qualityPreset = .custom
+        model.customWidth = 1280
+        model.customHeight = 720
+        model.customFPS = 60
         model.streamDisplayMode = .window
         model.streamHDR = false
         let app = LibraryApp(id: 1, name: "Journey game", hdr: false, hidden: false)
@@ -63,6 +70,9 @@ final class JourneyMacPC {
 
     private func connected() {
         guard let (window, input, decoder) = prepared else { preconditionFailure("Missing native stream surface") }
+        // Only the synthetic PC window is capturable by the journey's picture assertion.
+        window.window.sharingType = .readOnly
+        window.window.setAccessibilityIdentifier("journey-stream-window")
         input.setReady(true)
         let video = JourneyVideo(layer: window.displayLayer)
         videoTask?.cancel()
@@ -71,6 +81,10 @@ final class JourneyMacPC {
             do {
                 while !Task.isCancelled && !window.didClose {
                     try video.draw()
+                    // The fixture supplies decoded pixels directly, bypassing the VT callback.
+                    // Keep the real session watchdogs informed without disabling their checks.
+                    decoder.statsCollector.recordDecodedFrame()
+                    decoder.statsCollector.recordRendererEnqueue()
                     if first && video.ready {
                         first = false
                         decoder.onFirstDecodedFrame?()

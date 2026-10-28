@@ -50,14 +50,17 @@ class MacControllerJourneyTests(unittest.TestCase):
             calls = [json.loads(line) for line in log.read_text().splitlines()]
             return result, calls
 
-    def test_only_isolated_ui_target_unsigned_in_both_appearances(self):
+    def test_only_isolated_ui_target_adhoc_in_both_appearances(self):
         result, calls = self.run_journeys()
         self.assertEqual(result.returncode, 0, result.stderr)
         builds = [call for call in calls if call[0] == "xcodebuild"]
         self.assertEqual(len(builds), 3)
         for build in builds:
             self.assertIn("-only-testing:GlimmerUITests", build)
-            self.assertIn("CODE_SIGNING_ALLOWED=NO", build)
+            self.assertIn("CODE_SIGNING_ALLOWED=YES", build)
+            self.assertIn("CODE_SIGN_IDENTITY=-", build)
+            self.assertIn("DEVELOPMENT_TEAM=", build)
+            self.assertIn(f"CODE_SIGN_ENTITLEMENTS={ROOT}/GlimmerUITests/Journey.entitlements", build)
             self.assertIn("PRODUCT_BUNDLE_IDENTIFIER=io.ugfugl.Glimmer.JourneyHost", build)
             self.assertIn("Glimmer-Controller-Journeys", build)
         self.assertIn("JOURNEY_APPEARANCE=light", builds[1])

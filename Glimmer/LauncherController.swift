@@ -71,6 +71,7 @@ final class LauncherController {
                     guard let self else { return }
                     self.menuDepth += beginning ? 1 : -1
                     self.menuDepth = max(0, self.menuDepth)
+                    if beginning, !self.controllers.isEmpty { self.startTimer() }
                 }
             })
         }
@@ -195,7 +196,8 @@ final class LauncherController {
             }
         }
         guard canNavigate else { stop(); return }
-        if inputs.values.contains(where: { !$0.isNeutral }) {
+        // Native menu tracking blocks the main-queue callback that normally wakes a neutral controller.
+        if menuDepth > 0 || inputs.values.contains(where: { !$0.isNeutral }) {
             startTimer()
         } else {
             timer?.invalidate()

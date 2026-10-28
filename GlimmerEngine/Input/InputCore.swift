@@ -153,10 +153,10 @@ package final class InputCore: @unchecked Sendable {
             }
             if let state = layouts?.states[Int(slot)] {
                 let physical = physicalSample ?? (rawSupplement == nil
-                    ? ControllerMappingSample(buttons: buttons, analog: analog, extras: extras) : nil)
-                let supplement = rawSupplement ?? chordButtons.map { (center: $0, shoulders: $0) }
+                    ? ControllerMappingSample(buttons: chordButtons ?? buttons, analog: analog, extras: extras) : nil)
+                // A legacy profile snapshot is current input, not an authoritative cached HID override.
                 return receiveLayout(state, slot: slot,
-                    sample: layoutSample(state, physical: physical, supplement: supplement),
+                    sample: layoutSample(state, physical: physical, supplement: rawSupplement),
                     systemSample: .init(buttons: buttons, analog: analog, extras: extras),
                     at: capturedAt ?? ProcessInfo.processInfo.systemUptime)
             }

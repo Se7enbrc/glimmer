@@ -34,11 +34,9 @@ struct ControllerSettingsRow: View {
 }
 
 private struct ControllerSettingsForm: ViewModifier {
-    @ScaledMetric(relativeTo: .body) private var textSize = 17.0
-
     func body(content: Content) -> some View {
         content.formStyle(.grouped)
-            .font(.system(size: textSize))
+            .font(.body)
             .buttonStyle(.borderless)
             .pickerStyle(.menu)
             .toggleStyle(.switch)
@@ -46,9 +44,7 @@ private struct ControllerSettingsForm: ViewModifier {
 }
 
 private struct ControllerSettingsFootnote: ViewModifier {
-    @ScaledMetric(relativeTo: .footnote) private var textSize = 13.0
-
-    func body(content: Content) -> some View { content.font(.system(size: textSize)) }
+    func body(content: Content) -> some View { content.font(.footnote) }
 }
 
 extension View {
@@ -61,9 +57,21 @@ struct ControllerSettingsPicker<Selection: Hashable, Choices: View>: View {
     let value: String
     @Binding var selection: Selection
     @ViewBuilder let choices: () -> Choices
+    #if os(macOS)
+    @ScaledMetric(relativeTo: .body) private var rowHeight = 31.0
+    #else
     @ScaledMetric(relativeTo: .body) private var rowHeight = 44.0
+    #endif
 
     var body: some View {
+        #if os(macOS)
+        Picker(title, selection: $selection, content: choices)
+            .pickerStyle(.menu)
+            .frame(minHeight: rowHeight)
+            .accessibilityLabel(title)
+            .accessibilityIdentifier("controller-settings-picker-\(title)")
+            .accessibilityValue(value)
+        #else
         Menu {
             Picker(title, selection: $selection, content: choices).pickerStyle(.inline).labelsHidden()
         } label: {
@@ -80,5 +88,6 @@ struct ControllerSettingsPicker<Selection: Hashable, Choices: View>: View {
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .accessibilityLabel(title)
         .accessibilityValue(value)
+        #endif
     }
 }

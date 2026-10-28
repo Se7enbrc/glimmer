@@ -13,15 +13,15 @@ final class MacControllerJourneyUITests: XCTestCase {
     private func launch() throws {
         continueAfterFailure = false
         XCTAssertFalse(NSWorkspace.shared.isVoiceOverEnabled, "Journeys must remain silent")
-        // A signed runner is sandboxed, so the host's storage tripwire rejects its receipt folder.
-        try XCTSkipIf(FileManager.default.temporaryDirectory.path.contains("/Library/Containers/"),
-                      "Mac journeys need a runner that shares the host's temporary folder; harness follow-up")
         directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         app.launchEnvironment["GLIMMER_UI_TESTING"] = "journey"
         app.launchEnvironment["GLIMMER_JOURNEY_DIRECTORY"] = directory.path
         app.launchEnvironment["JOURNEY_APPEARANCE"] = ProcessInfo.processInfo.environment["JOURNEY_APPEARANCE"] ?? "light"
+        app.launchArguments = ["-ApplePersistenceIgnoreState", "YES"]
         app.launch()
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
         addTeardownBlock { @MainActor [self] in
             record("mac-final-state")
             if let data = try? Data(contentsOf: directory.appendingPathComponent("receipts.json")) {
@@ -74,6 +74,24 @@ final class MacControllerJourneyUITests: XCTestCase {
             attachment.lifetime = .keepAlways
             add(attachment)
         }
+    }
+
+    func testPictureSurvivesTheFirstFrameWatchdog() throws {
+        try launch()
+        app.buttons["Journey game"].click()
+        XCTAssertTrue(waitForReceipt("rendered"))
+        try assertPicture()
+        let window = app.windows["journey-stream-window"]
+        let ended = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !window.exists }, object: nil)
+        ended.isInverted = true
+        // A direct-render fixture used to report pixels, then die at the ten-second first-frame watchdog.
+        XCTAssertEqual(XCTWaiter.wait(for: [ended], timeout: 12), .completed)
+        try assertPicture()
+        record("mac-picture-past-watchdog")
+        app.typeKey("p", modifierFlags: .control)
+        window.buttons[XCUIIdentifierCloseWindow].click()
+        XCTAssertTrue(waitForReceipt("stop"))
+        XCTAssertTrue(app.buttons["Journey game"].waitForExistence(timeout: 5))
     }
 
     func testControllerOnlyLaunchAndStop() throws {
@@ -156,10 +174,12 @@ final class MacControllerJourneyUITests: XCTestCase {
         try controller(steps: [["element": "left", "value": 1, "y": 0, "milliseconds": 100],
                                ["element": "left", "value": 0, "y": 0]])
         try press("menu")
-        XCTAssertTrue(app.menus.firstMatch.waitForExistence(timeout: 5))
+        let contextAction = app.menuItems["Controller layout…"]
+        XCTAssertTrue(contextAction.waitForExistence(timeout: 5))
+        XCTAssertTrue(contextAction.isHittable)
         record("mac-controller-context-actions")
         try press("b")
-        XCTAssertTrue(app.menus.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(contextAction.waitForNonExistence(timeout: 5))
         XCTAssertFalse(receipts().contains { $0["launch"] == 1 })
         try press("a")
         XCTAssertTrue(waitForReceipt("rendered"))
@@ -197,14 +217,16 @@ final class MacControllerJourneyUITests: XCTestCase {
         try launch()
         try controller(connect: true)
         let settings = openInputSettings()
-        let mouse = control("Controller mouse")
+        let mouse = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Controller mouse,")).firstMatch
         reveal(mouse)
         mouse.click()
+        let preset = app.popUpButtons["controller-settings-picker-Preset"]
+        XCTAssertTrue(preset.waitForExistence(timeout: 5))
         if leftHanded {
-            control("Preset").click()
+            preset.click()
             app.menuItems["Left-handed"].click()
         }
-        XCTAssertEqual(control("Preset").value as? String, leftHanded ? "Left-handed" : "Right-handed")
+        XCTAssertEqual(preset.value as? String, leftHanded ? "Left-handed" : "Right-handed")
         record("mac-controller-mouse-preset")
         if remap {
             let click = control("Primary click")
@@ -222,8 +244,7 @@ final class MacControllerJourneyUITests: XCTestCase {
         XCTAssertTrue(waitForReceipt("rendered"))
         try assertPicture()
         try press("menu", duration: 1200)
-        XCTAssertTrue(app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "is now a mouse.")).firstMatch.exists)
+        XCTAssertTrue(app.otherElements["Controller is now a mouse."].waitForExistence(timeout: 3))
         record("mac-controller-mouse-active")
         let index = receipts().count
         let pointer = leftHanded ? "left" : "right"
@@ -248,8 +269,7 @@ final class MacControllerJourneyUITests: XCTestCase {
             XCTAssertFalse(receipts().dropFirst(index).contains { $0["pcMouseButton"] == 1 })
         }
         try press("menu", duration: 1200)
-        XCTAssertTrue(app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "back in the game.")).firstMatch.exists)
+        XCTAssertTrue(app.otherElements["Controller is back in the game."].waitForExistence(timeout: 3))
         try press("a")
         XCTAssertTrue(waitForReceipt("pcButtons", value: 0x1000))
         try chord(["lb", "rb", "options", "menu"])
@@ -264,9 +284,12 @@ final class MacControllerJourneyUITests: XCTestCase {
         reveal(layouts)
         layouts.click()
         control("Backbone One").click()
-        for (name, symbol) in [("Cross", "xmark.circle"), ("Circle", "circle.circle"),
-                               ("Square", "square.circle"), ("Triangle", "triangle.circle")] {
-            XCTAssertEqual(app.buttons[symbol].label, name)
+        record("mac-playstation-glyph-diagram")
+        for name in ["Cross", "Circle", "Square", "Triangle"] {
+            let button = control("\(name), sends ")
+            reveal(button)
+            XCTAssertTrue(button.label.hasPrefix("\(name), sends "))
+            XCTAssertTrue(button.isHittable)
         }
         record("mac-playstation-labels")
         let stop = control("Stop streaming")
@@ -276,6 +299,9 @@ final class MacControllerJourneyUITests: XCTestCase {
         reveal(recording)
         recording.click()
         try chord(["lb", "ls", "rs"])
+        XCTAssertFalse(app.buttons["Save"].isEnabled)
+        recording.click()
+        try chord(["a", "b", "x"])
         XCTAssertTrue(app.buttons["Save"].isEnabled)
         app.buttons["Save"].click()
         settings.buttons[XCUIIdentifierCloseWindow].click()
@@ -284,7 +310,7 @@ final class MacControllerJourneyUITests: XCTestCase {
         try assertPicture()
         try chord(["lb", "rb", "options", "menu"])
         XCTAssertFalse(receipts().contains { $0["stop"] == 1 })
-        try chord(["lb", "ls", "rs"])
+        try chord(["a", "b", "x"])
         XCTAssertTrue(waitForReceipt("quit"))
         XCTAssertTrue(app.buttons["Journey game"].waitForExistence(timeout: 10))
     }
@@ -298,7 +324,7 @@ final class MacControllerJourneyUITests: XCTestCase {
     }
 
     private func control(_ prefix: String) -> XCUIElement {
-        app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
     }
 
     private func reveal(_ element: XCUIElement) {
@@ -314,7 +340,7 @@ final class MacControllerJourneyUITests: XCTestCase {
     }
 
     private func assertPicture() throws {
-        let window = app.windows.matching(NSPredicate(format: "label CONTAINS %@", "Journey game")).firstMatch
+        let window = app.windows["journey-stream-window"]
         XCTAssertTrue(window.waitForExistence(timeout: 5))
         let image = try XCTUnwrap(window.screenshot().image.cgImage(forProposedRect: nil, context: nil, hints: nil))
         JourneyPicture.assertColors(image)

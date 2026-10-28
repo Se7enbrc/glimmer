@@ -11,7 +11,8 @@ mkdir -p "$results"
 started=$SECONDS
 build=(xcodebuild -project Glimmer.xcodeproj -scheme Glimmer-Controller-Journeys
     -configuration Debug -xcconfig Glimmer/StreamLib.xcconfig -derivedDataPath "$derived"
-    -destination platform=macOS CODE_SIGNING_ALLOWED=NO
+    -destination platform=macOS CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual
+    CODE_SIGN_ENTITLEMENTS="$PWD/GlimmerUITests/Journey.entitlements" DEVELOPMENT_TEAM=
     PRODUCT_BUNDLE_IDENTIFIER=io.ugfugl.Glimmer.JourneyHost -only-testing:GlimmerUITests)
 "${build[@]}" build-for-testing
 status=0
