@@ -75,6 +75,14 @@ def pending(ledger, cases, rerun=""):
     return selected
 
 
+def select(cases, patterns):
+    patterns = patterns.split()
+    for pattern in patterns:
+        if not any(fnmatchcase(case["key"], pattern) for case in cases):
+            raise ValueError(f"Acceptance only selector matched no cases: {pattern}")
+    return [case for case in cases if not patterns or any(fnmatchcase(case["key"], pattern) for pattern in patterns)]
+
+
 def outcomes(document):
     results = {}
     def visit(node):
@@ -115,10 +123,18 @@ def save(ledger, path):
     temporary.replace(path)
 
 
-def summary(ledger):
+def summary(ledger, selected=None):
+    active = ledger.get("active", [])
+    counts = {status: sum(ledger["cases"][key]["status"] == status for key in active)
+              for status in ("passed", "failed", "pending")}
     lines = [f"### Release acceptance: {ledger['release']}", "",
              "Historical acceptance evidence; each pass retains its tested SHA. The release owner selects affected reruns.", "",
-             "| Case / device / theme | Status | Tested SHA |", "| --- | --- | --- |"]
+             f"Whole release: {counts['passed']} passed, {counts['failed']} failed, {counts['pending']} pending.", ""]
+    if selected is not None:
+        lines += [f"Selected scope: {len(selected)} of {len(active)} cases. " +
+                  ("Partial acceptance; success applies only to this scope." if len(selected) < len(active)
+                   else "Complete release scope selected."), ""]
+    lines += ["| Case / device / theme | Status | Tested SHA |", "| --- | --- | --- |"]
     for key in ledger.get("active", []):
         entry = ledger["cases"][key]
         last = entry["history"][-1] if entry["history"] else {}

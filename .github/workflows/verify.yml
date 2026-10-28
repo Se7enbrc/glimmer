@@ -27,6 +27,11 @@ on:
           Affected case patterns, space separated (for example
           iphone/*/*Rotation*)
         type: string
+      only:
+        description:
+          Limit acceptance to matching case patterns (for example mac/*
+          iphone/*/*Rotation*)
+        type: string
 
 permissions:
   contents: read
@@ -345,6 +350,7 @@ jobs:
         env:
           ACCEPTANCE_RELEASE: ${{ inputs.release }}
           ACCEPTANCE_RERUN: ${{ inputs.rerun }}
+          ACCEPTANCE_ONLY: ${{ inputs.only }}
         run: python3 scripts/ci-local.py acceptance
 
       - name: Preserve acceptance ledger

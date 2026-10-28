@@ -144,7 +144,7 @@ class AcceptanceLedgerTests(FixtureTestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.fixture(root)
-            args = SimpleNamespace(ledger=root / "acceptance/ledger.json", release="2026.10.8", rerun="")
+            args = SimpleNamespace(ledger=root / "acceptance/ledger.json", release="2026.10.8", rerun="", only="")
             calls = []
             first_attempt = True
             def execute(command, log, timeout):
@@ -184,7 +184,7 @@ class AcceptanceLedgerTests(FixtureTestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.fixture(root)
-            args = SimpleNamespace(ledger=root / "acceptance/ledger.json", release="2026.10.8", rerun="")
+            args = SimpleNamespace(ledger=root / "acceptance/ledger.json", release="2026.10.8", rerun="", only="")
             def batch(device, theme, cases, destination, built):
                 if device == "ios":
                     return 0, {"render": "passed"}
@@ -198,3 +198,32 @@ class AcceptanceLedgerTests(FixtureTestCase):
             state = LEDGER.load(args.ledger, "2026.10.8")
             self.assertEqual(state["cases"]["ios/all/render"]["status"], "passed")
             self.assertTrue(all(entry["status"] == "pending" for key, entry in state["cases"].items() if key.startswith("mac/")))
+
+    def test_focused_acceptance_runs_selected_pending_cases_and_preserves_unrelated_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            args = SimpleNamespace(ledger=root / "acceptance/ledger.json", release="2026.10.8", rerun="",
+                                   only="mac/light/*/testFirst")
+            def batch(device, theme, cases, destination, built):
+                self.assertEqual((device, theme), ("mac", "light"))
+                self.assertEqual([case["test"] for case in cases], ["MacControllerJourneyUITests/testFirst"])
+                return 0, {cases[0]["test"]: "passed"}
+            with patch.object(RUNNER, "ROOT", root), patch.object(RUNNER, "toolchain"), \
+                    patch.object(RUNNER, "output", side_effect=[SHA, ""]), \
+                    patch.object(RUNNER, "acceptance_batch", side_effect=batch) as execute, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(RUNNER.acceptance(args), 0)
+                self.assertEqual(RUNNER.acceptance(args), 0)
+                execute.assert_called_once()
+                args.only = "misspelled/*"
+                with self.assertRaisesRegex(ValueError, "only selector matched no cases"):
+                    RUNNER.acceptance(args)
+                execute.assert_called_once()
+            state = LEDGER.load(args.ledger, args.release)
+            self.assertEqual(len(state["active"]), 5)
+            self.assertEqual(sum(case["status"] == "pending" for case in state["cases"].values()), 4)
+            report = (args.ledger.parent / "summary.md").read_text()
+            self.assertIn("1 passed, 0 failed, 4 pending", report)
+            self.assertIn("Selected scope: 1 of 5 cases", report)
+            self.assertIn("Partial acceptance; success applies only to this scope", report)
