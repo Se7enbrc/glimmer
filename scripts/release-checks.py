@@ -23,7 +23,7 @@ from release_progress import progress
 REPO = "Se7enbrc/glimmer"
 READ_DEADLINE = ContextVar("release_read_deadline", default=float("inf"))
 REQUIRED = {
-    ".github/workflows/verify.yml": {"macOS"},
+    ".github/workflows/verify.yml": {"macOS", "Tier 2"},
     ".github/workflows/codeql.yml": {"Analyze (swift)", "Analyze (python)", "Analyze (actions)"},
 }
 CATEGORIES = {f"/language:{language}": f"Analyze ({language})"
@@ -112,7 +112,7 @@ def latest_run(runs, workflow, sha, workflow_id, candidate=False):
         raise ValueError("check run has no execution identity")
     if run.get("head_repository", {}).get("full_name") != REPO:
         raise ValueError("checks did not originate from the upstream repository")
-    if run.get("event") not in {"push", "pull_request", "workflow_dispatch"}:
+    if run.get("event") not in {"push", "pull_request", "workflow_dispatch", "schedule"}:
         raise ValueError("unexpected check trigger")
     if candidate and run.get("status") != "completed":
         raise ChecksPending(f"checks are pending: {workflow}")

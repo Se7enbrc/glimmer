@@ -17,3 +17,7 @@ verify-all: verify
 
 ci-parity:
 	@scripts/ci-parity.sh
+
+.PHONY: ci-local
+ci-local:
+	@$(TOOLS) python3 scripts/ci-local.py $(SHARD) $(CI_TEST_FLAGS)

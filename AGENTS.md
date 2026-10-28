@@ -69,13 +69,14 @@ before committing. Older worktrees must remain usable during migration.
 - `make test`: the unit tests. Hostless, no PC needed.
 - `make verify`: Actionlint, the SPDX notice check, strict SwiftLint,
   release-tool tests, `make test` and protocol fuzz tests under
-  AddressSanitizer. This is the gate: hosted Verify runs its three parts
-  (`make check`, `make test`, `make test-asan`) as parallel jobs under the
-  required `macOS` check, alongside engine and iOS app verification, on every
-  `main` commit and every pull request that touches more than documentation
-  (those run `make check` alone), so nothing is done until it passes there.
-  Locally it does not fail on compiler warnings, so read the build log: there
-  must be none.
+  AddressSanitizer. Hosted Verify runs checks, builds and core tests under
+  `macOS`, reusing Mac test products on macOS 15. Pushes to `main` and
+  `feat/2026.10.8`, nightly runs and dispatches additionally require `Tier 2`
+  render/UI, journey and sanitizer validation. Release candidates require both
+  gates on the exact commit. `make ci-local SHARD=mac|core|render|journeys`
+  reproduces hosted test filters and coverage with Xcode 26.6; see
+  [local reproduction](docs/CONTRIBUTING.md#hosted-verification-and-local-reproduction).
+  There must be no compiler warnings.
 - `make preflight`: the pre-push gate, including `make ci-parity` with Xcode
   26.6 and release source checks on release branches. hk runs it only before
   push.

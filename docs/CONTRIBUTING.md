@@ -79,6 +79,40 @@ build.
 | `make test COVERAGE=1`                    | Swift coverage in `build/coverage`.                           |
 | `make test-scripts COVERAGE=1`            | Release-tool coverage in `build/coverage`.                    |
 
+### Hosted verification and local reproduction
+
+Pull requests use three Apple workers in Verify: independent Mac and iOS
+build/core workers, then one that runs the same Mac products on macOS 15. CodeQL
+uses one additional Apple worker. There is no Apple job matrix competing for all
+five available runners. Portable checks and libFuzzer run on Linux.
+
+Pushes to `main` and `feat/2026.10.8`, nightly runs, and manual dispatches also
+run Tier 2 after the core gate: every render suite, UI tests, Mac and touch
+journeys where present, and AddressSanitizer. The candidate gate requires both
+`macOS` and `Tier 2` successful on its exact commit; a green PR alone cannot
+qualify a candidate. Security queries, complete extraction, coverage reports,
+production device builds, and macOS 15 validation remain required.
+
+Run the same test shard with `make ci-local SHARD=mac`, `core`, `render`, or
+`journeys`. The command requires Xcode 26.6 and its matching Simulator runtime;
+it fails explicitly when either is unavailable. Each simulator run uses a new
+owned device and deletes only that device. Core and render share one test build;
+use `CI_TEST_FLAGS=--run-only` to reuse it. Journeys always run their full
+Mac/iPhone/iPad and light/dark matrix. Local simulator tooling can be selected
+explicitly through `GLIMMER_SIMCTL` for core/render; the selected Xcode and SDK
+never change implicitly.
+
+The shard logs, result bundles, coverage and failure summaries are under
+`build/logs`, `build/coverage`, and `iOS/build/ci`. Test failures appear with
+source locations when available. XCTest retries are limited to one within the
+same invocation; recovered failures are listed as flakes, not erased by a
+whole-job rerun. Runtime limits produce a failure and preserve the log.
+
+The CodeQL compiler wrapper limits each concurrent platform build to one WMO
+thread on the three-core host. Compare traced build duration and complete
+extraction receipts against the previous 23.3-minute build before claiming a
+speedup; neither a local build nor fewer queued jobs proves faster extraction.
+
 `scripts/fuzz.sh` runs coverage-guided harnesses in a pinned Swift Linux
 container. It needs Docker; `FUZZ_SECONDS` controls each target and crashing
 inputs stay in `build/fuzz/`.
