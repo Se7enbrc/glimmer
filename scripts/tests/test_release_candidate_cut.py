@@ -63,7 +63,7 @@ RELEASE_PATHS = (
     'scripts/check-secrets.sh',
     'scripts/check-private-keys.sh',
 )
-REQUIRED = ["macOS", "Analyze (swift)", "Analyze (python)", "Analyze (actions)"]
+REQUIRED = ["macOS", "Tier 2", "Analyze (swift)", "Analyze (python)", "Analyze (actions)"]
 
 
 def feed(*builds):

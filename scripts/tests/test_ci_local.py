@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 from fixture_git import FixtureTestCase
 from test_release_checks import CHECKS, SHA
+from test_release_candidate_cut import REQUIRED as CUT_FIXTURE_CHECKS
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -48,6 +49,9 @@ def project_fixture(paths):
 
 
 class CILocalTests(FixtureTestCase):
+    def test_cut_fixture_supplies_every_required_release_check(self):
+        self.assertEqual(set(CUT_FIXTURE_CHECKS), set().union(*CHECKS.REQUIRED.values()))
+
     def test_core_and_render_cover_all_unit_and_ui_suites_without_overlap(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
