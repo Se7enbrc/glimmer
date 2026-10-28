@@ -14,6 +14,8 @@ enum UITestLauncher {
         guard PersistentStorage.isTesting else {
             return nil
         }
+        // A touch-only fixture must not inherit the runner's keyboard; key tests use UIKit key commands.
+        if environment["GLIMMER_UI_TESTING"] != nil { JourneyControllerRegistry.hideHostKeyboardsAndMice() }
         if let path = environment["GLIMMER_JOURNEY_DIRECTORY"] {
             return UITestJourneyPC(directory: URL(fileURLWithPath: path),
                                    firstRun: environment["GLIMMER_UI_TESTING"] == "journey-first").launcher()

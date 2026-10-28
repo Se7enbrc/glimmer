@@ -134,15 +134,21 @@ final class JourneyControllerRegistry {
         }
         original = method_setImplementation(method, imp_implementationWithBlock(block))
         #if os(iOS)
-        // Simulators forward the host Mac's own controllers, mice and keyboards; journeys see only their devices.
-        Self.replace(GCMouse.self, #selector(GCMouse.mice),
-                     with: { () -> NSArray in [] } as @convention(block) () -> NSArray)
-        Self.replace(GCMouse.self, #selector(getter: GCMouse.current),
-                     with: { () -> GCMouse? in nil } as @convention(block) () -> GCMouse?)
-        Self.replace(GCKeyboard.self, #selector(getter: GCKeyboard.coalesced),
-                     with: { () -> GCKeyboard? in nil } as @convention(block) () -> GCKeyboard?)
+        Self.hideHostKeyboardsAndMice()
         #endif
     }
+
+    #if os(iOS)
+    /// Simulators forward the host's own mice and keyboards (CI's VM adds a Generic Keyboard); fixtures see none.
+    static func hideHostKeyboardsAndMice() {
+        replace(GCMouse.self, #selector(GCMouse.mice),
+                with: { () -> NSArray in [] } as @convention(block) () -> NSArray)
+        replace(GCMouse.self, #selector(getter: GCMouse.current),
+                with: { () -> GCMouse? in nil } as @convention(block) () -> GCMouse?)
+        replace(GCKeyboard.self, #selector(getter: GCKeyboard.coalesced),
+                with: { () -> GCKeyboard? in nil } as @convention(block) () -> GCKeyboard?)
+    }
+    #endif
 
     private static func replace(_ type: AnyClass, _ selector: Selector, with block: Any) {
         guard let method = class_getClassMethod(type, selector) else { return }
