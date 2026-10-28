@@ -29,6 +29,8 @@ extension ControllerJourneyUITests {
         let device = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Backbone One")).firstMatch
         XCTAssertTrue(device.waitForExistence(timeout: 5))
         device.tap()
+        // The diagram lays out after the device page pushes; read its glyphs once they exist.
+        XCTAssertTrue(app.buttons["xmark.circle"].waitForExistence(timeout: 5))
         record("playstation-controller-diagram")
         for (name, symbol) in [("Cross", "xmark.circle"), ("Circle", "circle.circle"),
                                ("Square", "square.circle"), ("Triangle", "triangle.circle")] {
