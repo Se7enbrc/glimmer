@@ -47,10 +47,12 @@ class IOSCIShardTests(FixtureTestCase):
 
     def test_test_without_building_uses_only_downloaded_products(self):
         result = subprocess.run(["make", "-n", "-C", "iOS", "test-run",
+                                 "DERIVED=/tmp/isolated test products",
                                  "TEST_FLAGS=-only-testing:GlimmerTests/NativeUIRenderTests"],
                                 cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("test-without-building -xctestrun", result.stdout)
+        self.assertIn('-derivedDataPath "/tmp/isolated test products"', result.stdout)
         self.assertNotIn("-project", result.stdout)
         self.assertIn("-parallel-testing-enabled NO", result.stdout)
         self.assertIn("-only-testing:GlimmerTests/NativeUIRenderTests", result.stdout)

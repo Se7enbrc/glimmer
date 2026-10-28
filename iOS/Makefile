@@ -55,7 +55,7 @@ test-run:
 	@set -- "$(DERIVED)"/Build/Products/"$(SCHEME)"_*.xctestrun; \
 	  test "$$#" -eq 1 && test -f "$$1" || { echo "ERR: run make test-build first" >&2; exit 1; }; \
 	  xcodebuild test-without-building -xctestrun "$$1" -destination '$(TEST_DESTINATION)' \
-	  -parallel-testing-enabled NO $(TEST_FLAGS)
+	  -derivedDataPath "$(DERIVED)" -parallel-testing-enabled NO $(TEST_FLAGS)
 
 check:
 	@$(MAKE) -C .. check
