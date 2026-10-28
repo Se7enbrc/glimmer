@@ -31,7 +31,12 @@ final class LauncherMenuController {
                   button.valueChangedHandler == nil else { continue }
             let wasPressed = Mutex(button.isPressed)
             button.valueChangedHandler = { @Sendable [weak self] _, _, pressed in
-                guard wasPressed.withLock({ defer { $0 = pressed }; return pressed && !$0 }) else { return }
+                let edge = wasPressed.withLock { previous in
+                    let edge = pressed && !previous
+                    previous = pressed
+                    return edge
+                }
+                guard edge else { return }
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == attempt else { return }
                     self.openMenu?()
