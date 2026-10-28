@@ -64,7 +64,7 @@ for index in "${indices[@]}"; do
     for appearance in "${appearances[@]}"; do
         # Already checked before the build; finish booting first so the live speech check can reach it.
         xcrun simctl bootstatus "$device" -b
-        python3 scripts/check-journey-silence.py --simulator "$device"
+        python3 scripts/check-journey-silence.py --simulator "$device" --booted
         xcrun simctl uninstall "$device" io.ugfugl.Glimmer.iOS.UITests.xctrunner >/dev/null 2>&1 || true
         xcrun simctl uninstall "$device" io.ugfugl.Glimmer.iOS >/dev/null 2>&1 || true
         xcrun simctl ui "$device" appearance "$appearance"

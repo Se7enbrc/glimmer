@@ -91,6 +91,10 @@ class IOSTouchJourneyTests(unittest.TestCase):
         self.assertEqual(appearances, ["light", "dark", "light", "dark"])
         deleted = [call[-1] for call in calls if call[:3] == ["xcrun", "simctl", "delete"]]
         self.assertEqual(deleted, ["created-phone", "created-pad"])
+        inventories = [call for call in calls if call == ["xcrun", "simctl", "list", "devices", "--json"]]
+        self.assertEqual(len(inventories), 2, "Only the initial pre-boot checks enumerate devices")
+        live_checks = [call for call in calls if call[:3] == ["xcrun", "simctl", "spawn"]]
+        self.assertEqual(len(live_checks), 8, "Both speech settings must be checked after each boot")
 
     def test_failure_keeps_remaining_runs_and_preserves_supplied_devices(self):
         result, calls = self.run_journeys(supplied=True, fail=True)
