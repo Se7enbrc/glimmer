@@ -25,11 +25,18 @@ package struct ControllerMouseState {
 
     package init(isMouse: Bool = false) { self.isMouse = isMouse }
 
+    // Starting needs a clear push (20% travel) so a stick drifting just past the 15% dead zone stays idle;
+    // once gliding, the pointer keeps moving until the stick is back inside the dead zone.
     @inline(__always)
-    package func isMoving(_ sticks: @autoclosure () -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>)) -> Bool {
+    package func isMoving(_ sticks: @autoclosure () -> (pointer: SIMD2<Int16>, scroll: SIMD2<Int16>),
+                          starting: Bool = false) -> Bool {
         guard isMouse else { return false }
         let sticks = sticks()
-        return ControllerMouseMotion.velocity(sticks.pointer) != .zero || ControllerMouseMotion.velocity(sticks.scroll) != .zero
+        let floor = starting ? 0.2 : 0
+        return [sticks.pointer, sticks.scroll].contains { stick in
+            ControllerMouseMotion.velocity(stick) != .zero
+                && hypot(Double(stick.x), Double(stick.y)) / 32767 > floor
+        }
     }
 
     // Idle sticks drop their residual so a new deflection never starts with a stale step.
@@ -197,8 +204,9 @@ extension InputCore {
     }
 
     package func updateControllerMousePolling() {
+        let starting = controllerMouseTimer == nil
         let moving = controllerMouseStates.contains { slot, state in
-            state.isMoving(mousePlan(slot: slot).sticks(state.analog))
+            state.isMoving(mousePlan(slot: slot).sticks(state.analog), starting: starting)
         }
         guard snapshot.ready, snapshot.focused, moving else {
             mousePollingGeneration &+= 1

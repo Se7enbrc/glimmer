@@ -116,6 +116,26 @@ struct ControllerMouseTests {
         #expect(horizontal.isEmpty, "\(lean) degrees sent \(horizontal.count) sideways notches")
     }
 
+    // A resting stick that drifts just past the dead zone must not wake the 120 Hz pointer timer.
+    @Test func aDriftingRestingStickNeverStartsThePointerTimer() {
+        let (forwarder, _) = rig()
+        defer { forwarder.detach() }
+        toggle(forwarder)
+        func stick(_ fraction: Double) {
+            var analog = neutral
+            analog.rightStickX = Int16(fraction * 32767)
+            forwarder.routeControllerMouse(slot: 0, buttons: 0, analog: analog, chordHeld: false)
+        }
+        stick(0.17)
+        #expect(forwarder.controllerMouseTask == nil)
+        stick(0.5)
+        #expect(forwarder.controllerMouseTask != nil)
+        stick(0.17)
+        #expect(forwarder.controllerMouseTask != nil, "An easing stick keeps gliding to a stop")
+        stick(0.1)
+        #expect(forwarder.controllerMouseTask == nil)
+    }
+
     @Test func togglesOnlyOnReleaseAfterMoonlightsThreshold() {
         var state = ControllerMouseState()
         let toggled1 = state.update(buttons: start, analog: neutral, chordHeld: false, now: 0)
