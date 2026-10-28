@@ -23,7 +23,7 @@ class CICachePolicyTests(FixtureTestCase):
         self.assertNotIn("build/Build/", action)
         self.assertIn("Package.resolved", action)
         self.assertIn("third_party/**", action)
-        self.assertIn("test \"$(xcodebuild -version | head -1)\" = 'Xcode 26.6'", action)
+        self.assertIn("test \"$(xcodebuild -version | sed -n '1p')\" = 'Xcode 26.6'", action)
         for forbidden in ("Keychains", "provisionprofile", ".p12", "signing.env", "ios-unsigned", "build/dist"):
             self.assertNotIn(forbidden, action)
 

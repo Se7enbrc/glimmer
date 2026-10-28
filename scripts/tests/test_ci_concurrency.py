@@ -34,6 +34,9 @@ class VerificationConcurrencyTests(FixtureTestCase):
                 self.assertIn("if: github.event.action != 'closed'", job)
                 self.assertNotIn("pull_request_target:", source)
         gate = (ROOT / ".github/workflows/verify.yml").read_text().split("  gate:\n", 1)[1]
-        self.assertRegex(gate, re.escape("if: always() && github.event.action != 'closed'"))
+        self.assertRegex(" ".join(gate.split()), re.escape("if: always() && github.event.action != 'closed'"))
         analysis = (ROOT / ".github/workflows/codeql.yml").read_text().split("  analyze:\n", 1)[1]
-        self.assertRegex(analysis, re.escape("if: always() && github.event.action != 'closed'"))
+        condition = analysis.split("    name:", 1)[0]
+        self.assertIn("if: ${{ !cancelled() && github.event.action != 'closed' }}", condition)
+        self.assertNotIn("always()", condition)
+        self.assertIn('test "$DECIDED" = success', analysis)

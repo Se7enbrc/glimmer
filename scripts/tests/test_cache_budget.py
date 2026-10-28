@@ -72,7 +72,12 @@ class CacheBudgetTests(FixtureTestCase):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
             for step in re.split(r'(?m)^      - name:', path.read_text()):
                 if 'uses: actions/upload-artifact@' in step:
-                    self.assertIn('retention-days: 1', step, path)
+                    artifact = re.search(r'(?m)^          name: (.+)$', step)
+                    retained = re.search(r'(?m)^          retention-days: (\d+)$', step)
+                    self.assertIsNotNone(retained, path)
+                    days = {'acceptance-ledger': 90, 'acceptance-results': 14}.get(
+                        artifact[1] if artifact and path.name == 'verify.yml' else '', 1)
+                    self.assertEqual(int(retained[1]), days, path)
         checks = (ROOT / 'scripts/ci-checks.mk').read_text().split('check-macos:', 1)[1]
         self.assertIn('hk check --all --step swiftlint', checks)
         hooks = (ROOT / 'hk.pkl').read_text()

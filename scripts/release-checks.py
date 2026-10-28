@@ -89,6 +89,8 @@ def object_api(path):
 def latest_run(runs, workflow, sha, workflow_id, candidate=False):
     eligible = [run for run in runs if run.get("head_sha") == sha
                 and run.get("workflow_id") == workflow_id and run.get("path") == workflow]
+    if workflow.endswith("verify.yml"):
+        eligible = [run for run in eligible if run.get("display_title") != "Release acceptance"]
     if candidate:
         eligible = [run for run in eligible if run.get("head_branch") == "release-candidate"
                     and run.get("event") == "workflow_dispatch"]
@@ -112,7 +114,7 @@ def latest_run(runs, workflow, sha, workflow_id, candidate=False):
         raise ValueError("check run has no execution identity")
     if run.get("head_repository", {}).get("full_name") != REPO:
         raise ValueError("checks did not originate from the upstream repository")
-    if run.get("event") not in {"push", "pull_request", "workflow_dispatch"}:
+    if run.get("event") not in {"push", "pull_request", "workflow_dispatch", "schedule"}:
         raise ValueError("unexpected check trigger")
     if candidate and run.get("status") != "completed":
         raise ChecksPending(f"checks are pending: {workflow}")

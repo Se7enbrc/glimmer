@@ -51,10 +51,11 @@ class CandidateRefChecksTests(FixtureTestCase):
             return [{'workflow_runs': [{**r, 'workflow_id': 2 if workflow == WORKFLOW else 3,
                                         'path': workflow} for r in self.runs]}]
         if '/jobs?' in path:
-            return [{'jobs': [*self.jobs.values(), {'name': 'macOS', 'head_sha': SHA,
-                                                   'status': 'completed', 'conclusion': 'success',
-                                                   'run_id': 1, 'run_attempt': 1,
-                                                   'head_branch': 'release-candidate'}]}]
+            return [{'jobs': [*self.jobs.values(), *[{'name': name, 'head_sha': SHA,
+                                                     'status': 'completed', 'conclusion': 'success',
+                                                     'run_id': 1, 'run_attempt': 1,
+                                                     'head_branch': 'release-candidate'}
+                                                    for name in ('macOS', 'Tier 2')]]}]
         if 'analyses?' in path:
             # Candidate evidence can be beyond the first page.
             return [analyses(id=100, ref='refs/pull/114/merge', commit_sha=MERGE), self.data]

@@ -54,6 +54,10 @@ RELEASE_PATHS = (
     '.github/workflows/portable-checks.yml',
     'scripts/ci-checks.mk',
     'scripts/mac-test-products.mk',
+    'scripts/ci-local.py',
+    'scripts/acceptance_ledger.py',
+    'scripts/ci-test-results.py',
+    'scripts/codeql-swiftc.sh',
     'scripts/test-scripts.py',
     '.github/actions/cache-save/action.yml',
     'scripts/cache-budget.py',
@@ -195,7 +199,7 @@ def candidate_runs(sha, workflow):
         raise ValueError("candidate run search may be truncated")
     return [run for page in pages for run in page.get("workflow_runs", [])
             if run.get("event") == "workflow_dispatch" and run.get("head_branch") == BRANCH
-            and run.get("head_sha") == sha]
+            and run.get("head_sha") == sha and run.get("display_title") != "Release acceptance"]
 
 
 def prepare_candidate(sha, dry_run):

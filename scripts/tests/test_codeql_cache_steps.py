@@ -31,7 +31,7 @@ class CodeQLCacheStepTests(FixtureTestCase):
         self.assertIn("needs: changes", workflow)
         self.assertIn("needs.changes.outputs.scan == 'true' && 'macos-26'", " ".join(workflow.split()))
         self.assertIn('test "$DECIDED" = success', workflow)
-        self.assertIn("if: always() && github.event.action != 'closed'", workflow)
+        self.assertIn("if: ${{ !cancelled() && github.event.action != 'closed' }}", workflow)
 
     def test_compiler_and_complete_extraction_gate_remain(self):
         wrapper = (ROOT / "scripts/codeql-swiftc.sh").read_text()
