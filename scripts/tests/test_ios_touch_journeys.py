@@ -39,7 +39,7 @@ if name == "make" and "test-run" in args and os.environ.get("JOURNEY_TEST_FAIL")
 
 class IOSTouchJourneyTests(unittest.TestCase):
     def run_journeys(self, *, supplied=False, fail=False, speech=False, booted=False, device="all",
-                     appearance="all"):
+                     appearance="all", selection="", skip_build=False):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             binaries = directory / "bin"
@@ -59,6 +59,7 @@ class IOSTouchJourneyTests(unittest.TestCase):
                 "JOURNEY_RESULTS": str(directory / "results"),
                 "JOURNEY_TEST_DATA": str(directory),
                 "JOURNEY_DEVICE": device, "JOURNEY_APPEARANCE": appearance,
+                "JOURNEY_TEST_FLAGS": selection, "JOURNEY_SKIP_BUILD": "1" if skip_build else "0",
             })
             if speech:
                 preferences = directory / "Library/Preferences"
@@ -108,6 +109,16 @@ class IOSTouchJourneyTests(unittest.TestCase):
         self.assertEqual(len(runs), 1)
         self.assertIn("id=created-pad", " ".join(runs[0]))
         self.assertIn("-dark-", " ".join(runs[0]))
+
+    def test_resume_runs_only_selected_test_without_rebuilding(self):
+        selected = "-only-testing:GlimmerUITests/TouchJourneyUITests/testRotate"
+        result, calls = self.run_journeys(device="phone", appearance="light", selection=selected, skip_build=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(any(call[0] == "make" and "test-build" in call for call in calls))
+        runs = [call for call in calls if call[0] == "make" and "test-run" in call]
+        self.assertEqual(len(runs), 1)
+        self.assertIn(selected, " ".join(runs[0]))
+        self.assertNotIn("ControllerJourneyUITests", " ".join(runs[0]))
 
     def test_booted_simulator_without_speech_keys_runs_every_appearance(self):
         result, calls = self.run_journeys(booted=True, device="phone")

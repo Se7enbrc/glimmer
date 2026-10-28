@@ -33,6 +33,15 @@ case "${JOURNEY_APPEARANCE:-all}" in
     all) ;;
     *) echo 'JOURNEY_APPEARANCE must be light, dark or all' >&2; exit 2 ;;
 esac
+if [ -n "${JOURNEY_TEST_FLAGS:-}" ]; then
+    read -r -a selected_tests <<< "$JOURNEY_TEST_FLAGS"
+    for flag in "${selected_tests[@]}"; do
+        case "$flag" in
+            -only-testing:GlimmerUITests/*) ;;
+            *) echo 'JOURNEY_TEST_FLAGS must select only GlimmerUITests' >&2; exit 2 ;;
+        esac
+    done
+fi
 for index in "${indices[@]}"; do
     if [ -z "${devices[$index]}" ]; then
         devices[index]="$(xcrun simctl create "Touch journeys ${types[$index]} $$" \
@@ -41,14 +50,17 @@ for index in "${indices[@]}"; do
     fi
     python3 scripts/check-journey-silence.py --simulator "${devices[$index]}"
 done
-make -C iOS test-build SCHEME=Glimmer-Touch-Journeys DERIVED="$derived" \
-    TEST_DESTINATION="platform=iOS Simulator,id=${devices[${indices[0]}]}" \
-    TEST_FLAGS='-only-testing:GlimmerUITests'
+if [ "${JOURNEY_SKIP_BUILD:-0}" != 1 ]; then
+    make -C iOS test-build SCHEME=Glimmer-Touch-Journeys DERIVED="$derived" \
+        TEST_DESTINATION="platform=iOS Simulator,id=${devices[${indices[0]}]}" \
+        TEST_FLAGS='-only-testing:GlimmerUITests'
+fi
 status=0
 for index in "${indices[@]}"; do
     device="${devices[$index]}"
     selection="-only-testing:GlimmerUITests/TouchJourneyUITests -only-testing:GlimmerUITests/ControllerJourneyUITests"
     if [ "$index" -eq 1 ]; then selection+=" -only-testing:GlimmerUITests/IPadTouchJourneyUITests"; fi
+    if [ -n "${JOURNEY_TEST_FLAGS:-}" ]; then selection="$JOURNEY_TEST_FLAGS"; fi
     for appearance in "${appearances[@]}"; do
         # Already checked before the build; finish booting first so the live speech check can reach it.
         xcrun simctl bootstatus "$device" -b

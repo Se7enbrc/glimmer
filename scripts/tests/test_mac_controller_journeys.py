@@ -28,7 +28,7 @@ if name == "xcodebuild" and "test-without-building" in sys.argv:
 
 
 class MacControllerJourneyTests(unittest.TestCase):
-    def run_journeys(self, *, speech="false", fail=False):
+    def run_journeys(self, *, speech="false", fail=False, appearance="all", selection="", skip_build=False):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             binaries = directory / "bin"
@@ -40,6 +40,8 @@ class MacControllerJourneyTests(unittest.TestCase):
             log = directory / "calls.jsonl"
             environment = dict(os.environ, PATH=str(binaries) + os.pathsep + os.environ["PATH"],
                                JOURNEY_TEST_LOG=str(log), JOURNEY_TEST_VOICEOVER=speech,
+                               JOURNEY_APPEARANCE=appearance, JOURNEY_TEST_FLAGS=selection,
+                               JOURNEY_SKIP_BUILD="1" if skip_build else "0",
                                JOURNEY_DERIVED=str(directory / "build"),
                                JOURNEY_RESULTS=str(directory / "results"))
             environment.pop("JOURNEY_TEST_FAIL", None)
@@ -65,6 +67,17 @@ class MacControllerJourneyTests(unittest.TestCase):
             self.assertIn("Glimmer-Controller-Journeys", build)
         self.assertIn("JOURNEY_APPEARANCE=light", builds[1])
         self.assertIn("JOURNEY_APPEARANCE=dark", builds[2])
+
+    def test_resume_runs_only_selected_test_and_appearance_without_rebuilding(self):
+        selected = "-only-testing:GlimmerUITests/MacControllerJourneyUITests/testControllerOnlyLaunch"
+        result, calls = self.run_journeys(appearance="dark", selection=selected, skip_build=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        builds = [call for call in calls if call[0] == "xcodebuild"]
+        self.assertEqual(len(builds), 1)
+        self.assertIn("test-without-building", builds[0])
+        self.assertIn(selected, builds[0])
+        self.assertNotIn("-only-testing:GlimmerUITests", builds[0])
+        self.assertIn("JOURNEY_APPEARANCE=dark", builds[0])
 
     def test_voiceover_or_unknown_state_refuses_before_build(self):
         for speech in ["true", "unknown"]:
