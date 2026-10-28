@@ -127,7 +127,12 @@ final class TouchJourneyUITests: TouchJourneyTestCase {
         XCTAssertTrue(app.buttons["Show controls"].firstMatch.waitForExistence(timeout: 5))
         try assertPicture(app)
         XCUIDevice.shared.press(.home)
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+        // iOS may suspend the background app before XCTest observes the transition.
+        let backgrounded = NSPredicate(format: "state IN %@", [
+            XCUIApplication.State.runningBackground.rawValue, XCUIApplication.State.runningBackgroundSuspended.rawValue
+        ])
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: backgrounded, object: app)],
+                                     timeout: 5), .completed)
         app.activate()
         XCTAssertTrue(app.buttons["A"].waitForExistence(timeout: 10))
         app.buttons["A"].tap()
