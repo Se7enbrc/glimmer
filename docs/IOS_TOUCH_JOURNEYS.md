@@ -2,7 +2,9 @@
 
 Run real-app XCUITest journeys with silent fake-PC video and input receipts.
 Touch journeys start without a controller or keyboard; controller journeys
-connect one at the GameController boundary.
+connect one at the GameController boundary. Only the `Glimmer-Touch-Journeys`
+scheme runs them; `Glimmer-iOS` (and so CI's Simulator shards) skips the journey
+classes.
 
 ## Run the iPhone and iPad matrix
 

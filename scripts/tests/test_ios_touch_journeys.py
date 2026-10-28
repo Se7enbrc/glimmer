@@ -121,6 +121,15 @@ class IOSTouchJourneyTests(unittest.TestCase):
         self.assertFalse(any(call[0] == "make" for call in calls))
         self.assertFalse(any(call[:3] == ["xcrun", "simctl", "bootstatus"] for call in calls))
 
+    def test_ci_scheme_skips_every_journey_class(self):
+        # CI's Simulator shards run Glimmer-iOS; journeys belong to their own scheme and time budget.
+        scheme = (ROOT / "iOS/Glimmer.xcodeproj/xcshareddata/xcschemes/Glimmer-iOS.xcscheme").read_text()
+        classes = {path.stem for path in (ROOT / "iOS/GlimmerUITests").glob("*JourneyUITests.swift")
+                   if f"final class {path.stem}" in path.read_text()}
+        self.assertEqual(classes, {"ControllerJourneyUITests", "IPadTouchJourneyUITests", "TouchJourneyUITests"})
+        for name in classes:
+            self.assertIn(f'<Test Identifier = "{name}">', scheme)
+
 
 if __name__ == "__main__":
     unittest.main()

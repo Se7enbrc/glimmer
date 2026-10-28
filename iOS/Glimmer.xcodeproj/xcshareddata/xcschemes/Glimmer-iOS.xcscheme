@@ -55,6 +55,11 @@
                BuildableName = "GlimmerUITests.xctest" BlueprintName = "GlimmerUITests"
                ReferencedContainer = "container:Glimmer.xcodeproj">
             </BuildableReference>
+            <SkippedTests>
+               <Test Identifier = "ControllerJourneyUITests"></Test>
+               <Test Identifier = "IPadTouchJourneyUITests"></Test>
+               <Test Identifier = "TouchJourneyUITests"></Test>
+            </SkippedTests>
          </TestableReference>
       </Testables>
    </TestAction>
