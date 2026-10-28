@@ -2,6 +2,9 @@
 
 ## 2026.10.8 - Unreleased
 
+- Controller remapping sheets keep their settings open while you choose or
+  record a shortcut on iPhone and iPad.
+
 - Performance telemetry keeps its channel lookup objects alive, fixing a crash
   while sampling on macOS 15.
 

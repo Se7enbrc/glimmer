@@ -42,11 +42,7 @@ extension ControllerJourneyUITests {
         stopShortcut.tap()
         record("stop-remap-sheet")
         let recordButtons = app.buttons["Record buttons…"]
-        let recorderPresented = recordButtons.waitForExistence(timeout: 5)
-        XCTExpectFailure("CJ99-03: editing Stop streaming dismisses Settings instead of opening the recorder") {
-            XCTAssertTrue(recorderPresented)
-        }
-        guard recorderPresented else { return }
+        XCTAssertTrue(app.navigationBars["Change Stop streaming"].waitForExistence(timeout: 5))
         reveal(recordButtons, in: app)
         recordButtons.tap()
         try controller(steps: [["element": "lb", "value": 1, "milliseconds": 10],
@@ -54,6 +50,11 @@ extension ControllerJourneyUITests {
                               ["element": "rs", "value": 1, "milliseconds": 600],
                               ["element": "rs", "value": 0], ["element": "ls", "value": 0],
                               ["element": "lb", "value": 0]])
+        XCTAssertFalse(app.buttons["Save"].isEnabled, "An overlapping shortcut must be rejected")
+        recordButtons.tap()
+        try controller(steps: ["a", "b", "x"].map {
+            ["element": $0, "value": 1, "milliseconds": $0 == "x" ? 600 : 10]
+        } + ["x", "b", "a"].map { ["element": $0, "value": 0] })
         XCTAssertTrue(app.buttons["Save"].isEnabled)
         record("recorded-controller-stop-remap")
         app.buttons["Save"].tap()
@@ -66,11 +67,9 @@ extension ControllerJourneyUITests {
             ["element": $0, "value": 1, "milliseconds": $0 == "menu" ? 600 : 10]
         } + ["menu", "options", "rb", "lb"].map { ["element": $0, "value": 0] })
         XCTAssertFalse(receipts().contains { $0["stop"] == 1 }, "The old chord must no longer stop")
-        try controller(steps: [["element": "lb", "value": 1, "milliseconds": 10],
-                              ["element": "ls", "value": 1, "milliseconds": 10],
-                              ["element": "rs", "value": 1, "milliseconds": 600],
-                              ["element": "rs", "value": 0], ["element": "ls", "value": 0],
-                              ["element": "lb", "value": 0]])
+        try controller(steps: ["a", "b", "x"].map {
+            ["element": $0, "value": 1, "milliseconds": $0 == "x" ? 600 : 10]
+        } + ["x", "b", "a"].map { ["element": $0, "value": 0] })
         XCTAssertTrue(waitForReceipt("stop"))
         XCTAssertTrue(game.waitForExistence(timeout: 5))
     }
