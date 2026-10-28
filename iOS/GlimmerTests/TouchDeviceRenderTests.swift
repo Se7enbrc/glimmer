@@ -266,7 +266,9 @@ private final class TouchOrientationController: UIViewController {
                     self?.updates.continuation.yield(())
                 }
             }
-            while geometryError == nil, transitioning || scene.effectiveGeometry.interfaceOrientation != target {
+            // The scene reports the orientation before UIKit resizes this controller's view.
+            while geometryError == nil, transitioning || scene.effectiveGeometry.interfaceOrientation != target
+                || view.bounds.size != scene.effectiveGeometry.coordinateSpace.bounds.size {
                 try #require(await iterator.next() != nil, "UIKit did not settle the scene in time")
             }
             if geometryError == nil || attempt == 4 { break }

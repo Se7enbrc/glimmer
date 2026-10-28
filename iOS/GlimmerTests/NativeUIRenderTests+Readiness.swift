@@ -78,8 +78,14 @@ extension NativeUIRenderTests {
         }
         await finishTransition(controller)
         try await commitLayout(controller.view)
-        if scene.traitCollection.userInterfaceIdiom == .pad {
-            #expect(controller.view.bounds.size == scene.effectiveGeometry.coordinateSpace.bounds.size)
+        try await waitForSceneSize(controller, in: scene)
+    }
+
+    // The scene reports its new orientation before UIKit resizes the window and its controllers.
+    func waitForSceneSize(_ controller: UIViewController, in scene: UIWindowScene) async throws {
+        try await waitForUIState("The view did not take the rotated scene's size.") {
+            controller.transitionCoordinator == nil
+                && controller.view.bounds.size == scene.effectiveGeometry.coordinateSpace.bounds.size
         }
     }
 
@@ -103,22 +109,24 @@ extension NativeUIRenderTests {
                             settling controller: UIViewController,
                             matches: @escaping @MainActor () -> Bool) async throws {
         let refusal = OrientationRefusal()
-        for _ in 0..<4 {
+        for _ in 0..<4 where !matches() {
             do {
                 try await observeGeometry(scene, request: {
                     scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { @Sendable error in
                         refusal.reason.withLock { $0 = "\(error)" }
                     }
                 }, matches: matches)
-                return
             } catch {
                 await finishTransition(controller)
                 try await commitLayout(controller.view)
             }
         }
-        let reason = refusal.reason.withLock { $0 }.map { " (\($0))" } ?? ""
-        throw RenderReadinessFailure.missingSignal(
-            "The scene did not reach its requested interface orientation\(reason).")
+        guard matches() else {
+            let reason = refusal.reason.withLock { $0 }.map { " (\($0))" } ?? ""
+            throw RenderReadinessFailure.missingSignal(
+                "The scene did not reach its requested interface orientation\(reason).")
+        }
+        try await waitForSceneSize(controller, in: scene)
     }
 
     func finishTransition(_ host: UIViewController) async {
